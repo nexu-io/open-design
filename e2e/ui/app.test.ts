@@ -163,79 +163,11 @@ for (const entry of automatedUiScenarios().filter(
       });
     }
 
-    if (entry.flow === 'question-form-single-selection') {
-      const form = [
-        '<question-form id="discovery" title="Quick brief — 30 seconds">',
-        JSON.stringify(
-          {
-            description: "I'll lock these in before building.",
-            questions: [
-              {
-                id: 'tone',
-                label: 'Visual tone',
-                type: 'radio',
-                options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
-                required: true,
-              },
-            ],
-          },
-          null,
-          2,
-        ),
-        '</question-form>',
-      ].join('\n');
-      await routeSuccessfulRuns(page, {
-        runIdPrefix: 'mock-run',
-        eventBody: successfulRunEventBody([
-          'event: start',
-          'data: {"bin":"mock-agent"}',
-          '',
-          'event: stdout',
-          `data: ${JSON.stringify({ chunk: form })}`,
-          '',
-        ]),
-      });
-    }
-
-    if (entry.flow === 'question-form-submit-persistence') {
-      let requestCount = 0;
-      await routeSuccessfulRuns(page, {
-        runIdPrefix: 'mock-run',
-        eventBody: () => {
-          requestCount += 1;
-          const chunk =
-            requestCount === 1
-              ? [
-                  '<question-form id="discovery" title="Quick brief — 30 seconds">',
-                  JSON.stringify(
-                    {
-                      description: "I'll lock these in before building.",
-                      questions: [
-                        {
-                          id: 'tone',
-                          label: 'Visual tone',
-                          type: 'radio',
-                          options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
-                          required: true,
-                        },
-                      ],
-                    },
-                    null,
-                    2,
-                  ),
-                  '</question-form>',
-                ].join('\n')
-              : 'Thanks — I will use these answers for the next draft.';
-          return successfulRunEventBody([
-            'event: start',
-            'data: {"bin":"mock-agent"}',
-            '',
-            'event: stdout',
-            `data: ${JSON.stringify({ chunk })}`,
-            '',
-          ]);
-        },
-      });
+    if (
+      entry.flow === 'question-form-single-selection'
+      || entry.flow === 'question-form-submit-persistence'
+    ) {
+      await routeSuccessfulRuns(page, { runIdPrefix: 'mock-run' });
     }
 
     if (entry.flow === 'file-mention') {
@@ -557,13 +489,19 @@ async function seedHtmlArtifact(
 }
 
 async function openDesignFile(page: Page, fileName: string) {
+  const tab = tabBySuffix(page, fileName);
+  if (await tab.isVisible().catch(() => false)) {
+    if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true');
+    return;
+  }
   await openAllProjectFiles(page);
   const fileRow = page.locator(`[data-testid^="design-file-row-"][data-testid$="${fileName}"]`).first();
   await expect(fileRow).toBeVisible();
   // #5517 removed the preview pane and its "Open" button: the row's primary
   // target opens the file in a workspace tab on a single click.
   await fileRow.getByRole('button').first().click();
-  await expect(tabBySuffix(page, fileName)).toHaveAttribute('aria-selected', 'true');
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
 }
 
 async function expectFileSource(
@@ -871,12 +809,53 @@ async function runLiveArtifactProjectRoutingFlow(
   await expectScenarioProjectState(page, entry, projectId);
 }
 
+async function seedQuestionFormMessage(page: Page): Promise<void> {
+  const { projectId, conversationId } = await getCurrentProjectContext(page);
+  const content = [
+    '<question-form id="discovery" title="Quick brief — 30 seconds">',
+    JSON.stringify(
+      {
+        description: "I'll lock these in before building.",
+        questions: [
+          {
+            id: 'tone',
+            label: 'Visual tone',
+            type: 'radio',
+            options: ['Editorial / magazine', 'Modern minimal', 'Soft / warm'],
+            required: true,
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    '</question-form>',
+  ].join('\n');
+  const response = await page.request.put(
+    `/api/projects/${projectId}/conversations/${conversationId}/messages/question-form-assistant-${projectId}`,
+    {
+      data: {
+        role: 'assistant',
+        content,
+        runStatus: 'succeeded',
+        events: [{ kind: 'text', text: content }],
+        createdAt: Date.now(),
+      },
+    },
+  );
+  expect(response.ok(), `seed question form: ${await response.text()}`).toBeTruthy();
+  await page.goto(`/projects/${projectId}/conversations/${conversationId}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await expectWorkspaceReady(page);
+}
+
 
 async function runQuestionFormSingleSelectionFlow(
   page: Page,
-  entry: UiScenario,
+  _entry: UiScenario,
 ) {
-  await sendPrompt(page, entry.prompt);
+  await seedQuestionFormMessage(page);
 
   const toneQuestion = page.locator('.qf-field', { has: page.getByText('Visual tone') });
   await expect(toneQuestion).toBeVisible();
@@ -897,12 +876,9 @@ async function runQuestionFormSingleSelectionFlow(
 
 async function runQuestionFormSubmitPersistenceFlow(
   page: Page,
-  entry: UiScenario,
+  _entry: UiScenario,
 ) {
-  const firstRunRequestPromise = page.waitForRequest(isCreateRunRequest);
-  await sendPrompt(page, entry.prompt);
-  const firstRunBody = (await firstRunRequestPromise).postDataJSON() as Record<string, unknown>;
-  expectScenarioRunRequest(firstRunBody, entry);
+  await seedQuestionFormMessage(page);
 
   // Studio discovery renders the clarification form inline in the chat flow
   // (the legacy Questions workspace tab is gone), so locate the form directly.
@@ -1034,8 +1010,7 @@ async function runCommentAttachmentFlow(
 async function runDeckPaginationNextPrevCorrectnessFlow(page: Page) {
   const { projectId } = await getCurrentProjectContext(page);
   await seedDeckArtifact(page, projectId, 'pagination.html', 'Pagination Deck', ['Slide One', 'Slide Two', 'Slide Three']);
-  await page.reload();
-  await openDesignFile(page, 'pagination.html');
+  await gotoDesignFile(page, projectId, 'pagination.html');
 
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Slide One')).toBeVisible();
@@ -1051,16 +1026,23 @@ async function runDeckPaginationPerFileIsolatedFlow(page: Page) {
   const { projectId } = await getCurrentProjectContext(page);
   await seedDeckArtifact(page, projectId, 'deck-alpha.html', 'Deck Alpha', ['Alpha One', 'Alpha Two']);
   await seedDeckArtifact(page, projectId, 'deck-beta.html', 'Deck Beta', ['Beta One', 'Beta Two']);
-  await page.reload();
 
-  await openDesignFile(page, 'deck-alpha.html');
+  await gotoDesignFile(page, projectId, 'deck-alpha.html');
   const frame = artifactPreviewFrame(page);
   await expect(frame.getByText('Alpha One')).toBeVisible();
   await clickDeckNextSlide(page);
   await expect(frame.getByText('Alpha Two')).toBeVisible();
 
-  await openAllProjectFiles(page);
-  await openDesignFile(page, 'deck-beta.html');
+  const betaTab = tabBySuffix(page, 'deck-beta.html');
+  if (await betaTab.isVisible().catch(() => false)) {
+    await betaTab.click();
+  } else {
+    await page.getByTestId('workspace-add-tab').click();
+    const launcher = page.getByTestId('tab-launcher-menu');
+    await expect(launcher).toBeVisible();
+    await launcher.getByTestId('tab-launcher-result').filter({ hasText: 'deck-beta.html' }).click();
+  }
+  await expect(betaTab).toHaveAttribute('aria-selected', 'true');
   await expect(frame.getByText('Beta One')).toBeVisible();
   await clickDeckNextSlide(page);
   await expect(frame.getByText('Beta Two')).toBeVisible();
@@ -1069,6 +1051,14 @@ async function runDeckPaginationPerFileIsolatedFlow(page: Page) {
   await expect(frame.getByText('Alpha Two')).toBeVisible();
   await page.getByRole('tab', { name: /deck-beta\.html/i }).click();
   await expect(frame.getByText('Beta Two')).toBeVisible();
+}
+
+async function gotoDesignFile(page: Page, projectId: string, fileName: string): Promise<void> {
+  await page.goto(`/projects/${projectId}/files/${encodeURIComponent(fileName)}`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await expectWorkspaceReady(page);
+  await expect(tabBySuffix(page, fileName)).toHaveAttribute('aria-selected', 'true');
 }
 
 async function seedDeckArtifact(

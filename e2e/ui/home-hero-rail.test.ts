@@ -443,6 +443,12 @@ test.beforeEach(async ({ page }) => {
     window.localStorage.clear();
     window.sessionStorage.clear();
     window.localStorage.setItem(key, JSON.stringify(value));
+    // Keep time-boxed marketing surfaces out of functional Home scenarios,
+    // including tests that later mock an authenticated workspace.
+    window.localStorage.setItem(
+      'open-design:campaign-seen:deepseek-v4-flash-unlimited-2026',
+      '1',
+    );
   }, { key: STORAGE_KEY, value: HOME_CONFIG });
 
   await page.route('**/api/github/open-design', async (route) => {
@@ -1173,8 +1179,8 @@ test('[P1] home session mode toggle switches Ask planning prompts away from desi
   await gotoEntryHome(page);
 
   const modeTrigger = page.getByTestId('composer-mode-trigger');
-  // Design is the app default, so the picker starts on its neutral trigger.
-  await expect(modeTrigger).toHaveAttribute('aria-label', 'Choose a mode');
+  // Design is the app default and is now represented as an explicit selection.
+  await expect(modeTrigger).toHaveAttribute('aria-label', 'Mode: Design');
   await modeTrigger.click();
   // Every mode description is always visible in the open menu (no hover card).
   await expect(page.getByText(/planning, and discussion/i)).toBeVisible();
@@ -1196,7 +1202,7 @@ test('[P1] home session mode toggle switches Ask planning prompts away from desi
   expect(askBody.pluginId ?? null).toBeNull();
 
   await gotoEntryHome(page);
-  await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Choose a mode');
+  await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
   await page.getByTestId('home-hero-input').fill('Design the screens from this brief.');
 
   const designRequestPromise = page.waitForRequest((request) =>
@@ -1267,7 +1273,9 @@ test('[P1] home design-system picker Create opens design-system creation and sta
   await expect
     .poll(() => brandRequests.at(-1)?.url)
     .toBe('https://acme.example.com');
-  await expect(page).toHaveURL(/\/projects\/brand-project-acme$/);
+  await expect(page).toHaveURL(
+    /\/projects\/brand-project-acme\/conversations\/conv-brand-acme$/,
+  );
   await expect(page.getByTestId('file-workspace')).toBeVisible();
   await expect(page.getByTestId('design-system-project-tab')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByTestId('design-system-project-tab-panel')).toBeVisible();
@@ -1354,7 +1362,7 @@ test('[P1] home suggestion entry remains retryable after create failures', async
   await expect(page).toHaveURL(/\/projects\/[^/]+$/);
 });
 
-test('[P2] zh-CN home smoke exposes the localized template, design system, working directory, and send entries', async ({ page }) => {
+test('[P2] zh-CN home smoke exposes the localized creation type, design system, working directory, and run entries', async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem('open-design:locale', 'zh-CN');
     window.localStorage.setItem('open-design:locale-source', 'manual');
@@ -1363,12 +1371,14 @@ test('[P2] zh-CN home smoke exposes the localized template, design system, worki
   await routeHomeDesignSystems(page);
   await gotoEntryHome(page);
 
-  await expect(page.getByRole('heading', { name: '今天想和你的 Agent 一起设计什么？' })).toBeVisible();
-  await expect(page.getByText('从模板开始…')).toBeVisible();
-  await expect(page.getByText('…或创建一个空白项目')).toBeVisible();
-  await expect(page.getByText('不指定设计系统')).toBeVisible();
-  await expect(page.getByTestId('working-dir-picker')).toContainText(/本地存储|选择工作目录/);
-  await expect(page.getByTestId('home-hero-submit')).toContainText('发送');
+  await expect(page.getByTestId('home-hero-input')).toHaveAttribute(
+    'title',
+    '上传文件、关联设计系统，或描述你想创作的内容',
+  );
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText('创作类型');
+  await expect(page.getByTestId('home-hero-design-system-trigger')).toContainText('设计体系');
+  await expect(page.getByTestId('working-dir-picker')).toContainText('工作目录');
+  await expect(page.getByTestId('home-hero-submit')).toHaveAccessibleName('运行');
 });
 
 test('[P1] home template picker selects a starter template and can clear it', async ({ page }) => {
@@ -1383,9 +1393,11 @@ test('[P1] home template picker selects a starter template and can clear it', as
 
   await page.getByTestId('home-hero-template-reset').click();
   await expect(page.getByTestId('home-hero-footer-option-speakerNotes')).toHaveCount(0);
-  // At rest the pill drops the value slot entirely and reads as the bare
-  // "Template" kicker — there is no "None" placeholder any more.
-  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Template|模板|範本/i);
+  // At rest the pill drops the value slot entirely and returns to the generic
+  // creation-type label — there is no "None" placeholder.
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(
+    /Creation type|创作类型|創作類型/i,
+  );
 });
 
 // "Blank project" no longer has a Home entry: the "…or create a blank project"
@@ -1398,79 +1410,10 @@ test('[P1] home template picker selects a starter template and can clear it', as
 // submit spec above and by the new-project modal specs in
 // `project-management-flows.test.ts`.
 
-test('[P1] home template picker switches non-media modes without surfacing media-only footer options', async ({ page }) => {
+test('[P1] home creation picker switches non-media modes without surfacing media-only footer options', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
-  const home = page.getByTestId('entry-view-home');
-  const revealBody = page.locator('.home-templates-reveal__body');
-  await expect(page.getByTestId('recent-projects-strip')).toHaveCount(0);
-  await expect(page.getByTestId('home-templates-hint')).toBeVisible();
-  await expect(home.getByTestId('plugins-home-section')).toBeAttached();
-  await expect(revealBody).toHaveAttribute('aria-hidden', 'true');
-
-  await page.getByTestId('home-templates-hint').click();
-
-  await expect(revealBody).toHaveAttribute('aria-hidden', 'false');
-  await expect(home.getByTestId('plugins-home-section')).toBeVisible();
-  await expect(home.getByTestId('plugins-home-browse-registry')).toBeVisible();
-  // The Community gallery defaults to the All slice (#5759).
-  await expect(home.getByTestId('plugins-home-pill-category-all')).toHaveAttribute('aria-selected', 'true');
-  await expect(home.getByTestId('plugins-home-pill-category-live-artifact')).toHaveAttribute('aria-selected', 'false');
-  await expect(home.locator('article.plugins-home__card[data-plugin-id="example-live-artifact"]')).toBeVisible();
-});
-
-test('[P1] blank project entry creates an empty project without prompt or template metadata', async ({ page }) => {
-  await page.route('**/api/projects', async (route) => {
-    const request = route.request();
-    if (request.method() === 'GET') {
-      await route.fulfill({ json: { projects: [] } });
-      return;
-    }
-    if (request.method() === 'POST') {
-      const body = request.postDataJSON() as { id?: string; name?: string };
-      await route.fulfill({
-        json: {
-          project: {
-            id: body.id ?? 'blank-project-entry',
-            name: body.name ?? 'Untitled project',
-            path: `/tmp/open-design/${body.id ?? 'blank-project-entry'}`,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            metadata: {},
-          },
-          conversationId: `conv-${body.id ?? 'blank-project-entry'}`,
-        },
-      });
-      return;
-    }
-    await route.continue();
-  });
-
-  await gotoEntryHome(page);
-
-  const createRequestPromise = page.waitForRequest((request) =>
-    request.method() === 'POST' && new URL(request.url()).pathname === '/api/projects',
-  );
-  await page.getByTestId('home-hero-blank-project').click();
-  const createRequest = await createRequestPromise;
-  const body = createRequest.postDataJSON() as {
-    pendingPrompt?: string;
-    pluginId?: string | null;
-    skillId?: string | null;
-    metadata?: { kind?: string };
-  };
-
-  expect(body.pendingPrompt).toBeUndefined();
-  expect(body.pluginId ?? null).toBeNull();
-  expect(body.skillId ?? null).toBeNull();
-  expect(body.metadata?.kind ?? null).toBeNull();
-});
-
-test('[P1] home hero rail switches non-media modes without surfacing media-only footer options', async ({ page }) => {
-  await gotoEntryHome(page);
-
-  await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
   await expect(page.getByTestId('home-hero-footer-option-duration')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-option-audioType')).toHaveCount(0);
 

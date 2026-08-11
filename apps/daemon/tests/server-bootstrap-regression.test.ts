@@ -83,9 +83,10 @@ describe('server route inventory', () => {
       'POST /api/plugins/events/purge',
       'GET /api/plugins/events',
     ];
-    const pluginLifecycleRouteKeys = [
-      'GET /api/plugins',
-      'GET /api/plugins/:id',
+  const pluginLifecycleRouteKeys = [
+    'GET /api/plugins',
+    'GET /api/plugins/stats',
+    'GET /api/plugins/:id',
       'POST /api/plugins/upload-zip',
       'POST /api/plugins/upload-folder',
       'POST /api/plugins/install',
@@ -96,7 +97,6 @@ describe('server route inventory', () => {
       'POST /api/plugins/:id/share-project',
       'POST /api/plugins/:id/doctor',
       'POST /api/plugins/:id/trust',
-      'GET /api/plugins/stats',
       'GET /api/applied-plugins/:snapshotId',
       'GET /api/applied-plugins/:snapshotId/canon',
       'GET /api/applied-plugins',

@@ -572,7 +572,7 @@ describe('createVelaWorkspaceContextProvider explicit local scope', () => {
     expect(context?.workspaceType).toBe('personal');
     expect(context?.workspaceMemberId).toBe('wm-p1');
     expect(context?.workspaceSettingsUrl).toBe(
-      'https://web.example.com/console/settings?workspaceId=ws-personal-1',
+      'https://web.example.com/console/settings?workspaceId=ws-personal-1&source=open_design',
     );
     // Resource semantics from the handoff: a plain read NEVER writes the
     // account-level Active Workspace.
@@ -600,7 +600,7 @@ describe('createVelaWorkspaceContextProvider explicit local scope', () => {
 
     expect(initial?.workspaceType).toBe('personal');
     expect(initial?.workspaceSettingsUrl).toBe(
-      'https://web.example.com/console/settings?workspaceId=ws-personal-1',
+      'https://web.example.com/console/settings?workspaceId=ws-personal-1&source=open_design',
     );
     expect(refreshed?.workspaceSettingsUrl).toBe(initial?.workspaceSettingsUrl);
   });

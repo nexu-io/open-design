@@ -148,9 +148,12 @@ export const CERTAIN_EXEMPT_PREFIXES = [
 // proves no gate-lane source reads them.
 export const CERTAIN_EXEMPT_EXACT = ["LICENSE", ".github/CODEOWNERS"] as const;
 
+export const CERTAIN_DAEMON_CORE_EXACT = ["docs/agent-adapters.md"] as const;
+
 const CERTAIN_EXEMPT_SURFACE: RuleMatch = {
   prefixes: CERTAIN_EXEMPT_PREFIXES,
   exact: CERTAIN_EXEMPT_EXACT,
+  excludeWhen: { exact: CERTAIN_DAEMON_CORE_EXACT },
 };
 
 export const CERTAIN_PACKAGED_LEAF_PREFIXES = [
@@ -186,6 +189,7 @@ const CERTAIN_DAEMON_CORE_EXCLUDED_SURFACE: RuleMatch = {
 
 const CERTAIN_DAEMON_CORE_SURFACE: RuleMatch = {
   prefixes: CERTAIN_DAEMON_CORE_PREFIXES,
+  exact: CERTAIN_DAEMON_CORE_EXACT,
   excludeWhen: CERTAIN_DAEMON_CORE_EXCLUDED_SURFACE,
 };
 

@@ -516,13 +516,10 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   await expect(page.getByTestId('draw-overlay-toggle')).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Box select' })).toBeVisible();
   await page.getByPlaceholder('Add a note for this mark').fill('Mark this hero crop');
-  const submitOptionsButton = page.getByRole('button', { name: 'Submit options' });
-  await expect(submitOptionsButton).toBeEnabled();
-  await submitOptionsButton.click();
-  const submitOptionsMenu = page.getByRole('menu', { name: 'Submit options' });
-  await expect(submitOptionsMenu.getByRole('menuitemradio', { name: 'Add to input' })).toBeEnabled();
-  await submitOptionsButton.click();
-  await expect(submitOptionsMenu).toHaveCount(0);
+  const addToInputButton = page.getByRole('button', { name: 'Add to input' });
+  const queueButton = page.getByRole('button', { name: 'Queue' });
+  await expect(addToInputButton).toBeEnabled();
+  await expect(queueButton).toBeEnabled();
 
   const previewBox = await artifactPreview(page).boundingBox();
   expect(previewBox).not.toBeNull();
@@ -530,10 +527,7 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   await page.mouse.down();
   await page.mouse.move(previewBox!.x + 220, previewBox!.y + 170);
   await page.mouse.up();
-  await submitOptionsButton.click();
-  const queueOption = submitOptionsMenu.getByRole('menuitemradio', { name: 'Queue' });
-  await expect(queueOption).toBeEnabled();
-  await queueOption.click();
+  await queueButton.click();
   const queuedStrip = page.getByTestId('chat-queued-send-strip');
   await expect(queuedStrip).toBeVisible();
   await expect(queuedStrip).toContainText('Mark this hero crop');
@@ -587,8 +581,7 @@ test('[P1] draw annotation composer floats near the selected mark and can be que
   expect(Math.abs(noteBox!.y - mark.y2)).toBeLessThan(220);
 
   await noteInput.fill('Float this note near the marked hero area');
-  await page.getByRole('button', { name: 'Submit options' }).click();
-  const queueButton = page.getByRole('menuitemradio', { name: 'Queue' });
+  const queueButton = page.getByRole('button', { name: 'Queue' });
   await expect(queueButton).toBeEnabled();
   await queueButton.click();
   const queuedStrip = page.getByTestId('chat-queued-send-strip');

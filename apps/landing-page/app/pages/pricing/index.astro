@@ -23,7 +23,8 @@ import {
   getPricingContent,
   fillTemplate,
   PREMIUM_MODELS,
-  STANDARD_MODELS,
+  IMAGE_MODELS,
+  VIDEO_MODELS,
   CREDIT_BONUS_PCT,
   TRIAL_CREDIT_PROMO_ENABLED,
   type PlanTierId,
@@ -344,15 +345,16 @@ const jsonLd = [
 
         {TRIAL_CREDIT_PROMO_ENABLED && (
           <div class="pr-models">
-            <p class="pr-models-head">{L.premiumModels}</p>
+            <p class="pr-models-head">{L.topTextModels}</p>
             <ul class="pr-model-list">
               {FREE_PREMIUM_MODELS.map((m) => (
-                <li class={m.trial ? undefined : 'is-unavailable'}>{m.name}</li>
+                <li class={m.trial ? undefined : 'is-unavailable'}>
+                  <span class="pr-model-logo" aria-hidden="true">
+                    <img src={m.icon} alt="" width="14" height="14" loading="lazy" decoding="async" />
+                  </span>
+                  <span>{m.name}</span>
+                </li>
               ))}
-            </ul>
-            <p class="pr-models-head">{L.standardModels}</p>
-            <ul class="pr-model-list">
-              {STANDARD_MODELS.map((m) => <li>{m}</li>)}
             </ul>
           </div>
         )}
@@ -434,6 +436,7 @@ const jsonLd = [
                   </span>
                 )}
               </li>
+              <li class="pr-feat pr-feat-multimodal">{L.multimodalBenefit}</li>
               <li class="pr-feat pr-feat-strong">{plan.concurrency}</li>
               {plan.features.map((f) => (
                 <li class="pr-feat">{renderCatalogLabel(f)}</li>
@@ -441,13 +444,41 @@ const jsonLd = [
             </ul>
 
             <div class="pr-models">
-              <p class="pr-models-head">{L.premiumModels}</p>
+              <p class="pr-models-head">{L.topTextModels}</p>
               <ul class="pr-model-list">
-                {PREMIUM_MODELS.map((m) => <li>{m.name}</li>)}
+                {PREMIUM_MODELS.map((m) => (
+                  <li>
+                    <span class="pr-model-logo" aria-hidden="true">
+                      <img src={m.icon} alt="" width="14" height="14" loading="lazy" decoding="async" />
+                    </span>
+                    <span>{m.name}</span>
+                  </li>
+                ))}
               </ul>
-              <p class="pr-models-head">{L.standardModels}</p>
+              <p class="pr-models-head">{L.topImageModels}</p>
               <ul class="pr-model-list">
-                {STANDARD_MODELS.map((m) => <li>{m}</li>)}
+                {IMAGE_MODELS.map((m) => (
+                  <li>
+                    <span class="pr-model-logo" aria-hidden="true">
+                      <img src={m.icon} alt="" width="14" height="14" loading="lazy" decoding="async" />
+                    </span>
+                    <span>{m.name}</span>
+                  </li>
+                ))}
+              </ul>
+              {/* Hosted video has no server-owned entitlement/billing path yet,
+                  so the roster is shown greyed-out behind a coming-soon tag
+                  rather than as an included benefit. */}
+              <p class="pr-models-head">{L.topVideoModels}<span class="pr-soon-tag">{L.comingSoon}</span></p>
+              <ul class="pr-model-list is-soon">
+                {VIDEO_MODELS.map((m) => (
+                  <li>
+                    <span class="pr-model-logo" aria-hidden="true">
+                      <img src={m.icon} alt="" width="14" height="14" loading="lazy" decoding="async" />
+                    </span>
+                    <span>{m.name}</span>
+                  </li>
+                ))}
               </ul>
             </div>
           </article>
@@ -455,6 +486,27 @@ const jsonLd = [
       })}
     </section>
 
+    <section class="pr-multimodal" aria-labelledby="pr-multimodal-title">
+      <div class="pr-multimodal-copy">
+        <span class="pr-multimodal-kicker">Open Design Cloud</span>
+        <h2 id="pr-multimodal-title">{L.multimodalTitle}</h2>
+        <p>{L.multimodalDescription}</p>
+      </div>
+      <div class="pr-multimodal-modes" aria-label={L.multimodalTitle}>
+        <div class="pr-mode">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M5 9h9M5 13h14M5 17h9" /></svg>
+          <span>{L.designAgent}</span>
+        </div>
+        <div class="pr-mode">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2" /><circle cx="9" cy="9" r="1.5" /><path d="m5.5 17 4-4 3 3 2-2 4 3" /></svg>
+          <span>{L.imageGeneration}</span>
+        </div>
+        <div class="pr-mode is-soon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" /><path d="m10 9 5 3-5 3Z" /></svg>
+          <span>{L.videoGeneration}<span class="pr-soon-tag">{L.comingSoon}</span></span>
+        </div>
+      </div>
+    </section>
     </div>
 
     <div
@@ -1270,7 +1322,7 @@ const jsonLd = [
     margin-top: 28px;
     border-bottom: 1px solid var(--border, rgba(0, 0, 0, 0.12));
   }
-  .pr-toggle { margin-top: 12px; }
+  .pr-toggle { margin-top: 24px; }
   .pr-toggle-btn {
     display: inline-flex;
     align-items: center;
@@ -1329,7 +1381,7 @@ const jsonLd = [
   /* ---- Grid ---- */
   .pr-grid {
     padding: 0;
-    margin-top: 40px;
+    margin-top: 28px;
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 16px;
@@ -1467,6 +1519,7 @@ const jsonLd = [
   /* Lead rows (credit + concurrency) read bold on paid tiers, mirroring the
      vela modal's core-benefit emphasis. */
   .pr-feat-strong { font-weight: 600; }
+  .pr-feat-multimodal { font-weight: 600; }
   /* The credit lead row carries an inline bonus badge. */
   .pr-feat-lead { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
   .pr-bonus {
@@ -1496,24 +1549,146 @@ const jsonLd = [
   .pr-models-head:first-child { margin-top: 0; }
   .pr-model-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 9px; }
   .pr-model-list li {
-    position: relative;
-    padding-left: 22px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
     font-size: 0.85rem;
+    line-height: 1.35;
     color: var(--ink, #2a2a2a);
   }
-  .pr-model-list li::before {
-    content: '✓';
-    position: absolute;
-    left: 0;
-    top: 0;
-    font-weight: 700;
-    color: var(--olive, #218c00);
+  .pr-model-logo {
+    display: inline-grid;
+    place-items: center;
+    flex: 0 0 20px;
+    width: 20px;
+    height: 20px;
+    border: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+    border-radius: 6px;
+    color: currentColor;
+    background: color-mix(in srgb, currentColor 3%, transparent);
   }
-  /* Models outside the Free trial pool render greyed-out with an ✕ mark. */
+  .pr-model-logo img {
+    display: block;
+    width: 13px;
+    height: 13px;
+    color: inherit;
+  }
+  /* Models outside the Free trial pool render greyed-out. */
   .pr-model-list li.is-unavailable { color: var(--ink-soft, #aaa); }
-  .pr-model-list li.is-unavailable::before {
-    content: '✕';
-    color: var(--ink-soft, #bbb);
+  .pr-model-list li.is-unavailable .pr-model-logo { opacity: 0.55; }
+  /* Roster for a modality that is not purchasable yet. `--ink-soft` sits too
+     close to `--ink` to read as unavailable, so mute against the surface. */
+  .pr-model-list.is-soon li { color: color-mix(in srgb, var(--ink, #262626) 48%, transparent); }
+  .pr-model-list.is-soon .pr-model-logo { opacity: 0.5; }
+
+  /* ---- Shared hosted multimodal benefit ---- */
+  .pr-multimodal {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1.35fr) minmax(420px, 1fr);
+    gap: 36px;
+    align-items: center;
+    max-width: 1280px;
+    margin: 28px auto 0;
+    padding: 30px 34px;
+    overflow: hidden;
+    border: 1px solid var(--border, rgba(0, 0, 0, 0.12));
+    border-radius: 18px;
+    background:
+      linear-gradient(105deg, color-mix(in srgb, var(--brand, #2bd200) 8%, transparent), transparent 42%),
+      var(--surface, rgba(255, 255, 255, 0.55));
+  }
+  .pr-multimodal::after {
+    content: '';
+    position: absolute;
+    top: -90px;
+    right: 18%;
+    width: 180px;
+    height: 180px;
+    border: 1px solid color-mix(in srgb, var(--brand, #2bd200) 28%, transparent);
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .pr-multimodal-copy { position: relative; z-index: 1; }
+  .pr-multimodal-kicker {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--olive, #218c00);
+    font-size: 0.68rem;
+    font-weight: 750;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .pr-multimodal h2 {
+    margin: 0;
+    font-family: var(--serif, Georgia, serif);
+    font-size: clamp(20px, 2.3vw, 28px);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+  }
+  .pr-multimodal-copy p {
+    max-width: 700px;
+    margin: 10px 0 0;
+    color: var(--ink-soft, #666);
+    font-size: 0.84rem;
+    line-height: 1.65;
+  }
+  .pr-multimodal-modes {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .pr-mode {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px;
+    border: 1px solid var(--line, rgba(0, 0, 0, 0.08));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--surface, #fff) 82%, transparent);
+  }
+  .pr-mode svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: var(--ink);
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .pr-mode span {
+    font-size: 0.78rem;
+    font-weight: 650;
+    line-height: 1.3;
+    color: var(--ink);
+  }
+  /* Modality that is presented but not yet purchasable. Reads as a
+     parenthetical on the label rather than a badge, so it never competes
+     with the campaign/bonus pills for attention. */
+  .pr-mode.is-soon svg { stroke: color-mix(in srgb, var(--ink, #262626) 48%, transparent); }
+  .pr-mode.is-soon > span { color: color-mix(in srgb, var(--ink, #262626) 48%, transparent); }
+  /* No margin: each locale's string carries its own separator (a leading
+     space for Latin/Hangul, the full-width bracket's side bearing for CJK). */
+  .pr-soon-tag {
+    color: var(--ink-soft, #aaa);
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+  }
+  @media (max-width: 900px) {
+    .pr-multimodal { grid-template-columns: 1fr; gap: 22px; }
+  }
+  @media (max-width: 540px) {
+    .pr-multimodal { padding: 24px 20px; }
+    .pr-multimodal-modes { grid-template-columns: 1fr; }
+    .pr-mode { flex-direction: row; align-items: center; gap: 12px; }
   }
   /* ---- Footnote ---- */
   .pr-foot {

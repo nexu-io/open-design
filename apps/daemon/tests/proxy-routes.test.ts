@@ -294,6 +294,84 @@ describe('API proxy routes', () => {
     });
   });
 
+  it('keeps deployment run-session metadata on Azure OpenAI-compatible max-token retries', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const providerBodies: Record<string, unknown>[] = [];
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url === 'https://authority.example.test/api/runs') {
+          return Promise.resolve(Response.json({
+            schema: 'deployment-provider.run-session.v1',
+            run_session_id: 'odrs_azure_retry',
+          }, { status: 201 }));
+        }
+        expect(url).toBe(
+          'https://resource.services.ai.azure.com/api/projects/project/openai/v1/chat/completions',
+        );
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer deployment-secret',
+        });
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        providerBodies.push(body);
+        expect(JSON.stringify(body)).not.toContain('deployment-secret');
+        if ('max_tokens' in body) {
+          return Promise.resolve(new Response(
+            JSON.stringify({
+              error: {
+                message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+              },
+            }),
+            { status: 400, headers: { 'content-type': 'application/json' } },
+          ));
+        }
+        return Promise.resolve(sseResponse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-chat-latest',
+          maxTokens: 1234,
+          projectId: 'project_1',
+          providerRunId: 'conversation_1',
+          providerOperationId: 'message_1',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
+      expect(providerBodies).toHaveLength(2);
+      expect(providerBodies[0]).toMatchObject({
+        max_tokens: 1234,
+        metadata: {
+          opendesign_run_session_id: 'odrs_azure_retry',
+          opendesign_cost_cap_usd: 0.05,
+          opendesign_idempotency_key: 'message_1',
+        },
+      });
+      expect(providerBodies[0]).not.toHaveProperty('max_completion_tokens');
+      expect(providerBodies[1]).toMatchObject({
+        max_completion_tokens: 1234,
+        metadata: {
+          opendesign_run_session_id: 'odrs_azure_retry',
+          opendesign_cost_cap_usd: 0.05,
+          opendesign_idempotency_key: 'message_1',
+        },
+      });
+      expect(providerBodies[1]).not.toHaveProperty('max_tokens');
+    });
+  });
+
   it('uses route-owned deployment provider run-session ids for minimal OpenAI-compatible proxy requests', async () => {
     await withDeploymentProviderEnv({
       OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
@@ -1514,6 +1592,66 @@ describe('API proxy routes', () => {
     expect(secondBody).toMatchObject({
       model: 'prod',
       messages: [{ role: 'user', content: 'hello' }],
+      max_completion_tokens: 1234,
+      stream: true,
+    });
+    expect(secondBody).not.toHaveProperty('max_tokens');
+  });
+
+  it('retries Azure-hosted OpenAI protocol alias requests when max_tokens is rejected', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return Promise.resolve(new Response(
+          JSON.stringify({
+            error: {
+              message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+              type: 'invalid_request_error',
+              param: 'max_tokens',
+              code: 'unsupported_parameter',
+            },
+          }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        ));
+      }
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+        apiKey: 'azure-key',
+        model: 'gpt-chat-latest',
+        maxTokens: 1234,
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    await expect(res.text()).resolves.toContain('event: end');
+    const upstreamCalls = fetchMock.mock.calls.filter(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCalls).toHaveLength(2);
+    expect(String(upstreamCalls[0]![0])).toBe(
+      'https://resource.services.ai.azure.com/api/projects/project/openai/v1/chat/completions',
+    );
+    expect(upstreamCalls[0]![1]?.headers).toMatchObject({
+      Authorization: 'Bearer azure-key',
+    });
+    const firstBody = JSON.parse(String(upstreamCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(upstreamCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({
+      model: 'gpt-chat-latest',
+      max_tokens: 1234,
+      stream: true,
+    });
+    expect(secondBody).toMatchObject({
+      model: 'gpt-chat-latest',
       max_completion_tokens: 1234,
       stream: true,
     });

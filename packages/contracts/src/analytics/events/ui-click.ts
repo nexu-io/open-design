@@ -1337,7 +1337,14 @@ export interface ShareOptionPopoverClickProps {
   // Export/share formats, plus 'publish_required_guide' for the share-intent
   // signal: the user opened Share wanting a link but the artifact isn't
   // deployed yet, so only the "publish online first" guide row is shown.
-  element: TrackingExportFormat | 'publish_required_guide';
+  // 'publish_file' is the Share tab's "Publish this file for everyone" button
+  // (the outcome reports separately via artifact_publish_result);
+  // 'copy_publish_link' is the copy-link button shown once a file is published.
+  element:
+    | TrackingExportFormat
+    | 'publish_required_guide'
+    | 'publish_file'
+    | 'copy_publish_link';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
   project_id: string;

@@ -6,6 +6,7 @@ import {
   buildLegacyMaxTokensParam,
   buildMaxCompletionTokensParam,
   buildOpenAIChatTokenParam,
+  isAzureOpenAIHostname,
   isUnsupportedMaxTokensError,
 } from '../integrations/openai-chat-token-params.js';
 import {
@@ -1303,18 +1304,28 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       payloadMessages.unshift({ role: 'system', content: systemPrompt });
     }
 
+    const effectiveMaxTokens =
+      typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192;
+    const payloadMetadata = proxyBody.metadata && typeof proxyBody.metadata === 'object'
+      ? { metadata: proxyBody.metadata }
+      : {};
     const payload: any = {
       model,
       messages: payloadMessages,
-      ...(proxyBody.metadata && typeof proxyBody.metadata === 'object'
-        ? { metadata: proxyBody.metadata }
-        : {}),
-      ...buildOpenAIChatTokenParam(
-        model,
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
-      ),
+      ...payloadMetadata,
+      ...buildOpenAIChatTokenParam(model, effectiveMaxTokens),
       stream: true,
     };
+    const retryPayload = {
+      model,
+      messages: payloadMessages,
+      ...payloadMetadata,
+      ...buildMaxCompletionTokensParam(effectiveMaxTokens),
+      stream: true,
+    };
+    const canRetryUnsupportedMaxTokens = isAzureOpenAIHostname(
+      validated.parsed!.hostname,
+    );
 
     const sse = createSseResponse(res);
     let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
@@ -1322,7 +1333,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       proxyDispatcher = proxyDispatcherRequestInit();
       const signal = clientDisconnectSignal(res);
       sse.send('start', { model });
-      const response = await fetch(url, {
+      const requestInit = {
         ...proxyDispatcher.requestInit,
         signal,
         method: 'POST',
@@ -1334,21 +1345,40 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'X-Title': 'Open Design',
           } : {}),
         },
+        redirect: 'error' as const,
+      };
+      let response = await fetch(url, {
+        ...requestInit,
         body: JSON.stringify(payload),
-        redirect: 'error',
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText, [effectiveApiKey])}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: redactAuthTokens(errorText, [effectiveApiKey]),
-          retryable: response.status === 429 || response.status >= 500,
-        });
-        return sse.end();
+        let errorText = await response.text();
+        if (
+          canRetryUnsupportedMaxTokens &&
+          response.status === 400 &&
+          isUnsupportedMaxTokensError(errorText)
+        ) {
+          console.warn(
+            `[proxy:openai] retrying Azure-hosted request with max_completion_tokens model=${model}`,
+          );
+          response = await fetch(url, {
+            ...requestInit,
+            body: JSON.stringify(retryPayload),
+          });
+          errorText = response.ok ? '' : await response.text();
+        }
+        if (!response.ok) {
+          console.error(
+            `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText, [effectiveApiKey])}`,
+          );
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: redactAuthTokens(errorText, [effectiveApiKey]),
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
+        }
       }
 
       let ended = false;

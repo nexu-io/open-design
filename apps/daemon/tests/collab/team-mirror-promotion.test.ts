@@ -795,9 +795,11 @@ describe('authorized team mirror promotion', () => {
     const { rename } = await import('node:fs/promises');
     await rename(fx.liveDir, recoveryDir);
     await rename(fx.stageDir, fx.liveDir);
+    const unexpectedLiveDir = path.join(fx.root, '.project-1.unexpected-live');
+    await mkdir(unexpectedLiveDir);
+    await writeFile(path.join(unexpectedLiveDir, 'caller.txt'), 'do not delete');
     await rm(fx.liveDir, { recursive: true });
-    await mkdir(fx.liveDir);
-    await writeFile(path.join(fx.liveDir, 'caller.txt'), 'do not delete');
+    await rename(unexpectedLiveDir, fx.liveDir);
     await mkdir(fx.journalDir, { recursive: true });
     const recoveryStat = await lstat(recoveryDir);
     const record: TeamMirrorPromotionJournalRecord = {

@@ -30,13 +30,11 @@ import { describe, expect, it } from 'vitest';
  *
  * ## Why this lives in `e2e/tests/` and not `apps/daemon/tests/`
  *
- * A guard is worth exactly the lane that runs it. `ci.yml`'s daemon lane
- * executes one file — `tests/project-watchers.test.ts` — and that exclusive
- * invocation is itself pinned by the certain-exempt consumption guard
- * (`workflowRunsOnlyAllowedDaemonTest` in
- * `scripts/check-certain-exempt-consumption.ts`), so widening it is a coupled
- * policy change, not a lane edit. A daemon-hosted guard therefore protects
- * nothing on the merge gate.
+ * A guard is worth exactly the lane that runs it. The daemon lane now executes
+ * the complete package suite in four shards, so a daemon-hosted regression
+ * would also protect the merge gate. This check remains here as a lightweight,
+ * independent structural guard because it does not boot a daemon and runs in
+ * the broader E2E Vitest lane.
  *
  * `e2e/tests/` closes that gap, and the closure is structural rather than
  * incidental:

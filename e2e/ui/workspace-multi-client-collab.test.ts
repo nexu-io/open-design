@@ -445,15 +445,13 @@ async function pinWorkspace(page: Page, workspaceMemberId: string): Promise<void
 
 async function openHome(page: Page): Promise<void> {
   await page.bringToFront();
-  const workspaceEventsConnected = page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return response.request().method() === 'GET' && url.pathname === '/api/workspace/events';
-  }, { timeout: T.long });
   await page.goto('/', { waitUntil: 'domcontentloaded', timeout: T.xlong });
   await expect(page.getByText('Loading Open Design…')).toHaveCount(0, {
     timeout: T.xlong,
   });
-  expect((await workspaceEventsConnected).ok()).toBeTruthy();
+  // Do not wait on the long-lived SSE response itself: Chromium may not emit
+  // a response event until the stream yields its first chunk. The live
+  // convergence assertions below are the actual connection contract.
   const privacyDialog = page
     .getByRole('dialog')
     .filter({ hasText: 'Help us improve Open Design' });
