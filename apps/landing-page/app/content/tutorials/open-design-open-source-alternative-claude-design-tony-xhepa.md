@@ -1,7 +1,7 @@
 ---
 title: 'Which Coding Agent Should You Run Open Design With?'
 youtubeId: 6yyF5kJEO20
-summary: A setup guide focused on the one choice that matters most — which coding agent drives Open Design. It supports 13+ agents (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen, Copilot, Devin, Hermes, Kimi, Pi, Kiro, and more); here's how to pick one, install from source, and build your first design. Based on Tony Xhepa's walkthrough.
+summary: A setup guide focused on the one choice that matters most — which coding agent drives Open Design. It supports a broad runtime set (Claude Code, Codex, Cursor, OpenCode, Qwen, Copilot, Devin, Hermes, Kimi, Pi, Kiro, and more); here's how to pick one, install from source, and build your first design. Based on Tony Xhepa's walkthrough.
 date: 2026-05-03
 category: Demo
 durationSeconds: 421
@@ -16,7 +16,7 @@ Open Design's first real decision isn't what to build — it's **which coding ag
 
 ## Why the agent is the important choice
 
-Open Design doesn't ship its own model — it's an open-source, local-first surface that **runs on whatever coding agent you already have**. So the agent you pick *is* your design engine: it determines quality, cost, and speed. The beauty is the breadth. Tony's list of supported agents is long: **Claude Code, Codex, Devin for Terminal, Cursor, Gemini, OpenCode, Qwen, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro — and more.** Whatever you're already running, Open Design probably supports it, and if you have none installed, you can use an Anthropic or OpenAI API key instead.
+Open Design doesn't ship its own model — it's an open-source, local-first surface that **runs on whatever supported coding agent you already have**. So the agent you pick *is* your design engine: it determines quality, cost, and speed. The runtime list is broad: **Claude Code, Codex, Devin for Terminal, Cursor, OpenCode, Qwen, GitHub Copilot CLI, Hermes, Kimi, Pi, Kiro — and more.** Whatever you're already running, Open Design probably supports it, and if you have none installed, you can configure a BYOK provider instead.
 
 ## How to pick one
 
@@ -24,7 +24,7 @@ A quick way to choose:
 
 - **Already paying for a coding CLI?** Use it — Open Design rides on that subscription, so there's no second bill.
 - **Want the strongest design output?** Point it at a top model (e.g. Claude Code on a capable model) for the initial build.
-- **Want it cheap or free?** Gemini CLI's free tier or OpenCode's bundled models work well; you can also bring your own key.
+- **Want it cheap or free?** OpenCode's available models or another supported free-tier runtime work well; you can also configure Google Gemini or another provider through BYOK.
 - **Care about privacy/local?** Any local CLI keeps generation on credentials that never leave your machine.
 
 You're not locked in — swap the active agent later in one click.
@@ -45,7 +45,7 @@ Then open the local URL it prints (a dynamic port — don't hardcode one). One n
 
 ## Step 2 — Configure execution mode (pick your agent)
 
-On first launch you set the **execution mode**: local CLI, Anthropic API, or OpenAI API. Choose **local CLI** and Open Design shows which agents it detected on your machine — Tony has Codex, Gemini, OpenCode, and Pi installed (Claude Code shown as not installed on that machine). Pick one (he goes with OpenCode), optionally choose the model, and **Get started**.
+On first launch you set the **execution mode**. In Tony's recording, the local list included Codex, Gemini, OpenCode, and Pi; he chose OpenCode. Current releases no longer expose Gemini CLI as a direct runtime, so choose another detected CLI or configure Google Gemini through BYOK, then select the model and click **Get started**.
 
 ![The Open Design plugins hub.](/tutorials/open-design-open-source-alternative-claude-design-tony-xhepa/plugins-hub.webp)
 *The plugins hub: browse the registry, import plugins, and prepare them for your team.*
@@ -68,7 +68,7 @@ Create a **Prototype**, name it, pick fidelity (high), and start from a suggeste
 ## FAQ
 
 **Which agents does Open Design support?**
-Many — Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen, GitHub Copilot CLI, Devin, Hermes, Kimi, Pi, Kiro, and more. It auto-detects the ones installed on your machine.
+Many — Claude Code, Codex, Cursor, OpenCode, Qwen, GitHub Copilot CLI, Devin, Hermes, Kimi, Pi, Kiro, and more. It auto-detects the supported ones installed on your machine.
 
 **How do I choose one?**
 Use the CLI you already pay for; pick a strong model for the initial build and a cheaper one for iteration; or use a free tier / your own API key.

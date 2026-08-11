@@ -175,7 +175,7 @@ const blogJsonLd =
     ? {
         '@context': 'https://schema.org',
         '@type': 'Blog',
-        name: 'Open Design — Blog',
+        name: props.title,
         description: props.description,
         url: canonical,
         inLanguage: localeDef.htmlLang,
@@ -196,7 +196,10 @@ const blogJsonLd =
 {alternateLinks.map((entry) => (
   <link rel='alternate' hreflang={entry.hreflang} href={entry.href} />
 ))}
-<link rel='alternate' hreflang='x-default' href={xDefaultHref} />
+{/* hreflang must not advertise noindexed URLs — a page that opts into a
+    robots noindex drops its x-default pointer too (on `noindex: true` posts
+    the English target itself is noindexed). */}
+{props.noindex !== true && <link rel='alternate' hreflang='x-default' href={xDefaultHref} />}
 <link rel='alternate' type='application/rss+xml' title='Open Design Blog' href={rssUrl} />
 <FaviconLinks />
 <ResourceHints />

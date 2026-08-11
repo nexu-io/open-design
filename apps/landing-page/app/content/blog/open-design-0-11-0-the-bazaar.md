@@ -3,13 +3,13 @@ title: "Open Design 0.11.0: the Bazaar"
 date: 2026-06-17
 category: "Product"
 readingTime: 7
-summary: "Tag open-design-v0.11.0 — 137 PRs from 57 contributors in four days. Codename \"the Bazaar.\" The plugin gallery now plays a live clip of every real output, whatever coding agent you already use just snaps in, and a newcomer's first run is a guided welcome instead of a locked gate."
+summary: "open-design-v0.11.0 — 137 PRs from 57 contributors in four days. Codename \"the Bazaar.\" The plugin gallery now plays a live clip of every real output, whatever coding agent you already use just snaps in, and a newcomer's first run is a guided welcome instead of a locked gate."
 i18n:
   zh:
     title: 'Open Design 0.11.0：集市'
-    summary: '标签 open-design-v0.11.0 —— 四天内 57 位贡献者提交了 137 个 PR。代号「集市」。插件画廊现在会为每一个真实产出播放一段实时片段，你已经在用的任何 coding agent 都能即插即用，而新人的第一次运行是一段有引导的欢迎之旅，而不再是一道上锁的关卡。'
+    summary: 'open-design-v0.11.0 —— 四天内 57 位贡献者提交了 137 个 PR。代号「集市」。插件画廊现在会为每一个真实产出播放一段实时片段，你已经在用的任何 coding agent 都能即插即用，而新人的第一次运行是一段有引导的欢迎之旅，而不再是一道上锁的关卡。'
     bodyHtml: |
-      <p>标签 <code>open-design-v0.11.0</code>，于 2026 年 6 月 17 日发布。<strong>四天内 57 位贡献者提交了 137 个 PR。</strong>代号「集市」。大教堂由少数被选中的人闭门建造；而集市则在开放之中由所有人同时建造 —— 而这次发布把 Open Design 变成了那座集市。走进来，逛逛摊位，看中什么就拿起什么，让它成为你自己的。</p>
+      <p><code>open-design-v0.11.0</code>，于 2026 年 6 月 17 日发布。<strong>四天内 57 位贡献者提交了 137 个 PR。</strong>代号「集市」。大教堂由少数被选中的人闭门建造；而集市则在开放之中由所有人同时建造 —— 而这次发布把 Open Design 变成了那座集市。走进来，逛逛摊位，看中什么就拿起什么，让它成为你自己的。</p>
       <p>想看完整版本，可以查阅 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0">GitHub 上的发布说明</a>。本文是精简版：这次发布开放了什么、你今天能用它做什么，以及从哪里开始。</p>
 
       <h2>一个终于会展示自己的画廊</h2>
@@ -72,9 +72,9 @@ i18n:
       </ul>
   ja:
     title: 'Open Design 0.11.0：バザール'
-    summary: 'タグ open-design-v0.11.0 — 4日間で57人のコントリビューターから137件のPR。コードネームは「バザール」。プラグインギャラリーは、実際のアウトプットすべてのライブクリップを再生するようになり、あなたがすでに使っているコーディングエージェントが何であれそのまま組み込め、新規ユーザーの初回起動は、閉ざされたゲートではなくガイド付きのウェルカムになります。'
+    summary: 'open-design-v0.11.0 — 4日間で57人のコントリビューターから137件のPR。コードネームは「バザール」。プラグインギャラリーは、実際のアウトプットすべてのライブクリップを再生するようになり、あなたがすでに使っているコーディングエージェントが何であれそのまま組み込め、新規ユーザーの初回起動は、閉ざされたゲートではなくガイド付きのウェルカムになります。'
     bodyHtml: |
-      <p>タグ <code>open-design-v0.11.0</code>、2026年6月17日にリリース。<strong>4日間で57人のコントリビューターから137件のPR。</strong>コードネームは「バザール」。伽藍は、選ばれた少数の手によって密やかに建てられます。一方バザールは、みんなの手で、一斉に、開かれた場所で築かれます——そして今回のリリースは、Open Design をそのバザールへと変えます。足を踏み入れ、露店を見て回り、目に留まったものを手に取り、自分のものにしてください。</p>
+      <p><code>open-design-v0.11.0</code>、2026年6月17日にリリース。<strong>4日間で57人のコントリビューターから137件のPR。</strong>コードネームは「バザール」。伽藍は、選ばれた少数の手によって密やかに建てられます。一方バザールは、みんなの手で、一斉に、開かれた場所で築かれます——そして今回のリリースは、Open Design をそのバザールへと変えます。足を踏み入れ、露店を見て回り、目に留まったものを手に取り、自分のものにしてください。</p>
       <p>詳細版が読みたい方は、<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0">GitHub のリリースノート</a>をご覧ください。本記事は短縮版です：今回のリリースで何が開かれたか、今日それで何ができるか、そしてどこから始めればよいか。</p>
 
       <h2>ついに本領を発揮するギャラリー</h2>
@@ -137,9 +137,9 @@ i18n:
       </ul>
   ko:
     title: 'Open Design 0.11.0: 바자르'
-    summary: '태그 open-design-v0.11.0 — 4일 동안 57명의 기여자가 만든 137개의 PR. 코드명 "바자르(Bazaar)". 이제 플러그인 갤러리는 모든 실제 결과물의 라이브 클립을 재생하고, 이미 쓰고 있는 어떤 코딩 에이전트든 그대로 끼워 넣을 수 있으며, 새 사용자의 첫 실행은 잠긴 관문이 아니라 안내가 있는 환영입니다.'
+    summary: 'open-design-v0.11.0 — 4일 동안 57명의 기여자가 만든 137개의 PR. 코드명 "바자르(Bazaar)". 이제 플러그인 갤러리는 모든 실제 결과물의 라이브 클립을 재생하고, 이미 쓰고 있는 어떤 코딩 에이전트든 그대로 끼워 넣을 수 있으며, 새 사용자의 첫 실행은 잠긴 관문이 아니라 안내가 있는 환영입니다.'
     bodyHtml: |
-      <p>태그 <code>open-design-v0.11.0</code>, 2026년 6월 17일 출시. <strong>4일 동안 57명의 기여자가 만든 137개의 PR.</strong> 코드명 "바자르(Bazaar)". 대성당은 선택받은 소수가 비공개로 짓고, 바자르는 모두가 공개된 곳에서 한꺼번에 짓습니다 — 그리고 이번 릴리스는 Open Design을 바로 그 바자르로 만듭니다. 안으로 들어와 좌판을 둘러보고, 눈길을 끄는 무엇이든 집어 들어 당신의 것으로 만드세요.</p>
+      <p><code>open-design-v0.11.0</code>, 2026년 6월 17일 출시. <strong>4일 동안 57명의 기여자가 만든 137개의 PR.</strong> 코드명 "바자르(Bazaar)". 대성당은 선택받은 소수가 비공개로 짓고, 바자르는 모두가 공개된 곳에서 한꺼번에 짓습니다 — 그리고 이번 릴리스는 Open Design을 바로 그 바자르로 만듭니다. 안으로 들어와 좌판을 둘러보고, 눈길을 끄는 무엇이든 집어 들어 당신의 것으로 만드세요.</p>
       <p>긴 버전이 궁금하다면 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0">GitHub의 릴리스 노트</a>에 담겨 있습니다. 이 글은 짧은 버전입니다: 이번 릴리스에서 무엇이 열렸는지, 오늘 그것으로 무엇을 할 수 있는지, 그리고 어디서 시작하면 되는지.</p>
 
       <h2>마침내 제 실력을 뽐내는 갤러리</h2>
@@ -202,9 +202,9 @@ i18n:
       </ul>
   de:
     title: 'Open Design 0.11.0: der Basar'
-    summary: 'Tag open-design-v0.11.0 — 137 PRs von 57 Mitwirkenden in vier Tagen. Codename „der Basar”. Die Plugin-Galerie spielt jetzt einen Live-Clip jeder echten Ausgabe ab, jeder Coding-Agent, den du bereits nutzt, lässt sich einfach einklinken, und der erste Lauf für Neulinge ist ein geführtes Willkommen statt eines verriegelten Tors.'
+    summary: 'open-design-v0.11.0 — 137 PRs von 57 Mitwirkenden in vier Tagen. Codename „der Basar”. Die Plugin-Galerie spielt jetzt einen Live-Clip jeder echten Ausgabe ab, jeder Coding-Agent, den du bereits nutzt, lässt sich einfach einklinken, und der erste Lauf für Neulinge ist ein geführtes Willkommen statt eines verriegelten Tors.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.11.0</code>, veröffentlicht am 17. Juni 2026. <strong>137 PRs von 57 Mitwirkenden in vier Tagen.</strong> Codename „der Basar”. Eine Kathedrale wird im Verborgenen von wenigen Auserwählten gebaut; ein Basar wird offen gebaut, von allen, alle zugleich — und dieses Release macht Open Design zum Basar. Tritt ein, schlendere an den Ständen vorbei, greif dir, was dein Auge fängt, und mach es zu deinem.</p>
+      <p><code>open-design-v0.11.0</code>, veröffentlicht am 17. Juni 2026. <strong>137 PRs von 57 Mitwirkenden in vier Tagen.</strong> Codename „der Basar”. Eine Kathedrale wird im Verborgenen von wenigen Auserwählten gebaut; ein Basar wird offen gebaut, von allen, alle zugleich — und dieses Release macht Open Design zum Basar. Tritt ein, schlendere an den Ständen vorbei, greif dir, was dein Auge fängt, und mach es zu deinem.</p>
       <p>Wenn du die ausführliche Version möchtest, findest du sie in den <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0">Release Notes auf GitHub</a>. Dieser Beitrag ist die Kurzfassung: was sich in diesem Release geöffnet hat, was du heute damit machen kannst und wo du anfängst.</p>
 
       <h2>Eine Galerie, die endlich zeigt, was sie kann</h2>
@@ -267,9 +267,9 @@ i18n:
       </ul>
   fr:
     title: 'Open Design 0.11.0 : le Bazar'
-    summary: 'Tag open-design-v0.11.0 — 137 PR de 57 contributeurs en quatre jours. Nom de code « le Bazar ». La galerie de plugins lit désormais un extrait en direct de chaque sortie réelle, l''agent de codage que vous utilisez déjà s''y intègre d''un clic, et le premier lancement d''un nouveau venu est un accueil guidé plutôt qu''une porte verrouillée.'
+    summary: 'open-design-v0.11.0 — 137 PR de 57 contributeurs en quatre jours. Nom de code « le Bazar ». La galerie de plugins lit désormais un extrait en direct de chaque sortie réelle, l''agent de codage que vous utilisez déjà s''y intègre d''un clic, et le premier lancement d''un nouveau venu est un accueil guidé plutôt qu''une porte verrouillée.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.11.0</code>, publié le 17 juin 2026. <strong>137 PR de 57 contributeurs en quatre jours.</strong> Nom de code « le Bazar ». Une cathédrale se bâtit en privé par quelques élus ; un bazar se bâtit à ciel ouvert, par tout le monde, tous à la fois — et cette version transforme Open Design en bazar. Entrez, parcourez les étals, attrapez ce qui attire votre regard, et faites-le vôtre.</p>
+      <p><code>open-design-v0.11.0</code>, publié le 17 juin 2026. <strong>137 PR de 57 contributeurs en quatre jours.</strong> Nom de code « le Bazar ». Une cathédrale se bâtit en privé par quelques élus ; un bazar se bâtit à ciel ouvert, par tout le monde, tous à la fois — et cette version transforme Open Design en bazar. Entrez, parcourez les étals, attrapez ce qui attire votre regard, et faites-le vôtre.</p>
       <p>Si vous voulez la version longue, les <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0">notes de version sur GitHub</a> la contiennent. Cet article est la version courte : ce qui s'est ouvert dans cette version, ce que vous pouvez en faire dès aujourd'hui, et par où commencer.</p>
 
       <h2>Une galerie qui se montre enfin</h2>
@@ -332,9 +332,9 @@ i18n:
       </ul>
   ru:
     title: 'Open Design 0.11.0: базар'
-    summary: 'Тег open-design-v0.11.0 — 137 PR от 57 контрибьюторов за четыре дня. Кодовое название «базар». Галерея плагинов теперь проигрывает живой ролик каждого реального результата, любой кодинг-агент, которым вы уже пользуетесь, просто подключается, а первый запуск для новичка — это сопровождаемое приветствие вместо запертых ворот.'
+    summary: 'open-design-v0.11.0 — 137 PR от 57 контрибьюторов за четыре дня. Кодовое название «базар». Галерея плагинов теперь проигрывает живой ролик каждого реального результата, любой кодинг-агент, которым вы уже пользуетесь, просто подключается, а первый запуск для новичка — это сопровождаемое приветствие вместо запертых ворот.'
     bodyHtml: |
-      <p>Тег <code>open-design-v0.11.0</code>, выпущен 17 июня 2026 года. <strong>137 PR от 57 контрибьюторов за четыре дня.</strong> Кодовое название «базар». Собор строится в тиши избранными немногими; базар строится открыто, всеми и сразу — и этот релиз превращает Open Design в базар. Войдите, пройдитесь по рядам, возьмите всё, что приглянулось, и сделайте это своим.</p>
+      <p><code>open-design-v0.11.0</code>, выпущен 17 июня 2026 года. <strong>137 PR от 57 контрибьюторов за четыре дня.</strong> Кодовое название «базар». Собор строится в тиши избранными немногими; базар строится открыто, всеми и сразу — и этот релиз превращает Open Design в базар. Войдите, пройдитесь по рядам, возьмите всё, что приглянулось, и сделайте это своим.</p>
       <p>Если вам нужна развёрнутая версия, она есть в <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0">примечаниях к релизу на GitHub</a>. Этот пост — краткая версия: что открылось в этом релизе, что вы можете сделать с этим уже сегодня и с чего начать.</p>
 
       <h2>Галерея, которая наконец показывает себя</h2>
@@ -397,9 +397,9 @@ i18n:
       </ul>
   es:
     title: 'Open Design 0.11.0: el Bazar'
-    summary: 'Tag open-design-v0.11.0: 137 PRs de 57 colaboradores en cuatro días. Nombre en clave «el Bazar». La galería de plugins ahora reproduce un clip en vivo de cada resultado real, cualquier coding agent que ya uses simplemente encaja, y el primer arranque de un recién llegado es una bienvenida guiada en lugar de una puerta cerrada.'
+    summary: 'open-design-v0.11.0: 137 PRs de 57 colaboradores en cuatro días. Nombre en clave «el Bazar». La galería de plugins ahora reproduce un clip en vivo de cada resultado real, cualquier coding agent que ya uses simplemente encaja, y el primer arranque de un recién llegado es una bienvenida guiada en lugar de una puerta cerrada.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.11.0</code>, publicado el 17 de junio de 2026. <strong>137 PRs de 57 colaboradores en cuatro días.</strong> Nombre en clave «el Bazar». Una catedral la construyen en privado unos pocos elegidos; un bazar se construye a la vista, entre todos, a la vez, y esta versión convierte Open Design en el bazar. Entra, recorre los puestos, toma lo que te llame la atención y hazlo tuyo.</p>
+      <p><code>open-design-v0.11.0</code>, publicado el 17 de junio de 2026. <strong>137 PRs de 57 colaboradores en cuatro días.</strong> Nombre en clave «el Bazar». Una catedral la construyen en privado unos pocos elegidos; un bazar se construye a la vista, entre todos, a la vez, y esta versión convierte Open Design en el bazar. Entra, recorre los puestos, toma lo que te llame la atención y hazlo tuyo.</p>
       <p>Si quieres la versión larga, las <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0">notas de la versión en GitHub</a> la tienen. Esta publicación es la versión corta: qué se abrió en esta versión, qué puedes hacer con ello hoy y por dónde empezar.</p>
 
       <h2>Una galería que por fin se luce</h2>
@@ -462,9 +462,9 @@ i18n:
       </ul>
   pt-br:
     title: 'Open Design 0.11.0: o Bazar'
-    summary: 'Tag open-design-v0.11.0 — 137 PRs de 57 contribuidores em quatro dias. Codinome "o Bazar". A galeria de plugins agora reproduz um clipe ao vivo de cada saída real, qualquer agente de programação que você já usa simplesmente se encaixa, e a primeira execução de um recém-chegado é um acolhimento guiado em vez de um portão trancado.'
+    summary: 'open-design-v0.11.0 — 137 PRs de 57 contribuidores em quatro dias. Codinome "o Bazar". A galeria de plugins agora reproduz um clipe ao vivo de cada saída real, qualquer agente de programação que você já usa simplesmente se encaixa, e a primeira execução de um recém-chegado é um acolhimento guiado em vez de um portão trancado.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.11.0</code>, lançada em 17 de junho de 2026. <strong>137 PRs de 57 contribuidores em quatro dias.</strong> Codinome "o Bazar". Uma catedral é construída em segredo por uns poucos escolhidos; um bazar é construído à vista de todos, por todo mundo, tudo de uma vez — e esta versão transforma o Open Design no bazar. Entre, percorra as barracas, pegue o que chamar sua atenção e torne-o seu.</p>
+      <p><code>open-design-v0.11.0</code>, lançada em 17 de junho de 2026. <strong>137 PRs de 57 contribuidores em quatro dias.</strong> Codinome "o Bazar". Uma catedral é construída em segredo por uns poucos escolhidos; um bazar é construído à vista de todos, por todo mundo, tudo de uma vez — e esta versão transforma o Open Design no bazar. Entre, percorra as barracas, pegue o que chamar sua atenção e torne-o seu.</p>
       <p>Se você quer a versão longa, as <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0">notas de versão no GitHub</a> têm tudo. Este post é a versão curta: o que se abriu nesta versão, o que você pode fazer com isso hoje e por onde começar.</p>
 
       <h2>Uma galeria que finalmente se exibe</h2>
@@ -527,9 +527,9 @@ i18n:
       </ul>
   it:
     title: 'Open Design 0.11.0: il Bazaar'
-    summary: 'Tag open-design-v0.11.0 — 137 PR da 57 contributori in quattro giorni. Nome in codice "il Bazaar". La galleria di plugin ora riproduce una clip live di ogni output reale, qualunque coding agent tu già usi si aggancia all''istante, e la prima esecuzione di un nuovo arrivato è un benvenuto guidato invece di un cancello bloccato.'
+    summary: 'open-design-v0.11.0 — 137 PR da 57 contributori in quattro giorni. Nome in codice "il Bazaar". La galleria di plugin ora riproduce una clip live di ogni output reale, qualunque coding agent tu già usi si aggancia all''istante, e la prima esecuzione di un nuovo arrivato è un benvenuto guidato invece di un cancello bloccato.'
     bodyHtml: |
-      <p>Tag <code>open-design-v0.11.0</code>, rilasciato il 17 giugno 2026. <strong>137 PR da 57 contributori in quattro giorni.</strong> Nome in codice "il Bazaar". Una cattedrale viene costruita in privato da pochi eletti; un bazar viene costruito allo scoperto, da tutti, tutti insieme — e questa release trasforma Open Design nel bazar. Entra, scorri le bancarelle, prendi qualunque cosa ti colpisca e fallo tuo.</p>
+      <p><code>open-design-v0.11.0</code>, rilasciato il 17 giugno 2026. <strong>137 PR da 57 contributori in quattro giorni.</strong> Nome in codice "il Bazaar". Una cattedrale viene costruita in privato da pochi eletti; un bazar viene costruito allo scoperto, da tutti, tutti insieme — e questa release trasforma Open Design nel bazar. Entra, scorri le bancarelle, prendi qualunque cosa ti colpisca e fallo tuo.</p>
       <p>Se vuoi la versione lunga, le <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0">note di rilascio su GitHub</a> ce l'hanno. Questo post è la versione breve: cosa si è aperto in questa release, cosa puoi farci oggi e da dove iniziare.</p>
 
       <h2>Una galleria che finalmente si mette in mostra</h2>
@@ -592,9 +592,9 @@ i18n:
       </ul>
   tr:
     title: 'Open Design 0.11.0: Pazar Yeri'
-    summary: 'Etiket open-design-v0.11.0 — dört günde 57 katkıda bulunandan 137 PR. Kod adı "Pazar Yeri." Eklenti galerisi artık her gerçek çıktının canlı bir klibini oynatıyor, hâlihazırda kullandığınız hangi kodlama agent''ı olursa olsun doğrudan yerine oturuyor ve yeni gelen birinin ilk çalıştırması kilitli bir kapı yerine rehberli bir karşılama oluyor.'
+    summary: 'open-design-v0.11.0 — dört günde 57 katkıda bulunandan 137 PR. Kod adı "Pazar Yeri." Eklenti galerisi artık her gerçek çıktının canlı bir klibini oynatıyor, hâlihazırda kullandığınız hangi kodlama agent''ı olursa olsun doğrudan yerine oturuyor ve yeni gelen birinin ilk çalıştırması kilitli bir kapı yerine rehberli bir karşılama oluyor.'
     bodyHtml: |
-      <p>Etiket <code>open-design-v0.11.0</code>, 17 Haziran 2026'da yayınlandı. <strong>Dört günde 57 katkıda bulunandan 137 PR.</strong> Kod adı "Pazar Yeri." Bir katedral, seçilmiş birkaç kişi tarafından gizlice inşa edilir; bir pazar yeri ise açıkta, herkes tarafından, hep birlikte inşa edilir — ve bu sürüm Open Design'ı pazar yerine dönüştürüyor. İçeri girin, tezgâhlara göz atın, gözünüze ne çarparsa alın ve onu kendinizinki yapın.</p>
+      <p><code>open-design-v0.11.0</code>, 17 Haziran 2026'da yayınlandı. <strong>Dört günde 57 katkıda bulunandan 137 PR.</strong> Kod adı "Pazar Yeri." Bir katedral, seçilmiş birkaç kişi tarafından gizlice inşa edilir; bir pazar yeri ise açıkta, herkes tarafından, hep birlikte inşa edilir — ve bu sürüm Open Design'ı pazar yerine dönüştürüyor. İçeri girin, tezgâhlara göz atın, gözünüze ne çarparsa alın ve onu kendinizinki yapın.</p>
       <p>Uzun versiyonunu istiyorsanız, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0">GitHub'daki sürüm notları</a> hepsini içeriyor. Bu yazı kısa versiyon: bu sürümde neler açıldı, bununla bugün ne yapabilirsiniz ve nereden başlamalısınız.</p>
 
       <h2>Sonunda hünerini sergileyen bir galeri</h2>
@@ -657,7 +657,7 @@ i18n:
       </ul>
 ---
 
-Tag `open-design-v0.11.0`, shipped 17 June 2026. **137 PRs from 57 contributors in four days.** Codename "the Bazaar." A cathedral is built in private by a chosen few; a bazaar is built in the open, by everyone, all at once — and this release turns Open Design into the bazaar. Walk in, browse the stalls, pick up whatever catches your eye, and make it yours.
+`open-design-v0.11.0`, shipped 17 June 2026. **137 PRs from 57 contributors in four days.** Codename "the Bazaar." A cathedral is built in private by a chosen few; a bazaar is built in the open, by everyone, all at once — and this release turns Open Design into the bazaar. Walk in, browse the stalls, pick up whatever catches your eye, and make it yours.
 
 If you want the long version, the [release notes on GitHub](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.11.0) have it. This post is the short version: what opened up in this release, what you can do with it today, and where to start.
 

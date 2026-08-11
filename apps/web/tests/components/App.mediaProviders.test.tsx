@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
@@ -23,12 +24,29 @@ import {
 } from '../../src/providers/registry';
 import { listProjects, listTemplates } from '../../src/state/projects';
 
+// Settings is now a full-page route (`/settings`): App.openSettings navigates
+// instead of toggling a modal flag, so the router mock must feed navigate()
+// calls back into useRoute() (like the production useSyncExternalStore router)
+// for the settings surface to render at all.
+const homeRouteMock = { kind: 'home' as const, view: 'home' as const };
+const routeListeners = new Set<() => void>();
 const navigateMock = vi.fn();
-const useRouteMock = vi.fn(() => ({ kind: 'home' as const, view: 'home' as const }));
+const useRouteMock = vi.fn(() => homeRouteMock);
 
 vi.mock('../../src/router', () => ({
-  navigate: (...args: unknown[]) => navigateMock(...args),
-  useRoute: () => useRouteMock(),
+  navigate: (...args: unknown[]) => {
+    navigateMock(...args);
+    useRouteMock.mockReturnValue(args[0] as never);
+    routeListeners.forEach((notify) => notify());
+  },
+  useRoute: () =>
+    useSyncExternalStore(
+      (onChange) => {
+        routeListeners.add(onChange);
+        return () => routeListeners.delete(onChange);
+      },
+      useRouteMock,
+    ),
 }));
 
 vi.mock('../../src/components/EntryView', () => ({
@@ -167,6 +185,7 @@ const baseConfig: AppConfig = {
 
 describe('App media provider sync flows', () => {
   beforeEach(() => {
+    useRouteMock.mockReturnValue(homeRouteMock);
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([]);
     mockedFetchSkills.mockResolvedValue([]);

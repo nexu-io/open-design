@@ -17,7 +17,7 @@ import type { PackagedNamespacePaths } from "./paths.js";
 type LauncherAfterQuitLogger = Pick<Console, "warn"> & Partial<Pick<Console, "info">>;
 
 export type LauncherExistingDesktopGateResult =
-  | { action: "continue"; reason: "inspect-failed" | "not-running" | "stale-sidecar" | "superseded-version" }
+  | { action: "continue"; reason: "headless-owner" | "inspect-failed" | "not-running" | "stale-sidecar" | "superseded-version" }
   | { action: "exit"; reason: "existing-focused" | "existing-focus-failed" };
 
 /**
@@ -90,7 +90,7 @@ async function restartExistingDesktop(
     namespace: string;
     paths: PackagedNamespacePaths;
     pid: number | null;
-    reason: "stale-sidecar" | "superseded-version";
+    reason: "headless-owner" | "stale-sidecar" | "superseded-version";
     requestIpc: typeof requestJsonIpc;
     stop: typeof stopProcesses;
     waitForExit: typeof waitForProcessExit;
@@ -163,6 +163,7 @@ export async function waitForLauncherAfterQuit(
 export async function inspectExistingDesktopForLauncher(
   namespace: string,
   options: {
+    deeplinkUrl?: string | null;
     incomingVersion?: string | null;
     logger?: LauncherAfterQuitLogger;
     paths: PackagedNamespacePaths;
@@ -259,8 +260,36 @@ export async function inspectExistingDesktopForLauncher(
     return { action: "continue", reason: "superseded-version" };
   }
 
+  if (status.windowVisible === false) {
+    const pid = typeof status.pid === "number" ? status.pid : null;
+    await writeLauncherAfterQuitLog(
+      options.paths,
+      `inspect-found-existing namespace=${namespace} action=restart reason=headless-owner pid=${pid ?? "unknown"}`,
+    );
+    const restarted = await restartExistingDesktop({
+      ipcPath,
+      logger,
+      namespace,
+      paths: options.paths,
+      pid,
+      reason: "headless-owner",
+      requestIpc,
+      stop,
+      waitForExit,
+    });
+    if (!restarted) return { action: "exit", reason: "existing-focus-failed" };
+    return { action: "continue", reason: "headless-owner" };
+  }
+
   try {
-    await requestIpc(ipcPath, { type: SIDECAR_MESSAGES.SHOW }, { timeoutMs: 800 });
+    await requestIpc(
+      ipcPath,
+      {
+        ...(options.deeplinkUrl == null ? {} : { input: { deeplinkUrl: options.deeplinkUrl } }),
+        type: SIDECAR_MESSAGES.SHOW,
+      },
+      { timeoutMs: 800 },
+    );
     await writeLauncherAfterQuitLog(options.paths, `inspect-found-existing namespace=${namespace} focus=accepted`);
     return { action: "exit", reason: "existing-focused" };
   } catch (error) {

@@ -2,12 +2,20 @@
  * @module analytics/events/result-events
  * *_result event prop types (run, feedback, settings, packaged).
  */
-import type { TrackingRuntimeType } from '../public-params.js';
+import type {
+  AnalyticsAttributionQuality,
+  AnalyticsDistributionMechanism,
+  AnalyticsEntrySurface,
+  AnalyticsHostProduct,
+  AnalyticsPublisherClass,
+  TrackingRuntimeType,
+} from '../public-params.js';
 import type { ReleaseChannel } from '@open-design/release';
+import type { ArtifactOriginEntrySurface, ArtifactOriginStatus } from '../../api/files.js';
 import type { TrackingDesignSystemEditSurface, TrackingDesignSystemKind, TrackingDesignSystemLengthBucket, TrackingDesignSystemOrigin, TrackingDesignSystemRunEntryFrom } from './design-systems.js';
 import type { TrackingSettingsPage } from './event-names.js';
-import type { TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingResult, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
-import type { TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
+import type { TrackingAmrOpenCodeErrorPhase, TrackingAmrOpenCodeLastEventType, TrackingAmrOpenCodeLastToolKind, TrackingAmrOpenCodeLastToolStatus, TrackingArtifactKind, TrackingArtifactWriteSource, TrackingArtifactWriteStatus, TrackingByokPreflightBlockReason, TrackingByokProviderId, TrackingCliProviderId, TrackingDesignSystemSource, TrackingExecutionMode, TrackingExportFormat, TrackingExportResult, TrackingFeedbackAction, TrackingFeedbackProviderId, TrackingFeedbackRating, TrackingFeedbackRatingWithNone, TrackingFeedbackReasonCode, TrackingFidelity, TrackingFileSizeBucket, TrackingFileType, TrackingFirstModelEventType, TrackingLangfuseDeliveryStatus, TrackingLangfuseDropReason, TrackingLangfuseReportResult, TrackingLangfuseReportSkipReason, TrackingProjectKind, TrackingProjectSource, TrackingPublishErrorCode, TrackingResult, TrackingRunCancelOrigin, TrackingRunCloseReason, TrackingRunDiagnosticSource, TrackingRunFailureCategory, TrackingRunFailureDetail, TrackingRunFailureStage, TrackingRunFailureUserAction, TrackingRunLifecyclePhase, TrackingRunPhaseTimingStatus, TrackingRunResult, TrackingRunRetryFinalResult, TrackingRunRetryStrategy, TrackingRunRetrySuppressedReason, TrackingRunTerminalTrigger, TrackingStderrLineCountBucket, TrackingTestResult, TrackingTokenCountSource } from './shared-enums.js';
+import type { ConversationForkAnalyticsContext, TrackingFileVersionSource, TrackingPluginImportSource, TrackingSessionMode, TrackingSettingsArea } from './ui-click.js';
 // ---- Result events -------------------------------------------------------
 
 // Final outcome for the paid provider submission. Keep this envelope free of
@@ -89,8 +97,10 @@ export interface SpeakerNotesSaveResultProps {
 
 // Outcome of an actual import attempt from the plugin import modal. Fires
 // once per executed import (after the install/upload promise settles), not
-// for clicks that no-op. `error_code` carries the backend failure message —
-// the install pipeline has no structured codes (see PluginInstallOutcome).
+// for clicks that no-op. `error_code` carries a bounded machine-readable
+// backend code when available, with a stable HTTP/network fallback. Never put
+// the free-form install message here: it can contain URLs, paths, or upstream
+// response text and would create unbounded analytics cardinality.
 export interface PluginImportResultProps {
   page_name: 'plugins';
   area: 'import_modal';
@@ -121,7 +131,147 @@ export interface UpdateCheckResultProps {
 // (current daemon-side authoritative emission). Daemon supplies token /
 // duration data; entry surfaces propagate the optional context (entry_from,
 // fidelity, etc.) via the create-run payload.
-export interface RunCreatedProps {
+export type TrackingRunEntrySource =
+  | 'new_project'
+  | 'chat_composer'
+  | 'comment'
+  | 'mark'
+  | 'next_step'
+  | 'question_answer'
+  | 'resume_continue'
+  | TrackingDesignSystemRunEntryFrom;
+
+export type TrackingRunRecoveryActionType =
+  | 'manual_retry'
+  | 'resume_run'
+  | 'authorize_and_retry'
+  | 'switch_model_retry'
+  | 'switch_runtime_retry'
+  | 'question_answer';
+
+export interface RunTaskLineageProps {
+  /** Stable id for one user intent across every recovery-created Run. */
+  task_execution_id: string;
+  /** First Run in the task. Equals run_id on task_run_index zero. */
+  initial_run_id: string;
+  /** Previous Run that directly triggered this recovery Run. */
+  source_run_id?: string;
+  /** Zero-based Run index inside the task; same-Run automatic retries do not increment it. */
+  task_run_index: number;
+  recovery_action_type?: TrackingRunRecoveryActionType;
+  recovery_action_instance_id?: string;
+}
+
+export interface RunContextProps {
+  session_run_index?: number;
+  project_run_index?: number;
+  has_existing_artifacts?: boolean;
+  is_followup_run?: boolean;
+}
+
+export interface RunCapabilitiesProps {
+  plugin_id?: string;
+  skill_ids?: string[];
+  mcp_server_ids?: string[];
+}
+
+export type TrackingInputAccountingMode = 'inclusive' | 'additive' | 'unknown';
+
+export interface RunModelCallTokenProps {
+  provider_input_tokens?: number;
+  effective_input_tokens?: number;
+  output_tokens?: number;
+  cache_read_tokens?: number;
+  cache_write_tokens?: number;
+}
+
+export interface RunTokenProps extends RunModelCallTokenProps {
+  usage_count_source: TrackingTokenCountSource;
+  cache_token_source?: 'anthropic' | 'openai' | 'unavailable';
+  input_accounting_mode?: TrackingInputAccountingMode;
+  user_query_tokens?: number;
+  total_tokens?: number;
+  first_model_call?: RunModelCallTokenProps;
+}
+
+export interface RunDesignSystemProps {
+  selection_source?: string;
+  edit_surface?: TrackingDesignSystemEditSurface;
+  origin?: TrackingDesignSystemOrigin;
+  input_source_count?: number;
+  has_brand_description?: boolean;
+  brand_description_length_bucket?: TrackingDesignSystemLengthBucket;
+  github_repo_count?: number;
+  local_folder_count?: number;
+  fig_file_count?: number;
+  asset_file_count?: number;
+  change_type?: 'none' | 'created' | 'modified';
+  preview_module_count?: number;
+  missing_font_count?: number;
+}
+
+export interface RunTimingProps {
+  total_duration_ms: number;
+  queue_duration_ms?: number;
+  process_spawn_duration_ms?: number;
+  time_to_first_model_event_ms?: number;
+  first_model_event_type?: TrackingFirstModelEventType;
+  time_to_first_token_ms?: number;
+  time_to_first_visible_output_ms?: number;
+  time_to_first_artifact_ms?: number;
+  generation_duration_ms?: number;
+  finalize_duration_ms?: number;
+  collection_status?: TrackingRunPhaseTimingStatus;
+}
+
+export interface RunAutomaticRetryProps {
+  retry_count: number;
+  outcome: TrackingRunRetryFinalResult;
+  suppressed_reason?: TrackingRunRetrySuppressedReason;
+  last_attempt?: {
+    index?: number;
+    duration_ms?: number;
+    time_to_first_token_ms?: number;
+  };
+}
+
+export interface RunActivityProps {
+  tools?: {
+    call_count?: number;
+    duration_ms?: number;
+  };
+  artifacts?: {
+    changed_file_count?: number;
+    created_file_count?: number;
+    modified_file_count?: number;
+    supporting_asset_files_changed_count?: number;
+    write_duration_ms?: number;
+    write_status?: TrackingArtifactWriteStatus;
+    write_source?: TrackingArtifactWriteSource;
+  };
+}
+
+export interface RunDiagnosticsProps {
+  failure_signal_source?: TrackingRunDiagnosticSource;
+  run_close_reason?: TrackingRunCloseReason;
+  last_observed_phase?: TrackingRunLifecyclePhase;
+  stderr_line_count_bucket?: TrackingStderrLineCountBucket;
+  stdout_line_count_bucket?: TrackingStderrLineCountBucket;
+  first_token_seen?: boolean;
+  user_visible_output_seen?: boolean;
+  tool_call_seen?: boolean;
+  artifact_write_seen?: boolean;
+  live_artifact_seen?: boolean;
+  session_resume_fallback_used?: boolean;
+  runtime_timing?: Record<string, number>;
+}
+
+export interface RunLangfuseDeliveryProps {
+  delivery_status: TrackingLangfuseDeliveryStatus;
+  drop_reason?: TrackingLangfuseDropReason;
+}
+
+export interface RunCreatedProps extends RunTaskLineageProps {
   // `chat_panel` is the regular artifact-run surface; `design_system_project`
   // is the DS-as-project variant (DS creation + regeneration runs).
   page_name: 'chat_panel' | 'design_system_project';
@@ -129,19 +279,9 @@ export interface RunCreatedProps {
   // Where the run was initiated from. The DS variant uses the
   // `TrackingDesignSystemRunEntryFrom` set; both unions stay
   // distinct so the dashboard can split funnels cleanly.
-  entry_from?:
-    | 'new_project'
-    | 'chat_composer'
-    // Preview-annotation entries: `comment` (comment/board pin flow) and
-    // `mark` (Mark draw-overlay flow). Both run against an existing artifact.
-    | 'comment'
-    | 'mark'
-    // `next_step`: composer seeded by a guided Next-step action (best-effort,
-    // tagged on the following send). `question_answer`: submitting answers to
-    // an inline `<question-form>` clarification.
-    | 'next_step'
-    | 'question_answer'
-    | TrackingDesignSystemRunEntryFrom;
+  entry_from?: TrackingRunEntrySource;
+  /** v4 name; entry_from remains during the compatibility window. */
+  entry_source?: TrackingRunEntrySource;
   // Session-dimension run context (0-based `turn_index` within the browser
   // analytics session, `is_first_run` === turn_index 0). Lets the dashboard
   // sequence a session's runs and read "did this session reach an artifact,
@@ -202,6 +342,8 @@ export interface RunCreatedProps {
   reference_template?: string;
   aspect?: string;
   has_attachment: boolean;
+  /** v4 name; has_attachment remains during the compatibility window. */
+  has_attachments: boolean;
   user_query_tokens: number;
   // `'default'` when the user did not pick a specific model and the agent's
   // own default was selected; use `modelIdForTracking` to bucket null/empty
@@ -223,6 +365,8 @@ export interface RunCreatedProps {
   // (wire value `chat`); `design` is the full design-agent run. Optional so
   // DS-generation runs (which have no user-facing mode) can omit it.
   session_mode?: TrackingSessionMode;
+  /** v4 name; session_mode remains during the compatibility window. */
+  interaction_mode?: TrackingSessionMode;
   // The plugin actively bound to this run (the applied plugin snapshot), or
   // null when the user ran with no active plugin.
   plugin_id?: string | null;
@@ -232,16 +376,49 @@ export interface RunCreatedProps {
   mcp_ids?: string[];
   skill_ids?: string[];
   token_count_source: TrackingTokenCountSource;
+  /** v4 grouped domains. Old flat aliases remain during migration. */
+  run_context?: RunContextProps;
+  capabilities?: RunCapabilitiesProps;
+  tokens: RunTokenProps;
+  design_system?: RunDesignSystemProps;
+  // External MCP/Plugin attribution. These fields are optional so existing UI
+  // and CLI Run producers keep their current contract; the Open Design Cloud
+  // Plugin path validates and supplies the complete subset.
+  entry_surface?: AnalyticsEntrySurface;
+  host_product?: AnalyticsHostProduct;
+  external_plugin_id?: string;
+  external_plugin_version?: string;
+  distribution_mechanism?: AnalyticsDistributionMechanism;
+  publisher_class?: AnalyticsPublisherClass;
+  attribution_quality?: AnalyticsAttributionQuality;
+  plugin_workflow_id?: string;
+  logical_request_digest?: string;
+  logical_request_digest_version?: 1;
+  mcp_session_id?: string;
+  brief_state?: 'confirmed' | 'skipped' | 'not_applicable';
+  deduplicated?: boolean;
+  resume?: boolean;
+  attempt_count?: number;
+  generation_slo_window_ms?: number;
+  recharge_wait_duration_ms?: number;
 }
 
 export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   area: 'chat_panel' | 'design_system_generation';
   result: TrackingRunResult;
   error_code?: string;
+  /** Only `user_stop` proves the user explicitly cancelled the run. */
+  cancel_origin?: TrackingRunCancelOrigin;
+  /** Lifecycle or watchdog mechanism that forced the terminal state. */
+  terminal_trigger?: TrackingRunTerminalTrigger;
   failure_category?: TrackingRunFailureCategory;
   failure_detail?: TrackingRunFailureDetail;
+  /** v4 name; failure_detail remains during the compatibility window. */
+  failure_reason?: TrackingRunFailureDetail;
   failure_stage?: TrackingRunFailureStage;
   retryable?: boolean;
+  /** v4 name; retryable remains during the compatibility window. */
+  is_automatic_retry_eligible?: boolean;
   user_action?: TrackingRunFailureUserAction;
   // A daemon boot repaired a terminal state that was interrupted before the
   // normal PostHog/Langfuse finalization path completed.
@@ -262,6 +439,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   tool_call_seen?: boolean;
   artifact_write_seen?: boolean;
   live_artifact_seen?: boolean;
+  deliverable_valid?: boolean;
+  deliverable_validation?: 'valid' | 'invalid';
+  artifact_origin_status?: ArtifactOriginStatus;
+  artifact_version_id?: string;
   // Distinct artifact files this run produced OR edited (created + modified),
   // measured agent-agnostically by a filesystem snapshot diff in the daemon
   // (`run-artifact-fs.ts`). An edit-only turn that rewrites an existing file
@@ -281,6 +462,10 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   // them from the "run finished -> has artifact" funnel instead of counting
   // them as artifact-generation failures.
   asked_user_question: boolean;
+  /** v4 name; asked_user_question remains during the compatibility window. */
+  clarification_requested: boolean;
+  /** Main user-visible artifact outcome; omitted for Ask, clarification and DS Runs. */
+  primary_artifact_change?: 'none' | 'created' | 'modified';
   input_tokens?: number;
   input_tokens_provider?: number;
   input_tokens_effective?: number;
@@ -333,6 +518,11 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   artifact_write_source?: TrackingArtifactWriteSource;
   finalize_duration_ms?: number;
   total_duration_ms: number;
+  timing: RunTimingProps;
+  automatic_retry?: RunAutomaticRetryProps;
+  run_activity?: RunActivityProps;
+  diagnostics?: RunDiagnosticsProps;
+  langfuse_delivery?: RunLangfuseDeliveryProps;
   bottleneck_phase?: TrackingRunLifecyclePhase;
   last_observed_phase?: TrackingRunLifecyclePhase;
   phase_timing_status?: TrackingRunPhaseTimingStatus;
@@ -355,6 +545,15 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   stdin_backpressure?: boolean;
   tool_result_sent?: boolean;
   last_progress_age_ms?: number;
+  // Vela's OpenCode bridge attaches this context to `error.data` when an AMR
+  // prompt fails. Keep only fixed enums in analytics: session/tool call ids,
+  // paths, titles, inputs, and outputs are deliberately not copied.
+  // Together these fields distinguish "tool still pending/running" from
+  // "tool completed, but the agent stream never reached done".
+  amr_opencode_error_phase?: TrackingAmrOpenCodeErrorPhase;
+  amr_opencode_last_event_type?: TrackingAmrOpenCodeLastEventType;
+  amr_opencode_last_tool_status?: TrackingAmrOpenCodeLastToolStatus;
+  amr_opencode_last_tool_kind?: TrackingAmrOpenCodeLastToolKind;
   attempt_index?: number;
   attempt_duration_ms?: number;
   attempt_time_to_first_token_ms?: number;
@@ -412,11 +611,12 @@ export interface RunRetryBaseProps {
   failure_category?: TrackingRunFailureCategory;
   failure_detail?: TrackingRunFailureDetail;
   failure_stage?: TrackingRunFailureStage;
+  terminal_trigger?: TrackingRunTerminalTrigger;
   error_code?: string;
 }
 
 export interface RunRetryAttemptedProps extends RunRetryBaseProps {
-  retry_reason: 'transient_failure';
+  retry_reason: 'transient_failure' | 'post_tool_resume';
   // Backoff delay (ms) waited before this retry attempt was restarted.
   retry_delay_ms?: number;
 }
@@ -523,6 +723,7 @@ export type FileUploadResultProps = TrackingFileUploadSurface & {
 export interface ArtifactExportResultProps {
   page_name: 'artifact';
   area: 'share_option_popover';
+  entry_surface: 'open_design_ui';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
   export_format: TrackingExportFormat;
@@ -531,6 +732,12 @@ export interface ArtifactExportResultProps {
   export_duration_ms: number;
   project_id: string;
   project_kind: TrackingProjectKind | null;
+  artifact_origin_status: ArtifactOriginStatus;
+  artifact_version_id?: string;
+  origin_entry_surface: ArtifactOriginEntrySurface;
+  origin_external_plugin_id?: string;
+  origin_plugin_workflow_id?: string;
+  origin_run_id?: string;
 }
 
 // Fired when the user explicitly clicks "Save" in the Excalidraw sketch editor
@@ -585,6 +792,27 @@ export interface ArtifactDeployResultProps {
   project_kind: TrackingProjectKind | null;
 }
 
+// Fired when a "Publish this file for everyone" attempt from the Share tab
+// resolves — publishing and unpublishing share the event, split by `action`.
+// Fires when the daemon call settles (success once the public URL is returned
+// for publish, or removal is confirmed for unpublish), regardless of whether a
+// newer request superseded this one in the UI. Clicking the publish button
+// reports separately as ui_click element 'publish_file'.
+export interface ArtifactPublishResultProps {
+  page_name: 'artifact';
+  area: 'share_option_popover';
+  artifact_id: string;
+  artifact_kind: TrackingArtifactKind;
+  action: 'publish' | 'unpublish';
+  result: TrackingExportResult;
+  // 'workspace_identity_required' when the workspace context could not be
+  // confirmed (the one actionable failure), 'publish_failed' otherwise.
+  error_code?: TrackingPublishErrorCode;
+  publish_duration_ms: number;
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+}
+
 // Outcome of an HTML file version restore from the version history modal.
 // Fires once per confirmed restore attempt (after the restore API settles) —
 // opening the confirm popover or cancelling it only reports ui_click.
@@ -635,6 +863,24 @@ export interface FeedbackSubmitResultProps {
   has_custom_reason: boolean;
   custom_reason?: string;
   result: TrackingResult;
+}
+
+export type TrackingConversationForkErrorCode =
+  | 'bad_request'
+  | 'permission_denied'
+  | 'fork_source_not_found'
+  | 'payload_too_large'
+  | 'server_error'
+  | 'http_error'
+  | 'network_error'
+  | 'empty_response'
+  | 'unknown_error';
+
+export interface ConversationForkResultProps extends ConversationForkAnalyticsContext {
+  target_conversation_id: string | null;
+  result: TrackingResult;
+  error_code?: TrackingConversationForkErrorCode;
+  duration_ms: number;
 }
 
 interface AssistantFeedbackBase {

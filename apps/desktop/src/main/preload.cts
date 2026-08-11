@@ -8,6 +8,7 @@ import type {
   OpenDesignHostCaptureResult,
   OpenDesignHostFailure,
   OpenDesignHostProjectImportResult,
+  OpenDesignHostProjectImportInit,
   OpenDesignHostProjectReplaceWorkingDirResult,
   OpenDesignHostPickWorkingDirResult,
   OpenDesignHostUpdaterActionOptions,
@@ -178,7 +179,7 @@ type DesktopDiagnosticsExportResult =
 
 const project = {
   pickAndImport: (
-    init?: { name?: string; skillId?: string | null; designSystemId?: string | null },
+    init?: OpenDesignHostProjectImportInit,
   ): Promise<OpenDesignHostProjectImportResult> =>
     ipcRenderer.invoke('dialog:pick-and-import', init ?? null)
       .then(normalizeProjectImportResult)
@@ -244,7 +245,7 @@ const capture = {
 };
 
 function invokeUpdater(
-  action: 'check' | 'download' | 'install' | 'status',
+  action: 'check' | 'clear-cache' | 'download' | 'install' | 'status',
   options?: OpenDesignHostUpdaterActionOptions,
 ): Promise<OpenDesignHostUpdaterStatusSnapshot> {
   return ipcRenderer.invoke(`od:update:${action}`, options ?? null);
@@ -253,6 +254,8 @@ function invokeUpdater(
 const updater = {
   check: (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>
     invokeUpdater('check', options),
+  'clear-cache': (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>
+    invokeUpdater('clear-cache', options),
   download: (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>
     invokeUpdater('download', options),
   install: (options?: OpenDesignHostUpdaterActionOptions): Promise<OpenDesignHostUpdaterStatusSnapshot> =>
@@ -306,6 +309,12 @@ const hostBridge = {
     type: 'desktop',
     platform: process.platform,
     ...(osLocale !== undefined ? { osLocale } : {}),
+  },
+  appearance: {
+    // Pin the native window appearance (macOS vibrancy glass material) to the
+    // app theme. Fire-and-forget: the main process validates the value.
+    setTheme: (theme: 'light' | 'dark' | 'system'): void =>
+      ipcRenderer.send('od:appearance:set-theme', theme),
   },
   shell,
   browser,

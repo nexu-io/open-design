@@ -36,6 +36,8 @@ export interface ByokDraftValidation {
 
 interface ValidateByokDraftOptions {
   requiresApiKey?: boolean;
+  /** A daemon-owned secure profile satisfies the credential requirement. */
+  credentialConfigured?: boolean;
   requireModel?: boolean;
   keyValidationBaseUrl?: string;
 }
@@ -123,13 +125,14 @@ export function validateByokDraft(
   options: ValidateByokDraftOptions = {},
 ): ByokDraftValidation {
   const requiresApiKey = options.requiresApiKey ?? true;
+  const credentialConfigured = options.credentialConfigured === true;
   const requireModel = options.requireModel ?? true;
   const issues: ByokDraftIssue[] = [];
   const cleanedApiKey = cleanByokApiKey(config.apiKey);
   const baseUrl = config.baseUrl.trim();
   const model = config.model.trim();
 
-  if (requiresApiKey && !cleanedApiKey) {
+  if (requiresApiKey && !cleanedApiKey && !credentialConfigured) {
     issues.push({
       field: 'api_key',
       level: 'error',
@@ -137,7 +140,7 @@ export function validateByokDraft(
       message: 'API key is required.',
       action: 'focus_api_key',
     });
-  } else if (requiresApiKey) {
+  } else if (requiresApiKey && cleanedApiKey) {
     if (cleanedApiKey !== config.apiKey) {
       issues.push({
         field: 'api_key',

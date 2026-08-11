@@ -5,7 +5,9 @@
 import type { DesignSystemEnrichClickProps, TrackingDesignSystemEditSurface } from './design-systems.js';
 import type { TrackingPageName, TrackingSettingsPage } from './event-names.js';
 import type { OnboardingClickProps, TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
-import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
+import type { TrackingRunRecoveryActionType } from './result-events.js';
+import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCampaignConversionSource, TrackingCampaignId, TrackingCampaignUserState, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
+import type { AccountMenuClickProps, CommunityTemplateClickProps, EntryNavigationClickProps, ExtensionMarketplaceClickProps, ProjectCollectionClickProps, TrackingWorkspaceScope, WorkspaceInviteClickProps, WorkspaceSwitcherClickProps } from './workspace.js';
 // ---- ui_click ------------------------------------------------------------
 //
 // Each surface lives in its own `*ClickProps` interface so call sites stay
@@ -72,16 +74,15 @@ export interface ExecutionSettingsPopoverClickProps {
 }
 
 // Items inside the header gear settings popover (EntrySettingsMenu): the
-// interface-language select, the appearance (system/light/dark) radio row,
-// the "Share Open Design" social grid, the Discord / social follow links and
-// the Settings → details entry. The same popover is mounted both on the home
-// header and the in-project artifact header, hence the two-value page_name.
+// interface-language select, the "Share Open Design" social grid, the Discord /
+// social follow links and the Settings → details entry. The same popover is
+// mounted both on the home header and the in-project artifact header, hence the
+// two-value page_name.
 export interface SettingsPopoverClickProps {
   page_name: 'home' | 'artifact';
   area: 'settings_popover';
   element:
     | 'language_select'
-    | 'appearance'
     | 'share_channel'
     | 'workspace_teams'
     | 'join_discord'
@@ -92,8 +93,7 @@ export interface SettingsPopoverClickProps {
     | 'follow_linkedin'
     | 'follow_xiaohongshu'
     | 'open_settings';
-  // element=language_select → snake_cased locale (e.g. en, zh_cn, pt_br);
-  // element=appearance → system | light | dark.
+  // element=language_select → snake_cased locale (e.g. en, zh_cn, pt_br).
   value?: string;
   // element=share_channel only — which social network was clicked.
   channel?:
@@ -550,8 +550,9 @@ export interface PluginDetailModalSharePopoverClickProps {
 export interface DesignSystemsTopClickProps {
   page_name: 'design_systems';
   area: 'design_systems';
-  element: 'search_input' | 'search_dropdown' | 'filter_chip';
+  element: 'search_input' | 'search_dropdown' | 'filter_chip' | 'create';
   filter_name?: string;
+  resource_scope?: TrackingWorkspaceScope;
 }
 
 export interface DesignSystemsTemplateCardClickProps {
@@ -560,6 +561,7 @@ export interface DesignSystemsTemplateCardClickProps {
   element: 'templates_card';
   templates_id?: string;
   templates_type?: string;
+  resource_scope?: TrackingWorkspaceScope;
 }
 
 export interface DesignSystemsTemplatesModalClickProps {
@@ -672,6 +674,7 @@ export interface DesignSystemEditClickProps {
   artifact_kind?: 'design_system';
   design_system_id?: string;
   project_id?: string;
+  resource_scope?: TrackingWorkspaceScope;
 }
 
 // INTEGRATIONS
@@ -929,6 +932,22 @@ export interface RunFailedToastClickProps {
   element: 'go_amr';
 }
 
+export interface RunRecoveryActionClickProps {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'run_recovery_action';
+  task_execution_id: string;
+  recovery_action_instance_id: string;
+  recovery_action_type: TrackingRunRecoveryActionType;
+  source_run_id?: string;
+  source_agent_provider_id?: string;
+  source_model_id?: string;
+  failure_category?: string;
+  failure_reason?: string;
+  target_agent_provider_id?: string;
+  target_model_id?: string;
+}
+
 export interface AmrEntryClickProps {
   page_name: TrackingPageName;
   area: 'amr_entry';
@@ -938,6 +957,24 @@ export interface AmrEntryClickProps {
   source_product: 'open_design';
   source_detail: TrackingAmrEntrySource;
   entry_occurred_at: string;
+  campaign_id?: TrackingCampaignId;
+  conversion_source?: TrackingCampaignConversionSource;
+}
+
+export interface DeepSeekCampaignModalClickProps {
+  page_name: 'home';
+  area: 'deepseek_campaign_modal';
+  element: 'close' | 'later' | 'use_now' | 'upgrade';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
+}
+
+export interface DeepSeekCampaignBadgeClickProps {
+  page_name: 'home';
+  area: 'campaign_badge';
+  element: 'open_pricing';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
 }
 
 // Terminal outcome of one AMR (vela) sign-in attempt, fired exactly once
@@ -959,6 +996,12 @@ export interface AmrAuthResultProps {
   // attempt; absent when login was started without a recorded entry.
   entry_id?: string;
   source_detail?: TrackingAmrEntrySource;
+  auth_attempt_id?: string;
+  last_stage?: import('./amr-auth.js').AmrAuthStage;
+  last_stage_result?: import('./amr-auth.js').AmrAuthStageResult;
+  last_error_kind?: import('./amr-auth.js').AmrAuthErrorKind;
+  network_path?: import('./amr-auth.js').AmrAuthNetworkPath;
+  fallback_used?: boolean;
 }
 
 export interface ChatPanelResourcesPopoverClickProps {
@@ -1079,6 +1122,11 @@ export interface ArtifactToolbarClickProps {
     // Copies a screenshot of the current preview to the clipboard (does not
     // start a run). Tracked so the preview-export tool's usage is measurable.
     | 'screenshot'
+    // Stages a screenshot of the current preview into the chat composer as a
+    // draft attachment; does not start a run. This is the toolbar's primary
+    // capture action — `screenshot` (clipboard copy) now lives in the export
+    // menu, so the two are separable in the funnel.
+    | 'edit_screenshot'
     | 'tweaks'
     // The Mark (mark-pen) annotation tool. Renamed from `draw` to match the
     // product label users see; the draw-overlay sub-toolbar keeps area
@@ -1238,7 +1286,13 @@ export interface HandoffClickProps {
 export interface PresentPopoverClickProps {
   page_name: 'artifact';
   area: 'present_popover';
-  element: 'in_this_tab' | 'fullscreen' | 'new_tab';
+  element:
+    | 'in_this_tab'
+    | 'fullscreen'
+    | 'new_tab'
+    | 'start_from_beginning'
+    | 'start_from_current'
+    | 'presenter_mode';
   artifact_id?: string;
   artifact_kind?: TrackingArtifactKind;
 }
@@ -1283,7 +1337,14 @@ export interface ShareOptionPopoverClickProps {
   // Export/share formats, plus 'publish_required_guide' for the share-intent
   // signal: the user opened Share wanting a link but the artifact isn't
   // deployed yet, so only the "publish online first" guide row is shown.
-  element: TrackingExportFormat | 'publish_required_guide';
+  // 'publish_file' is the Share tab's "Publish this file for everyone" button
+  // (the outcome reports separately via artifact_publish_result);
+  // 'copy_publish_link' is the copy-link button shown once a file is published.
+  element:
+    | TrackingExportFormat
+    | 'publish_required_guide'
+    | 'publish_file'
+    | 'copy_publish_link';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
   project_id: string;
@@ -1376,6 +1437,32 @@ export interface AssistantFeedbackReasonSubmitClickProps {
   has_custom_reason: boolean;
   custom_reason?: string;
 }
+
+// CONVERSATION FORK funnel. The click and result events share this context so
+// analysts can compare historical-vs-latest forks without joining prompts or
+// other user-authored content into PostHog.
+export type TrackingConversationForkPoint = 'latest' | 'historical' | 'unknown';
+
+export interface ConversationForkAnalyticsContext {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'assistant_fork_button';
+  action: 'fork_conversation';
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+  conversation_id: string;
+  assistant_message_id: string;
+  source_run_id: string | null;
+  source_agent_id: string;
+  agent_provider_id: string;
+  session_mode: TrackingSessionMode;
+  fork_point: TrackingConversationForkPoint;
+  seed_message_count: number | null;
+  conversation_message_count: number;
+  messages_after_fork_count: number | null;
+}
+
+export type ConversationForkClickProps = ConversationForkAnalyticsContext;
 
 // SETTINGS clicks
 export type TrackingSettingsArea =
@@ -1477,13 +1564,6 @@ export interface SettingsLanguageClickProps {
   element: string;
 }
 
-export interface SettingsAppearanceClickProps {
-  page_name: TrackingSettingsPage;
-  area: 'appearance';
-  element: 'system' | 'light' | 'dark' | 'accent_color';
-  color?: string;
-}
-
 export interface SettingsNotificationsClickProps {
   page_name: TrackingSettingsPage;
   area: 'notifications';
@@ -1545,6 +1625,13 @@ export interface SettingsExternalMcpClickProps {
 
 // Discriminated union of every supported ui_click payload.
 export type UiClickProps =
+  | EntryNavigationClickProps
+  | AccountMenuClickProps
+  | WorkspaceSwitcherClickProps
+  | WorkspaceInviteClickProps
+  | ProjectCollectionClickProps
+  | CommunityTemplateClickProps
+  | ExtensionMarketplaceClickProps
   | HomeNavClickProps
   | HelpPopoverClickProps
   | HomeToolbarClickProps
@@ -1597,7 +1684,10 @@ export type UiClickProps =
   | NextStepActionClickProps
   | QuestionsFormClickProps
   | RunFailedToastClickProps
+  | RunRecoveryActionClickProps
   | AmrEntryClickProps
+  | DeepSeekCampaignModalClickProps
+  | DeepSeekCampaignBadgeClickProps
   | ChatPanelResourcesPopoverClickProps
   | ChatPanelMessageQueueClickProps
   | FileManagerClickProps
@@ -1613,6 +1703,7 @@ export type UiClickProps =
   | DeckViewerClickProps
   | ShareOptionPopoverClickProps
   | FileVersionModalClickProps
+  | ConversationForkClickProps
   | AssistantFeedbackButtonClickProps
   | AssistantFeedbackReasonSubmitClickProps
   | SettingsSidebarClickProps
@@ -1623,7 +1714,6 @@ export type UiClickProps =
   | SettingsMediaProvidersClickProps
   | SettingsConnectorsClickProps
   | SettingsLanguageClickProps
-  | SettingsAppearanceClickProps
   | SettingsNotificationsClickProps
   | SettingsPetsClickProps
   | SettingsPrivacyClickProps

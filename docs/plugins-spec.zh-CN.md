@@ -62,7 +62,7 @@ sequenceDiagram
 | Marketplace 详情页 | 用户在插件页点击「Use」 | `Make a 12-slide investor deck for a Series A SaaS startup targeting enterprise design teams.` | Deck skill、slide craft rules、示例 assets、必填 inputs、preview samples。 |
 | 首页 inline input | 用户输入 brief 后选择推荐插件 | `Create a landing page for a new AI browser extension, use a dark neon visual direction.` | Landing-page skill、推荐 design system、prompt rewrite、starter assets。 |
 | Project chat follow-up | 用户已经在生成好的 project 里 | `Turn this landing page into a launch announcement deck.` | 现有 project context、选中的 artifact refs、deck conversion skill、保留 brand tokens。 |
-| Headless CLI / code agent | Claude Code、Cursor、Codex、CI 或脚本调用 `od` | `od run create --plugin make-a-deck --input audience=investors --input topic='AI design ops'` | 不打开 desktop，也得到同一套 manifest resolution、context chips 和 run events。 |
+| Headless CLI / code agent | Claude Code、Cursor、Codex、CI 或脚本调用 `od` | `od run start --project p_abc --plugin make-a-deck --inputs '{"audience":"investors","topic":"AI design ops"}'` | 不打开 desktop，也得到同一套 manifest resolution、context chips 和 run events。 |
 | 自托管 marketplace | 团队运行私有目录 | `Create an internal QBR deck using the Acme design system and sales metrics CSV.` | 私有 plugin index、可信内部 design system、asset attachments、受限数据策略。 |
 
 关键产品变化是：**插件不是本地 UI addon，而是可复用的 agent workflow。** UI 组件可以和这些 workflow 协作，但消费与处理主体已经变成 agent run。
@@ -447,7 +447,7 @@ export type ContextItem =
 
 Marketplace 顶层 `version` 是 catalog snapshot 版本；每个 `plugins[]` entry 也声明被列入的插件版本。Installer 抓取后仍会校验目标文件夹自己的 `open-design.json`，但 registry search、审计日志和 marketplace refresh events 可以在安装前就理解 catalog 与插件版本。
 
-可以同时存在多个 marketplaces。用户通过 `od marketplace add <url>` 注册额外 index（Vercel 的、OpenClaw 的 clawhub、企业私有 catalog）。默认情况下，用户添加的 marketplace 只是 discovery source，它里面的插件仍然以 `restricted` 安装；只有官方内置 marketplace 或用户显式执行 `od marketplace add <url> --trust` / `od marketplace trust <id>` 后，来自该 marketplace 的插件才可以默认继承 `trusted`。
+可以同时存在多个 marketplaces。用户通过 `od marketplace add <url>` 注册额外 index（Vercel 的、OpenClaw 的 clawhub、企业私有 catalog）。默认情况下，用户添加的 marketplace 只是 discovery source，它里面的插件仍然以 `restricted` 安装；只有官方内置 marketplace 或用户显式执行 `od marketplace add <url> --trust trusted` / `od marketplace trust <id> --trust trusted` 后，来自该 marketplace 的插件才可以默认继承 `trusted`。
 
 ## 7. 发现与安装
 
@@ -618,7 +618,7 @@ export interface InputFieldSpec {
 
 `appliedPlugin` 不是装饰字段；它是「插件 → run」之间的**契约**。仅传 `pluginId` 不够，因为：
 
-- 插件可能在两次 run 之间被 `od plugin update` 升级。
+- 插件可能在两次 run 之间被 `od plugin upgrade <id>` 升级。
 - 同一 `pluginId` 在不同 marketplace 上可能解析到不同 git SHA。
 - `od.pipeline` / `od.context.*` 中的 ref 可能指向移动的 default branch。
 - `assets` staging 计划与 `capabilitiesGranted` 必须与生成 prompt 时的视图一致。
@@ -627,7 +627,7 @@ export interface InputFieldSpec {
 
 1. **Apply 时**：把 hydrated manifest 与 inputs 一起 hash 成 `manifestSourceDigest`，连同 `pluginSpecVersion`、`pluginVersion`、`pinnedRef`、`sourceMarketplaceId`、`resolvedContext`、`capabilitiesGranted`、`assetsStaged`、**`connectorsRequired` / `connectorsResolved`（参考 connector 子系统当前 `status`）**、**`mcpServers`（apply 时启用的 MCP server set）** 写入 `appliedPlugin`，返回给 caller。
 2. **Project create / run start 时**：把客户端提交的 `appliedPlugin`（或 daemon 在 server-side 重新解析得到的 snapshot）写入 SQLite `applied_plugin_snapshots` 表（§11.4），并在 `runs` / `conversations` 表中以 FK 指向。
-3. **Replay**：`od run replay <runId>` 与 `od plugin export <runId>` 必须从 snapshot 而非 live manifest 还原 prompt 与 assets，使老 run 在插件升级后仍可复现。
+3. **Replay / export**：`od plugin replay <runId> --snapshot-id <snapshotId>` 发出不可变 snapshot 与 rerun bundle；`od plugin export --snapshot-id <snapshotId> --as <target> --out <dir>` 则从该 snapshot 而非 live manifest 解析 export。调用方显式重新 apply 并 start replay run，从而保证 plugin 升级后旧 run 仍可复现。
 4. **Audit**：UI 的 ProjectView 顶端展示 snapshot id + version + digest；artifact provenance（§11.5 ArtifactManifest）通过 snapshot id 反查 plugin source。
 
 `AppliedPluginSnapshot` 只在 daemon side 写入；CLI / UI 客户端只读。Plugin 升级或 marketplace ref 漂移触发 `od plugin doctor` 把受影响的历史 snapshot 标为 `stale`，但**永不重写**：reproducibility 优先于 freshness。
@@ -655,7 +655,7 @@ ChatComposer（每个 project 的 conversation 输入组件，[`apps/web/src/com
 1. **Apply 阶段不渲染任何 surface。** apply 仍然纯粹解析；UI 表面、CLI 表面在此时只是把 `genuiSurfaces` 转成「这个长程任务可能会问你这些问题」的告示卡。一旦 plugin 在 manifest 里声明了 `oauth-prompt`，详情页 capability checklist 上会增加一行「This plugin will ask you to authorize <provider>」，让用户在发送前知道 run 中可能弹出的 surface 类型。
 2. **Run 中 agent 通过 atom 触发 surface。** 每条 surface 的 `trigger.atom`（与可选 `trigger.stageId`）是一组 allowlist：daemon 拒绝任何来自未声明 atom 的 `genui_surface_request` 事件——这是「未声明的 UI 不会被动态产生」的强制点（doctor + runtime 双重检查）。
 3. **同 project 已存在的答复直接复用。** 当 surface 的 `persist` 是 `project` 或 `conversation`，daemon 在触发前先查 `genui_surfaces` 表（§11.4）；若已有 valid 状态（未过期、未失效），直接以 stored value 通过，不向用户广播请求。这正是「插件创建项目后多轮交互、多个会话也会用到」的具体落地。
-4. **不响应 surface ≠ 阻塞 run。** 每个 surface 必须声明 `timeout`（默认 5 分钟）与 `onTimeout`（`abort` / `default` / `skip`）；CLI 在 ND-JSON 流中以 `genui_surface_request` event 暴露同一份 surface 描述，使 headless 自动化可以 `od ui respond --surface-id …` 在另一个进程中作答，或在不需要时优雅 skip（详见 §10.3）。
+4. **不响应 surface ≠ 阻塞 run。** 每个 surface 必须声明 `timeout`（默认 5 分钟）与 `onTimeout`（`abort` / `default` / `skip`）；CLI 在 ND-JSON 流中以 `genui_surface_request` event 暴露同一份 surface 描述，使 headless 自动化可以 `od ui respond <runId> <surface-id> --value-json …` 在另一个进程中作答，或在不需要时优雅 skip（详见 §10.3）。
 
 `ApplyResult.genuiSurfaces` 与 `appliedPlugin.snapshotId` 一起构成 plugin 与 project 之间的 GenUI 契约：snapshot 不可变；surface answer 落进 `genui_surfaces` 后归 project 拥有，被同 project 后续 plugin（甚至换插件、换 conversation）按 `surface.id` 查找复用，前提是当前 plugin 也声明了相同 surface id 与兼容的 `schema`。
 
@@ -694,12 +694,12 @@ UI 上的 capability gate 是 modal + checklist；headless / CI / 第三方 code
 1. **预先 trust**（推荐 hosted / CI）。
 
    ```bash
-   od plugin trust make-a-deck --caps fs:read,mcp,subprocess
-   od plugin trust make-a-digest --caps fs:read,connector:slack,connector:notion
-   od plugin trust make-a-deck --caps all          # 等价于 manifest 中声明的全部 capability
+   od plugin trust make-a-deck --capabilities fs:read,mcp,subprocess
+   od plugin trust make-a-digest --capabilities fs:read,connector:slack,connector:notion
+   # 不存在 `all` shorthand；显式枚举你要授予的每个 capability。
    ```
 
-   写入 SQLite `installed_plugins.capabilities_granted`，对所有后续 apply / run 生效，直到 plugin 升级或 source marketplace 变化（见 §9 provenance 规则）触发重新确认。`connector:<id>` 在 `--caps` 里写完整 id（`connector:slack`、`connector:notion`），不接受 glob。
+   写入 SQLite `installed_plugins.capabilities_granted`，对所有后续 apply / run 生效，直到 plugin 升级或 source marketplace 变化（见 §9 provenance 规则）触发重新确认。`connector:<id>` 在 `--capabilities` 里写完整 id（`connector:slack`、`connector:notion`），不接受 glob。
 
 2. **Per-call 临时 grant**。
 
@@ -724,7 +724,7 @@ UI 上的 capability gate 是 modal + checklist；headless / CI / 第三方 code
          "required": ["mcp", "subprocess"],
          "granted": ["prompt:inject", "fs:read"],
          "remediation": [
-           "od plugin trust make-a-deck --caps mcp,subprocess",
+           "od plugin trust make-a-deck --capabilities mcp,subprocess",
            "or pass --grant-caps mcp,subprocess to this command"
          ]
        }
@@ -734,7 +734,7 @@ UI 上的 capability gate 是 modal + checklist；headless / CI / 第三方 code
 
    Code agent 读到 exit 66 时可以选择重试（带 `--grant-caps`）、降级、或把 remediation 文本回报给上游用户。HTTP 等价响应是 `409 Conflict`，body 为同样 shape；用于 desktop UI 自动构建 capability checklist。
 
-`bash` / `subprocess` / `network` / `connector`（笼统形态，**不带 `:<id>`**）等 elevated capabilities **绝不**支持 `--grant-caps all` shorthand 单独覆盖：CLI 强制要求显式列出每一项，避免脚本误授权。`connector:<id>` 是 elevated 的 scoped 形态，可以列在 `--caps all` 内，但 hosted operator 通常更偏好显式枚举每个 connector id 以审计。
+无论永久授权的 `--capabilities` 还是单次调用的 `--grant-caps`，都不支持 `all` shorthand：CLI 强制要求显式列出每一项，避免脚本误授权。对 `bash` / `subprocess` / `network` / `connector`（笼统形态，**不带 `:<id>`**）等 elevated capabilities 尤其如此。`connector:<id>` 是 scoped 形态，也应使用完整 id 显式枚举以便审计。
 
 ### 9.2 Preview sandbox
 
@@ -934,13 +934,14 @@ od ui respond <runId> <surface-id> --skip          # 触发 onTimeout='skip'
 od ui revoke  <projectId> <surface-id>             # 跨 conversation 撤销
 ```
 
-如果 CLI 调用方完全不响应，run 在 `surface.timeout` 后按 `onTimeout` 收敛，不会无限期挂起。Code agent 也可以为整个 plugin **预先回答**：
+如果 CLI 调用方完全不响应，run 在 `surface.timeout` 后按 `onTimeout` 收敛，不会无限期挂起。Code agent 也可以在 run 开始前逐个 surface **预先回答**：
 
 ```bash
-od ui prefill <projectId> --plugin <pluginId> --json '{"figma-oauth":"<token>","direction-pick":"editorial"}'
+od ui prefill --project <projectId> --snapshot-id <snapshotId> figma-oauth --value-json '"<token>"'
+od ui prefill --project <projectId> --snapshot-id <snapshotId> direction-pick --value-json '"editorial"'
 ```
 
-prefill 只把 row 写成 `resolved`，等待 plugin 触发时按 cache 读出（事件流上仍会发 `genui_surface_response { respondedBy: 'cache' }`，便于 audit）。
+每个 surface 重复调用一次 `prefill`。它把 row 写成 `resolved`，等待 plugin 触发时按 cache 读出（事件流上仍会发 `genui_surface_response { respondedBy: 'cache' }`，便于 audit）。
 
 #### 10.3.5 与 AG-UI 协议的对齐路线
 
@@ -1283,7 +1284,7 @@ CLI（`od …`）是 **Open Design 面向 agent 的 canonical API**。Plugin ver
 
 ```
 od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
-                  [--plugin <id>] [--input k=v ...] [--brief "<text>"]
+                  [--plugin <id>] [--inputs <json>] [--brief "<text>"]
                   [--metadata-json <path|->] [--json]
 od project list   [--json]
 od project info   <id> [--json]
@@ -1302,7 +1303,7 @@ od project open   <id>                                 # opens browser at /proje
 
 ```
 od conversation list <projectId> [--json]
-od conversation new  <projectId> [--name "<title>"] [--json]
+od conversation new  <projectId> [--title "<title>"] [--json]
 od conversation info <conversationId> [--json]
 ```
 
@@ -1310,7 +1311,7 @@ od conversation info <conversationId> [--json]
 
 ```
 od run start --project <projectId> [--conversation <conversationId>]
-             [--message "<text>"] [--plugin <pluginId>] [--input k=v ...]
+             [--message "<text>"] [--plugin <pluginId>] [--inputs <json>]
              [--agent claude|codex|opencode] [--model <id>] [--reasoning <level>]
              [--attachments <relpath,...>] [--follow] [--json]
 
@@ -1342,16 +1343,19 @@ od files diff   <projectId> <relpath>                   # vs. last committed ver
 ```
 od plugin install   <source>                            # github: | https://… | ./folder | <name from marketplace>
 od plugin uninstall <id>
-od plugin list      [--kind skill|scenario|atom|bundle] [--trust trusted|restricted] [--json]
+od plugin list      [--task-kind <kind>] [--mode <mode>] [--tag <tag>]
+                    [--trust trusted|restricted|bundled] [--bundled | --no-bundled] [--json]
 od plugin info      <id> [--json]
-od plugin update    [<id>]
-od plugin trust     <id> [--caps fs:write,mcp,bash,hooks]   # 永久授权，写入 installed_plugins
+od plugin upgrade   <id> [--policy latest|pinned] [--json]
+od plugin trust     <id> --capabilities fs:write,mcp,bash,subprocess [--revoke]
+                                                               # 永久授权，写入 installed_plugins
 od plugin apply     <id> --project <projectId> [--input k=v ...] [--grant-caps fs:read,mcp ...] [--json]
                                                             # returns ApplyResult; pure (no run)
                                                             # --grant-caps: 仅作用于本次 apply 产生的 snapshot
-od plugin run       <id> --project <projectId> [--input k=v ...] [--grant-caps ...] [--follow] [--json]
+od plugin run       <id> --project <projectId> [--inputs <json>] [--grant-caps ...] [--follow] [--json]
                                                             # shorthand: apply + run start --follow
-od plugin replay    <runId> [--follow] [--json]             # 基于 run 的 applied_plugin_snapshot 重跑长程任务
+od plugin replay    <runId> --snapshot-id <snapshotId> [--json]
+                                                            # 发出不可变 snapshot + rerun bundle；调用方随后 apply + run start
 ```
 
 #### Generative UI verbs (§10.3)
@@ -1362,8 +1366,9 @@ od ui show      <runId> <surface-id> [--json]                 # surface kind / s
 od ui respond   <runId> <surface-id> --value-json '{...}'     # write answer, unblock the run
 od ui respond   <runId> <surface-id> --skip                   # trigger onTimeout='skip'
 od ui revoke    <projectId> <surface-id>                      # invalidate persisted answer (e.g. OAuth logout)
-od ui prefill   <projectId> --plugin <pluginId> --json '{ "<surface-id>": <value>, ... }'
-                                                              # bulk pre-answer, used before the run starts
+od ui prefill   --project <projectId> --snapshot-id <snapshotId> <surface-id>
+                [--value <text> | --value-json <json>] [--persist run|conversation|project]
+                                                              # 预先回答一个 surface；多个则重复调用
 od plugin export    <projectId> --as od|claude-plugin|agent-skill --out <dir>
 od plugin doctor    <id>
 od plugin scaffold
@@ -1372,12 +1377,11 @@ od plugin scaffold
 #### Marketplace verbs
 
 ```
-od marketplace add     <url> [--trust]
+od marketplace add     <url> [--trust trusted|restricted]
 od marketplace remove  <id>
-od marketplace trust   <id>
-od marketplace untrust <id>
+od marketplace trust   <id> [--trust trusted|restricted|official]
 od marketplace list    [--json]
-od marketplace refresh [<id>]
+od marketplace refresh <id>
 od marketplace search  "<query>" [--tag <tag>] [--json]   # search across configured catalogs
 ```
 
@@ -1403,7 +1407,11 @@ od daemon status [--json]                                   # alias of `od statu
 od status        [--json]                                   # daemon up? port? installed plugins count
 od doctor                                                   # diagnostics: skills/DS/craft/plugins, providers, MCP
 od version       [--json]
-od config get|set|list|unset  [--key ...] [--value ...]     # backed by media-config.json + db
+od config list [--json]
+od config get <key> [--json]
+od config set <key> <value> [--json]
+od config set <key> --value-json '<json>' [--json]
+od config unset <key> [--json]                              # backed by app config
 ```
 
 `od daemon start --headless` 是 §11.7 中 headless mode 的入口（无 web bundle、无 electron）。`od daemon start --serve-web` 增加本地 web UI 但不启用 electron。二者都沿用现有 tools-dev port conventions（[`OD_PORT`, `OD_WEB_PORT`](../AGENTS.md)）。
@@ -1436,13 +1444,13 @@ od mcp live-artifacts        # specialized MCP server
 | --- | --- | --- | --- |
 | 64 | Daemon not running | `od status`，然后启动 daemon | `{ host, port }` |
 | 65 | Plugin not found / not installed | `od plugin list` 后 `od plugin install <source>` | `{ pluginId, candidateSources[] }` |
-| 66 | Plugin restricted, capability required | `od plugin trust <id> --caps …` 或重试时加 `--grant-caps …` | `{ pluginId, pluginVersion, required[], granted[], remediation[] }` |
+| 66 | Plugin restricted, capability required | `od plugin trust <id> --capabilities …` 或重试时加 `--grant-caps …` | `{ pluginId, pluginVersion, required[], granted[], remediation[] }` |
 | 67 | Required input missing on apply | 用每个缺失字段重新运行 `--input k=v` | `{ pluginId, missing[], schema }` |
 | 68 | Project not found | `od project list` | `{ projectId }` |
 | 69 | Run not found / already terminal | `od run list --project <id>` | `{ runId, status }` |
 | 70 | Provider not configured | 为 provider key 执行 `od config set ...` | `{ provider, requiredKeys[] }` |
 | 71 | Plugin requires daemon mode | 启动 daemon 或切换到 desktop / headless | `{ pluginId, mode: 'api-fallback' }`（§11.8） |
-| 72 | Applied plugin snapshot stale | `od plugin replay <runId>` 或 `od plugin upgrade <id>` 后重新 apply | `{ snapshotId, pluginId, currentVersion, snapshotVersion }` |
+| 72 | Applied plugin snapshot stale | `od plugin replay <runId> --snapshot-id <snapshotId>` 或 `od plugin upgrade <id>` 后重新 apply | `{ snapshotId, pluginId, currentVersion, snapshotVersion }` |
 | 73 | GenUI surface awaiting response | `od ui show <runId> <surface-id>` 后用 `od ui respond` 作答；或在调用前 `od ui prefill` | `{ runId, surfaceId, kind, schema, prompt, persist, timeoutAt }`（§10.3） |
 
 当设置 `--json` 时，结构化错误输出是 stderr 上的 `{ "error": { "code": "<short-code>", "message": "<human>", "data": { ... } } }`。上面的 exit codes 保持稳定；human prose 可以演进。Exit 66 的 `data` shape 与 §9.1 中的 capability gate JSON 一致；agent 读到 66 后可以选择带 `--grant-caps` 重试，或回报给上游用户。
@@ -1464,7 +1472,7 @@ od plugin apply make-a-deck --project "$PID" --input topic="agentic design" --in
 
 # 4. Start the run, follow events live (ND-JSON on stdout).
 od run start --project "$PID" --plugin make-a-deck \
-             --input topic="agentic design" --input audience=VC \
+             --inputs '{"topic":"agentic design","audience":"VC"}' \
              --message "Make it concise; investor-ready." --follow \
   | jq -r 'select(.kind == "message_chunk") | .text' \
   | tee run.log
@@ -1555,8 +1563,7 @@ od plugin install github:open-design/plugins/make-a-deck
 # Create a project bound to the plugin. Inputs are templated into the brief.
 PID=$(od project create \
         --plugin make-a-deck \
-        --input topic="agentic design" \
-        --input audience=VC \
+        --inputs '{"topic":"agentic design","audience":"VC"}' \
         --json | jq -r .projectId)
 
 # Drive the run with Claude Code (or any code agent). Two equivalent paths:
@@ -1774,7 +1781,7 @@ Validation：e2e in `e2e/`：
 
 (b) apply 后取消发送，project cwd 无 staged assets，`.mcp.json` 不存在。
 
-(c) `od plugin replay <runId>` 即使在源 plugin 已被 `od plugin update` 升级后，仍能产生与原 run **完全一致**的 prompt（snapshot 不可变）。
+(c) `od plugin replay <runId> --snapshot-id <snapshotId>` 即使在源 plugin 已被 `od plugin upgrade <id>` 升级后，仍返回与原 run **完全一致的不可变 snapshot 与 rerun bundle**；调用方随后显式重新 apply 并 start run。
 
 (d) Web API-fallback mode（OD daemon 关闭、浏览器直连 provider）下，UI 中 inline rail 渲染 plugin 卡片但点击「Use」时弹出 daemon-required 提示；daemon 启动后再点击恢复正常。
 
@@ -1782,7 +1789,7 @@ Validation：e2e in `e2e/`：
 
 (f) **Connector trust gate**：local plugin 声明 `od.connectors.required = [{ id: 'slack', tools: ['channels.list'] }]`，**不**显式 grant `connector:slack`：
 
-  - apply（无 `--grant-caps`） → exit 66 / 409，`data.required` 含 `connector:slack`，`data.remediation` 含 `od plugin trust <id> --caps connector:slack`。
+  - apply（无 `--grant-caps`） → exit 66 / 409，`data.required` 含 `connector:slack`，`data.remediation` 含 `od plugin trust <id> --capabilities connector:slack`。
   - apply 带 `--grant-caps connector:slack`，但 connector 尚未 connected → daemon 派生一条 implicit `oauth-prompt`（surface id `__auto_connector_slack`，`persist=project`），用户在 UI 完成现有 connector OAuth flow 后 surface 落 `resolved`，`applied_plugin_snapshots.connectors_resolved_json` 包含 `{ id:'slack', accountLabel:..., status:'connected' }`。
   - 同 project 第二次 apply 同插件：`connector:slack` 已 connected → 不再派生 oauth-prompt；snapshot `connectors_resolved_json[0].status='connected'` 命中 cache。
   - 第二个 plugin 声明 `od.connectors.required = [{ id: 'notion', tools: [...] }]` 但**未声明** `connector:notion` capability → apply 失败 exit 66；额外验证 plugin trust × connector tool 的 token 颁发：手动 `curl /api/tools/connectors/execute` 模拟绕过尝试，daemon 返回 `403 connector-not-granted`。
@@ -1803,11 +1810,11 @@ Validation：e2e in `e2e/`：install local plugin → marketplace → detail pre
 - `od project delete/import`、`od run list/logs --since`、`od files write/upload/delete/diff`、`od conversation list/new/info`。
 - 这些包装现有 endpoints，不引入新 HTTP surface。
 
-Validation：扩展 §12.5 的 walkthrough：`od project import` 一个本地文件夹 → `od plugin apply` → `od run replay <runId>` 在 import 出来的 project 上重跑。
+Validation：扩展 §12.5 的 walkthrough：`od project import` 一个本地文件夹 → `od plugin replay <runId> --snapshot-id <snapshotId>` 取回不可变 rerun bundle → 在 import 出来的 project 上执行 `od plugin apply` + `od run start`。
 
 ### Phase 3 — Federated marketplace + tiered trust（3–5 天）
 
-- `od marketplace add/remove/trust/untrust/list/refresh`；`od plugin install <name>` 通过 marketplaces 解析。
+- `od marketplace add/remove/trust/list/refresh`；用 `od marketplace trust <id> --trust restricted` 降低 trust tier。`od plugin install <name>` 通过 marketplaces 解析。
 - `GET /api/marketplaces`、`POST /api/marketplaces`、`GET /api/marketplaces/:id/plugins`。
 - `PluginDetailView` 上的 Trust UI（capability checklist + "Grant" action）。
 - Apply pipeline 通过 `trust` + `capabilities_granted` gate。
@@ -1820,7 +1827,7 @@ Validation：从本地 mock marketplace.json 安装 plugin、rotate ref、uninst
 
 - 在 `docs/atoms.md` 中记录 atoms；通过 `GET /api/atoms` 暴露。
 - `od plugin export <projectId> --as od|claude-plugin|agent-skill`：从已有 project 生成 publish-ready folder。
-- `od plugin run <id> --input k=v --follow`：apply + run start + watch 的 shorthand wrapper。
+- `od plugin run <id> --inputs <json> --follow`：apply + run start + watch 的 shorthand wrapper。
 - `od plugin scaffold` interactive starter。
 - `od plugin publish --to anthropics-skills|awesome-agent-skills|clawhub` 打开 PR template。
 - **剩余 CLI parity：** `od conversation list/new/info`、`od skills/design-systems/craft/atoms list/show`、`od status/doctor/version`、`od config get/set/list`、`od marketplace search`。这些基本都是纯 CLI 工作，endpoints 已存在或很轻量。
@@ -1937,8 +1944,8 @@ installer 会把 nested skills/design-systems/craft fan out 到 registry 的 nam
 - **`od plugin run` headless contract**：当前是否足够，还是也为非 CLI agents 暴露 HTTP POST endpoint？（默认：v1 只 CLI；Phase 4 如需要再补 HTTP。）
 - **Multi-tenant auth（per-user OAuth、RBAC、project ownership、billing）** 明确不属于 v1。Docker image 设计为 single-tenant（一个 `OD_API_TOKEN`）。Multi-tenancy 是 post-v1 story，需要单独 spec。请确认 first ecosystem release 这个 scope 是否可接受。
 - **Hosted mode 的 trust propagation**：当前 spec 已锁定 arbitrary GitHub / URL / local 插件默认 `restricted`，第三方 marketplace 也默认不传递 trust。还需确认 hosted deployments 是否允许 operator 通过 `OD_TRUSTED_PLUGINS` 直接 trust 单个插件，还是必须先 trust 它所属 marketplace。
-- **Discovery-time hot reload**：daemon 是否 watch `<daemonDataDir>/plugins/`（开发体验好），还是只在 `od plugin install/update/uninstall` 后 reload（稳定性高）？（默认：watch，500ms debounce。）
-- **Versioning policy**：安装时 pin tag/SHA，还是默认跟踪 default branch 并提供 opt-in pin？（默认：安装时 pin resolved ref；`od plugin update` 重新 resolve。）
+- **Discovery-time hot reload**：daemon 是否 watch `<daemonDataDir>/plugins/`（开发体验好），还是只在 `od plugin install/upgrade/uninstall` 后 reload（稳定性高）？（默认：watch，500ms debounce。）
+- **Versioning policy**：安装时 pin tag/SHA，还是默认跟踪 default branch 并提供 opt-in pin？（默认：安装时 pin resolved ref；`od plugin upgrade <id>` 重新 resolve。）
 - ~~**Plugin prompt block 提到 contracts 共享层的时机**~~：**已按 PB1 解决。** Phase 2A 已把 `renderPluginBlock(snapshot)` 放到 `packages/contracts/src/prompts/plugin-block.ts`；两份 composer import 同一函数；v1 fallback rejection 规则保留。
 - ~~**`AppliedPluginSnapshot` 留存策略**~~：**已按 PB2 解决。** 被 run / conversation / project 引用的 snapshot 永久 pin；未引用 snapshot 默认 30 天过期；`OD_SNAPSHOT_RETENTION_DAYS` 是 operator opt-in；`od plugin snapshots prune` 保留为强制清理出口。
 - **Devloop 计费颗粒度**：每次 stage 的 `iteration` 是否单独按 token 计费 / 单独 audit / 单独 cancellable？（默认：单独 audit + 可单独 cancel；计费颗粒度跟随 provider 实际消耗，不在 spec 层定义新颗粒。）
@@ -2350,7 +2357,7 @@ Bundled scenario plugins 与 pipeline fallback resolver 现在已经存在。剩
 | trust 等级 | 来源 | 安装时是否 capability prompt | 是否可被 marketplace upgrade 替换 | SQLite `source_kind` |
 | --- | --- | --- | --- | --- |
 | `bundled` | `<repo-root>/plugins/_official/**` | 否 —— daemon 内部 allowlist 直接授权 | 否 —— 仅随 daemon 升级一同替换 | `bundled` |
-| `trusted` | 一方 / 显式 trust 的 marketplace | 否 —— 安装即自动授权 | 是 —— `od plugin update` 可以拉新版本 | `marketplace` |
+| `trusted` | 一方 / 显式 trust 的 marketplace | 否 —— 安装即自动授权 | 是 —— `od plugin upgrade <id>` 可以拉新版本 | `marketplace` |
 | `restricted` | 其他来源（GitHub URL、任意 marketplace、本地文件夹） | 是 —— 需 capability checklist | 是 | `github` / `url` / `local` / `marketplace` |
 
 `bundled` 等级让 patch 2 与 patch 3 安全：daemon 不会就自己一直拥有的 capability 来给自己提示，恶意 marketplace plugin 也无法靠重用 bundled atom 的 id 来冒充。
@@ -2361,7 +2368,7 @@ daemon 启动多一步：
 
 1. 走 `<repo-root>/plugins/_official/**`，把每个 plugin 注册到 `installed_plugins` 中：`source_kind='bundled'`、`trust='bundled'`、capabilities = 该 plugin 声明的 `od.capabilities`。
 2. bundled plugin **不**复制到 `<daemonDataDir>/plugins/`；它们直接从 repo path 加载并热重载，daemon 升级时与 daemon 代码同步替换。
-3. `od plugin uninstall` 拒绝 uninstall `bundled` plugin（会让 daemon 失能）；`od plugin update` 对 bundled 是 no-op。
+3. `od plugin uninstall` 拒绝 uninstall `bundled` plugin（会让 daemon 失能）；`od plugin upgrade <id>` 会以 `409 bundled-plugin` 拒绝，因为 bundled plugin 只随 daemon image 升级替换。
 4. 用户可以安装一个 id 与 bundled 相同的 `trusted` 或 `restricted` plugin；正常 apply 时用户 copy 胜出，但 daemon 保留 bundled copy 作为 fallback，给那些 pin 了 bundled 版本的旧 `AppliedPluginSnapshot` replay 用。
 
 ### 23.4 自举之后的 kernel：纯 assembler

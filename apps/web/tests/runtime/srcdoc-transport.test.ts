@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   buildLazySrcdocTransport,
+  buildSrcdoc,
   canActivateSrcDocTransport,
   type SrcDocActivationInputs,
 } from '../../src/runtime/srcdoc';
@@ -20,7 +21,7 @@ function extractShellScript(shellHtml: string): string {
 
 interface RunShellResult {
   parentMessages: unknown[];
-  triggerActivate: (html: string) => void;
+  triggerActivate: (html: string, generation?: string) => void;
 }
 
 function runShellInSandbox(shellHtml: string): RunShellResult {
@@ -51,9 +52,9 @@ function runShellInSandbox(shellHtml: string): RunShellResult {
   vm.runInContext(script, sandbox);
   return {
     parentMessages,
-    triggerActivate: (html: string) => {
+    triggerActivate: (html: string, generation = 'generation-1') => {
       for (const listener of messageListeners) {
-        listener({ data: { type: 'od:srcdoc-transport-activate', html } });
+        listener({ data: { type: 'od:srcdoc-transport-activate', html, generation } });
       }
     },
   };
@@ -111,8 +112,39 @@ describe('buildLazySrcdocTransport (#2253)', () => {
     vm.createContext(sandbox);
     vm.runInContext(script, sandbox);
     const listener = (win as { __listener: (ev: { data: unknown }) => void }).__listener;
-    listener({ data: { type: 'od:srcdoc-transport-activate', html: '<p>hi</p>' } });
+    listener({
+      data: {
+        type: 'od:srcdoc-transport-activate',
+        html: '<p>hi</p>',
+        generation: 'generation-1',
+      },
+    });
     expect(writes).toEqual(['<p>hi</p>']);
+  });
+
+  it('requires a generation on activate so the host can reject stale ready acks', () => {
+    const shell = buildLazySrcdocTransport();
+    const script = extractShellScript(shell);
+    const writes: string[] = [];
+    const win: Record<string, unknown> = {
+      addEventListener(_t: string, listener: (ev: { data: unknown }) => void) {
+        (win as { __listener: typeof listener }).__listener = listener;
+      },
+    };
+    win.parent = { postMessage: () => {} };
+    const sandbox: Record<string, unknown> = {
+      document: {
+        open: () => {},
+        write: (chunk: string) => writes.push(chunk),
+        close: () => {},
+      },
+      window: win,
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(script, sandbox);
+    const listener = (win as { __listener: (ev: { data: unknown }) => void }).__listener;
+    listener({ data: { type: 'od:srcdoc-transport-activate', html: '<p>stale</p>' } });
+    expect(writes).toEqual([]);
   });
 
   it('ignores activate messages with missing or non-string html', () => {
@@ -141,6 +173,20 @@ describe('buildLazySrcdocTransport (#2253)', () => {
     listener({ data: null });
     listener({ data: { type: 'unrelated' } });
     expect(writes).toEqual([]);
+  });
+});
+
+describe('srcDoc transport activation witness', () => {
+  it('runs before authored head scripts so slow boot code cannot cause a false recovery', () => {
+    const doc = buildSrcdoc(
+      '<html><head><script src="slow-app.js"></script></head><body>app</body></html>',
+      { transportActivationGeneration: 'generation-1' },
+    );
+
+    expect(doc.indexOf('data-od-srcdoc-transport-activation')).toBeGreaterThan(-1);
+    expect(doc.indexOf('data-od-srcdoc-transport-activation')).toBeLessThan(
+      doc.indexOf('src="slow-app.js"'),
+    );
   });
 });
 

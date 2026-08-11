@@ -16,7 +16,7 @@ This guide is a deliberately honest first look at Open Design — the parts that
 
 ## What is Open Design?
 
-Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design. The "AI purple slop" problem (every generated UI looking the same) is exactly what tools like this try to solve, and Open Design's answer is to run **on top of the coding agent you already use** rather than ship its own model. It detects Claude Code, Codex, Cursor, Gemini, OpenCode, and more on your machine and uses that as the engine. Sasha's framing: it collected tens of thousands of GitHub stars in its first week because it's free, open, and not locked to one provider.
+Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design. The "AI purple slop" problem (every generated UI looking the same) is exactly what tools like this try to solve, and Open Design's answer is to run **on top of the coding agent you already use** rather than ship its own model. It detects Claude Code, Codex, Cursor, OpenCode, Qwen, and more on your machine and uses that as the engine. Sasha's framing: it collected tens of thousands of GitHub stars in its first week because it's free, open, and not locked to one provider.
 
 - **Open source, Apache-2.0** — clone it, read it, self-host it.
 - **Runs locally** — your projects are folders on your own machine.

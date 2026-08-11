@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "clone-audit-mrlv3nl4",
+  "title": "Clone Audit",
+  "version": "0.1.0",
+  "description": "Audit website clones for fidelity gaps, tracking code, source-brand and language residue, placeholders, and risky external dependencies.",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}

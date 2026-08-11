@@ -62,7 +62,7 @@ sequenceDiagram
 | Marketplace detail | User clicks **Use** on a plugin page | `Make a 12-slide investor deck for a Series A SaaS startup targeting enterprise design teams.` | Deck skill, slide craft rules, example assets, required inputs, preview samples. |
 | Home inline input | User types a brief, then picks a suggested plugin | `Create a landing page for a new AI browser extension, use a dark neon visual direction.` | Landing-page skill, suggested design system, prompt rewrite, starter assets. |
 | Project chat follow-up | User is already inside a generated project | `Turn this landing page into a launch announcement deck.` | Existing project context, selected artifact refs, deck conversion skill, preserved brand tokens. |
-| Headless CLI / code agent | Claude Code, Cursor, Codex, CI, or script shells out to `od` | `od run create --plugin make-a-deck --input audience=investors --input topic='AI design ops'` | Same manifest resolution, same context chips, same run events without opening desktop. |
+| Headless CLI / code agent | Claude Code, Cursor, Codex, CI, or script shells out to `od` | `od run start --project p_abc --plugin make-a-deck --inputs '{"audience":"investors","topic":"AI design ops"}'` | Same manifest resolution, same context chips, same run events without opening desktop. |
 | Self-hosted marketplace | Team runs a private catalog | `Create an internal QBR deck using the Acme design system and sales metrics CSV.` | Private plugin index, trusted internal design system, asset attachments, restricted data policy. |
 
 The important product shift: **plugins are not local UI addons; they are reusable agent workflows.** UI components can collaborate with those workflows, but consumption and processing belong to the agent run.
@@ -448,7 +448,7 @@ Mirrors [`anthropics/skills/.claude-plugin/marketplace.json`](https://raw.github
 
 The marketplace top-level `version` is the catalog snapshot version; every `plugins[]` entry also declares the listed plugin version. Installers still verify the target folder's own `open-design.json` after fetching, but registry search, audit logs, and marketplace refresh events can now reason about catalog and plugin versions before install.
 
-Multiple marketplaces coexist — the user runs `od marketplace add <url>` to register additional indexes (Vercel's, OpenClaw's clawhub, an enterprise team's private catalog). By default, a user-added marketplace is only a discovery source and plugins from it still install as `restricted`; only the built-in official marketplace or a marketplace explicitly trusted through `od marketplace add <url> --trust` / `od marketplace trust <id>` can pass through default `trusted` status.
+Multiple marketplaces coexist — the user runs `od marketplace add <url>` to register additional indexes (Vercel's, OpenClaw's clawhub, an enterprise team's private catalog). By default, a user-added marketplace is only a discovery source and plugins from it still install as `restricted`; only the built-in official marketplace or a marketplace explicitly trusted through `od marketplace add <url> --trust trusted` / `od marketplace trust <id> --trust trusted` can pass through default `trusted` status.
 
 ## 7. Discovery and install
 
@@ -621,7 +621,7 @@ Lives in `packages/contracts/src/plugins/apply.ts`. Re-exported from [`packages/
 
 `appliedPlugin` is not a decorative field; it is the **contract** between "plugin" and "run". Passing only `pluginId` is not enough, because:
 
-- A plugin can be upgraded between two runs via `od plugin update`.
+- A plugin can be upgraded between two runs via `od plugin upgrade <id>`.
 - The same `pluginId` may resolve to different git SHAs on different marketplaces.
 - Refs inside `od.pipeline` / `od.context.*` may point to a moving default branch.
 - Asset staging plans and `capabilitiesGranted` must match the view used when the prompt was generated.
@@ -630,7 +630,7 @@ The daemon therefore must:
 
 1. **At apply time** — hash the hydrated manifest plus inputs into `manifestSourceDigest`, then write `pluginSpecVersion`, `pluginVersion`, `pinnedRef`, `sourceMarketplaceId`, `resolvedContext`, `capabilitiesGranted`, `assetsStaged`, **`connectorsRequired` / `connectorsResolved` (cross-checked against the connector subsystem's current `status`)**, and **`mcpServers` (the MCP server set active at apply time)** into `appliedPlugin` and return it to the caller.
 2. **At project create / run start** — write the client-supplied `appliedPlugin` (or the daemon's server-side re-resolved snapshot) into the SQLite `applied_plugin_snapshots` table (§11.4) and FK-link it from `runs` / `conversations`.
-3. **Replay** — `od run replay <runId>` and `od plugin export <runId>` must reconstruct prompt and assets from the snapshot rather than the live manifest, so old runs remain reproducible after plugin upgrades.
+3. **Replay / export** — `od plugin replay <runId> --snapshot-id <snapshotId>` emits the immutable snapshot and rerun bundle, while `od plugin export --snapshot-id <snapshotId> --as <target> --out <dir>` resolves an export from that snapshot rather than the live manifest. The caller explicitly re-applies and starts the replayed run, so old runs remain reproducible after plugin upgrades.
 4. **Audit** — UI ProjectView shows snapshot id + version + digest at the top; artifact provenance (§11.5 ArtifactManifest) reverse-resolves plugin source via the snapshot id.
 
 Only the daemon writes `AppliedPluginSnapshot`; CLI/UI clients are read-only. Plugin upgrades or marketplace ref drift cause `od plugin doctor` to mark affected historical snapshots as `stale`, but **never** to rewrite them: reproducibility wins over freshness.
@@ -659,7 +659,7 @@ Net effect: a single project can be steered through many plugin-driven tasks —
 1. **Apply does not render any surface.** Apply remains a pure resolver. UI / CLI surfaces only translate `genuiSurfaces` into a "this long task may ask you these questions" advisory card. As soon as a plugin declares an `oauth-prompt`, the detail-page capability checklist gains a row "This plugin will ask you to authorize <provider>", so the user knows ahead of Send what surfaces may pop during the run.
 2. **At runtime, the agent triggers surfaces only through declared atoms.** Each surface's `trigger.atom` (and optional `trigger.stageId`) acts as an allowlist: the daemon rejects any `genui_surface_request` event coming from an undeclared atom — this is the enforcement point for "no UI is ever produced unless declared" (doctor + runtime double-check).
 3. **Existing answers in the same project are reused.** When `persist` is `project` or `conversation`, the daemon checks the `genui_surfaces` table (§11.4) before emitting a request; if a valid stored value exists (not expired, not invalidated), it short-circuits with that value and never broadcasts the request. This is exactly how "the plugin creates a project, the user keeps interacting across multiple turns and conversations, and these meta-info are reused" lands in practice.
-4. **A non-response does not block the run forever.** Every surface declares `timeout` (default 5 minutes) and `onTimeout` (`abort` / `default` / `skip`); the CLI exposes the same surface description on the ND-JSON stream as a `genui_surface_request` event, so headless automation can answer it from another process via `od ui respond --surface-id …`, or skip cleanly when not needed (§10.3).
+4. **A non-response does not block the run forever.** Every surface declares `timeout` (default 5 minutes) and `onTimeout` (`abort` / `default` / `skip`); the CLI exposes the same surface description on the ND-JSON stream as a `genui_surface_request` event, so headless automation can answer it from another process via `od ui respond <runId> <surface-id> --value-json …`, or skip cleanly when not needed (§10.3).
 
 `ApplyResult.genuiSurfaces` plus `appliedPlugin.snapshotId` jointly form the GenUI contract between plugin and project: the snapshot is immutable; once a surface answer is written into `genui_surfaces`, the project owns it and any subsequent plugin (even a different plugin or a different conversation) can look it up by `surface.id` if it also declares the same id with a compatible `schema`.
 
@@ -698,9 +698,9 @@ The UI capability gate is a modal + checklist; headless / CI / third-party code 
 1. **Pre-trust** (recommended for hosted / CI).
 
    ```bash
-   od plugin trust make-a-deck   --caps fs:read,mcp,subprocess
-   od plugin trust make-a-digest --caps fs:read,connector:slack,connector:notion
-   od plugin trust make-a-deck   --caps all          # equivalent to all capabilities the manifest declares
+   od plugin trust make-a-deck   --capabilities fs:read,mcp,subprocess
+   od plugin trust make-a-digest --capabilities fs:read,connector:slack,connector:notion
+   # There is no `all` shorthand; enumerate every capability you intend to grant.
    ```
 
    Writes to SQLite `installed_plugins.capabilities_granted`. Applies to all subsequent apply / run calls until the plugin is upgraded or the source marketplace changes (§9 provenance rules), at which point re-confirmation is required. `connector:<id>` is given as the full id (`connector:slack`, `connector:notion`); globs are not accepted.
@@ -728,7 +728,7 @@ The UI capability gate is a modal + checklist; headless / CI / third-party code 
          "required": ["mcp", "subprocess"],
          "granted": ["prompt:inject", "fs:read"],
          "remediation": [
-           "od plugin trust make-a-deck --caps mcp,subprocess",
+           "od plugin trust make-a-deck --capabilities mcp,subprocess",
            "or pass --grant-caps mcp,subprocess to this command"
          ]
        }
@@ -738,7 +738,7 @@ The UI capability gate is a modal + checklist; headless / CI / third-party code 
 
    On reading exit 66, a code agent can retry with `--grant-caps`, degrade gracefully, or surface the remediation text to the upstream user. The HTTP equivalent is `409 Conflict` with the same body shape; desktop UI uses it to auto-build the capability checklist.
 
-Elevated capabilities (`bash` / `subprocess` / `network`, plus the coarse `connector` **without** an `:<id>` suffix) **never** support `--grant-caps all` shorthand on its own: the CLI requires each one to be listed explicitly to prevent scripted over-authorization. `connector:<id>` is the scoped form of an elevated capability and may appear inside `--caps all`, but hosted operators typically prefer enumerating each connector id for audit.
+Neither permanent `--capabilities` grants nor per-call `--grant-caps` grants support an `all` shorthand: the CLI requires every capability to be listed explicitly to prevent scripted over-authorization. This is especially important for elevated capabilities (`bash` / `subprocess` / `network`, plus the coarse `connector` **without** an `:<id>` suffix). `connector:<id>` is the scoped form and should likewise be enumerated by full id for audit.
 
 ### 9.2 Preview sandbox
 
@@ -756,8 +756,8 @@ Promote what already exists in [`apps/daemon/src/prompts/system.ts`](../apps/dae
 
 | Atom id | Source today | What it does | taskKind fit |
 | --- | --- | --- | --- |
-| `discovery-question-form` | `DISCOVERY_AND_PHILOSOPHY` in `system.ts` | Turn-1 question form for ambiguous briefs | new-generation, tune-collab |
-| `direction-picker` | same | 3–5 direction picker before final | new-generation, tune-collab |
+| `discovery-question-form` | `DISCOVERY_AND_PHILOSOPHY` in `system.ts` | Structured clarification protocol for unresolved material requirements on any turn | new-generation, tune-collab |
+| `direction-picker` | same | Optional 3–5 direction comparison only when the user explicitly requests alternatives | new-generation, tune-collab |
 | `todo-write` | same | TodoWrite-driven plan | all |
 | `file-read` / `file-write` / `file-edit` | code-agent native | File ops | all |
 | `research-search` | `od research search` ([`apps/daemon/src/cli.ts`](../apps/daemon/src/cli.ts)) | Tavily web research | new-generation |
@@ -938,13 +938,14 @@ od ui respond <runId> <surface-id> --skip          # triggers onTimeout='skip'
 od ui revoke  <projectId> <surface-id>             # cross-conversation revoke
 ```
 
-If the CLI caller never responds, the run converges per `onTimeout` once `surface.timeout` elapses and never hangs forever. A code agent can also **pre-answer** for an entire plugin:
+If the CLI caller never responds, the run converges per `onTimeout` once `surface.timeout` elapses and never hangs forever. A code agent can also **pre-answer** one surface at a time before the run starts:
 
 ```bash
-od ui prefill <projectId> --plugin <pluginId> --json '{"figma-oauth":"<token>","direction-pick":"editorial"}'
+od ui prefill --project <projectId> --snapshot-id <snapshotId> figma-oauth --value-json '"<token>"'
+od ui prefill --project <projectId> --snapshot-id <snapshotId> direction-pick --value-json '"editorial"'
 ```
 
-Prefill writes rows in `resolved` state; when the plugin triggers the surface, the daemon serves the cached value and still emits `genui_surface_response { respondedBy: 'cache' }` for audit.
+Repeat `prefill` for each surface. It writes rows in `resolved` state; when the plugin triggers the surface, the daemon serves the cached value and still emits `genui_surface_response { respondedBy: 'cache' }` for audit.
 
 #### 10.3.5 Alignment roadmap with the AG-UI protocol
 
@@ -1288,7 +1289,7 @@ Existing commands ([`apps/daemon/src/cli.ts`](../apps/daemon/src/cli.ts)) stay; 
 
 ```
 od project create [--name "<title>"] [--skill <id>] [--design-system <id>]
-                  [--plugin <id>] [--input k=v ...] [--brief "<text>"]
+                  [--plugin <id>] [--inputs <json>] [--brief "<text>"]
                   [--metadata-json <path|->] [--json]
 od project list   [--json]
 od project info   <id> [--json]
@@ -1307,7 +1308,7 @@ Result of `od project create --json`:
 
 ```
 od conversation list <projectId> [--json]
-od conversation new  <projectId> [--name "<title>"] [--json]
+od conversation new  <projectId> [--title "<title>"] [--json]
 od conversation info <conversationId> [--json]
 ```
 
@@ -1315,7 +1316,7 @@ od conversation info <conversationId> [--json]
 
 ```
 od run start --project <projectId> [--conversation <conversationId>]
-             [--message "<text>"] [--plugin <pluginId>] [--input k=v ...]
+             [--message "<text>"] [--plugin <pluginId>] [--inputs <json>]
              [--agent claude|codex|opencode] [--model <id>] [--reasoning <level>]
              [--attachments <relpath,...>] [--follow] [--json]
 
@@ -1347,16 +1348,19 @@ A code agent typically uses `od files read` / `od files write` instead of native
 ```
 od plugin install   <source>                            # github: | https://… | ./folder | <name from marketplace>
 od plugin uninstall <id>
-od plugin list      [--kind skill|scenario|atom|bundle] [--trust trusted|restricted] [--json]
+od plugin list      [--task-kind <kind>] [--mode <mode>] [--tag <tag>]
+                    [--trust trusted|restricted|bundled] [--bundled | --no-bundled] [--json]
 od plugin info      <id> [--json]
-od plugin update    [<id>]
-od plugin trust     <id> [--caps fs:write,mcp,bash,hooks]   # permanent grant; persisted on installed_plugins
+od plugin upgrade   <id> [--policy latest|pinned] [--json]
+od plugin trust     <id> --capabilities fs:write,mcp,bash,subprocess [--revoke]
+                                                               # permanent grant; persisted on installed_plugins
 od plugin apply     <id> --project <projectId> [--input k=v ...] [--grant-caps fs:read,mcp ...] [--json]
                                                             # returns ApplyResult; pure (no run)
                                                             # --grant-caps: scoped to this apply's snapshot only
-od plugin run       <id> --project <projectId> [--input k=v ...] [--grant-caps ...] [--follow] [--json]
+od plugin run       <id> --project <projectId> [--inputs <json>] [--grant-caps ...] [--follow] [--json]
                                                             # shorthand: apply + run start --follow
-od plugin replay    <runId> [--follow] [--json]             # rerun the long-task using the run's applied_plugin_snapshot
+od plugin replay    <runId> --snapshot-id <snapshotId> [--json]
+                                                            # emit the immutable snapshot + rerun bundle; caller then apply + run start
 od plugin export    <projectId> --as od|claude-plugin|agent-skill --out <dir>
 od plugin doctor    <id>
 od plugin scaffold
@@ -1370,19 +1374,19 @@ od ui show      <runId> <surface-id> [--json]                 # surface kind / s
 od ui respond   <runId> <surface-id> --value-json '{...}'     # write answer, unblock the run
 od ui respond   <runId> <surface-id> --skip                   # trigger onTimeout='skip'
 od ui revoke    <projectId> <surface-id>                      # invalidate persisted answer (e.g. OAuth logout)
-od ui prefill   <projectId> --plugin <pluginId> --json '{ "<surface-id>": <value>, ... }'
-                                                              # bulk pre-answer, used before the run starts
+od ui prefill   --project <projectId> --snapshot-id <snapshotId> <surface-id>
+                [--value <text> | --value-json <json>] [--persist run|conversation|project]
+                                                              # pre-answer one surface; repeat for more
 ```
 
 #### Marketplace verbs
 
 ```
-od marketplace add     <url> [--trust]
+od marketplace add     <url> [--trust trusted|restricted]
 od marketplace remove  <id>
-od marketplace trust   <id>
-od marketplace untrust <id>
+od marketplace trust   <id> [--trust trusted|restricted|official]
 od marketplace list    [--json]
-od marketplace refresh [<id>]
+od marketplace refresh <id>
 od marketplace search  "<query>" [--tag <tag>] [--json]   # search across configured catalogs
 ```
 
@@ -1408,7 +1412,11 @@ od daemon status [--json]                                   # alias of `od statu
 od status        [--json]                                   # daemon up? port? installed plugins count
 od doctor                                                   # diagnostics: skills/DS/craft/plugins, providers, MCP
 od version       [--json]
-od config get|set|list|unset  [--key ...] [--value ...]     # backed by media-config.json + db
+od config list [--json]
+od config get <key> [--json]
+od config set <key> <value> [--json]
+od config set <key> --value-json '<json>' [--json]
+od config unset <key> [--json]                              # backed by app config
 ```
 
 `od daemon start --headless` is the entry for the headless mode in §11.7 (no web bundle, no electron). `od daemon start --serve-web` adds the local web UI without electron. Both keep using the existing tools-dev port conventions ([`OD_PORT`, `OD_WEB_PORT`](../AGENTS.md)).
@@ -1441,13 +1449,13 @@ od mcp live-artifacts        # specialized MCP server
 | --- | --- | --- | --- |
 | 64 | Daemon not running | `od status`, then start daemon | `{ host, port }` |
 | 65 | Plugin not found / not installed | `od plugin list` then `od plugin install <source>` | `{ pluginId, candidateSources[] }` |
-| 66 | Plugin restricted, capability required | `od plugin trust <id> --caps …` or retry with `--grant-caps …` | `{ pluginId, pluginVersion, required[], granted[], remediation[] }` |
+| 66 | Plugin restricted, capability required | `od plugin trust <id> --capabilities …` or retry with `--grant-caps …` | `{ pluginId, pluginVersion, required[], granted[], remediation[] }` |
 | 67 | Required input missing on apply | re-run with `--input k=v` for each missing field | `{ pluginId, missing[], schema }` |
 | 68 | Project not found | `od project list` | `{ projectId }` |
 | 69 | Run not found / already terminal | `od run list --project <id>` | `{ runId, status }` |
 | 70 | Provider not configured | `od config set ...` for the provider key | `{ provider, requiredKeys[] }` |
 | 71 | Plugin requires daemon mode | start daemon or switch to desktop / headless | `{ pluginId, mode: 'api-fallback' }` (§11.8) |
-| 72 | Applied plugin snapshot stale | `od plugin replay <runId>` or `od plugin upgrade <id>` then re-apply | `{ snapshotId, pluginId, currentVersion, snapshotVersion }` |
+| 72 | Applied plugin snapshot stale | `od plugin replay <runId> --snapshot-id <snapshotId>` or `od plugin upgrade <id>` then re-apply | `{ snapshotId, pluginId, currentVersion, snapshotVersion }` |
 | 73 | GenUI surface awaiting response | inspect via `od ui show <runId> <surface-id>` then answer with `od ui respond`, or `od ui prefill` before the run | `{ runId, surfaceId, kind, schema, prompt, persist, timeoutAt }` (§10.3) |
 
 When `--json` is set, structured error output is `{ "error": { "code": "<short-code>", "message": "<human>", "data": { ... } } }` on stderr. The exit codes above remain stable; the human prose may evolve. The exit-66 `data` shape matches §9.1's capability gate JSON; an agent reading 66 can retry with `--grant-caps` or surface remediation text upstream.
@@ -1469,7 +1477,7 @@ od plugin apply make-a-deck --project "$PID" --input topic="agentic design" --in
 
 # 4. Start the run, follow events live (ND-JSON on stdout).
 od run start --project "$PID" --plugin make-a-deck \
-             --input topic="agentic design" --input audience=VC \
+             --inputs '{"topic":"agentic design","audience":"VC"}' \
              --message "Make it concise; investor-ready." --follow \
   | jq -r 'select(.kind == "message_chunk") | .text' \
   | tee run.log
@@ -1560,8 +1568,7 @@ od plugin install github:open-design/plugins/make-a-deck
 # Create a project bound to the plugin. Inputs are templated into the brief.
 PID=$(od project create \
         --plugin make-a-deck \
-        --input topic="agentic design" \
-        --input audience=VC \
+        --inputs '{"topic":"agentic design","audience":"VC"}' \
         --json | jq -r .projectId)
 
 # Drive the run with Claude Code (or any code agent). Two equivalent paths:
@@ -1788,7 +1795,7 @@ Validation: e2e in `e2e/`:
 
 (b) Apply then cancel before sending; project cwd has no staged assets and `.mcp.json` does not exist.
 
-(c) `od plugin replay <runId>` reproduces the **exact same prompt** even after the source plugin has been upgraded via `od plugin update` (snapshot is immutable).
+(c) `od plugin replay <runId> --snapshot-id <snapshotId>` returns the **exact same immutable snapshot and rerun bundle** even after the source plugin has been upgraded via `od plugin upgrade <id>`; the caller then re-applies and starts the run explicitly.
 
 (d) In web API-fallback mode (OD daemon stopped, browser talking provider directly), the inline rail still renders plugin cards but clicking "Use" pops a daemon-required notice; resuming the daemon restores normal behavior.
 
@@ -1796,7 +1803,7 @@ Validation: e2e in `e2e/`:
 
 (f) **Connector trust gate.** A local plugin declares `od.connectors.required = [{ id: 'slack', tools: ['channels.list'] }]` but **does not** explicitly grant `connector:slack`:
 
-  - `apply` (no `--grant-caps`) → exit 66 / 409 with `data.required` including `connector:slack` and `data.remediation` listing `od plugin trust <id> --caps connector:slack`.
+  - `apply` (no `--grant-caps`) → exit 66 / 409 with `data.required` including `connector:slack` and `data.remediation` listing `od plugin trust <id> --capabilities connector:slack`.
   - `apply --grant-caps connector:slack` while the connector is not connected yet → daemon auto-derives an implicit `oauth-prompt` (surface id `__auto_connector_slack`, `persist=project`); the user completes the existing connector OAuth flow in the UI; the surface flips to `resolved`; `applied_plugin_snapshots.connectors_resolved_json` contains `{ id:'slack', accountLabel:..., status:'connected' }`.
   - Re-applying the same plugin in the same project: `connector:slack` is connected → no oauth-prompt is derived; the snapshot's `connectors_resolved_json[0].status='connected'` hits cache.
   - A second plugin declares `od.connectors.required = [{ id: 'notion', tools: [...] }]` but **does not** declare `connector:notion` capability → `apply` fails with exit 66; additionally the token-issuance path is verified by `curl /api/tools/connectors/execute` directly (simulating a bypass attempt) which returns `403 connector-not-granted`.
@@ -1817,11 +1824,11 @@ Validation: e2e in `e2e/`: install local plugin → marketplace → detail previ
 - `od project delete/import`, `od run list/logs --since`, `od files write/upload/delete/diff`, `od conversation list/new/info`.
 - These wrap existing endpoints; no new HTTP surface.
 
-Validation: extend the §12.5 walkthrough — `od project import` an external folder → `od plugin apply` → `od run replay <runId>` reruns on top of the imported project.
+Validation: extend the §12.5 walkthrough — `od project import` an external folder → `od plugin replay <runId> --snapshot-id <snapshotId>` to recover the immutable rerun bundle → `od plugin apply` + `od run start` on the imported project.
 
 ### Phase 3 — Federated marketplace + tiered trust (3–5 days)
 
-- `od marketplace add/remove/trust/untrust/list/refresh`; `od plugin install <name>` resolves through marketplaces.
+- `od marketplace add/remove/trust/list/refresh`; downgrade trust with `od marketplace trust <id> --trust restricted`. `od plugin install <name>` resolves through marketplaces.
 - `GET /api/marketplaces`, `POST /api/marketplaces`, `GET /api/marketplaces/:id/plugins`.
 - Trust UI on `PluginDetailView` (capability checklist + "Grant" action).
 - Apply pipeline gates by `trust` + `capabilities_granted`.
@@ -1834,7 +1841,7 @@ Validation: install plugin from a local mock marketplace.json, rotate ref, unins
 
 - Document atoms in `docs/atoms.md`; expose via `GET /api/atoms`.
 - `od plugin export <projectId> --as od|claude-plugin|agent-skill` — generates a publish-ready folder from an existing project.
-- `od plugin run <id> --input k=v --follow` — shorthand wrapper for apply + run start + watch.
+- `od plugin run <id> --inputs <json> --follow` — shorthand wrapper for apply + run start + watch.
 - `od plugin scaffold` interactive starter.
 - `od plugin publish --to anthropics-skills|awesome-agent-skills|clawhub` opens a PR template.
 - **Remaining CLI parity:** `od conversation list/new/info`, `od skills/design-systems/craft/atoms list/show`, `od status/doctor/version`, `od config get/set/list`, `od marketplace search`. All purely CLI work — endpoints exist or are trivial.
@@ -1950,8 +1957,8 @@ Open questions worth confirming before code lands:
 - **`od plugin run` headless contract** — sufficient as-is, or also expose an HTTP POST endpoint for non-CLI agents? (Default: CLI only in v1; HTTP added in Phase 4 if needed.)
 - **Multi-tenant auth (per-user OAuth, RBAC, project ownership, billing)** is explicitly out of scope for v1. The Docker image is single-tenant by design (one `OD_API_TOKEN`). Multi-tenancy is a post-v1 story that needs its own spec — confirm this scoping is acceptable for the first ecosystem release.
 - **Trust propagation in hosted mode** — current spec locks arbitrary GitHub / URL / local plugins to `restricted` by default, and third-party marketplaces do not propagate trust by default. Confirm whether hosted deployments may trust individual plugins through `OD_TRUSTED_PLUGINS`, or whether operators must first trust the source marketplace.
-- **Discovery-time hot reload** — should the daemon watch `<daemonDataDir>/plugins/` for filesystem changes (developer ergonomics), or only reload after `od plugin install/update/uninstall` (stability)? (Default: watch, with a 500ms debounce.)
-- **Versioning policy** — pin to a tag/SHA on install, or always track the default branch with an opt-in pin? (Default: pin to the resolved ref at install time; `od plugin update` re-resolves.)
+- **Discovery-time hot reload** — should the daemon watch `<daemonDataDir>/plugins/` for filesystem changes (developer ergonomics), or only reload after `od plugin install/upgrade/uninstall` (stability)? (Default: watch, with a 500ms debounce.)
+- **Versioning policy** — pin to a tag/SHA on install, or always track the default branch with an opt-in pin? (Default: pin to the resolved ref at install time; `od plugin upgrade <id>` re-resolves.)
 - ~~**When to lift the plugin prompt block into contracts**~~ — **resolved (PB1, see `docs/plans/plugins-implementation.md` §7).** Lift in Phase 2A as a pure `renderPluginBlock(snapshot)` function in `packages/contracts/src/prompts/plugin-block.ts`; both composers import it; v1 fallback rejection rule (§11.8) is preserved; Phase 4 turns on fallback support as a one-line wiring change. The Phase 1–4 byte-equality CI fixture is no longer needed.
 - ~~**`AppliedPluginSnapshot` retention**~~ — **resolved (PB2, see `docs/plans/plugins-implementation.md` §7).** Snapshots referenced by any run / conversation / project stay pinned forever (`expires_at = NULL`); unreferenced snapshots get `expires_at = applied_at + OD_SNAPSHOT_UNREFERENCED_TTL_DAYS` (default `30`, `0` disables). The "expire even referenced rows" knob `OD_SNAPSHOT_RETENTION_DAYS` is operator-opt-in only (default unset), and applies only when the referencing row is terminal. The `expires_at` column lands in Phase 1 (§11.4); the GC worker lands in Phase 5 (§16). The `od plugin snapshots prune` CLI remains as a forced-cleanup escape hatch.
 - **Devloop billing granularity** — should each stage `iteration` be billed / audited / cancelled independently? (Default: independent audit + cancel; billing granularity follows the provider's actual consumption rather than introducing a new spec-level unit.)
@@ -2363,7 +2370,7 @@ Today §9 conflates "bundled with the daemon" and "from the official marketplace
 | Trust tier | Source | Capability prompt at install? | Replaceable by marketplace upgrade? | SQLite `source_kind` |
 | --- | --- | --- | --- | --- |
 | `bundled` | `<repo-root>/plugins/_official/**` | No — capabilities granted by daemon-internal allowlist | No — replaced only on daemon upgrade | `bundled` |
-| `trusted` | First-party / explicitly-trusted marketplace | No — auto-granted on install | Yes — `od plugin update` may pull a newer version | `marketplace` |
+| `trusted` | First-party / explicitly-trusted marketplace | No — auto-granted on install | Yes — `od plugin upgrade <id>` may pull a newer version | `marketplace` |
 | `restricted` | Anything else (GitHub URL, arbitrary marketplace, local folder) | Yes — capability checklist required | Yes | `github` / `url` / `local` / `marketplace` |
 
 The `bundled` tier is what makes patches 2 and 3 safe: the daemon does not capability-prompt itself for capabilities it has always had, and a malicious marketplace plugin cannot impersonate a bundled atom by reusing its id.
@@ -2374,7 +2381,7 @@ Daemon startup adds a step:
 
 1. Walk `<repo-root>/plugins/_official/**` and register every plugin under `installed_plugins.source_kind='bundled'`, `trust='bundled'`, capabilities = the plugin's declared `od.capabilities`.
 2. Bundled plugins are not copied into `<daemonDataDir>/plugins/`; they live and reload from the repo path so daemon upgrades replace them in lockstep with daemon code.
-3. `od plugin uninstall` refuses to uninstall a `bundled` plugin (would break the daemon); `od plugin update` is a no-op for bundled.
+3. `od plugin uninstall` refuses to uninstall a `bundled` plugin (would break the daemon); `od plugin upgrade <id>` rejects it with `409 bundled-plugin`, because bundled plugins are replaced only by a daemon-image upgrade.
 4. A user may install a `trusted` or `restricted` plugin with the same id as a bundled one; the user-installed copy wins for normal apply, but the daemon retains the bundled copy as a fallback for replays of older `AppliedPluginSnapshot` rows that pinned the bundled version.
 
 ### 23.4 The kernel after self-hosting: a pure assembler

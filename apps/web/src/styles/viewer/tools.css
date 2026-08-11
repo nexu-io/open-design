@@ -1,10 +1,10 @@
-.op-meta { color: var(--text-muted); font-size: 11.5px; }
+.op-meta { color: var(--text-muted); font-size: 12px; }
 .op-desc { font-style: italic; }
 .op-path {
   background: var(--bg-fill-tertiary);
   padding: 1px 6px;
   border-radius: var(--radius-xs);
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--mono);
   color: var(--text);
   overflow: hidden;
@@ -34,7 +34,7 @@
   background: var(--bg-panel);
 }
 .op-toggle {
-  font-size: 10.5px;
+  font-size: 12px;
   padding: 2px 8px;
   border: none;
   border-radius: var(--radius-sm);
@@ -42,7 +42,7 @@
   color: var(--text-muted);
 }
 .op-open {
-  font-size: 10.5px;
+  font-size: 12px;
   padding: 2px 8px;
   border: none;
   border-radius: var(--radius-sm);
@@ -63,7 +63,7 @@
   border-radius: 0;
 }
 .produced-files-label {
-  font-size: 11px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-soft);
@@ -85,12 +85,19 @@
   border-radius: var(--radius);
   background: none;
   border: none;
-  font-size: 12.5px;
+  font-size: 13px;
   box-shadow: none;
   transition: background 160ms var(--ease-out);
 }
 .produced-file:hover {
   background: var(--bg-fill-tertiary);
+}
+.produced-file-openable {
+  cursor: pointer;
+}
+.produced-file-openable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .produced-file-icon { width: 22px; text-align: center; color: var(--text-muted); }
 .produced-file-name {
@@ -102,14 +109,14 @@
   font-family: var(--mono);
 }
 .produced-file-size {
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
 .produced-file-actions { display: flex; gap: 4px; }
 .produced-file-actions .ghost,
 .produced-file-actions .ghost-link {
-  font-size: 11px;
+  font-size: 12px;
   padding: 2px 8px;
   border: none;
   background: none;
@@ -148,13 +155,13 @@
   flex-shrink: 0;
 }
 .plugin-action-panel__title {
-  font-weight: 650;
+  font-weight: 600;
   font-size: 13px;
   color: var(--text);
 }
 .plugin-action-panel__subtitle {
   margin-top: 2px;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.35;
   color: var(--text-muted);
 }
@@ -202,7 +209,7 @@
   align-items: baseline;
   gap: 5px 8px;
   min-width: 0;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .plugin-action-card__path {
@@ -213,7 +220,7 @@
   border: 1px solid var(--border-soft);
   color: var(--text);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -235,8 +242,8 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text);
-  font-size: 11.5px;
-  font-weight: 550;
+  font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
 }
 .plugin-action-button:hover:not(:disabled) {
@@ -263,7 +270,7 @@
   background: var(--bg-panel);
   border: 1px solid var(--border-soft);
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.35;
 }
 .plugin-action-card__notice a {
@@ -291,9 +298,15 @@
 .file-ops {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  /* Frosted Thick standard material (材质规范): mostly-opaque + backdrop blur
+     across all four sides, so the card reads as frosted glass on the wash
+     instead of a starkly see-through panel. Theme-aware and degradation-safe
+     via material.css (falls back to a solid --bg-elevated). */
+  background: var(--material-thick);
+  -webkit-backdrop-filter: var(--material-thick-backdrop);
+  backdrop-filter: var(--material-thick-backdrop);
   overflow: hidden;
 }
 .file-ops-head {
@@ -322,7 +335,7 @@
 .file-ops-toggle--static:hover { background: transparent; }
 .file-ops-icon { display: inline-flex; color: var(--text-muted); }
 .file-ops-label {
-  font-size: 10.5px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--text-muted);
@@ -336,6 +349,16 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   color: var(--text-muted);
+}
+.file-ops-count {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-soft);
 }
 .file-ops-more {
   font-size: 10.5px;
@@ -407,16 +430,16 @@
   height: 18px;
   padding: 0 4px;
   border-radius: var(--radius-xs);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   font-family: var(--mono);
   letter-spacing: 0;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   background: var(--bg-subtle);
   color: var(--text-muted);
 }
 .file-ops-badge-count {
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   opacity: 0.85;
@@ -447,18 +470,18 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--mono);
-  font-size: 11.5px;
+  font-size: 12px;
   background: transparent;
   padding: 0;
 }
 .file-ops-row-count {
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 .file-ops-row-status {
-  font-size: 10.5px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 600;
@@ -474,6 +497,16 @@
   color: #c0392b;
   background: color-mix(in oklab, #c0392b 12%, transparent);
 }
+.file-ops-row-open {
+  font-size: 12px;
+  padding: 3px 9px;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: pointer;
+  flex-shrink: 0;
+}
 .file-ops-row-open-icon {
   display: inline-flex;
   align-items: center;
@@ -485,6 +518,10 @@
   transition:
     opacity 140ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.file-ops-row-open:hover {
+  border-color: var(--border);
+  color: var(--accent);
 }
 .file-ops-row-main--action:hover .file-ops-row-open-icon,
 .file-ops-row-main--action:focus-visible .file-ops-row-open-icon {
@@ -500,7 +537,7 @@
   color: #f0eee9;
   border-radius: var(--radius-md);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.55;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -581,7 +618,7 @@
 .present-wrap { position: relative; display: inline-block; }
 .present-trigger .caret {
   margin-left: 4px;
-  font-size: 10px;
+  font-size: 12px;
   opacity: 0.7;
 }
 .present-menu {
@@ -589,7 +626,11 @@
   top: calc(100% + 6px);
   right: 0;
   z-index: var(--viewer-action-menu-z);
-  min-width: 168px;
+  /* Size to the widest item (labels + any description) up to a cap, then wrap —
+     so a longer hint line isn't clipped by a fixed menu width. */
+  min-width: 200px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 24px));
   padding: 4px;
   background: var(--bg-panel);
   border: 1px solid var(--border);
@@ -601,6 +642,13 @@
 .present-menu button {
   background: transparent;
   border: none;
+  /* Override the global `button { height: 36px; white-space: nowrap; }`
+     reset (primitives.css) — this menu's first item pairs a label with a
+     wrapped `.present-menu-copy small` hint (deck files only), and the
+     fixed single-line height clipped/overflowed that second line. `auto`
+     lets the row grow to fit the wrapped copy; the plain items (全屏 /
+     新标签页) stay compact since their own padding is the only floor. */
+  height: auto;
   padding: 8px 10px;
   font-size: 12px;
   text-align: left;
@@ -608,8 +656,12 @@
   cursor: pointer;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
+  width: 100%;
   color: var(--text);
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .present-menu button:hover { background: var(--bg-subtle); border-color: transparent; }
 .present-icon {
@@ -624,6 +676,13 @@
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  /* The button's own global reset sets `white-space: nowrap` (inherited by
+     both the label span and the `small` hint below). At the menu's 168px
+     min-width that kept the deck hint ("演讲者备注会在弹窗中打开") on one
+     unbroken line wide enough to overflow past the menu's right edge, which
+     read as the sentence being cut off mid-way with no ellipsis. Let this
+     column wrap normally so the hint reflows onto a second line instead. */
+  white-space: normal;
 }
 .present-menu-copy small {
   color: var(--text-muted);
@@ -638,7 +697,28 @@
   align-items: center;
   gap: 6px;
 }
-.template-share-trigger[aria-expanded='true'] {
+/* The Share trigger sits next to the solid "Use" pill in the preview-modal
+   header. `button.ghost` zeroes the border out (`border-color: transparent`),
+   so it used to render as bare text + icons and did not read as a button at
+   all. Give it the same outlined-box treatment the reference uses for a
+   standalone share/more control (`.plugin-share-trigger--solo`): panel fill,
+   1px border, accent-tinted open/hover state. Doubling up on `.ghost` here is
+   deliberate — it out-specifies `button.ghost` without an `!important`; the
+   `:not(:disabled)` is equally deliberate, so the global `button:disabled`
+   treatment still wins when the menu has nothing to offer. The header capsule
+   rule (`.ds-modal-actions .share-menu > button`) still owns the pill radius so
+   the box lines up with the Use pill. */
+.template-share-trigger.ghost:not(:disabled) {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+/* Both selectors carry `.ghost` so they out-specify the idle rule above
+   (0,3,0). Without it the open state would be (0,2,0) — lower than idle — and
+   specificity beats source order, so an open menu would silently render as if
+   it were closed the moment the pointer left it. */
+.template-share-trigger.ghost:hover:not(:disabled),
+.template-share-trigger.ghost[aria-expanded='true'] {
   background: var(--accent-tint);
   border-color: var(--accent);
   color: var(--accent);
@@ -710,10 +790,13 @@
 .share-menu-item {
   display: flex;
   align-items: center;
+  /* Left-align icon + label. Reset the global `button { justify-content: center }`
+     rule, which otherwise centres the row and leaves big empty side margins. */
+  justify-content: flex-start;
   gap: 10px;
   width: 100%;
   padding: 8px 10px;
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
   background: transparent;
   border: none;
@@ -744,7 +827,7 @@
 }
 .share-menu-text small {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.25;
 }
 .share-menu-divider { height: 1px; background: var(--border); margin: 4px 6px; }
@@ -763,7 +846,7 @@
   background: var(--bg-subtle);
 }
 .template-share-summary__eyebrow {
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -778,7 +861,7 @@
   text-overflow: ellipsis;
 }
 .template-share-summary span:last-child {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -797,7 +880,7 @@
 .template-share-section__label {
   padding: 2px 8px 0;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -818,7 +901,7 @@
   border-radius: var(--radius);
   background: var(--bg-panel);
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -844,7 +927,7 @@
   justify-content: center;
   background: var(--text);
   color: var(--bg-panel);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
 }
@@ -874,7 +957,7 @@
 .share-menu-section-label {
   padding: 8px 10px 4px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
 }
@@ -882,7 +965,7 @@
   padding: 6px 10px 2px 18px;
   color: var(--text-muted);
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -1141,7 +1224,7 @@
 }
 .deploy-form .deploy-field-title {
   color: var(--text);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 .deploy-form label.deploy-field-title {
@@ -1173,7 +1256,7 @@
 .deploy-field-inline-action {
   border: 0;
   padding: 0 2px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text);
   white-space: nowrap;
   display: inline-flex;
@@ -1218,7 +1301,7 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 10.5px;
+  font-size: 12px;
   color: var(--text-muted);
   text-decoration: none;
   white-space: nowrap;
@@ -1238,7 +1321,7 @@
 .field-status-badge {
   display: inline-flex;
   align-items: center;
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
   padding: 2px 7px;

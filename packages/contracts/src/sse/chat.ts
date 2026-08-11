@@ -86,6 +86,8 @@ export interface ChatSseEndPayload {
    *  Present when the daemon resolved the run's filesystem/tool-stream diff
    *  before publishing the terminal frame. */
   artifactCount?: number;
+  /** Project-relative artifact paths created or modified by this run. */
+  artifactPaths?: string[];
   /** True when a `failed` run can be recovered by resuming the agent's CLI
    *  session (transient upstream drop / inactivity on a session-resuming
    *  runtime). Lets the chat offer a Continue affordance without a separate
@@ -113,7 +115,14 @@ export type DaemonAgentPayload =
   | LiveArtifactSsePayload
   | LiveArtifactRefreshSsePayload
   | PlainStreamArtifactSsePayload
-  | { type: 'tool_use'; id: string; name: string; input: unknown }
+  | {
+      type: 'tool_use';
+      id: string;
+      name: string;
+      input: unknown;
+      /** Optional wall-clock ms when the tool first started (e.g. ACP first frame). */
+      startedAt?: number;
+    }
   /**
    * Live-only incremental tool-input fragment, emitted while the model is still
    * streaming a tool call's JSON arguments (Claude `input_json_delta`). `delta`

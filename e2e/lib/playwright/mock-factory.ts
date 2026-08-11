@@ -1,4 +1,5 @@
-import type { Page, Route } from '@playwright/test';
+import { expect, type Page, type Request, type Route } from '@playwright/test';
+import { expectStableCount } from './assertions.js';
 
 export const STORAGE_KEY = 'open-design:config';
 
@@ -35,6 +36,20 @@ const STANDARD_MOCK_AGENT = {
   models: [{ id: 'default', label: 'Default' }],
 };
 
+export type RunRequestBody = Record<string, unknown>;
+
+export type RunRequestTracker = {
+  bodies: RunRequestBody[];
+  expectCount: (count: number, options?: { timeout?: number; message?: string }) => Promise<void>;
+  expectNone: (options?: { timeout?: number; message?: string }) => Promise<void>;
+  dispose?: () => void;
+};
+
+type RunEventBodyFactory = (
+  requestIndex: number,
+  body: RunRequestBody | null,
+) => string | Promise<string>;
+
 /**
  * Seed localStorage with the standard daemon/mock-agent config and intercept
  * /api/agents and /api/app-config GET with deterministic fixtures.
@@ -47,7 +62,51 @@ export async function applyStandardMocks(page: Page): Promise<void> {
   await applyStorageConfig(page);
   await routeMockAgents(page);
   await routeAppConfig(page);
+  // Keep this explicit even though the shared suite fixture also installs the
+  // route: callers use applyStandardMocks for extra pages/contexts that are
+  // created outside the built-in Playwright `page` fixture.
+  await routeUnavailableVelaStatus(page);
   await suppressWhatsNew(page);
+}
+
+/**
+ * Keep non-authentication UI specs independent from Cloud account state.
+ *
+ * Cloud-first onboarding makes a completed local app config and the Cloud
+ * session two separate boot gates. A fake signed-in account changes project
+ * and conversation APIs to Workspace-scoped behavior, so unrelated local UI
+ * specs instead model a valid transient status outage: the app keeps the
+ * account state unresolved and does not redirect. Authentication specs route
+ * this endpoint themselves with explicit signed-in/signed-out responses.
+ */
+export async function routeUnavailableVelaStatus(page: Page): Promise<void> {
+  await page.route('**/api/integrations/vela/status*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({
+      status: 503,
+      json: { error: 'Vela status unavailable in this spec' },
+    });
+  });
+}
+
+/**
+ * Keep local-agent scenarios independent from a developer machine's Vela
+ * session. Workspace-aware project creation treats a signed-in account as
+ * requiring an exact Workspace authority, so leaking the host login here can
+ * reject a mocked local-agent create before POST /api/projects is dispatched.
+ * AMR scenarios register their own status route after this standard fallback.
+ */
+export async function routeSignedOutVelaStatus(page: Page): Promise<void> {
+  await page.route('**/api/integrations/vela/status*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    await route.fulfill({ json: { loggedIn: false } });
+  });
 }
 
 /** Keep unrelated release announcements from covering the surface under test. */
@@ -124,4 +183,158 @@ export async function fulfillAgentsRoute(
     contentType: 'text/event-stream; charset=utf-8',
     body: `${agentEvents}event: done\ndata: {}\n\n`,
   });
+}
+
+export async function routeSuccessfulRuns(
+  page: Page,
+  options: {
+    bodies?: RunRequestBody[];
+    runId?: string;
+    runIdPrefix?: string;
+    events?: boolean | 'pending';
+    eventBody?: string | RunEventBodyFactory;
+  } = {},
+): Promise<RunRequestTracker> {
+  const bodies = options.bodies ?? [];
+  const runIdPrefix = options.runIdPrefix ?? 'mock-run';
+  let requestCount = 0;
+
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+
+    const raw = route.request().postData();
+    const body = raw ? JSON.parse(raw) as RunRequestBody : null;
+    if (body) bodies.push(body);
+    requestCount += 1;
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: options.runId ?? `${runIdPrefix}-${requestCount}` }),
+    });
+  });
+
+  if (options.events === 'pending') {
+    await page.route('**/api/runs/*/events', async () => {
+      await new Promise(() => undefined);
+    });
+  } else if (options.events !== false) {
+    await page.route('**/api/runs/*/events', async (route) => {
+      const eventBody = typeof options.eventBody === 'function'
+        ? await options.eventBody(bodies.length, bodies.at(-1) ?? null)
+        : options.eventBody ?? successfulRunEventBody();
+      await route.fulfill({
+        status: 200,
+        headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+        body: eventBody,
+      });
+    });
+  }
+
+  return makeRunRequestTracker(bodies);
+}
+
+export async function routeRunSequence(
+  page: Page,
+  options: {
+    bodies?: RunRequestBody[];
+    runIdPrefix?: string;
+    eventBodies: Array<string | RunEventBodyFactory>;
+  },
+): Promise<RunRequestTracker> {
+  const bodies = options.bodies ?? [];
+  const runIdPrefix = options.runIdPrefix ?? 'mock-run';
+  let requestCount = 0;
+  let eventCount = 0;
+
+  await page.route('**/api/runs', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+
+    const raw = route.request().postData();
+    const body = raw ? JSON.parse(raw) as RunRequestBody : null;
+    if (body) bodies.push(body);
+    requestCount += 1;
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ runId: `${runIdPrefix}-${requestCount}` }),
+    });
+  });
+
+  await page.route('**/api/runs/*/events', async (route) => {
+    eventCount += 1;
+    const index = Math.min(eventCount - 1, options.eventBodies.length - 1);
+    const selected = options.eventBodies[index] ?? successfulRunEventBody();
+    const eventBody = typeof selected === 'function'
+      ? await selected(eventCount, bodies.at(-1) ?? null)
+      : selected;
+    await route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: eventBody,
+    });
+  });
+
+  return makeRunRequestTracker(bodies);
+}
+
+export function successfulRunEventBody(events: string[] = []): string {
+  return [...events, 'event: end', 'data: {"code":0,"status":"succeeded"}', '', ''].join('\n');
+}
+
+export function failedRunEventBody(message: string): string {
+  return [
+    'event: start',
+    'data: {"bin":"mock-agent"}',
+    '',
+    'event: error',
+    `data: ${JSON.stringify({ message })}`,
+    '',
+    '',
+  ].join('\n');
+}
+
+export function trackRunRequests(page: Page): RunRequestTracker {
+  const bodies: RunRequestBody[] = [];
+  const listener = (request: Request) => {
+    if (!isCreateRunRequest(request)) return;
+    const raw = request.postData();
+    bodies.push(raw ? JSON.parse(raw) as RunRequestBody : {});
+  };
+  page.on('request', listener);
+  return {
+    ...makeRunRequestTracker(bodies),
+    dispose: () => page.off('request', listener),
+  };
+}
+
+function isCreateRunRequest(request: Request): boolean {
+  const url = new URL(request.url());
+  return url.pathname === '/api/runs' && request.method() === 'POST';
+}
+
+function makeRunRequestTracker(bodies: RunRequestBody[]): RunRequestTracker {
+  const expectCount = async (count: number, options: { timeout?: number; message?: string } = {}) => {
+    const pollOptions: { timeout: number; message?: string } = {
+      timeout: options.timeout ?? 10_000,
+    };
+    if (options.message) pollOptions.message = options.message;
+    await expect.poll(() => bodies.length, pollOptions).toBe(count);
+  };
+
+  return {
+    bodies,
+    expectCount,
+    async expectNone(options = {}) {
+      await expectStableCount(() => bodies.length, 0, {
+        timeout: options.timeout ?? 750,
+        message: options.message ?? 'expected no POST /api/runs requests during the settled observation window',
+      });
+    },
+  };
 }

@@ -55,6 +55,11 @@ on:
         required: false
         type: string
         default: ""
+      amr_profile:
+        description: "Optional AMR profile baked into the build (e.g. feature-test to point the packaged app at that profile's AMR backend and enable the workspace-team transport). Empty leaves the default (prod)."
+        required: false
+        type: string
+        default: ""
       mac_arm64_sign_mode:
         description: "macOS arm64 signing mode."
         required: true
@@ -189,6 +194,11 @@ on:
         required: false
         type: boolean
         default: false
+      promote:
+        description: "Promote this build to beta/latest after publishing versioned platform artifacts."
+        required: false
+        type: boolean
+        default: true
       release_version:
         required: false
         type: string
@@ -202,6 +212,10 @@ on:
         type: string
         default: ""
       ref:
+        required: false
+        type: string
+        default: ""
+      amr_profile:
         required: false
         type: string
         default: ""
@@ -276,16 +290,22 @@ on:
         value: ${{ jobs.metadata.outputs.previous_commit }}
       release_state:
         description: "complete | partial | failed."
-        value: ${{ jobs.publish.outputs.release_state }}
+        value: ${{ jobs.publish.outputs.release_state || (jobs.metadata.outputs.promote == 'false' && 'partial') }}
       version_metadata_url:
         description: "Public URL of this build's version metadata.json."
         value: ${{ jobs.publish.outputs.version_metadata_url }}
       mac_arm64_url:
         description: "macOS arm64 dmg download URL."
-        value: ${{ jobs.publish.outputs.mac_arm64_url }}
+        value: ${{ jobs.publish.outputs.mac_arm64_url || jobs.build_mac_arm64.outputs.mac_arm64_url }}
       win_x64_url:
         description: "Windows x64 installer download URL."
-        value: ${{ jobs.publish.outputs.win_x64_url }}
+        value: ${{ jobs.publish.outputs.win_x64_url || jobs.build_win_x64.outputs.win_x64_url }}
+      mac_arm64_smoke_result:
+        description: "macOS arm64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_mac_arm64.outputs.smoke_result }}
+      win_x64_smoke_result:
+        description: "Windows x64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_win_x64.outputs.smoke_result }}
       mac_x64_url:
         description: "macOS x64 dmg download URL."
         value: ${{ jobs.publish.outputs.mac_x64_url }}
@@ -307,7 +327,21 @@ env:
   POSTHOG_HOST: ${{ inputs.publish && vars.POSTHOG_HOST || '' }}
   POSTHOG_CLI_API_KEY: ${{ inputs.publish && secrets.POSTHOG_CLI_API_KEY || '' }}
   POSTHOG_CLI_PROJECT_ID: ${{ inputs.publish && vars.POSTHOG_CLI_PROJECT_ID || '' }}
-  RELEASE_BRANCH: ${{ github.ref_name }}
+  # Vela web console origin for the AMR profile this build targets. Held in a
+  # per-profile repository secret instead of the source tree: the non-prod AMR
+  # environments are internal deployments and this repository is public, so
+  # neither the workflow nor the product code may name their hostnames.
+  #
+  # tools-pack bakes it into open-design-config.json and the packaged runtime
+  # forwards it to the daemon as OD_VELA_WEB_URL, which is the second half of the
+  # workspace-team gate (the first being the AMR profile allowlist). A profile
+  # whose secret is not configured therefore ships with workspace-team dormant
+  # rather than pointed at an unknown backend. `prod` never gets an origin — the
+  # packaged gate rejects it regardless.
+  #
+  # Secrets read here: VELA_WEB_URL_FEATURE_TEST, VELA_WEB_URL_TEST.
+  OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || inputs.amr_profile == 'test' && secrets.VELA_WEB_URL_TEST || '' }}
+  RELEASE_BRANCH: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
   RELEASE_REPOSITORY: ${{ github.repository }}
   RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
   RELEASE_RUN_ID: ${{ github.run_id }}
@@ -325,9 +359,10 @@ jobs:
       asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
       base_version: ${{ steps.beta.outputs.base_version }}
       beta_version: ${{ inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
-      branch: ${{ steps.beta.outputs.branch }}
-      commit: ${{ steps.beta.outputs.commit }}
+      branch: ${{ steps.identity.outputs.branch }}
+      commit: ${{ steps.identity.outputs.commit }}
       previous_commit: ${{ steps.prev.outputs.previous_commit }}
+      promote: ${{ inputs.promote }}
       release_name: ${{ steps.beta.outputs.release_name }}
       state_source: ${{ steps.beta.outputs.state_source }}
     steps:
@@ -350,8 +385,33 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Resolve built commit
-        run: echo "BUILT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+      - name: Resolve built identity
+        id: identity
+        env:
+          BUILD_REF: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          built_sha="$(git rev-parse HEAD)"
+          echo "BUILT_SHA=$built_sha" >> "$GITHUB_ENV"
+          {
+            echo "branch=$BUILD_REF"
+            echo "commit=$built_sha"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate shared beta publisher
+        if: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          built_sha="$(git rev-parse HEAD)"
+          main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [ -z "$main_sha" ]; then
+            echo "Could not resolve the current main commit; refusing shared beta publication." >&2
+            exit 1
+          fi
+          if [ "$built_sha" != "$main_sha" ]; then
+            echo "Shared beta publication is restricted to the current main commit ($main_sha); got $built_sha. Re-run this ref with publish=false for dogfood artifacts." >&2
+            exit 1
+          fi
 
       - name: Capture previous beta commit
         id: prev
@@ -404,6 +464,9 @@ jobs:
     needs: metadata
     if: ${{ inputs.enable_mac_arm64 }}
     runs-on: macos-14
+    outputs:
+      mac_arm64_url: ${{ steps.mac_arm64_platform_outputs.outputs.dmg_url }}
+      smoke_result: ${{ steps.mac_arm64_smoke.outcome }}
     env:
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
     steps:
@@ -475,6 +538,13 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Bake the AMR profile (tools-pack reads OPEN_DESIGN_AMR_PROFILE) so a
+          # feature-test dispatch produces a packaged app that targets that
+          # profile's AMR backend and enables the workspace-team transport. The
+          # matching console origin arrives via the workflow-level
+          # OD_VELA_WEB_URL. Empty = default (prod) — the normal beta pipeline is
+          # unaffected.
+          OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/release-build/mac_arm64"
@@ -508,6 +578,11 @@ jobs:
 
       - name: Retry beta mac_arm64 without restored cache
         if: ${{ steps.mac_arm64_tools_pack_build.outcome == 'failure' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
         run: |
           set -euo pipefail
           rm -rf "$RUNNER_TEMP/tools-pack-cache"
@@ -539,6 +614,42 @@ jobs:
             printf '%s\n' "$build_output"
             exit "$build_status"
           fi
+
+      - name: Upload mac_arm64 DMG for manual distribution
+        # Only when NOT publishing to the release feed: this is the downloadable
+        # artifact for a manual dispatch (e.g. a signed feature-test build handed
+        # to teammates). The normal publish=true release pipeline is unchanged.
+        if: ${{ !cancelled() && !inputs.publish }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-beta-mac-arm64-dmg
+          path: ${{ runner.temp }}/tools-pack/out/mac/namespaces/release-beta/**/*.dmg
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload mac_arm64 dogfood build to release storage
+        # Companion to the artifact step above, for publish=false only. A GitHub
+        # artifact needs a logged-in teammate and a zip round-trip; this puts the
+        # same DMG in R2 under dogfood/<version>/<build>/ so the link can be
+        # handed over directly. It writes no channel metadata and no latest
+        # pointer (enforced by the guard in tools/release/src/storage/dogfood.ts),
+        # so it cannot change what an installed client sees as an available
+        # update. The publish=true pipeline is untouched.
+        if: ${{ !cancelled() && !inputs.publish }}
+        continue-on-error: true
+        env:
+          DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          DOGFOOD_BUILD_JSON_KEYS: dmgPath
+          DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
+          DOGFOOD_LABEL: macOS arm64 beta ${{ needs.metadata.outputs.beta_version }}
+          DOGFOOD_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+        run: pnpm exec tools-release publish-dogfood
 
       - name: Delete failed mac_arm64 tools-pack cache
         if: ${{ steps.mac_arm64_tools_pack_build.outcome == 'failure' && steps.mac_arm64_tools_pack_cache_restore.outputs.cache-matched-key != '' }}
@@ -580,6 +691,7 @@ jobs:
             --app-version "$update_version" \
             --mac-compression normal \
             --to dmg \
+            --require-vela-cli \
             --json)"
           printf '%s\n' "$update_output" > "$update_build_json_path"
           {
@@ -588,7 +700,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Smoke beta mac_arm64 packaged runtime
+        id: mac_arm64_smoke
         if: ${{ inputs.mac_arm64_smoke_mode != 'skip' }}
+        continue-on-error: true
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
@@ -647,7 +761,7 @@ jobs:
         run: |
           set -euo pipefail
           prefix="${{ steps.mac_arm64_tools_pack_cache_key.outputs.prefix }}"
-          keep=3
+          keep=1
           cache_ids="$(gh cache list --key "$prefix" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq ".[$keep:] | .[].id")"
           count=0
           while IFS= read -r cache_id; do
@@ -695,6 +809,16 @@ jobs:
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
         run: pnpm exec tools-release publish-platform
+
+      - name: Read mac_arm64 platform outputs
+        id: mac_arm64_platform_outputs
+        if: ${{ inputs.publish }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-platform-outputs/mac_arm64.json`, "utf8"));
+            for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
 
       - name: Upload mac_arm64 publish manifest
         if: ${{ inputs.publish }}
@@ -795,6 +919,7 @@ jobs:
             --mac-compression normal
             --to "${{ inputs.mac_x64_target }}"
             --json
+            --require-vela-cli
           )
           case "${{ inputs.mac_x64_sign_mode }}" in
             no) ;;
@@ -828,6 +953,7 @@ jobs:
             --mac-compression normal
             --to "${{ inputs.mac_x64_target }}"
             --json
+            --require-vela-cli
           )
           case "${{ inputs.mac_x64_sign_mode }}" in
             no) ;;
@@ -917,7 +1043,7 @@ jobs:
         run: |
           set -euo pipefail
           prefix="${{ steps.mac_x64_tools_pack_cache_key.outputs.prefix }}"
-          keep=3
+          keep=1
           cache_ids="$(gh cache list --key "$prefix" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq ".[$keep:] | .[].id")"
           count=0
           while IFS= read -r cache_id; do
@@ -975,6 +1101,9 @@ jobs:
     needs: metadata
     if: ${{ inputs.enable_win_x64 }}
     runs-on: windows-latest
+    outputs:
+      smoke_result: ${{ steps.win_x64_smoke.outcome }}
+      win_x64_url: ${{ steps.win_x64_platform_outputs.outputs.installer_url }}
     env:
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
     steps:
@@ -1051,11 +1180,19 @@ jobs:
           OD_BETA_WINDOWS_SIGN_CERT_SHA1: ${{ steps.sign_probe.outputs.thumbprint }}
           OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
           OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
+          # Bake the AMR profile (tools-pack reads OPEN_DESIGN_AMR_PROFILE) so a
+          # feature-test dispatch produces a packaged app that targets that
+          # profile's AMR backend and enables the workspace-team transport. Empty
+          # = default (prod) — the normal beta pipeline is unaffected. Mirrors the
+          # mac_arm64 build step above; this was missing here, so every win_x64
+          # dogfood build silently fell back to prod and could not sign in to a
+          # feature-test AMR environment.
+          OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
         run: |
           $ErrorActionPreference = "Stop"
           New-Item -ItemType Directory -Force -Path "${{ runner.temp }}\release-build\win_x64" | Out-Null
           pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace release-beta-win --json
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--app-version", "${{ needs.metadata.outputs.beta_version }}", "--to", "${{ inputs.win_x64_target }}", "--json")
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--app-version", "${{ needs.metadata.outputs.beta_version }}", "--to", "${{ inputs.win_x64_target }}", "--require-vela-cli", "--json")
           if ("${{ inputs.win_x64_sign_mode }}" -eq "on") { $buildArgs += "--signed" }
           $buildOutput = pnpm.cmd @buildArgs
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win build failed with exit code $LASTEXITCODE" }
@@ -1067,18 +1204,59 @@ jobs:
         id: win_tools_pack_build_retry
         if: ${{ steps.win_tools_pack_build.outcome == 'failure' }}
         shell: pwsh
+        env:
+          OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
         run: |
           $ErrorActionPreference = "Stop"
           Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "${{ runner.temp }}\tools-pack-cache"
           New-Item -ItemType Directory -Force -Path "${{ runner.temp }}\release-build\win_x64" | Out-Null
           pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace release-beta-win --json
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--app-version", "${{ needs.metadata.outputs.beta_version }}", "--to", "${{ inputs.win_x64_target }}", "--json")
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--app-version", "${{ needs.metadata.outputs.beta_version }}", "--to", "${{ inputs.win_x64_target }}", "--require-vela-cli", "--json")
           if ("${{ inputs.win_x64_sign_mode }}" -eq "on") { $buildArgs += "--signed" }
           $buildOutput = pnpm.cmd @buildArgs
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win fallback build failed with exit code $LASTEXITCODE" }
           $buildOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\build.json" -Encoding utf8
           $build = $buildOutput | ConvertFrom-Json
           pnpm.cmd exec tools-pack win validate-payload --namespace release-beta-win --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.beta_version }}" --json
+
+      - name: Upload win_x64 installer for manual distribution
+        # Only when NOT publishing to the release feed, mirroring the mac DMG
+        # step. Before this existed a publish=false dispatch left the Windows job
+        # with nothing retrievable at all, so a QA/dogfood build could not be
+        # handed to a teammate without also publishing to the public feed. The
+        # glob covers every win_x64_target: nsis produces the setup exe, zip the
+        # portable zip, all both. The normal publish=true pipeline is unchanged.
+        if: ${{ !cancelled() && !inputs.publish }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-beta-win-x64-installer
+          path: |
+            ${{ runner.temp }}\tools-pack\out\win\namespaces\release-beta-win\builder\*-setup.exe
+            ${{ runner.temp }}\tools-pack\out\win\namespaces\release-beta-win\builder\*-portable.zip
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload win_x64 dogfood build to release storage
+        # publish=false only. Artifact paths come from the build's own --json
+        # output rather than a hardcoded layout, so whichever of installerPath /
+        # portableZipPath the selected win_x64_target actually produced is what
+        # gets uploaded. Writes under dogfood/<version>/<build>/ and nowhere
+        # else; see the guard in tools/release/src/storage/dogfood.ts.
+        if: ${{ !cancelled() && !inputs.publish }}
+        continue-on-error: true
+        env:
+          DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          DOGFOOD_BUILD_JSON_KEYS: installerPath,portableZipPath
+          DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+          DOGFOOD_LABEL: Windows x64 beta ${{ needs.metadata.outputs.beta_version }}
+          DOGFOOD_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+        run: pnpm exec tools-release publish-dogfood
 
       - name: Delete failed Windows tools-pack cache
         if: ${{ steps.win_tools_pack_build.outcome == 'failure' && steps.win_tools_pack_cache_restore.outputs.cache-matched-key != '' }}
@@ -1100,7 +1278,7 @@ jobs:
           $match = [regex]::Match("${{ needs.metadata.outputs.beta_version }}", "^(?<base>\d+\.\d+\.\d+)-beta\.(?<number>\d+)$")
           if (-not $match.Success) { throw "full Windows smoke requires a counted beta version; got ${{ needs.metadata.outputs.beta_version }}" }
           $updateVersion = "{0}-beta.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--app-version", $updateVersion, "--to", "nsis", "--json")
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--app-version", $updateVersion, "--to", "nsis", "--require-vela-cli", "--json")
           if ("${{ inputs.win_x64_sign_mode }}" -eq "on") { $buildArgs += "--signed" }
           $updateOutput = pnpm.cmd @buildArgs
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
@@ -1109,7 +1287,9 @@ jobs:
           pnpm.cmd exec tools-pack win validate-payload --namespace release-beta-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
 
       - name: Smoke beta win_x64 packaged runtime
+        id: win_x64_smoke
         if: ${{ inputs.win_x64_smoke_mode != 'skip' }}
+        continue-on-error: true
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
@@ -1167,7 +1347,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           $prefix = "${{ steps.win_tools_pack_cache_key.outputs.prefix }}"
-          $keep = 3
+          $keep = 1
           $caches = @(gh cache list --key $prefix --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
           $stale = @($caches | Select-Object -Skip $keep)
           foreach ($cache in $stale) { gh cache delete $cache.id }
@@ -1208,6 +1388,16 @@ jobs:
           RELEASE_TARGET: win_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
         run: pnpm exec tools-release publish-platform
+
+      - name: Read win_x64 platform outputs
+        id: win_x64_platform_outputs
+        if: ${{ inputs.publish }}
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-platform-outputs/win_x64.json`, "utf8"));
+            for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
 
       - name: Upload win_x64 publish manifest
         if: ${{ inputs.publish }}
@@ -1343,6 +1533,7 @@ jobs:
         always() &&
         !cancelled() &&
         inputs.publish &&
+        inputs.promote &&
         needs.metadata.result == 'success' &&
         (inputs.enable_mac_arm64 || inputs.enable_win_x64 || inputs.enable_mac_x64 || inputs.enable_linux_x64) &&
         (!inputs.enable_mac_arm64 || needs.build_mac_arm64.result == 'success') &&
@@ -1437,6 +1628,10 @@ jobs:
           MAC_X64_RESULT: ${{ needs.build_mac_x64.result }}
           RELEASE_ASSET_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}
           RELEASE_CHANNEL: beta
+          RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_BETA }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
           RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
@@ -1472,6 +1667,10 @@ jobs:
           MAC_ARM64_RESULT: ${{ needs.build_mac_arm64.result }}
           MAC_X64_RESULT: ${{ needs.build_mac_x64.result }}
           RELEASE_CHANNEL: beta
+          RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}
+          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_BETA }}
+          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
           RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}

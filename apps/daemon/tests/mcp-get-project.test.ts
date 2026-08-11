@@ -1,8 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { _resetWebBaseUrlCache, handleMcpToolCall } from '../src/mcp.js';
+import { handleMcpToolCall } from '../src/mcp.js';
+import { _resetMcpWorkspaceContextCacheForTests } from '../src/mcp-workspace-context.js';
 
 const originalFetch = globalThis.fetch;
+
+// Non-vela directory: the bridge falls back to headerless behavior, which is
+// what this suite exercised before #6569.
+function emptyDirectory(): Response {
+  return new Response(JSON.stringify({ items: [], activeWorkspaceId: null }), { status: 200 });
+}
 
 function firstJson<T>(result: { content: Array<{ text: string }> }): T {
   const item = result.content[0];
@@ -12,7 +19,7 @@ function firstJson<T>(result: { content: Array<{ text: string }> }): T {
 
 describe('public MCP get_project', () => {
   afterEach(() => {
-    _resetWebBaseUrlCache();
+    _resetMcpWorkspaceContextCacheForTests();
     vi.unstubAllGlobals();
     globalThis.fetch = originalFetch;
   });
@@ -22,6 +29,7 @@ describe('public MCP get_project', () => {
     const projectId = '11111111-1111-1111-1111-111111111111';
     const resolvedDir = '/tmp/open-design/projects/demo';
     const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/api/workspace/directory')) return emptyDirectory();
       if (url.endsWith('/api/mcp/install-info')) {
         return new Response(JSON.stringify({ webBaseUrl: null }), { status: 200 });
       }
@@ -44,7 +52,7 @@ describe('public MCP get_project', () => {
       project: projectId,
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(firstJson(result)).toMatchObject({
       id: projectId,
       name: 'Demo',

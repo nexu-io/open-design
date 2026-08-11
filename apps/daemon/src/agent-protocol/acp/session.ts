@@ -22,7 +22,7 @@ import {
   ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT,
   AMR_STDERR_RETRY_TAIL_LIMIT,
 } from './constants.js';
-import { errorMessage, asObject, extractAcpUpdateText } from './json.js';
+import { errorMessage, asObject, extractAcpUpdateText, extractAcpStatusDetail } from './json.js';
 import {
   sendRpc,
   sendRpcResult,
@@ -30,18 +30,26 @@ import {
   rpcErrorMessage,
   rpcErrorData,
   rpcErrorRetryable,
+  inferRpcErrorRetryable,
   promotedOpenCodeSessionErrorPayload,
   formatUsage,
   choosePermissionOutcome,
 } from './rpc.js';
 import {
   acpRawEventShape,
-  isAcpCompletedStatus,
   isAcpTerminalFailureStatus,
   acpToolCallId,
   isAcpArtifactWriteLabel,
   isAcpArtifactWriteUpdate,
-  acpArtifactWritePath,
+  isAcpTerminalToolStatus,
+  isAcpThinkOnlyTool,
+  isAcpRecognizedKind,
+  acpArtifactWritePathRanked,
+  acpToolName,
+  acpToolInput,
+  acpToolResultContent,
+  acpSafeToolResultContent,
+  acpTelemetryToolCallId,
   promotedAmrRetryStatusPayload,
   promotedAmrStderrPayload,
 } from './updates.js';
@@ -71,6 +79,10 @@ export interface AttachAcpSessionOptions {
   stageTimeoutMs?: number;
   executionProfile?: ExecutionProfile;
   modelUnavailableErrorCode?: 'AMR_MODEL_UNAVAILABLE';
+  // Some ACP adapters expose an explicit `turn_end` session update as their
+  // terminal turn signal instead of returning the pending session/prompt RPC.
+  // Keep this opt-in so standard ACP adapters still require the response.
+  completePromptOnTurnEnd?: boolean;
   // When set, resume an existing upstream session instead of creating a new
   // one: the handshake sends `session/load { sessionId }` (the durable handle
   // captured from a prior run via `getDurableSessionId()`) rather than
@@ -81,9 +93,11 @@ export interface AttachAcpSessionOptions {
   // `onCliReady` fires once on the first well-formed ACP JSON-RPC message
   // (the CLI is up and speaking the protocol); `onSessionInit` fires once when
   // the `session/new` handshake is acknowledged (a session id is established).
-  // Both are best-effort and the caller dedupes, so extra calls are harmless.
+  // `onPromptComplete` fires once when a clean `session/prompt` result is
+  // accepted. Error paths never invoke it.
   onCliReady?: () => void;
   onSessionInit?: () => void;
+  onPromptComplete?: () => void;
 }
 /**
  * Attaches an ACP protocol session to an already-spawned child process and
@@ -97,7 +111,8 @@ export interface AttachAcpSessionOptions {
  * 5. Streams `session/update` events to the `send` callback, translating:
  *    - `agent_thought_chunk` → `thinking_start` / `thinking_delta`
  *    - `agent_message_chunk` → `text_delta` (with DSML and tool-call text suppression)
- *    - `tool_call` / `tool_call_update` → deferred `tool_use` / `tool_result` pairs
+ *    - `tool_call` / `tool_call_update` → full `tool_use` / `tool_result` transcript
+ *      (all tools; write tools keep Claude-shaped names + `file_path` for artifact count)
  *    - status updates → `agent.status` events
  * 6. Handles `session/request_permission` calls by auto-approving.
  * 7. On prompt completion, flushes suppression buffers, emits usage, and closes stdin.
@@ -123,9 +138,11 @@ export function attachAcpSession({
   stageTimeoutMs = DEFAULT_STAGE_TIMEOUT_MS,
   executionProfile = 'filesystem',
   modelUnavailableErrorCode,
+  completePromptOnTurnEnd = false,
   resumeSessionId,
   onCliReady,
   onSessionInit,
+  onPromptComplete,
 }: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
   const effectiveCwd = path.resolve(cwd || process.cwd());
@@ -180,12 +197,81 @@ export function attachAcpSession({
     closedBlocks: 0,
   };
   const acpArtifactWriteToolCallIds = new Set<string>();
-  // Per artifact-write tool call, accumulate the best concrete file path seen
-  // across its frames and whether we have already mirrored it into canonical
-  // tool_use/tool_result events. Emission is deferred to the terminal frame so
-  // a `locations`/`rawInput` path that ACP only sends on a later update is used
-  // for classification, instead of locking in a first-frame guess.
-  const acpArtifactRunEventState = new Map<string, { path: string | null; emitted: boolean }>();
+  // Per toolCallId: accumulate name/input/path/result across partial ACP frames
+  // and emit exactly one tool_use + one tool_result at terminal status (or on
+  // prompt flush for still-open tools). Think-only tools are tracked but never
+  // transcribed and never flip emittedConcreteToolEvent. Entries stay after
+  // emit so a repeated terminal frame cannot re-create + re-emit.
+  type AcpToolNameSource = 'kind' | 'other';
+  type AcpToolRunState = {
+    name: string;
+    nameSource: AcpToolNameSource;
+    input: Record<string, unknown>;
+    path: string | null;
+    pathRank: number;
+    resultContent: string;
+    /** Sticky: once true, never cleared by later status-only frames. */
+    thinkOnly: boolean;
+    firstSeenAt: number;
+    emitted: boolean;
+  };
+  const acpToolRunEventState = new Map<string, AcpToolRunState>();
+
+  const buildToolUseInput = (st: AcpToolRunState): Record<string, unknown> => {
+    const input = { ...st.input };
+    if (st.path) input.file_path = st.path;
+    else delete input.file_path;
+    return input;
+  };
+
+  const emitTerminalToolPair = (toolCallId: string, st: AcpToolRunState, isError: boolean) => {
+    if (st.emitted) return;
+    st.emitted = true;
+    // Think/reason frames are activity noise for AMR no-output detection and
+    // must not appear as concrete tool_use/tool_result events.
+    if (st.thinkOnly) return;
+    // Raw ACP toolCallId stays as the local Map key for frame correlation; the
+    // transcript/telemetry id is always an opaque hash so adapter-supplied
+    // ids (paths, tokens, JWTs) never leak into Langfuse span ids or
+    // metadata.toolCallId.
+    const telemetryToolCallId = acpTelemetryToolCallId(toolCallId);
+    send('agent', {
+      type: 'tool_use',
+      id: telemetryToolCallId,
+      name: st.name,
+      input: buildToolUseInput(st),
+      // Wall-clock start of the first ACP frame for this toolCallId so analytics
+      // can compute real duration even though tool_use is emitted at terminal.
+      startedAt: st.firstSeenAt,
+    });
+    send('agent', {
+      type: 'tool_result',
+      toolUseId: telemetryToolCallId,
+      // Bash/execute stdout can dump private files (cat .env). Langfuse only
+      // lexically masks Bash, so redact before the canonical transcript ships.
+      content: acpSafeToolResultContent(st.name, st.resultContent),
+      isError,
+    });
+    // Concrete only on terminal tool_result for a real (non-think) tool.
+    emittedConcreteToolEvent = true;
+  };
+
+  // Flush tools that never received a terminal `tool_call_update`. Clean
+  // completion uses isError=false (best-effort close); fail paths use
+  // isError=true so Langfuse/PostHog and the persisted transcript keep the
+  // open tool as an errored result instead of dropping it entirely.
+  //
+  // Do not clear the map after flush. Emitted entries must stay until the
+  // session ends so a late/racy terminal `tool_call_update` (timeout/abort/
+  // prompt-response flush racing buffered stdout) cannot recreate the same
+  // id as a fresh open tool and emit a second, possibly contradictory
+  // tool_use/tool_result pair. `st.emitted` already suppresses re-emission.
+  const flushOpenAcpTools = (isError = false) => {
+    for (const [toolCallId, st] of acpToolRunEventState) {
+      if (st.emitted) continue;
+      emitTerminalToolPair(toolCallId, st, isError);
+    }
+  };
 
   const stageWatchdogDisabled = stageTimeoutMs <= 0;
   const resetStageTimer = (label: string) => {
@@ -228,6 +314,9 @@ export function attachAcpSession({
 
   const failWithPayload = (payload: unknown) => {
     if (finished) return;
+    // Emit pending tools as errored before terminal state so deferred
+    // tool_use pairs are not lost on timeout / process death / RPC error.
+    flushOpenAcpTools(true);
     finished = true;
     fatal = true;
     clearStageTimer();
@@ -240,6 +329,9 @@ export function attachAcpSession({
     options: { forceModelUnavailable?: boolean; details?: unknown; retryable?: boolean } = {},
   ) => {
     if (finished) return;
+    // Emit pending tools as errored before terminal state so deferred
+    // tool_use pairs are not lost on timeout / process death / RPC error.
+    flushOpenAcpTools(true);
     finished = true;
     fatal = true;
     clearStageTimer();
@@ -285,6 +377,84 @@ export function attachAcpSession({
       elapsedMs: Date.now() - runStartedAt,
       shape: acpRawEventShape(update),
     });
+  };
+
+  const emitAcpExecutionObservability = (update: JsonObject): boolean => {
+    const name = typeof update.sessionUpdate === 'string' ? update.sessionUpdate : '';
+    if (
+      name !== 'assistant_message_lifecycle' &&
+      name !== 'model_step_lifecycle' &&
+      name !== 'model_retry'
+    ) {
+      return false;
+    }
+    const numberField = (key: string) => {
+      const value = update[key];
+      return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+    };
+    const stringField = (key: string) => {
+      const value = update[key];
+      return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+    };
+    const usage = asObject(update.usage);
+    send('agent', {
+      type: 'diagnostic',
+      name,
+      source: 'amr-opencode',
+      elapsedMs: Date.now() - runStartedAt,
+      ...(stringField('phase') ? { phase: stringField('phase') } : {}),
+      ...(stringField('status') ? { status: stringField('status') } : {}),
+      ...(stringField('reason') ? { reason: stringField('reason') } : {}),
+      ...(stringField('provider') ? { provider: stringField('provider') } : {}),
+      ...(stringField('model') ? { model: stringField('model') } : {}),
+      ...(stringField('errorClass') ? { errorClass: stringField('errorClass') } : {}),
+      ...(stringField('timingEvidence')
+        ? { timingEvidence: stringField('timingEvidence') }
+        : {}),
+      ...(numberField('assistantMessageIndex') !== undefined
+        ? { assistantMessageIndex: numberField('assistantMessageIndex') }
+        : {}),
+      ...(numberField('stepIndex') !== undefined
+        ? { stepIndex: numberField('stepIndex') }
+        : {}),
+      ...(numberField('startedAtMs') !== undefined
+        ? { startedAtMs: numberField('startedAtMs') }
+        : {}),
+      ...(numberField('endedAtMs') !== undefined
+        ? { endedAtMs: numberField('endedAtMs') }
+        : {}),
+      ...(numberField('durationMs') !== undefined
+        ? { durationMs: numberField('durationMs') }
+        : {}),
+      ...(numberField('attempt') !== undefined
+        ? { attempt: numberField('attempt') }
+        : {}),
+      ...(usage
+        ? {
+            usage: {
+              ...(typeof usage.inputTokens === 'number'
+                ? { inputTokens: usage.inputTokens }
+                : {}),
+              ...(typeof usage.outputTokens === 'number'
+                ? { outputTokens: usage.outputTokens }
+                : {}),
+              ...(typeof usage.totalTokens === 'number'
+                ? { totalTokens: usage.totalTokens }
+                : {}),
+              ...(typeof usage.reasoningTokens === 'number'
+                ? { reasoningTokens: usage.reasoningTokens }
+                : {}),
+              ...(typeof usage.cacheReadTokens === 'number'
+                ? { cacheReadTokens: usage.cacheReadTokens }
+                : {}),
+              ...(typeof usage.cacheWriteTokens === 'number'
+                ? { cacheWriteTokens: usage.cacheWriteTokens }
+                : {}),
+            },
+          }
+        : {}),
+    });
+    return true;
   };
 
   const emitVisibleTextDelta = (delta: string) => {
@@ -408,8 +578,28 @@ export function attachAcpSession({
     nextId += 1;
   };
 
+  // Best-effort: emit provider usage before terminal fail/success so failed
+  // ACP runs still contribute token fields to PostHog/Langfuse when the agent
+  // returned a usage object on the prompt result.
+  const emitUsageIfPresent = (usageSource?: unknown) => {
+    const usage = formatUsage(usageSource);
+    if (!usage) return;
+    send('agent', {
+      type: 'usage',
+      usage,
+      durationMs: Date.now() - runStartedAt,
+    });
+  };
+
   const finishCleanPrompt = (usageSource?: unknown) => {
     if (finished) return;
+    // Mark the prompt finished before notifying observers so duplicate results
+    // and callback re-entry cannot report clean completion more than once.
+    finished = true;
+    onPromptComplete?.();
+    // Flush any tools still open when the prompt completes so traces stay
+    // complete (one tool_use + tool_result per id).
+    flushOpenAcpTools();
     const flushedToolText = toolCallTextSuppressor.flush();
     noteToolCallTextSuppression('tool_call_xml_flush');
     const flushedText = flushedToolText ? (dsmlArtifactSuppressor?.strip(flushedToolText) ?? flushedToolText) : '';
@@ -419,15 +609,7 @@ export function attachAcpSession({
     noteArtifactTextSuppression('artifact_flush');
     emitToolCallTextSuppressionSummary();
     emitArtifactTextSuppressionSummary();
-    const usage = formatUsage(usageSource);
-    if (usage) {
-      send('agent', {
-        type: 'usage',
-        usage,
-        durationMs: Date.now() - runStartedAt,
-      });
-    }
-    finished = true;
+    emitUsageIfPresent(usageSource);
     clearStageTimer();
     stdin.end();
     // Some ACP agents keep the child process alive after stdin closes,
@@ -510,7 +692,7 @@ export function attachAcpSession({
         failWithPayload(promotedPayload);
         return;
       }
-      const retryable = rpcErrorRetryable(details);
+      const retryable = rpcErrorRetryable(details) ?? inferRpcErrorRetryable(rpcErr, details);
       fail(rpcErr, {
         details,
         ...(retryable === undefined ? {} : { retryable }),
@@ -530,13 +712,26 @@ export function attachAcpSession({
           return;
         }
       }
+      if (emitAcpExecutionObservability(update)) {
+        return;
+      }
       if (update.sessionUpdate !== 'agent_message_chunk' && update.sessionUpdate !== 'agent_thought_chunk') {
+        const detail = extractAcpStatusDetail(update);
         send('agent', {
           type: 'status',
           label: String(update.sessionUpdate || 'session_update'),
+          ...(detail ? { detail } : {}),
           elapsedMs: Date.now() - runStartedAt,
         });
         emitAcpRawShapeDiagnostic(update);
+      }
+      if (
+        completePromptOnTurnEnd &&
+        promptRequestId !== null &&
+        update.sessionUpdate === 'turn_end'
+      ) {
+        finishCleanPrompt(update.usage);
+        return;
       }
       if (update.sessionUpdate === 'agent_thought_chunk') {
         emitAcpRawShapeDiagnostic(update);
@@ -633,51 +828,62 @@ export function attachAcpSession({
         if (toolCallId && isAcpArtifactWriteLabel(update)) {
           acpArtifactWriteToolCallIds.add(toolCallId);
         }
-        // Mirror artifact-write tool calls into the daemon's canonical
-        // tool_use/tool_result event shape so `countNewArtifacts`
-        // (run-artifacts.ts) can see ACP file writes. Without this, every ACP
-        // agent (AMR, Hermes, Kilo, Kiro, Devin, Vibe, …) reported
-        // run_finished.artifact_count: 0 even when the run wrote artifacts,
-        // because the ACP adapter emitted only text/status/thinking events and
-        // never the tool_use/tool_result pair the counter scans for.
-        //
-        // This path only feeds the NO-PROJECT fallback (project runs use the
-        // filesystem snapshot). Two correctness rules, both learned the hard
-        // way in review:
-        //   1. Defer emission to the TERMINAL frame and accumulate the best
-        //      concrete path across frames — ACP often sends `locations` only
-        //      on the completing update, and emitting on the first frame would
-        //      lock in a wrong/empty guess that a later path can't correct.
-        //   2. Never fabricate an artifact extension. `isArtifactPath` is what
-        //      decides whether a write counts; feeding it a real path lets it
-        //      correctly EXCLUDE non-artifact edits (`config.json`, `README.md`)
-        //      and INCLUDE real artifacts. A write that never carries a concrete
-        //      path stays keyed on its (extension-less) toolCallId, so it is
-        //      simply not counted rather than inflating the metric with a
-        //      synthetic `.html` — under-counting a truly opaque write is
-        //      acceptable; a false-positive artifact is not.
+        // Full ACP tool transcript → canonical tool_use/tool_result events for
+        // Langfuse/PostHog and `countNewArtifacts` (run-artifacts.ts). Every
+        // non-think tool is mirrored once at terminal status (accumulate
+        // partial frames first). Write tools keep Claude-shaped Write/Edit
+        // names and a real `file_path` when present. Never use toolCallId as
+        // file_path.
         if (toolCallId) {
-          const isWriteCall =
-            isAcpArtifactWriteLabel(update) || acpArtifactWriteToolCallIds.has(toolCallId);
-          if (isWriteCall) {
-            let st = acpArtifactRunEventState.get(toolCallId);
-            if (!st) {
-              st = { path: null, emitted: false };
-              acpArtifactRunEventState.set(toolCallId, st);
+          const nextName = acpToolName(update);
+          const nextInput = acpToolInput(update);
+          const nextPath = acpArtifactWritePathRanked(update);
+          const nextResult = acpToolResultContent(update);
+          const nextThinkOnly = isAcpThinkOnlyTool(update);
+          const kindRaw = typeof update.kind === 'string' ? update.kind.trim() : '';
+          const nameFromKind = Boolean(kindRaw && isAcpRecognizedKind(kindRaw));
+          let st = acpToolRunEventState.get(toolCallId);
+          if (!st) {
+            st = {
+              name: nextName,
+              nameSource: nameFromKind ? 'kind' : 'other',
+              input: nextInput,
+              path: nextPath?.path ?? null,
+              pathRank: nextPath?.rank ?? 0,
+              resultContent: nextResult,
+              thinkOnly: nextThinkOnly,
+              firstSeenAt: Date.now(),
+              emitted: false,
+            };
+            acpToolRunEventState.set(toolCallId, st);
+          } else if (!st.emitted) {
+            // Kind-locked names must not be overwritten by later title-only frames
+            // (e.g. kind:read then title "Update cache" must stay Read).
+            if (nameFromKind) {
+              st.name = nextName;
+              st.nameSource = 'kind';
+            } else if (st.nameSource !== 'kind') {
+              // Prefer a more specific name over the generic fallback.
+              if (nextName !== 'Tool' || st.name === 'Tool') st.name = nextName;
             }
-            if (!st.path) st.path = acpArtifactWritePath(update);
+            // Shallow merge rawInput; later keys win.
+            st.input = { ...st.input, ...nextInput };
+            // Upgrade path when a higher-precedence source appears.
+            if (nextPath && (!st.path || nextPath.rank >= st.pathRank)) {
+              st.path = nextPath.path;
+              st.pathRank = nextPath.rank;
+            }
+            // Keep last non-empty result payload (terminal may be status-only).
+            if (nextResult) st.resultContent = nextResult;
+            // Sticky think-only: once classified, never clear on later frames
+            // (terminal status-only frames have no title and would otherwise
+            // flip thinkOnly false and emit a fake concrete tool).
+            if (nextThinkOnly) st.thinkOnly = true;
+          }
+          if (isAcpTerminalToolStatus(update)) {
             const failed = isAcpTerminalFailureStatus(update);
-            if (!st.emitted && (failed || isAcpCompletedStatus(update))) {
-              st.emitted = true;
-              send('agent', {
-                type: 'tool_use',
-                id: toolCallId,
-                name: 'Write',
-                input: { file_path: st.path ?? toolCallId },
-              });
-              send('agent', { type: 'tool_result', toolUseId: toolCallId, isError: failed });
-              emittedConcreteToolEvent = true;
-            }
+            emitTerminalToolPair(toolCallId, st, failed);
+            // Keep the entry (emitted=true) so a repeated terminal cannot re-emit.
           }
         }
         if (isAcpArtifactWriteUpdate(update, acpArtifactWriteToolCallIds)) {
@@ -766,10 +972,18 @@ export function attachAcpSession({
       return;
     }
     if (promptRequestId !== null && obj.id === promptRequestId) {
+      // Flush still-open tools before AMR no-output classification. A successful
+      // session/prompt may omit a terminal tool_call_update; clean-closing those
+      // pending non-think tools flips emittedConcreteToolEvent so we take
+      // finishCleanPrompt instead of acp_no_visible_output (which would re-flush
+      // them as isError via fail()). Think-only open tools do not flip the flag.
+      flushOpenAcpTools();
       const usage = formatUsage(result.usage);
       if (!emittedVisibleTextChunk && !emittedConcreteToolEvent && modelUnavailableErrorCode) {
         const outputTokens = usage?.output_tokens;
         const hadCompletionTokens = typeof outputTokens === 'number' && outputTokens > 0;
+        // Emit usage before fail so analytics still sees provider tokens.
+        emitUsageIfPresent(result.usage);
         if (hadCompletionTokens || emittedToolCall || emittedTextChunk) {
           fail(
             'ACP session completed after reporting model activity, but did not produce visible assistant text, concrete tool results, or artifacts.',
@@ -855,6 +1069,11 @@ export function attachAcpSession({
      */
     abort() {
       if (aborted || finished) return;
+      // Flush deferred tool pairs as errored before terminal cancel. Tools are
+      // held until a terminal tool_call_update; without this flush, user cancel
+      // (runs.ts → acpSession.abort) drops in-progress tools from the transcript
+      // and from Langfuse/PostHog — unlike timeout and child-exit fail paths.
+      flushOpenAcpTools(true);
       aborted = true;
       finished = true;
       clearStageTimer();

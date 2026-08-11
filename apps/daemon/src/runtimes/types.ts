@@ -65,6 +65,11 @@ export type RuntimeContext = {
   // also persists) and the daemon seeds it with the full transcript.
   resumeSessionId?: string | null;
   newSessionId?: string;
+  // Per-run plugin isolation for agent subprocesses. External Plugin entry
+  // points use this for Local Codex so the child cannot recursively load the
+  // same Codex Plugin and route itself into another Open Design workflow.
+  // Operator-wide overrides remain owned by each runtime definition.
+  disablePlugins?: boolean;
 };
 
 // Marker on a RuntimeAgentDef declaring that the adapter's CLI maintains
@@ -224,6 +229,15 @@ export type RuntimeAgentDef = {
   // default. Operators can still override per-process via
   // `OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS` — that env wins.
   inactivityTimeoutMs?: number;
+  // Absolute ceiling between the runtime announcing that it is waiting for
+  // model output and the first substantive text/thinking/tool/artifact event.
+  // Unlike `inactivityTimeoutMs`, transport heartbeats and status events do not
+  // extend this deadline. Disabled when omitted; operators can override via
+  // `OD_CHAT_RUN_FIRST_OUTPUT_TIMEOUT_MS`.
+  firstOutputTimeoutMs?: number;
+  // Opt-in compatibility for ACP adapters that terminate a prompt with a
+  // `turn_end` session update rather than a session/prompt RPC response.
+  acpTurnEndCompletesPrompt?: boolean;
   // Declarative authentication probe. When set, detection spawns
   // `<bin> <args>` after the version check and classifies the combined
   // stdout/stderr to derive `authStatus`. This replaces the previous
@@ -264,13 +278,14 @@ export type DetectedAgent = Omit<
   | 'versionProbeTimeoutMs'
   | 'maxPromptArgBytes'
   | 'env'
-  // `inactivityTimeoutMs` is a spawn-time-only hint consumed by the
-  // chat-run watchdog. It is not part of the public `/api/agents`
+  // Runtime timeout fields are spawn-time-only hints consumed by chat-run
+  // watchdogs. They are not part of the public `/api/agents`
   // contract (`packages/contracts/src/api/registry.ts#AgentInfo`), so
-  // omitting it here keeps the daemon response aligned with that
+  // omitting them here keeps the daemon response aligned with that
   // shared web/CLI shape — agents pick it up by reading the runtime
   // def directly, the registry payload stays unchanged.
   | 'inactivityTimeoutMs'
+  | 'firstOutputTimeoutMs'
   | 'authProbe'
 > & {
   models: RuntimeModelOption[];

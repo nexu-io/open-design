@@ -210,6 +210,14 @@ export async function downloadHostUpdater(
   return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.DOWNLOAD, options, scope);
 }
 
+/** Clear the host updater/launcher caches and reset one-shot update state. */
+export async function clearHostUpdaterCache(
+  options?: OpenDesignHostUpdaterActionOptions,
+  scope: OpenDesignHostGlobalScope = globalThis,
+): Promise<OpenDesignHostUpdaterResult> {
+  return await runHostUpdaterAction(OPEN_DESIGN_HOST_UPDATER_ACTIONS.CLEAR_CACHE, options, scope);
+}
+
 /** Trigger a host updater install. */
 export async function installHostUpdater(
   options?: OpenDesignHostUpdaterActionOptions,

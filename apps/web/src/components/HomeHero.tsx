@@ -31,6 +31,7 @@ import type {
   InputFieldSpec,
   InstalledPluginRecord,
   McpServerConfig,
+  WorkspaceCollabContext,
   WorkspaceContextItem,
 } from '@open-design/contracts';
 import { DesignSystemPicker } from './DesignSystemPicker';
@@ -47,11 +48,13 @@ import {
 import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import {
   chipsForGroup,
+  HOME_APPLY_TEMPLATE_EVENT,
   orderedCreateChips,
   type ChipGroup,
   type HomeHeroChip,
 } from './home-hero/chips';
 import { homeHeroChipLabel } from './home-hero/chip-labels';
+import { PixelScanLogo } from './home-hero/PixelScanLogo';
 import { ScenarioArt } from './home-hero/ScenarioArt';
 import { useEdgeAutoScroll, EdgeScrollZones } from './home-hero/EdgeAutoScroll';
 import {
@@ -78,7 +81,6 @@ import {
   localizeSkillName,
 } from '../i18n/content';
 import { PreviewSurface } from './plugins-home/cards/PreviewSurface';
-import { canDuplicatePluginPreview } from './plugins-home/duplicate';
 import { pluginCategoryLabel } from './plugins-home/categoryLabel';
 import { readHomeGuideStage, writeHomeGuideStage } from './home-hero/firstRunGuide';
 import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
@@ -94,7 +96,7 @@ import { workspaceContextDetailLine, workspaceContextKindLabel } from './workspa
 import { FigmaHelpModal } from './FigmaHelpModal';
 import { TemplatePicker } from './home-hero/TemplatePicker';
 import { LibraryPicker } from './LibraryPicker';
-import { SessionModeToggle } from './SessionModeToggle';
+import { ComposerModePicker } from './ComposerModePicker';
 import { assetTitle } from './LibraryAssetMeta';
 import { libraryAssetRawUrl } from '../providers/registry';
 import type { LibraryAsset } from '@open-design/contracts';
@@ -139,6 +141,7 @@ export interface ExamplePromptInfo {
 }
 
 interface Props {
+  workspaceContext?: WorkspaceCollabContext | null;
   active?: boolean;
   // Arms the first-run guidance trail (prototype chip → first preset
   // card sheen). Tri-state: true = brand-new user (no projects), false =
@@ -221,8 +224,6 @@ interface Props {
   submitting?: boolean;
   onPickPlugin: (record: InstalledPluginRecord, nextPrompt: string | null) => void;
   onPickExamplePlugin?: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
-  onDuplicateExamplePlugin?: (record: InstalledPluginRecord) => void;
-  pendingDuplicatePluginId?: string | null;
   onPickSkill?: (skill: SkillSummary, nextPrompt: string | null) => void;
   onPickMcp?: (server: McpServerConfig, nextPrompt: string) => void;
   onPickConnector?: (connector: ConnectorDetail, nextPrompt: string) => void;
@@ -293,6 +294,7 @@ const EMPTY_WORKSPACE_ITEMS: WorkspaceContextItem[] = [];
 
 export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   {
+    workspaceContext = null,
     active = true,
     prompt,
     onPromptChange,
@@ -350,8 +352,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     submitting = false,
     onPickPlugin,
     onPickExamplePlugin = () => undefined,
-    onDuplicateExamplePlugin = () => undefined,
-    pendingDuplicatePluginId = null,
     onPickSkill = () => undefined,
     onPickMcp = () => undefined,
     onPickConnector = () => undefined,
@@ -453,6 +453,30 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // prompt examples, then to a localized chip-label prompt. That keeps every
   // create template submittable from an empty composer instead of silently
   // disabling Send.
+  // #118: once the caret is in the editor, the animating placeholder reads as a
+  // second cursor. Tracked with native focusin/focusout on the wrapper rather
+  // than an editor prop, so this works for the Lexical editor without widening
+  // its API. `carouselActive` deliberately stays true — Send must still submit
+  // the current scenario from an empty composer.
+  const [promptFocused, setPromptFocused] = useState(false);
+  useEffect(() => {
+    const node = promptEditorRef.current;
+    if (!node) return;
+    const onIn = () => setPromptFocused(true);
+    const onOut = (ev: FocusEvent) => {
+      // focusout fires for moves *within* the editor too; only a target outside
+      // the wrapper is a real blur.
+      if (node.contains(ev.relatedTarget as Node | null)) return;
+      setPromptFocused(false);
+    };
+    node.addEventListener('focusin', onIn);
+    node.addEventListener('focusout', onOut);
+    return () => {
+      node.removeEventListener('focusin', onIn);
+      node.removeEventListener('focusout', onOut);
+    };
+  }, []);
+
   const carouselActive =
     active &&
     !submitting &&
@@ -671,6 +695,21 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     () => orderedCreateChips().filter((chip) => chip.action.kind === 'apply-scenario'),
     [],
   );
+  // A surface outside the hero (e.g. the workspace tabs-bar) can hand off a
+  // template pick through this window event; apply the chip exactly as if it
+  // was clicked here. Deliberately depless (re-subscribes each render) so the
+  // listener always sees the current handlers without threading them through
+  // refs.
+  useEffect(() => {
+    function onApplyTemplate(event: Event) {
+      const chipId = (event as CustomEvent<{ chipId?: string }>).detail?.chipId;
+      if (!chipId) return;
+      const chip = templateChips.find((item) => item.id === chipId);
+      if (chip) handlePickTaskChip(chip);
+    }
+    window.addEventListener(HOME_APPLY_TEMPLATE_EVENT, onApplyTemplate);
+    return () => window.removeEventListener(HOME_APPLY_TEMPLATE_EVENT, onApplyTemplate);
+  });
   const activeExamplePlugins = useMemo(
     () =>
       activeChipId
@@ -1209,31 +1248,22 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     contextOnlyMcpServers.length > 0 ||
     contextOnlyConnectors.length > 0 ||
     contextWorkspaceItems.length > 0;
-  const blankProjectEntry = onStartBlankProject ? (
-    <button
-      type="button"
-      className="home-hero__blank-project"
-      data-testid="home-hero-blank-project"
-      onClick={onStartBlankProject}
-    >
-      {t('homeHero.startBlankProject')}
-      <Icon name="chevron-right" size={13} aria-hidden />
-    </button>
-  ) : null;
-
   let optionRenderIndex = 0;
 
   return (
     <section ref={homeHeroRef} className="home-hero" data-testid="home-hero">
-      <div className="home-hero__brand" aria-hidden>
-        <span className="home-hero__brand-mark od-brand-glyph" />
-        <span className="home-hero__brand-name">Open Design</span>
-      </div>
-      <h1 className="home-hero__title">{t('homeHero.title')}</h1>
-      <p className="home-hero__subtitle">
-        {t('homeHero.subtitlePrefix')}
-      </p>
+      {/* #5517 hero header: the OpenDesign logotype replaces the small
+          brand-mark + name pair, and the tagline subtitle is dropped. The
+          static wordmark is now a WebGL pixel-scan effect (round 7) — the
+          title heading below it is dropped too, since the animated wordmark
+          alone carries the brand moment. */}
+      <span className="home-hero__logo-wrap">
+        <PixelScanLogo className="home-hero__logo home-hero__logo--tiles" />
+      </span>
 
+      {/* #5517 wraps the input card + workdir row into one visible composer
+          card so they read as a single surface. */}
+      <div className="home-hero__composer-card">
       <div
         className={`home-hero__input-card${
           authoringLayoutActive ? ' home-hero__input-card--compact-authoring' : ''
@@ -1589,6 +1619,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             />
             <PlaceholderCarousel
               active={carouselActive}
+              paused={promptFocused}
               scenarios={carouselScenarios}
               onScenarioChange={setCarouselScenario}
             />
@@ -1724,6 +1755,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           />
           <div className="home-hero__foot-left">
             <ComposerPlusMenu
+              workspaceContext={workspaceContext}
               triggerTestId="home-hero-plus-trigger"
               placementPreference="down"
               onOpen={() =>
@@ -1734,7 +1766,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
                 })
               }
               onSubmenuOpen={(submenu) => {
-                if (submenu === 'toolbox') return;
+                // Home never passes the working-dir submenu (it keeps its own
+                // footer picker), so only the resource submenus reach here.
+                if (submenu === 'toolbox' || submenu === 'workingDir') return;
                 trackHomeChatComposerClick(analytics.track, {
                   page_name: 'home',
                   area: 'chat_composer',
@@ -1898,6 +1932,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
             {projectReferenceOpen ? (
               <ProjectReferenceModal
+                workspaceContext={workspaceContext}
                 onClose={() => {
                   // Only the dismiss paths (X / backdrop / Escape / Cancel)
                   // land here — a confirmed pick closes via
@@ -1954,23 +1989,21 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
             ) : null}
           </div>
           <div className="home-hero__foot-right">
-            <div className="home-hero__mode-switcher">
-              <SessionModeToggle
-                mode={sessionMode}
-                onChange={(next) => {
-                  if (next !== sessionMode) {
-                    trackComposerSessionModeClick(analytics.track, {
-                      page_name: 'home',
-                      area: 'chat_composer',
-                      element: 'session_mode_toggle',
-                      mode_before: sessionModeToTracking(sessionMode),
-                      mode_after: sessionModeToTracking(next),
-                    });
-                  }
-                  onSessionModeChange?.(next);
-                }}
-              />
-            </div>
+            <ComposerModePicker
+              mode={sessionMode}
+              onModeChange={(next) => {
+                if (next !== sessionMode) {
+                  trackComposerSessionModeClick(analytics.track, {
+                    page_name: 'home',
+                    area: 'chat_composer',
+                    element: 'session_mode_toggle',
+                    mode_before: sessionModeToTracking(sessionMode),
+                    mode_after: sessionModeToTracking(next),
+                  });
+                }
+                onSessionModeChange?.(next);
+              }}
+            />
             {executionSwitcher ? (
               <div className="home-hero__execution-switcher">
                 {executionSwitcher}
@@ -1988,8 +2021,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               aria-label={submitting ? t('chat.comments.sending') : t('homeHero.run')}
               aria-busy={submitting}
             >
-              <Icon name="send" size={16} />
-              <span>{submitting ? t('chat.comments.sending') : t('chat.send')}</span>
+              <Icon name={submitting ? 'spinner' : 'arrow-up'} size={17} />
             </button>
           </div>
         </div>
@@ -2010,6 +2042,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           ) : null}
           {onPickWorkingDir ? (
             <WorkingDirPicker
+              className="home-hero__working-dir-picker"
+              emptyLabel={t('homeWorkingDir.triggerShort')}
               workingDir={workingDir}
               recentDirs={recentDirs}
               onPickDirectory={() => {
@@ -2040,41 +2074,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           ) : null}
         </div>
       ) : null}
+      </div>
 
       {recommendationSlot}
-
-      {activeCreateChip ? null : (
-        <div className="home-hero__template-section" data-testid="home-hero-template-section">
-          <div className="home-hero__template-heading">
-            {t('homeHero.startWithTemplate')}
-          </div>
-          <RailGroup
-            group="create"
-            activeChipId={activeChipId}
-            pendingChipId={pendingChipId}
-            pendingPluginId={pendingPluginId}
-            pluginsLoading={pluginsLoading}
-            onPickChip={handlePickTaskChip}
-            variant="tabs"
-            pulseChipId={guidePulseChipId}
-            onHoverChip={setPreviewTemplateId}
-          >
-            <ShortcutsMenu
-              activeChipId={activeChipId}
-              pendingChipId={pendingChipId}
-              pendingPluginId={pendingPluginId}
-              pluginsLoading={pluginsLoading}
-              open={shortcutsOpen}
-              refNode={shortcutsMenuRef}
-              onOpenChange={setShortcutsOpen}
-              onPickChip={(chip) => {
-                setShortcutsOpen(false);
-                handlePickTaskChip(chip);
-              }}
-            />
-          </RailGroup>
-        </div>
-      )}
 
       {activeSubChips.length > 0 && isSubChipParent(activeChipId) ? (
         <SubTypeRow
@@ -2110,12 +2112,10 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           plugins={filteredExamplePlugins}
           activePluginId={activePluginRecord?.id ?? null}
           pendingPluginId={pendingPluginId}
-          pendingDuplicatePluginId={pendingDuplicatePluginId}
           locale={locale}
           onPick={pickExamplePluginPreset}
-          onPreview={onOpenPluginDetails}
-          onDuplicate={onDuplicateExamplePlugin}
           pulseFirstPreset={guidePulseFirstPreset}
+          workspaceContext={workspaceContext}
         />
       ) : activePromptExamples.length > 0 ? (
         <div
@@ -2151,8 +2151,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
           </div>
         </div>
       ) : null}
-
-      {blankProjectEntry}
 
       {error ? (
         <div role="alert" className="home-hero__error">
@@ -2197,22 +2195,18 @@ function PluginPromptPresets({
   chipId,
   locale,
   onPick,
-  onPreview,
-  onDuplicate,
-  pendingDuplicatePluginId,
   pendingPluginId,
   plugins,
   pulseFirstPreset = false,
+  workspaceContext = null,
 }: {
   activePluginId: string | null;
   chipId: string;
   locale: Locale;
   onPick: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
-  onPreview: (record: InstalledPluginRecord) => void;
-  onDuplicate: (record: InstalledPluginRecord) => void;
-  pendingDuplicatePluginId: string | null;
   pendingPluginId: string | null;
   plugins: InstalledPluginRecord[];
+  workspaceContext?: WorkspaceCollabContext | null;
   // First-run guide: the first card carries the attention sheen.
   pulseFirstPreset?: boolean;
 }) {
@@ -2243,12 +2237,9 @@ function PluginPromptPresets({
               active={activePluginId === record.id}
               pending={pendingPluginId === record.id}
               disabled={pendingPluginId !== null}
-              duplicatePending={pendingDuplicatePluginId === record.id}
-              duplicateDisabled={pendingDuplicatePluginId !== null || pendingPluginId !== null}
               pulse={pulseFirstPreset && index === 0}
               onPick={onPick}
-              onPreview={onPreview}
-              onDuplicate={onDuplicate}
+              workspaceContext={workspaceContext}
             />
           ))}
         </div>
@@ -2340,35 +2331,30 @@ function PluginPromptPresetCard({
   active,
   chipId,
   disabled,
-  duplicateDisabled,
-  duplicatePending,
   locale,
-  onDuplicate,
   onPick,
-  onPreview,
   pending,
   pulse = false,
   record,
+  workspaceContext = null,
 }: {
   active: boolean;
   chipId: string;
   disabled: boolean;
-  duplicateDisabled: boolean;
-  duplicatePending: boolean;
   locale: Locale;
-  onDuplicate: (record: InstalledPluginRecord) => void;
   onPick: (record: InstalledPluginRecord, chipId: string, promptText: string) => void;
-  // Preview the template in the detail modal (the card body opens this; Use
-  // seeds the composer input, Remix forks a new project).
-  onPreview: (record: InstalledPluginRecord) => void;
   pending: boolean;
   pulse?: boolean;
   record: InstalledPluginRecord;
+  workspaceContext?: WorkspaceCollabContext | null;
 }) {
   const { t } = useI18n();
   // Example-prompt preset tiles are thumbnails too — prefer the cheap baked
   // hover-pan clip when one exists (same as the gallery cards).
-  const preview = useMemo(() => inferPluginPreview(record, { preferBaked: true }), [record]);
+  const preview = useMemo(
+    () => inferPluginPreview(record, { preferBaked: true, workspaceContext }),
+    [record, workspaceContext],
+  );
   // Home cards keep their richer structured-preview path as the last-resort
   // fallback (the detail modal injects a simpler one).
   const seedPrompt = examplePresetSeedPrompt(record, locale, () =>
@@ -2386,7 +2372,6 @@ function PluginPromptPresetCard({
   // Create page picker show, so the example row reads like the reference
   // template galleries. Null for records without a known category.
   const categoryLabel = pluginCategoryLabel(record, t);
-  const canDuplicate = canDuplicatePluginPreview(record);
   return (
     <span className="home-hero__plugin-preset-cell" role="listitem">
       <button
@@ -2395,7 +2380,8 @@ function PluginPromptPresetCard({
         data-testid="home-hero-plugin-preset"
         data-plugin-id={record.id}
         {...(typeof odMode === 'string' ? { 'data-od-mode': odMode } : {})}
-        onClick={() => onPreview(record)}
+        disabled={disabled}
+        onClick={() => onPick(record, chipId, seedPrompt)}
       >
         <span className="home-hero__plugin-preset-preview" aria-hidden ref={presetPreviewRef}>
           <PreviewSurface
@@ -2411,45 +2397,13 @@ function PluginPromptPresetCard({
           ) : null}
         </span>
         <span className="home-hero__plugin-preset-meta">
-          {categoryLabel ? (
-            <span
-              className="home-hero__plugin-preset-category"
-              data-testid={`home-hero-plugin-preset-category-${record.id}`}
-            >
-              {categoryLabel}
-            </span>
-          ) : null}
+          {/* Category tag dropped (dogfood 2026-07-28): the filter chips above
+              the rail already scope the row, so the per-card pill was noise. */}
           <span className="home-hero__plugin-preset-title">
             {title}
           </span>
         </span>
       </button>
-      <span className="home-hero__plugin-preset-actions">
-        <button
-          type="button"
-          className="home-hero__plugin-preset-action home-hero__plugin-preset-action--primary"
-          onClick={() => onPick(record, chipId, seedPrompt)}
-          disabled={disabled}
-          aria-busy={pending ? 'true' : undefined}
-          data-testid={`home-hero-plugin-preset-use-${record.id}`}
-        >
-          <Icon name={pending ? 'spinner' : 'play'} size={12} />
-          <span>{pending ? t('pluginCard.applying') : t('pluginCard.use')}</span>
-        </button>
-        {canDuplicate ? (
-          <button
-            type="button"
-            className="home-hero__plugin-preset-action"
-            onClick={() => onDuplicate(record)}
-            disabled={duplicateDisabled}
-            aria-busy={duplicatePending ? 'true' : undefined}
-            data-testid={`home-hero-plugin-preset-duplicate-${record.id}`}
-          >
-            <Icon name={duplicatePending ? 'spinner' : 'copy'} size={12} />
-            <span>{duplicatePending ? t('pluginCard.duplicating') : t('pluginCard.duplicate')}</span>
-          </button>
-        ) : null}
-      </span>
     </span>
   );
 }

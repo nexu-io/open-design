@@ -2,6 +2,8 @@
 
 Follow the root `AGENTS.md` and `tools/AGENTS.md` first. This tool owns the repo-external packaged build/start/stop/logs command surface.
 
+Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a cache node, or changing what a cached node reads or writes. It is the source of truth for the build-graph cache under `--cache-dir`: determinant rules, materialization-time parameters, the signing boundary, and confidence grading.
+
 ## Owns
 
 - Local packaging orchestration for packaged Open Design artifacts.
@@ -58,6 +60,8 @@ The runtime updater reads `https://releases.open-design.ai/<channel>/latest/meta
 - The artifact must have a checksum, preferably `sha256Url`; the updater verifies bytes before exposing an install action.
 - `OD_UPDATE_CURRENT_VERSION` may override the packaged version for tests, but user-flow package validation should prefer building the package with the intended `--app-version`.
 - Release metadata may include `releaseNote.content`, with a `defaultLocale` and locale descriptors containing `url`, `mediaType`, `sha256`, and `size`. The updater does not currently consume this block; `tools-release` owns its publication and verification independently from updater UI behavior.
+- Release metadata may include `control.launcher.version.{min, url}` — the installer-reinstall floor. The updater compares `min` against the **physically installed outer package version** (read at check time from the outer bundle's `open-design-config.json` via the launcher launch path; `OD_UPDATE_INSTALLED_VERSION` overrides it for tests), NOT the running payload version — payload updates never touch the outer bundle, so a broken outer generation must reach the installer path even when its payload is current. When the floor trips (or `min` is set but the outer version is unreadable — conservative), the updater selects the installer artifact and, when no newer release exists, offers a same-version installer reinstall; snapshot field `reinstall` carries `{reason, installedVersion, minVersion, url}` and the web UI presents the optional operator `url` as a jump link with default i18n copy as fallback. Publication: channel policy is managed as one repo-vars pair per channel — `RELEASE_LAUNCHER_VERSION_MIN_<CHANNEL>` + `RELEASE_LAUNCHER_VERSION_MIN_URL_<CHANNEL>` — passed through workflows verbatim (no YAML fallback expressions) and resolved by the shared resolver in `tools/release/src/storage/launcher-version-floor.ts`: a non-stable channel whose own pair is unset falls back to the STABLE pair as a unit, and format/https/floor validation is applied at that single point. `publish-metadata` hard-fails when `min` exceeds the release version — a floor this release cannot satisfy would make the same-version reinstall offer nag forever. `verify-metadata` re-resolves the same channel policy and checks the published block against it; `summary-metadata` surfaces the floor in the step summary.
+- The updater exposes a manual disaster-recovery `clear-cache` action (`od:update:clear-cache` IPC, sidecar action `clear-cache`, Settings → About "Clear update cache" row with a two-stage inline confirm). It resets one-shot update state (downloaded release, install freeze) back to `idle`, purges `releases/`, `staging/`, `downloads/`, and `.back/`, removes a stale launcher `attempt.json` plus any non-`confirmed` desktop-handoff journal, and deletes non-retained launcher payload versions. Runtime `active`/`lastSuccessful` versions, explicit `retained` cleanup entries, `install.json`, and a `confirmed` handoff journal are never touched; locked files defer through the existing cleanup.json retry machinery. An installer helper already spawned by a prior install action is not cancelled.
 - Release-note source lives at `docs/CHANGELOG/v<full-releaseVersion>/<locale>.md`. All channels use the same publication pipeline, while stable additionally requires `en` and `zh-CN` before platform builds proceed.
 - Post-update "what's new" highlights are NOT carried in release `metadata.json`. The daemon's `/api/whats-new` fetches a single hand-curated document on a dedicated R2 bucket (`https://whatsnew.open-design.ai/whats-new.json`, overridable with `OD_WHATS_NEW_URL`); the web home surface shows a one-time card driven by that document's `id`, not the running version. Operators edit that one file after a release — there is no per-version publish tooling.
 
@@ -106,7 +110,7 @@ curl.exe --ssl-no-revoke -fsSL https://releases.open-design.ai/beta/latest/metad
 For `release-beta-s`, check the internal feed instead:
 
 ```bash
-curl.exe --ssl-no-revoke -fsSL https://s3.nexu.space/od-releases/beta/latest/metadata.json
+curl.exe --ssl-no-revoke -fsSL https://s3.nexu.space/od-releases/betas/latest/metadata.json
 ```
 
 2. Build a non-portable Windows beta package with the real beta namespace and a version lower than latest:
@@ -161,7 +165,7 @@ pnpm tools-pack win cleanup --dir C:\odtp-beta-release-fixed --namespace release
 
 ### Validation matrix for updater changes
 
-Run the narrow tests that match the surface you touched, then the repo checks:
+`docs/testing/updater-lifecycle.md` is the full lifecycle-to-test coverage map (including deliberate manual-only nodes); consult it to find the owning tests for the node you touched, then run the narrow tests plus the repo checks:
 
 ```bash
 pnpm --filter @open-design/desktop test -- tests/main/updater.test.ts tests/main/updater-host-boundary.test.ts tests/main/preload-host-boundary.test.ts

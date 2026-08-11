@@ -60,7 +60,7 @@ interface ShareLinkItem {
   href: string;
 }
 
-function buildInstallCommand(record: InstalledPluginRecord): string {
+export function buildPluginInstallCommand(record: InstalledPluginRecord): string {
   // The daemon's install resolver accepts the raw `record.source`
   // shape for every kind (github:owner/repo[@ref][/sub], https URL,
   // local path, marketplace id), so we mirror it verbatim. For
@@ -154,7 +154,7 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
       label: t('plugins.actions.copyInstallCommand'),
       icon: 'copy',
       copies: true,
-      onSelect: () => copyPluginShareText(buildInstallCommand(record), 'install'),
+      onSelect: () => copyPluginShareText(buildPluginInstallCommand(record), 'install'),
     },
     {
       key: 'id',
@@ -227,7 +227,7 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
         onClick={() => setOpen((v) => !v)}
         title={t('designs.menuMore')}
       >
-        <Icon name="more-horizontal" size={12} />
+        <Icon name="more-horizontal" size={14} />
         <span>{t('homeHero.moreShortcuts')}</span>
       </button>
       {open ? (
@@ -249,7 +249,7 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
                         : 'close'
                       : item.icon
                   }
-                  size={12}
+                  size={14}
                 />
                 <span>
                   {copyFeedback?.key === item.key
@@ -273,7 +273,7 @@ export function PluginShareMenu({ record, variant = 'default' }: Props) {
                 rel="noreferrer"
                 onClick={() => setOpen(false)}
               >
-                <Icon name={item.icon} size={12} />
+                <Icon name={item.icon} size={14} />
                 <span>{item.label}</span>
               </a>
             ))}

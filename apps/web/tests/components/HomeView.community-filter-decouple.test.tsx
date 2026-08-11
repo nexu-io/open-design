@@ -12,14 +12,15 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { HomeView } from '../../src/components/HomeView';
+import type { InstalledPluginRecord } from '@open-design/contracts';
+import { PluginsHomeSection } from '../../src/components/PluginsHomeSection';
 import { I18nProvider } from '../../src/i18n';
 
 function makeHomePlugin(
   id: string,
   mode: string,
   preview?: Record<string, unknown>,
-) {
+): InstalledPluginRecord {
   return {
     id,
     title: id,
@@ -69,93 +70,66 @@ describe('HomeView community filter decoupling', () => {
   });
 
   it('keeps the Community category selection independent from the hero type chips', async () => {
-    const fetchMock = vi.fn<typeof fetch>(async (url) => {
-      if (typeof url === 'string' && url === '/api/plugins') {
-        return new Response(JSON.stringify({ plugins: PLUGINS }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
-      throw new Error(`unexpected fetch ${url}`);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
     render(
       <I18nProvider initial="en">
-        <HomeView
-          projects={[]}
-          onSubmit={() => undefined}
-          onOpenProject={() => undefined}
-          onViewAllProjects={() => undefined}
+        <PluginsHomeSection
+          plugins={PLUGINS}
+          loading={false}
+          activePluginId={null}
+          pendingApplyId={null}
+          onUse={() => undefined}
+          onOpenDetails={() => undefined}
+          preferDefaultFacet
+          cardLayout="gallery"
         />
       </I18nProvider>,
     );
 
-    // Home boots with a default active type chip, but the Community grid starts
-    // from its own All selection so users can browse the full catalog first.
-    // Wait for the selected state, not just the pill mount, so the assertion
-    // stays stable under full-suite CI load.
+    // The Community gallery owns its own facet state, so it is mounted on its
+    // own here — there is no hero rail for it to couple to. It boots on its own
+    // All selection (the gallery layout keeps the All bucket, per #5762's
+    // sibling change to PluginsHomeSection) no matter which type chip Home
+    // would have started on. Wait for the selected state, not just the pill
+    // mount, so the assertion stays stable under full-suite CI load.
     await waitFor(() => {
       expect(ariaSelected('plugins-home-pill-category-all')).toBe('true');
     });
     expect(ariaSelected('plugins-home-pill-category-deck')).toBe('false');
     expect(ariaSelected('plugins-home-pill-category-prototype')).toBe('false');
 
-    // Picking another chip drives the composer, not the gallery filter.
-    fireEvent.click(await screen.findByTestId('home-hero-rail-deck'));
-    await waitFor(() => {
-      expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
-    });
-    expect(ariaSelected('plugins-home-pill-category-all')).toBe('true');
-    expect(ariaSelected('plugins-home-pill-category-deck')).toBe('false');
-
-    // And the gallery's own pills still work locally.
-    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
+    // The gallery's own pills still work locally, independent of any hero chip.
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-deck'));
     expect(ariaSelected('plugins-home-pill-category-all')).toBe('false');
+    expect(ariaSelected('plugins-home-pill-category-deck')).toBe('true');
+
+    // And switching to a different gallery pill selects it locally.
+    fireEvent.click(screen.getByTestId('plugins-home-pill-category-prototype'));
+    expect(ariaSelected('plugins-home-pill-category-deck')).toBe('false');
     expect(ariaSelected('plugins-home-pill-category-prototype')).toBe('true');
   });
 
   it('opens duplicated gallery examples at the copied entry file', async () => {
     const onOpenProject = vi.fn();
-    const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
-      if (typeof url === 'string' && url === '/api/plugins') {
-        return new Response(JSON.stringify({ plugins: DUPLICABLE_PLUGINS }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        });
-      }
+    const onDuplicate = vi.fn((record: InstalledPluginRecord) => {
       if (
-        typeof url === 'string' &&
-        url === '/api/plugins/example-html-prototype/duplicate-project' &&
-        init?.method === 'POST'
+        record.id === 'example-html-prototype'
       ) {
-        return new Response(
-          JSON.stringify({
-            ok: true,
-            projectId: 'duplicated-project',
-            conversationId: 'duplicated-conversation',
-            relPath: 'index.html',
-            project: { id: 'duplicated-project', name: 'Duplicated' },
-            sourcePluginId: 'example-html-prototype',
-            sourceEntry: 'example.html',
-            copiedFiles: 1,
-            skippedFiles: 0,
-            warnings: [],
-          }),
-          { status: 201, headers: { 'content-type': 'application/json' } },
-        );
+        onOpenProject('duplicated-project', 'index.html');
       }
-      throw new Error(`unexpected fetch ${url}`);
     });
-    vi.stubGlobal('fetch', fetchMock);
 
     render(
       <I18nProvider initial="en">
-        <HomeView
-          projects={[]}
-          onSubmit={() => undefined}
-          onOpenProject={onOpenProject}
-          onViewAllProjects={() => undefined}
+        <PluginsHomeSection
+          plugins={DUPLICABLE_PLUGINS}
+          loading={false}
+          activePluginId={null}
+          pendingApplyId={null}
+          onUse={() => undefined}
+          onDuplicate={onDuplicate}
+          onOpenDetails={() => undefined}
+          preferDefaultFacet={false}
+          cardLayout="gallery"
         />
       </I18nProvider>,
     );

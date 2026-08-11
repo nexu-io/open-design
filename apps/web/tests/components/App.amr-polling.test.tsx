@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../../src/App';
@@ -17,10 +18,32 @@ import {
 import { fetchAmrModels, fetchVelaLoginStatus } from '../../src/providers/daemon';
 import { listProjects, listTemplates } from '../../src/state/projects';
 
-vi.mock('../../src/router', () => ({
-  navigate: vi.fn(),
-  useRoute: () => ({ kind: 'home' as const, view: 'home' as const }),
-}));
+// Settings is now a full-page route (`/settings`): App.openSettings navigates
+// instead of toggling a modal flag, so the router mock must feed navigate()
+// calls back into useRoute() (like the production useSyncExternalStore router)
+// for the settings surface to render at all.
+const homeRouteMock = { kind: 'home' as const, view: 'home' as const };
+const routeListeners = new Set<() => void>();
+const useRouteMock = vi.fn(() => homeRouteMock);
+
+vi.mock('../../src/router', async () => {
+  const actual = await vi.importActual<typeof import('../../src/router')>('../../src/router');
+  return {
+    ...actual,
+    navigate: vi.fn((route: unknown) => {
+      useRouteMock.mockReturnValue(route as never);
+      routeListeners.forEach((notify) => notify());
+    }),
+    useRoute: () =>
+      useSyncExternalStore(
+        (onChange) => {
+          routeListeners.add(onChange);
+          return () => routeListeners.delete(onChange);
+        },
+        useRouteMock,
+      ),
+  };
+});
 
 vi.mock('../../src/components/EntryView', () => ({
   EntryView: ({
@@ -66,6 +89,7 @@ vi.mock('../../src/components/SettingsDialog', () => ({
   SettingsDialog: ({
     onRefreshAgents,
     onAmrLoginStatusChange,
+    onClose,
   }: {
     onRefreshAgents: (options?: { agentCliEnv?: AppConfig['agentCliEnv'] }) => void | Promise<void>;
     onAmrLoginStatusChange?: (status: {
@@ -75,6 +99,7 @@ vi.mock('../../src/components/SettingsDialog', () => ({
       user: null;
       configPath: string;
     } | null) => void;
+    onClose: () => void;
   }) => (
     <>
       <button
@@ -100,6 +125,7 @@ vi.mock('../../src/components/SettingsDialog', () => ({
       >
         mark amr signed in
       </button>
+      <button onClick={onClose}>close settings</button>
     </>
   ),
 }));
@@ -205,8 +231,16 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+async function advanceTestClock(ms: number): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
 describe('App AMR polling', () => {
   beforeEach(() => {
+    window.localStorage.clear();
+    useRouteMock.mockReturnValue(homeRouteMock);
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([
       {
@@ -255,20 +289,24 @@ describe('App AMR polling', () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
-  it('keeps polling AMR models until the remote catalog replaces the preset list', { timeout: 10_000 }, async () => {
+  it('keeps polling AMR models until the remote catalog replaces the preset list', async () => {
+    vi.useFakeTimers();
     render(<App />);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
-    });
+    await advanceTestClock(0);
+    expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
 
-    await waitFor(() => {
-      expect(screen.getByTestId('amr-model').textContent).toBe('remote-a');
-    }, { timeout: 4_000 });
+    await advanceTestClock(1_999);
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    await advanceTestClock(1);
+
+    expect(screen.getByTestId('amr-model').textContent).toBe('remote-a');
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(3);
   });
 
@@ -409,9 +447,8 @@ describe('App AMR polling', () => {
     }
   });
 
-  it('restarts AMR polling after sign-in when preset refresh previously stopped on a remote error', {
-    timeout: 10_000,
-  }, async () => {
+  it('restarts AMR polling after sign-in when preset refresh previously stopped on a remote error', async () => {
+    vi.useFakeTimers();
     mockedFetchAmrModels.mockReset();
     mockedFetchAmrModels
       .mockResolvedValueOnce({
@@ -433,19 +470,15 @@ describe('App AMR polling', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
-    });
+    await advanceTestClock(0);
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
 
-    await waitFor(() => {
-      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
-    }, { timeout: 4_000 });
-    await waitFor(() => {
-      expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
-    });
+    await advanceTestClock(1_000);
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
 
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-
+    await advanceTestClock(1_500);
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
     mockedFetchVelaLoginStatus.mockResolvedValue({
       loggedIn: true,
@@ -455,15 +488,17 @@ describe('App AMR polling', () => {
     });
 
     fireEvent.click(screen.getByText('open settings'));
-    await waitFor(() => {
-      expect(screen.getByText('mark amr signed in')).toBeTruthy();
-    });
+    expect(screen.getByText('mark amr signed in')).toBeTruthy();
     fireEvent.click(screen.getByText('mark amr signed in'));
+    await advanceTestClock(0);
 
-    await waitFor(() => {
-      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(3);
-      expect(screen.getByTestId('amr-model').textContent).toBe('remote-a');
-    }, { timeout: 4_000 });
+    // Settings is a full-page route now; return home so the EntryView
+    // mock (which renders the amr-model probe) is mounted again.
+    fireEvent.click(screen.getByText('close settings'));
+    await advanceTestClock(0);
+
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(3);
+    expect(screen.getByTestId('amr-model').textContent).toBe('remote-a');
   });
 
   it('does not restart AMR model polling for repeated signed-in status snapshots', async () => {
@@ -497,9 +532,8 @@ describe('App AMR polling', () => {
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(2);
   });
 
-  it('stops polling after the preset retry budget is exhausted when remote never arrives', {
-    timeout: 20_000,
-  }, async () => {
+  it('stops polling after the preset retry budget is exhausted when remote never arrives', async () => {
+    vi.useFakeTimers();
     mockedFetchAmrModels.mockReset();
     mockedFetchAmrModels.mockImplementation(async () => ({
       source: 'preset',
@@ -509,14 +543,15 @@ describe('App AMR polling', () => {
 
     render(<App />);
 
-    await waitFor(() => {
-      expect(mockedFetchAmrModels).toHaveBeenCalledTimes(11);
-    }, { timeout: 12_000 });
-
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    await advanceTestClock(0);
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(1);
+    await advanceTestClock(10_000);
 
     expect(mockedFetchAmrModels).toHaveBeenCalledTimes(11);
     expect(screen.getByTestId('amr-model').textContent).toBe('preset-a');
+
+    await advanceTestClock(1_500);
+    expect(mockedFetchAmrModels).toHaveBeenCalledTimes(11);
   });
 
   it('does not merge stale AMR remote models over a rescan with new agent env', async () => {
@@ -560,6 +595,10 @@ describe('App AMR polling', () => {
       expect(screen.getByText('rescan agents')).toBeTruthy();
     });
     fireEvent.click(screen.getByText('rescan agents'));
+
+    // Settings is a full-page route now; return home so the EntryView
+    // mock (which renders the amr-model probe) is mounted again.
+    fireEvent.click(screen.getByText('close settings'));
 
     await waitFor(() => {
       expect(screen.getByTestId('amr-model').textContent).toBe('new-probe');

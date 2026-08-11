@@ -59,6 +59,19 @@
   border-radius: var(--radius);
   padding: 6px 10px;
 }
+/* Match the adjacent template share trigger so the inline variant keeps a
+   visible anchor while its popover is open. */
+.plugin-share-trigger.ghost:not(:disabled) {
+  background: var(--bg-panel);
+  border-color: var(--border);
+  color: var(--text);
+}
+.plugin-share-trigger.ghost:hover:not(:disabled),
+.plugin-share-trigger.ghost[aria-expanded='true'] {
+  background: var(--accent-tint);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .plugin-share-trigger--solo {
   border: 1px solid var(--border);
   background: var(--bg-panel);
@@ -101,13 +114,14 @@
   appearance: none;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   width: 100%;
   border: 0;
   background: transparent;
   border-radius: var(--radius-sm);
   padding: 7px 9px;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text);
   cursor: pointer;
   text-align: left;
@@ -144,7 +158,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text-muted);
   flex-shrink: 0;
@@ -173,7 +187,7 @@
   flex-wrap: wrap;
 }
 .plugin-byline__by {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-faint);
   text-transform: lowercase;
 }
@@ -183,7 +197,7 @@
   color: var(--text);
 }
 .plugin-byline__version {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-faint);
   font-variant-numeric: tabular-nums;
 }
@@ -197,7 +211,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
   text-decoration: none;
   transition: color 120ms var(--ease-out);
@@ -286,7 +300,7 @@
 
 .inline-plugins-rail__error {
   flex: 0 0 100%;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--danger, #c33);
 }
 
@@ -300,7 +314,7 @@
   align-items: center;
 }
 .context-chip-strip__empty {
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 .context-chip-strip__chip {
@@ -313,7 +327,7 @@
   border-radius: var(--radius-pill);
   background: var(--c-tint);
   border: 1px solid color-mix(in srgb, var(--c-hue) 22%, var(--border));
-  font-size: 11px;
+  font-size: 12px;
   color: color-mix(in srgb, var(--c-hue) 70%, var(--text-strong));
   max-width: 240px;
   transition:
@@ -382,8 +396,8 @@
   flex: 0 0 auto;
 }
 .context-chip-strip__kind {
-  font-size: 9.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: color-mix(in srgb, var(--c-hue) 60%, var(--text-muted));
@@ -393,7 +407,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text);
-  font-weight: 550;
+  font-weight: 500;
 }
 .context-chip-strip__remove {
   appearance: none;
@@ -441,8 +455,8 @@
 .plugin-inputs-form__label {
   display: inline-flex;
   align-items: center;
-  font-size: 10px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-muted);
@@ -454,7 +468,7 @@
 }
 .plugin-inputs-form__input {
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 1.45;
   padding: 7px 9px;
   border: 1px solid var(--border);
@@ -471,7 +485,6 @@
 .plugin-inputs-form__input:focus {
   outline: none;
   border-color: var(--selected);
-  box-shadow: 0 0 0 3px var(--selected-soft);
   background: var(--bg-panel);
 }
 .plugin-inputs-form__input--textarea {
@@ -504,8 +517,8 @@ select.plugin-inputs-form__input {
   order: 1;
   text-transform: none;
   letter-spacing: 0;
-  font-size: 12.5px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text);
 }
 .plugin-inputs-form__file-shell {
@@ -519,7 +532,7 @@ select.plugin-inputs-form__input {
   border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--text-muted);
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
   transition:
     border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
@@ -532,7 +545,6 @@ select.plugin-inputs-form__input {
 }
 .plugin-inputs-form__file-shell:focus-within {
   border-color: var(--selected);
-  box-shadow: 0 0 0 3px var(--selected-soft);
 }
 .plugin-inputs-form__input--file {
   position: absolute;
@@ -607,8 +619,8 @@ select.plugin-inputs-form__input {
 }
 .composer-shell .context-chip-strip__label {
   max-width: 168px;
-  font-size: 11.5px;
-  font-weight: 550;
+  font-size: 12px;
+  font-weight: 500;
 }
 .composer-shell .context-chip-strip__remove {
   width: 18px;
@@ -631,7 +643,7 @@ select.plugin-inputs-form__input {
   grid-column: 1 / -1;
 }
 .composer-shell .plugin-inputs-form__label {
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1;
   letter-spacing: 0.07em;
   color: var(--text-soft);
@@ -651,7 +663,6 @@ select.plugin-inputs-form__input {
 .composer-shell .plugin-inputs-form__input:focus {
   border-color: var(--selected);
   background-color: var(--bg-panel);
-  box-shadow: 0 0 0 3px var(--selected-soft);
 }
 .composer-shell .plugin-inputs-form__input--textarea {
   min-height: 70px;

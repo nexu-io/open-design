@@ -88,6 +88,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
   EXPORT_PDF: "export-pdf",
   MINT_IMPORT_TOKEN: "mint-import-token",
   REGISTER_DESKTOP_AUTH: "register-desktop-auth",
+  REGISTER_WEB_URL: "register-web-url",
   RENDER_SLIDES: "render-slides",
   SCREENSHOT: "screenshot",
   SHUTDOWN: "shutdown",
@@ -98,6 +99,7 @@ export const SIDECAR_MESSAGES = Object.freeze({
 
 export const DESKTOP_UPDATE_ACTIONS = Object.freeze({
   CHECK: "check",
+  CLEAR_CACHE: "clear-cache",
   DOWNLOAD: "download",
   INSTALL: "install",
   STATUS: "status",
@@ -420,7 +422,7 @@ export type DesktopUpdateIncomingSnapshot = {
   version: string;
 };
 
-export type DesktopUpdateCacheLifecycleTrigger = "cold-start" | "next-version-ready";
+export type DesktopUpdateCacheLifecycleTrigger = "cold-start" | "manual" | "next-version-ready";
 
 export type DesktopUpdateReleaseLifecycleState =
   | "cleanup-deferred"
@@ -448,6 +450,30 @@ export type DesktopUpdateCacheSnapshot = {
   lifecycle?: DesktopUpdateCacheLifecycleSummary;
 };
 
+export const DESKTOP_UPDATE_REINSTALL_REASONS = Object.freeze({
+  LAUNCHER_SCHEMA: "launcher-schema",
+  OUTER_BELOW_MIN: "outer-below-min",
+  OUTER_VERSION_UNREADABLE: "outer-version-unreadable",
+} as const);
+
+export type DesktopUpdateReinstallReason =
+  (typeof DESKTOP_UPDATE_REINSTALL_REASONS)[keyof typeof DESKTOP_UPDATE_REINSTALL_REASONS];
+
+/**
+ * Present on a status snapshot when the release feed requires a full installer
+ * reinstall instead of an in-place payload update. `installedVersion` is the
+ * physically installed outer package version (not the running payload version);
+ * it is omitted when the outer bundle config could not be read. `url` is an
+ * optional operator-supplied explanation link from
+ * `control.launcher.version.url`.
+ */
+export type DesktopUpdateReinstallSnapshot = {
+  installedVersion?: string;
+  minVersion?: string;
+  reason: DesktopUpdateReinstallReason;
+  url?: string;
+};
+
 export type DesktopUpdateStatusSnapshot = {
   active?: DesktopUpdateReleaseSnapshot;
   arch: string;
@@ -470,6 +496,7 @@ export type DesktopUpdateStatusSnapshot = {
   paths?: DesktopUpdatePathSnapshot;
   platform: string;
   progress?: DesktopUpdateProgressSnapshot;
+  reinstall?: DesktopUpdateReinstallSnapshot;
   state: DesktopUpdateState;
   supported: boolean;
 };
@@ -485,7 +512,10 @@ export type SidecarShutdownMessage = { type: typeof SIDECAR_MESSAGES.SHUTDOWN };
 export type DesktopEvalMessage = { input: DesktopEvalInput; type: typeof SIDECAR_MESSAGES.EVAL };
 export type DesktopScreenshotMessage = { input: DesktopScreenshotInput; type: typeof SIDECAR_MESSAGES.SCREENSHOT };
 export type DesktopConsoleMessage = { type: typeof SIDECAR_MESSAGES.CONSOLE };
-export type DesktopShowMessage = { type: typeof SIDECAR_MESSAGES.SHOW };
+export type DesktopShowInput = {
+  deeplinkUrl?: string;
+};
+export type DesktopShowMessage = { input?: DesktopShowInput; type: typeof SIDECAR_MESSAGES.SHOW };
 export type DesktopClickMessage = { input: DesktopClickInput; type: typeof SIDECAR_MESSAGES.CLICK };
 export type DesktopExportPdfMessage = { input: DesktopExportPdfInput; type: typeof SIDECAR_MESSAGES.EXPORT_PDF };
 export type DesktopRenderSlidesMessage = { input: DesktopRenderSlidesInput; type: typeof SIDECAR_MESSAGES.RENDER_SLIDES };
@@ -528,11 +558,30 @@ export type MintImportTokenResult =
   | { ok: false; code: "DESKTOP_AUTH_INACTIVE"; message: string; retryable: false }
   | { ok: false; code: "DESKTOP_AUTH_PENDING"; message: string; retryable: true };
 
+/**
+ * Registers the browser-facing URL after a packaged web sidecar has bound its
+ * dynamic port. The message travels over the namespace-scoped daemon IPC, so
+ * it cannot accidentally update another packaged runtime.
+ */
+export type RegisterWebUrlInput = {
+  url: string;
+};
+
+export type RegisterWebUrlMessage = {
+  input: RegisterWebUrlInput;
+  type: typeof SIDECAR_MESSAGES.REGISTER_WEB_URL;
+};
+
+export type RegisterWebUrlResult = {
+  accepted: true;
+};
+
 export type DaemonSidecarMessage =
   | SidecarStatusMessage
   | SidecarShutdownMessage
   | RegisterDesktopAuthMessage
-  | MintImportTokenMessage;
+  | MintImportTokenMessage
+  | RegisterWebUrlMessage;
 export type WebSidecarMessage = SidecarStatusMessage | SidecarShutdownMessage;
 export type DesktopSidecarMessage =
   | SidecarStatusMessage
@@ -733,6 +782,39 @@ function normalizeMintImportTokenInput(input: unknown): MintImportTokenInput {
   return { baseDir: normalizeNonEmptyString(value.baseDir, "mint-import-token baseDir") };
 }
 
+function normalizeRegisterWebUrlInput(input: unknown): RegisterWebUrlInput {
+  const value = assertObject(input, "register-web-url input");
+  assertKnownKeys(value, ["url"], "register-web-url input");
+  const raw = normalizeNonEmptyString(value.url, "register-web-url url");
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error("register-web-url url must be an absolute URL");
+  }
+  if (parsed.protocol !== "http:") {
+    throw new Error("register-web-url url must use HTTP");
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname !== "127.0.0.1" && hostname !== "localhost" && hostname !== "[::1]") {
+    throw new Error("register-web-url url must use a loopback host");
+  }
+  const port = Number(parsed.port);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new Error("register-web-url url must include a valid explicit port");
+  }
+  if (
+    parsed.username
+    || parsed.password
+    || parsed.pathname !== "/"
+    || parsed.search
+    || parsed.hash
+  ) {
+    throw new Error("register-web-url url must be a bare origin");
+  }
+  return { url: parsed.origin };
+}
+
 function normalizeBoolean(value: unknown, label: string): boolean {
   if (typeof value !== "boolean") throw new Error(`${label} must be a boolean`);
   return value;
@@ -827,7 +909,7 @@ function normalizeDesktopExportArtifactInput(input: unknown): DesktopExportArtif
   };
 }
 
-function isDesktopUpdateAction(value: unknown): value is DesktopUpdateAction {
+export function isDesktopUpdateAction(value: unknown): value is DesktopUpdateAction {
   return Object.values(DESKTOP_UPDATE_ACTIONS).includes(value as DesktopUpdateAction);
 }
 
@@ -838,6 +920,17 @@ function normalizeDesktopUpdateInput(input: unknown): DesktopUpdateInput {
     throw new Error(`unsupported desktop update action: ${String(value.action)}`);
   }
   return { action: value.action };
+}
+
+function normalizeDesktopShowInput(input: unknown): DesktopShowInput {
+  const value = assertObject(input, "desktop show input");
+  assertKnownKeys(value, ["deeplinkUrl"], "desktop show input");
+  if (value.deeplinkUrl == null) return {};
+  const deeplinkUrl = normalizeNonEmptyString(value.deeplinkUrl, "desktop show deeplinkUrl");
+  if (!deeplinkUrl.startsWith("opendesign://")) {
+    throw new Error("desktop show deeplinkUrl must use the opendesign scheme");
+  }
+  return { deeplinkUrl };
 }
 
 function normalizeMessageType(value: unknown, label: string): string {
@@ -862,6 +955,10 @@ export function normalizeDaemonSidecarMessage(input: unknown): DaemonSidecarMess
     assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
     return { input: normalizeMintImportTokenInput(value.input), type };
   }
+  if (type === SIDECAR_MESSAGES.REGISTER_WEB_URL) {
+    assertKnownKeys(value, ["input", "type"], "daemon sidecar message");
+    return { input: normalizeRegisterWebUrlInput(value.input), type };
+  }
   throw new SidecarContractError(SIDECAR_ERROR_CODES.UNKNOWN_MESSAGE, `unknown daemon sidecar message: ${type}`);
 }
 
@@ -882,9 +979,13 @@ export function normalizeDesktopSidecarMessage(input: unknown): DesktopSidecarMe
     case SIDECAR_MESSAGES.STATUS:
     case SIDECAR_MESSAGES.SHUTDOWN:
     case SIDECAR_MESSAGES.CONSOLE:
-    case SIDECAR_MESSAGES.SHOW:
       assertKnownKeys(value, ["type"], "desktop sidecar message");
       return { type };
+    case SIDECAR_MESSAGES.SHOW:
+      assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
+      return value.input == null
+        ? { type }
+        : { input: normalizeDesktopShowInput(value.input), type };
     case SIDECAR_MESSAGES.EVAL:
       assertKnownKeys(value, ["input", "type"], "desktop sidecar message");
       return { input: normalizeDesktopEvalInput(value.input), type };

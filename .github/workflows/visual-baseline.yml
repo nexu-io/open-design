@@ -27,6 +27,8 @@ jobs:
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
+        with:
+          save-pnpm-cache: 'true'
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
@@ -74,6 +76,7 @@ jobs:
           name: visual-baseline-${{ github.sha }}
           path: |
             e2e/ui/reports/visual-screenshots
+            e2e/ui/reports/visual-test-results
             e2e/ui/reports/visual-results.json
             e2e/ui/reports/visual-report/baseline-manifest.json
           if-no-files-found: ignore

@@ -179,7 +179,7 @@
     "cards": [
       { "badge": "Deck",     "num": "Nº 01", "year": "2026", "title": "Magazine Decks",     "body": "Editorial-grade slide decks with <code class='code-inline sm'>guizang-ppt</code>. Magazine layout, WebGL hero.", "href": "https://github.com/nexu-io/open-design/tree/main/skills/guizang-ppt" },
       { "badge": "Media",    "num": "Nº 02", "year": "2026", "title": "Synthetic Matter",   "body": "Gpt-image-2 + Seedance + HyperFrames. Image, video, audio — same chat surface as code.",                       "href": "https://github.com/nexu-io/open-design/tree/main/skills/hyperframes" },
-      { "badge": "Loop",     "num": "Nº 03", "year": "2026", "title": "Prompt Choreography","body": "The interactive question form pops before a single pixel is improvised. 30s of radios beats 30min of redirects.","href": "https://github.com/nexu-io/open-design/tree/main/skills/design-brief" },
+      { "badge": "Loop",     "num": "Nº 03", "year": "2026", "title": "Prompt Choreography","body": "When unresolved choices would materially change the result, a focused question form keeps the next iteration on track.","href": "https://github.com/nexu-io/open-design/tree/main/skills/design-brief" },
       { "badge": "Critique", "num": "Nº 04", "year": "2026", "title": "Visual Reasoning",   "body": "5-dim self-critique gates every artifact: philosophy · hierarchy · execution · specificity · restraint.",       "href": "https://github.com/nexu-io/open-design/tree/main/skills/critique" },
       { "badge": "Runtime",  "num": "Nº 05", "year": "2026", "title": "Soft Systems",       "body": "Sandboxed iframe preview. Streaming todos. Real-cwd filesystem. Adaptive loops between human and machine.",      "href": "https://github.com/nexu-io/open-design/tree/main/apps/daemon" }
     ],
@@ -199,7 +199,7 @@
     "right": "Every stage is iterative, visual, and research-driven — composable files, not opaque prompts.",
     "steps": [
       { "num": "01", "title": "Detect",   "body": "The daemon scans your $PATH for 12 coding agents and auto-loads 31 skills + 72 systems on boot." },
-      { "num": "02", "title": "Discover", "body": "Turn 1 is a question form — surface, audience, tone, scale, brand context. Locked in 30 seconds." },
+      { "num": "02", "title": "Discover", "body": "Clarify only when it matters — focused questions for unresolved surface, audience, tone, scale, or brand context." },
       { "num": "03", "title": "Direct",   "body": "Pick one of 5 deterministic visual directions. Palette in OKLch, font stack, layout posture cues." },
       { "num": "04", "title": "Deliver",  "body": "The agent writes to disk, you preview in a sandboxed iframe, export HTML / PDF / PPTX / ZIP / Markdown." }
     ],

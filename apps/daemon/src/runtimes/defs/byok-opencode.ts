@@ -14,8 +14,16 @@ export const byokOpenCodeAgentDef = {
   versionArgs: ['--version'],
   ...OPENCODE_PERMISSION_CAPABILITY,
   fallbackModels: [DEFAULT_MODEL_OPTION],
-  buildArgs: (_prompt, _imagePaths, _extra, options = {}) => {
+  buildArgs: (_prompt, _imagePaths, _extra, options = {}, runtimeContext = {}) => {
     const args = ['run', '--format', 'json'];
+    if (typeof runtimeContext.cwd === 'string' && runtimeContext.cwd.length > 0) {
+      // OpenCode promotes nested directories to the enclosing Git worktree
+      // unless its own directory flag is explicit. Managed Open Design
+      // projects live under the development repository in local runs, so
+      // relying on spawn({ cwd }) alone can make Write/Edit target the repo
+      // root instead of the selected project.
+      args.push('--dir', runtimeContext.cwd);
+    }
     appendOpenCodePermissionBypass(args, 'byok-opencode');
     const model = opencodeByokModelId(options.model);
     if (model) args.push('-m', model);

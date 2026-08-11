@@ -26,11 +26,14 @@ import { x as tarExtract } from 'tar';
 import {
   defaultRegistryRoots,
   deleteInstalledPlugin,
+  getInstalledPlugin,
   resolvePluginFolder,
   upsertInstalledPlugin,
   type ResolveOptions,
   type RegistryRoots,
 } from './registry.js';
+import { deleteWorkspaceResourceByResourceId } from '../db.js';
+import { resolveGithubRepositoryUrl } from '../github-install-source.js';
 import type {
   InstalledPluginRecord,
   MarketplaceTrust,
@@ -59,9 +62,18 @@ export interface InstallErrorEvent {
   kind: 'error';
   message: string;
   warnings: string[];
+  code?: PluginInstallErrorCode;
 }
 
 export type InstallEvent = InstallProgressEvent | InstallSuccessEvent | InstallErrorEvent;
+
+export type PluginInstallErrorCode =
+  | 'BAD_REQUEST'
+  | 'FETCH_FAILED'
+  | 'INVALID_ARCHIVE'
+  | 'INVALID_MANIFEST'
+  | 'CONFLICT'
+  | 'INTERNAL_ERROR';
 
 export interface InstallOptions {
   source: string;
@@ -92,6 +104,10 @@ export interface InstallOptions {
   // Optional runtime-data lockfile path. Daemon routes pass
   // `<OD_DATA_DIR>/od-plugin-lock.json`; tests can point at temp dirs.
   lockfilePath?: string;
+  // Called after manifest identity is known but before existing bytes or the
+  // installed_plugins row can be replaced. Workspace-aware callers use this
+  // to fail closed when the global install slot belongs to another member.
+  allowReplacePlugin?: (pluginId: string) => boolean | string;
 }
 
 export type ArchiveFetcher = (url: string) => Promise<{
@@ -132,21 +148,72 @@ interface GithubContentsBudget {
   maxBytes: number;
 }
 
+/** Keep installer diagnostics finite so SSE clients never use paths or URLs as analytics keys. */
+export function classifyPluginInstallError(message: string): PluginInstallErrorCode {
+  if (/cannot be replaced|owned by another workspace member|destination folder already exists/i.test(message)) {
+    return 'CONFLICT';
+  }
+  if (/files? are required|only \.tar\.gz|only \.tgz|source folder not found|source path is not a directory|github repository urls|invalid upload path|unsafe upload path|exceeds? (?:size cap of )?\d+ (?:bytes|mib)|too large/i.test(message)) {
+    return 'BAD_REQUEST';
+  }
+  if (/network|fetch failed|download failed|private address|timed?\s*out|econn|enotfound/i.test(message)) {
+    return 'FETCH_FAILED';
+  }
+  if (/manifest|plugin id|installable archive|re-parsing destination|contains no skill\.md/i.test(message)) {
+    return 'INVALID_MANIFEST';
+  }
+  if (/archive|zip|symbolic|hard links?|path-traversal|integrity mismatch/i.test(message)) {
+    return 'INVALID_ARCHIVE';
+  }
+  if (/malformed github/i.test(message)) {
+    return 'BAD_REQUEST';
+  }
+  return 'INTERNAL_ERROR';
+}
+
+async function* withStableInstallErrorCodes(
+  events: AsyncIterable<InstallEvent>,
+): AsyncGenerator<InstallEvent, void, void> {
+  try {
+    for await (const event of events) {
+      yield event.kind === 'error' && !event.code
+        ? { ...event, code: classifyPluginInstallError(event.message) }
+        : event;
+    }
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    yield {
+      kind: 'error',
+      message,
+      warnings: [],
+      code: classifyPluginInstallError(message),
+    };
+  }
+}
+
 // Top-level dispatcher. Picks the backend off the source string and yields
 // the same InstallEvent stream regardless of where the bytes came from.
 export async function* installPlugin(
   db: SqliteDb,
   opts: InstallOptions,
 ): AsyncGenerator<InstallEvent, void, void> {
-  if (opts.source.startsWith('github:')) {
-    yield* installFromGithub(db, opts);
+  const browserGithub = resolveGithubRepositoryUrl(opts.source);
+  if (browserGithub.kind === 'invalid') {
+    yield { kind: 'error', message: browserGithub.error, warnings: [], code: 'BAD_REQUEST' };
     return;
   }
-  if (HTTPS_SOURCE_RE.test(opts.source)) {
-    yield* installFromHttpsArchive(db, opts);
+  const normalizedOpts = browserGithub.kind === 'repository'
+    ? { ...opts, source: browserGithub.source }
+    : opts;
+  if (normalizedOpts.source.startsWith('github:')) {
+    yield* withStableInstallErrorCodes(installFromGithub(db, normalizedOpts));
     return;
   }
-  yield* installFromLocalFolder(db, opts);
+  if (HTTPS_SOURCE_RE.test(normalizedOpts.source)) {
+    yield* withStableInstallErrorCodes(installFromHttpsArchive(db, normalizedOpts));
+    return;
+  }
+  yield* withStableInstallErrorCodes(installFromLocalFolder(db, normalizedOpts));
 }
 
 // `github:owner/repo[@ref][/subpath]` → codeload tarball.
@@ -694,7 +761,12 @@ export async function* installFromLocalFolder(
   }, opts);
   const probe = await resolvePluginFolder(probeOptions);
   if (!probe.ok) {
-    yield { kind: 'error', message: probe.errors.join('; '), warnings: probe.warnings };
+    yield {
+      kind: 'error',
+      message: probe.errors.join('; '),
+      warnings: probe.warnings,
+      code: 'INVALID_MANIFEST',
+    };
     return;
   }
   warnings.push(...probe.warnings);
@@ -704,6 +776,20 @@ export async function* installFromLocalFolder(
     return;
   }
   const destFolder = path.join(roots.userPluginsRoot, pluginId);
+
+  if (fs.existsSync(destFolder) || getInstalledPlugin(db, pluginId)) {
+    const replacement = opts.allowReplacePlugin?.(pluginId);
+    if (typeof replacement === 'string' || replacement === false) {
+      yield {
+        kind: 'error',
+        message: typeof replacement === 'string'
+          ? replacement
+          : `Plugin "${pluginId}" cannot be replaced from this workspace`,
+        warnings,
+      };
+      return;
+    }
+  }
 
   // Block overwriting a foreign plugin id. The destination folder may
   // contain a previous version of the same id, in which case we replace it.
@@ -735,7 +821,12 @@ export async function* installFromLocalFolder(
   const parsed = await resolvePluginFolder(parsedOptions);
   if (!parsed.ok) {
     await fsp.rm(destFolder, { recursive: true, force: true }).catch(() => undefined);
-    yield { kind: 'error', message: parsed.errors.join('; '), warnings: [...warnings, ...parsed.warnings] };
+    yield {
+      kind: 'error',
+      message: parsed.errors.join('; '),
+      warnings: [...warnings, ...parsed.warnings],
+      code: 'INVALID_MANIFEST',
+    };
     return;
   }
   warnings.push(...parsed.warnings);
@@ -798,6 +889,24 @@ export async function uninstallPlugin(
     return { ok: false, warning: `Plugin id '${id}' is not a safe folder name` };
   }
   const removed = deleteInstalledPlugin(db, id);
+  // Clean up the workspace_resources binding row too — this table has no
+  // FOREIGN KEY ... ON DELETE CASCADE (a resource_id can point at any of
+  // several tables depending on resource_type, so SQLite cannot enforce a
+  // polymorphic FK), so skipping this would leave an orphan binding that
+  // reinstalling the same plugin id would find and silently reuse (stale
+  // workspace/visibility). A DELETE against a row that never existed is a
+  // no-op, so this is safe to call unconditionally in production (every real
+  // daemon db goes through db.ts's full `migrate()`, which always creates
+  // `workspace_resources`). Guarded here only for narrow-schema test
+  // doubles that run `migratePlugins(db)` in isolation (e.g.
+  // tests/plugins-installer.test.ts) without the rest of db.ts's schema —
+  // mirrors the same "table may not exist yet" tolerance server.ts's
+  // `collectBundledScenarios` already uses for `installed_plugins`.
+  try {
+    deleteWorkspaceResourceByResourceId(db, 'plugin', id);
+  } catch {
+    // Table not present in this db — nothing to clean up.
+  }
   const folder = path.join(roots.userPluginsRoot, id);
   // Defence in depth: even a SAFE_BASENAME-passing id must resolve to a direct
   // child of the registry root. If normalization lands anywhere else, refuse.

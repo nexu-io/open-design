@@ -1,5 +1,5 @@
 name: Setup Playwright
-description: Restore Playwright browser cache and install browsers
+description: Use a preseeded Nexu browser when available, otherwise restore the browser cache and install browsers
 
 inputs:
   package-json-path:
@@ -16,8 +16,40 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Detect preinstalled Playwright
+      id: preinstalled-playwright
+      shell: bash
+      env:
+        RUNNER_LABELS_JSON: ${{ inputs.runner-labels }}
+      run: |
+        preinstalled_enabled=false
+
+        # The ARC tools image carries both the OS dependencies and Chromium.
+        # Keep this opt-in to the named Nexu profiles so a hosted runner with
+        # a restored browser cache still receives its OS dependencies.
+        case "$RUNNER_LABELS_JSON" in
+          *'"nexu-runners-'*)
+            if [ -n "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && [ -d "$PLAYWRIGHT_BROWSERS_PATH" ]; then
+              chromium_bin="$(find "$PLAYWRIGHT_BROWSERS_PATH" -type f \
+                \( -name chrome -o -name chromium -o -name chrome-headless-shell \) \
+                -perm -111 -print -quit 2>/dev/null || true)"
+              if [ -n "$chromium_bin" ]; then
+                preinstalled_enabled=true
+              fi
+            fi
+            ;;
+        esac
+
+        echo "enabled=$preinstalled_enabled" >> "$GITHUB_OUTPUT"
+        if [ "$preinstalled_enabled" = "true" ]; then
+          echo "Using the Playwright browser preseeded in the Nexu runner image."
+        else
+          echo "No preseeded Playwright browser detected; using the workflow install path."
+        fi
+
     - name: Detect persistent Playwright cache
       id: persistent-playwright-cache
+      if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' }}
       shell: bash
       env:
         RUNNER_LABELS_JSON: ${{ inputs.runner-labels }}
@@ -41,6 +73,7 @@ runs:
 
     - name: Resolve Playwright version
       id: playwright-version
+      if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' }}
       shell: bash
       run: |
         version=$(node -p "const pkg = require('./${{ inputs.package-json-path }}'); const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }; (deps['@playwright/test'] || deps.playwright || '').replace(/[^0-9.]/g,'')")
@@ -51,12 +84,22 @@ runs:
         echo "version=$version" >> "$GITHUB_OUTPUT"
 
     - name: Cache Playwright browser binaries
-      if: ${{ steps.persistent-playwright-cache.outputs.enabled != 'true' }}
+      if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' && steps.persistent-playwright-cache.outputs.enabled != 'true' }}
       uses: actions/cache@v5.0.5
       with:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
 
+    - name: Ensure preinstalled Playwright browser revision
+      if: ${{ steps.preinstalled-playwright.outputs.enabled == 'true' }}
+      shell: bash
+      env:
+        PACKAGE_JSON_PATH: ${{ inputs.package-json-path }}
+      run: |
+        package_dir="${PACKAGE_JSON_PATH%/*}"
+        pnpm -C "$package_dir" exec playwright install chromium
+
     - name: Install Playwright browsers
+      if: ${{ steps.preinstalled-playwright.outputs.enabled != 'true' }}
       shell: bash
       run: ${{ inputs.install-command }}

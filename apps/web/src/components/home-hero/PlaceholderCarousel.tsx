@@ -37,12 +37,18 @@ interface Props {
   active: boolean;
   // Fired whenever the displayed scenario changes (including on first show).
   onScenarioChange: (scenario: PlaceholderScenario) => void;
+  // The user has put a cursor in the editor. Typing animation stops and the
+  // overlay hides: once someone is about to type, a second stream of text
+  // animating under their caret reads as a second cursor (#118). The parent
+  // keeps `active` true so Send still submits the current scenario from an
+  // empty composer — this only silences the animation.
+  paused?: boolean;
 }
 
 // Pointer-events-none overlay that types the rotating scenario placeholders
 // over the (empty) Lexical editor. It owns the per-character animation state so
 // the frequent re-renders stay confined here and never touch the editor.
-export function PlaceholderCarousel({ scenarios, active, onScenarioChange }: Props) {
+export function PlaceholderCarousel({ scenarios, active, paused = false, onScenarioChange }: Props) {
   const reducedMotion = usePrefersReducedMotion();
   const [state, setState] = useState(initialTypewriterState);
   const onChangeRef = useRef(onScenarioChange);
@@ -68,7 +74,7 @@ export function PlaceholderCarousel({ scenarios, active, onScenarioChange }: Pro
 
   // Report the active scenario up on every index change (incl. first show).
   useEffect(() => {
-    if (!active || scenarios.length === 0) return;
+    if (!active || paused || scenarios.length === 0) return;
     const scenario = scenarios[state.index % scenarios.length];
     if (scenario && reportedIndexRef.current !== state.index) {
       reportedIndexRef.current = state.index;
@@ -80,7 +86,7 @@ export function PlaceholderCarousel({ scenarios, active, onScenarioChange }: Pro
   // state re-runs this effect, whose cleanup clears the prior timer — so the
   // chain self-sustains without overlapping timers (StrictMode-safe).
   useEffect(() => {
-    if (!active || scenarios.length === 0) return;
+    if (!active || paused || scenarios.length === 0) return;
     const scenario = scenarios[state.index % scenarios.length];
     const length = scenario?.text.length ?? 0;
     const { state: nextState, delayMs } = advanceTypewriter(
@@ -92,9 +98,9 @@ export function PlaceholderCarousel({ scenarios, active, onScenarioChange }: Pro
     );
     const timer = window.setTimeout(() => setState(nextState), Math.max(16, delayMs));
     return () => window.clearTimeout(timer);
-  }, [active, state, scenarios, reducedMotion]);
+  }, [active, paused, state, scenarios, reducedMotion]);
 
-  if (!active || scenarios.length === 0) return null;
+  if (!active || paused || scenarios.length === 0) return null;
   const scenario = scenarios[state.index % scenarios.length];
   if (!scenario) return null;
   const visible = reducedMotion ? scenario.text : scenario.text.slice(0, state.charCount);

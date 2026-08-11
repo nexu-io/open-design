@@ -216,6 +216,7 @@ function mockDataTransfer(): DataTransfer {
 }
 
 beforeEach(() => {
+  sessionStorage.clear();
   MockResizeObserver.instances = [];
   vi.stubGlobal('ResizeObserver', MockResizeObserver);
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
@@ -1016,6 +1017,155 @@ Expected output:
       ],
     );
   });
+
+  it('hides the stale pinned todo after continuing its remaining tasks', async () => {
+    const onContinueRemainingTasks = vi.fn(() => true);
+    const messages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        createdAt: 1,
+        endedAt: 2,
+        runStatus: 'failed',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'todo-1',
+            name: 'TodoWrite',
+            input: {
+              todos: [
+                { content: 'Build prototype', status: 'completed' },
+                { content: 'Run QA', status: 'pending' },
+              ],
+            },
+          },
+        ],
+      },
+    ];
+
+    const { container, rerender } = render(
+      <ChatPane
+        messages={messages}
+        streaming={false}
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+        onContinueRemainingTasks={onContinueRemainingTasks}
+      />,
+    );
+
+    fireEvent.click(container.querySelector<HTMLButtonElement>('.op-todo-continue')!);
+
+    expect(onContinueRemainingTasks).toHaveBeenCalledOnce();
+    await waitFor(() => {
+      expect(container.querySelector('.chat-pinned-todo')).toBeNull();
+    });
+
+    rerender(
+      <ChatPane
+        messages={[
+          ...messages,
+          {
+            id: 'assistant-2',
+            role: 'assistant',
+            content: '',
+            createdAt: 3,
+            runStatus: 'running',
+            events: [
+              {
+                kind: 'tool_use',
+                id: 'todo-2',
+                name: 'TodoWrite',
+                input: {
+                  todos: [
+                    { content: 'Build prototype', status: 'completed' },
+                    { content: 'Run QA', status: 'pending' },
+                  ],
+                },
+              },
+            ],
+          },
+        ]}
+        streaming
+        error={null}
+        projectId="project-1"
+        projectFiles={[]}
+        onEnsureProject={async () => 'project-1'}
+        onSend={vi.fn()}
+        onStop={vi.fn()}
+        conversations={conversations}
+        activeConversationId="conv-1"
+        onSelectConversation={vi.fn()}
+        onDeleteConversation={vi.fn()}
+        projectMetadata={projectMetadata}
+        onContinueRemainingTasks={onContinueRemainingTasks}
+      />,
+    );
+
+    expect(container.querySelector('.chat-pinned-todo')).not.toBeNull();
+  });
+
+  it('keeps a continued todo snapshot hidden after the conversation remounts', async () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: '',
+        createdAt: 1,
+        endedAt: 2,
+        runStatus: 'failed',
+        events: [
+          {
+            kind: 'tool_use',
+            id: 'todo-1',
+            name: 'update_plan',
+            input: {
+              plan: [
+                { step: 'Build prototype', status: 'completed' },
+                { step: 'Run QA', status: 'pending' },
+              ],
+            },
+          },
+        ],
+      },
+    ];
+    const props = {
+      messages,
+      streaming: false,
+      error: null,
+      projectId: 'project-1',
+      projectFiles: [],
+      onEnsureProject: async () => 'project-1',
+      onSend: vi.fn(),
+      onStop: vi.fn(),
+      conversations,
+      activeConversationId: 'conv-1',
+      onSelectConversation: vi.fn(),
+      onDeleteConversation: vi.fn(),
+      projectMetadata,
+      onContinueRemainingTasks: vi.fn(() => true),
+    };
+
+    const firstMount = render(<ChatPane {...props} />);
+    fireEvent.click(firstMount.container.querySelector<HTMLButtonElement>('.op-todo-continue')!);
+    await waitFor(() => {
+      expect(firstMount.container.querySelector('.chat-pinned-todo')).toBeNull();
+    });
+    firstMount.unmount();
+
+    const secondMount = render(<ChatPane {...props} />);
+    expect(secondMount.container.querySelector('.chat-pinned-todo')).toBeNull();
+  });
+
   it('shows several queued prompts above the composer with compact controls', () => {
     const onRemoveQueuedSend = vi.fn();
     const onSendQueuedNow = vi.fn();

@@ -183,8 +183,8 @@ export function metadataForHomeMediaComposer(
     : undefined;
 
   // Media surfaces no longer seed ratio / duration / model / audio kind from
-  // the composer footer — those are asked for by the agent during the run
-  // (system.ts prints "(unknown — ask: …)" when a field is unset). We only
+  // the composer footer. The prompt marks them as not provided, infers safe
+  // defaults, and asks only when a choice materially changes the output. We
   // seed `kind` (+ the hyperframes route discriminator) and any picked prompt
   // template, mirroring how prototype/deck defer their settings.
   if (surface === 'image') {

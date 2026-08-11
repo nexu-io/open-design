@@ -16,7 +16,7 @@ This guide is about using Open Design as a **real, versionable design workflow**
 
 ## What is Open Design?
 
-Open Design is a local-first, open-source design app that connects to the coding agent you already use. Instead of shipping its own model, it detects tools like Claude Code, Codex, Cursor, Gemini, OpenCode, and Qwen Code from your path and uses that agent as the design engine — with an Anthropic API (BYOK) fallback if none are installed. It's Apache-2.0, and the only cost is whatever model you choose. As AICodeKing puts it, it's "a design shell around the agents you already have."
+Open Design is a local-first, open-source design app that connects to the coding agent you already use. Instead of shipping its own model, it detects tools like Claude Code, Codex, Cursor, OpenCode, and Qwen Code from your path and uses that agent as the design engine — with configured BYOK providers routed through an isolated OpenCode adapter when no local CLI is selected. It's Apache-2.0, and the only cost is whatever model you choose. As AICodeKing puts it, it's "a design shell around the agents you already have."
 
 ## Why it's a team workflow, not just a chat box
 

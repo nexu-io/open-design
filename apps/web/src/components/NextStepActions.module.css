@@ -1,11 +1,17 @@
 .root {
   display: flex;
   flex-direction: column;
-  margin-top: 8px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  font-size: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent-tint) 50%, var(--bg-panel)) 0%,
+    var(--bg-panel) 60%
+  );
   animation: next-step-in 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
 }
 
@@ -24,6 +30,14 @@
   .root {
     animation: none;
   }
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 
 /* One flat row: Share + iteration directions all sit at the same level. */
@@ -65,10 +79,54 @@
 /* Featured design-toolbox follow-up rows — the toolbox's primary entry point
    now that it left the "+" menu. Each row reads as a suggested next step;
    hovering reveals a detail card, clicking seeds the composer. */
+/* Quick-access pills pinned above the action list: jump straight to the
+   composer "+" menu's 扩展 / 设计百宝箱 flyouts. */
+.quickPills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Placement variant for the pills' home above the composer input (ChatPane).
+   No own bottom margin: `.composer` below already carries 8px padding-top,
+   which IS the intended 8px visible gap — adding margin here doubled it.
+   The 8px horizontal inset mirrors `.composer`'s own horizontal padding so
+   the first pill's left edge lines up with the grey input frame below. */
+.composerQuickPills {
+  margin: 0 8px;
+  /* Above the standalone popovers' click-catcher backdrop (z 89) so the
+     pills stay hoverable while a panel is open — hover-switching between
+     插件 and 设计百宝箱 swaps panels without an extra dismiss click. */
+  position: relative;
+  z-index: 91;
+}
+
+.quickPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 11px;
+  font-size: 12px;
+  color: var(--text-default);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.quickPill:hover {
+  background: var(--bg-subtle);
+  border-color: var(--border);
+}
+
+
 .toolboxList {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 6px;
 }
 
 .toolboxRowWrap {
@@ -79,30 +137,26 @@
 .moreRow {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
-  min-height: 44px;
-  padding: 10px 2px;
-  font-size: 13.5px;
+  padding: 6px 10px;
+  font-size: 12px;
   color: var(--text-default);
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--border-soft);
-  border-radius: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft);
+  /* Full capsule, matching the quick pills above the composer. */
+  border-radius: 999px;
   cursor: pointer;
   text-align: left;
   transition:
     background 140ms cubic-bezier(0.23, 1, 0.32, 1),
-    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-
-.toolboxList > :last-child {
-  border-bottom-color: transparent;
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 .toolboxRow:hover,
 .moreRow:hover {
-  background: var(--bg-subtle);
+  background: var(--accent-tint);
+  border-color: var(--border);
 }
 
 .toolboxRow:disabled,
@@ -113,7 +167,8 @@
 
 .toolboxRow:disabled:hover,
 .moreRow:disabled:hover {
-  background: transparent;
+  background: var(--bg-panel);
+  border-color: var(--border-soft);
 }
 
 .toolboxRow:focus-visible,
@@ -124,9 +179,8 @@
 
 .toolboxRowIcon {
   flex: none;
-  width: 16px;
-  height: 16px;
-  color: var(--text-muted);
+  /* Brand green, same accent as the quick-pill icons. */
+  color: var(--brand);
 }
 
 .toolboxRowText {
@@ -146,14 +200,17 @@
 }
 
 .toolboxRowDescription {
-  display: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--text-muted);
 }
 
 .toolboxRowArrow {
   flex: none;
-  width: 16px;
-  height: 16px;
-  color: var(--text-soft);
+  color: var(--text-muted);
 }
 
 .moreRow .toolboxRowTitle {
@@ -168,7 +225,7 @@
   z-index: 1000;
   width: 240px;
   padding: 10px 12px;
-  border: 1px solid var(--border-strong, var(--border));
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   background: var(--bg-panel);
   box-shadow:
@@ -178,7 +235,7 @@
 }
 
 .detailTitle {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-default);
 }
@@ -198,14 +255,14 @@
 
 .detailBadge {
   margin-top: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
 .divider {
   height: 1px;
   margin: 2px 0;
-  background: var(--border);
+  background: var(--border-soft);
 }
 
 .openDesignRow {
@@ -219,7 +276,7 @@
   gap: 6px;
   padding: 5px 10px;
   background: var(--bg-subtle);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-soft);
   border-radius: 8px;
   font-size: 12px;
   color: var(--text-default);
@@ -231,7 +288,7 @@
 
 .openDesignButton:hover:not(:disabled) {
   background: var(--bg-default);
-  border-color: var(--border-strong);
+  border-color: var(--border-soft);
 }
 
 .openDesignButton:disabled {
@@ -260,18 +317,18 @@
   width: 200px;
 }
 .flyoutToolbox {
-  width: 286px;
+  width: 300px;
   max-height: min(70vh, 500px);
-  padding: 8px;
+  padding: 10px;
 }
 
 .toolboxFlyoutTitle {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 1px 4px 6px;
-  font-size: 13px;
-  font-weight: 650;
+  gap: 8px;
+  padding: 2px 4px 8px;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-default);
 }
 
@@ -282,12 +339,11 @@
 .flyoutSearch {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 4px 7px;
-  margin-bottom: 6px;
+  gap: 8px;
+  padding: 7px 9px;
+  margin-bottom: 8px;
   border: 1px solid var(--border-strong, var(--border));
-  border-radius: 8px;
+  border-radius: var(--radius-large, 8px);
   color: var(--text-muted);
   background: var(--bg-default);
 }
@@ -296,8 +352,7 @@
   min-width: 0;
   border: 0;
   background: transparent;
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
   color: var(--text-default);
   outline: none;
 }
@@ -307,8 +362,8 @@
 }
 .flyoutSectionLabel {
   padding: 8px 8px 4px;
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.02em;
   color: var(--text-muted);
 }

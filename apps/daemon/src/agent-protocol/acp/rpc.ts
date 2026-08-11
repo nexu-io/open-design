@@ -88,6 +88,27 @@ export function rpcErrorRetryable(data: unknown): boolean | undefined {
   return typeof details?.retryable === 'boolean' ? details.retryable : undefined;
 }
 /**
+ * Fallback retryability inference from the error message/details text, used when
+ * the runtime does not set an explicit `retryable` field. `request_too_large`
+ * (the prompt must shrink) is non-retryable; upstream transport blips
+ * (`stream idle timeout`, `overloaded`, gateway/service outages) are retryable.
+ * Returns `undefined` when nothing matches so callers keep their own default.
+ */
+export function inferRpcErrorRetryable(message: string, data: unknown): boolean | undefined {
+  const details = asObject(data);
+  const text = [
+    message,
+    details ? JSON.stringify(details) : '',
+  ].join('\n');
+  if (/\b(request_too_large|request body exceeds configured limit)\b/i.test(text)) {
+    return false;
+  }
+  if (/\b(upstream_error|stream idle timeout|no data received within configured window|temporarily unavailable|overloaded|gateway timeout|service unavailable)\b/i.test(text)) {
+    return true;
+  }
+  return undefined;
+}
+/**
  * Promotes an opencode `ROLE_MARKER_HALLUCINATION` error embedded in an ACP
  * JSON-RPC `error.data` payload into a canonical Open Design error object.
  * Returns `null` when the data payload does not match the expected shape.
@@ -128,15 +149,40 @@ export function promotedOpenCodeSessionErrorPayload(data: unknown, fallbackMessa
 export interface FormattedUsage {
   input_tokens?: number;
   output_tokens?: number;
+  /** OpenAI-like inclusive cache-read subset (input already includes cache). */
   cached_read_tokens?: number;
+  /** Anthropic-like additive cache-read (input is uncached remainder). */
+  cache_read_input_tokens?: number;
+  /** Generic / OpenAI-like cache write alias. */
+  cache_creation_tokens?: number;
+  /** Anthropic-like cache creation field name. */
+  cache_creation_input_tokens?: number;
+  /** OpenAI-like cache write alias used by some ACP adapters. */
+  cached_write_tokens?: number;
   thought_tokens?: number;
   total_tokens?: number;
 }
+
+function firstFiniteNumber(src: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = src[key];
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 /**
- * Normalises an ACP agent's raw `usage` object (camelCase keys) into the
- * snake_case `FormattedUsage` shape used by the daemon event stream. Returns
- * `null` when the input is not a recognisable usage object or has no known
- * fields.
+ * Normalises an ACP agent's raw `usage` object (camelCase and/or snake_case
+ * keys) into the snake_case `FormattedUsage` shape used by the daemon event
+ * stream. Returns `null` when the input is not a recognisable usage object or
+ * has no known fields.
+ *
+ * Cache field names are preserved by family so
+ * `scanRunEventsForUsageAnalytics` can classify anthropic (additive) vs
+ * openai (inclusive) correctly. Do not collapse Anthropic
+ * `cache_read_input_tokens` into `cached_read_tokens`.
  *
  * @param usage - The raw `result.usage` value from a `session/prompt` response.
  * @returns A `FormattedUsage` object with at least one field, or `null`.
@@ -145,13 +191,43 @@ export function formatUsage(usage: unknown): FormattedUsage | null {
   const src = asObject(usage);
   if (!src) return null;
   const out: FormattedUsage = {};
-  if (typeof src.inputTokens === 'number') out.input_tokens = src.inputTokens;
-  if (typeof src.outputTokens === 'number') out.output_tokens = src.outputTokens;
-  if (typeof src.cachedReadTokens === 'number') {
-    out.cached_read_tokens = src.cachedReadTokens;
+  const inputTokens = firstFiniteNumber(src, ['inputTokens', 'input_tokens']);
+  const outputTokens = firstFiniteNumber(src, ['outputTokens', 'output_tokens']);
+  // Prefer source-family keys independently so mixed payloads keep both
+  // semantics when present; otherwise map only within the matching family.
+  const anthropicCacheRead = firstFiniteNumber(src, [
+    'cache_read_input_tokens',
+    'cacheReadInputTokens',
+  ]);
+  const openAiCacheRead = firstFiniteNumber(src, [
+    'cachedReadTokens',
+    'cached_read_tokens',
+  ]);
+  const anthropicCacheCreation = firstFiniteNumber(src, [
+    'cache_creation_input_tokens',
+    'cacheCreationInputTokens',
+  ]);
+  const openAiCacheCreation = firstFiniteNumber(src, [
+    'cacheCreationTokens',
+    'cache_creation_tokens',
+  ]);
+  const openAiCachedWrite = firstFiniteNumber(src, [
+    'cached_write_tokens',
+    'cachedWriteTokens',
+  ]);
+  const thoughtTokens = firstFiniteNumber(src, ['thoughtTokens', 'thought_tokens']);
+  const totalTokens = firstFiniteNumber(src, ['totalTokens', 'total_tokens']);
+  if (inputTokens !== undefined) out.input_tokens = inputTokens;
+  if (outputTokens !== undefined) out.output_tokens = outputTokens;
+  if (anthropicCacheRead !== undefined) out.cache_read_input_tokens = anthropicCacheRead;
+  if (openAiCacheRead !== undefined) out.cached_read_tokens = openAiCacheRead;
+  if (anthropicCacheCreation !== undefined) {
+    out.cache_creation_input_tokens = anthropicCacheCreation;
   }
-  if (typeof src.thoughtTokens === 'number') out.thought_tokens = src.thoughtTokens;
-  if (typeof src.totalTokens === 'number') out.total_tokens = src.totalTokens;
+  if (openAiCacheCreation !== undefined) out.cache_creation_tokens = openAiCacheCreation;
+  if (openAiCachedWrite !== undefined) out.cached_write_tokens = openAiCachedWrite;
+  if (thoughtTokens !== undefined) out.thought_tokens = thoughtTokens;
+  if (totalTokens !== undefined) out.total_tokens = totalTokens;
   return Object.keys(out).length > 0 ? out : null;
 }
 /**

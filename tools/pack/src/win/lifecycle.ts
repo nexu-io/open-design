@@ -7,10 +7,12 @@ import {
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
+  isDesktopUpdateAction,
   type DaemonStatusSnapshot,
   type DesktopEvalResult,
   type DesktopScreenshotResult,
   type DesktopStatusSnapshot,
+  type DesktopUpdateAction,
   type DesktopUpdateResult,
   type SidecarStamp,
   type WebStatusSnapshot,
@@ -180,11 +182,18 @@ export async function installPackedWinApp(config: ToolPackConfig): Promise<WinIn
   } else {
     await measureLifecycleStep(lifecycleTimings, "pre-install remove install dir", async () => removeTree(registeredPaths.installDir));
   }
-  await measureLifecycleStep(lifecycleTimings, "ensure install parent", async () => mkdir(dirname(paths.installDir), { recursive: true }));
+  await measureLifecycleStep(lifecycleTimings, "ensure install directory", async () => mkdir(paths.installDir, { recursive: true }));
   await measureLifecycleStep(lifecycleTimings, "nsis install", async () => runTimed(paths.installTimingPath, "install", async () => {
     await invokeNsis(paths, paths.setupPath, installArgs(config, paths), "install");
   }));
   if (!(await pathExists(paths.installedExePath))) throw new Error(`installer completed but executable is missing at ${paths.installedExePath}`);
+  // Portable shipping builds omit namespaceBaseRoot so end users fall back to
+  // Electron userData. The tools-pack installed copy must retain its isolated
+  // runtime root for OS protocol cold launches, which inherit none of the
+  // OD_PACKAGED_CONFIG_PATH environment used by `tools-pack win start`.
+  await measureLifecycleStep(lifecycleTimings, "pin installed packaged namespace", async () => {
+    await pinInstalledPackagedConfigNamespace(config, paths.installedExePath);
+  });
   const registryEntries = await measureLifecycleStep(lifecycleTimings, "query registry", async () => queryWinRegistryEntries(paths, config));
   const installPayload = await measureLifecycleStep(lifecycleTimings, "collect payload report", async () => collectInstallPayloadReport(paths));
   await measureLifecycleStep(lifecycleTimings, "write install marker", async () => writeJsonMarker(paths.installMarkerPath, {
@@ -212,16 +221,42 @@ export async function installPackedWinApp(config: ToolPackConfig): Promise<WinIn
   };
 }
 
-async function writeInstalledLaunchPackagedConfig(config: ToolPackConfig, executablePath: string): Promise<string> {
+/**
+ * Pin the tools-pack runtime namespace into the installed app's packaged config
+ * and write the launch override used by `tools-pack win start`.
+ *
+ * The installed config is the only source available to a bare executable
+ * launched through the Windows protocol registry. Keeping both copies
+ * identical prevents that cold launch from resolving a different daemon data
+ * root than the process started by tools-pack.
+ */
+async function pinInstalledPackagedConfigNamespace(
+  config: ToolPackConfig,
+  executablePath: string,
+): Promise<{ installedConfigPath: string; launchConfigPath: string }> {
   const installedConfigPath = join(dirname(executablePath), "resources", "open-design-config.json");
+  if (!(await pathExists(installedConfigPath))) {
+    throw new Error(`installed packaged config missing at ${installedConfigPath}`);
+  }
   const raw = JSON.parse(await readFile(installedConfigPath, "utf8")) as Record<string, unknown>;
+  if (typeof raw !== "object" || raw == null || Array.isArray(raw)) {
+    throw new Error(`installed packaged config must be a JSON object: ${installedConfigPath}`);
+  }
+  const pinned = {
+    ...raw,
+    namespace: config.namespace,
+    namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
+  };
+  const body = `${JSON.stringify(pinned, null, 2)}\n`;
+  await writeFile(installedConfigPath, body, "utf8");
   const launchConfigPath = join(config.roots.runtime.namespaceRoot, "runtime", "launch-open-design-config.json");
   await mkdir(dirname(launchConfigPath), { recursive: true });
-  await writeFile(
-    launchConfigPath,
-    `${JSON.stringify({ ...raw, namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }, null, 2)}\n`,
-    "utf8",
-  );
+  await writeFile(launchConfigPath, body, "utf8");
+  return { installedConfigPath, launchConfigPath };
+}
+
+async function writeInstalledLaunchPackagedConfig(config: ToolPackConfig, executablePath: string): Promise<string> {
+  const { launchConfigPath } = await pinInstalledPackagedConfigNamespace(config, executablePath);
   return launchConfigPath;
 }
 
@@ -475,10 +510,10 @@ export async function resetPackedWinNamespaces(config: ToolPackConfig): Promise<
   return { namespaces, results };
 }
 
-function resolveUpdateAction(value: string | undefined): "status" | "check" | "download" | "install" | null {
+function resolveUpdateAction(value: string | undefined): DesktopUpdateAction | null {
   if (value == null) return null;
-  if (value === "status" || value === "check" || value === "download" || value === "install") return value;
-  throw new Error("--update-action must be status, check, download, or install");
+  if (isDesktopUpdateAction(value)) return value;
+  throw new Error("--update-action must be status, check, clear-cache, download, or install");
 }
 
 async function requestDesktopEval(

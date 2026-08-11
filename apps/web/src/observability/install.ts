@@ -16,6 +16,7 @@ import { installResourceErrorObserver } from './resource-error';
 import { installBootTimingObserver } from './boot-timing';
 import { installVisibilityObserver } from './visibility';
 import { installWhiteScreenDetector } from './white-screen';
+import { installPreviewIframeMessageObserver } from './iframe-error';
 
 let installed = false;
 
@@ -30,6 +31,7 @@ export function installWebObservability(): () => void {
     installBootTimingObserver(),
     installVisibilityObserver(),
     installWhiteScreenDetector(),
+    installPreviewIframeMessageObserver(),
   ];
 
   return () => {

@@ -115,6 +115,17 @@ const tiles = [
     </div>
   </header>
 
+  {/* Featured curated collection — Codex design. */}
+  <a class="plugins-feature" href={href('/plugins/codex-design/')}>
+    <img class="plugins-feature-cover" src="/plugins/covers/codex-design.webp" alt="" width="640" height="427" loading="lazy" decoding="async" />
+    <div class="plugins-feature-body">
+      <span class="plugins-feature-eyebrow">{pcopy.hubFeatureEyebrow}</span>
+      <h2 class="plugins-feature-title">{pcopy.hubFeatureTitle}</h2>
+      <p class="plugins-feature-blurb">{pcopy.hubFeatureBlurb}</p>
+      <span class="plugins-feature-cta">{pcopy.hubFeatureCta} →</span>
+    </div>
+  </a>
+
   {/* Browse by category — each collection leads with an on-brand cover. */}
   <section class="plugins-tile-grid" aria-label={pcopy.hubLabel}>
     {tiles.map((tile) => (

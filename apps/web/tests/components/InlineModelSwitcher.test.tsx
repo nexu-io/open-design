@@ -2,11 +2,36 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { InlineModelSwitcher } from '../../src/components/InlineModelSwitcher';
-import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
+import {
+  AMR_LOGIN_POLL_INTERVAL_MS,
+  AMR_LOGIN_TIMEOUT_MS,
+} from '../../src/components/amrLoginPolling';
 import { fetchProviderModels } from '../../src/providers/provider-models';
 import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
+import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
 import type { AgentInfo, AppConfig, ProviderModelOption } from '../../src/types';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
+
+const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
+
+vi.mock('../../src/analytics/provider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
+  return {
+    ...actual,
+    useAnalytics: () => ({
+      track: analyticsMocks.track,
+      setConsent: vi.fn(),
+      setIdentity: vi.fn(),
+      setConfigureGlobals: vi.fn(),
+      setUserId: vi.fn(),
+      anonymousId: 'test-anonymous-id',
+      sessionId: 'test-session-id',
+      newRequestId: () => 'test-request-id',
+    }),
+  };
+});
 
 function optionNames(container: HTMLElement): string[] {
   return within(container).getAllByRole('option').map((option) => {
@@ -63,18 +88,6 @@ const codexAgent: AgentInfo = {
   models: [{ id: 'default', label: 'Default' }],
 };
 
-const codexFastAgent: AgentInfo = {
-  ...codexAgent,
-  models: [
-    { id: 'default', label: 'Default' },
-    {
-      id: 'gpt-5.5',
-      label: 'gpt-5.5',
-      serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
-    },
-  ],
-};
-
 function renderSwitcher(
   config: Partial<AppConfig> = {},
   agents: AgentInfo[] = [amrAgent],
@@ -98,6 +111,81 @@ function renderSwitcher(
     />,
   );
   return { ...view, onAgentModelChange };
+}
+
+// recvqfYKutwWlQ: the AMR upgrade entry point must only render for a caller who
+// can actually act on it (`permissions.canManageBilling`), never just a
+// caller whose plan tier happens to be upgradeable. Personal workspaces
+// resolve `canManageBilling` true because the user is always their own owner
+// there (`buildWorkspacePermissions`: `canManageBilling: readable && isOwner`),
+// so this fixture doubles as the "personal identity keeps the upgrade entry"
+// control case.
+function personalWorkspaceContext(
+  overrides: Partial<WorkspaceCollabContext> = {},
+): WorkspaceCollabContext {
+  return {
+    workspaceId: 'ws-personal',
+    workspaceType: 'personal',
+    workspaceMemberId: 'wm-1',
+    role: 'owner',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: null,
+    providerMode: 'personal_byok',
+    seatSummary: { seatLimit: 1, usedSeats: 1, availableSeats: 0, isSeatFull: false },
+    permissions: {
+      canManageMembers: true,
+      canManageBilling: true,
+      canInviteMembers: true,
+      canManageAutoRecharge: true,
+      canShareProjects: true,
+      canWriteSyncedFiles: true,
+      canViewWorkspaceSettings: true,
+      canManageSharedResources: true,
+    },
+    ...overrides,
+  } as WorkspaceCollabContext;
+}
+
+// A team MEMBER (not owner/admin) — `canManageBilling` folds in role, so this
+// is the "cannot act on billing" case the upgrade entry must hide for.
+function teamMemberWorkspaceContext(
+  overrides: Partial<WorkspaceCollabContext> = {},
+): WorkspaceCollabContext {
+  return {
+    ...personalWorkspaceContext(),
+    workspaceId: 'ws-team',
+    workspaceType: 'team',
+    role: 'member',
+    teamId: 'team-1',
+    teamName: 'OD Feature Team',
+    permissions: {
+      canManageMembers: false,
+      canManageBilling: false,
+      canInviteMembers: false,
+      canManageAutoRecharge: false,
+      canShareProjects: true,
+      canWriteSyncedFiles: true,
+      canViewWorkspaceSettings: true,
+      canManageSharedResources: false,
+    },
+    ...overrides,
+  } as WorkspaceCollabContext;
+}
+
+function workspaceContextResponse(context: WorkspaceCollabContext | null) {
+  return new Response(JSON.stringify({ context }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function workspaceDirectoryResponse(context: WorkspaceCollabContext) {
+  return new Response(JSON.stringify(workspaceDirectoryFixture([context])), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
 }
 
 function expectVelaLoginWithAttribution(
@@ -135,6 +223,7 @@ describe('InlineModelSwitcher AMR row', () => {
   afterEach(() => {
     cleanup();
     vi.mocked(fetchProviderModels).mockReset();
+    analyticsMocks.track.mockReset();
     vi.unstubAllGlobals();
     vi.useRealTimers();
     try {
@@ -142,6 +231,7 @@ describe('InlineModelSwitcher AMR row', () => {
     } catch {
       // jsdom normally exposes localStorage; keep cleanup tolerant.
     }
+    resetWorkspaceContextCache();
   });
 
   it('shows the AMR reminder dot once when another CLI is selected', async () => {
@@ -327,41 +417,6 @@ describe('InlineModelSwitcher AMR row', () => {
     });
   });
 
-  it('routes Codex service tier changes through onAgentModelChange', () => {
-    const { onAgentModelChange } = renderSwitcher(
-      {
-        agentId: 'codex',
-        agentModels: {
-          codex: { model: 'gpt-5.5', reasoning: 'default' },
-        },
-      },
-      [amrAgent, codexFastAgent],
-    );
-
-    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
-
-    const tierSelect = screen.getByRole('combobox', {
-      name: 'Service tier',
-    }) as HTMLSelectElement;
-    expect(tierSelect).toBe(screen.getByTestId('inline-model-switcher-service-tier'));
-    expect(
-      Array.from(tierSelect.options).map((option) => option.textContent),
-    ).toEqual(['Default', 'Fast']);
-
-    fireEvent.change(tierSelect, { target: { value: 'priority' } });
-
-    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
-      serviceTier: 'priority',
-    });
-
-    onAgentModelChange.mockClear();
-    fireEvent.change(tierSelect, { target: { value: 'default' } });
-
-    expect(onAgentModelChange).toHaveBeenCalledWith('codex', {
-      serviceTier: undefined,
-    });
-  });
-
   it('shows icon-only signed-in status instead of account information in the AMR button', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
@@ -442,9 +497,62 @@ describe('InlineModelSwitcher AMR row', () => {
       name: /^Open Design\s+Signed in$/i,
     });
     await waitFor(() => {
-      expect(within(popover).getByText('Balance')).toBeTruthy();
+      expect(within(popover).getByText('Allowance')).toBeTruthy();
       expect(within(popover).getByText('$0.10')).toBeTruthy();
     });
+  });
+
+  it('uses only the explicit team workspace balance, never the account fallback', async () => {
+    const workspaceContext = teamMemberWorkspaceContext();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: true,
+            profile: 'test',
+            user: {
+              id: 'user-1',
+              email: 'manual-amr@example.local',
+            },
+            account: { plan: 'plus', balanceUsd: '247.5087' },
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(workspaceContext);
+      }
+      if (url === '/api/workspace/context') {
+        return workspaceContextResponse(workspaceContext);
+      }
+      if (url === '/api/workspace/billing?scope=workspace&workspaceId=ws-team') {
+        return new Response(
+          JSON.stringify({
+            summary: null,
+            workspaceBalance: {
+              billingScopeVersion: 2,
+              workspaceId: 'ws-team',
+              workspaceMemberId: 'wm-1',
+              balanceUsd: '7.8912',
+              expiresAt: null,
+              updatedAt: '2026-07-26T00:00:00.000Z',
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSwitcher();
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+    expect(await within(popover).findByText('$7.89')).toBeTruthy();
+    expect(within(popover).queryByText('$247.51')).toBeNull();
   });
 
   it('prefers fresh signed-in status balance over an older wallet snapshot', async () => {
@@ -513,6 +621,7 @@ describe('InlineModelSwitcher AMR row', () => {
 
   it('routes inline upgrades through the signed-in AMR profile', async () => {
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    const workspaceContext = personalWorkspaceContext();
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
       if (url === '/api/integrations/vela/status') {
@@ -523,6 +632,84 @@ describe('InlineModelSwitcher AMR row', () => {
             user: { id: 'user-1', email: 'manual-amr@example.local' },
             account: { plan: 'plus', balanceUsd: '42.0000' },
             configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      // Personal workspace: `canManageBilling` is always true there, so this
+      // is the control case proving the permission gate below does not
+      // suppress the upgrade entry for non-team identities.
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(workspaceContext);
+      }
+      if (url === '/api/workspace/context') {
+        return workspaceContextResponse(workspaceContext);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSwitcher({
+      telemetry: { metrics: true },
+      installationId: 'od-install-abc',
+    });
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+    await within(popover).findByText('$42.00');
+    fireEvent.click(await screen.findByTestId('inline-model-switcher-account-upgrade'));
+
+    const [url, target, features] = openSpy.mock.calls[0] ?? [];
+    const parsed = new URL(String(url));
+    expect(parsed.origin).toBe('https://vela.powerformer.net');
+    expect(parsed.pathname).toBe('/dashboard');
+    // `billing=plan` is B's state-aware upgrade intent, replacing the wallet
+    // page's fixed `view=plans` pricing modal.
+    expect(parsed.searchParams.get('billing')).toBe('plan');
+    expect(parsed.searchParams.get('od_entry_source')).toBe('inline_amr_upgrade');
+    expect(parsed.searchParams.get('od_device_id')).toBe('od-install-abc');
+    expect(target).toBe('_blank');
+    expect(features).toBe('noopener,noreferrer');
+  });
+
+  // recvqfYKutwWlQ: a team member's plan tier can be upgradeable while the
+  // member itself cannot act on billing (owner-only) — the upgrade entry must
+  // stay hidden for them even with a fully signed-in, upgrade-eligible AMR
+  // account.
+  it('hides the inline upgrade action for a team member without billing permission', async () => {
+    const workspaceContext = teamMemberWorkspaceContext();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: true,
+            profile: 'test',
+            user: { id: 'user-1', email: 'manual-amr@example.local' },
+            account: { plan: 'plus', balanceUsd: '42.0000' },
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(workspaceContext);
+      }
+      if (url === '/api/workspace/context') {
+        return workspaceContextResponse(workspaceContext);
+      }
+      if (url === '/api/workspace/billing?scope=workspace&workspaceId=ws-team') {
+        return new Response(
+          JSON.stringify({
+            summary: null,
+            workspaceBalance: {
+              billingScopeVersion: 2,
+              workspaceId: 'ws-team',
+              workspaceMemberId: 'wm-1',
+              balanceUsd: '7.8912',
+              expiresAt: null,
+              updatedAt: '2026-07-26T00:00:00.000Z',
+            },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
@@ -538,17 +725,16 @@ describe('InlineModelSwitcher AMR row', () => {
 
     fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
     const popover = screen.getByTestId('inline-model-switcher-popover');
-    await within(popover).findByText('$42.00');
-    fireEvent.click(screen.getByTestId('inline-model-switcher-account-upgrade'));
-
-    const [url, target, features] = openSpy.mock.calls[0] ?? [];
-    const parsed = new URL(String(url));
-    expect(parsed.origin).toBe('https://vela.powerformer.net');
-    expect(parsed.searchParams.get('view')).toBe('plans');
-    expect(parsed.searchParams.get('od_entry_source')).toBe('inline_amr_upgrade');
-    expect(parsed.searchParams.get('od_device_id')).toBe('od-install-abc');
-    expect(target).toBe('_blank');
-    expect(features).toBe('noopener,noreferrer');
+    await within(popover).findByText('$7.89');
+    // Give the workspace-context fetch a beat to settle so a late render
+    // cannot sneak the button back in.
+    await waitFor(() => expect(fetchMock.mock.calls.some(([i]) =>
+      i.toString() === '/api/workspace/context')).toBe(true));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('inline-model-switcher-account-upgrade')).toBeNull();
   });
 
   it('filters fetched BYOK provider models in the Home switcher search box', async () => {
@@ -987,6 +1173,7 @@ describe('InlineModelSwitcher AMR row', () => {
   });
 
   it('cancels a timed-out AMR sign-in from the inline switcher', async () => {
+    const authAttemptId = '11111111-1111-4111-8111-111111111111';
     let loginStarted = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
@@ -995,6 +1182,7 @@ describe('InlineModelSwitcher AMR row', () => {
           JSON.stringify({
             loggedIn: false,
             loginInFlight: loginStarted,
+            authAttemptId,
             profile: 'default',
             user: null,
             configPath: '/Users/test/.amr/config.json',
@@ -1004,7 +1192,7 @@ describe('InlineModelSwitcher AMR row', () => {
       }
       if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
         loginStarted = true;
-        return new Response(JSON.stringify({ pid: 123 }), {
+        return new Response(JSON.stringify({ pid: 123, authAttemptId }), {
           status: 202,
           headers: { 'content-type': 'application/json' },
         });
@@ -1041,9 +1229,17 @@ describe('InlineModelSwitcher AMR row', () => {
     ).toBeTruthy();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(
+        AMR_LOGIN_TIMEOUT_MS + AMR_LOGIN_POLL_INTERVAL_MS,
+      );
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login/cancel', { method: 'POST' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login/cancel',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ authAttemptId }),
+      }),
+    );
     expect(
       within(popover).getByRole('radio', { name: /^Open Design\s+Sign-in failed\./i }),
     ).toBeTruthy();
@@ -1054,6 +1250,7 @@ describe('InlineModelSwitcher AMR row', () => {
   });
 
   it('turns the pending AMR row into a cancel action', async () => {
+    const authAttemptId = '11111111-1111-4111-8111-111111111111';
     let loginStarted = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
@@ -1062,6 +1259,7 @@ describe('InlineModelSwitcher AMR row', () => {
           JSON.stringify({
             loggedIn: false,
             loginInFlight: loginStarted,
+            authAttemptId,
             profile: 'default',
             user: null,
             configPath: '/Users/test/.amr/config.json',
@@ -1071,7 +1269,7 @@ describe('InlineModelSwitcher AMR row', () => {
       }
       if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
         loginStarted = true;
-        return new Response(JSON.stringify({ pid: 123 }), {
+        return new Response(JSON.stringify({ pid: 123, authAttemptId }), {
           status: 202,
           headers: { 'content-type': 'application/json' },
         });
@@ -1118,10 +1316,122 @@ describe('InlineModelSwitcher AMR row', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login/cancel', { method: 'POST' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login/cancel',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ authAttemptId }),
+      }),
+    );
     expect(
       within(popover).getByRole('radio', { name: /^Open Design\s+Sign in$/i }),
     ).toBeTruthy();
+  });
+
+  it('cancels the canonical attempt when the pre-start status refresh rejects', async () => {
+    const canonicalAuthAttemptId = '22222222-2222-4222-8222-222222222222';
+    let releaseLogin!: (response: Response) => void;
+    const heldLoginResponse = new Promise<Response>((resolve) => {
+      releaseLogin = resolve;
+    });
+    const cancelAttemptIds: string[] = [];
+    let statusCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        statusCalls += 1;
+        if (statusCalls > 1) {
+          throw new Error('status unavailable');
+        }
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: false,
+            profile: 'default',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/login' && init?.method === 'POST') {
+        return heldLoginResponse;
+      }
+      if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { authAttemptId: string };
+        cancelAttemptIds.push(body.authAttemptId);
+        return new Response(
+          JSON.stringify({
+            canceled: body.authAttemptId === canonicalAuthAttemptId,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSwitcher();
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+    await within(popover).findByRole('radio', {
+      name: /^Open Design\s+Sign in$/i,
+    });
+    vi.useFakeTimers();
+    fireEvent.click(
+      within(popover).getByTestId('inline-model-switcher-account-action'),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login',
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    fireEvent.click(
+      within(popover).getByTestId('inline-model-switcher-account-action'),
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(cancelAttemptIds).toHaveLength(1);
+
+    releaseLogin(new Response(
+      JSON.stringify({ pid: 123, authAttemptId: canonicalAuthAttemptId }),
+      { status: 202, headers: { 'content-type': 'application/json' } },
+    ));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(cancelAttemptIds).toEqual([
+      expect.stringMatching(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      ),
+      canonicalAuthAttemptId,
+    ]);
+    expect(
+      within(popover).getByRole('radio', { name: /^Open Design\s+Sign in$/i }),
+    ).toBeTruthy();
+    const statusCallsAfterCanonicalCancel = statusCalls;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    expect(statusCalls).toBe(statusCallsAfterCanonicalCancel);
+    expect(
+      within(popover).queryByRole('radio', {
+        name: /^Open Design\s+Signing in/i,
+      }),
+    ).toBeNull();
   });
 
   it('re-reads AMR status on reopen and converges from signed-in back to Sign in when later status is loggedOut', async () => {
@@ -1227,6 +1537,62 @@ describe('InlineModelSwitcher AMR row', () => {
       expect(loginCalls).toBe(1);
       expect(onAgentChange).toHaveBeenCalledWith('amr');
     });
+  });
+
+  it('offers the BYOK provider catalogue, not the CLI agent catalogue, in the compact home popover', () => {
+    // Bug: with BYOK active, the compact home-hero chip correctly showed the
+    // BYOK model (e.g. gpt-4o), but opening the popover listed the local CLI
+    // agent's models (the Open Design cloud catalogue) instead of the BYOK
+    // provider's catalogue. The popover body must always reflect the active
+    // execution mode; `compact` only affects layout density.
+    const onApiModelChange = vi.fn();
+    render(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          mode: 'api',
+          apiProtocol: 'openai',
+          baseUrl: 'https://api.openai.com/v1',
+          apiProviderBaseUrl: 'https://api.openai.com/v1',
+          apiKey: 'sk-test',
+          model: 'gpt-4o',
+        }}
+        agents={[amrAgent, codexAgent]}
+        compact
+        daemonLive={true}
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={onApiModelChange}
+        providerModelsCache={{
+          [providerModelsCacheKey('openai', 'https://api.openai.com/v1', 'sk-test', '')]: [
+            { id: 'gpt-4o', label: 'gpt-4o' },
+            { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+            { id: 'gpt-5.5', label: 'gpt-5.5' },
+          ],
+        }}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+    const popover = screen.getByTestId('inline-model-switcher-popover');
+
+    // The CLI agent's catalogue must not leak into a BYOK popover.
+    expect(within(popover).queryByText('AMR Cloud Latest')).toBeNull();
+
+    // The BYOK provider's catalogue is on offer and picking a model writes
+    // through the BYOK sink.
+    fireEvent.click(within(popover).getByTestId('inline-model-switcher-api-model'));
+    const modelPopover = screen.getByTestId(
+      'inline-model-switcher-api-model-popover',
+    );
+    expect(optionNames(modelPopover)).toEqual(
+      expect.arrayContaining(['gpt-4o', 'gpt-4o-mini', 'gpt-5.5']),
+    );
+    fireEvent.click(within(modelPopover).getByRole('option', { name: 'gpt-5.5' }));
+    expect(onApiModelChange).toHaveBeenCalledWith('gpt-5.5');
   });
 
   it('lists fetched BYOK provider models from the shared cache', () => {

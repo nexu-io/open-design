@@ -23,6 +23,10 @@ describe('static resource mutation routes', () => {
         const app = express();
         app.use(express.json({ limit: '4mb' }));
         registerStaticResourceRoutes(app, {
+          // Never reached by any subtest in this file — every request either
+          // 403s on the cross-origin guard or hits a design-system-only route
+          // before touching the skill workspace-mutation gate that reads it.
+          db: {} as any,
           http: {
             createSseResponse: () => undefined,
             isLocalSameOrigin,
@@ -189,6 +193,10 @@ describe('design system import catalog lookup', () => {
         const app = express();
         app.use(express.json({ limit: '4mb' }));
         registerStaticResourceRoutes(app, {
+          // Never reached by any subtest in this file — every request either
+          // 403s on the cross-origin guard or hits a design-system-only route
+          // before touching the skill workspace-mutation gate that reads it.
+          db: {} as any,
           http: {
             createSseResponse: () => undefined,
             isLocalSameOrigin,

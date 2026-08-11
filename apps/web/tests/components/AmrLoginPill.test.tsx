@@ -19,9 +19,38 @@ import {
   AmrAccountControl,
   AmrLoginPill,
 } from '../../src/components/AmrLoginPill';
-import { AMR_LOGIN_TIMEOUT_MS } from '../../src/components/amrLoginPolling';
+import * as analyticsProvider from '../../src/analytics/provider';
+import {
+  AMR_LOGIN_POLL_INTERVAL_MS,
+  AMR_LOGIN_STATUS_EVENT,
+  AMR_LOGIN_TIMEOUT_MS,
+} from '../../src/components/amrLoginPolling';
 import { I18nProvider } from '../../src/i18n';
 import type { VelaLoginStatus } from '../../src/providers/daemon';
+import {
+  TEAM_PROJECTS_CHANGED_EVENT,
+  WORKSPACE_BILLING_REFRESH_EVENT,
+  WORKSPACE_CONTEXT_REFRESH_EVENT,
+} from '../../src/collab/useWorkspaceContext';
+
+const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
+
+vi.mock('../../src/analytics/provider', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/analytics/provider')>();
+  return {
+    ...actual,
+    useAnalytics: vi.fn(() => ({
+      track: analyticsMocks.track,
+      setConsent: vi.fn(),
+      setIdentity: vi.fn(),
+      setConfigureGlobals: vi.fn(),
+      setUserId: vi.fn(),
+      anonymousId: 'test-anonymous-id',
+      sessionId: 'test-session-id',
+      newRequestId: () => 'test-request-id',
+    })),
+  };
+});
 
 interface StubbedResponse {
   status?: number;
@@ -42,6 +71,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   globalThis.fetch = originalFetch;
   vi.useRealTimers();
+  analyticsMocks.track.mockReset();
 });
 
 beforeEach(() => {
@@ -249,7 +279,7 @@ describe('AmrLoginPill', () => {
     expect(screen.getByText('leaf@example.com')).toBeTruthy();
     expect(screen.getByText('TEST')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
-      'https://vela.powerformer.net/wallet?source=open_design',
+      'https://vela.powerformer.net/dashboard?source=open_design',
     );
   });
 
@@ -264,7 +294,7 @@ describe('AmrLoginPill', () => {
 
     expect(screen.getByText('LOCAL')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
-      'http://localhost:5173/wallet?source=open_design',
+      'http://localhost:5173/dashboard?source=open_design',
     );
   });
 
@@ -279,7 +309,7 @@ describe('AmrLoginPill', () => {
 
     expect(screen.queryByText('PROD')).toBeNull();
     expect(screen.getByRole('link', { name: 'Manage' }).getAttribute('href')).toBe(
-      'https://open-design.ai/amr/wallet?source=open_design',
+      'https://open-design.ai/amr/dashboard?source=open_design',
     );
   });
 
@@ -287,7 +317,7 @@ describe('AmrLoginPill', () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/attribution/bridge-url') {
-        return jsonResponse({ body: { url: 'https://open-design.ai/amr/wallet?od_bridge=odbr_12345678' } });
+        return jsonResponse({ body: { url: 'https://open-design.ai/amr/dashboard?od_bridge=odbr_12345678' } });
       }
       if (url === '/api/system/open-external') return jsonResponse({ body: { ok: true } });
       return new Response('{}', { status: 202 });
@@ -336,7 +366,7 @@ describe('AmrLoginPill', () => {
       '/api/system/open-external',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ url: 'https://open-design.ai/amr/wallet?od_bridge=odbr_12345678' }),
+        body: JSON.stringify({ url: 'https://open-design.ai/amr/dashboard?od_bridge=odbr_12345678' }),
       }),
     );
   });
@@ -569,6 +599,120 @@ describe('AmrLoginPill', () => {
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
+  // This pill is what Settings' "Sign in / Register" cloud callout and the
+  // Open Design agent card's "Authorize" action both render (SettingsDialog
+  // renders it from a full-page `/settings` route, so the entry rail — and
+  // its `useWorkspaceContext` hook — is unmounted the whole time the user is
+  // on that page). Besides notifyAmrLoginStatusChanged(), it also fires
+  // notifyWorkspaceContextRefresh()/notifyWorkspaceBillingRefresh()/
+  // notifyTeamProjectsChanged() directly on poll-confirmed sign-in — the same
+  // three CloudSignInTip's finishSignedIn() and EntryShell's
+  // pollAmrLoginCompletion() fire (see the dedicated test below). It no
+  // longer relies solely on App.tsx's global AMR_LOGIN_STATUS_EVENT listener
+  // eventually resetting every open tab down to a fresh Home tab (see
+  // `deriveTabIdentityScope` / WorkspaceTabsBar) to get a stale rail to
+  // refetch — that reset still happens (for tab identity-scope safety) and
+  // its remount's fetch now safely joins/shares the explicit one instead of
+  // firing a second, via `forceCoalescedGet`. This test locks in the
+  // AMR_LOGIN_STATUS_EVENT signal specifically; verified end-to-end (real
+  // Playwright walkthrough with network capture) in
+  // e2e/ui/amr-login-pill-workspace-refresh.test.ts.
+  it('dispatches AMR_LOGIN_STATUS_EVENT once polling confirms signed-in, so identity-scope listeners outside this pill (e.g. the entry rail after a Settings sign-in) learn about it too', async () => {
+    let loginPosted = false;
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          body: loginPosted
+            ? { loggedIn: true, profile: 'prod', configPath: '/x', user: { id: 'u', email: 'leaf@example.com' } }
+            : { loggedIn: false, profile: 'prod', user: null, configPath: '/x' },
+        });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        loginPosted = true;
+        return jsonResponse({ status: 202, body: { pid: 4242 } });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const events: string[] = [];
+    const onEvent = () => events.push('fired');
+    window.addEventListener(AMR_LOGIN_STATUS_EVENT, onEvent);
+    try {
+      renderPill();
+      fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+      });
+      // 'login-started' (on click) + the poll's success dispatch — the
+      // second one is what a Settings-page sign-in relies on to eventually
+      // reach the entry rail once the user navigates back to Home.
+      expect(events.length).toBeGreaterThanOrEqual(2);
+    } finally {
+      window.removeEventListener(AMR_LOGIN_STATUS_EVENT, onEvent);
+    }
+  });
+
+  // This fix: the pill used to only call
+  // notifyAmrLoginStatusChanged() on poll-confirmed sign-in, leaving the
+  // workspace-context/billing/team-projects refresh to whatever the global
+  // AMR_LOGIN_STATUS_EVENT listener in App.tsx happened to trigger later
+  // (a forced tab-reset remount, not a deliberate signal). It must now fire
+  // all three explicitly, immediately, the same way CloudSignInTip's
+  // finishSignedIn() and EntryShell's pollAmrLoginCompletion() already do.
+  it('fires notifyWorkspaceContextRefresh/notifyWorkspaceBillingRefresh/notifyTeamProjectsChanged once polling confirms signed-in', async () => {
+    let loginPosted = false;
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          body: loginPosted
+            ? { loggedIn: true, profile: 'prod', configPath: '/x', user: { id: 'u', email: 'leaf@example.com' } }
+            : { loggedIn: false, profile: 'prod', user: null, configPath: '/x' },
+        });
+      }
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        loginPosted = true;
+        return jsonResponse({ status: 202, body: { pid: 4242 } });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    let contextRefreshCount = 0;
+    let billingRefreshCount = 0;
+    let teamProjectsChangedCount = 0;
+    const onContextRefresh = () => {
+      contextRefreshCount += 1;
+    };
+    const onBillingRefresh = () => {
+      billingRefreshCount += 1;
+    };
+    const onTeamProjectsChanged = () => {
+      teamProjectsChangedCount += 1;
+    };
+    window.addEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, onContextRefresh);
+    window.addEventListener(WORKSPACE_BILLING_REFRESH_EVENT, onBillingRefresh);
+    window.addEventListener(TEAM_PROJECTS_CHANGED_EVENT, onTeamProjectsChanged);
+    try {
+      renderPill();
+      fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+      });
+      expect(contextRefreshCount).toBe(1);
+      expect(billingRefreshCount).toBe(1);
+      expect(teamProjectsChangedCount).toBe(1);
+    } finally {
+      window.removeEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, onContextRefresh);
+      window.removeEventListener(WORKSPACE_BILLING_REFRESH_EVENT, onBillingRefresh);
+      window.removeEventListener(TEAM_PROJECTS_CHANGED_EVENT, onTeamProjectsChanged);
+    }
+  });
+
   it('does not reuse stale activation details when a new login starts after a canceled attempt', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
@@ -604,6 +748,195 @@ describe('AmrLoginPill', () => {
       screen.queryByRole('link', { name: 'Open sign-in page' }),
     ).toBeNull();
     expect(screen.queryByText('EXPIRED')).toBeNull();
+  });
+
+  it('rejoins a newer in-flight attempt when a delayed cancel is stale', async () => {
+    const attemptA = '11111111-1111-4111-8111-111111111111';
+    const attemptB = '22222222-2222-4222-8222-222222222222';
+    let currentAttemptId = attemptA;
+    let resolveCancel!: (response: Response) => void;
+    const cancelResponse = new Promise<Response>((resolve) => {
+      resolveCancel = resolve;
+    });
+    const analyticsTrack = vi.fn();
+    const analyticsSpy = vi.spyOn(analyticsProvider, 'useAnalytics').mockReturnValue({
+      track: analyticsTrack,
+      setConsent: vi.fn(),
+      setIdentity: vi.fn(),
+      setConfigureGlobals: vi.fn(),
+      setUserId: vi.fn(),
+      anonymousId: 'test-anonymous-id',
+      sessionId: 'test-session-id',
+      newRequestId: () => 'test-request-id',
+    });
+    const loginStatusReasons: string[] = [];
+    const onLoginStatusChange = (event: Event) => {
+      loginStatusReasons.push(
+        (event as CustomEvent<{ reason?: string }>).detail?.reason ?? 'status-changed',
+      );
+    };
+    window.addEventListener('od:amr-login-status-change', onLoginStatusChange);
+
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return jsonResponse({
+          status: 202,
+          body: { pid: 4242, authAttemptId: attemptA },
+        });
+      }
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          body: {
+            loggedIn: false,
+            loginInFlight: true,
+            authAttemptId: currentAttemptId,
+            profile: 'prod',
+            user: null,
+            configPath: '/x',
+          },
+        });
+      }
+      if (
+        url.endsWith('/api/integrations/vela/login/cancel') &&
+        init?.method === 'POST'
+      ) {
+        expect(JSON.parse(String(init.body))).toEqual({
+          authAttemptId: attemptA,
+        });
+        currentAttemptId = attemptB;
+        return cancelResponse;
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    try {
+      renderPill({
+        skipInitialRefresh: true,
+        revealPendingCancelAction: true,
+        initialStatus: {
+          loggedIn: false,
+          loginInFlight: false,
+          profile: 'prod',
+          user: null,
+          configPath: '/x',
+        },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+      expect(await screen.findByText('Signing in…')).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          '/api/integrations/vela/login/cancel',
+          expect.objectContaining({ method: 'POST' }),
+        );
+      });
+
+      resolveCancel(jsonResponse({ body: { canceled: false } }));
+
+      await waitFor(() => {
+        expect(screen.getByText('Signing in…')).toBeTruthy();
+      });
+      expect(screen.queryByText('Canceled')).toBeNull();
+      expect(loginStatusReasons).not.toContain('login-canceled');
+      expect(
+        analyticsTrack.mock.calls.some(
+          ([event, properties]) =>
+            event === 'amr_auth_result' &&
+            (properties as { result?: string }).result === 'cancelled',
+        ),
+      ).toBe(false);
+    } finally {
+      analyticsSpy.mockRestore();
+      window.removeEventListener(
+        'od:amr-login-status-change',
+        onLoginStatusChange,
+      );
+    }
+  });
+
+  it('cancels the canonical attempt when the pre-start status refresh is non-OK', async () => {
+    const canonicalAuthAttemptId = '22222222-2222-4222-8222-222222222222';
+    let releaseLogin!: (response: Response) => void;
+    const heldLoginResponse = new Promise<Response>((resolve) => {
+      releaseLogin = resolve;
+    });
+    const cancelAttemptIds: string[] = [];
+    let statusCalls = 0;
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/login') && init?.method === 'POST') {
+        return heldLoginResponse;
+      }
+      if (url.endsWith('/api/integrations/vela/status')) {
+        statusCalls += 1;
+        return jsonResponse({ status: 503, body: { error: 'unavailable' } });
+      }
+      if (
+        url.endsWith('/api/integrations/vela/login/cancel') &&
+        init?.method === 'POST'
+      ) {
+        const body = JSON.parse(String(init.body)) as { authAttemptId: string };
+        cancelAttemptIds.push(body.authAttemptId);
+        return jsonResponse({
+          body: {
+            canceled: body.authAttemptId === canonicalAuthAttemptId,
+          },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    renderPill({
+      skipInitialRefresh: true,
+      revealPendingCancelAction: true,
+      initialStatus: {
+        loggedIn: false,
+        loginInFlight: false,
+        profile: 'prod',
+        user: null,
+        configPath: '/x',
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/integrations/vela/login',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => {
+      expect(cancelAttemptIds).toHaveLength(1);
+      expect(statusCalls).toBe(1);
+    });
+
+    releaseLogin(jsonResponse({
+      status: 202,
+      body: { pid: 123, authAttemptId: canonicalAuthAttemptId },
+    }));
+
+    await waitFor(() => {
+      expect(cancelAttemptIds).toEqual([
+        expect.stringMatching(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+        ),
+        canonicalAuthAttemptId,
+      ]);
+      expect(screen.getByText('Canceled')).toBeTruthy();
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(statusCalls).toBe(1);
+    expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
   it('only surfaces activation details from the pill when explicitly enabled', async () => {
@@ -682,6 +1015,7 @@ describe('AmrLoginPill', () => {
   }, 10_000);
 
   it('cancels a timed-out login attempt and restores the Sign-in action', async () => {
+    const authAttemptId = '11111111-1111-4111-8111-111111111111';
     let loginStarted = false;
     const fetchMock = vi.fn(async (input, init) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
@@ -690,6 +1024,7 @@ describe('AmrLoginPill', () => {
           body: {
             loggedIn: false,
             loginInFlight: loginStarted,
+            authAttemptId,
             profile: 'prod',
             user: null,
             configPath: '/x',
@@ -701,7 +1036,10 @@ describe('AmrLoginPill', () => {
         init?.method === 'POST'
       ) {
         loginStarted = true;
-        return jsonResponse({ status: 202, body: { pid: 4242 } });
+        return jsonResponse({
+          status: 202,
+          body: { pid: 4242, authAttemptId },
+        });
       }
       if (
         url.endsWith('/api/integrations/vela/login/cancel') &&
@@ -727,13 +1065,18 @@ describe('AmrLoginPill', () => {
     expect(screen.getByText('Signing in…')).toBeTruthy();
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(AMR_LOGIN_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(
+        AMR_LOGIN_TIMEOUT_MS + AMR_LOGIN_POLL_INTERVAL_MS,
+      );
     });
     expect(
       fetchMock.mock.calls.some(
         ([url, init]) =>
           String(url).endsWith('/api/integrations/vela/login/cancel') &&
-          (init as RequestInit | undefined)?.method === 'POST',
+          (init as RequestInit | undefined)?.method === 'POST' &&
+          (init as RequestInit | undefined)?.body === JSON.stringify({
+            authAttemptId,
+          }),
       ),
     ).toBe(true);
     expect(screen.getByText('Sign-in failed.')).toBeTruthy();
@@ -741,8 +1084,54 @@ describe('AmrLoginPill', () => {
     expect(screen.queryByText('Signing in…')).toBeNull();
   });
 
-  it('logout POSTs /logout and flips the pill back to Sign-in', async () => {
+  // recvqgMWpJZqhL: clicking Sign out must never log the user out directly —
+  // it arms a confirmation dialog, and only the dialog's confirm action POSTs
+  // /logout. Cancel (or Escape) leaves the session untouched.
+  it('sign-out click opens the confirm dialog without POSTing /logout; cancel keeps the session', async () => {
+    const fetchMock = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : (input as URL).toString();
+      if (url.endsWith('/api/integrations/vela/status')) {
+        return jsonResponse({
+          body: {
+            loggedIn: true,
+            profile: 'local',
+            configPath: '/x',
+            user: { id: 'u', email: 'leaf@example.com', plan: 'free' },
+          },
+        });
+      }
+      if (url.endsWith('/api/integrations/vela/logout')) {
+        throw new Error('logout must not fire before the confirm step');
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    renderPill();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+
+    // The dialog is armed, and no logout request has been issued.
+    expect(screen.getByTestId('sign-out-confirm-dialog')).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).endsWith('/api/integrations/vela/logout'),
+      ),
+    ).toBe(false);
+
+    // Cancel: the dialog closes, still signed in, still no logout POST.
+    fireEvent.click(screen.getByTestId('sign-out-confirm-cancel'));
+    expect(screen.queryByTestId('sign-out-confirm-dialog')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+    expect(
+      fetchMock.mock.calls.some(([url]) =>
+        String(url).endsWith('/api/integrations/vela/logout'),
+      ),
+    ).toBe(false);
+  });
+
+  it('logout POSTs /logout only after confirming, then flips the pill back to Sign-in', async () => {
     let loggedIn = true;
+    const onSignedOut = vi.fn();
     const fetchMock = vi.fn(async (input, init) => {
       const url = typeof input === 'string' ? input : (input as URL).toString();
       if (url.endsWith('/api/integrations/vela/status')) {
@@ -768,13 +1157,16 @@ describe('AmrLoginPill', () => {
     });
     globalThis.fetch = fetchMock as typeof fetch;
 
-    renderPill();
+    renderPill({ onSignedOut });
     const logoutBtn = await screen.findByRole('button', { name: 'Sign out' });
     fireEvent.click(logoutBtn);
+    fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();
     });
+    expect(onSignedOut).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('sign-out-confirm-dialog')).toBeNull();
   });
 
   it('converges a stale signed-in snapshot back to Sign-in when a later status read reports loggedOut', async () => {
@@ -839,6 +1231,7 @@ describe('AmrLoginPill', () => {
     renderPill();
     const logoutBtn = await screen.findByRole('button', { name: 'Sign out' });
     fireEvent.click(logoutBtn);
+    fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Sign in' })).toBeTruthy();

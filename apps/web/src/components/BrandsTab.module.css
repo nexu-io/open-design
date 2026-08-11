@@ -35,7 +35,7 @@
 .title {
   margin: 0;
   font-size: 18px;
-  font-weight: 680;
+  font-weight: 600;
   letter-spacing: -0.01em;
   color: var(--text-strong);
 }
@@ -66,7 +66,7 @@
   border-radius: var(--radius-sm);
   background: var(--bg-subtle);
   color: var(--text);
-  font-size: 13.5px;
+  font-size: 13px;
   transition: border-color var(--dur-quick) var(--ease-out),
     box-shadow var(--dur-quick) var(--ease-out);
 }
@@ -78,7 +78,6 @@
 .search:focus-visible {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .list {
@@ -166,7 +165,7 @@
   background: var(--bg-muted);
   color: var(--text-soft);
   font-size: 16px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .itemMeta {
@@ -181,7 +180,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-strong);
 }
@@ -190,7 +189,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 

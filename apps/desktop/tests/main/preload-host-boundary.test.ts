@@ -28,6 +28,7 @@ describe("desktop preload host boundary", () => {
     expect(source).toContain("'--od-os-locale='");
     expect(source).toContain("osLocale");
     expect(source).toContain("invokeUpdater('install'");
+    expect(source).toContain("invokeUpdater('clear-cache'");
     expect(source).toContain("od:update:quit");
     expect(source).toContain("od:update:status-changed");
     expect(source).toContain("od:update:open-dialog");

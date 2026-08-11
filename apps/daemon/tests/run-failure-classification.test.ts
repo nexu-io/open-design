@@ -115,6 +115,7 @@ describe('classifyRunFailure', () => {
       classifyRunFailure({
         result: 'cancelled',
         status: { status: 'canceled' },
+        cancelOrigin: 'user_stop',
       }),
     ).toEqual({
       failure_category: 'user_cancel',
@@ -122,9 +123,26 @@ describe('classifyRunFailure', () => {
       failure_stage: 'first_token_wait',
       retryable: false,
       user_action: 'none',
+      cancel_origin: 'user_stop',
+      terminal_trigger: 'user_stop',
     });
   });
 
+  it.each(['project_cleanup', 'daemon_shutdown'] as const)(
+    'keeps lifecycle cancellation origin %s out of the user-stop signal',
+    (cancelOrigin) => {
+      expect(
+        classifyRunFailure({
+          result: 'cancelled',
+          status: { status: 'canceled' },
+          cancelOrigin,
+        }),
+      ).toMatchObject({
+        cancel_origin: cancelOrigin,
+        terminal_trigger: cancelOrigin,
+      });
+    },
+  );
 
   it('prefers user cancellation over timeout-flavored status text when the run result is cancelled', () => {
     expect(
@@ -152,6 +170,8 @@ describe('classifyRunFailure', () => {
       failure_stage: 'first_token_wait',
       retryable: false,
       user_action: 'none',
+      cancel_origin: 'unknown',
+      terminal_trigger: 'unknown',
     });
   });
 
@@ -167,7 +187,7 @@ describe('classifyRunFailure', () => {
       }),
     ).toMatchObject({
       failure_category: 'user_cancel',
-      failure_stage: 'tool_execution',
+      failure_stage: 'tool_outstanding',
     });
   });
 
@@ -260,6 +280,35 @@ describe('classifyRunFailure', () => {
     });
   });
 
+  it('classifies provider "Unsupported model" responses before stream-close fallback', () => {
+    const message = [
+      'Bad Request: {',
+      '  "error": {',
+      '    "code": "400",',
+      '    "message": "Unsupported model claude-sonnet-4-5"',
+      '  }',
+      '}',
+    ].join('\n');
+
+    expect(
+      classifyForAgent(
+        'byok-opencode',
+        'AGENT_EXECUTION_FAILED',
+        message,
+        [
+          errorEvent('AGENT_EXECUTION_FAILED', message, true),
+          runtimeCloseEvent('stream_error'),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'model_not_supported',
+      failure_stage: 'model_select',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+  });
+
   it('recovers rate-limit and session-limit signals from generic error codes', () => {
     expect(
       classify(
@@ -335,6 +384,22 @@ describe('classifyRunFailure', () => {
       failure_category: 'upstream_unavailable',
       failure_detail: 'stream_disconnected',
       failure_stage: 'first_token_wait',
+      retryable: true,
+      user_action: 'retry',
+    });
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'json-rpc id 4: opencode event stream: {"type":"session.error","properties":{"error":{"data":{"message":"\\"[code=upstream_error] stream idle timeout: no data received within configured window\\""}}}}',
+        [errorEvent(
+          'AGENT_EXECUTION_FAILED',
+          'json-rpc id 4: opencode event stream: {"type":"session.error","properties":{"error":{"data":{"message":"\\"[code=upstream_error] stream idle timeout: no data received within configured window\\""}}}}',
+          true,
+        )],
+      ),
+    ).toMatchObject({
+      failure_category: 'upstream_unavailable',
+      failure_detail: 'stream_disconnected',
       retryable: true,
       user_action: 'retry',
     });
@@ -529,11 +594,137 @@ describe('classifyRunFailure', () => {
       failure_category: 'timeout',
       failure_detail: 'inactivity_timeout',
       failure_stage: 'first_token_wait',
+      terminal_trigger: 'inactivity_watchdog',
       retryable: true,
       user_action: 'retry',
     });
   });
 
+  it('distinguishes the absolute first-output deadline from inactivity', () => {
+    const timeoutMessage = 'Agent stalled without emitting a first output for 120s.';
+
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        status: {
+          status: 'failed',
+          error: timeoutMessage,
+          signal: 'SIGTERM',
+          exitCode: null,
+          errorCode: 'AGENT_SIGNAL_SIGTERM',
+        },
+        errorCode: 'AGENT_SIGNAL_SIGTERM',
+        events: [errorEvent('AGENT_SIGNAL_SIGTERM', timeoutMessage, true)],
+      }),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      terminal_trigger: 'first_output_deadline',
+    });
+  });
+
+  it('keeps an explicit watchdog trigger when a provider error supplies the failure bucket', () => {
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        status: {
+          status: 'failed',
+          error: 'HTTP 429: too many requests',
+          exitCode: 1,
+          signal: null,
+          errorCode: 'RATE_LIMITED',
+        },
+        errorCode: 'RATE_LIMITED',
+        terminalTrigger: 'inactivity_watchdog',
+        events: [errorEvent('RATE_LIMITED', 'HTTP 429: too many requests', true)],
+      }),
+    ).toMatchObject({
+      failure_category: 'rate_limit',
+      terminal_trigger: 'inactivity_watchdog',
+    });
+  });
+
+  it('classifies only the terminal attempt after an automatic retry', () => {
+    const timeoutMessage = 'Agent stalled without emitting any new output for 120s.';
+
+    expect(
+      classifyRunFailure({
+        result: 'failed',
+        status: {
+          status: 'failed',
+          error: timeoutMessage,
+          signal: 'SIGTERM',
+          exitCode: null,
+          errorCode: 'AGENT_SIGNAL_SIGTERM',
+        },
+        errorCode: 'AGENT_SIGNAL_SIGTERM',
+        agentId: 'claude',
+        events: [
+          { event: 'start', data: { attempt: 1 } },
+          { event: 'agent', data: { type: 'text_delta', delta: 'Working.' } },
+          { event: 'agent', data: { type: 'tool_use', id: 'tool-1', name: 'Read' } },
+          errorEvent('UPSTREAM_UNAVAILABLE', '503 upstream unavailable', true),
+          { event: 'run_retry_attempted', data: { attempt: 2 } },
+          { event: 'start', data: { attempt: 2 } },
+          errorEvent('AGENT_SIGNAL_SIGTERM', timeoutMessage, true),
+        ],
+      }),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'first_token_wait',
+      retryable: true,
+      user_action: 'retry',
+    });
+  });
+
+  it('separates outstanding tools from post-tool resume stalls', () => {
+    const timeoutMessage = 'Agent stalled without emitting any new output for 600s.';
+
+    expect(
+      classify('TIMEOUT', timeoutMessage, [
+        { event: 'agent', data: { type: 'text_delta', delta: 'Working.' } },
+        { event: 'agent', data: { type: 'tool_use', id: 'tool-1', name: 'Read' } },
+        errorEvent('TIMEOUT', timeoutMessage, true),
+      ]),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'tool_outstanding',
+    });
+
+    expect(
+      classify('TIMEOUT', timeoutMessage, [
+        { event: 'agent', data: { type: 'text_delta', delta: 'Working.' } },
+        { event: 'agent', data: { type: 'tool_use', id: 'tool-1', name: 'Read' } },
+        { event: 'agent', data: { type: 'tool_result', toolUseId: 'tool-1' } },
+        errorEvent('TIMEOUT', timeoutMessage, true),
+      ]),
+    ).toMatchObject({
+      failure_category: 'timeout',
+      failure_detail: 'inactivity_timeout',
+      failure_stage: 'post_tool_resume',
+    });
+  });
+
+  it('separates id-less outstanding tools from resolved post-tool stalls', () => {
+    const timeoutMessage = 'Agent stalled without emitting any new output for 600s.';
+    const classifyIdless = (withResult: boolean) =>
+      classify('TIMEOUT', timeoutMessage, [
+        { event: 'agent', data: { type: 'tool_use', id: null, name: 'Read' } },
+        ...(withResult
+          ? [{ event: 'agent', data: { type: 'tool_result', toolUseId: null } }]
+          : []),
+        errorEvent('TIMEOUT', timeoutMessage, true),
+      ]);
+
+    expect(classifyIdless(false)).toMatchObject({
+      failure_stage: 'tool_outstanding',
+    });
+    expect(classifyIdless(true)).toMatchObject({
+      failure_stage: 'post_tool_resume',
+    });
+  });
 
   it('honors the latest explicit non-retryable hint for timeout failures', () => {
     expect(
@@ -902,6 +1093,34 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
     });
 
     expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        "The 'gpt-5.6-terra' model requires a newer version of Codex.",
+        [
+          {
+            event: 'diagnostic',
+            data: {
+              type: 'model_capability_preflight',
+              status: 'incompatible',
+              model: 'gpt-5.6-terra',
+            },
+          },
+          errorEvent(
+            'AGENT_EXECUTION_FAILED',
+            "The 'gpt-5.6-terra' model requires a newer version of Codex.",
+            false,
+          ),
+        ],
+      ),
+    ).toMatchObject({
+      failure_category: 'model_unavailable',
+      failure_detail: 'cli_version_incompatible',
+      failure_stage: 'preflight',
+      retryable: false,
+      user_action: 'switch_model',
+    });
+
+    expect(
       classify(null, 'Selected model is at capacity. Please try a different model.'),
     ).toMatchObject({
       failure_category: 'upstream_unavailable',
@@ -992,6 +1211,21 @@ describe('classifyRunFailure — signal and interrupt attribution', () => {
     ).toMatchObject({
       failure_category: 'prompt_too_large',
       failure_detail: 'prompt_too_large',
+      failure_stage: 'prompt_send',
+      retryable: false,
+      user_action: 'reduce_context',
+    });
+
+    expect(
+      classify(
+        'AGENT_EXECUTION_FAILED',
+        'json-rpc id 4: opencode event stream: {"properties":{"error":{"data":{"message":"[code=request_too_large] request body exceeds configured limit"}}}}',
+      ),
+    ).toMatchObject({
+      failure_category: 'prompt_too_large',
+      // main 把带 [code=request_too_large] 的上游错误单独归到 request_too_large,
+      // 与「上下文放不下」的 prompt_too_large 区分开(分类仍是 prompt_too_large)。
+      failure_detail: 'request_too_large',
       failure_stage: 'prompt_send',
       retryable: false,
       user_action: 'reduce_context',

@@ -30,6 +30,7 @@ function createPackagedConfig(
     ...(config.updateMetadataUrl == null ? {} : { updateMetadataUrl: config.updateMetadataUrl }),
     ...(config.posthogKey == null ? {} : { posthogKey: config.posthogKey }),
     ...(config.posthogHost == null ? {} : { posthogHost: config.posthogHost }),
+    ...(config.velaWebUrl == null ? {} : { velaWebUrl: config.velaWebUrl }),
     webOutputMode: config.webOutputMode,
     ...(config.portable ? {} : { namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot }),
   };

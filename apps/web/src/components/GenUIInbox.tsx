@@ -7,6 +7,8 @@
 // POST /api/projects/:projectId/genui/:surfaceId/revoke.
 
 import { useCallback, useEffect, useState } from 'react';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
+import { workspaceProjectHeaders } from '../collab/workspace-identity';
 
 interface SurfaceRow {
   id: string;
@@ -24,26 +26,27 @@ interface SurfaceRow {
 
 interface Props {
   projectId: string;
+  workspaceContext?: WorkspaceCollabContext | null;
   // Pluggable for tests / storybook. Defaults to the daemon HTTP routes.
   fetchSurfaces?: (projectId: string) => Promise<SurfaceRow[]>;
   revokeSurface?: (projectId: string, surfaceId: string) => Promise<void>;
 }
 
 export function GenUIInbox(props: Props) {
-  const fetchSurfaces = props.fetchSurfaces ?? defaultFetchSurfaces;
-  const revokeSurface = props.revokeSurface ?? defaultRevokeSurface;
   const [surfaces, setSurfaces] = useState<SurfaceRow[]>([]);
   const [pendingRevoke, setPendingRevoke] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const rows = await fetchSurfaces(props.projectId);
+      const rows = props.fetchSurfaces
+        ? await props.fetchSurfaces(props.projectId)
+        : await defaultFetchSurfaces(props.projectId, props.workspaceContext);
       setSurfaces(rows);
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [props.projectId, fetchSurfaces]);
+  }, [props.fetchSurfaces, props.projectId, props.workspaceContext]);
 
   useEffect(() => {
     void refresh();
@@ -53,7 +56,15 @@ export function GenUIInbox(props: Props) {
     setPendingRevoke(surfaceId);
     setError(null);
     try {
-      await revokeSurface(props.projectId, surfaceId);
+      if (props.revokeSurface) {
+        await props.revokeSurface(props.projectId, surfaceId);
+      } else {
+        await defaultRevokeSurface(
+          props.projectId,
+          surfaceId,
+          props.workspaceContext,
+        );
+      }
       await refresh();
     } catch (err) {
       setError((err as Error).message);
@@ -108,17 +119,30 @@ export function GenUIInbox(props: Props) {
   );
 }
 
-async function defaultFetchSurfaces(projectId: string): Promise<SurfaceRow[]> {
-  const resp = await fetch(`/api/projects/${encodeURIComponent(projectId)}/genui`);
+async function defaultFetchSurfaces(
+  projectId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<SurfaceRow[]> {
+  const resp = await fetch(
+    `/api/projects/${encodeURIComponent(projectId)}/genui`,
+    workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+  );
   if (!resp.ok) return [];
   const json = (await resp.json()) as { surfaces?: SurfaceRow[] };
   return json.surfaces ?? [];
 }
 
-async function defaultRevokeSurface(projectId: string, surfaceId: string): Promise<void> {
+async function defaultRevokeSurface(
+  projectId: string,
+  surfaceId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<void> {
   const resp = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/genui/${encodeURIComponent(surfaceId)}/revoke`,
-    { method: 'POST' },
+    {
+      method: 'POST',
+      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+    },
   );
   if (!resp.ok) {
     throw new Error(`Failed to revoke ${surfaceId}: HTTP ${resp.status}`);

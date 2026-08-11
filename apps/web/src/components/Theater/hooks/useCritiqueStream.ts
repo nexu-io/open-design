@@ -12,6 +12,7 @@ import {
   type CritiqueEventsConnection,
   type CritiqueEventsConnectionOptions,
 } from '../state/sse';
+import { workspaceIdentityCacheKey } from '../../../collab/workspace-identity';
 
 export interface UseCritiqueStreamOptions extends CritiqueEventsConnectionOptions {
   /**
@@ -77,13 +78,21 @@ export function useCritiqueStream(
         maxBackoffMs: options.maxBackoffMs,
         setTimeoutFn: options.setTimeoutFn,
         clearTimeoutFn: options.clearTimeoutFn,
+        workspaceContext: options.workspaceContext,
       },
     );
     return () => conn.close();
     // factory identity is intentionally captured at mount; rest are the
     // configurable knobs a parent might tweak.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, enabled, options.EventSourceCtor, options.initialBackoffMs, options.maxBackoffMs]);
+  }, [
+    projectId,
+    enabled,
+    workspaceIdentityCacheKey(options.workspaceContext),
+    options.EventSourceCtor,
+    options.initialBackoffMs,
+    options.maxBackoffMs,
+  ]);
 
   return { state, dispatch };
 }

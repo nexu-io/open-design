@@ -1,0 +1,85 @@
+name: cache-maintenance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - pnpm-lock.yaml
+      - .github/actions/setup-workspace/action.yml
+      - .github/workflows/cache-maintenance.yml
+  pull_request_target:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  seed-pnpm-windows:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6.0.2
+
+      - name: Seed Windows pnpm cache
+        uses: ./.github/actions/setup-workspace
+        with:
+          save-pnpm-cache: 'true'
+
+
+  # GHA actions/cache is repo-scoped and shared across hosted + every Nexu
+  # size (small/medium/large). One Linux seed under the pinned home store path
+  # is enough for the whole fleet; no per-size matrix required.
+  seed-pnpm-linux:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6.0.2
+
+      - name: Seed Linux pnpm cache
+        uses: ./.github/actions/setup-workspace
+        with:
+          save-pnpm-cache: 'true'
+
+  clean-closed-pr-buildkit:
+    if: github.event_name == 'pull_request_target' && github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Delete closed PR BuildKit caches
+        env:
+          CACHE_REF: refs/pull/${{ github.event.pull_request.number }}/merge
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          cache_rows="$(
+            gh cache list \
+              --repo "$GITHUB_REPOSITORY" \
+              --ref "$CACHE_REF" \
+              --limit 10000 \
+              --json id,key,sizeInBytes \
+              --jq '.[] | select((.key | startswith("buildkit-blob-")) or (.key | startswith("index-buildkit-"))) | [.id, .key, .sizeInBytes] | @tsv'
+          )"
+
+          if [ -z "$cache_rows" ]; then
+            echo "No closed-PR BuildKit caches found for $CACHE_REF"
+            exit 0
+          fi
+
+          count=0
+          bytes=0
+          while IFS=$'\t' read -r cache_id cache_key cache_size; do
+            [ -n "$cache_id" ] || continue
+            echo "Deleting cache id=$cache_id key=$cache_key bytes=$cache_size ref=$CACHE_REF"
+            gh cache delete "$cache_id" --repo "$GITHUB_REPOSITORY"
+            count=$((count + 1))
+            bytes=$((bytes + cache_size))
+          done <<< "$cache_rows"
+
+          echo "Deleted $count closed-PR BuildKit caches ($bytes bytes) for $CACHE_REF"

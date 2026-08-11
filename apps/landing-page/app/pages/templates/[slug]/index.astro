@@ -5,6 +5,7 @@
  */
 import Layout from '../../../_components/sub-page-layout.astro';
 import LazyImg from '../../../_components/lazy-img.astro';
+import { getInfoPageCopy } from '../../../info-page-i18n';
 import { getTemplateRecords, type TemplateRecord } from '../../../_lib/catalog';
 import {
   getLandingUiCopy,
@@ -127,6 +128,7 @@ interface Props {
 const { template: routeTemplate } = Astro.props as Props;
 const locale = localeFromPath(Astro.url.pathname);
 const ui = getLandingUiCopy(locale);
+const common = getInfoPageCopy(locale).common;
 const href = (path: string) => localizedHref(path, locale);
 const localizedTemplates = locale === 'en' ? [] : await getTemplateRecords(locale);
 const template =
@@ -135,7 +137,10 @@ const template =
 const title = ui.catalog.templates.detailTitle(template.name);
 const description = template.summary;
 
-const templateUrl = `https://open-design.ai/templates/${template.slug}/`;
+// Keep the public/share URL aligned with the localized canonical emitted by
+// Layout. Localized template routes are real static pages, so sharing one must
+// not silently send the visitor back to the English route.
+const templateUrl = new URL(href(`/templates/${template.slug}/`), Astro.site).toString();
 const shareCopy = (SHARE_COPY[locale] ?? SHARE_COPY.en)({
   name: template.name,
   description: template.summary,
@@ -164,9 +169,9 @@ const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'BreadcrumbList',
   itemListElement: [
-    { '@type': 'ListItem', position: 1, name: 'Open Design', item: Astro.site?.toString() },
-    { '@type': 'ListItem', position: 2, name: ui.catalog.templates.detailLabel, item: new URL('/templates/', Astro.site).toString() },
-    { '@type': 'ListItem', position: 3, name: template.name, item: new URL(template.detailHref, Astro.site).toString() },
+    { '@type': 'ListItem', position: 1, name: 'Open Design', item: new URL(href('/'), Astro.site).toString() },
+    { '@type': 'ListItem', position: 2, name: ui.catalog.templates.detailLabel, item: new URL(href('/templates/'), Astro.site).toString() },
+    { '@type': 'ListItem', position: 3, name: template.name, item: templateUrl },
   ],
 };
 ---
@@ -211,18 +216,15 @@ const jsonLd = {
         </dl>
       )}
       <div class="detail-actions">
-        {/* Two CTAs matching skills/[slug]: "Use this template" sends
-            users to the OD desktop release page (install first, then
-            use the template); "Find on GitHub" deep-links to the
-            source folder. See skills/[slug].astro for the broader
-            rationale on the release-page pivot. */}
+        {/* The desktop app does not register a public template deep-link yet,
+            so do not promise one. Route through the localized download page
+            and retain the template slug in the URL for a future handoff. */}
         <a
           class="btn btn-primary"
-          href="https://github.com/nexu-io/open-design/releases"
-          target="_blank"
-          rel="noopener"
+          href={href(`/download/?template=${encodeURIComponent(template.slug)}`)}
+          data-template-intent={template.slug}
         >
-          Use this template →
+          {common.downloadDesktop} →
         </a>
         <a class="btn btn-ghost" href={template.source} target="_blank" rel="noopener">
           Find on GitHub →

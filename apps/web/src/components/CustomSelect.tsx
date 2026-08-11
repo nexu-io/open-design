@@ -322,7 +322,7 @@ function SelectOptionButton({
     >
       <span className="od-select-option-label">{option.label}</span>
       <span className="od-select-option-check" aria-hidden>
-        <Icon name="check" size={13} />
+        <Icon name="check" size={14} />
       </span>
     </button>
   );

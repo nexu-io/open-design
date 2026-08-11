@@ -35,7 +35,9 @@ describe('AmrLowBalanceDialog', () => {
     fireEvent.click(primary);
 
     const url = String(open.mock.calls[0]?.[0] ?? '');
-    expect(url).not.toContain('view=plans');
+    // The top-up entry must not carry B's upgrade intent — it opens the
+    // console to add credit, not the plan catalog.
+    expect(url).not.toContain('billing=plan');
   });
 
   it('dismisses from the corner close button', () => {

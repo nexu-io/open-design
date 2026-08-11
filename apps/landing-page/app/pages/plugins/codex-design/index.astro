@@ -1,0 +1,184 @@
+---
+/*
+ * /plugins/codex-design/ — curated "Codex design" collection.
+ *
+ * A standalone editorial board (NOT bundled-plugin driven) of the best
+ * real, external skills for doing design with OpenAI Codex (openai/skills,
+ * MengTo/Skills, etc.). Positions Open Design as the home for designing
+ * with Codex and drives to the client download + the codex-design
+ * list. Content comes from `_lib/codex-design.ts`; page chrome
+ * (breadcrumb, nav) from `getPluginsCopy(locale)`.
+ *
+ * Visual language is deliberately the SAME as the rest of /plugins/*:
+ * editorial tpl-card DNA (1.5px ink border, hard offset hover shadow,
+ * media bleed, mono uppercase labels, dark full-width CTA), the shared
+ * `.plugins-*` hero primitives, and the site's ink/bone palette. It must
+ * read as one family with the plugin hub.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import { getPluginsCopy } from '../../../_lib/plugins-i18n';
+import { getCodexCopy, categoryLabel, skillCopy } from '../../../_lib/codex-i18n';
+import { localeFromPath, localizedHref } from '../../../i18n';
+import { getDetailPlugins } from '../../../_lib/bundled-plugins';
+import '../../../_partials/detail-bands.css';
+import {
+  assertNoCodexSlugCollision,
+  CODEX_COLLECTION,
+  CODEX_SKILLS,
+  AWESOME_REPO_URL,
+  OD_DOWNLOAD_URL,
+} from '../../../_lib/codex-design';
+
+// Fails the build if a bundled plugin ever claims one of the flat
+// `/plugins/<slug>/` routes these curated skills occupy.
+assertNoCodexSlugCollision(getDetailPlugins().map((p) => p.detailSlug));
+
+const locale = localeFromPath(Astro.url.pathname);
+const pcopy = getPluginsCopy(locale);
+const cc = getCodexCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+
+const c = CODEX_COLLECTION;
+const title = `${c.eyebrow} · ${cc.collectionHeading} · Open Design`;
+const description = cc.collectionLede;
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: `${c.eyebrow} — ${cc.collectionHeading}`,
+    description: cc.collectionLede,
+    url: new URL(href('/plugins/codex-design/'), Astro.site).toString(),
+    numberOfItems: CODEX_SKILLS.length,
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: CODEX_SKILLS.map((s, i) => ({
+      '@type': 'ListItem',
+      position: i + 1,
+      name: skillCopy(cc, s.slug).name,
+      url: new URL(href(`/plugins/${s.slug}/`), Astro.site).toString(),
+    })),
+  },
+];
+---
+
+<Layout
+  title={title}
+  description={description}
+  active="plugins"
+  jsonLd={jsonLd}
+  mainClassName="sub-main"
+>
+  <div class="db codex-collection">
+    {/* Hero band, same treatment as the plugin detail pages. */}
+    <section class="dbband dbhero">
+      <div class="dbin">
+        <p class="dbeye">{cc.collectionEyebrow}</p>
+        <h1 class="dbh1">{cc.collectionHeading}</h1>
+        <p class="dbdek dbdek-wide">{cc.collectionLede}</p>
+        <div class="dbcta-row">
+          <a class="dbbtn-p" href={href(OD_DOWNLOAD_URL)}>{cc.ctaDownload}</a>
+          <a class="dbbtn-g" href={AWESOME_REPO_URL} target="_blank" rel="noopener">{cc.ctaStarList}</a>
+        </div>
+      </div>
+    </section>
+
+    {/* The jobs these plugins do, one per category. */}
+    <section class="dbband dbmetaband" aria-label={cc.collectionEyebrow}>
+      <div class="dbin">
+        <ul class="dbjobs">
+          {c.categories.map((cat, i) => (
+            <li>
+              <span class="k">{categoryLabel(cc, cat.key)}</span>
+              <span class="v">{cc.collectionCategoryBlurbs[i]}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+
+    {/* The plugins. */}
+    <section class="dbband" aria-label={cc.collectionHeading}>
+      <div class="dbin">
+        <div class="codex-filter" role="group" aria-label={cc.collectionHeading}>
+          <button class="codex-chip is-on" data-filter="all" type="button" aria-pressed="true">
+            {cc.filterAll} <span class="codex-chip-n">{CODEX_SKILLS.length}</span>
+          </button>
+          {c.categories.map((cat) => (
+            <button class="codex-chip" data-filter={cat.key} type="button" aria-pressed="false">
+              {categoryLabel(cc, cat.key)}
+              <span class="codex-chip-n">{CODEX_SKILLS.filter((s) => s.category === cat.key).length}</span>
+            </button>
+          ))}
+        </div>
+        <div class="codex-skill-grid">
+          {CODEX_SKILLS.map((s) => (
+            <article class="tpl-card" data-cat={s.category}>
+              <a class="tpl-media" href={href(`/plugins/${s.slug}/`)} aria-label={skillCopy(cc, s.slug).name}>
+                <img class="tpl-media-poster" src={s.image} alt="" loading="lazy" />
+                <span class="tpl-media-kind">{categoryLabel(cc, s.category)}</span>
+              </a>
+              <div class="tpl-meta">
+                <span class="tpl-author">{s.badge}</span>
+                <span>{cc.cardKind}</span>
+              </div>
+              <a class="tpl-excerpt" href={href(`/plugins/${s.slug}/`)}>
+                <span class="tpl-excerpt-head">{cc.cardWhatItDoes}</span>
+                <span class="tpl-excerpt-title">{skillCopy(cc, s.slug).name}</span>
+                <span class="tpl-excerpt-body">{skillCopy(cc, s.slug).tagline}</span>
+              </a>
+              <div class="tpl-actions">
+                <a class="tpl-cta" href={href(`/plugins/${s.slug}/`)}>{cc.cardCta}</a>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+
+    {/* Closing CTA: the client download. */}
+    <section class="dbband dbfinal">
+      <div class="dbin">
+        <p class="dbeye">{cc.finalEyebrow}</p>
+        <h2 class="dbfinal-h">{cc.collectionCloserHeading}</h2>
+        <p class="dbfinal-p">{cc.collectionCloserBody}</p>
+        <div class="dbcta-row">
+          <a class="dbbtn-p" href={href(OD_DOWNLOAD_URL)}>{cc.ctaDownload} ↗</a>
+          <a class="dbbtn-g" href={href('/plugins/')}>{cc.ctaBrowseAll}</a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <style>
+    /* Page-level additions on top of the shared band primitives. */
+    .dbdek-wide { max-width: 660px; }
+
+    /* `.codex-skill-grid` (tpl-card DNA) is global in sub-pages.css. */
+  </style>
+
+  <script is:inline>
+    (function () {
+      var bar = document.querySelector('.codex-filter');
+      if (!bar) return;
+      var cards = Array.prototype.slice.call(document.querySelectorAll('.tpl-card[data-cat]'));
+      bar.addEventListener('click', function (e) {
+        var btn = e.target.closest('.codex-chip');
+        if (!btn) return;
+        var f = btn.getAttribute('data-filter');
+        bar.querySelectorAll('.codex-chip').forEach(function (b) {
+          var on = b === btn;
+          b.classList.toggle('is-on', on);
+          // Keep the announced state with the visual one, or a screen reader
+          // hears plain buttons and cannot tell which filter is active.
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        cards.forEach(function (c) {
+          c.hidden = f !== 'all' && c.getAttribute('data-cat') !== f;
+        });
+      });
+    })();
+  </script>
+</Layout>

@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { en } from '../../src/i18n/locales/en';
 
 function optionNames(container: HTMLElement): string[] {
@@ -112,6 +113,7 @@ import { providerModelsCacheKey } from '../../src/components/providerModelsCache
 import { I18nProvider } from '../../src/i18n';
 import { LOCALES } from '../../src/i18n/types';
 import { MAX_MAX_TOKENS, MIN_MAX_TOKENS } from '../../src/state/maxTokens';
+import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 import type {
   AgentInfo,
   AppConfig,
@@ -157,6 +159,88 @@ const amrAgent: AgentInfo = {
   models: [{ id: 'default', label: 'Default' }],
   supportsCustomModel: false,
 };
+
+// recvqfYKutwWlQ: the AMR upgrade entry point must only render for a caller
+// who can actually act on it (`permissions.canManageBilling`), never just a
+// caller whose plan tier happens to be upgradeable. Personal workspaces
+// resolve `canManageBilling` true because the user is always their own owner
+// there (`buildWorkspacePermissions`: `canManageBilling: readable && isOwner`),
+// so this fixture doubles as the "personal identity keeps the upgrade entry"
+// control case.
+function personalWorkspaceContext(
+  overrides: Partial<WorkspaceCollabContext> = {},
+): WorkspaceCollabContext {
+  return {
+    workspaceId: 'ws-personal',
+    workspaceType: 'personal',
+    workspaceMemberId: 'wm-1',
+    role: 'owner',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: null,
+    providerMode: 'personal_byok',
+    seatSummary: { seatLimit: 1, usedSeats: 1, availableSeats: 0, isSeatFull: false },
+    permissions: {
+      canManageMembers: true,
+      canManageBilling: true,
+      canInviteMembers: true,
+      canManageAutoRecharge: true,
+      canShareProjects: true,
+      canWriteSyncedFiles: true,
+      canViewWorkspaceSettings: true,
+      canManageSharedResources: true,
+    },
+    ...overrides,
+  } as WorkspaceCollabContext;
+}
+
+// A team MEMBER (not owner/admin) — `canManageBilling` folds in role, so this
+// is the "cannot act on billing" case the upgrade entry must hide for.
+function teamMemberWorkspaceContext(
+  overrides: Partial<WorkspaceCollabContext> = {},
+): WorkspaceCollabContext {
+  return {
+    ...personalWorkspaceContext(),
+    workspaceId: 'ws-team',
+    workspaceType: 'team',
+    role: 'member',
+    teamId: 'team-1',
+    teamName: 'OD Feature Team',
+    permissions: {
+      canManageMembers: false,
+      canManageBilling: false,
+      canInviteMembers: false,
+      canManageAutoRecharge: false,
+      canShareProjects: true,
+      canWriteSyncedFiles: true,
+      canViewWorkspaceSettings: true,
+      canManageSharedResources: false,
+    },
+    ...overrides,
+  } as WorkspaceCollabContext;
+}
+
+function workspaceContextResponse(context: WorkspaceCollabContext | null) {
+  return new Response(JSON.stringify({ context }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' },
+  });
+}
+
+function workspaceDirectoryResponse(
+  context: WorkspaceCollabContext | null,
+): Response {
+  return new Response(
+    JSON.stringify(workspaceDirectoryFixture(context ? [context] : [])),
+    {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    },
+  );
+}
+
+const inFlightAuthAttemptId = '936da01f-9abd-4d9d-80c7-02af85c822a8';
 
 type OnRefreshAgents = (
   options?: AgentRefreshOptions,
@@ -274,10 +358,12 @@ function renderSettingsDialog(
     daemonLive?: boolean;
     onRefreshAgents?: OnRefreshAgents;
     initialSection?: SettingsSection;
+    locale?: Parameters<typeof I18nProvider>[0]['initial'];
     appVersionInfo?: AppVersionInfo | null;
     providerModelsCache?: Record<string, ProviderModelOption[]>;
     welcome?: boolean;
     onSilentUpdatePreferenceChange?: (allowSilentUpdates: boolean) => Promise<void>;
+    onResetOnboarding?: (next: AppConfig) => void;
   } = {},
 ) {
   const onPersist = vi.fn();
@@ -288,7 +374,7 @@ function renderSettingsDialog(
   const onClose = vi.fn();
   const onRefreshAgents = options.onRefreshAgents ?? vi.fn<OnRefreshAgents>();
 
-  const view = render(
+  const dialog = (
     <SettingsDialog
       initial={{ ...baseConfig, ...initial }}
       agents={options.agents ?? availableAgents}
@@ -301,8 +387,14 @@ function renderSettingsDialog(
       onSilentUpdatePreferenceChange={onSilentUpdatePreferenceChange}
       onPersistComposioKey={onPersistComposioKey}
       onClose={onClose}
+      onResetOnboarding={options.onResetOnboarding}
       onRefreshAgents={onRefreshAgents}
-    />,
+    />
+  );
+  const view = render(
+    options.locale
+      ? <I18nProvider initial={options.locale}>{dialog}</I18nProvider>
+      : dialog,
   );
 
   return {
@@ -372,7 +464,7 @@ async function waitForPersist(
 }
 
 function openGatewayPresetPopover() {
-  fireEvent.click(screen.getByRole('combobox', { name: 'Gateway preset' }));
+  fireEvent.click(screen.getByRole('combobox', { name: 'Provider preset' }));
   return screen.getByTestId('settings-byok-provider-preset-popover');
 }
 
@@ -480,7 +572,8 @@ describe('SettingsDialog privacy settings interactions', () => {
       mode: 'daemon',
       agentId: null,
       installationId: null,
-      privacyDecisionAt: 1778244000000,
+      // Undecided: the consent card (and its Share button) only renders before
+      // a choice exists — deciding swaps it for the toggles it just set.
       telemetry: { metrics: false, content: false, artifactManifest: true },
     };
     const view = renderSettingsDialog(initial, { initialSection: 'privacy' });
@@ -505,8 +598,9 @@ describe('SettingsDialog privacy settings interactions', () => {
       />,
     );
 
-    expect(screen.getByRole('button', { name: 'Share' }).getAttribute('aria-pressed'))
-      .toBe('true');
+    // The pending choice survives the unrelated parent update: the card is
+    // gone (a decision exists now) and the toggles it set are still on.
+    expect(screen.queryByRole('button', { name: 'Share' })).toBeNull();
     expect((screen.getByLabelText('Anonymous ID') as HTMLInputElement).value).toBe('inst-new');
     expect(screen.getByRole('button', { name: /Anonymous metrics/ }).getAttribute('aria-pressed'))
       .toBe('true');
@@ -525,6 +619,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     const { container } = renderSettingsDialog();
     const dialog = screen.getByRole('dialog');
     const sidebar = container.querySelector('#settings-sidebar');
+
+    expect(dialog.classList.contains('settings-fullscreen')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Exit fullscreen' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Exit fullscreen' }));
+    expect(dialog.classList.contains('settings-fullscreen')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Fullscreen' })).toBeTruthy();
 
     expect(dialog.classList.contains('settings-sidebar-collapsed')).toBe(false);
     expect(sidebar?.getAttribute('aria-hidden')).toBeNull();
@@ -562,12 +662,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(screen.getByRole('tab', { name: 'SenseAudio' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'AIHubMix' })).toBeTruthy();
     expect(screen.queryByRole('tab', { name: 'AWS Bedrock' })).toBeNull();
-    expect(screen.getByLabelText('Gateway preset')).toBeTruthy();
+    expect(screen.getByLabelText('Provider preset')).toBeTruthy();
     expect(screen.getByLabelText('Model')).toBeTruthy();
     const baseUrlInput = screen.getByLabelText('Base URL') as HTMLInputElement;
     expect(baseUrlInput.value).toBe('https://api.anthropic.com');
     expect(baseUrlInput.readOnly).toBe(true);
-    expect(screen.getByText('Default endpoint. Usually no need to change this.')).toBeTruthy();
+    expect(screen.getByText('Change this only if you use a proxy or compatible gateway.')).toBeTruthy();
     const memoryModelDetails = screen
       .getAllByText('Memory model')
       .find((node) => node.closest('summary'))
@@ -590,7 +690,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     expect(apiKeyInput.type).toBe('password');
 
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
-    expect(screen.getByLabelText('Gateway preset')).toBeTruthy();
+    expect(screen.getByLabelText('Provider preset')).toBeTruthy();
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
       'https://api.openai.com/v1',
     );
@@ -791,7 +891,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog();
 
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).readOnly).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Customize URL' }));
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).readOnly).toBe(false);
 
     cleanup();
@@ -865,13 +965,13 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog({ apiProtocol: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o', apiProviderBaseUrl: 'https://api.openai.com/v1' });
 
     fireEvent.click(screen.getByRole('tab', { name: 'OpenAI' }));
-    expect(screen.getByRole('combobox', { name: 'Gateway preset' }).textContent).toContain('OpenAI');
+    expect(screen.getByRole('combobox', { name: 'Provider preset' }).textContent).toContain('OpenAI');
 
     fireEvent.change(screen.getByLabelText('Base URL'), {
       target: { value: 'https://my-proxy.example.com/v1' },
     });
 
-    expect(screen.getByRole('combobox', { name: 'Gateway preset' }).textContent).toContain('Custom provider');
+    expect(screen.getByRole('combobox', { name: 'Provider preset' }).textContent).toContain('Custom provider');
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
       'https://my-proxy.example.com/v1',
     );
@@ -887,7 +987,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       'Ollama Cloud (managed)',
       'Ollama Self-hosted (local)',
     ]);
-    fireEvent.click(screen.getByRole('combobox', { name: 'Gateway preset' }));
+    fireEvent.click(screen.getByRole('combobox', { name: 'Provider preset' }));
     expect((screen.getByLabelText('Base URL') as HTMLInputElement).readOnly).toBe(false);
 
     selectGatewayPreset('Ollama Self-hosted (local)');
@@ -901,6 +1001,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   it('saves and auto-tests the self-hosted Ollama preset without an API key', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -981,7 +1087,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       target: { value: 'sk-test' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Customize URL' }));
     // A non-http scheme is still rejected client-side. (An internal-IP URL is
     // no longer rejected here — it is syntactically valid and the daemon owns
     // the allowlist decision; see #3225.)
@@ -1021,13 +1127,13 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       apiProviderBaseUrl: 'https://api.anthropic.com',
     });
 
-    fireEvent.click(screen.getByRole('tab', { name: /BYOK.*API provider/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /API providers.*API provider/i }));
     fireEvent.change(screen.getByLabelText('API key'), {
       target: { value: 'unfinished-key' },
     });
 
     expect(screen.getByTestId('settings-byok-draft-notice').textContent).toBe(
-      'This setup remains a draft until the required fields are complete. Your current execution setup stays active.',
+      'Complete the required fields to save this provider. Your current setup will remain active.',
     );
 
     await waitFor(() => expect(first.onPersist).toHaveBeenCalled());
@@ -1060,7 +1166,7 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     first.unmount();
 
     const reopened = renderSettingsDialog(persistedDraft);
-    fireEvent.click(screen.getByRole('tab', { name: /BYOK.*API provider/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /API providers.*API provider/i }));
     expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe(
       'unfinished-key',
     );
@@ -1214,10 +1320,8 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     fireEvent.change(screen.getByLabelText('API key'), {
       target: { value: 'azure-key' },
     });
+    expect(screen.queryByLabelText('Custom deployment name')).toBeNull();
     fireEvent.change(screen.getByLabelText('Deployment name'), {
-      target: { value: '__custom__' },
-    });
-    fireEvent.change(screen.getByLabelText('Custom deployment name'), {
       target: { value: 'deployment-one' },
     });
     fireEvent.change(screen.getByLabelText('Base URL'), {
@@ -1240,10 +1344,26 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
         model: 'deployment-one',
         baseUrl: 'https://example.openai.azure.com',
         apiVersion: '2024-10-21',
-        apiProviderBaseUrl: null,
+        apiProviderBaseUrl: '',
       }),
       {},
     );
+
+    const persistedConfig = onPersist.mock.calls.at(-1)?.[0] as AppConfig;
+    cleanup();
+
+    renderSettingsDialog(persistedConfig);
+
+    expect((screen.getByLabelText('Deployment name') as HTMLInputElement).value).toBe(
+      'deployment-one',
+    );
+    expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+      'https://example.openai.azure.com',
+    );
+    expect((screen.getByLabelText('API version') as HTMLInputElement).value).toBe(
+      '2024-10-21',
+    );
+    expect(screen.queryByLabelText('Custom deployment name')).toBeNull();
   });
 
   it('does not fetch provider models while the API key edit is still uncommitted', async () => {
@@ -1642,6 +1762,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   it('auto-tests a saved complete BYOK config when Settings opens', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -1675,6 +1801,15 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   it('auto-tests BYOK after required fields become locally valid', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(null);
+      }
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -1967,6 +2102,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
       // current extraction override from /api/memory on mount. Swallow
       // it here so the assertion below only counts the test-connection
       // POST the user actually triggered.
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -2015,6 +2156,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   it('shows provider upstream detail for failed BYOK connection tests', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -2172,6 +2319,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     let sentApiKey: unknown;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -2216,6 +2369,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   it('shows a BYOK API key cleaned notice after blur cleanup', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -2260,11 +2419,26 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     let attempt = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(null);
+      }
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
+      }
+      if (url.startsWith('/api/workspace/billing?')) {
+        return new Response(JSON.stringify({ summary: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
       }
       attempt += 1;
       return new Response(
@@ -2306,6 +2480,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   it('marks a successful BYOK test after a config edit as success after action', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -2365,6 +2545,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   it('renders invalid Base URL test failures on the Base URL field', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -2399,6 +2585,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   it('renders auth failed test failures on the API key field', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -2435,6 +2627,12 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
   it('focuses the model field when the BYOK test returns model not found', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -2489,6 +2687,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     };
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -2548,8 +2752,8 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     const localCliTab = screen.getByRole('tab', { name: /Local CLI.*1 installed/i });
     fireEvent.click(localCliTab);
 
-    expect(screen.getByText('Your CLIs (1)')).toBeTruthy();
-    const installGroupSummary = screen.getByText('Available to install (1)');
+    expect(screen.getByText('Installed CLIs (1)')).toBeTruthy();
+    const installGroupSummary = screen.getByText('Available CLIs (1)');
     expect(installGroupSummary.closest('details')?.hasAttribute('open')).toBe(false);
     const codexCard = screen.getByRole('button', { name: /Codex CLI/i }) as HTMLButtonElement;
     fireEvent.click(installGroupSummary);
@@ -2570,11 +2774,10 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(codexCard);
     const selectedCard = codexCard.closest('.agent-card') as HTMLElement;
-    expect(
-      within(selectedCard).getByRole('combobox', {
-        name: en['settings.modelPicker'],
-      }),
-    ).toBeTruthy();
+    const selectedModelPicker = within(selectedCard).getByRole('combobox', {
+      name: en['settings.modelPicker'],
+    });
+    expect(selectedModelPicker.textContent).toContain('CLI default');
     expect(
       selectedCard.compareDocumentPosition(installGroupSummary) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -2681,10 +2884,10 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
-    expect(screen.getByText('Live from CLI')).toBeTruthy();
-    expect(
-      screen.getByText(/Model list comes from this CLI/i),
-    ).toBeTruthy();
+    expect(screen.getByText('Synced from CLI')).toBeTruthy();
+    // The badge is the only source label; the explanatory hint under the
+    // picker was removed.
+    expect(screen.queryByText(/Model list comes from this CLI/i)).toBeNull();
   });
 
   it('labels fallback CLI model metadata in the model picker', () => {
@@ -2702,132 +2905,9 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
     expect(screen.getByText('Built-in list')).toBeTruthy();
-    expect(
-      screen.getByText(/Showing built-in defaults/i),
-    ).toBeTruthy();
-  });
-
-  it('persists Codex service tier selection and sends it to the agent test', async () => {
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
-      const url = input.toString();
-      if (url === '/api/test/connection') {
-        return new Response(
-          JSON.stringify({
-            ok: true,
-            kind: 'success',
-            latencyMs: 12,
-            model: 'gpt-5.5',
-            sample: 'ok',
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
-      }
-      return new Response(JSON.stringify({}), { status: 404 });
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const { onPersist } = renderSettingsDialog(
-      {
-        mode: 'daemon',
-        agentId: 'codex',
-        agentModels: {
-          codex: { model: 'gpt-5.5', reasoning: 'default' },
-        },
-      },
-      {
-        agents: [
-          {
-            ...availableAgents[0]!,
-            reasoningOptions: [
-              { id: 'default', label: 'Default' },
-              { id: 'high', label: 'High' },
-            ],
-            modelsSource: 'live',
-            models: [
-              { id: 'default', label: 'Default' },
-              {
-                id: 'gpt-5.5',
-                label: 'gpt-5.5',
-                serviceTierOptions: [{ id: 'priority', label: 'Fast' }],
-              },
-            ],
-          },
-        ],
-      },
-    );
-
-    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
-    const serviceTierPicker = screen.getByRole('combobox', {
-      name: en['settings.serviceTierPicker'],
-    }) as HTMLSelectElement;
-    expect(
-      Array.from(serviceTierPicker.options).map((option) => option.textContent),
-    ).toEqual(['Default', 'Fast']);
-
-    fireEvent.change(serviceTierPicker, { target: { value: 'priority' } });
-
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        agentModels: {
-          codex: {
-            model: 'gpt-5.5',
-            reasoning: 'default',
-            serviceTier: 'priority',
-          },
-        },
-      }),
-      {},
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: en['settings.test'] }));
-
-    await waitFor(() => {
-      const calls = fetchMock.mock.calls as Array<[RequestInfo | URL, RequestInit?]>;
-      const testCall = calls.find(
-        ([input]) => input.toString() === '/api/test/connection',
-      );
-      expect(testCall).toBeDefined();
-      const init = testCall?.[1] as RequestInit | undefined;
-      const body = JSON.parse(String(init?.body));
-      expect(body).toEqual(expect.objectContaining({
-        mode: 'agent',
-        agentId: 'codex',
-        model: 'gpt-5.5',
-        reasoning: 'default',
-        serviceTier: 'priority',
-      }));
-    });
-
-    const reasoningPicker = screen.getByRole('combobox', {
-      name: en['settings.reasoningPicker'],
-    }) as HTMLSelectElement;
-    fireEvent.change(reasoningPicker, { target: { value: 'high' } });
-
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        agentModels: {
-          codex: {
-            model: 'gpt-5.5',
-            reasoning: 'high',
-            serviceTier: 'priority',
-          },
-        },
-      }),
-      {},
-    );
-
-    fireEvent.change(serviceTierPicker, { target: { value: 'default' } });
-
-    await waitFor(() => {
-      const clearedPersist = onPersist.mock.calls.find(([config]) => {
-        const choice = (config as AppConfig).agentModels?.codex;
-        return choice?.model === 'gpt-5.5'
-          && choice.reasoning === 'high'
-          && !Object.prototype.hasOwnProperty.call(choice, 'serviceTier');
-      });
-      expect(clearedPersist).toBeDefined();
-    });
+    // The badge is the only source label; the explanatory hint under the
+    // picker was removed.
+    expect(screen.queryByText(/Showing built-in defaults/i)).toBeNull();
   });
 
   it('uses the existing Settings card picker for AMR without exposing custom stale models', () => {
@@ -2852,7 +2932,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^Open Design\b/ }));
+    fireEvent.click(screen.getByTestId('settings-agent-select-amr'));
 
     const modelPickers = screen.getAllByRole('combobox', {
       name: en['settings.modelPicker'],
@@ -2863,6 +2943,42 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     const modelPopover = screen.getByTestId('settings-agent-model-popover-amr');
     expect(optionNames(modelPopover)).toEqual(['GLM 5', 'GLM 5.1']);
     expect(screen.queryByLabelText(en['settings.modelCustomLabel'])).toBeNull();
+  });
+
+  it('closes the AMR model picker with Escape without closing Settings', () => {
+    const view = renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'amr',
+        agentModels: { amr: { model: 'glm-5' } },
+      },
+      {
+        agents: [
+          {
+            ...amrAgent,
+            modelsSource: 'live',
+            models: [
+              { id: 'glm-5', label: 'GLM 5' },
+              { id: 'glm-5.1', label: 'GLM 5.1' },
+            ],
+          },
+        ],
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+    fireEvent.click(screen.getByTestId('settings-agent-select-amr'));
+
+    const modelPicker = screen.getByRole('combobox', {
+      name: en['settings.modelPicker'],
+    });
+    fireEvent.click(modelPicker);
+    expect(screen.getByTestId('settings-agent-model-popover-amr')).toBeTruthy();
+
+    fireEvent.keyDown(modelPicker, { key: 'Escape' });
+
+    expect(screen.queryByTestId('settings-agent-model-popover-amr')).toBeNull();
+    expect(view.onClose).not.toHaveBeenCalled();
   });
 
   it('shows an empty state when no local CLI agents are detected', () => {
@@ -2889,6 +3005,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     ];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3036,7 +3158,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    fireEvent.click(screen.getByText('Available to install (1)'));
+    fireEvent.click(screen.getByText('Available CLIs (1)'));
     fireEvent.click(screen.getByRole('link', { name: en['settings.agentInstall.install'] }));
     expect(onRefreshAgents).not.toHaveBeenCalled();
 
@@ -3089,12 +3211,18 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     const localCliTab = screen.getByRole('tab', { name: /Local CLI.*daemon offline/i }) as HTMLButtonElement;
     expect(localCliTab.disabled).toBe(true);
     expect(localCliTab.getAttribute('title')).toBe('Daemon is not running');
-    expect(screen.getByRole('tab', { name: /BYOK.*API provider/i }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: /API providers.*API provider/i }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('renders a Local CLI connection test for selected installed agents', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3119,6 +3247,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
   it('renders the AMR local agent without vela branding and with the Local CLI test action', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3147,7 +3281,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
-    expect(screen.getByRole('button', { name: /^Open Design\b/ })).toBeTruthy();
+    expect(screen.getByTestId('settings-agent-select-amr')).toBeTruthy();
     expect(screen.queryByText('1.0.0')).toBeNull();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
     expect(screen.queryByText(/vela/i)).toBeNull();
@@ -3163,6 +3297,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
   it('only shows the AMR authorization action after selecting the AMR card', async () => {
     globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3187,17 +3327,131 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*2 installed/i }));
-    expect(screen.getByRole('button', { name: /^Open Design\b/ })).toBeTruthy();
+    expect(screen.getByTestId('settings-agent-select-amr')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Authorize' })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: /^Open Design\b/ }));
+    fireEvent.click(screen.getByTestId('settings-agent-select-amr'));
 
     expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
+  });
+
+  // recvqfYKutwWlQ: a personal workspace always resolves `canManageBilling`
+  // true (the user is their own owner), so the upgrade entry stays visible
+  // for a signed-in, upgrade-eligible AMR account with no team involved.
+  it('shows the AMR upgrade action for a personal identity with an upgradeable plan', async () => {
+    const context = personalWorkspaceContext();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(context);
+      }
+      if (url === '/api/workspace/context') {
+        return workspaceContextResponse(context);
+      }
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: true,
+            profile: 'default',
+            user: { id: 'u1', email: 'solo@example.com' },
+            account: { plan: 'plus', balanceUsd: '10.0000' },
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+
+    expect(
+      await screen.findByTestId('settings-agent-card-amr-upgrade'),
+    ).toBeTruthy();
+  });
+
+  // recvqfYKutwWlQ: a team member's plan tier can be upgradeable while the
+  // member itself cannot act on billing (owner-only) — the AMR card's
+  // upgrade entry must stay hidden for them even with a fully signed-in,
+  // upgrade-eligible account, matching the fix for
+  // "团队的成员没有升级权限，是不是可以在客户端隐藏升级入口".
+  it('hides the AMR upgrade action for a team member without billing permission', async () => {
+    const context = teamMemberWorkspaceContext();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(context);
+      }
+      if (url === '/api/workspace/context') {
+        return workspaceContextResponse(context);
+      }
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: true,
+            profile: 'default',
+            user: { id: 'u2', email: 'member@example.com' },
+            account: { plan: 'plus', balanceUsd: '10.0000' },
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+
+    // Let both identity sources resolve before checking the action. The $10
+    // value is account-scoped and must NOT be shown as this team workspace's
+    // balance while its explicit wallet response is unavailable.
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([i]) =>
+        i.toString() === '/api/workspace/context')).toBe(true);
+      expect(fetchMock.mock.calls.some(([i]) =>
+        i.toString() === '/api/integrations/vela/status')).toBe(true);
+    });
+    expect(screen.queryByText('$10.00')).toBeNull();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId('settings-agent-card-amr-upgrade')).toBeNull();
   });
 
   it('reveals AMR cancel only while hovering the active card during sign-in', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3226,7 +3480,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCardButton = screen.getByRole('button', { name: /^Open Design\b/ });
+    const amrCardButton = screen.getByTestId('settings-agent-select-amr');
     const amrCard = amrCardButton.closest('.agent-card') as HTMLElement;
     expect(amrCard).toBeTruthy();
     expect(await screen.findByText('Signing in…')).toBeTruthy();
@@ -3245,6 +3499,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     let statusStage: 'pending' | 'signed-out' = 'pending';
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3258,6 +3518,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
               ? {
                   loggedIn: false,
                   loginInFlight: true,
+                  authAttemptId: inFlightAuthAttemptId,
                   profile: 'local',
                   user: null,
                   configPath: '/Users/test/.amr/config.json',
@@ -3265,6 +3526,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
               : {
                   loggedIn: false,
                   loginInFlight: false,
+                  authAttemptId: inFlightAuthAttemptId,
                   profile: 'local',
                   user: null,
                   configPath: '/Users/test/.amr/config.json',
@@ -3274,6 +3536,9 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
         );
       }
       if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          authAttemptId: inFlightAuthAttemptId,
+        });
         statusStage = 'signed-out';
         return new Response(JSON.stringify({ canceled: true }), {
           status: 200,
@@ -3290,14 +3555,20 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCard = screen.getByRole('button', { name: /^Open Design\b/ }).closest('.agent-card') as HTMLElement;
+    const amrCard = screen.getByTestId('settings-agent-select-amr').closest('.agent-card') as HTMLElement;
     expect(await screen.findByText('Signing in…')).toBeTruthy();
 
     fireEvent.mouseEnter(amrCard);
     fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
 
     expect(await screen.findByText('Canceled')).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/login/cancel', { method: 'POST' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/integrations/vela/login/cancel',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ authAttemptId: inFlightAuthAttemptId }),
+      }),
+    );
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Authorize' })).toBeTruthy();
@@ -3317,6 +3588,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     let cancelReceived = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3331,6 +3608,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
           JSON.stringify({
             loggedIn: false,
             loginInFlight: true,
+            authAttemptId: inFlightAuthAttemptId,
             profile: 'local',
             user: null,
             configPath: '/Users/test/.amr/config.json',
@@ -3339,6 +3617,9 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
         );
       }
       if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          authAttemptId: inFlightAuthAttemptId,
+        });
         cancelReceived = true;
         return new Response(JSON.stringify({ canceled: true }), {
           status: 200,
@@ -3355,7 +3636,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCard = screen.getByRole('button', { name: /^Open Design\b/ }).closest('.agent-card') as HTMLElement;
+    const amrCard = screen.getByTestId('settings-agent-select-amr').closest('.agent-card') as HTMLElement;
     expect(await screen.findByText('Signing in…')).toBeTruthy();
 
     fireEvent.mouseEnter(amrCard);
@@ -3383,6 +3664,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     let statusStage: 'pending' | 'signed-out' | 'signed-in' = 'pending';
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3395,31 +3682,37 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
             ? {
                 loggedIn: false,
                 loginInFlight: true,
+                authAttemptId: inFlightAuthAttemptId,
                 profile: 'local',
                 user: null,
                 configPath: '/Users/test/.amr/config.json',
               }
             : statusStage === 'signed-in'
               ? {
-                  loggedIn: true,
-                  loginInFlight: false,
-                  profile: 'local',
-                  user: { id: 'user-1', email: 'late@example.com' },
-                  configPath: '/Users/test/.amr/config.json',
-                }
+                loggedIn: true,
+                loginInFlight: false,
+                authAttemptId: inFlightAuthAttemptId,
+                profile: 'local',
+                user: { id: 'user-1', email: 'late@example.com' },
+                configPath: '/Users/test/.amr/config.json',
+              }
               : {
-                  loggedIn: false,
-                  loginInFlight: false,
-                  profile: 'local',
-                  user: null,
-                  configPath: '/Users/test/.amr/config.json',
-                };
+                loggedIn: false,
+                loginInFlight: false,
+                authAttemptId: inFlightAuthAttemptId,
+                profile: 'local',
+                user: null,
+                configPath: '/Users/test/.amr/config.json',
+              };
         return new Response(JSON.stringify(body), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
       if (url === '/api/integrations/vela/login/cancel' && init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({
+          authAttemptId: inFlightAuthAttemptId,
+        });
         statusStage = 'signed-out';
         return new Response(JSON.stringify({ canceled: true }), {
           status: 200,
@@ -3436,7 +3729,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
-    const amrCard = screen.getByRole('button', { name: /^Open Design\b/ }).closest('.agent-card') as HTMLElement;
+    const amrCard = screen.getByTestId('settings-agent-select-amr').closest('.agent-card') as HTMLElement;
     expect(await screen.findByText('Signing in…')).toBeTruthy();
 
     fireEvent.mouseEnter(amrCard);
@@ -3459,6 +3752,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
   it('renders the signed-in AMR account state inside Settings without leaking vela branding', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3493,7 +3792,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Design\b/ })).toBeTruthy();
+    expect(screen.getByTestId('settings-agent-select-amr')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Plan pro/ })).toBeTruthy();
     expect(screen.getByText('signed-in@example.com')).toBeTruthy();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
@@ -3503,6 +3802,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
   it('keeps the AMR plan badge on the account row outside the clipped benefits row', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3550,10 +3855,16 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     expect(benefits?.contains(planBadge)).toBe(false);
   });
 
-  it('loads the Settings AMR wallet fallback balance without a manual card refresh button', async () => {
+  it('loads the Settings AMR wallet fallback balance in canonical USD format without a manual card refresh button', async () => {
     let walletCalls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3597,12 +3908,13 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'amr' },
-      { agents: [amrAgent] },
+      { agents: [amrAgent], locale: 'de' },
     );
 
-    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+    fireEvent.click(screen.getByRole('tab', { name: /Lokale CLI.*1 installiert/i }));
 
     expect(await screen.findByText('$1.00')).toBeTruthy();
+    expect(screen.queryByText(/1,00/)).toBeNull();
     expect(screen.queryByRole('button', { name: 'Refresh AMR wallet balance' })).toBeNull();
     expect(walletCalls).toBe(1);
     expect(fetchMock).toHaveBeenCalledWith('/api/integrations/vela/wallet', {
@@ -3610,9 +3922,123 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     });
   });
 
+  // recvpZPzGJL7o7: "cli 页面的余额数据取的还是 personal 空间的余额". The local-CLI
+  // card read ONLY vela's account-scoped balance (`account.balanceUsd`, then
+  // the `/api/integrations/vela/wallet` snapshot) — the same account-scoped
+  // projection `resolvePlanTier` already exists to override for the plan badge
+  // on this exact card. The explicit workspace balance from
+  // `useWorkspaceBillingResponse` must win once it has loaded.
+  it('prefers the workspace billing balance over the account-scoped wallet snapshot', async () => {
+    const context = teamMemberWorkspaceContext({
+      workspaceId: 'ws-team',
+      workspaceMemberId: 'member-team',
+    });
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === '/api/workspace/directory') {
+        return workspaceDirectoryResponse(context);
+      }
+      if (url === '/api/workspace/context') {
+        return workspaceContextResponse(context);
+      }
+      if (url.startsWith('/api/workspace/billing?')) {
+        return new Response(
+          JSON.stringify({
+            summary: {
+              workspaceId: null,
+              membershipTier: 'team',
+              // recvqakgSc1Pwd: B reports credits and USD on separate scales
+              // (thousands of credits per dollar) — a real workspace read
+              // 99933 credits / $9.9933. Earlier fixture data used a
+              // fractional credits count that coincidentally equaled its own
+              // balanceUsd string, which let a totalAvailableCredits-as-USD
+              // regression pass silently. These numbers are deliberately far
+              // apart so only reading `balanceUsd` can produce '$9.99'.
+              totalAvailableCredits: 99933,
+              subscriptionCredits: 99933,
+              rechargeCredits: 0,
+              balanceUsd: '131.23',
+              subscriptionStatus: 'active',
+              availableActions: [],
+              workspaceBalance: null,
+            },
+            workspaceBalance: {
+              workspaceId: 'ws-team',
+              workspaceMemberId: 'member-team',
+              balanceUsd: '9.9933',
+              billingScopeVersion: 2,
+              expiresAt: null,
+              updatedAt: '2026-07-26T12:00:00Z',
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/memory') {
+        return new Response(
+          JSON.stringify({ enabled: true, memories: [], extraction: null }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/status') {
+        return new Response(
+          JSON.stringify({
+            loggedIn: true,
+            profile: 'feature-test',
+            user: { id: 'user-1', email: 'signed-in@example.com', name: 'Signed In User' },
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url === '/api/integrations/vela/wallet' || url === '/api/integrations/vela/wallet?refresh=1') {
+        // The member's own PERSONAL wallet — deliberately a different number
+        // from the team's billing summary above, so a pass proves the card
+        // read the workspace-scoped source, not this account-scoped one.
+        return new Response(
+          JSON.stringify({
+            status: 'available',
+            profile: 'feature-test',
+            user: { id: 'user-1', email: 'signed-in@example.com' },
+            balanceUsd: '138.63',
+            updatedAt: '2026-07-21T08:00:00.000Z',
+            fetchedAt: '2026-07-21T08:00:01.000Z',
+            stale: false,
+            source: 'vela_api',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'amr' },
+      { agents: [amrAgent] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
+
+    // recvqakgSc1Pwd: the card must format `balanceUsd` (a real dollar
+    // figure vela reports), never `totalAvailableCredits` (a raw credits
+    // count) — feeding the credits count through the USD formatter is how a
+    // FEATURE TEST workspace with 388307 credits rendered "Balance
+    // $388307.00" in Settings > Models & providers > Local CLI.
+    expect(await screen.findByText('$9.99')).toBeTruthy();
+    expect(screen.queryByText('$99933.00')).toBeNull();
+    expect(screen.queryByText('$138.63')).toBeNull();
+  });
+
   it('renders env-backed AMR login inside Settings without fabricating account details', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3642,7 +4068,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Design\b/ })).toBeTruthy();
+    expect(screen.getByTestId('settings-agent-select-amr')).toBeTruthy();
     expect(screen.queryByText(/@/i)).toBeNull();
     expect(screen.queryByText(/AMR \(vela\)/i)).toBeNull();
   });
@@ -3651,6 +4077,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     let statusCalls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3704,6 +4136,12 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     let statusCalls = 0;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = input.toString();
+      if (url === '/api/workspace/context') {
+        return new Response(JSON.stringify({ context: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (url === '/api/memory') {
         return new Response(
           JSON.stringify({ enabled: true, memories: [], extraction: null }),
@@ -3739,12 +4177,15 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
     expect(await screen.findByRole('button', { name: 'Sign out' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Design\b/ })).toBeTruthy();
+    expect(screen.getByTestId('settings-agent-select-amr')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+    // recvqgMWpJZqhL: sign-out is gated behind an explicit confirmation
+    // dialog; the real logout only runs after confirming.
+    fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
 
     expect(await screen.findByRole('button', { name: 'Authorize' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /^Open Design\b/ })).toBeTruthy();
+    expect(screen.getByTestId('settings-agent-select-amr')).toBeTruthy();
     expect(
       onPersist.mock.calls.some(
         ([nextConfig]) =>
@@ -3775,10 +4216,16 @@ describe('SettingsDialog media providers interactions', () => {
       { initialSection: 'media' },
     );
 
-    const names = Array.from(document.querySelectorAll('.media-provider-name')).map((node) =>
-      node.textContent?.trim(),
+    // #5517 layout: providers render as selector pills (configured first),
+    // each carrying a status dot; the pill title encodes label + state.
+    const pills = Array.from(
+      document.querySelectorAll('.media-provider-tabs .protocol-chip'),
     );
-    expect(names.slice(0, 2)).toEqual(['MiniMax', 'OpenAI']);
+    const titles = pills.map((pill) => pill.getAttribute('title'));
+    expect(titles.slice(0, 2)).toEqual(['MiniMax · Configured', 'OpenAI · Configured']);
+    expect(pills[0]?.querySelector('.media-provider-chip-status.is-connected')).toBeTruthy();
+    expect(pills[1]?.querySelector('.media-provider-chip-status.is-connected')).toBeTruthy();
+    expect(pills[2]?.querySelector('.media-provider-chip-status.is-connected')).toBeFalsy();
   });
 
   it('renders non-integrated providers in the coming-soon section without input fields', () => {
@@ -3800,6 +4247,10 @@ describe('SettingsDialog media providers interactions', () => {
       { mode: 'daemon', agentId: 'codex' },
       { initialSection: 'media' },
     );
+
+    // #5517 layout: one detail card at a time — select the provider pill
+    // before asserting on its fields.
+    fireEvent.click(screen.getByRole('tab', { name: /ElevenLabs/ }));
 
     const apiKeyInput = screen.getByLabelText('ElevenLabs API key') as HTMLInputElement;
     const baseUrlInput = screen.getByLabelText('ElevenLabs Base URL') as HTMLInputElement;
@@ -3824,7 +4275,7 @@ describe('SettingsDialog media providers interactions', () => {
     // here so the test still exercises the cleared-payload path.
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 
-    const clearButtons = screen.getAllByRole('button', { name: 'Clear' });
+    const clearButtons = screen.getAllByRole('button', { name: 'Clear configuration' });
     fireEvent.click(clearButtons[0]!);
 
     expect(confirmSpy).toHaveBeenCalledTimes(1);
@@ -3855,7 +4306,7 @@ describe('SettingsDialog media providers interactions', () => {
     );
 
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
-    const clearButtons = screen.getAllByRole('button', { name: 'Clear' });
+    const clearButtons = screen.getAllByRole('button', { name: 'Clear configuration' });
     fireEvent.click(clearButtons[0]!);
 
     expect(confirmSpy).toHaveBeenCalledTimes(1);
@@ -3877,6 +4328,10 @@ describe('SettingsDialog media providers interactions', () => {
       { mode: 'daemon', agentId: 'codex' },
       { initialSection: 'media' },
     );
+
+    // #5517 layout: one detail card at a time — select the provider pill
+    // before editing its fields.
+    fireEvent.click(screen.getByRole('tab', { name: /FishAudio/ }));
 
     fireEvent.change(screen.getByLabelText('FishAudio API key'), {
       target: { value: 'fish-key' },
@@ -3922,7 +4377,7 @@ describe('SettingsDialog media providers interactions', () => {
     // unimplemented confirm() returns undefined, which would cancel
     // the clear and leave this test asserting the wrong reveal state.
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    fireEvent.click(screen.getAllByRole('button', { name: 'Clear' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Clear configuration' })[0]!);
     expect(apiKeyInput.type).toBe('password');
 
     fireEvent.change(apiKeyInput, { target: { value: 'sk-replacement' } });
@@ -3940,13 +4395,18 @@ describe('SettingsDialog media providers interactions', () => {
       { initialSection: 'media' },
     );
 
+    // #5517 layout: one detail card at a time — select the provider pill
+    // before editing its fields. The model override renders as a labeled
+    // "Model" field in the detail card.
+    fireEvent.click(screen.getByRole('tab', { name: /Nano Banana/ }));
+
     fireEvent.change(screen.getByLabelText('Nano Banana API key'), {
       target: { value: 'banana-key' },
     });
     fireEvent.change(screen.getByLabelText('Nano Banana Base URL'), {
       target: { value: 'https://gateway.example.com' },
     });
-    fireEvent.change(screen.getByLabelText('Nano Banana model'), {
+    fireEvent.change(screen.getByLabelText('Nano Banana Model'), {
       target: { value: 'gemini-3.1-flash-image-preview' },
     });
 
@@ -3979,6 +4439,9 @@ describe('SettingsDialog media providers interactions', () => {
       );
       onPersist.mockRejectedValueOnce(rejection);
 
+      // #5517 layout: select the OpenAI pill first — nothing is configured
+      // here, so the default detail card is the first alphabetical provider.
+      fireEvent.click(screen.getByRole('tab', { name: /OpenAI/ }));
       fireEvent.change(screen.getByLabelText('OpenAI API key'), {
         target: { value: 'sk-unmount-media' },
       });
@@ -4010,6 +4473,8 @@ describe('SettingsDialog media providers interactions', () => {
       { initialSection: 'media' },
     );
 
+    // #5517 layout: select the OpenAI pill before editing its detail card.
+    fireEvent.click(screen.getByRole('tab', { name: /OpenAI/ }));
     fireEvent.change(screen.getByLabelText('OpenAI API key'), {
       target: { value: 'sk-unsaved-media' },
     });
@@ -4022,6 +4487,7 @@ describe('SettingsDialog media providers interactions', () => {
       { mode: 'daemon', agentId: 'codex' },
       { initialSection: 'media' },
     );
+    fireEvent.click(screen.getByRole('tab', { name: /OpenAI/ }));
     fireEvent.change(screen.getByLabelText('OpenAI API key'), {
       target: { value: 'sk-unsaved-media-2' },
     });
@@ -4051,7 +4517,7 @@ describe('SettingsDialog connectors interactions', () => {
 
     expect(screen.getAllByRole('heading', { name: 'Connectors' }).length).toBeGreaterThan(0);
     expect(screen.getByText('Saved · ••••uQEg')).toBeTruthy();
-    expect((screen.getByPlaceholderText('Paste a new key to replace the saved one') as HTMLInputElement).value).toBe('');
+    expect((screen.getByPlaceholderText('Enter a new key to replace the saved key') as HTMLInputElement).value).toBe('');
     expect(screen.getByText(/your key is saved in the local daemon/i)).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Clear' }) as HTMLButtonElement).disabled).toBe(false);
 
@@ -4073,7 +4539,7 @@ describe('SettingsDialog connectors interactions', () => {
       { initialSection: 'composio' },
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Paste a new key to replace the saved one'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter a new key to replace the saved key'), {
       target: { value: 'cmp_replacement_secret' },
     });
 
@@ -4132,7 +4598,7 @@ describe('SettingsDialog connectors interactions', () => {
       { initialSection: 'composio' },
     );
 
-    fireEvent.change(screen.getByPlaceholderText('Paste a new key to replace the saved one'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter a new key to replace the saved key'), {
       target: { value: 'cmp_unsaved_secret' },
     });
     fireEvent.click(first.container.querySelector('.settings-close') as HTMLElement);
@@ -4152,7 +4618,7 @@ describe('SettingsDialog connectors interactions', () => {
       },
       { initialSection: 'composio' },
     );
-    fireEvent.change(screen.getByPlaceholderText('Paste a new key to replace the saved one'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter a new key to replace the saved key'), {
       target: { value: 'cmp_unsaved_secret_2' },
     });
     fireEvent.click(document.querySelector('.modal-backdrop') as HTMLElement);
@@ -4217,12 +4683,13 @@ describe('SettingsDialog MCP server interactions', () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith('/api/mcp/install-info');
     });
-    expect(screen.getByText(/Run this in your terminal/i)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: /Connect Open Design to your coding agent/i })).toBeTruthy();
+    expect(screen.queryByText(/Run this command in your terminal/i)).toBeNull();
     await waitFor(() => {
       expect(screen.getByText(/claude mcp add-json --scope user open-design/i)).toBeTruthy();
     });
-    expect(screen.getByText(/Restart your client to pick up the new server/i)).toBeTruthy();
-    expect(screen.getByText(/Open Design must be running for MCP tool calls to succeed/i)).toBeTruthy();
+    expect(screen.getByText(/Keep Open Design running\. Restart your coding agent after setup\./i)).toBeTruthy();
+    expect(screen.getByText(/What your agent can do/i)).toBeTruthy();
   });
 
   it('switches client instructions and snippet content when a different MCP client is selected', async () => {
@@ -4266,7 +4733,7 @@ describe('SettingsDialog MCP server interactions', () => {
       expect(screen.getByText(/claude mcp add-json --scope user open-design/i)).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy MCP configuration snippet' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Copy setup command' }));
 
     await waitFor(() => {
       expect(writeTextMock).toHaveBeenCalledWith(
@@ -4300,21 +4767,26 @@ describe('SettingsDialog language interactions', () => {
     document.documentElement.removeAttribute('dir');
   });
 
-  it('shows every locale as a tile and marks the current locale as selected', async () => {
+  // #5517 replaced the 4×N locale tile grid with one compact select. The
+  // capability is unchanged — every locale is still offered — so these specs
+  // now drive the <select> instead of clicking radio tiles.
+  it('offers every locale in the language select and shows the current one', async () => {
     renderLanguageSettingsDialog('en');
 
-    const tiles = await screen.findAllByRole('radio');
-    expect(tiles).toHaveLength(LOCALES.length);
-    expect(screen.getByRole('radio', { name: /English/i }).getAttribute('aria-checked')).toBe('true');
-    expect(screen.getByRole('radio', { name: /简体中文/i }).getAttribute('aria-checked')).toBe('false');
+    const select = (await screen.findByLabelText('Language')) as HTMLSelectElement;
+    expect(select.tagName).toBe('SELECT');
+    expect(within(select).getAllByRole('option')).toHaveLength(LOCALES.length);
+    expect(select.value).toBe('en');
+    expect(within(select).getByRole('option', { name: /简体中文/i })).toBeTruthy();
   });
 
   it('switches locale immediately and updates localStorage', async () => {
     renderLanguageSettingsDialog('en');
 
-    fireEvent.click(screen.getByRole('radio', { name: /简体中文/i }));
+    const select = screen.getByLabelText('Language') as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'zh-CN' } });
 
-    expect(screen.getByRole('radio', { name: /简体中文/i }).getAttribute('aria-checked')).toBe('true');
+    expect((screen.getByLabelText('界面语言') as HTMLSelectElement).value).toBe('zh-CN');
     expect(window.localStorage.getItem('open-design:locale')).toBe('zh-CN');
     expect(document.documentElement.getAttribute('lang')).toBe('zh-CN');
     expect(document.documentElement.getAttribute('dir')).toBe('ltr');
@@ -4323,7 +4795,7 @@ describe('SettingsDialog language interactions', () => {
   it('sets rtl direction for rtl locales', async () => {
     renderLanguageSettingsDialog('en');
 
-    fireEvent.click(screen.getByRole('radio', { name: /فارسی/i }));
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'fa' } });
 
     expect(window.localStorage.getItem('open-design:locale')).toBe('fa');
     expect(document.documentElement.getAttribute('lang')).toBe('fa');
@@ -4333,7 +4805,7 @@ describe('SettingsDialog language interactions', () => {
   it('does not route language changes through autosave and closing does not revert an applied locale', async () => {
     const { onPersist, onClose } = renderLanguageSettingsDialog('en');
 
-    fireEvent.click(screen.getByRole('radio', { name: /Deutsch/i }));
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'de' } });
 
     expect(window.localStorage.getItem('open-design:locale')).toBe('de');
     expect(document.documentElement.getAttribute('lang')).toBe('de');
@@ -4352,18 +4824,21 @@ describe('SettingsDialog notifications interactions', () => {
     cleanup();
   });
 
-  it('renders notifications offline by default and only reveals sound pickers when enabled', () => {
+  it('renders notifications inactive by default and only reveals sound pickers when enabled', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex' },
       { initialSection: 'notifications' },
     );
 
     expect(screen.getByRole('group', { name: 'Completion sound' })).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'offline' })[0]?.getAttribute('aria-pressed')).toBe('false');
+    // Each row is now a 使用中/未使用 pill pair instead of one toggle button;
+    // "未使用" (inactive) is pressed by default, "使用中" (active) is not.
+    expect(screen.getAllByRole('button', { name: 'inactive' })[0]?.getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByRole('button', { name: 'active' })[0]?.getAttribute('aria-pressed')).toBe('false');
     expect(screen.queryByRole('group', { name: 'Success sound' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Failure sound' })).toBeNull();
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'offline' })[0] as HTMLButtonElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'active' })[0] as HTMLButtonElement);
     expect(playSoundMock).toHaveBeenCalledWith('ding');
     expect(screen.getByRole('group', { name: 'Success sound' })).toBeTruthy();
     expect(screen.getByRole('group', { name: 'Failure sound' })).toBeTruthy();
@@ -4414,13 +4889,15 @@ describe('SettingsDialog notifications interactions', () => {
       { initialSection: 'notifications' },
     );
 
-    const desktopToggle = screen.getAllByRole('button', { name: 'offline' })[1] as HTMLButtonElement;
+    // Row 0 is Completion sound, row 1 is Desktop notifications — each a
+    // 使用中/未使用 pill pair; "active" (使用中) at index 1 is desktop's on-toggle.
+    const desktopToggle = screen.getAllByRole('button', { name: 'active' })[1] as HTMLButtonElement;
     fireEvent.click(desktopToggle);
 
     await waitFor(() => {
       expect(requestNotificationPermissionMock).toHaveBeenCalledTimes(1);
     });
-    expect(screen.getByRole('button', { name: 'active' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByRole('button', { name: 'active' })[1]?.getAttribute('aria-pressed')).toBe('true');
 
     fireEvent.click(screen.getByRole('button', { name: 'Send test' }));
     await waitFor(() => {
@@ -4440,7 +4917,7 @@ describe('SettingsDialog notifications interactions', () => {
       { initialSection: 'notifications' },
     );
 
-    const desktopToggle = screen.getAllByRole('button', { name: 'offline' })[1] as HTMLButtonElement;
+    const desktopToggle = screen.getAllByRole('button', { name: 'active' })[1] as HTMLButtonElement;
     fireEvent.click(desktopToggle);
 
     await waitFor(() => {
@@ -4456,7 +4933,7 @@ describe('SettingsDialog notifications interactions', () => {
       { initialSection: 'notifications' },
     );
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'offline' })[0] as HTMLButtonElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'active' })[0] as HTMLButtonElement);
     fireEvent.click(first.container.querySelector('.settings-close') as HTMLElement);
     expect(first.onClose).toHaveBeenCalledTimes(1);
 
@@ -4466,94 +4943,23 @@ describe('SettingsDialog notifications interactions', () => {
       { mode: 'daemon', agentId: 'codex' },
       { initialSection: 'notifications' },
     );
-    fireEvent.click(screen.getAllByRole('button', { name: 'offline' })[0] as HTMLButtonElement);
+    fireEvent.click(screen.getAllByRole('button', { name: 'active' })[0] as HTMLButtonElement);
     fireEvent.click(document.querySelector('.modal-backdrop') as HTMLElement);
     expect(second.onClose).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('SettingsDialog appearance interactions', () => {
+// Was 'SettingsDialog appearance interactions'. The eight theme/accent cases
+// this block opened with are retired: the product removed theme selection
+// outright ("主题设置不要了，因为 workspace 功能不支持暗色主题，要干掉"), which
+// also formally overturns the NON-ALIGNMENT #9 note that had argued for keeping
+// the segmented control as the last "follow system" entry point. The document
+// theme/accent teardown went with them — nothing here writes those any more.
+// What survives is the AMR draft-reconciliation coverage that merely happened
+// to live in this block.
+describe('SettingsDialog draft reconciliation', () => {
   afterEach(() => {
     cleanup();
-    document.documentElement.removeAttribute('data-theme');
-    document.documentElement.style.removeProperty('--accent');
-    document.documentElement.style.removeProperty('--accent-strong');
-    document.documentElement.style.removeProperty('--accent-soft');
-    document.documentElement.style.removeProperty('--accent-tint');
-    document.documentElement.style.removeProperty('--accent-hover');
-  });
-
-  it('treats System as the selected appearance mode when theme is unset or system', () => {
-    renderSettingsDialog(
-      { theme: 'system' },
-      { initialSection: 'appearance' },
-    );
-
-    expect(screen.getByRole('button', { name: 'System' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Light' }).getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('false');
-  });
-
-  it('applies the first accent color as the default appearance color', () => {
-    renderSettingsDialog(
-      { theme: 'system' },
-      { initialSection: 'appearance' },
-    );
-
-    expect(screen.getByRole('radio', { name: 'Default accent color' }).getAttribute('aria-checked')).toBe('true');
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#c96442');
-  });
-
-  it('live previews explicit themes and removes the explicit document theme when switching back to System', () => {
-    renderSettingsDialog(
-      { theme: 'dark' },
-      { initialSection: 'appearance' },
-    );
-
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Light' }));
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-
-    fireEvent.click(screen.getByRole('button', { name: 'System' }));
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-  });
-
-  it('reverts an unsaved appearance preview back to the saved theme when the dialog closes', () => {
-    const first = renderSettingsDialog(
-      { theme: 'dark' },
-      { initialSection: 'appearance' },
-    );
-
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Light' }));
-    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
-    fireEvent.click(first.container.querySelector('.settings-close') as HTMLElement);
-    expect(first.onClose).toHaveBeenCalledTimes(1);
-
-    first.unmount();
-    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-  });
-
-  it('persists System mode explicitly and preserves accent variables without an explicit document theme', async () => {
-    const { onPersist } = renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex', theme: 'dark', accentColor: '#2563eb' },
-      { initialSection: 'appearance' },
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'System' }));
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#2563eb');
-
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        theme: 'system',
-        accentColor: '#2563eb',
-      }),
-      {},
-    );
   });
 
   it('reconciles the open settings draft when the parent agent CLI env changes', async () => {
@@ -4561,7 +4967,14 @@ describe('SettingsDialog appearance interactions', () => {
       {
         mode: 'daemon',
         agentId: 'amr',
-        theme: 'dark',
+        // Seeded on so the one click below is a real state change: the
+        // completion-sound pills are no-ops when clicked in their current state.
+        notifications: {
+          soundEnabled: true,
+          successSoundId: 'chime',
+          failureSoundId: 'two-tone-down',
+          desktopEnabled: false,
+        },
         agentModels: {
           amr: {
             model: 'prod-only-model',
@@ -4576,7 +4989,7 @@ describe('SettingsDialog appearance interactions', () => {
           },
         },
       },
-      { initialSection: 'appearance', agents: [amrAgent, ...availableAgents] },
+      { initialSection: 'notifications', agents: [amrAgent, ...availableAgents] },
     );
 
     view.rerender(
@@ -4585,7 +4998,12 @@ describe('SettingsDialog appearance interactions', () => {
           ...baseConfig,
           mode: 'daemon',
           agentId: 'amr',
-          theme: 'dark',
+          notifications: {
+            soundEnabled: true,
+            successSoundId: 'chime',
+            failureSoundId: 'two-tone-down',
+            desktopEnabled: false,
+          },
           agentCliEnv: {
             amr: {
               OPEN_DESIGN_AMR_PROFILE: 'local',
@@ -4596,7 +5014,7 @@ describe('SettingsDialog appearance interactions', () => {
         agents={[amrAgent, ...availableAgents]}
         daemonLive={true}
         appVersionInfo={null}
-        initialSection="appearance"
+        initialSection="notifications"
         onPersist={view.onPersist}
         onPersistComposioKey={view.onPersistComposioKey}
         onClose={view.onClose}
@@ -4604,12 +5022,20 @@ describe('SettingsDialog appearance interactions', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Light' }));
+    // Any committed edit will do — this test is about what the draft carries
+    // when it autosaves, not about which control fired it. It used to ride the
+    // Appearance theme control; with theme selection removed, the notifications
+    // completion-sound toggle is the equivalent one-click persisted edit.
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Completion sound' })).getByRole('button', {
+        name: 'inactive',
+      }),
+    );
 
     await waitForPersist(
       view.onPersist,
       expect.objectContaining({
-        theme: 'light',
+        notifications: expect.objectContaining({ soundEnabled: false }),
         agentModels: {},
         agentCliEnv: {
           codex: { CODEX_BIN: '/tmp/codex-dev' },
@@ -4684,102 +5110,6 @@ describe('SettingsDialog appearance interactions', () => {
       },
     });
   });
-
-  it('switches back to the default accent color and persists it explicitly', async () => {
-    const { onPersist } = renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex', theme: 'light', accentColor: '#2563eb' },
-      { initialSection: 'appearance' },
-    );
-
-    fireEvent.click(screen.getByRole('radio', { name: 'Default accent color' }));
-
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#c96442');
-
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        accentColor: '#c96442',
-      }),
-      {},
-    );
-  });
-
-  it('keeps an autosaved accent color applied after the dialog closes', async () => {
-    const view = renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex', theme: 'light', accentColor: '#2563eb' },
-      { initialSection: 'appearance' },
-    );
-
-    fireEvent.click(screen.getByRole('radio', { name: '#059669' }));
-
-    await waitForPersist(
-      view.onPersist,
-      expect.objectContaining({
-        accentColor: '#059669',
-      }),
-      {},
-    );
-
-    fireEvent.click(view.container.querySelector('.settings-close') as HTMLElement);
-    expect(view.onClose).toHaveBeenCalledTimes(1);
-
-    view.unmount();
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#059669');
-  });
-
-  it('live previews and autosaves preset and custom accent colors', async () => {
-    const { onPersist } = renderSettingsDialog(
-      { mode: 'daemon', agentId: 'codex', theme: 'light' },
-      { initialSection: 'appearance' },
-    );
-
-    fireEvent.click(screen.getByRole('radio', { name: '#059669' }));
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#059669');
-
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        accentColor: '#059669',
-      }),
-      {},
-    );
-
-    fireEvent.change(screen.getByLabelText('Custom color'), {
-      target: { value: '#123456' },
-    });
-    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#123456');
-
-    await waitForPersist(
-      onPersist,
-      expect.objectContaining({
-        accentColor: '#123456',
-      }),
-      {},
-    );
-  });
-
-  it('localizes the accent color controls in Chinese', () => {
-    render(
-      <I18nProvider initial="zh-CN">
-        <SettingsDialog
-          initial={{ ...baseConfig, theme: 'light' }}
-          agents={availableAgents}
-          daemonLive={true}
-          appVersionInfo={null}
-          initialSection="appearance"
-          onPersist={vi.fn()}
-          onPersistComposioKey={vi.fn()}
-          onClose={vi.fn()}
-          onRefreshAgents={vi.fn()}
-        />
-      </I18nProvider>,
-    );
-
-    expect(screen.getByText('主题色')).toBeTruthy();
-    expect(screen.getByRole('radiogroup', { name: '主题色' })).toBeTruthy();
-    expect(screen.getByRole('radio', { name: '默认主题色' })).toBeTruthy();
-    expect(screen.getByLabelText('自定义颜色')).toBeTruthy();
-  });
 });
 
 describe('SettingsDialog pets interactions', () => {
@@ -4792,6 +5122,24 @@ describe('SettingsDialog pets interactions', () => {
       Reflect.deleteProperty(window.navigator, 'clipboard');
     }
     cleanup();
+  });
+
+  // #5517 folded the pet picker into General and the nav rail dropped its
+  // standalone "Pets" item. The composer's pet-settings entry point still
+  // deep-links with `initialSection: 'pet'`, so that token must resolve to
+  // General — otherwise the entry point opens a section with no nav item and
+  // nothing rendered.
+  it('lands a pet deep link on the General section with the General nav item active', () => {
+    const { container } = renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'pet' },
+    );
+
+    expect(container.querySelector('.settings-general-section')).toBeTruthy();
+    const active = container.querySelector('.settings-nav-item.active');
+    expect(active?.textContent).toContain('General');
+    // The pet block renders inside General, not as its own page.
+    expect(container.querySelector('.settings-general-section .pet-tabs, .settings-general-section [role="tab"]')).toBeTruthy();
   });
 
   it('renders bundled pets by default and exposes community pets in a separate tab', async () => {
@@ -4970,8 +5318,24 @@ describe('SettingsDialog pets interactions', () => {
 });
 
 describe('IntegrationsView skills tab', () => {
+  beforeEach(() => {
+    // SkillsSection deliberately waits for an authoritative Workspace answer
+    // before reading a catalog. These filter tests exercise the legal
+    // signed-out/headerless path, so terminate that boundary explicitly rather
+    // than letting jsdom's relative fetch fail into `unavailable` (which must
+    // remain fail-closed).
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith('/api/workspace/directory')) {
+        return workspaceDirectoryResponse(null);
+      }
+      throw new Error(`Unexpected IntegrationsView request: ${url}`);
+    }));
+  });
+
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it('lists functional skills and filters them by mode + search', async () => {
@@ -5081,7 +5445,7 @@ describe('IntegrationsView skills tab', () => {
 
     fireEvent.click(screen.getByText('blog-post'));
     await waitFor(() => {
-      expect(fetchSkillMock).toHaveBeenCalledWith('blog-post');
+      expect(fetchSkillMock).toHaveBeenCalledWith('blog-post', null);
       expect(screen.getByText('skill body for blog-post')).toBeTruthy();
     });
 
@@ -5138,7 +5502,7 @@ describe('SettingsDialog design systems section', () => {
 
     fireEvent.click(screen.getByText('Signal Green'));
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('signal-green');
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith('signal-green', null);
       expect(screen.getByText('design system body for signal-green')).toBeTruthy();
     });
 
@@ -5199,6 +5563,52 @@ describe('SettingsDialog design systems section', () => {
 describe('SettingsDialog about interactions', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
+  });
+
+  it('drops a pending autosave when explicit onboarding reset unmounts Settings', () => {
+    vi.useFakeTimers();
+    const onResetOnboarding = vi.fn();
+    const view = renderSettingsDialog(
+      {
+        mode: 'daemon',
+        agentId: 'codex',
+        onboardingCompleted: true,
+        // Seeded on so the one click below is a real state change.
+        notifications: {
+          soundEnabled: true,
+          successSoundId: 'chime',
+          failureSoundId: 'two-tone-down',
+          desktopEnabled: false,
+        },
+      },
+      {
+        initialSection: 'notifications',
+        onResetOnboarding,
+      },
+    );
+
+    // The subject is the pending-autosave drop, not which control queued it.
+    // Theme selection is gone, so the completion-sound toggle stands in as the
+    // one-click persisted edit that leaves a debounced save in flight.
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Completion sound' })).getByRole('button', {
+        name: 'inactive',
+      }),
+    );
+    expect(screen.getByText('Saving…')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /About/i }));
+    fireEvent.click(screen.getByRole('button', { name: en['settings.resetOnboardingButton'] }));
+    view.unmount();
+
+    expect(view.onPersist).not.toHaveBeenCalled();
+    expect(onResetOnboarding).toHaveBeenCalledWith(
+      expect.objectContaining({
+        onboardingCompleted: false,
+        notifications: expect.objectContaining({ soundEnabled: false }),
+      }),
+    );
   });
 
   it('renders app version and runtime details when version info is available', () => {
@@ -5351,6 +5761,76 @@ describe('SettingsDialog about interactions', () => {
       expect(download).toHaveBeenCalledWith({ payload: { source: 'settings-about' } });
     });
     expect(screen.getByText('Version 1.2.3-beta.4 is ready to install.')).toBeTruthy();
+  });
+
+  it('clears the updater cache from the about page after inline confirmation', async () => {
+    const cleared = updateStatus({ state: 'idle' });
+    const clearCache = vi.fn(async () => cleared);
+    restoreOpenDesignHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          'clear-cache': clearCache,
+          status: vi.fn(async () => updateStatus()),
+        },
+      },
+    });
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '1.2.3-beta.3',
+          channel: 'beta',
+          packaged: true,
+          platform: 'darwin',
+          arch: 'arm64',
+        },
+      },
+    );
+
+    // Two-stage inline confirm: the first click only arms the action.
+    const trigger = await screen.findByTestId('settings-clear-updater-cache');
+    fireEvent.click(trigger);
+    expect(clearCache).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('settings-clear-updater-cache-confirm'));
+
+    await waitFor(() => {
+      expect(clearCache).toHaveBeenCalled();
+    });
+    expect(await screen.findByText(en['settings.clearUpdaterCacheSuccess'])).toBeTruthy();
+  });
+
+  it('hides updater cache recovery when packaged updates are unsupported', async () => {
+    restoreOpenDesignHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => updateStatus({
+            platform: 'linux',
+            state: 'unsupported',
+            supported: false,
+          })),
+        },
+      },
+    });
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      {
+        initialSection: 'about',
+        appVersionInfo: {
+          version: '1.2.3-beta.3',
+          channel: 'beta',
+          packaged: true,
+          platform: 'linux',
+          arch: 'x64',
+        },
+      },
+    );
+
+    await screen.findByText(en['settings.updateStatusUnsupported']);
+    expect(screen.queryByTestId('settings-clear-updater-cache')).toBeNull();
   });
 
   it('installs a downloaded payload update from the about page', async () => {
@@ -5589,7 +6069,7 @@ describe('SettingsDialog about interactions', () => {
   it('still autosaves an unrelated edit that lands during a silent-update save', async () => {
     // Regression: success must only advance autosaveLastSavedRef for
     // allowSilentUpdates. Spreading the whole latest draft would mark a
-    // concurrent theme (etc.) change as already saved and skip onPersist.
+    // concurrent unrelated change as already saved and skip onPersist.
     let resolveSave: (() => void) | null = null;
     const onSilentUpdatePreferenceChange = vi.fn(
       () => new Promise<void>((resolve) => {
@@ -5601,8 +6081,13 @@ describe('SettingsDialog about interactions', () => {
         mode: 'daemon',
         agentId: 'codex',
         allowSilentUpdates: false,
-        theme: 'light',
-        accentColor: '#2563eb',
+        // Seeded on so the concurrent click below is a real state change.
+        notifications: {
+          soundEnabled: true,
+          successSoundId: 'chime',
+          failureSoundId: 'two-tone-down',
+          desktopEnabled: false,
+        },
       },
       {
         initialSection: 'about',
@@ -5627,11 +6112,18 @@ describe('SettingsDialog about interactions', () => {
     expect(onPersist).not.toHaveBeenCalled();
 
     // Concurrent persisted edit while the silent-update request is in flight.
-    fireEvent.click(screen.getByRole('button', { name: /Appearance/i }));
-    fireEvent.click(screen.getByRole('radio', { name: '#059669' }));
+    // The invariant under test is the autosave bookkeeping, not the field that
+    // carries it — theme selection was the old vehicle and is gone, so this
+    // reaches for the notifications completion-sound toggle instead.
+    fireEvent.click(screen.getByRole('button', { name: /General/i }));
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Completion sound' })).getByRole('button', {
+        name: 'inactive',
+      }),
+    );
 
     // Resolve silent-update AFTER the concurrent edit is in draft. The success
-    // path must not stamp this accent into autosaveLastSavedRef.
+    // path must not stamp this edit into autosaveLastSavedRef.
     await act(async () => {
       resolveSave?.();
       await Promise.resolve();
@@ -5640,7 +6132,7 @@ describe('SettingsDialog about interactions', () => {
     await waitForPersist(
       onPersist,
       expect.objectContaining({
-        accentColor: '#059669',
+        notifications: expect.objectContaining({ soundEnabled: false }),
       }),
       {},
     );

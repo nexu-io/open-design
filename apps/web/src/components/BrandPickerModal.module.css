@@ -21,7 +21,11 @@
 
 .modal {
   width: 100%;
-  max-width: 860px;
+  /* 860px left the 4-up brand grid too narrow for the catalogue's longest
+     names ("Charlotte Tilbury"), which clipped to an ellipsis. The extra 60px
+     buys each card enough text width to spell them out; below ~968px viewport
+     the dialog shrinks and the grid degrades to 3-up on its own. */
+  max-width: 920px;
   /* Stable, spacious dialog with a bounded height; the brand gallery scrolls
      internally (fillHeight) while the header stays pinned. */
   height: min(680px, 84vh);
@@ -115,6 +119,8 @@
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
-  padding: 16px 4px 4px 2px;
+  /* Side padding ≥ the picker cards' 9px hover bleed (BrandReferencePicker's
+     side-nav split) so the bleed isn't clipped by overflow-x: hidden. */
+  padding: 16px 9px 4px 9px;
   border-top: 1px solid var(--border);
 }

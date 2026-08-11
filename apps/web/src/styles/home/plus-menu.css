@@ -27,6 +27,7 @@
   justify-content: center;
   background: transparent;
   border-color: transparent;
+  border-radius: var(--radius-circular, 50%);
 }
 .plus-menu__trigger:hover:not(:disabled) {
   background: var(--bg-subtle);
@@ -36,7 +37,25 @@
   background: var(--bg-subtle);
   color: var(--text);
 }
+/* The "+" glyph pivots 45° while the menu is open (reads as a close ×),
+   and eases back on dismiss. */
+.plus-menu__trigger .od-icon {
+  display: inline-flex;
+  transition: transform 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.plus-menu__trigger.is-active .od-icon {
+  transform: rotate(45deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .plus-menu__trigger .od-icon {
+    transition: none;
+  }
+}
 .home-hero__input-card .plus-menu__trigger {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: var(--radius-circular, 50%);
   background: var(--bg-panel);
   border-color: var(--border);
   color: var(--text-muted);
@@ -56,37 +75,19 @@
   bottom: auto;
   left: 0;
   z-index: 90;
-  min-width: min(208px, calc(100vw - 24px));
+  min-width: min(190px, calc(100vw - 24px));
   max-height: calc(100vh - 24px);
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 4px;
+  padding: 5px;
   border: 1px solid var(--border-strong, var(--border));
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.04),
     0 10px 28px -10px rgba(0, 0, 0, 0.18);
-  overflow-x: visible;
-  overflow-y: auto;
-  scrollbar-width: thin;
-}
-.plus-menu__group {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 1px 0 3px;
-}
-.plus-menu__group + .plus-menu__group {
-  border-top: 1px solid var(--border);
-}
-.plus-menu__group-label {
-  padding: 5px 8px 3px;
-  color: var(--text-muted);
-  font-size: 10.5px;
-  font-weight: 650;
-  line-height: 1.15;
+  overflow: visible;
 }
 .plus-menu__popup--flyout-contained {
   overflow-y: auto;
@@ -95,17 +96,17 @@
 .plus-menu__item {
   appearance: none;
   width: 100%;
-  min-height: 28px;
+  min-height: 32px;
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 8px;
+  gap: 9px;
+  padding: 0 9px;
   border: 0;
   border-radius: var(--radius);
   background: transparent;
   color: var(--text-strong);
   font: inherit;
-  font-size: 12.25px;
+  font-size: 13px;
   text-align: left;
   cursor: pointer;
   transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
@@ -118,37 +119,6 @@
 .plus-menu__item:disabled {
   opacity: 0.5;
   cursor: default;
-}
-.plus-menu__split-row {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.plus-menu__split-main {
-  min-width: 0;
-  flex: 1 1 auto;
-}
-.plus-menu__learn {
-  appearance: none;
-  flex: 0 0 auto;
-  height: 24px;
-  max-width: 78px;
-  padding: 0 7px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 10.75px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.plus-menu__learn:hover,
-.plus-menu__learn:focus-visible {
-  outline: none;
-  border-color: var(--border-strong);
-  background: var(--bg-subtle);
-  color: var(--text);
 }
 .plus-menu__item-icon {
   flex: 0 0 auto;
@@ -172,19 +142,18 @@
   position: relative;
 }
 .plus-menu__flyout {
-  position: fixed;
-  left: auto;
-  right: auto;
-  top: auto;
-  bottom: auto;
+  position: absolute;
+  left: 100%;
+  top: -5px;
+  margin-left: 4px;
   z-index: 91;
-  min-width: 204px;
-  max-width: calc(100vw - 24px);
+  min-width: 220px;
+  max-width: 280px;
   max-height: min(320px, var(--plus-menu-flyout-max-height, calc(100vh - 24px)));
   display: flex;
   flex-direction: column;
   gap: 0;
-  padding: 4px;
+  padding: 5px;
   border: 1px solid var(--border-strong, var(--border));
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
@@ -194,10 +163,14 @@
   overflow-y: auto;
 }
 .plus-menu__popup--flyout-left .plus-menu__flyout {
+  left: auto;
+  right: 100%;
   margin-left: 0;
+  margin-right: 4px;
 }
 .plus-menu__popup--flyout-y-up .plus-menu__flyout {
   top: auto;
+  bottom: -5px;
 }
 /* Invisible bridge so the cursor can cross the gap into the flyout without
    triggering the row's mouseleave. */
@@ -223,7 +196,7 @@
   min-width: 0;
   max-width: none;
   max-height: min(320px, calc(100vh - 24px));
-  margin: 3px 0 0;
+  margin: 4px 0 0;
 }
 .plus-menu__popup--flyout-contained .plus-menu__flyout::before {
   display: none;
@@ -236,10 +209,10 @@
 .plus-menu__search {
   display: flex;
   align-items: center;
-  gap: 5px;
-  margin: 0 0 3px;
-  padding: 0 7px;
-  height: 27px;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 0 8px;
+  height: 30px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
@@ -254,52 +227,27 @@
   background: transparent;
   color: var(--text);
   font: inherit;
-  font-size: 12.25px;
+  font-size: 13px;
   outline: none;
-}
-.plus-menu__search input:focus,
-.plus-menu__search input:focus-visible {
-  outline: none;
-  border-color: transparent;
-  box-shadow: none;
-}
-.plus-menu__flyout .composer-design-toolbox-head + .plus-menu__search,
-.composer-toolbox-standalone-popup .composer-design-toolbox-head + .plus-menu__search {
-  height: 24px;
-  gap: 5px;
-  margin: 0 2px 4px;
-  padding: 0 6px;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg) 88%, var(--bg-panel));
-}
-.plus-menu__flyout .composer-design-toolbox-head + .plus-menu__search svg,
-.composer-toolbox-standalone-popup .composer-design-toolbox-head + .plus-menu__search svg {
-  width: 11px;
-  height: 11px;
-}
-.plus-menu__flyout .composer-design-toolbox-head + .plus-menu__search input,
-.composer-toolbox-standalone-popup .composer-design-toolbox-head + .plus-menu__search input {
-  font-size: 12px;
-  line-height: 16px;
 }
 .plus-menu__list {
   display: flex;
   flex-direction: column;
   gap: 0;
   min-height: 0;
-  max-height: 216px;
+  max-height: 240px;
   overflow-y: auto;
   scrollbar-width: thin;
 }
 .plus-menu__divider {
   height: 1px;
-  margin: 3px 5px;
+  margin: 4px 6px;
   background: var(--border);
 }
 .plus-menu__empty {
-  padding: 7px 8px;
+  padding: 8px 9px;
   color: var(--text-muted);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 /* ---------- Plugins flyout: list + hover-preview column ---------- */
 /* The plugins flyout is wider than the others: the left column is the
@@ -309,13 +257,13 @@
 .plus-menu__flyout--plugins {
   min-width: 0;
   max-width: none;
-  width: 420px;
+  width: 466px;
   max-width: calc(100vw - 24px);
   overflow: hidden;
 }
 .plus-menu__plugin-pane {
   display: flex;
-  gap: 7px;
+  gap: 8px;
   min-height: 0;
   flex: 1 1 auto;
 }
@@ -323,11 +271,11 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  flex: 0 0 194px;
-  max-width: 194px;
+  flex: 0 0 224px;
+  max-width: 224px;
 }
 .plus-menu__plugin-main .plus-menu__list {
-  max-height: 220px;
+  max-height: 248px;
 }
 /* Base preview block — reused both as the plugins-flyout side column and
    inside the design-toolbox hover-detail panel, so it stays layout-neutral
@@ -336,12 +284,15 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   overflow: hidden;
 }
 .plus-menu__plugin-pane .plus-menu__preview {
   flex: 1 1 auto;
-  padding-left: 7px;
+  /* The flyout's own padding is a tight 5px; the detail column needs more
+     air than the list rows, so it carries its own inset — top and sides
+     (dogfood 2026-07-28). */
+  padding: 10px 10px 6px 14px;
   border-left: 1px solid var(--border);
 }
 .plus-menu__preview-hero {
@@ -357,7 +308,7 @@
 .plus-menu__preview-meta {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   min-height: 0;
 }
 .plus-menu__preview-title-row {
@@ -371,7 +322,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12.25px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-strong);
 }
@@ -379,18 +330,18 @@
    Live artifact) — same taxonomy as the home Community chips. */
 .plus-menu__preview-kind {
   flex: 0 0 auto;
-  padding: 1px 6px;
+  padding: 1px 7px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: color-mix(in srgb, var(--accent) 78%, var(--text));
-  font-size: 10.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.5;
   white-space: nowrap;
 }
 .plus-menu__preview-desc {
   margin: 0;
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   color: var(--text-muted);
   /* Clamp to a few lines so a verbose manifest never blows out the panel. */
@@ -419,102 +370,12 @@
 .plus-menu__popup--flyout-contained .plus-menu__preview {
   border-left: 0;
   border-top: 1px solid var(--border);
-  padding-left: 0;
-  padding-top: 7px;
+  /* Stacked layout: the side-column inset above doesn't apply — full-width
+     preview under the list, breathing room on top only. */
+  padding: 8px 0 0;
 }
 .plus-menu__popup--flyout-contained .plus-menu__preview-hero .plugins-home__preview {
   max-height: 160px;
-}
-
-/* ---------- Skills flyout: searchable list + hover summary ---------- */
-.plus-menu__flyout--skills {
-  min-width: 0;
-  max-width: none;
-  width: 430px;
-  max-width: calc(100vw - 24px);
-  height: min(320px, var(--plus-menu-flyout-max-height, calc(100vh - 24px)));
-  overflow: hidden;
-}
-.plus-menu__skill-pane {
-  display: flex;
-  gap: 8px;
-  min-height: 0;
-  height: 100%;
-  max-height: 100%;
-  flex: 1 1 auto;
-}
-.plus-menu__skill-main {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  align-self: stretch;
-  flex: 0 0 204px;
-  max-width: 204px;
-}
-.plus-menu__skill-main .plus-menu__list {
-  flex: 1 1 auto;
-  max-height: none;
-}
-.plus-menu__skill-preview {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding-left: 8px;
-  border-left: 1px solid var(--border);
-}
-.plus-menu__skill-preview-meta,
-.plus-menu__skill-preview-triggers {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.plus-menu__skill-preview-meta span,
-.plus-menu__skill-preview-triggers span {
-  min-width: 0;
-  max-width: 100%;
-  padding: 2px 7px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.45;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.plus-menu__skill-preview-triggers span {
-  color: color-mix(in srgb, var(--accent) 76%, var(--text));
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-.plus-menu__skill-preview-example {
-  margin: 0;
-  padding: 7px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-subtle);
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.45;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  overflow: hidden;
-}
-.plus-menu__popup--flyout-contained .plus-menu__flyout--skills {
-  width: auto;
-  height: auto;
-}
-.plus-menu__popup--flyout-contained .plus-menu__skill-pane {
-  flex-direction: column;
-}
-.plus-menu__popup--flyout-contained .plus-menu__skill-main {
-  flex: 1 1 auto;
-  max-width: none;
-}
-.plus-menu__popup--flyout-contained .plus-menu__skill-preview {
-  border-left: 0;
-  border-top: 1px solid var(--border);
-  padding-left: 0;
-  padding-top: 8px;
 }
 
 /* ---------- Design-toolbox hover-detail / preview panel ---------- */
@@ -525,13 +386,13 @@
 .plus-menu__detail {
   position: fixed;
   z-index: 92;
-  width: 248px;
+  width: 264px;
   max-width: calc(100vw - 24px);
   max-height: calc(100vh - 24px);
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  padding: 9px;
+  gap: 8px;
+  padding: 10px;
   border: 1px solid var(--border-strong, var(--border));
   border-radius: var(--radius-lg);
   background: var(--bg-panel);
@@ -542,12 +403,12 @@
   scrollbar-width: thin;
 }
 .plus-menu__detail-title {
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-strong);
 }
 .plus-menu__detail-desc {
-  font-size: 11.5px;
+  font-size: 12px;
   line-height: 1.45;
   color: var(--text-muted);
   display: -webkit-box;
@@ -556,24 +417,24 @@
   overflow: hidden;
 }
 .plus-menu__detail-skill {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--accent, var(--text-muted));
 }
 .plus-menu__detail-badge {
   align-self: flex-start;
-  padding: 1px 6px;
+  padding: 1px 7px;
   border-radius: 999px;
   background: var(--bg-subtle);
   color: var(--text-muted);
-  font-size: 10.5px;
+  font-size: 12px;
   line-height: 1.5;
 }
 /* Section headings inside the toolbox list (后续动作 / 资源). */
 .plus-menu__section-label {
-  padding: 5px 8px 3px;
+  padding: 6px 9px 4px;
   color: var(--text-muted);
-  font-size: 10.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.02em;
 }
 .plus-menu__subitem {
@@ -591,4 +452,218 @@
   box-shadow: none;
   padding: 0;
   background: transparent;
+}
+
+/* ── Composer mode picker (Plan / Design / Ask), left of the model selector ── */
+.composer-mode {
+  position: relative;
+  display: inline-flex;
+  /* Match the selected-state green to the "原型" template chip
+     (deep brand green #2f781d on the #f9fff4 tint). */
+  --green: #2f781d;
+  --green-bg: #f9fff4;
+}
+.composer-mode__trigger {
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: var(--radius-circular, 50%);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.composer-mode__trigger:hover:not(:disabled),
+.composer-mode__trigger.is-open,
+.composer-mode__trigger.is-selected {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.composer-mode__icon {
+  display: inline-flex;
+}
+.composer-mode__icon svg {
+  display: block;
+  /* 16px in both states — the unselected circular trigger previously ran the
+     glyph at 18px, a touch larger than the selected pill's 16px. */
+  width: 16px;
+  height: 16px;
+}
+/* Selected pill keeps the same 16px glyph as the neutral trigger
+   (dogfood 2026-07-28 icon-size pass). */
+.composer-mode.is-selected .composer-mode__icon svg {
+  width: 16px;
+  height: 16px;
+}
+/* In the home composer footer, match the "+" button chrome exactly: a 36px
+   circular outlined button (panel fill + border + soft shadow, muted glyph)
+   instead of the bare 32px borderless icon. */
+.home-hero__input-card .composer-mode__trigger {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: var(--radius-circular, 50%);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  box-shadow: var(--shadow-xs);
+}
+.home-hero__input-card .composer-mode__trigger:hover:not(:disabled),
+.home-hero__input-card .composer-mode__trigger.is-open {
+  outline: none;
+  background: var(--bg-panel);
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+/* Selected state (Cursor-style): the circular icon button becomes a green
+   capsule — icon + mode name + a clear ×. The `.composer-mode` root holds the
+   pill fill; the trigger and clear button ride transparently on it. */
+.composer-mode.is-selected {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 0 4px 0 0;
+  border-radius: var(--radius-pill, 999px);
+  /* Neutral chip (dogfood 2026-07-28): no green plate, no green ring — the
+     selected mode reads in the same muted ink as the design-system palette
+     icon beside it. */
+  background: transparent;
+  box-shadow: none;
+}
+.home-hero__input-card .composer-mode.is-selected .composer-mode__trigger,
+.composer-mode.is-selected .composer-mode__trigger {
+  width: auto;
+  min-width: 0;
+  height: 34px;
+  gap: 6px;
+  padding: 0 6px 0 11px;
+  border: none;
+  border-radius: var(--radius-pill, 999px);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.home-hero__input-card .composer-mode.is-selected .composer-mode__trigger:hover:not(:disabled),
+.composer-mode.is-selected .composer-mode__trigger:hover:not(:disabled),
+.composer-mode.is-selected .composer-mode__trigger.is-open {
+  background: transparent;
+  border: none;
+  color: var(--text);
+}
+.composer-mode__label {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--text-muted);
+}
+.composer-mode__clear {
+  appearance: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill, 999px);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.composer-mode__clear:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+
+.composer-mode-menu {
+  position: fixed;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  /* 2px between items so a hovered/selected row's fill sits clear of its
+     neighbours instead of butting against them. */
+  gap: 2px;
+  padding: 5px;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 10px 28px -10px rgba(0, 0, 0, 0.18);
+}
+.composer-mode-menu__item {
+  appearance: none;
+  width: 100%;
+  /* Override the global `button { height: 36px }` — items grow to fit the
+     name + always-visible description. */
+  height: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.composer-mode-menu__item:hover,
+.composer-mode-menu__item:focus-visible,
+.composer-mode-menu__item.is-selected {
+  outline: none;
+  background: var(--bg-subtle);
+}
+.composer-mode-menu__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.composer-mode-menu__icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  opacity: 0.85;
+}
+.composer-mode-menu__icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+.composer-mode-menu__name {
+  font-size: 13px;
+  font-weight: 500;
+}
+/* Checkmark on the selected row, pushed to the right edge of the name line. */
+.composer-mode-menu__check {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  color: var(--text);
+}
+/* Description sits under the name, always visible (aligned past the icon).
+   `min-width: 0` lets the flex item shrink so long text wraps inside the menu
+   width instead of overflowing to the right. */
+.composer-mode-menu__desc {
+  min-width: 0;
+  padding: 3px 0 0 25px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  white-space: normal;
+  overflow-wrap: break-word;
 }

@@ -60,6 +60,10 @@ export type TrackingAmrEntrySource =
   | 'inline_model_switcher_amr_row'
   | 'settings_amr_agent_card'
   | 'settings_amr_authorize'
+  // The 'use Open Design Cloud' callout on the execution tab. Same device-auth
+  // flow as settings_amr_authorize, kept distinct so the two entry points stay
+  // separable in funnel analysis.
+  | 'settings_cloud_callout'
   | 'settings_amr_console'
   | 'settings_amr_install'
   | 'avatar_amr_console'
@@ -79,16 +83,34 @@ export type TrackingAmrEntrySource =
   | 'generation_preview_switch_retry_card'
   | 'settings_amr_upgrade'
   | 'inline_amr_upgrade'
+  | 'deepseek_unpaid_modal'
+  | 'deepseek_workbench_badge'
+  | 'deepseek_model_switcher_upgrade'
   | 'avatar_amr_upgrade'
   | 'avatar_amr_agent_card'
   | 'artifact_success_upgrade'
   | 'home_artifact_upgrade';
+
+export type TrackingCampaignId = 'deepseek_v4_flash';
+export type TrackingCampaignUserState = 'paid' | 'unpaid';
+export type TrackingCampaignConversionSource =
+  | 'deepseek_unpaid_modal'
+  | 'deepseek_workbench_badge'
+  | 'deepseek_model_switcher_upgrade'
+  | 'landing_home_banner'
+  | 'landing_pricing_personal_plan'
+  | 'landing_pricing_team_plan';
 
 export interface AmrEntryAttribution {
   entryId: string;
   sourceProduct: 'open_design';
   sourceDetail: TrackingAmrEntrySource;
   occurredAt: string;
+  // Campaign joins keep the first entry source stable and record the final
+  // conversion touch separately. Both fields are forwarded to Vela so a
+  // Stripe payment result can be attributed without replacing first touch.
+  campaignId?: TrackingCampaignId;
+  conversionSource?: TrackingCampaignConversionSource;
   // Open Design install/device id forwarded only on consent-gated AMR handoffs.
   odDeviceId?: string;
   // Self-reported onboarding profile, forwarded to AMR (anchored to entryId) so
@@ -192,7 +214,21 @@ export type TrackingExportFormat =
 
 export type TrackingResult = 'success' | 'failed';
 export type TrackingRunResult = 'success' | 'failed' | 'cancelled';
+export type TrackingRunCancelOrigin =
+  | 'user_stop'
+  | 'project_cleanup'
+  | 'daemon_shutdown'
+  | 'unknown';
+export type TrackingRunTerminalTrigger =
+  | TrackingRunCancelOrigin
+  | 'first_output_deadline'
+  | 'inactivity_watchdog'
+  | 'daemon_restart';
 export type TrackingExportResult = 'success' | 'failed' | 'cancelled';
+// Stable codes for artifact_publish_result.error_code. Deliberately a CLOSED
+// set — unlike artifact_deploy_result's open-ended provider/HTTP codes — so no
+// free-form message text can ever be passed as an analytics error code.
+export type TrackingPublishErrorCode = 'workspace_identity_required' | 'publish_failed';
 export type TrackingTestResult = 'success' | 'failed' | 'timeout';
 export type TrackingRunFailureCategory =
   | 'auth'
@@ -274,6 +310,8 @@ export type TrackingRunFailureStage =
   | 'prompt_send'
   | 'first_token_wait'
   | 'tool_execution'
+  | 'tool_outstanding'
+  | 'post_tool_resume'
   | 'artifact_write'
   | 'child_close'
   | 'finalize';
@@ -321,7 +359,9 @@ export type TrackingRunFailureUserAction =
   | 'install_cli'
   | 'fix_config'
   | 'none';
-export type TrackingRunRetryStrategy = 'same_run_transient';
+export type TrackingRunRetryStrategy =
+  | 'same_run_transient'
+  | 'native_session_continue';
 export type TrackingRunRetryFinalResult =
   | 'not_attempted'
   | 'success'
@@ -362,6 +402,33 @@ export type TrackingRunCloseReason =
   | 'fatal_rpc_error'
   | 'empty_output'
   | 'unknown';
+export type TrackingAmrOpenCodeErrorPhase =
+  | 'timeout'
+  | 'event_stream_start'
+  | 'event_stream'
+  | 'prompt_async'
+  | 'other';
+export type TrackingAmrOpenCodeLastEventType =
+  | 'tool_call'
+  | 'tool_call_update'
+  | 'agent_message_chunk'
+  | 'agent_thought_chunk'
+  | 'done'
+  | 'other';
+export type TrackingAmrOpenCodeLastToolStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'completed'
+  | 'failed'
+  | 'other';
+export type TrackingAmrOpenCodeLastToolKind =
+  | 'read'
+  | 'write'
+  | 'edit'
+  | 'search'
+  | 'execute'
+  | 'fetch'
+  | 'other';
 export type TrackingLangfuseDeliveryStatus =
   | 'not_expected'
   | 'queued'

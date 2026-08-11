@@ -151,6 +151,26 @@ test('posthog: nav /download/ button → download_page + placement=nav', () => {
   assert.equal(dl!.props.placement, 'nav');
 });
 
+test('posthog: engagement prompt CTA → direct installer + placement=engagement_prompt', () => {
+  const { captures, click } = runPosthogTracker('solutions_prototype');
+  click(
+    makeLink({
+      href: 'https://github.com/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      pathname: '/nexu-io/open-design/releases/download/v1/od-mac-arm64.dmg',
+      attrs: {
+        'data-direct-download': '',
+        'data-download-placement': 'engagement_prompt',
+      },
+      text: '免费下载',
+    }),
+  );
+  const dl = captures.find((c) => c.name === 'ui_click' && c.props.element === 'download_desktop');
+  assert.ok(dl, 'expected a download event from the engagement prompt CTA');
+  assert.equal(dl!.props.download_target, 'direct');
+  assert.equal(dl!.props.placement, 'engagement_prompt');
+  assert.equal(dl!.props.page_name, 'solutions_prototype');
+});
+
 test('posthog: bare /download/ link (no attr) still matched by path', () => {
   const { captures, click } = runPosthogTracker();
   click(makeLink({ href: 'https://open-design.dev/download/', pathname: '/download/', text: 'Download desktop' }));

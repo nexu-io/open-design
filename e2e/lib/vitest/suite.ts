@@ -33,6 +33,11 @@ export type SmokeSuite = {
   finalize: (result: SmokeSuiteFinalizeInput) => Promise<string>;
 };
 
+export type SmokeSuiteOptions = {
+  /** Reuse one explicit daemon data root across process-restart witnesses. */
+  dataDir?: string;
+};
+
 export type SmokeSuiteFinalizeInput = {
   diagnostics?: unknown;
   error?: unknown;
@@ -77,14 +82,17 @@ export type ToolsDevSuiteOptions = {
 
 const workspaceRoot = resolveE2eWorkspaceRoot();
 
-export async function createSmokeSuite(name: string): Promise<SmokeSuite> {
+export async function createSmokeSuite(
+  name: string,
+  options: SmokeSuiteOptions = {},
+): Promise<SmokeSuite> {
   const namespace = `e2e-${sanitizeSegment(name)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const root = join(workspaceRoot, '.tmp', 'e2e', namespace);
   const reportDir = join(root, 'report');
   const scratchDir = join(root, 'scratch');
   const codexHomeDir = join(scratchDir, 'codex-home');
   const toolsDevRoot = join(scratchDir, 'tools-dev');
-  const dataDir = join(scratchDir, 'data');
+  const dataDir = options.dataDir ?? join(scratchDir, 'data');
   const [amrApiPort, amrLinkPort] = await allocateDistinctPorts(2);
 
   await mkdir(reportDir, { recursive: true });

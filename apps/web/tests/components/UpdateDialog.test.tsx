@@ -109,6 +109,48 @@ describe('UpdateDialog', () => {
     expect(screen.getByRole('button', { name: 'Explore new features' })).toBeTruthy();
   });
 
+  it('shows reinstall copy and the operator link when the feed forces the installer route', async () => {
+    let openDialogListener: OpenDesignHostUpdaterOpenDialogListener | null = null;
+    const ready = payloadReadyStatus({
+      artifact: {
+        name: 'open-design-1.2.4-setup.exe',
+        platformKey: 'win',
+        type: 'installer',
+        url: 'https://example.test/open-design-1.2.4-setup.exe',
+      },
+      reinstall: {
+        installedVersion: '1.0.0',
+        minVersion: '1.2.0',
+        reason: 'outer-below-min',
+        url: 'https://example.com/reinstall-help',
+      },
+    });
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => ready),
+          subscribeOpenDialog: vi.fn((listener) => {
+            openDialogListener = listener;
+            return vi.fn();
+          }),
+        },
+      },
+    });
+
+    render(<I18nProvider initial="en"><UpdateDialog /></I18nProvider>);
+    await act(async () => {
+      openDialogListener?.({ source: 'mac-app-menu' });
+      await Promise.resolve();
+    });
+
+    await screen.findByRole('dialog', { name: 'Check for updates' });
+    expect(
+      screen.getByText('Open Design 1.2.4 requires a full reinstall. Open Design will close and open the installer.'),
+    ).toBeTruthy();
+    expect(screen.getByTestId('update-dialog-reinstall-learn-more')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Explore new features' })).toBeNull();
+  });
+
   it('starts an explicit auto-downloading check when opened from an idle menu state', async () => {
     let openDialogListener: OpenDesignHostUpdaterOpenDialogListener | null = null;
     const check = vi.fn(async () => idleStatus({ state: 'not-available' }));

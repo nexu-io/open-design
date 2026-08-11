@@ -46,12 +46,27 @@ export interface PricingLabels {
   yearly: string;
   yearlySave: string;
   perMonth: string;
-  premiumModels: string;
-  standardModels: string;
+  topTextModels: string;
+  topImageModels: string;
+  topVideoModels: string;
+  /**
+   * Marks a modality that is presented but not yet purchasable. Hosted video
+   * generation has no server-owned entitlement/billing path yet, so its models
+   * render greyed-out behind this tag instead of as an included benefit.
+   */
+  comingSoon: string;
   recommended: string;
   // Lead benefit rows. `{amount}` `{pct}` filled at render.
   creditBenefit: string;
   creditBonus: string;
+  /** Hosted multimodal benefit shared by every paid creator plan. */
+  multimodalBenefit: string;
+  /** Shared multimodal explainer shown once below the creator plan grid. */
+  multimodalTitle: string;
+  multimodalDescription: string;
+  designAgent: string;
+  imageGeneration: string;
+  videoGeneration: string;
   /** Free card price subline ($0 · forever). */
   freeForever: string;
   /** Free card lead benefit row (trial credit grant). */
@@ -111,32 +126,46 @@ const FREE_TAGLINE_TRIAL_OFF: Partial<Record<LandingLocaleCode, string>> = {
 // also opens up; the Free card sorts those first and greys out the rest.
 export interface PricingModel {
   name: string;
+  icon: string;
   trial?: boolean;
 }
 
 export const PREMIUM_MODELS: readonly PricingModel[] = [
-  { name: 'Claude-Fable-5' },
-  { name: 'Claude-Opus-4.8' },
-  { name: 'Claude-Opus-4.7' },
-  { name: 'GPT-5.5-Pro' },
-  { name: 'GPT-5.5' },
-  { name: 'Gemini-3.1-Pro' },
-  { name: 'Grok-4.5', trial: true },
-] as const;
-
-export const STANDARD_MODELS = [
-  'GLM-5.2',
-  'Kimi-K2.7',
-  'DeepSeek-V4',
-  'MiMo-V2.5-Pro',
-  'MiniMax-M2.7',
-  'Qwen-3.7-Max',
+  { name: 'Claude-Fable-5', icon: '/agents/anthropic.svg' },
+  { name: 'GPT-5.6 (Sol/Terra/Luna)', icon: '/agents/openai.svg' },
+  { name: 'Grok-4.5', icon: '/agents/xai.svg', trial: true },
 ] as const;
 
 /**
- * Limited-time credit bonus over the base grant, surfaced as a badge next to
- * the credit amount to pull users up (Pro +20%, Max +50%). `null` = no bonus.
- * The displayed credit is `grantUsd × (1 + pct/100)` — e.g. Pro $100 → $120.
+ * Hosted image roster, mirrored from the shipped Open Design Cloud catalogue
+ * in `apps/daemon/src/media/models.ts` (`provider: 'vela'`, `credentialsRequired:
+ * false`): `vela/seedream-5.0`, `vela/seedream-5.0-pro`, `vela/nano-banana-2`
+ * (+ `-lite`), and `vela/gpt-image-2`. Variant suffixes are grouped so one model
+ * family reads as one benefit. Keep this list in step with that registry — it is
+ * the source of truth for what a paid plan can actually reach.
+ */
+export const IMAGE_MODELS = [
+  { name: 'Seedream 5 / Pro', icon: '/model-icons/bytedance.svg' },
+  { name: 'Nano Banana 2', icon: '/agents/gemini.svg' },
+  { name: 'GPT Image 2', icon: '/agents/openai.svg' },
+] as const;
+
+/**
+ * Video roster. Cloud currently ships only `vela/doubao-seedance-2-0-260128`
+ * (seedance 2.0), so none of the families below are reachable yet — the pricing
+ * page renders this list muted behind `labels.comingSoon`.
+ */
+export const VIDEO_MODELS = [
+  { name: 'Seedance 2.5', icon: '/model-icons/bytedance.svg' },
+  { name: 'MiniMax H3', icon: '/agents/minimax.svg' },
+  { name: 'Kling 3.0 Standard / Pro / Turbo', icon: '/model-icons/kling.svg' },
+] as const;
+
+/**
+ * Limited-time credit bonus represented by the current grant itself and
+ * surfaced as a badge next to the amount (Pro $120 / +20%, Max $300 / +50%).
+ * `grantUsd` is already the final advertised grant, so consumers must not
+ * apply this percentage to it a second time. `null` = no bonus badge.
  */
 export const CREDIT_BONUS_PCT: Record<PlanTierId, number | null> = {
   plus: null,
@@ -155,18 +184,26 @@ export const BUDGET_VALUES = ['lt_1k', 'usd_1k_5k', 'usd_5k_20k', 'usd_20k_plus'
 
 const EN: PricingContent = {
   labels: {
-    heroTitle: 'Choose the right plan',
+    heroTitle: 'Pay only for AI tasks that deliver results',
     footnote: 'Prices shown in USD. Checkout, billing, and auto top-up are handled in the {console}. Adjust or cancel your plan anytime.',
     consoleLabel: 'Open Design Cloud console',
     monthly: 'Monthly',
     yearly: 'Yearly',
     yearlySave: 'Save up to 51%',
     perMonth: '/ mo',
-    premiumModels: 'Premium models',
-    standardModels: 'Standard models',
+    topTextModels: 'Top text models',
+    topImageModels: 'Top image models',
+    topVideoModels: 'Top video models',
+    comingSoon: ' (Coming soon)',
     recommended: 'Recommended',
     creditBenefit: '{amount} model credits / mo',
     creditBonus: 'Limited +{pct}% bonus',
+    multimodalBenefit: 'Top models, ready to use for agents and images',
+    multimodalTitle: 'One credit balance powers agents and multimodal creation',
+    multimodalDescription: 'From understanding a brief and executing design work to generating images—without configuring provider API keys. See an estimate before generation; successful generations are charged by actual usage. Video generation is coming soon.',
+    designAgent: 'Professional design agent',
+    imageGeneration: 'Image generation',
+    videoGeneration: 'Video generation',
     freeForever: 'Free forever',
     freeTrialCreditLabel: 'Limited trial model credits (valid for 7 days)',
     firstMonthTag: '{pct}% off 1st month',
@@ -179,7 +216,7 @@ const EN: PricingContent = {
     tagline: 'Limited-time free trial; configure your own agent or BYOK afterwards',
     ctaLabel: 'Start free',
     concurrency: '1 concurrent task',
-    features: ['BYOK provider keys', 'Community support'],
+    features: ['BYOK provider keys · Local coding agents', 'Community support'],
   },
   plans: {
     plus: {
@@ -187,11 +224,9 @@ const EN: PricingContent = {
       ctaLabel: 'Upgrade to Plus',
       concurrency: '2 concurrent tasks',
       features: [
-        'BYOK provider keys',
         'Zero-config professional design agent',
         '{skillsCount}+ Skills workflows',
         '{systemsCount}+ Design Systems',
-        '20+ flagship model credits',
         'Email support',
       ],
     },
@@ -200,11 +235,9 @@ const EN: PricingContent = {
       ctaLabel: 'Upgrade to Pro',
       concurrency: '5 concurrent tasks',
       features: [
-        'BYOK provider keys',
         'Zero-config professional design agent',
         '{skillsCount}+ Skills workflows',
         '{systemsCount}+ Design Systems',
-        '20+ flagship model credits',
         'Priority email support',
       ],
     },
@@ -213,11 +246,9 @@ const EN: PricingContent = {
       ctaLabel: 'Upgrade to Max',
       concurrency: '10 concurrent tasks',
       features: [
-        'BYOK provider keys',
         'Zero-config professional design agent',
         '{skillsCount}+ Skills workflows',
         '{systemsCount}+ Design Systems',
-        '20+ flagship model credits',
         'Peak-time priority compute · lower latency',
         'Dedicated customer success',
       ],
@@ -227,18 +258,26 @@ const EN: PricingContent = {
 
 const ZH_CN: PricingContent = {
   labels: {
-    heroTitle: '选择适合你的订阅计划',
+    heroTitle: '只为实际完成的 AI 任务付费',
     footnote: '价格以美元计。结账、账单与自动充值均在 {console} 完成。可随时调整或取消套餐。',
     consoleLabel: 'Open Design Cloud 控制台',
     monthly: '月付',
     yearly: '年付',
     yearlySave: '省最多 51%',
     perMonth: '/月',
-    premiumModels: '高级模型',
-    standardModels: '标准模型',
+    topTextModels: '顶级文本模型',
+    topImageModels: '顶级图片模型',
+    topVideoModels: '顶级视频模型',
+    comingSoon: '（即将上线）',
     recommended: '推荐',
     creditBenefit: '每月 {amount} 模型额度',
     creditBonus: '限时加赠 {pct}%',
+    multimodalBenefit: '顶级模型开箱即用，覆盖 Agent 与图片创作',
+    multimodalTitle: '一份模型额度，驱动 Agent 与多模态创作',
+    multimodalDescription: '从理解需求、规划并执行设计任务，到生成图片，无需分别配置供应商 API Key。生成前展示预估费用，成功后按实际用量扣除。视频生成即将上线。',
+    designAgent: '专业设计 Agent',
+    imageGeneration: '图片生成',
+    videoGeneration: '视频生成',
     freeForever: '永久免费',
     freeTrialCreditLabel: '有限的模型体验额度（7 天内有效）',
     firstMonthTag: '首月 {pct}% Off',
@@ -251,7 +290,7 @@ const ZH_CN: PricingContent = {
     tagline: '限时免费体验，结束后需配置 Agent 或 BYOK',
     ctaLabel: '免费开始',
     concurrency: '1 个任务并发',
-    features: ['BYOK 自带密钥', '社区支持'],
+    features: ['BYOK 自带密钥，支持本地 Coding Agent', '社区支持'],
   },
   plans: {
     plus: {
@@ -259,11 +298,9 @@ const ZH_CN: PricingContent = {
       ctaLabel: '升级 Plus',
       concurrency: '2 个任务并发',
       features: [
-        'BYOK 自带密钥',
         '零配置专业设计 Agent',
         '{skillsCount}+ Skills 工作流',
         '{systemsCount}+ Design Systems',
-        '20+ 旗舰模型额度',
         '邮件支持',
       ],
     },
@@ -272,11 +309,9 @@ const ZH_CN: PricingContent = {
       ctaLabel: '升级 Pro',
       concurrency: '5 个任务并发',
       features: [
-        'BYOK 自带密钥',
         '零配置专业设计 Agent',
         '{skillsCount}+ Skills 工作流',
         '{systemsCount}+ Design Systems',
-        '20+ 旗舰模型额度',
         '优先邮件支持',
       ],
     },
@@ -285,11 +320,9 @@ const ZH_CN: PricingContent = {
       ctaLabel: '升级 Max',
       concurrency: '10 个任务并发',
       features: [
-        'BYOK 自带密钥',
         '零配置专业设计 Agent',
         '{skillsCount}+ Skills 工作流',
         '{systemsCount}+ Design Systems',
-        '20+ 旗舰模型额度',
         '高峰优先算力 · 更低时延',
         '专属客户成功',
       ],
@@ -299,18 +332,26 @@ const ZH_CN: PricingContent = {
 
 const ZH_TW: PricingContent = {
   labels: {
-    heroTitle: '選擇適合你的訂閱方案',
+    heroTitle: '只為實際完成的 AI 任務付費',
     footnote: '價格以美元計。結帳、帳單與自動加值皆於 {console} 完成。可隨時調整或取消方案。',
     consoleLabel: 'Open Design Cloud 主控台',
     monthly: '月付',
     yearly: '年付',
     yearlySave: '最多省 51%',
     perMonth: '/ 月',
-    premiumModels: '高級模型',
-    standardModels: '標準模型',
+    topTextModels: '頂級文字模型',
+    topImageModels: '頂級圖片模型',
+    topVideoModels: '頂級影片模型',
+    comingSoon: '（即將上線）',
     recommended: '推薦',
     creditBenefit: '每月 {amount} 模型額度',
     creditBonus: '限時加贈 {pct}%',
+    multimodalBenefit: '頂級模型開箱即用，涵蓋 Agent 與圖片創作',
+    multimodalTitle: '一份模型額度，驅動 Agent 與多模態創作',
+    multimodalDescription: '從理解需求、規劃並執行設計任務，到生成圖片，無需分別配置供應商 API Key。生成前顯示預估費用，成功後依實際用量扣除。影片生成即將上線。',
+    designAgent: '專業設計 Agent',
+    imageGeneration: '圖片生成',
+    videoGeneration: '影片生成',
     freeForever: '永久免費',
     freeTrialCreditLabel: '有限的模型體驗額度（7 天內有效）',
     firstMonthTag: '首月 {pct}% Off',
@@ -323,7 +364,7 @@ const ZH_TW: PricingContent = {
     tagline: '限時免費體驗，結束後需配置 Agent 或 BYOK',
     ctaLabel: '免費開始',
     concurrency: '1 個任務並行',
-    features: ['BYOK 自帶密鑰', '社群支援'],
+    features: ['BYOK 自帶密鑰，支援本機 Coding Agent', '社群支援'],
   },
   plans: {
     plus: {
@@ -331,11 +372,9 @@ const ZH_TW: PricingContent = {
       ctaLabel: '升級 Plus',
       concurrency: '2 個任務並行',
       features: [
-        'BYOK 自帶密鑰',
         '零配置專業設計 Agent',
         '{skillsCount}+ Skills 工作流',
         '{systemsCount}+ Design Systems',
-        '20+ 旗艦模型額度',
         '郵件支援',
       ],
     },
@@ -344,11 +383,9 @@ const ZH_TW: PricingContent = {
       ctaLabel: '升級 Pro',
       concurrency: '5 個任務並行',
       features: [
-        'BYOK 自帶密鑰',
         '零配置專業設計 Agent',
         '{skillsCount}+ Skills 工作流',
         '{systemsCount}+ Design Systems',
-        '20+ 旗艦模型額度',
         '優先郵件支援',
       ],
     },
@@ -357,11 +394,9 @@ const ZH_TW: PricingContent = {
       ctaLabel: '升級 Max',
       concurrency: '10 個任務並行',
       features: [
-        'BYOK 自帶密鑰',
         '零配置專業設計 Agent',
         '{skillsCount}+ Skills 工作流',
         '{systemsCount}+ Design Systems',
-        '20+ 旗艦模型額度',
         '高峰優先算力 · 更低時延',
         '專屬客戶成功',
       ],
@@ -371,18 +406,26 @@ const ZH_TW: PricingContent = {
 
 const ES: PricingContent = {
   labels: {
-    heroTitle: 'Elige el plan adecuado',
+    heroTitle: 'Paga solo por tareas de IA completadas',
     footnote: 'Precios en USD. El pago, la facturación y la recarga automática se gestionan en la {console}. Cambia o cancela tu plan cuando quieras.',
     consoleLabel: 'consola de Open Design Cloud',
     monthly: 'Mensual',
     yearly: 'Anual',
     yearlySave: 'Ahorra hasta 51%',
     perMonth: '/ mes',
-    premiumModels: 'Modelos premium',
-    standardModels: 'Modelos estándar',
+    topTextModels: 'Modelos de texto líderes',
+    topImageModels: 'Modelos de imagen líderes',
+    topVideoModels: 'Modelos de vídeo líderes',
+    comingSoon: ' (Próximamente)',
     recommended: 'Recomendado',
     creditBenefit: '{amount} en créditos de modelo / mes',
     creditBonus: '+{pct}% extra (limitado)',
+    multimodalBenefit: 'Modelos de primer nivel listos para agentes e imágenes',
+    multimodalTitle: 'Un saldo impulsa agentes y creación multimodal',
+    multimodalDescription: 'Desde comprender el encargo y ejecutar el trabajo de diseño hasta generar imágenes, sin configurar claves API de proveedores. Consulta una estimación antes de generar; solo se cobra el uso real de las generaciones completadas. La generación de vídeo llegará pronto.',
+    designAgent: 'Agente de diseño profesional',
+    imageGeneration: 'Generación de imágenes',
+    videoGeneration: 'Generación de vídeo',
     freeForever: 'Gratis para siempre',
     freeTrialCreditLabel: 'Créditos de prueba de modelos limitados (válidos por 7 días)',
     firstMonthTag: '1.er mes {pct}% off',
@@ -395,7 +438,7 @@ const ES: PricingContent = {
     tagline: 'Prueba gratis por tiempo limitado; después configura tu agent o usa BYOK',
     ctaLabel: 'Empezar gratis',
     concurrency: '1 tarea simultánea',
-    features: ['Claves BYOK de proveedores', 'Soporte de la comunidad'],
+    features: ['Claves BYOK · Coding agents locales', 'Soporte de la comunidad'],
   },
   plans: {
     plus: {
@@ -403,11 +446,9 @@ const ES: PricingContent = {
       ctaLabel: 'Subir a Plus',
       concurrency: '2 tareas simultáneas',
       features: [
-        'Claves BYOK de proveedores',
         'Agent de diseño profesional sin configuración',
         '{skillsCount}+ flujos de Skills',
         '{systemsCount}+ Design Systems',
-        'Créditos para más de 20 modelos punteros',
         'Soporte por email',
       ],
     },
@@ -416,11 +457,9 @@ const ES: PricingContent = {
       ctaLabel: 'Subir a Pro',
       concurrency: '5 tareas simultáneas',
       features: [
-        'Claves BYOK de proveedores',
         'Agent de diseño profesional sin configuración',
         '{skillsCount}+ flujos de Skills',
         '{systemsCount}+ Design Systems',
-        'Créditos para más de 20 modelos punteros',
         'Soporte prioritario por email',
       ],
     },
@@ -429,11 +468,9 @@ const ES: PricingContent = {
       ctaLabel: 'Subir a Max',
       concurrency: '10 tareas simultáneas',
       features: [
-        'Claves BYOK de proveedores',
         'Agent de diseño profesional sin configuración',
         '{skillsCount}+ flujos de Skills',
         '{systemsCount}+ Design Systems',
-        'Créditos para más de 20 modelos punteros',
         'Cómputo prioritario en horas pico · menor latencia',
         'Customer success dedicado',
       ],
@@ -443,18 +480,26 @@ const ES: PricingContent = {
 
 const PT_BR: PricingContent = {
   labels: {
-    heroTitle: 'Escolha o plano certo',
+    heroTitle: 'Pague apenas por tarefas de IA concluídas',
     footnote: 'Preços em USD. Pagamento, faturamento e recarga automática são feitos no {console}. Ajuste ou cancele seu plano quando quiser.',
     consoleLabel: 'console do Open Design Cloud',
     monthly: 'Mensal',
     yearly: 'Anual',
     yearlySave: 'Economize até 51%',
     perMonth: '/ mês',
-    premiumModels: 'Modelos premium',
-    standardModels: 'Modelos padrão',
+    topTextModels: 'Principais modelos de texto',
+    topImageModels: 'Principais modelos de imagem',
+    topVideoModels: 'Principais modelos de vídeo',
+    comingSoon: ' (Em breve)',
     recommended: 'Recomendado',
     creditBenefit: '{amount} em créditos de modelo / mês',
     creditBonus: '+{pct}% bônus (limitado)',
+    multimodalBenefit: 'Modelos de ponta prontos para agentes e imagens',
+    multimodalTitle: 'Um saldo impulsiona agentes e criação multimodal',
+    multimodalDescription: 'Da compreensão do briefing e execução do trabalho de design à geração de imagens, sem configurar chaves de API de provedores. Veja uma estimativa antes de gerar; gerações concluídas são cobradas pelo uso real. A geração de vídeo chega em breve.',
+    designAgent: 'Agente de design profissional',
+    imageGeneration: 'Geração de imagem',
+    videoGeneration: 'Geração de vídeo',
     freeForever: 'Grátis para sempre',
     freeTrialCreditLabel: 'Créditos de teste de modelos limitados (válidos por 7 dias)',
     firstMonthTag: '1º mês {pct}% off',
@@ -467,7 +512,7 @@ const PT_BR: PricingContent = {
     tagline: 'Teste grátis por tempo limitado; depois configure seu agent ou use BYOK',
     ctaLabel: 'Começar grátis',
     concurrency: '1 tarefa simultânea',
-    features: ['Chaves BYOK de provedores', 'Suporte da comunidade'],
+    features: ['Chaves BYOK · Coding agents locais', 'Suporte da comunidade'],
   },
   plans: {
     plus: {
@@ -475,11 +520,9 @@ const PT_BR: PricingContent = {
       ctaLabel: 'Atualizar para Plus',
       concurrency: '2 tarefas simultâneas',
       features: [
-        'Chaves BYOK de provedores',
         'Agent de design profissional sem configuração',
         '{skillsCount}+ fluxos de Skills',
         '{systemsCount}+ Design Systems',
-        'Créditos para 20+ modelos de ponta',
         'Suporte por email',
       ],
     },
@@ -488,11 +531,9 @@ const PT_BR: PricingContent = {
       ctaLabel: 'Atualizar para Pro',
       concurrency: '5 tarefas simultâneas',
       features: [
-        'Chaves BYOK de provedores',
         'Agent de design profissional sem configuração',
         '{skillsCount}+ fluxos de Skills',
         '{systemsCount}+ Design Systems',
-        'Créditos para 20+ modelos de ponta',
         'Suporte prioritário por email',
       ],
     },
@@ -501,11 +542,9 @@ const PT_BR: PricingContent = {
       ctaLabel: 'Atualizar para Max',
       concurrency: '10 tarefas simultâneas',
       features: [
-        'Chaves BYOK de provedores',
         'Agent de design profissional sem configuração',
         '{skillsCount}+ fluxos de Skills',
         '{systemsCount}+ Design Systems',
-        'Créditos para 20+ modelos de ponta',
         'Computação prioritária em horários de pico · menor latência',
         'Customer success dedicado',
       ],
@@ -515,18 +554,26 @@ const PT_BR: PricingContent = {
 
 const RU: PricingContent = {
   labels: {
-    heroTitle: 'Выберите подходящий план',
+    heroTitle: 'Платите только за выполненные задачи ИИ',
     footnote: 'Цены указаны в USD. Оплата, выставление счетов и автопополнение выполняются в {console}. Изменение или отмена тарифа в любое время.',
     consoleLabel: 'консоли Open Design Cloud',
     monthly: 'Месяц',
     yearly: 'Год',
     yearlySave: 'Экономия до 51%',
     perMonth: '/ мес.',
-    premiumModels: 'Премиум-модели',
-    standardModels: 'Стандартные модели',
+    topTextModels: 'Лучшие текстовые модели',
+    topImageModels: 'Лучшие модели изображений',
+    topVideoModels: 'Лучшие видеомодели',
+    comingSoon: ' (Скоро)',
     recommended: 'Рекомендуется',
     creditBenefit: '{amount} кредитов моделей / мес.',
     creditBonus: '+{pct}% бонус (ограничено)',
+    multimodalBenefit: 'Лучшие модели сразу готовы для агентов и изображений',
+    multimodalTitle: 'Единый баланс для агентов и мультимодального творчества',
+    multimodalDescription: 'От понимания задачи и выполнения дизайн-работы до генерации изображений — без настройки API-ключей провайдеров. До генерации показывается оценка, а успешные генерации оплачиваются по фактическому использованию. Генерация видео скоро появится.',
+    designAgent: 'Профессиональный дизайн-агент',
+    imageGeneration: 'Генерация изображений',
+    videoGeneration: 'Генерация видео',
     freeForever: 'Всегда бесплатно',
     freeTrialCreditLabel: 'Ограниченные пробные кредиты на модели (действуют 7 дней)',
     firstMonthTag: '1-й мес. {pct}% off',
@@ -539,7 +586,7 @@ const RU: PricingContent = {
     tagline: 'Бесплатный пробный период; затем настройте агента или BYOK',
     ctaLabel: 'Начать бесплатно',
     concurrency: '1 одновременная задача',
-    features: ['Ключи провайдеров BYOK', 'Поддержка сообщества'],
+    features: ['Ключи BYOK · локальные coding-агенты', 'Поддержка сообщества'],
   },
   plans: {
     plus: {
@@ -547,11 +594,9 @@ const RU: PricingContent = {
       ctaLabel: 'Перейти на Plus',
       concurrency: '2 одновременные задачи',
       features: [
-        'Ключи провайдеров BYOK',
         'Профессиональный design agent без настройки',
         '{skillsCount}+ рабочих процессов Skills',
         '{systemsCount}+ Design Systems',
-        'Кредиты для 20+ флагманских моделей',
         'Поддержка по email',
       ],
     },
@@ -560,11 +605,9 @@ const RU: PricingContent = {
       ctaLabel: 'Перейти на Pro',
       concurrency: '5 одновременных задач',
       features: [
-        'Ключи провайдеров BYOK',
         'Профессиональный design agent без настройки',
         '{skillsCount}+ рабочих процессов Skills',
         '{systemsCount}+ Design Systems',
-        'Кредиты для 20+ флагманских моделей',
         'Приоритетная поддержка по email',
       ],
     },
@@ -573,11 +616,9 @@ const RU: PricingContent = {
       ctaLabel: 'Перейти на Max',
       concurrency: '10 одновременных задач',
       features: [
-        'Ключи провайдеров BYOK',
         'Профессиональный design agent без настройки',
         '{skillsCount}+ рабочих процессов Skills',
         '{systemsCount}+ Design Systems',
-        'Кредиты для 20+ флагманских моделей',
         'Приоритетные вычисления в пик · меньше задержек',
         'Выделенный customer success',
       ],
@@ -587,18 +628,26 @@ const RU: PricingContent = {
 
 const FR: PricingContent = {
   labels: {
-    heroTitle: 'Choisir le bon plan',
+    heroTitle: 'Payez uniquement pour les tâches IA terminées',
     footnote: 'Prix indiqués en USD. Le paiement, la facturation et la recharge automatique se gèrent dans la {console}. Ajustez ou résiliez votre forfait à tout moment.',
     consoleLabel: 'console Open Design Cloud',
     monthly: 'Mensuel',
     yearly: 'Annuel',
     yearlySave: 'Économisez jusqu’à 51%',
     perMonth: '/ mois',
-    premiumModels: 'Modèles premium',
-    standardModels: 'Modèles standard',
+    topTextModels: 'Meilleurs modèles de texte',
+    topImageModels: 'Meilleurs modèles d’image',
+    topVideoModels: 'Meilleurs modèles vidéo',
+    comingSoon: ' (Bientôt disponible)',
     recommended: 'Recommandé',
     creditBenefit: '{amount} de crédits de modèle / mois',
     creditBonus: '+{pct}% bonus (limité)',
+    multimodalBenefit: 'Des modèles de pointe prêts pour les agents et l’image',
+    multimodalTitle: 'Un seul solde pour les agents et la création multimodale',
+    multimodalDescription: 'De la compréhension du brief à l’exécution du travail de design, puis à la génération d’images, sans configurer de clés API fournisseur. Une estimation s’affiche avant la génération ; les générations réussies sont facturées selon l’usage réel. La génération vidéo arrive bientôt.',
+    designAgent: 'Agent de design professionnel',
+    imageGeneration: 'Génération d’images',
+    videoGeneration: 'Génération de vidéos',
     freeForever: 'Gratuit pour toujours',
     freeTrialCreditLabel: "Crédits d'essai de modèles limités (valables 7 jours)",
     firstMonthTag: '1er mois {pct}% off',
@@ -611,7 +660,7 @@ const FR: PricingContent = {
     tagline: 'Essai gratuit à durée limitée ; ensuite configurez votre agent ou BYOK',
     ctaLabel: 'Commencer gratuitement',
     concurrency: '1 tâche simultanée',
-    features: ['Clés fournisseur BYOK', 'Support communautaire'],
+    features: ['Clés BYOK · agents de code locaux', 'Support communautaire'],
   },
   plans: {
     plus: {
@@ -619,11 +668,9 @@ const FR: PricingContent = {
       ctaLabel: 'Passer à Plus',
       concurrency: '2 tâches simultanées',
       features: [
-        'Clés fournisseur BYOK',
         'Agent de design professionnel sans configuration',
         '{skillsCount}+ workflows Skills',
         '{systemsCount}+ Design Systems',
-        'Crédits pour 20+ modèles phares',
         'Support par email',
       ],
     },
@@ -632,11 +679,9 @@ const FR: PricingContent = {
       ctaLabel: 'Passer à Pro',
       concurrency: '5 tâches simultanées',
       features: [
-        'Clés fournisseur BYOK',
         'Agent de design professionnel sans configuration',
         '{skillsCount}+ workflows Skills',
         '{systemsCount}+ Design Systems',
-        'Crédits pour 20+ modèles phares',
         'Support email prioritaire',
       ],
     },
@@ -645,11 +690,9 @@ const FR: PricingContent = {
       ctaLabel: 'Passer à Max',
       concurrency: '10 tâches simultanées',
       features: [
-        'Clés fournisseur BYOK',
         'Agent de design professionnel sans configuration',
         '{skillsCount}+ workflows Skills',
         '{systemsCount}+ Design Systems',
-        'Crédits pour 20+ modèles phares',
         'Calcul prioritaire en heures de pointe · latence réduite',
         'Customer success dédié',
       ],
@@ -659,18 +702,26 @@ const FR: PricingContent = {
 
 const KO: PricingContent = {
   labels: {
-    heroTitle: '알맞은 플랜 선택',
+    heroTitle: '완료된 AI 작업에만 비용을 지불하세요',
     footnote: '가격은 USD 기준입니다. 결제, 청구, 자동 충전은 {console}에서 처리됩니다. 플랜 변경 또는 취소는 언제든 가능합니다.',
     consoleLabel: 'Open Design Cloud 콘솔',
     monthly: '월간',
     yearly: '연간',
     yearlySave: '최대 51% 절약',
     perMonth: '/월',
-    premiumModels: '프리미엄 모델',
-    standardModels: '표준 모델',
+    topTextModels: '최고급 텍스트 모델',
+    topImageModels: '최고급 이미지 모델',
+    topVideoModels: '최고급 동영상 모델',
+    comingSoon: ' (출시 예정)',
     recommended: '추천',
-    creditBenefit: '매월 모델 크레딧 {amount}',
+    creditBenefit: '매월 {amount} 모델 크레딧',
     creditBonus: '한정 {pct}% 추가 증정',
+    multimodalBenefit: '최상급 모델로 Agent·이미지 제작을 바로 시작',
+    multimodalTitle: '하나의 크레딧으로 Agent와 멀티모달 창작',
+    multimodalDescription: '요구사항을 이해하고 디자인 작업을 계획·실행하는 것부터 이미지 생성까지, 공급자 API 키를 별도로 설정할 필요가 없습니다. 생성 전 예상 비용을 확인하고, 성공한 생성은 실제 사용량만큼 차감됩니다. 동영상 생성은 출시 예정입니다.',
+    designAgent: '전문 디자인 Agent',
+    imageGeneration: '이미지 생성',
+    videoGeneration: '동영상 생성',
     freeForever: '영구 무료',
     freeTrialCreditLabel: '제한된 모델 체험 크레딧 (7일간 유효)',
     firstMonthTag: '첫 달 {pct}% Off',
@@ -683,7 +734,7 @@ const KO: PricingContent = {
     tagline: '기간 한정 무료 체험, 종료 후 Agent 구성 또는 BYOK 필요',
     ctaLabel: '무료로 시작',
     concurrency: '동시 작업 1개',
-    features: ['BYOK 제공자 키', '커뮤니티 지원'],
+    features: ['BYOK 제공자 키 · 로컬 Coding Agent 지원', '커뮤니티 지원'],
   },
   plans: {
     plus: {
@@ -691,11 +742,9 @@ const KO: PricingContent = {
       ctaLabel: 'Plus로 업그레이드',
       concurrency: '동시 작업 2개',
       features: [
-        'BYOK 제공자 키',
         '무설정 전문 디자인 Agent',
         '{skillsCount}+ Skills 워크플로',
         '{systemsCount}+ Design Systems',
-        '20+ 플래그십 모델 크레딧',
         '이메일 지원',
       ],
     },
@@ -704,11 +753,9 @@ const KO: PricingContent = {
       ctaLabel: 'Pro로 업그레이드',
       concurrency: '동시 작업 5개',
       features: [
-        'BYOK 제공자 키',
         '무설정 전문 디자인 Agent',
         '{skillsCount}+ Skills 워크플로',
         '{systemsCount}+ Design Systems',
-        '20+ 플래그십 모델 크레딧',
         '우선 이메일 지원',
       ],
     },
@@ -717,11 +764,9 @@ const KO: PricingContent = {
       ctaLabel: 'Max로 업그레이드',
       concurrency: '동시 작업 10개',
       features: [
-        'BYOK 제공자 키',
         '무설정 전문 디자인 Agent',
         '{skillsCount}+ Skills 워크플로',
         '{systemsCount}+ Design Systems',
-        '20+ 플래그십 모델 크레딧',
         '피크 시간 우선 연산 · 더 낮은 지연',
         '전담 고객 성공 지원',
       ],
@@ -731,18 +776,26 @@ const KO: PricingContent = {
 
 const DE: PricingContent = {
   labels: {
-    heroTitle: 'Wähle den passenden Plan',
+    heroTitle: 'Zahle nur für abgeschlossene KI-Aufgaben',
     footnote: 'Preise in USD. Checkout, Abrechnung und automatisches Aufladen erfolgen in der {console}. Plan jederzeit anpassen oder kündigen.',
     consoleLabel: 'Open Design Cloud Konsole',
     monthly: 'Monatlich',
     yearly: 'Jährlich',
     yearlySave: 'Bis zu 51% sparen',
     perMonth: '/ Monat',
-    premiumModels: 'Premium-Modelle',
-    standardModels: 'Standardmodelle',
+    topTextModels: 'Top-Textmodelle',
+    topImageModels: 'Top-Bildmodelle',
+    topVideoModels: 'Top-Videomodelle',
+    comingSoon: ' (Demnächst)',
     recommended: 'Empfohlen',
     creditBenefit: '{amount} Modell-Credits / Monat',
     creditBonus: '+{pct}% Bonus (befristet)',
+    multimodalBenefit: 'Top-Modelle sofort einsatzbereit für Agenten und Bilder',
+    multimodalTitle: 'Ein Guthaben für Agenten und multimodale Kreation',
+    multimodalDescription: 'Vom Verstehen des Briefings und Ausführen der Designarbeit bis zur Bildgenerierung — ohne separate Anbieter-API-Schlüssel. Vor der Generierung erscheint eine Schätzung; erfolgreiche Generierungen werden nach tatsächlicher Nutzung abgerechnet. Videogenerierung folgt in Kürze.',
+    designAgent: 'Professioneller Design-Agent',
+    imageGeneration: 'Bildgenerierung',
+    videoGeneration: 'Videogenerierung',
     freeForever: 'Für immer kostenlos',
     freeTrialCreditLabel: 'Begrenztes Modell-Testguthaben (7 Tage gültig)',
     firstMonthTag: '1. Monat {pct}% off',
@@ -755,7 +808,7 @@ const DE: PricingContent = {
     tagline: 'Zeitlich begrenzte Gratis-Testphase; danach eigenen Agent konfigurieren oder BYOK',
     ctaLabel: 'Kostenlos starten',
     concurrency: '1 gleichzeitige Aufgabe',
-    features: ['BYOK-Anbieterschlüssel', 'Community-Support'],
+    features: ['BYOK-Anbieterschlüssel · lokale Coding Agents', 'Community-Support'],
   },
   plans: {
     plus: {
@@ -763,11 +816,9 @@ const DE: PricingContent = {
       ctaLabel: 'Auf Plus upgraden',
       concurrency: '2 gleichzeitige Aufgaben',
       features: [
-        'BYOK-Anbieterschlüssel',
         'Professioneller Design-Agent ohne Einrichtung',
         '{skillsCount}+ Skills-Workflows',
         '{systemsCount}+ Design Systems',
-        'Credits für 20+ Flagship-Modelle',
         'E-Mail-Support',
       ],
     },
@@ -776,11 +827,9 @@ const DE: PricingContent = {
       ctaLabel: 'Auf Pro upgraden',
       concurrency: '5 gleichzeitige Aufgaben',
       features: [
-        'BYOK-Anbieterschlüssel',
         'Professioneller Design-Agent ohne Einrichtung',
         '{skillsCount}+ Skills-Workflows',
         '{systemsCount}+ Design Systems',
-        'Credits für 20+ Flagship-Modelle',
         'Priorisierter E-Mail-Support',
       ],
     },
@@ -789,11 +838,9 @@ const DE: PricingContent = {
       ctaLabel: 'Auf Max upgraden',
       concurrency: '10 gleichzeitige Aufgaben',
       features: [
-        'BYOK-Anbieterschlüssel',
         'Professioneller Design-Agent ohne Einrichtung',
         '{skillsCount}+ Skills-Workflows',
         '{systemsCount}+ Design Systems',
-        'Credits für 20+ Flagship-Modelle',
         'Priorisierte Rechenleistung zu Spitzenzeiten · geringere Latenz',
         'Dedizierter Customer Success',
       ],
@@ -803,18 +850,26 @@ const DE: PricingContent = {
 
 const JA: PricingContent = {
   labels: {
-    heroTitle: '最適なプランを選択',
+    heroTitle: '完了した AI タスクにだけ支払う',
     footnote: '価格は米ドル表示です。決済・請求・自動チャージは {console} で行います。プランの変更・解約はいつでも可能です。',
     consoleLabel: 'Open Design Cloud コンソール',
     monthly: '月額',
     yearly: '年額',
     yearlySave: '最大 51% オフ',
     perMonth: '/ 月',
-    premiumModels: 'プレミアムモデル',
-    standardModels: '標準モデル',
+    topTextModels: 'トップテキストモデル',
+    topImageModels: 'トップ画像モデル',
+    topVideoModels: 'トップ動画モデル',
+    comingSoon: '（近日公開）',
     recommended: 'おすすめ',
-    creditBenefit: '毎月 {amount} 分のモデルクレジット',
+    creditBenefit: '毎月 {amount} のモデルクレジット',
     creditBonus: '期間限定 {pct}% 増量',
+    multimodalBenefit: 'トップモデルをすぐに利用し、Agent・画像を制作',
+    multimodalTitle: '1つのクレジットで Agent とマルチモーダル制作',
+    multimodalDescription: '要件の理解、デザイン作業の計画・実行から画像の生成まで、プロバイダーの API キーを個別に設定する必要はありません。生成前に見積もりを表示し、成功した生成は実際の使用量に応じて課金されます。動画生成は近日公開予定です。',
+    designAgent: 'プロフェッショナルデザイン Agent',
+    imageGeneration: '画像生成',
+    videoGeneration: '動画生成',
     freeForever: 'ずっと無料',
     freeTrialCreditLabel: '限定的なモデル体験クレジット（7 日間有効）',
     firstMonthTag: '初月 {pct}% Off',
@@ -827,7 +882,7 @@ const JA: PricingContent = {
     tagline: '期間限定の無料体験。終了後は Agent 設定または BYOK が必要',
     ctaLabel: '無料で開始',
     concurrency: '同時実行タスク 1 件',
-    features: ['BYOK プロバイダーキー', 'コミュニティサポート'],
+    features: ['BYOK プロバイダーキー・ローカル Coding Agent 対応', 'コミュニティサポート'],
   },
   plans: {
     plus: {
@@ -835,11 +890,9 @@ const JA: PricingContent = {
       ctaLabel: 'Plus にアップグレード',
       concurrency: '同時実行タスク 2 件',
       features: [
-        'BYOK プロバイダーキー',
         '設定不要のプロ向けデザイン Agent',
         '{skillsCount}+ Skills ワークフロー',
         '{systemsCount}+ Design Systems',
-        '20+ フラッグシップモデル用クレジット',
         'メールサポート',
       ],
     },
@@ -848,11 +901,9 @@ const JA: PricingContent = {
       ctaLabel: 'Pro にアップグレード',
       concurrency: '同時実行タスク 5 件',
       features: [
-        'BYOK プロバイダーキー',
         '設定不要のプロ向けデザイン Agent',
         '{skillsCount}+ Skills ワークフロー',
         '{systemsCount}+ Design Systems',
-        '20+ フラッグシップモデル用クレジット',
         '優先メールサポート',
       ],
     },
@@ -861,11 +912,9 @@ const JA: PricingContent = {
       ctaLabel: 'Max にアップグレード',
       concurrency: '同時実行タスク 10 件',
       features: [
-        'BYOK プロバイダーキー',
         '設定不要のプロ向けデザイン Agent',
         '{skillsCount}+ Skills ワークフロー',
         '{systemsCount}+ Design Systems',
-        '20+ フラッグシップモデル用クレジット',
         'ピーク時優先コンピュート · 低レイテンシ',
         '専任カスタマーサクセス',
       ],

@@ -3,15 +3,25 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 import type Database from 'better-sqlite3';
+import {
+  buildRunFinishedV4Aliases,
+  type TrackingRunCancelOrigin,
+  type TrackingRunTerminalTrigger,
+  type RunTaskLineageProps,
+} from '@open-design/contracts/analytics';
 
 import { appendMessageStatusEvent } from '../db.js';
 import { classifyRunFailure } from '../run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from '../run-result.js';
 import { runAskedUserQuestion } from './run-artifacts.js';
+import {
+  interruptDurableRunAfterDaemonRestart,
+  RESTART_ERROR_CODE,
+  RESTART_ERROR_MESSAGE,
+  type RestartRecoverableDurableRunState,
+} from './run-restart-recovery.js';
 
 const TERMINAL_STATUSES = new Set(['succeeded', 'failed', 'canceled']);
-const RESTART_ERROR_CODE = 'DAEMON_RESTARTED';
-const RESTART_ERROR_MESSAGE = 'Run interrupted because the daemon restarted.';
 const RECONCILED_STATUS_MESSAGE = 'Run terminal state reconciled after daemon restart.';
 
 interface AnalyticsRecovery {
@@ -21,24 +31,22 @@ interface AnalyticsRecovery {
   completedAt?: number;
 }
 
-interface DurableRunState {
+interface DurableRunState extends RestartRecoverableDurableRunState {
   schemaVersion: 1;
   id: string;
   projectId: string | null;
   conversationId: string | null;
   assistantMessageId: string | null;
   agentId: string | null;
-  status: string;
+  cancelOrigin?: TrackingRunCancelOrigin | null;
+  terminalTrigger?: TrackingRunTerminalTrigger | null;
   createdAt: number;
-  updatedAt: number;
-  exitCode?: number | null;
-  signal?: string | null;
-  error?: string | null;
-  errorCode?: string | null;
   artifactCount?: number;
   endedWithUnfinishedWork?: boolean;
   userPrompt?: string;
   model?: string;
+  resolvedModelId?: string;
+  preflightAgentCliVersion?: string;
   reasoning?: string;
   skillId?: string;
   designSystemId?: string;
@@ -50,7 +58,6 @@ interface DurableRunState {
   promptCache?: Record<string, unknown>;
   analyticsRecovery?: AnalyticsRecovery;
   langfuseCompletedAt?: number;
-  terminalRecoveryReason?: 'daemon_restart' | 'analytics_incomplete';
 }
 
 interface AnalyticsLike {
@@ -142,6 +149,12 @@ function hydrateRun(state: DurableRunState, events: ReturnType<typeof readEvents
     events,
     ...(state.userPrompt !== undefined ? { userPrompt: state.userPrompt } : {}),
     ...(state.model !== undefined ? { model: state.model } : {}),
+    ...(state.resolvedModelId !== undefined
+      ? { resolvedModelId: state.resolvedModelId }
+      : {}),
+    ...(state.preflightAgentCliVersion !== undefined
+      ? { preflightAgentCliVersion: state.preflightAgentCliVersion }
+      : {}),
     ...(state.reasoning !== undefined ? { reasoning: state.reasoning } : {}),
     ...(state.skillId !== undefined ? { skillId: state.skillId } : {}),
     ...(state.designSystemId !== undefined ? { designSystemId: state.designSystemId } : {}),
@@ -220,14 +233,7 @@ export async function reconcileDurableRunTerminals(
   const now = Date.now();
 
   for (const entry of states) {
-    if (TERMINAL_STATUSES.has(entry.state.status)) continue;
-    entry.state.status = 'failed';
-    entry.state.updatedAt = now;
-    entry.state.exitCode = 1;
-    entry.state.signal = null;
-    entry.state.error = RESTART_ERROR_MESSAGE;
-    entry.state.errorCode = RESTART_ERROR_CODE;
-    entry.state.terminalRecoveryReason = 'daemon_restart';
+    if (!interruptDurableRunAfterDaemonRestart(entry.state, now)) continue;
     writeState(entry.filePath, entry.state);
     result.interrupted += 1;
   }
@@ -261,34 +267,66 @@ export async function reconcileDurableRunTerminals(
               failure_stage: 'finalize' as const,
               retryable: true,
               user_action: 'retry' as const,
+              terminal_trigger: 'daemon_restart' as const,
             }
           : classifyRunFailure({
               result: runResult,
               status: state,
               ...(errorCode ? { errorCode } : {}),
               agentId: state.agentId,
+              cancelOrigin: state.cancelOrigin ?? null,
+              terminalTrigger: state.terminalTrigger ?? null,
               events,
             })
         : undefined;
+      const properties: Record<string, unknown> = {
+        ...state.analyticsRecovery.properties,
+        area: state.analyticsRecovery.properties.area === 'design_system_generation'
+          ? 'design_system_generation'
+          : 'chat_panel',
+        result: runResult,
+        artifact_count: state.artifactCount ?? 0,
+        asked_user_question: runAskedUserQuestion(events),
+        total_duration_ms: Math.max(0, state.updatedAt - state.createdAt),
+        langfuse_trace_id: state.id,
+        terminal_reconciled: true,
+        terminal_recovery_reason: recoveryReason,
+        ...(errorCode ? { error_code: errorCode } : {}),
+        ...(failure ?? {}),
+      };
+      const taskLineage: RunTaskLineageProps = {
+        task_execution_id:
+          typeof properties.task_execution_id === 'string'
+            ? properties.task_execution_id
+            : state.id,
+        initial_run_id:
+          typeof properties.initial_run_id === 'string'
+            ? properties.initial_run_id
+            : state.id,
+        task_run_index:
+          typeof properties.task_run_index === 'number'
+            ? properties.task_run_index
+            : 0,
+        ...(typeof properties.source_run_id === 'string'
+          ? { source_run_id: properties.source_run_id }
+          : {}),
+        ...(typeof properties.recovery_action_type === 'string'
+          ? {
+              recovery_action_type: properties.recovery_action_type as NonNullable<
+                RunTaskLineageProps['recovery_action_type']
+              >,
+            }
+          : {}),
+        ...(typeof properties.recovery_action_instance_id === 'string'
+          ? { recovery_action_instance_id: properties.recovery_action_instance_id }
+          : {}),
+      };
+      Object.assign(properties, buildRunFinishedV4Aliases(properties, taskLineage));
       await Promise.resolve(options.analytics.capture({
         eventName: 'run_finished',
         context: state.analyticsRecovery.context,
         appVersion: options.appVersion,
-        properties: {
-          ...state.analyticsRecovery.properties,
-          area: state.analyticsRecovery.properties.area === 'design_system_generation'
-            ? 'design_system_generation'
-            : 'chat_panel',
-          result: runResult,
-          artifact_count: state.artifactCount ?? 0,
-          asked_user_question: runAskedUserQuestion(events),
-          total_duration_ms: Math.max(0, state.updatedAt - state.createdAt),
-          langfuse_trace_id: state.id,
-          terminal_reconciled: true,
-          terminal_recovery_reason: recoveryReason,
-          ...(errorCode ? { error_code: errorCode } : {}),
-          ...(failure ?? {}),
-        },
+        properties,
         insertId: `${state.analyticsRecovery.insertId}-finish`,
       }));
       state.analyticsRecovery.completedAt = Date.now();

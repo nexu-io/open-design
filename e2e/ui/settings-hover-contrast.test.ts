@@ -124,10 +124,16 @@ async function hoverAndMeasure(page: Page, selector: string) {
   await el.waitFor({ state: 'visible' });
   await el.scrollIntoViewIfNeeded();
   await el.hover();
-  // Let CSS transitions settle so the measurement reflects the steady-state
-  // hover style. The hover rule for .subtab-pill uses a background-only
-  // change with no transition, so 120ms is comfortably enough.
-  await page.waitForTimeout(150);
+  // Wait for any hover transition/animation to settle before measuring. A
+  // passing first sample is not evidence that the final color remains AA.
+  await el.evaluate(async (node) => {
+    const animations = node.getAnimations({ subtree: true });
+    if (!animations.length) return;
+    await Promise.race([
+      Promise.all(animations.map((animation) => animation.finished.catch(() => undefined))),
+      new Promise<void>((resolve) => setTimeout(resolve, 2_000)),
+    ]);
+  });
   return measureContrast(page, selector);
 }
 
@@ -164,14 +170,20 @@ test.describe('Settings hover contrast (regression guard for #1795)', () => {
       ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
     });
 
-    test(`[P2] seg-btn surfaces (BYOK / Appearance / Notifications) hover stays readable in ${theme} theme`, async ({
+    // Appearance dropped out of this list in #5517 (product confirmed
+    // 2026-07-20): its 系统/浅色/深色 segmented control was removed, so the
+    // section no longer renders a `.seg-btn` at all and cannot participate in
+    // this measurement. The rule under test is a single shared one, so BYOK +
+    // Notifications still exercise it end to end; the Appearance leg is not
+    // replaced by a weaker proxy.
+    test(`[P2] seg-btn surfaces (BYOK / Notifications) hover stays readable in ${theme} theme`, async ({
       page,
     }) => {
       await openSettings(page, theme);
 
       // Configure execution mode is the default landing — BYOK seg-btn lives
       // here. Hovering the inactive tab is enough to exercise the seg-btn
-      // hover rule that covers BYOK + Appearance + Notifications.
+      // hover rule that covers BYOK + Notifications.
       const execMeasurement = await hoverAndMeasure(
         page,
         '.seg-control .seg-btn:not(.active):not(:disabled)',
@@ -179,18 +191,6 @@ test.describe('Settings hover contrast (regression guard for #1795)', () => {
       expect(
         execMeasurement.ratio,
         `BYOK seg-btn hover ${execMeasurement.ratio} (${theme})`,
-      ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
-
-      const appearanceNav = settingsNavItem(page, /^(Appearance|外观|外觀)$/i);
-      await appearanceNav.click();
-      await page.waitForSelector('.seg-control .seg-btn');
-      const themeMeasurement = await hoverAndMeasure(
-        page,
-        '.seg-control .seg-btn:not(.active)',
-      );
-      expect(
-        themeMeasurement.ratio,
-        `Appearance theme hover ${themeMeasurement.ratio} (${theme})`,
       ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
 
       const notifNav = settingsNavItem(page, /^(Notifications|通知)$/i);
@@ -206,4 +206,49 @@ test.describe('Settings hover contrast (regression guard for #1795)', () => {
       ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
     });
   }
+});
+
+test('[P1] system theme follows the OS color scheme without persisting an explicit theme', async ({ page }) => {
+  await page.addInitScript(
+    ({ key }) => {
+      window.localStorage.setItem(
+        key,
+        JSON.stringify({
+          theme: 'system',
+          accentColor: '#c96442',
+          mode: 'daemon',
+          onboardingCompleted: true,
+          agentId: null,
+          skillId: null,
+          designSystemId: null,
+          mediaProviders: {},
+          agentModels: {},
+        }),
+      );
+    },
+    { key: STORAGE_KEY },
+  );
+  await page.route('**/api/health', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
+
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/');
+  await expect
+    .poll(() => page.locator('html').getAttribute('data-theme'))
+    .toBeNull();
+  const lightBg = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
+  );
+
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect
+    .poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()))
+    .not.toBe(lightBg);
+  await expect
+    .poll(() => page.locator('html').getAttribute('data-theme'))
+    .toBeNull();
+  await expect
+    .poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? '{}').theme, STORAGE_KEY))
+    .toBe('system');
 });

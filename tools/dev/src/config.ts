@@ -143,6 +143,15 @@ export function parsePortOption(value: number | string | null | undefined, optio
   return parsed;
 }
 
+export function parseParentPidOption(value: number | string | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`--parent-pid must be a positive safe integer`);
+  }
+  return parsed;
+}
+
 export function resolveToolDevConfig(options: ToolDevOptions = {}): ToolDevConfig {
   const namespace = resolveNamespace({ namespace: options.namespace, env: process.env, contract: OPEN_DESIGN_SIDECAR_CONTRACT });
   const toolsDevRoot = resolveSidecarBase({

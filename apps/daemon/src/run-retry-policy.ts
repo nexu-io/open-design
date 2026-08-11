@@ -13,6 +13,12 @@ import type {
 // with attempt_limit_reached).
 export const DEFAULT_SAFE_RUN_RETRY_MAX_ATTEMPTS = 1;
 export const SAFE_RUN_RETRY_STRATEGY: TrackingRunRetryStrategy = 'same_run_transient';
+export const NATIVE_SESSION_CONTINUE_STRATEGY: TrackingRunRetryStrategy =
+  'native_session_continue';
+export const POST_TOOL_RESUME_CONTINUATION_PROMPT =
+  'Continue the interrupted turn from the current native session. ' +
+  'Treat every tool result already committed in this session as completed and do not repeat those tool calls. ' +
+  'Continue from the latest tool result and finish the original user request.';
 
 // Backoff before a same-run retry restart. An immediate retry of a transient
 // failure — especially a 429 — tends to re-hit the same limit, so the policy
@@ -81,7 +87,7 @@ export type RunRetryPolicyDecision =
       retryAttemptIndex: number;
       retryMaxAttempts: number;
       retryStrategy: TrackingRunRetryStrategy;
-      retryReason: 'transient_failure';
+      retryReason: 'transient_failure' | 'post_tool_resume';
       retryDelayMs: number;
     }
   | {
@@ -91,6 +97,66 @@ export type RunRetryPolicyDecision =
       retryStrategy: TrackingRunRetryStrategy;
       retrySuppressedReason: TrackingRunRetrySuppressedReason;
     };
+
+export interface PostToolResumeRecoveryInput {
+  result: TrackingRunResult;
+  failure?: RunRetryFailureSignal;
+  continuationAttemptCount: number;
+  totalRetryAttemptCount: number;
+  maxAttempts?: number;
+  sideEffects?: RunRetrySideEffectState;
+  supportsNativeSessionContinue: boolean;
+  hasNativeSession: boolean;
+}
+
+export function decidePostToolResumeRecovery(
+  input: PostToolResumeRecoveryInput,
+): Extract<RunRetryPolicyDecision, { shouldRetry: true }> | null {
+  const continuationAttemptCount = normalizeAttemptCount(
+    input.continuationAttemptCount,
+  );
+  const totalRetryAttemptCount = normalizeAttemptCount(
+    input.totalRetryAttemptCount,
+  );
+  const retryMaxAttempts = normalizeMaxAttempts(input.maxAttempts);
+  const failure = input.failure;
+  const sideEffects = input.sideEffects ?? {};
+  const isPostToolTransientFailure =
+    failure?.failure_stage === 'post_tool_resume' &&
+    failure.retryable === true &&
+    (
+      (failure.failure_category === 'timeout' &&
+        failure.failure_detail === 'inactivity_timeout') ||
+      (failure.failure_category === 'upstream_unavailable' &&
+        (
+          failure.failure_detail === 'stream_disconnected' ||
+          failure.failure_detail === 'upstream_5xx' ||
+          failure.failure_detail === 'provider_high_demand' ||
+          failure.failure_detail === 'provider_routing_error' ||
+          failure.failure_detail === 'network_error'
+        ))
+    );
+  if (
+    input.result !== 'failed' ||
+    sideEffects.cancelRequested ||
+    continuationAttemptCount >= retryMaxAttempts ||
+    !input.supportsNativeSessionContinue ||
+    !input.hasNativeSession ||
+    !sideEffects.toolCallSeen ||
+    !isPostToolTransientFailure
+  ) {
+    return null;
+  }
+  return {
+    shouldRetry: true,
+    retryAttemptIndex: totalRetryAttemptCount + 1,
+    retryMaxAttempts:
+      totalRetryAttemptCount + retryMaxAttempts - continuationAttemptCount,
+    retryStrategy: NATIVE_SESSION_CONTINUE_STRATEGY,
+    retryReason: 'post_tool_resume',
+    retryDelayMs: 0,
+  };
+}
 
 function normalizeAttemptCount(attemptCount: number): number {
   if (!Number.isFinite(attemptCount) || attemptCount < 0) return 0;

@@ -31,7 +31,14 @@ concurrency:
 jobs:
   runners:
     name: Resolve runner profiles
-    runs-on: ubuntu-24.04
+    # Resolve on the Nexu ARC fleet for trusted branches, but preserve the
+    # hosted bootstrap path for external forks and explicit economic mode.
+    runs-on: >-
+      ${{ ((github.event_name == 'pull_request'
+        && github.event.pull_request.head.repo.full_name != github.repository)
+        || vars.OD_CI_RUNNER_MODE == 'economic')
+        && 'ubuntu-24.04'
+        || 'nexu-runners-small' }}
     outputs:
       runs_on: ${{ steps.runners.outputs.runs_on }}
       decision: ${{ steps.runners.outputs.decision }}
@@ -43,7 +50,13 @@ jobs:
       - name: Resolve runner profiles
         id: runners
         env:
-          OD_CI_RUNNER_MODE: ${{ vars.OD_CI_RUNNER_MODE }}
+          # Fork PRs cannot rely on repository variables, so keep their required
+          # validation on GitHub-hosted runners even when private pools are down.
+          OD_CI_RUNNER_MODE: >-
+            ${{ github.event_name == 'pull_request'
+              && github.event.pull_request.head.repo.full_name != github.repository
+              && 'economic'
+              || vars.OD_CI_RUNNER_MODE }}
         run: python3 .github/scripts/runners.py
 
   scopes:
@@ -63,6 +76,7 @@ jobs:
       run_playwright_critical: ${{ steps.detect.outputs.run_playwright_critical }}
       run_playwright_visual: ${{ steps.detect.outputs.run_playwright_visual }}
       run_preflight: ${{ steps.detect.outputs.run_preflight }}
+      run_preflight_typecheck: ${{ steps.detect.outputs.run_preflight_typecheck }}
       run_ui_p0: ${{ steps.detect.outputs.run_ui_p0 }}
       run_web_workspace_tests: ${{ steps.detect.outputs.run_web_workspace_tests }}
       run_windows_tools_pack_payload_tests: ${{ steps.detect.outputs.run_windows_tools_pack_payload_tests }}
@@ -136,21 +150,31 @@ jobs:
     timeout-minutes: 10
     env:
       ACTIONLINT_VERSION: 1.7.12
+      SHELLCHECK_VERSION: 0.11.0
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
 
-      - name: Install actionlint
+      - name: Install actionlint and ShellCheck
         run: |
           case "$(uname -m)" in
-            x86_64) actionlint_arch=amd64 ;;
-            aarch64|arm64) actionlint_arch=arm64 ;;
+            x86_64)
+              actionlint_arch=amd64
+              shellcheck_arch=x86_64
+              ;;
+            aarch64|arm64)
+              actionlint_arch=arm64
+              shellcheck_arch=aarch64
+              ;;
             *) echo "Unsupported actionlint architecture: $(uname -m)" >&2; exit 1 ;;
           esac
           curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${actionlint_arch}.tar.gz" \
             | tar -xz actionlint
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.${shellcheck_arch}.tar.gz" \
+            | tar -xz --strip-components=1 "shellcheck-v${SHELLCHECK_VERSION}/shellcheck"
           sudo install -m 0755 actionlint /usr/local/bin/actionlint
+          sudo install -m 0755 shellcheck /usr/local/bin/shellcheck
 
       - name: Check workflow files
         run: actionlint -color
@@ -245,12 +269,14 @@ jobs:
       # If postinstall grows a targeted app type-generation phase covering these
       # three exports without broad app builds, this CI prebuild can be removed.
       - name: Prebuild workspace type declarations
+        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
         run: |
           pnpm --filter @open-design/daemon build
           pnpm --filter @open-design/desktop build
           pnpm --filter @open-design/web build:sidecar
 
       - name: Typecheck workspaces
+        if: ${{ needs.scopes.outputs.run_preflight_typecheck == 'true' }}
         run: |
           pnpm -r --filter '!open-design' --filter '!@open-design/landing-page' --workspace-concurrency="${OPEN_DESIGN_WORKSPACE_CONCURRENCY:-1}" --if-present run typecheck
           pnpm exec tsc -p scripts/tsconfig.json --noEmit
@@ -291,7 +317,13 @@ jobs:
             pnpm --filter @open-design/tools-dev test
           fi
           if [ "${{ needs.scopes.outputs.tools_pack_tests_required }}" = "true" ]; then
+            pnpm --filter @open-design/desktop build
+            pnpm --filter @open-design/desktop test
+            pnpm --filter @open-design/packaged test
             pnpm --filter @open-design/tools-pack test
+            if [ "${{ needs.scopes.outputs.run_e2e_vitest }}" != "true" ]; then
+              pnpm --filter @open-design/e2e test tests/packaged-launcher-update-loop.test.ts
+            fi
           fi
 
       - name: Probe watcher environment
@@ -334,11 +366,15 @@ jobs:
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
 
   web_workspace_tests:
-    name: Web workspace tests
+    name: Web workspace tests (${{ matrix.shard }}/2)
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
 
     steps:
       - name: Checkout
@@ -356,7 +392,7 @@ jobs:
         run: pnpm --filter @open-design/web build:sidecar
 
       - name: Web workspace tests
-        run: pnpm --filter @open-design/web test
+        run: pnpm --filter @open-design/web exec vitest run -c vitest.config.ts --maxWorkers=2 --shard=${{ matrix.shard }}/2
 
   e2e_vitest:
     name: E2E Vitest
@@ -445,7 +481,7 @@ jobs:
     name: UI P0 (${{ matrix.name }})
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
+    runs-on: ${{ matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0 }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -462,14 +498,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
+          runner-labels: ${{ toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
+          runner-labels: ${{ toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -582,6 +618,7 @@ jobs:
           name: visual-pr-capture-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ matrix.name }}
           path: |
             e2e/ui/reports/visual-screenshots
+            e2e/ui/reports/visual-test-results
             e2e/ui/reports/visual-results.json
             e2e/ui/reports/visual-report/manifest.json
           if-no-files-found: ignore
@@ -594,6 +631,7 @@ jobs:
           name: visual-ci-${{ github.run_id }}-${{ matrix.name }}
           path: |
             e2e/ui/reports/visual-screenshots
+            e2e/ui/reports/visual-test-results
             e2e/ui/reports/visual-results.json
           if-no-files-found: ignore
           retention-days: 7
@@ -721,10 +759,15 @@ jobs:
               handoff_dir="$(python3 .github/scripts/handoff.py dir comment "$handoff_id" --root "$handoff_root")"
               mkdir -p "$handoff_dir"
               marker="<!-- merge-queue-needs-validation -->"
+              # Markdown code spans are intentionally literal in these single-quoted strings.
+              # shellcheck disable=SC2016
               {
                 printf '%s\n' "$marker"
+                # Markdown code spans are intentional literal text.
+                # shellcheck disable=SC2016
                 printf 'Ejected from the merge queue: this PR still carries the `needs-validation` label.\n\n'
                 printf 'The merge queue gate ([run %s](%s/%s/actions/runs/%s)) blocked the queued group because of the label. That failure runs on the queue'"'"'s transient ref, so it never appears in this PR'"'"'s own checks — they stay green, and this notice is the only visible trace on the PR.\n\n' "$RUN_ID" "$GITHUB_SERVER_URL" "$REPO" "$RUN_ID"
+                # shellcheck disable=SC2016
                 printf 'To land this PR: complete the QA pass the label is tracking, remove the `needs-validation` label, then add the PR back to the merge queue.\n'
               } > "$handoff_dir/body.md"
               jq -n \

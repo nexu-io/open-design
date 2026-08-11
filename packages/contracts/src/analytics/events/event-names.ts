@@ -19,6 +19,10 @@ export type AnalyticsEventName =
   | 'langfuse_report_result'
   | 'run_retry_attempted'
   | 'run_retry_finished'
+  // Local MCP / external-plugin lifecycle (schema v3).
+  | 'mcp_session_initialized'
+  | 'mcp_tool_started'
+  | 'mcp_tool_finished'
   // Paid media provider request outcome and bounded response retry.
   | 'media_generation_result'
   // Packaged updater lifecycle
@@ -40,7 +44,19 @@ export type AnalyticsEventName =
   // Artifact
   | 'artifact_export_result'
   | 'artifact_deploy_result'
+  | 'artifact_publish_result'
   | 'file_version_restore_result'
+  // Workspace redesign: authoritative outcome events. Clicks and impressions
+  // continue to use the core ui_click/surface_view catalogue.
+  | 'workspace_switch_result'
+  | 'workspace_invite_result'
+  | 'workspace_project_action_result'
+  | 'workspace_shared_project_open_result'
+  | 'workspace_resource_action_result'
+  | 'project_comment_create_result'
+  // Message-level conversation forking. Entry clicks stay on `ui_click`;
+  // this result event records whether the new conversation was created.
+  | 'conversation_fork_result'
   // Feedback
   | 'feedback_submit_result'
   | 'assistant_feedback_click'
@@ -55,6 +71,7 @@ export type AnalyticsEventName =
   | 'byok_preflight_blocked'
   | 'settings_connector_auth_result'
   // AMR (hosted model) account auth result.
+  | 'amr_auth_stage'
   | 'amr_auth_result'
   // Onboarding-only result events. UI clicks + page_views inside the
   // onboarding flow reuse the generic `ui_click` / `page_view` shapes
@@ -88,6 +105,9 @@ export type AnalyticsEventName =
 
 export type TrackingPageName =
   | 'home'
+  | 'community'
+  | 'drafts'
+  | 'all_projects'
   | 'projects'
   | 'automations'
   | 'plugins'
@@ -105,7 +125,8 @@ export type TrackingPageName =
   // the design system picker. Reported when a DS picker / module renders
   // inside a project.
   | 'studio'
-  | 'settings';
+  | 'settings'
+  | 'workspace_settings';
 
 // Alias kept for backwards-compatibility inside the contracts file; v2 wire
 // format uses the field name `page_name` for settings events too.

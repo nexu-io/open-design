@@ -1,7 +1,5 @@
 <h1 align="center">Open Design : l'alternative open source à Claude Design</h1>
 
-> 🔥 **Open Design 0.13.0 — _Stay in Flow_ est là.** Les longues sessions de design se brisaient à la moindre interruption — une exécution perdait sa place, un sélecteur de modèle vous faisait deviner, un export exigeait un détour de plus. 0.13.0 maintient la session en vie : reprenez les exécutions Codex / OpenCode / Pi / Open Design Cloud d'un tour à l'autre, choisissez le bon modèle plus vite et exportez des PPTX / PDF appuyés par des captures d'écran sans quitter l'app. [Télécharger 0.13.0](https://github.com/nexu-io/open-design/releases) · [Notes de version](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.13.0)
->
 > ⚡ **Open Design Cloud — le service de modèles officiel.** Une seule recharge pour utiliser GPT, Claude, Gemini et DeepSeek directement dans Open Design : plus de 20 modèles phares, zéro configuration, facturation à l'usage réel des tokens. [Essayer Open Design Cloud](https://open-design.ai/cloud/)
 >
 > 🏅 **Le programme Open Design Fellow est désormais ouvert.** Si vous croyez vous aussi que le design devrait être ouvert — devenez Open Design Fellow, façonnez le produit aux côtés de l'équipe principale et aidez davantage de personnes à participer à la définition de l'avenir du design. Détails → [`MAINTAINERS.md`](../../MAINTAINERS.md) et [Discord](https://discord.gg/mHAjSMV6gz).
@@ -116,10 +114,10 @@ Un aperçu rapide de ce qu'est Open Design et de ce qu'il fait. Partez de la pag
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Pris en charge | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Pris en charge | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Pris en charge | `od mcp install reasonix` |
+| [Raven](https://github.com/EverMind-AI/Raven) | ✅ Pris en charge | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Pris en charge | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Pris en charge | `od mcp install copilot` |
 | [GitHub Copilot CLI](https://github.com/features/copilot/cli) | ✅ Pris en charge | `od mcp install copilot` |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | ✅ Pris en charge | `od mcp install gemini` |
 | [OpenCode](https://opencode.ai/) | ✅ Pris en charge | `od mcp install opencode` |
 | [OpenClaw](https://github.com/openclaw/openclaw) | ✅ Pris en charge | `od mcp install openclaw` |
 | [Antigravity](https://antigravity.google) | ✅ Pris en charge | `od mcp install antigravity` |
@@ -304,8 +302,8 @@ Vous pouvez utiliser Open Design sans jamais ouvrir l'interface graphique — ap
 ```bash
 # One-line install into the agent you're using:
 od mcp install <agent>
-# <agent> = claude | codex | cursor | copilot | openclaw | antigravity | gemini
-#         | pi | vibe | hermes | cline | kimi | trae | opencode
+# <agent> = claude | codex | reasonix | raven | cursor | copilot | openclaw | antigravity
+#         | pi | vibe | hermes | cline | kimi | kiro | trae | opencode
 ```
 
 Ensuite, à l'intérieur de l'agent :
@@ -681,7 +679,7 @@ Règles des mainteneurs, critères de promotion et protocole de départ → [`MA
 Merci à toutes les personnes qui ont pris part — code, documentation, retours, une issue pertinente, un nouveau skill, un nouveau système de design.
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-07-17" alt="Contributeurs d'Open Design" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="Contributeurs d'Open Design" />
 </a>
 
 ---
@@ -706,9 +704,9 @@ Si cela vous a fait gagner trente minutes, mettez-lui une ★. Les étoiles ne p
 
 <a href="https://star-history.com/#nexu-io/open-design&Date">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-07-17" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
-    <img alt="Historique des étoiles d'Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-07-17" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="Historique des étoiles d'Open Design" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 

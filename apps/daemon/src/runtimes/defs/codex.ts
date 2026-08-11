@@ -228,7 +228,10 @@ export const codexAgentDef = {
       const args = resumeSessionId
         ? ['exec', 'resume', '--json', '--skip-git-repo-check', ...sandboxArgs]
         : ['exec', '--json', '--skip-git-repo-check', ...sandboxArgs];
-      if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
+      if (
+        runtimeContext.disablePlugins === true
+        || process.env.OD_CODEX_DISABLE_PLUGINS === '1'
+      ) {
         args.push('--disable', 'plugins');
       }
       // `-C <cwd>` and `--add-dir <dir>` are CREATE-only flags: `codex exec

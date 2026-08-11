@@ -3,6 +3,7 @@ import type { Locator, Page, Route } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fulfillAgentsRoute } from './mock-factory.js';
+import { openSettingsDialog } from './amr.js';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
@@ -135,6 +136,16 @@ const VISUAL_PROJECTS = [
 
 type VisualProject = (typeof VISUAL_PROJECTS)[number];
 
+/** The single conversation every workspace capture opens into. */
+const VISUAL_CONVERSATION = {
+  id: 'visual-conversation-launchpad',
+  projectId: 'visual-project-launchpad',
+  title: null,
+  messageCount: 0,
+  createdAt: 1_700_000_000_000,
+  updatedAt: 1_700_000_050_000,
+} as const;
+
 const VISUAL_PROJECT_FILE_HTML =
   '<!doctype html><html><body><main><h1>Visual CSS Smoke</h1><p>Workspace preview remains framed.</p></main></body></html>';
 
@@ -168,6 +179,8 @@ type VisualPageOptions = {
   projects?: readonly VisualProject[];
   config?: Partial<VisualConfig>;
   agents?: readonly unknown[];
+  /** Signed-in by default so non-auth visual surfaces can reach Home. */
+  velaLoggedIn?: boolean;
 };
 
 type VisualVelaAccountOptions = {
@@ -250,6 +263,15 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
   const config = { ...VISUAL_CONFIG, ...(options.config ?? {}) };
   const agents = options.agents ?? [MOCK_AGENT];
 
+  // Visual coverage is a web rendering contract, not a daemon behavior lane.
+  // Register these first so the narrower fixtures below win; every other
+  // daemon-owned request terminates at a deterministic browser-side boundary.
+  for (const pattern of ['**/api/**', '**/artifacts/**', '**/frames/**', '**/powered/**']) {
+    await page.route(pattern, async (route) => {
+      await route.fulfill({ status: 404, json: { error: 'not mocked by visual coverage' } });
+    });
+  }
+
   await page.addInitScript(([key, config, githubStarsKey, githubStarsCount, visualStabilityKey]) => {
     window.localStorage.setItem(key, JSON.stringify(config));
     window.localStorage.setItem(
@@ -269,7 +291,7 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/test/connection', async (route) => {
     if (route.request().method() !== 'POST') {
-      await route.continue();
+      await route.fallback();
       return;
     }
 
@@ -286,7 +308,7 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/provider/models', async (route) => {
     if (route.request().method() !== 'POST') {
-      await route.continue();
+      await route.fallback();
       return;
     }
 
@@ -316,12 +338,24 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
   });
 
   await page.route('**/api/integrations/vela/status', async (route) => {
-    await fulfillGet(route, {
-      loggedIn: false,
-      profile: 'local',
-      configPath: '/tmp/.amr/config.json',
-      user: null,
-    });
+    const loggedIn = options.velaLoggedIn ?? true;
+    await fulfillGet(
+      route,
+      loggedIn
+        ? {
+            loggedIn: true,
+            loginInFlight: false,
+            profile: 'visual',
+            configPath: '/tmp/.amr/config.json',
+            user: { id: 'visual-user', email: 'visual@example.com' },
+          }
+        : {
+            loggedIn: false,
+            profile: 'local',
+            configPath: '/tmp/.amr/config.json',
+            user: null,
+          },
+    );
   });
 
   await page.route('**/api/media/providers/aihubmix/models**', async (route) => {
@@ -330,7 +364,7 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route(VISUAL_GITHUB_REPO_API, async (route) => {
     if (route.request().method() !== 'GET') {
-      await route.continue();
+      await route.fallback();
       return;
     }
 
@@ -343,9 +377,91 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     await fulfillGet(route, { projects });
   });
 
+  // A project deep link no longer borrows the shell's ambient Workspace. If
+  // the project list has not settled first, App bootstraps the route through
+  // an authoritative scope witness followed by the matching project detail.
+  // Keep those reads inside the visual fixture instead of letting the generic
+  // API catch-all turn normal list/bootstrap scheduling into a 404 race.
+  await page.route('**/api/projects/*/workspace-scope', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    const projectId = decodeURIComponent(
+      new URL(route.request().url()).pathname.split('/').at(-2) ?? '',
+    );
+    const project = projects.find((candidate) => candidate.id === projectId);
+    if (!project) {
+      await route.fulfill({ status: 404, json: { error: `unknown project ${projectId}` } });
+      return;
+    }
+    await route.fulfill({
+      json: {
+        scope: {
+          kind: 'unbound',
+          projectId,
+          workspaceId: null,
+          context: null,
+        },
+      },
+    });
+  });
+
+  await page.route('**/api/projects/*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    const projectId = decodeURIComponent(
+      new URL(route.request().url()).pathname.split('/').at(-1) ?? '',
+    );
+    const project = projects.find((candidate) => candidate.id === projectId);
+    if (!project) {
+      await route.fulfill({ status: 404, json: { error: `unknown project ${projectId}` } });
+      return;
+    }
+    await route.fulfill({ json: { project: { ...project, workspaceId: null } } });
+  });
+
+  // The conversation boundary. `ProjectView` renders `ChatPane` — and therefore
+  // the composer every workspace capture waits for — only once a conversation
+  // resolves (`activeConversationId || conversationLoadError`), and both
+  // `listConversations` and `createConversation` swallow a non-ok response
+  // (`[]` / `null`) rather than surfacing an error. So while the catch-all above
+  // answered `/conversations` with 404, the project opened with no conversation
+  // AND no load error, ChatPane never mounted, and every capture that navigates
+  // into the workspace died on `chat-composer` not existing. The catch-all's own
+  // contract is that "every other daemon-owned request terminates at a
+  // deterministic browser-side boundary" — this is that boundary for
+  // conversations, which the catch-all closed without supplying.
+  await page.route('**/api/projects/*/conversations', async (route) => {
+    const method = route.request().method();
+    if (method === 'GET') {
+      await route.fulfill({ json: { conversations: [VISUAL_CONVERSATION] } });
+      return;
+    }
+    if (method === 'POST') {
+      await route.fulfill({ json: { conversation: VISUAL_CONVERSATION } });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.route('**/api/projects/*/conversations/*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.fulfill({ json: { conversation: VISUAL_CONVERSATION } });
+      return;
+    }
+    await fulfillGet(route, { conversation: VISUAL_CONVERSATION });
+  });
+
+  await page.route('**/api/projects/*/conversations/*/messages', async (route) => {
+    await fulfillGet(route, { messages: [] });
+  });
+
   await page.route('**/api/projects/*/files', async (route) => {
     if (route.request().method() !== 'GET') {
-      await route.continue();
+      await route.fallback();
       return;
     }
     await fulfillGet(route, { files: VISUAL_PROJECT_FILES });
@@ -353,7 +469,7 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/projects/*/raw/*', async (route) => {
     if (route.request().method() !== 'GET') {
-      await route.continue();
+      await route.fallback();
       return;
     }
     await route.fulfill({
@@ -364,7 +480,7 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/projects/*/upload', async (route) => {
     if (route.request().method() !== 'POST') {
-      await route.continue();
+      await route.fallback();
       return;
     }
     await route.fulfill({
@@ -381,24 +497,24 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
     });
   });
 
-  await page.route('**/api/routines', async (route) => {
-    await fulfillGet(route, { routines: [] });
-  });
-
-  await page.route('**/api/automation-templates', async (route) => {
-    await fulfillGet(route, { templates: [] });
-  });
-
-  await page.route('**/api/automation-proposals?status=pending-review', async (route) => {
-    await fulfillGet(route, { proposals: [] });
-  });
-
-  await page.route('**/api/automation-source-packets?limit=3', async (route) => {
-    await fulfillGet(route, { packets: [] });
-  });
-
   await page.route('**/api/plugins', async (route) => {
     await fulfillGet(route, { plugins: VISUAL_PLUGINS });
+  });
+
+  // Single-plugin GET. #5517 turned plugin details into the `/marketplace/<id>`
+  // route, and `PluginDetailView` refetches the record by id instead of reusing
+  // the list payload the catalog already holds — so a fixture that mocks only
+  // the list renders the detail surface's "Failed to load plugin: HTTP 404"
+  // branch. The route returns the record unwrapped, matching the daemon.
+  // `*` never spans `/`, so this cannot shadow `*/preview` or `*/apply`.
+  await page.route('**/api/plugins/*', async (route) => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1) ?? '');
+    const plugin = VISUAL_PLUGINS.find((candidate) => candidate.id === id);
+    if (!plugin) {
+      await route.fulfill({ status: 404, json: { error: `unknown plugin ${id}` } });
+      return;
+    }
+    await fulfillGet(route, plugin);
   });
 
   await page.route('**/api/plugins/*/preview', async (route) => {
@@ -411,7 +527,7 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/plugins/*/apply', async (route) => {
     if (route.request().method() !== 'POST') {
-      await route.continue();
+      await route.fallback();
       return;
     }
     const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2) ?? 'plugin');
@@ -458,7 +574,7 @@ export async function configureVisualPage(page: Page, options: VisualPageOptions
 
   await page.route('**/api/design-systems/*', async (route) => {
     if (route.request().method() !== 'GET') {
-      await route.continue();
+      await route.fallback();
       return;
     }
     const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1) ?? 'agentic');
@@ -589,7 +705,9 @@ export async function waitForVisualProjects(page: Page, projects: readonly Visua
     return;
   }
 
-  await expect(page.getByText(projects[0]?.name ?? '')).toBeVisible();
+  await expect(
+    page.getByTestId('recent-projects-strip').getByText(projects[0]?.name ?? '', { exact: true }),
+  ).toBeVisible();
 }
 
 export async function gotoVisualHome(page: Page): Promise<void> {
@@ -598,6 +716,10 @@ export async function gotoVisualHome(page: Page): Promise<void> {
 }
 
 export async function gotoVisualWorkspace(page: Page): Promise<void> {
+  // Project workspace captures navigate immediately after Home becomes
+  // visible. Wait on the catalog they consume so slower CI scheduling cannot
+  // leave the route guard and deep-link bootstrap racing the mocked list.
+  await waitForVisualProjects(page, VISUAL_PROJECTS);
   await page.goto('/projects/visual-project-launchpad', { waitUntil: 'domcontentloaded' });
   await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page).toHaveURL(/\/projects\/visual-project-launchpad/, { timeout: T.medium });
@@ -607,19 +729,37 @@ export async function gotoVisualWorkspace(page: Page): Promise<void> {
   await prepareVisualWorkspaceFileList(page);
 }
 
+/**
+ * Drive the workspace onto its Design Files tab, converging on that state
+ * instead of deciding once whether to click.
+ *
+ * `aria-selected` and the design-file rows both come off FileWorkspace's single
+ * `activeTab === DESIGN_FILES_TAB` expression, so probing the rows to decide
+ * whether to click was never asking the wrong question — the problem is that the
+ * answer can still change after the probe. The tab is *persisted*
+ * (`setPersistedActive`) and restored asynchronously, so a restore that lands
+ * after this helper's one click puts another tab back, and a one-shot helper has
+ * nothing left to re-click. Under the visual lane — fully parallel, `retries: 0`
+ * — that surfaced as a single capture timing out for 10s on `aria-selected`
+ * while its siblings, running this identical prelude, all passed.
+ *
+ * Clicking is safe to repeat: the tab's handler just sets the same active id.
+ */
+export async function activateVisualDesignFilesTab(page: Page): Promise<void> {
+  const tab = page.getByTestId('design-files-tab');
+  await expect(tab).toBeVisible({ timeout: T.medium });
+  await expect(async () => {
+    if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
+    await expect(tab).toHaveAttribute('aria-selected', 'true', { timeout: T.short });
+  }).toPass({ timeout: T.long });
+}
+
 export async function prepareVisualWorkspaceFileList(page: Page): Promise<void> {
-  const trigger = page.getByTestId('workspace-pages-menu-trigger');
-  await expect
-    .poll(async () => ((await trigger.textContent()) ?? '').replace(/\s+/g, ' ').trim(), {
-      timeout: T.medium,
-    })
-    .not.toBe('Pages');
-  const triggerText = await trigger.textContent().catch(() => '');
-  if (!/\bAll project files\b/.test(triggerText ?? '')) {
-    await trigger.click();
-    await page.getByRole('menuitem', { name: 'All project files' }).click();
-    await expect(trigger).toContainText('All project files');
-  }
+  await activateVisualDesignFilesTab(page);
+  // No pages dropdown to drive: 023937ef4 replaced the tab strip's pages
+  // menu with a plain Design Files tab (#5517), deleting
+  // `workspace-pages-menu-trigger` from the app and this helper alike. The
+  // main sync resurrected the driving code here; the trigger stays deleted.
   await expect(page.getByTestId('design-file-row-index.html')).toBeVisible();
   await expect(page.getByTestId('design-file-preview')).toHaveCount(0);
   await resetVisualScroll(page);
@@ -628,11 +768,12 @@ export async function prepareVisualWorkspaceFileList(page: Page): Promise<void> 
 
 export async function prepareVisualWorkspacePreview(page: Page): Promise<void> {
   await prepareVisualWorkspaceFileList(page);
+  // #5517 (023937ef4) deleted the design-file preview pane: the card grid IS
+  // the preview surface now, so a single click on the row's primary open
+  // target lands straight on the rendered artifact — there is no intermediate
+  // preview card with an "Open" button to click through.
   const fileRow = page.getByTestId('design-file-row-index.html');
   await fileRow.getByRole('button').first().click();
-  const preview = page.getByTestId('design-file-preview');
-  await expect(preview).toBeVisible();
-  await preview.getByRole('button', { name: /^Open$/ }).click();
   await expect(
     page.frameLocator('[data-testid="artifact-preview-frame"]').getByRole('heading', {
       name: 'Visual CSS Smoke',
@@ -645,6 +786,10 @@ export async function prepareVisualWorkspacePreview(page: Page): Promise<void> {
 export async function prepareVisualAvatarMenu(page: Page): Promise<Locator> {
   await prepareVisualWorkspaceFileList(page);
   const menu = await openAvatarMenu(page);
+  // The composer popover is a model picker: the Open Design account card is
+  // conditional (Open Design has to be installed), so gate on the model list.
+  await expect(menu.locator('.avatar-model-section').first()).toBeVisible();
+  await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
   await expect(menu.locator('.avatar-item').first()).toBeVisible();
   await expect(page.getByTestId('design-file-row-index.html')).toBeVisible();
   await waitForVisualStable(page);
@@ -654,7 +799,12 @@ export async function prepareVisualAvatarMenu(page: Page): Promise<Locator> {
 export async function prepareVisualSettingsDialog(page: Page): Promise<Locator> {
   await prepareVisualWorkspaceFileList(page);
   const dialog = await openSettingsDetailsFromHeader(page);
-  await expect(dialog.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
+  // Assert the section nav, not a heading: the surface's own <h2> is consumed as
+  // its accessible name via aria-labelledby, and opening from a project lands on
+  // the execution section whose heading reads "Models & providers" — neither
+  // matches a /Settings|General|Execution mode/ probe. The nav is what proves
+  // Settings opened, in either presentation. (Same check critical-smoke uses.)
+  await expect(dialog.getByTestId('settings-nav-execution')).toBeVisible();
   await waitForVisualStable(page);
   return dialog;
 }
@@ -667,18 +817,27 @@ export async function openAvatarMenu(page: Page): Promise<Locator> {
 }
 
 export async function openSettingsDetailsFromHeader(page: Page): Promise<Locator> {
-  const settingsTrigger = page.getByTestId('entry-settings-menu-trigger');
-  await expect(settingsTrigger).toBeVisible({ timeout: T.medium });
-  await settingsTrigger.evaluate((element: HTMLElement) => element.click());
-  await expect(page.getByTestId('entry-settings-menu')).toBeVisible({ timeout: T.medium });
-  const openDetails = page.getByTestId('entry-settings-open-details');
-  await expect(openDetails).toBeVisible({ timeout: T.medium });
-  await openDetails.evaluate((element: HTMLElement) => element.click());
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible({ timeout: T.medium });
-  return dialog;
+  // Delegates to amr.ts's `openSettingsDialog`, which already encodes
+  // everything this local copy was missing and getting wrong:
+  //
+  //   - It expands the nav rail first. #5517 moved the entry settings chip into
+  //     the rail footer, and a collapsed rail is `inert` + `aria-hidden`, so the
+  //     chip is present but invisible to `getByRole` and even a programmatic
+  //     `element.click()` is a no-op. This copy never opened the rail, so none
+  //     of its triggers was ever visible and every capture died on the same
+  //     `.settings-icon-btn` line.
+  //   - It matches the surface with bare `.modal-settings`, the one class both
+  //     the modal and the #5517 `presentation="page"` route share, instead of
+  //     pinning `[role="dialog"]` which the page presentation never sets.
+  //   - It ends the trigger chain on the settings aria-label rather than
+  //     `.settings-icon-btn`, which the entry surface does not carry.
+  //
+  // It also clicks `entry-settings-open-details`, so it is a superset of what
+  // this helper did. Kept as a named re-export so visual-workspace.test.ts
+  // keeps reading in terms of the header, and so there is exactly one settings
+  // opener rather than a third variant.
+  return openSettingsDialog(page);
 }
-
 export async function waitForVisualFonts(page: Page): Promise<void> {
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -885,7 +1044,7 @@ function sanitizeVisualName(name: string): string {
 
 async function fulfillGet(route: Route, json: unknown): Promise<void> {
   if (route.request().method() !== 'GET') {
-    await route.continue();
+    await route.fallback();
     return;
   }
 
