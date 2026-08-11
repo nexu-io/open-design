@@ -421,6 +421,14 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       }
     }
     if (!shrinksEvents && !regressesTerminalStatus) {
+      const mergedContent =
+        typeof incoming.content === 'string' && incoming.content.length > 0
+          ? incoming.content
+          : typeof stored.content === 'string' && stored.content.length > 0
+            ? stored.content
+            : typeof incoming.content === 'string'
+              ? incoming.content
+              : stored.content ?? '';
       // A pinned-but-event-less daemon-backed row can still be hit by a stale
       // pre-run snapshot that omits `runId` (the web persisted the assistant
       // placeholder before /api/runs assigned ownership). Preserve the
@@ -433,6 +441,7 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         ...incoming,
         role: stored.role,
         runId: stored.runId,
+        content: mergedContent,
         // Preserve the stored run status when the snapshot omits it, so a
         // stale whole-message PUT cannot null the daemon-owned status column
         // and open the terminal-arbitration gate (nettee 8/10 on #6418);

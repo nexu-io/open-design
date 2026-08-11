@@ -384,6 +384,68 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
     ).toBe('evt-5');
   });
 
+  it('preserves daemon content on equal-length stale snapshots', async () => {
+    // nettee review (#6418): the accepted equal-length merge path must not let
+    // a stale client snapshot clear content after the daemon has already
+    // written it. This can happen when events persisted before the client
+    // reducer/content update, so event counts match while content is stale.
+    delete process.env.POSTHOG_KEY;
+    delete process.env.POSTHOG_HOST;
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+    delete process.env.LANGFUSE_BASE_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+
+    started = (await startServer({ port: 0, returnServer: true })) as StartedServer;
+    await putConfig(started.url, {
+      agentId: 'claude',
+      telemetry: { metrics: true, content: false, artifactManifest: false },
+      privacyDecisionAt: Date.now(),
+    });
+
+    const { projectId, conversationId } = await createConversation(started.url);
+    const messageId = `content_${randomUUID()}`;
+    const url = `${started.url}/api/projects/${encodeURIComponent(projectId)}/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}`;
+    const events = [
+      { kind: 'status', label: 'model' },
+      { kind: 'text', text: 'model output' },
+    ];
+
+    const seeded = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'model output',
+        runId: 'run-content',
+        runStatus: 'running',
+        lastRunEventId: '2',
+        events,
+      }),
+    });
+    expect(seeded.status).toBe(200);
+
+    const staleEmptyContent = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: '',
+        runId: 'run-content',
+        runStatus: 'running',
+        lastRunEventId: '2',
+        events,
+      }),
+    });
+    expect(staleEmptyContent.status).toBe(200);
+    expect(
+      (await fetchAssistantMessage(started.url, projectId, conversationId, messageId))
+        ?.content,
+    ).toBe('model output');
+  });
+
   it('lets a metadata update write a fresh endedAt while preserving daemon events', async () => {
     // The retry flow persists the completion timestamp as a metadata update
     // whose events array is empty (the web never carries the daemon's detailed
