@@ -93,6 +93,15 @@ async function startProjectStubServer(): Promise<StubServer> {
         }));
         return;
       }
+      if (captured.method === 'GET' && captured.url === '/api/workspaces/ws-1/projects') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({
+          projects: [
+            { id: 'project-1', name: 'Project One', skillId: null },
+          ],
+        }));
+        return;
+      }
       if (captured.method === 'POST' && captured.url === '/api/workspace/invite') {
         res.statusCode = 200;
         res.end(JSON.stringify({
@@ -368,7 +377,7 @@ describe('od project CLI', () => {
     });
   });
 
-  it('od project list with explicit --workspace skips auto-resolution (#6679)', async () => {
+  it('od project list with explicit --workspace routes to the workspace-scoped catalog (#6679)', async () => {
     stub = await startProjectStubServer();
 
     const result = await runCli([
@@ -385,11 +394,15 @@ describe('od project CLI', () => {
 
     expect(result.code).toBe(0);
     expect(result.stderr).toBe('');
-    // No workspace/directory call — header from flags wins.
+    // No workspace/directory call — explicit flags win, but they route to
+    // the workspace-scoped catalog (/api/workspaces/:id/projects), not to
+    // the unbound /api/projects catalog. Passing --workspace to /api/projects
+    // does NOT scope it (#6679 repro), so the explicit path mirrors the
+    // implicit signed-in path.
     expect(stub.requests).toHaveLength(1);
     expect(stub.requests[0]).toMatchObject({
       method: 'GET',
-      url: '/api/projects',
+      url: '/api/workspaces/ws-1/projects',
     });
     expect(stub.requests[0]!.headers).toMatchObject({
       'x-od-workspace-id': 'ws-1',

@@ -6611,16 +6611,29 @@ Common options:
       // an empty list while the UI keeps listing them (#6679). #6595 fixed
       // this for the MCP bridge by resolving the signed-in workspace once
       // and routing to GET /api/workspaces/:id/projects; mirror that here.
-      // An explicit --workspace pair wins. The signed-out / non-vela / no-
-      // directory cases fall back to the original headerless catalog so
-      // `od project list` still returns unbound projects there.
+      // BOTH the implicit signed-in path AND an explicit
+      // --workspace/--workspace-member pair route to the workspace-scoped
+      // catalog. The signed-out / non-vela / no-directory cases fall back to
+      // the original headerless catalog so `od project list` still returns
+      // unbound projects there. Passing --workspace to /api/projects does
+      // NOT scope it (#6679 repro), so the explicit path needs the same
+      // workspace-scoped endpoint as the implicit path.
       let listResp: any = null;
-      if (!explicitWorkspaceHeaders) {
+      let scopeHeaders: Record<string, string> = {};
+      if (explicitWorkspaceHeaders) {
+        const workspaceId = String(flags.workspace).trim();
+        scopeHeaders = explicitWorkspaceHeaders;
+        listResp = await fetch(
+          `${base}/api/workspaces/${encodeURIComponent(workspaceId)}/projects`,
+          { headers: scopeHeaders },
+        );
+      } else {
         const ctx = await resolveMcpWorkspaceContext(base);
         if (ctx) {
+          scopeHeaders = ctx.headers;
           listResp = await fetch(
             `${base}/api/workspaces/${encodeURIComponent(ctx.workspaceId)}/projects`,
-            { headers: ctx.headers },
+            { headers: scopeHeaders },
           );
         }
       }
