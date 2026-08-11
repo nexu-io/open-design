@@ -23,6 +23,24 @@ const skippedDirectories = new Set([
   "vendor",
 ]);
 const leafPackages = ["@open-design/desktop", "@open-design/packaged", "@open-design/tools-pack"] as const;
+const packagedLeafSourceMarkers = ["desktop", "packaged", "pack"] as const;
+
+// A prefilter may skip parsing only when escaped spellings cannot hide a
+// guarded path. Unicode, hex, and line-continuation escapes always fall back;
+// removing slashes covers identity escapes such as `\d\e\s\k\t\o\p`.
+function hasPotentiallyEscapedLiteral(source: string): boolean {
+  if (source.includes("\\u") || source.includes("\\x") || /\\\r?\n/.test(source)) return true;
+  if (!source.includes("\\")) return false;
+  const unescapedSource = source.replaceAll("\\", "");
+  return packagedLeafSourceMarkers.some((marker) => unescapedSource.includes(marker));
+}
+
+export function sourceMayConsumePackagedLeaf(source: string): boolean {
+  return (
+    hasPotentiallyEscapedLiteral(source) ||
+    packagedLeafSourceMarkers.some((marker) => source.includes(marker))
+  );
+}
 
 const allowedConsumerPrefixes = new Map([
   [
@@ -243,6 +261,7 @@ export async function checkPackagedLeafBoundary(): Promise<boolean> {
     for (const filePath of await collectCheckedFiles(path.join(repoRoot, root))) {
       if (isAllowedConsumer(filePath)) continue;
       const source = await readFile(path.join(repoRoot, filePath), "utf8");
+      if (!sourceMayConsumePackagedLeaf(source)) continue;
       violations.push(...collectPackagedLeafConsumptionFromSource(filePath, source));
     }
   }

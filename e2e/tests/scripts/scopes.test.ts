@@ -754,9 +754,18 @@ test("daemon core matches only its certain rule while excluded daemon surfaces s
 });
 
 test("packaged-leaf consumption collector resolves imports, packages, and static paths", async () => {
-  const { collectPackagedLeafConsumptionFromSource } = await import(
+  const { collectPackagedLeafConsumptionFromSource, sourceMayConsumePackagedLeaf } = await import(
     "../../../scripts/check-packaged-leaf-boundary.ts"
   );
+  assert.equal(sourceMayConsumePackagedLeaf(`import "@open-design/desktop/main";`), true);
+  assert.equal(sourceMayConsumePackagedLeaf(`const source = path.join(repoRoot, "tools", "pack");`), true);
+  assert.equal(
+    sourceMayConsumePackagedLeaf(String.raw`import "@open-design/\u0064esktop/main";`),
+    true,
+  );
+  assert.equal(sourceMayConsumePackagedLeaf(String.raw`import "@open-design/\d\e\s\k\t\o\p/main";`), true);
+  assert.equal(sourceMayConsumePackagedLeaf(`import "@open-design/contracts";`), false);
+
   const violations = collectPackagedLeafConsumptionFromSource(
     "packages/example/src/index.ts",
     [
@@ -770,12 +779,31 @@ test("packaged-leaf consumption collector resolves imports, packages, and static
     violations.map((violation) => violation.lineNumber),
     [1, 2, 3],
   );
+  assert.equal(
+    collectPackagedLeafConsumptionFromSource(
+      "packages/example/src/index.ts",
+      String.raw`import "@open-design/\u0064esktop/main";`,
+    ).length,
+    1,
+  );
 });
 
 test("the consumption guard folds repository paths while allowing sandbox fixture writers", async () => {
-  const { collectCertainExemptConsumptionFromSource } = await import(
+  const { collectCertainExemptConsumptionFromSource, sourceMayConsumeCertainExemptSurface } = await import(
     "../../../scripts/check-certain-exempt-consumption.ts"
   );
+
+  assert.equal(sourceMayConsumeCertainExemptSurface(`readFileSync("docs/spec.md")`), true);
+  assert.equal(
+    sourceMayConsumeCertainExemptSurface(`readFileSync(path.join(repoRoot, "docs", "spec.md"))`),
+    true,
+  );
+  assert.equal(
+    sourceMayConsumeCertainExemptSurface(String.raw`readFileSync("d\u006fcs/spec.md")`),
+    true,
+  );
+  assert.equal(sourceMayConsumeCertainExemptSurface(String.raw`readFileSync("\d\o\c\s/spec.md")`), true);
+  assert.equal(sourceMayConsumeCertainExemptSurface(`readFileSync("skills/example.md")`), false);
 
   // Dot-relative resolution into docs/ is consumption anywhere, tests included.
   const relative = collectCertainExemptConsumptionFromSource(
@@ -783,6 +811,13 @@ test("the consumption guard folds repository paths while allowing sandbox fixtur
     `const spec = readFileSync("../../../docs/spec.md", "utf8");`,
   );
   assert.deepEqual(relative.map((violation) => violation.literal), ["../../../docs/spec.md"]);
+  assert.equal(
+    collectCertainExemptConsumptionFromSource(
+      "apps/daemon/tests/example.test.ts",
+      String.raw`const spec = readFileSync("../../../d\u006fcs/spec.md", "utf8");`,
+    ).length,
+    1,
+  );
 
   // Bare repo-relative literals are consumption in non-test source...
   const bareInSource = collectCertainExemptConsumptionFromSource(

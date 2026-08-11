@@ -9,6 +9,7 @@ import {
   collectCrossAppImportViolationsFromSource,
   isCrossAppImportSourceFile,
   loadAppDirectoryRegistry,
+  sourceMayImportAnotherApp,
 } from "../../../scripts/check-cross-app-imports.ts";
 
 const registry: AppDirectoryRegistry = {
@@ -17,6 +18,57 @@ const registry: AppDirectoryRegistry = {
     ["web", "@open-design/web"],
   ]),
 };
+
+test("cross-app import prefilter keeps possible targets and escaped specifiers", () => {
+  assert.equal(
+    sourceMayImportAnotherApp(
+      "apps/web/src/runtime.ts",
+      "import { run } from '@open-design/daemon';",
+      registry,
+    ),
+    true,
+  );
+  assert.equal(
+    sourceMayImportAnotherApp(
+      "apps/web/src/runtime.ts",
+      "import { run } from '../../daemon/src/server.ts';",
+      registry,
+    ),
+    true,
+  );
+  assert.equal(
+    sourceMayImportAnotherApp(
+      "apps/web/src/runtime.ts",
+      String.raw`import { run } from '@open-design/\u0064aemon';`,
+      registry,
+    ),
+    true,
+  );
+  assert.equal(
+    sourceMayImportAnotherApp(
+      "apps/web/src/runtime.ts",
+      String.raw`import { run } from '@open-design/\d\a\e\m\o\n';`,
+      registry,
+    ),
+    true,
+  );
+  assert.equal(
+    sourceMayImportAnotherApp(
+      "apps/web/src/runtime.ts",
+      "import { Button } from '@open-design/components';",
+      registry,
+    ),
+    false,
+  );
+
+  const escapedViolations = collectCrossAppImportViolationsFromSource(
+    "apps/web/src/runtime.ts",
+    String.raw`import { run } from '@open-design/\u0064aemon';`,
+    registry,
+  );
+  assert.equal(escapedViolations.length, 1);
+  assert.equal(escapedViolations[0]?.targetApp, "daemon");
+});
 
 test("cross-app import check rejects web importing daemon src via relative path", () => {
   const violations = collectCrossAppImportViolationsFromSource(
