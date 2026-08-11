@@ -593,13 +593,31 @@ export function EntryShell({
   // view from the route rather than keeping it in component state.
   const route = useRoute();
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
+  // Agent discovery reported AMR, and reported it unusable — the Vela binary
+  // this platform never shipped (Linux/Docker as of 0.18.1, upstream #5700 /
+  // #6567). Declared here, above the first consumer, because the identity-gate
+  // effect below reads it from its dependency array during render.
+  const amrRuntimeUnavailable =
+    !agentsLoading && agents.some((agent) => agent.id === 'amr' && !agent.available);
   useEffect(() => {
     // The entry shell is the authenticated Home surface. A definitive
     // signed-out result returns it to the Cloud identity gate while leaving
     // the saved model source untouched for passive reauthentication.
+    //
+    // That gate is only meaningful where signing in can actually succeed.
+    // Without a Vela binary `amrLoggedIn` is permanently false, so gating Home
+    // on it makes Home unreachable: every completed onboarding bounces back to
+    // a sign-in that always 500s. A local-CLI or BYOK runtime is a complete
+    // setup on its own, so those platforms keep Home without a cloud identity.
+    //
+    // Discovery has to finish before that can be judged. It streams, while the
+    // login status is a single request that resolves first, so deciding early
+    // means deciding on an agent list that has not yet mentioned AMR — and
+    // redirecting anyway, which is the bounce this guard exists to prevent.
+    if (agentsLoading || amrRuntimeUnavailable) return;
     if (amrLoggedIn !== false || view === 'onboarding') return;
     navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
-  }, [amrLoggedIn, view]);
+  }, [agentsLoading, amrLoggedIn, amrRuntimeUnavailable, view]);
   // The one shared workspace context. Any non-null context is a real workspace
   // (personal or team); workspace surfaces gate on B's permission bits, not on
   // workspaceType.
@@ -612,6 +630,9 @@ export function EntryShell({
     workspaceContextState,
     amrLoggedIn,
   );
+  // `amrRuntimeUnavailable` (declared above) also suppresses the rail's
+  // sign-in card, which can only ever fail here: POST
+  // /api/integrations/vela/login → 500 "vela binary not found".
   const workspaceContextRef = useRef(workspaceContext);
   workspaceContextRef.current = workspaceContext;
   const workspaceBillingResponse = useWorkspaceBillingResponse();
@@ -1537,7 +1558,7 @@ export function EntryShell({
           footerNotice={
             accountFooterState === 'syncing'
               ? <RailAccountSyncTip />
-              : accountFooterState === 'sign-in'
+              : accountFooterState === 'sign-in' && !amrRuntimeUnavailable
                 ? <CloudSignInTip />
                 : null
           }
@@ -2088,6 +2109,21 @@ function OnboardingView({
   const availableCliAgents = agents.filter((agent) => agent.available && agent.id !== 'amr');
   const visibleAgents = availableCliAgents.filter((agent) => visibleAgentIds.includes(agent.id));
   const amrSignedIn = amrStatus?.loggedIn === true;
+  // Agent discovery reported AMR, and reported it unusable — the Vela binary
+  // this platform never shipped (Linux/Docker as of 0.18.1, upstream #5700 /
+  // #6567). Both AMR surfaces in this flow then dead-end on the same failing
+  // POST /api/integrations/vela/login: the step-0 cloud gate, whose only
+  // button starts that login, and the step-1 hosted card, which selects a
+  // runtime that cannot start. Skipping is decided at render time rather than
+  // in an effect on purpose — `onFinish()` navigates, and a navigation that
+  // can land back on this view turns an effect-driven skip into an infinite
+  // render loop (React #185).
+  const amrRuntimeUnavailable =
+    !agentsLoading && agents.some((agent) => agent.id === 'amr' && !agent.available);
+  // The hosted card is hidden when AMR is unavailable, so the 'amr' default
+  // must not survive into the selection either.
+  const effectiveModelSource: 'amr' | 'local' | 'byok' =
+    amrRuntimeUnavailable && modelSource === 'amr' ? 'local' : modelSource;
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
   const selectedAgentChoice = selectedAgent ? (config.agentModels?.[selectedAgent.id] ?? {}) : {};
   const normalizedSelectedAgentChoice = effectiveAgentModelChoice(selectedAgent, selectedAgentChoice) ?? selectedAgentChoice;
@@ -2531,7 +2567,9 @@ function OnboardingView({
     event: ReactKeyboardEvent<HTMLButtonElement>,
     currentSource: 'amr' | 'local' | 'byok',
   ): void {
-    const sources = ['amr', 'local', 'byok'] as const;
+    const sources = (
+      amrRuntimeUnavailable ? ['local', 'byok'] : ['amr', 'local', 'byok']
+    ) as ReadonlyArray<'amr' | 'local' | 'byok'>;
     const currentIndex = sources.indexOf(currentSource);
     let nextIndex: number | null = null;
 
@@ -2554,7 +2592,7 @@ function OnboardingView({
   }
 
   function continueWithModelSource(): void {
-    if (modelSource === 'amr') {
+    if (effectiveModelSource === 'amr') {
       emitOnboardingClick('amr_cloud', 'select_runtime', {
         runtime_type: 'amr_cloud',
         is_recommended: true,
@@ -2566,7 +2604,7 @@ function OnboardingView({
       return;
     }
 
-    if (modelSource === 'local') {
+    if (effectiveModelSource === 'local') {
       emitOnboardingClick('local_coding_agent', 'select_runtime', {
         runtime_type: 'local_cli',
       });
@@ -3077,7 +3115,7 @@ function OnboardingView({
 
   // Step 1 is identity only: every user signs into Open Design Cloud before
   // choosing Hosted, Local, or BYOK on the next screen.
-  if (step === 0) {
+  if (step === 0 && !amrRuntimeUnavailable) {
     const cloudBusy = amrLoginPending;
     const amrStatusResolving = !amrStatusResolved;
     return (
@@ -3187,7 +3225,9 @@ function OnboardingView({
     );
   }
 
-  if (step === 1) {
+  // `step === 0` only reaches here when the cloud gate above was skipped as
+  // unusable; source selection becomes the first screen instead of a dead end.
+  if (step === 1 || step === 0) {
     return (
       <section
         className="onboarding-view onboarding-view--cloud"
@@ -3206,6 +3246,7 @@ function OnboardingView({
               role="radiogroup"
               aria-label={t('settings.onboardingExecutionTitle')}
             >
+              {amrRuntimeUnavailable ? null : (
               <Button
                 ref={(node) => {
                   modelSourceOptionRefs.current.amr = node;
@@ -3238,16 +3279,17 @@ function OnboardingView({
                 </span>
                 <span className={onboardingSourceStyles.radio} aria-hidden="true" />
               </Button>
+              )}
               <Button
                 ref={(node) => {
                   modelSourceOptionRefs.current.local = node;
                 }}
                 variant="subtle"
                 role="radio"
-                aria-checked={modelSource === 'local'}
-                tabIndex={modelSource === 'local' ? 0 : -1}
+                aria-checked={effectiveModelSource === 'local'}
+                tabIndex={effectiveModelSource === 'local' ? 0 : -1}
                 className={`${onboardingSourceStyles.option} ${
-                  modelSource === 'local' ? onboardingSourceStyles.optionActive : ''
+                  effectiveModelSource === 'local' ? onboardingSourceStyles.optionActive : ''
                 }`}
                 onClick={() => setModelSource('local')}
                 onKeyDown={(event) => handleModelSourceKeyDown(event, 'local')}
@@ -3271,10 +3313,10 @@ function OnboardingView({
                 }}
                 variant="subtle"
                 role="radio"
-                aria-checked={modelSource === 'byok'}
-                tabIndex={modelSource === 'byok' ? 0 : -1}
+                aria-checked={effectiveModelSource === 'byok'}
+                tabIndex={effectiveModelSource === 'byok' ? 0 : -1}
                 className={`${onboardingSourceStyles.option} ${
-                  modelSource === 'byok' ? onboardingSourceStyles.optionActive : ''
+                  effectiveModelSource === 'byok' ? onboardingSourceStyles.optionActive : ''
                 }`}
                 onClick={() => setModelSource('byok')}
                 onKeyDown={(event) => handleModelSourceKeyDown(event, 'byok')}

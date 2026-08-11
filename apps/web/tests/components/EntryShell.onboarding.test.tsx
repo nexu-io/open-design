@@ -659,6 +659,49 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(props.onAgentChange).not.toHaveBeenCalled();
   });
 
+  it('keeps Home on platforms where discovery reports AMR as unavailable', async () => {
+    // No Vela binary ships for Linux, so `amrLoggedIn` is false forever and
+    // /api/integrations/vela/login always 500s. Gating Home on a sign-in that
+    // cannot succeed made a finished local-CLI setup bounce back to the gate
+    // on every attempt to reach Home.
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    const config = baseConfig({
+      onboardingCompleted: true,
+      mode: 'daemon',
+      agentId: 'claude-code',
+      agentModels: { 'claude-code': { model: 'sonnet' } },
+    });
+    renderHome({
+      config,
+      amrLoggedIn: false,
+      agents: [cliAgent(), cliAgent({ id: 'amr', name: 'AMR', bin: 'vela', available: false })],
+    });
+
+    await waitFor(() => expect(window.location.pathname).toBe('/'));
+    expect(screen.queryByRole('heading', { name: 'Sign in to Open Design' })).toBeNull();
+  });
+
+  it('defers the identity gate until agent discovery has answered', async () => {
+    // Discovery streams; the login status is one request and lands first. A
+    // gate that decides on the first render therefore judges an agent list
+    // that has not yet mentioned AMR, and redirects before it could know.
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    const config = baseConfig({
+      onboardingCompleted: true,
+      mode: 'daemon',
+      agentId: 'claude-code',
+      agentModels: { 'claude-code': { model: 'sonnet' } },
+    });
+    renderHome({ config, amrLoggedIn: false, agents: [], agentsLoading: true });
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(window.location.pathname).toBe('/');
+  });
+
   it('shows the model-source chooser after Cloud sign-in without exposing legacy onboarding steps', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({
