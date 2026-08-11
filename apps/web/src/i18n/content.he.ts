@@ -54,7 +54,7 @@ export const HE_SKILL_COPY: Record<string, { description?: string; examplePrompt
   },
   'eng-runbook': {
     examplePrompt:
-      "Rédigez un runbook pour notre service d'auth — alertes, dashboards, procédures standard, rotation on-call.",
+      'כתבו מדריך תפעול עבור שירות האימות שלנו — התראות, לוחות מחוונים, נהלים סטנדרטיים וסבב כוננות.',
   },
   'faq-page': {
     examplePrompt:
