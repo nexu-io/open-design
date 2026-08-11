@@ -15,6 +15,7 @@ import {
   resolveLauncherPaths,
 } from "@open-design/launcher-proto";
 import { readProcessStamp } from "@open-design/platform";
+import { resolveAppIpcPath } from "@open-design/sidecar";
 import {
   APP_KEYS,
   DESKTOP_UPDATE_CHANNELS,
@@ -2290,7 +2291,11 @@ describe("desktop updater", () => {
       ]));
       expect(readProcessStamp(args, OPEN_DESIGN_SIDECAR_CONTRACT)).toEqual({
         app: APP_KEYS.DESKTOP,
-        ipc: "\\\\.\\pipe\\open-design-release-beta-win-desktop",
+        ipc: resolveAppIpcPath({
+          app: APP_KEYS.DESKTOP,
+          contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+          namespace: "release-beta-win",
+        }),
         mode: SIDECAR_MODES.RUNTIME,
         namespace: "release-beta-win",
         source: SIDECAR_SOURCES.PACKAGED,

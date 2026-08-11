@@ -2103,12 +2103,14 @@ jobs:
 
       - name: Publish activation summary
         run: |
-          echo "## Accepted beta activation" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- version: \`${{ needs.metadata.outputs.beta_version }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- commit: \`${{ needs.metadata.outputs.commit }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Windows artifact smoke: \`success\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- latest CAS and public readback: \`success\`" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "## Accepted beta activation"
+            echo ""
+            echo "- version: \`${{ needs.metadata.outputs.beta_version }}\`"
+            echo "- commit: \`${{ needs.metadata.outputs.commit }}\`"
+            echo "- Windows artifact smoke: \`success\`"
+            echo "- latest CAS and public readback: \`success\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cleanup workflow artifacts
         if: ${{ success() }}
