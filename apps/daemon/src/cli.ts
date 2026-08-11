@@ -483,7 +483,10 @@ async function runExport(args) {
     process.exit(2);
   }
   const base = await cliDaemonBaseUrl(flags);
-  const workspaceHeaders = workspaceHeadersFromExplicitFlags(flags) ?? {};
+  const token = process.env.OD_TOOL_TOKEN;
+  const requestHeaders = token
+    ? { authorization: `Bearer ${token}` }
+    : workspaceHeadersFromExplicitFlags(flags) ?? {};
   // All three formats rasterize through the desktop screenshot renderer so the
   // CLI matches the UI exactly. In particular `pdf` uses `/export/pdf-image`
   // (one raster page per deck slide / per viewport for a page) — NOT the generic
@@ -513,7 +516,7 @@ async function runExport(args) {
   try {
     resp = await fetch(`${base}/api/projects/${encodeURIComponent(projectId)}/${exportPath}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', ...workspaceHeaders },
+      headers: { 'content-type': 'application/json', ...requestHeaders },
       body: JSON.stringify(requestBody),
     });
   } catch (err) {
