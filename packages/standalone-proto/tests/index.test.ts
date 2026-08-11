@@ -8,6 +8,7 @@ import {
   STANDALONE_UPDATER_SCHEMA_VERSION,
   compareStandaloneVersions,
   createStandaloneHandoffEnvelope,
+  validateStandaloneHandoffDescriptor,
   validateStandaloneHandoffRequest,
   validateStandaloneHandoffEnvelope,
   validateStandaloneRuntimeStatus,
@@ -75,6 +76,24 @@ function request(): StandaloneHandoffRequest {
 }
 
 describe("Standalone bootloader protocol", () => {
+  it("round-trips the transport-neutral handoff descriptor as JSON", () => {
+    const full = request();
+    const descriptor = validateStandaloneHandoffDescriptor({
+      attachment: full.attachment,
+      handoff: full.handoff,
+      paths: full.paths,
+    });
+
+    expect(validateStandaloneHandoffDescriptor(
+      JSON.parse(JSON.stringify(descriptor)),
+    )).toEqual(descriptor);
+    expect(descriptor).not.toHaveProperty("capabilities");
+    expect(() => validateStandaloneHandoffDescriptor({
+      ...descriptor,
+      capabilities: full.capabilities,
+    })).toThrow(/unsupported fields/u);
+  });
+
   it("fixes the fossil entry while keeping channel and namespace independent", () => {
     expect(STANDALONE_BOOTLOADER_ENTRY_PATH).toBe("bootloader.mjs");
     expect(validateStandaloneHandoffRequest(request())).toMatchObject({

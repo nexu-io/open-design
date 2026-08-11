@@ -220,11 +220,14 @@ export type StandaloneRuntimeCommandResult =
       outcome: "failed";
     }>);
 
-export type StandaloneHandoffRequest = Readonly<{
+export type StandaloneHandoffDescriptor = Readonly<{
   attachment: StandaloneAttachmentDescriptor;
-  capabilities: StandaloneShellCapabilityPort;
   handoff: StandaloneHandoffEnvelope;
   paths: StandalonePaths;
+}>;
+
+export type StandaloneHandoffRequest = StandaloneHandoffDescriptor & Readonly<{
+  capabilities: StandaloneShellCapabilityPort;
 }>;
 
 type StandaloneRuntimeStatusBase = Readonly<{
@@ -816,17 +819,39 @@ export function validateStandalonePaths(value: unknown): StandalonePaths {
   };
 }
 
+export function validateStandaloneHandoffDescriptor(value: unknown): StandaloneHandoffDescriptor {
+  const request = requireRecord(value, "standalone handoff descriptor");
+  requireKnownKeys(
+    request,
+    ["attachment", "handoff", "paths"],
+    "standalone handoff descriptor",
+  );
+  return {
+    attachment: validateStandaloneAttachmentDescriptor(request.attachment),
+    handoff: validateStandaloneHandoffEnvelope(request.handoff),
+    paths: validateStandalonePaths(request.paths),
+  };
+}
+
 export function validateStandaloneHandoffRequest(value: unknown): StandaloneHandoffRequest {
   const request = requireRecord(value, "standalone handoff request");
+  requireKnownKeys(
+    request,
+    ["attachment", "capabilities", "handoff", "paths"],
+    "standalone handoff request",
+  );
+  const descriptor = validateStandaloneHandoffDescriptor({
+    attachment: request.attachment,
+    handoff: request.handoff,
+    paths: request.paths,
+  });
   const capabilities = requireRecord(request.capabilities, "standalone shell capability port");
   if (typeof capabilities.invoke !== "function") {
     throw new StandaloneProtocolError("standalone shell capability port must expose invoke()");
   }
   return {
-    attachment: validateStandaloneAttachmentDescriptor(request.attachment),
+    ...descriptor,
     capabilities: request.capabilities as StandaloneShellCapabilityPort,
-    handoff: validateStandaloneHandoffEnvelope(request.handoff),
-    paths: validateStandalonePaths(request.paths),
   };
 }
 

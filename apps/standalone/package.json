@@ -18,6 +18,10 @@
       "types": "./dist/bootloader.d.ts",
       "default": "./dist/bootloader.mjs"
     },
+    "./process-bridge": {
+      "types": "./dist/process-bridge.d.ts",
+      "default": "./dist/process-bridge.mjs"
+    },
     "./sidecars": {
       "types": "./dist/sidecars.d.ts",
       "default": "./dist/sidecars.mjs"

@@ -10,6 +10,7 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the deploy
 - Product lifecycle composition over semantic `@open-design/sidecar` launch/connect/stop operations.
 - Product-facing exposure of common readiness, health, diagnostics, and shutdown.
 - Composition of validated Standalone-owned and attachment-local Shell updater provider ports into one opaque projection; it must not interpret provider action ids.
+- Serialization adapters that project attachment-local Shell capabilities and generation-shared Standalone body handles through the generic Sidecar control plane; transport-private service names stay out of standalone-proto.
 
 ## Does not own
 
