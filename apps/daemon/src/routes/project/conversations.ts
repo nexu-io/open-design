@@ -421,14 +421,16 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       }
     }
     if (!shrinksEvents && !regressesTerminalStatus) {
+      const storedEventCount = Array.isArray(stored.events) ? stored.events.length : 0;
+      const eventsGrew = incomingEvents.length > storedEventCount;
+      const incomingText = typeof incoming.content === 'string' ? incoming.content : null;
+      const storedText = typeof stored.content === 'string' ? stored.content : null;
       const mergedContent =
-        typeof incoming.content === 'string' && incoming.content.length > 0
-          ? incoming.content
-          : typeof stored.content === 'string' && stored.content.length > 0
-            ? stored.content
-            : typeof incoming.content === 'string'
-              ? incoming.content
-              : stored.content ?? '';
+        eventsGrew && incomingText !== null && incomingText.length > 0
+          ? incomingText
+          : storedText !== null && storedText.length > 0
+            ? storedText
+            : incomingText ?? storedText ?? '';
       // A pinned-but-event-less daemon-backed row can still be hit by a stale
       // pre-run snapshot that omits `runId` (the web persisted the assistant
       // placeholder before /api/runs assigned ownership). Preserve the

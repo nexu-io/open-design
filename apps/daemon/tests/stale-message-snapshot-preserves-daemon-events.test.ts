@@ -444,6 +444,25 @@ describe('stale web message snapshot does not wipe daemon-owned run events', () 
       (await fetchAssistantMessage(started.url, projectId, conversationId, messageId))
         ?.content,
     ).toBe('model output');
+
+    const stalePartialContent = await fetch(url, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: messageId,
+        role: 'assistant',
+        content: 'model',
+        runId: 'run-content',
+        runStatus: 'running',
+        lastRunEventId: '2',
+        events,
+      }),
+    });
+    expect(stalePartialContent.status).toBe(200);
+    expect(
+      (await fetchAssistantMessage(started.url, projectId, conversationId, messageId))
+        ?.content,
+    ).toBe('model output');
   });
 
   it('lets a metadata update write a fresh endedAt while preserving daemon events', async () => {
