@@ -95,14 +95,11 @@ import {
   resolveChatExtraAllowedDirs,
   describeStablePromptCache,
   designSystemIdFromPluginSnapshot,
-  resolveCodexGeneratedImagesDir,
   resolveEffectiveDesignSystemSelection,
-  resolveGrantedCodexImagegenOverride,
   resolveResearchCommandContract,
   resolveSafeProjectAttachments,
   resolveSafePromptImagePaths,
   selectPromptImagePaths,
-  validateCodexGeneratedImagesDir,
 } from './runtimes/chat-prompt-inputs.js';
 import {
   writePromptAndEndStdin,
@@ -151,14 +148,11 @@ export {
   resolveChatExtraAllowedDirs,
   describeStablePromptCache,
   designSystemIdFromPluginSnapshot,
-  resolveCodexGeneratedImagesDir,
   resolveEffectiveDesignSystemSelection,
-  resolveGrantedCodexImagegenOverride,
   resolveResearchCommandContract,
   resolveSafeProjectAttachments,
   resolveSafePromptImagePaths,
   selectPromptImagePaths,
-  validateCodexGeneratedImagesDir,
 } from './runtimes/chat-prompt-inputs.js';
 export {
   applyClaudeStreamJsonRunBookkeeping,
@@ -8737,7 +8731,6 @@ export async function startServer({
     // from the real ones and mislabel the telemetry it exists to explain.
     const systemPromptInputs = {
       agentId,
-      includeCodexImagegenOverride: false,
       skillBody,
       skillName,
       skillMode,
@@ -9559,34 +9552,11 @@ export async function startServer({
         resolveRunArtifactOutcomeBeforeFinish();
       }
     };
-    let codexGeneratedImagesDir = resolveCodexGeneratedImagesDir(
-      agentId,
-      projectRecord?.metadata,
-      process.env,
-      os.homedir(),
-      run?.mediaExecution,
-    );
-    if (codexGeneratedImagesDir) {
-      codexGeneratedImagesDir = validateCodexGeneratedImagesDir(
-        codexGeneratedImagesDir,
-        {
-          protectedDirs: [SKILLS_DIR, DESIGN_SYSTEMS_DIR, ...linkedDirs],
-        },
-      );
-    }
     const extraAllowedDirs = resolveChatExtraAllowedDirs({
       agentId,
       skillsDir: SKILLS_DIR,
       designSystemsDir: DESIGN_SYSTEMS_DIR,
       linkedDirs,
-      codexGeneratedImagesDir,
-    });
-    const codexImagegenOverride = resolveGrantedCodexImagegenOverride({
-      agentId,
-      metadata: projectRecord?.metadata,
-      codexGeneratedImagesDir,
-      extraAllowedDirs,
-      mediaExecution: run?.mediaExecution,
     });
     const researchCommandContract = resolveResearchCommandContract(
       research,
@@ -9832,7 +9802,7 @@ export async function startServer({
       daemonSystemPrompt: includeStableInstructions ? daemonSystemPrompt : '',
       runtimeToolPrompt: includeStableInstructions ? runtimeToolPrompt : '',
       clientSystemPrompt: clientInstructionPrompt,
-      finalPromptOverride: codexImagegenOverride,
+      finalPromptOverride: null,
     });
     // Some models (notably claude-opus-4-7 with --include-partial-messages)
     // start their reply by echoing the top of the user message verbatim,

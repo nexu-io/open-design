@@ -1509,7 +1509,7 @@ function projectMediaVoiceSeed(
 // Carry the creation-time model pick into the conversation ONLY when it belongs
 // to the active BYOK provider. Guards against clobbering a user's Settings
 // default with a model from a different provider — e.g. a SenseAudio user whose
-// image project was created with the dialog's default `gpt-image-2` keeps their
+// image project was created with the dialog's default `vela/gpt-image-2` keeps their
 // configured SenseAudio model instead of being forced to the registry default.
 // AIHubMix's live (`aihubmix-` prefixed) ids resolve via mediaModelProviderId
 // without waiting on the async catalogue, so the AIHubMix path still seeds.

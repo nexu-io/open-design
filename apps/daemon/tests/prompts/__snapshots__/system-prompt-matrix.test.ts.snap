@@ -38,18 +38,17 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
     ],
     "totalChars": 18076,
   },
-  "codex-imagegen": {
+  "codex-image-dispatcher": {
     "sections": [
       "injection-resistance",
       "identity-charter",
       "project-metadata",
       "media-generation-contract",
-      "codex-imagegen-override",
       "filesystem-handoff-override",
       "clarifying-questions",
       "role-marker-guard",
     ],
-    "totalChars": 47873,
+    "totalChars": 45265,
   },
   "critique-enabled": {
     "sections": [
@@ -238,7 +237,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "clarifying-questions",
       "role-marker-guard",
     ],
-    "totalChars": 45284,
+    "totalChars": 45263,
   },
   "memory-hooks-off": {
     "sections": [
