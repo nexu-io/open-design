@@ -2914,6 +2914,28 @@ test('attachAcpSession marks a rejected session/load for transparent reseeding',
   assert.equal(session.hasFatalError(), true);
 });
 
+test('attachAcpSession recognizes the standard ACP missing-session error without data', () => {
+  const child = new FakeAcpChild();
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    resumeSessionId: 'stored-session',
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {
+    agentCapabilities: { loadSession: true },
+  });
+  writeAcpError(child, 2, {
+    code: -32002,
+    message: 'Session not found',
+  });
+
+  assert.equal(session.resumeFailed(), true);
+  assert.equal(session.hasFatalError(), true);
+});
+
 test('attachAcpSession preserves a session after a non-missing load error', () => {
   const child = new FakeAcpChild();
   const errors: unknown[] = [];

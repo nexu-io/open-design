@@ -109,13 +109,17 @@ const ACP_SESSION_LOAD_MISS_KINDS = new Set([
   'resume_failed',
   'session_not_found',
 ]);
+const ACP_SESSION_NOT_FOUND_ERROR_CODE = -32002;
 
-function isStructuredSessionLoadMiss(details: unknown): boolean {
+function isSessionLoadMiss(errorCode: unknown, details: unknown): boolean {
+  if (errorCode === ACP_SESSION_NOT_FOUND_ERROR_CODE) return true;
   const value = asObject(details);
   if (!value) return false;
   const kind = typeof value.kind === 'string' ? value.kind.trim().toLowerCase() : '';
-  const code = typeof value.code === 'string' ? value.code.trim().toLowerCase() : '';
-  return ACP_SESSION_LOAD_MISS_KINDS.has(kind) || ACP_SESSION_LOAD_MISS_KINDS.has(code);
+  const code = typeof value.code === 'string' ? value.code.trim().toLowerCase() : value.code;
+  return ACP_SESSION_LOAD_MISS_KINDS.has(kind)
+    || ACP_SESSION_LOAD_MISS_KINDS.has(String(code))
+    || code === ACP_SESSION_NOT_FOUND_ERROR_CODE;
 }
 /**
  * Attaches an ACP protocol session to an already-spawned child process and
@@ -713,10 +717,10 @@ export function attachAcpSession({
         return;
       }
       const details = rpcErrorData(obj);
-      if (obj.id === sessionLoadRequestId && isStructuredSessionLoadMiss(details)) {
-        // Only a structured missing-session signal authorizes the caller to
-        // discard the durable handle. Auth, MCP, configuration, and transient
-        // load failures must preserve it and surface their original error.
+      if (obj.id === sessionLoadRequestId && isSessionLoadMiss(error?.code, details)) {
+        // Only the standard ACP missing-session code or an adapter's structured
+        // missing-session signal authorizes the caller to discard the durable
+        // handle. Auth, MCP, configuration, and transient failures preserve it.
         resumeFailed = true;
       }
       const promotedPayload = promotedOpenCodeSessionErrorPayload(details, rpcErr);
