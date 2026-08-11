@@ -19,6 +19,7 @@ vi.mock('../../src/i18n', async (importOriginal) => {
       return (key: Parameters<typeof t>[0], vars?: Parameters<typeof t>[1]) => {
         if (localizedLabelOverride.enabled && key === 'manualEdit.textTransform') return 'Localized transform';
         if (localizedLabelOverride.enabled && key === 'manualEdit.wordSpacing') return 'Localized word spacing';
+        if (localizedLabelOverride.enabled && key === 'manualEdit.textTransformUppercase') return 'Localized uppercase';
         return t(key, vars);
       };
     },
@@ -94,7 +95,7 @@ describe('ManualEditPanel', () => {
     expect(host.textContent).not.toContain('Advanced');
   });
 
-  it('localizes transform and word spacing labels through t', () => {
+  it('localizes labels through t', () => {
     localizedLabelOverride.enabled = true;
     try {
       renderPanel();
@@ -102,6 +103,7 @@ describe('ManualEditPanel', () => {
       const parameters = sectionByTitle(PARAMETERS);
       expect(parameters.textContent).toContain('Localized transform');
       expect(parameters.textContent).toContain('Localized word spacing');
+      expect(parameters.textContent).toContain('Localized uppercase');
     } finally {
       localizedLabelOverride.enabled = false;
     }
