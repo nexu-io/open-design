@@ -1,0 +1,68 @@
+{
+  "candidateId": "1f8fa573-30f5-4e3c-a5b4-4866d00104a4",
+  "projectId": "f4616849-7848-4a88-b2c8-c2c9e5ed7db0",
+  "runId": "0777c21a-9a1c-441e-87f7-72165bc5b8dd",
+  "conversationId": "b4ecf452-0d76-436f-959f-2d45a4439da1",
+  "provenance": {
+    "summary": "Detected from 03_Slides_075-098_Module05_Intelligence_Reconsidered.md, 04_Slides_099-198_Five_Domains.md, 05_Slides_199-287_Application_and_Development.md, 06_Slides_288-343_Trauma_Scrutiny_Close.md, 07_Master_Cross_Reference_Register.md, 08_Master_Learning_Outcomes.md, 09_Activity_Book.md, 10_Case_Book_Cases_01-30.md after a successful run.",
+    "detectedAt": 1786428833204
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "03_Slides_075-098_Module05_Intelligence_Reconsidered.md",
+      "label": "03_Slides_075-098_Module05_Intelligence_Reconsidered.md",
+      "size": 28755,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "04_Slides_099-198_Five_Domains.md",
+      "label": "04_Slides_099-198_Five_Domains.md",
+      "size": 94650,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "05_Slides_199-287_Application_and_Development.md",
+      "label": "05_Slides_199-287_Application_and_Development.md",
+      "size": 83448,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "06_Slides_288-343_Trauma_Scrutiny_Close.md",
+      "label": "06_Slides_288-343_Trauma_Scrutiny_Close.md",
+      "size": 54750,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "07_Master_Cross_Reference_Register.md",
+      "label": "07_Master_Cross_Reference_Register.md",
+      "size": 20575,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "08_Master_Learning_Outcomes.md",
+      "label": "08_Master_Learning_Outcomes.md",
+      "size": 12868,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "09_Activity_Book.md",
+      "label": "09_Activity_Book.md",
+      "size": 52292,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "10_Case_Book_Cases_01-30.md",
+      "label": "10_Case_Book_Cases_01-30.md",
+      "size": 76647,
+      "copied": true
+    }
+  ]
+}
