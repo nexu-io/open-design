@@ -122,7 +122,12 @@ function sessionMissingMessage(value: unknown): boolean {
     || ACP_MISSING_SESSION_SUBJECT_PATTERN.test(normalized);
 }
 
-function isSessionLoadMiss(errorCode: unknown, errorMessage: unknown, details: unknown): boolean {
+function isSessionLoadMiss(
+  errorCode: unknown,
+  errorMessage: unknown,
+  details: unknown,
+  requestedSessionId: string | null | undefined,
+): boolean {
   const value = asObject(details);
   const kind = typeof value?.kind === 'string' ? value.kind.trim().toLowerCase() : '';
   const code = typeof value?.code === 'string' ? value.code.trim().toLowerCase() : value?.code;
@@ -145,6 +150,9 @@ function isSessionLoadMiss(errorCode: unknown, errorMessage: unknown, details: u
   ].filter((entry): entry is string => typeof entry === 'string');
   if (resourceFields.length > 0) {
     return resourceFields.some((entry) => entry.trim().toLowerCase() === 'session');
+  }
+  if (typeof value?.uri === 'string' && value.uri === requestedSessionId) {
+    return true;
   }
   return sessionMissingMessage(errorMessage) || sessionMissingMessage(value?.message);
 }
@@ -746,7 +754,7 @@ export function attachAcpSession({
       const details = rpcErrorData(obj);
       if (
         obj.id === sessionLoadRequestId
-        && isSessionLoadMiss(error?.code, error?.message, details)
+        && isSessionLoadMiss(error?.code, error?.message, details, resumeSessionId)
       ) {
         // Only an explicit adapter signal or a generic resource-not-found code
         // that identifies the session authorizes discarding the durable handle.

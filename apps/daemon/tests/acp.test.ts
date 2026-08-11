@@ -2980,6 +2980,52 @@ test('attachAcpSession preserves a session when a missing resource name contains
   assert.equal(session.hasFatalError(), true);
 });
 
+test('attachAcpSession recognizes an ACP missing-resource URI for the requested session', () => {
+  const child = new FakeAcpChild();
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    resumeSessionId: 'dead-session-123',
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {
+    agentCapabilities: { loadSession: true },
+  });
+  writeAcpError(child, 2, {
+    code: -32002,
+    message: 'Resource not found: dead-session-123',
+    data: { uri: 'dead-session-123' },
+  });
+
+  assert.equal(session.resumeFailed(), true);
+  assert.equal(session.hasFatalError(), true);
+});
+
+test('attachAcpSession preserves the requested session when a different URI is missing', () => {
+  const child = new FakeAcpChild();
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    resumeSessionId: 'stored-session',
+    send: () => {},
+  });
+
+  writeAcpResult(child, 1, {
+    agentCapabilities: { loadSession: true },
+  });
+  writeAcpError(child, 2, {
+    code: -32002,
+    message: 'Resource not found: dead-session-123',
+    data: { uri: 'dead-session-123' },
+  });
+
+  assert.equal(session.resumeFailed(), false);
+  assert.equal(session.hasFatalError(), true);
+});
+
 test('attachAcpSession preserves a session after a non-missing load error', () => {
   const child = new FakeAcpChild();
   const errors: unknown[] = [];
