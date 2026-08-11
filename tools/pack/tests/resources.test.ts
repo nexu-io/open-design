@@ -15,7 +15,11 @@ import { dirname, join } from "node:path";
 import process from "node:process";
 
 import { domToPptxBundleResource } from "../src/dom-to-pptx-resource.js";
-import { copyBundledResourceTrees } from "../src/resources.js";
+import {
+  BUNDLED_RESOURCE_GROUPS,
+  copyBundledResourceGroup,
+  copyBundledResourceTrees,
+} from "../src/resources.js";
 import { copyOptionalVelaCliBinary, resolveOptionalVelaCliBinary } from "../src/vela-cli.js";
 
 async function writeFakeOpenCodeCompanion(
@@ -168,6 +172,45 @@ describe("domToPptxBundleResource", () => {
 });
 
 describe("copyBundledResourceTrees", () => {
+  it("declares isolated stable ids and preserves multi-tree groups", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-resource-group-"));
+    const workspaceRoot = join(root, "workspace");
+    const resourceRoot = join(root, "resources");
+    try {
+      await mkdir(join(workspaceRoot, "plugins", "_official", "sample"), { recursive: true });
+      await mkdir(join(workspaceRoot, "plugins", "registry"), { recursive: true });
+      await writeFile(
+        join(workspaceRoot, "plugins", "_official", "sample", "open-design.json"),
+        "official\n",
+      );
+      await writeFile(join(workspaceRoot, "plugins", "registry", "index.json"), "registry\n");
+
+      await copyBundledResourceGroup({ id: "plugins", resourceRoot, workspaceRoot });
+
+      expect(BUNDLED_RESOURCE_GROUPS.map((group) => group.id)).toEqual([
+        "skills",
+        "design-templates",
+        "design-systems",
+        "craft",
+        "plugins",
+        "frames",
+        "community-pets",
+        "prompt-templates",
+        "plugin-previews",
+      ]);
+      await expect(readFile(
+        join(resourceRoot, "plugins", "_official", "sample", "open-design.json"),
+        "utf8",
+      )).resolves.toBe("official\n");
+      await expect(readFile(
+        join(resourceRoot, "plugins", "registry", "index.json"),
+        "utf8",
+      )).resolves.toBe("registry\n");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("includes daemon resource trees", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-"));
     const workspaceRoot = join(root, "workspace");
