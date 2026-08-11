@@ -2803,9 +2803,10 @@ test('attachAcpSession marks OpenCode upstream idle session errors retryable', (
   assert.deepEqual(payload.error?.details, details);
 });
 
-test('attachAcpSession resumes via session/load when resumeSessionId is set', () => {
+test('attachAcpSession loads with MCP servers, suppresses replay, and accepts a null result', () => {
   const child = new FakeAcpChild();
   const writes: string[] = [];
+  const events: Array<{ event: string; payload: unknown }> = [];
   child.stdin.on('data', (chunk) => writes.push(String(chunk)));
 
   attachAcpSession({
@@ -2813,7 +2814,15 @@ test('attachAcpSession resumes via session/load when resumeSessionId is set', ()
     prompt: 'hello',
     cwd: '/tmp/od-project',
     resumeSessionId: 'oc-prev',
-    send: () => {},
+    mcpServers: [
+      {
+        type: 'stdio',
+        name: 'open-design-live-artifacts',
+        command: 'od',
+        args: ['mcp', 'live-artifacts'],
+      },
+    ],
+    send: (event, payload) => events.push({ event, payload }),
   });
 
   writeAcpResult(child, 1, {
@@ -2826,8 +2835,32 @@ test('attachAcpSession resumes via session/load when resumeSessionId is set', ()
   assert.deepEqual(loadReq?.params, {
     sessionId: 'oc-prev',
     cwd: path.resolve('/tmp/od-project'),
+    mcpServers: [
+      {
+        type: 'stdio',
+        name: 'open-design-live-artifacts',
+        command: 'od',
+        args: ['mcp', 'live-artifacts'],
+        env: [],
+      },
+    ],
   });
   assert.equal(requests.some((entry) => entry.method === 'session/new'), false);
+
+  writeAcpUpdate(child, {
+    sessionUpdate: 'agent_message_chunk',
+    content: { type: 'text', text: 'historical replay' },
+  });
+  assert.equal(events.some((entry) => entry.event === 'agent'), false);
+  assert.equal(parseRpcWrites(writes).some((entry) => entry.method === 'session/prompt'), false);
+
+  writeAcpResult(child, 2, null);
+  const promptReq = parseRpcWrites(writes).find((entry) => entry.method === 'session/prompt');
+  assert.ok(promptReq, 'expected session/prompt after the load response');
+  assert.deepEqual(promptReq.params, {
+    sessionId: 'oc-prev',
+    prompt: [{ type: 'text', text: 'hello' }],
+  });
 });
 
 test('attachAcpSession rejects resume when loadSession is not advertised so the caller can reseed', () => {
@@ -2873,11 +2906,39 @@ test('attachAcpSession marks a rejected session/load for transparent reseeding',
   });
   writeAcpError(child, 2, {
     code: -32000,
-    message: 'Session not found',
+    message: 'The resumed session could not be loaded',
+    data: { kind: 'session_not_found', phase: 'session_load', retryable: true },
   });
 
   assert.equal(session.resumeFailed(), true);
   assert.equal(session.hasFatalError(), true);
+});
+
+test('attachAcpSession preserves a session after a non-missing load error', () => {
+  const child = new FakeAcpChild();
+  const errors: unknown[] = [];
+  const session = attachAcpSession({
+    child: child as never,
+    prompt: 'hello',
+    cwd: '/tmp/od-project',
+    resumeSessionId: 'stored-session',
+    send: (event, payload) => {
+      if (event === 'error') errors.push(payload);
+    },
+  });
+
+  writeAcpResult(child, 1, {
+    agentCapabilities: { loadSession: true },
+  });
+  writeAcpError(child, 2, {
+    code: -32000,
+    message: 'MCP server failed to reconnect',
+    data: { kind: 'mcp_connection_failed', retryable: true },
+  });
+
+  assert.equal(session.resumeFailed(), false);
+  assert.equal(session.hasFatalError(), true);
+  assert.equal(errors.length, 1);
 });
 
 test('attachAcpSession captures the durable session handle from the result', () => {

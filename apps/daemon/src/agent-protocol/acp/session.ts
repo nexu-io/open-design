@@ -104,6 +104,19 @@ export interface AttachAcpSessionOptions {
   onSessionInit?: () => void;
   onPromptComplete?: () => void;
 }
+
+const ACP_SESSION_LOAD_MISS_KINDS = new Set([
+  'resume_failed',
+  'session_not_found',
+]);
+
+function isStructuredSessionLoadMiss(details: unknown): boolean {
+  const value = asObject(details);
+  if (!value) return false;
+  const kind = typeof value.kind === 'string' ? value.kind.trim().toLowerCase() : '';
+  const code = typeof value.code === 'string' ? value.code.trim().toLowerCase() : '';
+  return ACP_SESSION_LOAD_MISS_KINDS.has(kind) || ACP_SESSION_LOAD_MISS_KINDS.has(code);
+}
 /**
  * Attaches an ACP protocol session to an already-spawned child process and
  * drives the full JSON-RPC conversation from handshake to prompt completion.
@@ -152,6 +165,10 @@ export function attachAcpSession({
 }: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
   const effectiveCwd = path.resolve(cwd || process.cwd());
+  const sessionSetupParams = buildAcpSessionNewParams(
+    effectiveCwd,
+    mcpServers ? { mcpServers, envFormat } : { envFormat },
+  );
   if (!child.stdin || !child.stdout) {
     throw new Error('ACP child process must expose stdin and stdout streams');
   }
@@ -160,6 +177,7 @@ export function attachAcpSession({
   let expectedId = 1;
   let nextId = 2;
   let promptRequestId: JsonRpcId | null = null;
+  let sessionLoadRequestId: JsonRpcId | null = null;
   let setModelRequestId: JsonRpcId | null = null;
   let sessionId: string | null = null;
   let supportsSessionLoad = false;
@@ -695,11 +713,10 @@ export function attachAcpSession({
         return;
       }
       const details = rpcErrorData(obj);
-      if (obj.id === expectedId && expectedId === 2 && resumeSessionId) {
-        // The outstanding id=2 request is session/load on a resume turn. Keep
-        // this protocol fact on the controller instead of trying to recognize
-        // every adapter's error prose in server.ts; the caller uses it to clear
-        // the stale handle and transparently re-seed the full transcript.
+      if (obj.id === sessionLoadRequestId && isStructuredSessionLoadMiss(details)) {
+        // Only a structured missing-session signal authorizes the caller to
+        // discard the durable handle. Auth, MCP, configuration, and transient
+        // load failures must preserve it and surface their original error.
         resumeFailed = true;
       }
       const promotedPayload = promotedOpenCodeSessionErrorPayload(details, rpcErr);
@@ -720,6 +737,11 @@ export function attachAcpSession({
     }
     const update = asObject(params?.update);
     if (obj.method === 'session/update' && update) {
+      // Standard ACP session/load replays the existing conversation before it
+      // resolves. Those notifications reconstruct client UI state; they are not
+      // output from the new Open Design turn and must not enter its transcript,
+      // artifact accounting, or tool telemetry.
+      if (sessionLoadRequestId !== null) return;
       if (modelUnavailableErrorCode) {
         const promotedPayload = promotedAmrRetryStatusPayload(update);
         if (promotedPayload) {
@@ -923,10 +945,16 @@ export function attachAcpSession({
       }
       return;
     }
-    if (obj.id !== expectedId || !result) {
+    if (obj.id !== expectedId) {
+      return;
+    }
+    const isSessionLoadResponse =
+      sessionLoadRequestId !== null && obj.id === sessionLoadRequestId;
+    if (!result && !(isSessionLoadResponse && obj.result === null)) {
       return;
     }
     if (expectedId === 1) {
+      if (!result) return;
       const initializeCapabilities =
         asObject(result.agentCapabilities) ?? asObject(result.capabilities);
       supportsSessionLoad = initializeCapabilities?.loadSession === true;
@@ -946,20 +974,18 @@ export function attachAcpSession({
       }
       if (resumeSessionId) {
         // Resume the prior upstream session instead of creating a fresh one.
+        sessionLoadRequestId = nextId;
         writeRpc(
           nextId,
           'session/load',
-          { sessionId: resumeSessionId, cwd: effectiveCwd },
+          { ...sessionSetupParams, sessionId: resumeSessionId },
           'session/load',
         );
       } else {
         writeRpc(
           nextId,
           'session/new',
-          buildAcpSessionNewParams(
-            effectiveCwd,
-            mcpServers ? { mcpServers, envFormat } : { envFormat },
-          ),
+          sessionSetupParams,
           'session/new',
         );
       }
@@ -967,24 +993,26 @@ export function attachAcpSession({
       return;
     }
     if (expectedId === 2) {
+      const sessionResult = result ?? {};
+      sessionLoadRequestId = null;
       sessionId =
-        typeof result.sessionId === 'string'
-          ? result.sessionId
+        typeof sessionResult.sessionId === 'string'
+          ? sessionResult.sessionId
           : resumeSessionId
             ? resumeSessionId
             : null;
       // The durable handle for resuming this session on the next turn.
       durableSessionId =
-        typeof result.openCodeSessionId === 'string'
-          ? result.openCodeSessionId
+        typeof sessionResult.openCodeSessionId === 'string'
+          ? sessionResult.openCodeSessionId
           : supportsSessionLoad
             ? sessionId
             : null;
       // session/new acknowledged with a session id = handshake done (#3408 §4).
       if (sessionId) onSessionInit?.();
-      const modelConfig = findModelConfigOption(result.configOptions);
+      const modelConfig = findModelConfigOption(sessionResult.configOptions);
       modelConfigId = modelConfig?.configId ?? null;
-      activeModel = currentModelFromSessionResult(result);
+      activeModel = currentModelFromSessionResult(sessionResult);
       if (sessionId && activeModel) {
         send('agent', { type: 'status', label: 'model', model: activeModel });
       }
@@ -1011,6 +1039,7 @@ export function attachAcpSession({
       sendPrompt();
       return;
     }
+    if (!result) return;
     if (promptRequestId !== null && obj.id === promptRequestId) {
       // Flush still-open tools before AMR no-output classification. A successful
       // session/prompt may omit a terminal tool_call_update; clean-closing those
