@@ -8,10 +8,11 @@ product body.
 
 - Electron process, windows, menus, protocol registration, preload and native
   host capabilities.
-- Standalone absence-only lazy materialization, committed binding consumption,
-  and Shell self-update or installer-required decisions.
-- Projection of the launcher-owned release descriptor into the Standalone
-  handoff and sidecar control plane.
+- Mechanical execution of the Shell-carried Standalone bootstrap resource
+  using the Shell-carried official Node, followed by consumption of the one
+  validated committed-generation resolution it returns.
+- Projection of Electron identity and capabilities into the Standalone handoff
+  and generic sidecar control plane.
 - macOS and Windows Shell entrypoints consumed by `tools-pack`.
 
 ## Does not own
@@ -25,9 +26,10 @@ product body.
 
 - Consume `@open-design/standalone-proto`; never invent a second Shell-to-
   Standalone handoff shape.
-- The Shell consumes one committed Closure descriptor. Cold start may
-  materialize an initial Closure only when no descriptor exists; once committed,
-  it must not discover, select, retry, or roll back Closure generations.
+- The Shell never discovers, selects, downloads, materializes, commits, retries,
+  or rolls back Closure generations. It supplies identity, roots, discovery
+  capability, and repository-config location to the Standalone bootstrap, then
+  consumes only its validated result.
 - The root `bootloader.mjs` entry is best-effort handoff-once. Once an inner
   bootloader is selected, success or failure is terminal and no fallback body
   may start.

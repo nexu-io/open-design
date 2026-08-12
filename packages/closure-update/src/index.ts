@@ -104,6 +104,7 @@ export type ClosureResourceRepositoryConfig = Readonly<{
 
 export function validateClosureResourceRepositoryConfig(
   value: unknown,
+  options: Readonly<{ baseRoot?: string }> = {},
 ): ClosureResourceRepositoryConfig {
   const config = requireRecord(value, "Closure resource repository config");
   const extras = Object.keys(config).filter((key) => !["localSeeds", "remoteOrigins", "schemaVersion"].includes(key));
@@ -117,8 +118,11 @@ export function validateClosureResourceRepositoryConfig(
   const localSeeds = config.localSeeds.map((entry, index) => {
     const seed = requireRecord(entry, `Closure local seed ${index}`);
     if (Object.keys(seed).some((key) => key !== "root")) throw new ClosureUpdateError(`Closure local seed ${index} contains unsupported fields`);
-    const root = requireString(seed.root, `Closure local seed ${index} root`);
-    if (!isAbsolute(root)) throw new ClosureUpdateError(`Closure local seed ${index} root must be absolute`);
+    const configuredRoot = requireString(seed.root, `Closure local seed ${index} root`);
+    const root = isAbsolute(configuredRoot)
+      ? configuredRoot
+      : options.baseRoot == null ? configuredRoot : join(options.baseRoot, configuredRoot);
+    if (!isAbsolute(root)) throw new ClosureUpdateError(`Closure local seed ${index} root must resolve absolute`);
     return Object.freeze({ root });
   });
   const remoteOrigins = config.remoteOrigins.map((origin, index) => {
@@ -142,7 +146,10 @@ export async function readClosureResourceRepositoryConfig(
   const bytes = await readFile(path);
   if (bytes.byteLength > 1024 * 1024) throw new ClosureUpdateError("Closure resource repository config exceeds 1 MiB");
   try {
-    return validateClosureResourceRepositoryConfig(JSON.parse(bytes.toString("utf8")) as unknown);
+    return validateClosureResourceRepositoryConfig(
+      JSON.parse(bytes.toString("utf8")) as unknown,
+      { baseRoot: dirname(path) },
+    );
   } catch (error) {
     if (error instanceof ClosureUpdateError) throw error;
     throw new ClosureUpdateError(`Closure resource repository config is invalid: ${error instanceof Error ? error.message : String(error)}`);

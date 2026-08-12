@@ -9,7 +9,9 @@ import {
   compareStandaloneVersions,
   createStandaloneHandoffEnvelope,
   validateStandaloneBootstrapDescriptor,
+  validateStandaloneBootstrapResult,
   validateStandaloneBootstrapRequest,
+  validateStandaloneBootstrapResolution,
   validateStandaloneHandoffDescriptor,
   validateStandaloneHandoffRequest,
   validateStandaloneHandoffEnvelope,
@@ -100,6 +102,24 @@ describe("Standalone bootloader protocol", () => {
     expect(validateStandaloneBootstrapDescriptor(descriptor)).toMatchObject({ schemaVersion: 1 });
     expect(bootstrap).not.toHaveProperty("generation");
     expect(bootstrap).not.toHaveProperty("handoff");
+    expect(validateStandaloneBootstrapResolution({
+      bootloaderPath: "/open-design/generation/launcher/bootloader.mjs",
+      handoff: {
+        attachment: full.attachment,
+        handoff: full.handoff,
+        paths: full.paths,
+      },
+    })).toMatchObject({ handoff: { handoff: { scope: { generation: 7 } } } });
+    expect(validateStandaloneBootstrapResult({
+      outcome: "rejected",
+      error: { code: "installer-required", message: "Install a newer Shell" },
+      schemaVersion: 1,
+    })).toMatchObject({ error: { code: "installer-required" }, outcome: "rejected" });
+    expect(() => validateStandaloneBootstrapResult({
+      outcome: "rejected",
+      error: { code: "retry-another-version", message: "unsafe fallback" },
+      schemaVersion: 1,
+    })).toThrow(/error code/u);
   });
 
   it("round-trips the transport-neutral handoff descriptor as JSON", () => {

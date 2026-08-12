@@ -50,7 +50,13 @@ export {
 
 export const CLOSURE_INTERNAL_PACKAGES = [
   { directory: "packages/release", name: "@open-design/release" },
+  { directory: "packages/closure-proto", name: "@open-design/closure-proto" },
+  { directory: "packages/closure-store", name: "@open-design/closure-store" },
+  { directory: "packages/closure-update", name: "@open-design/closure-update" },
+  { directory: "packages/download", name: "@open-design/download" },
+  { directory: "packages/platform", name: "@open-design/platform" },
   { directory: "packages/sidecar", name: "@open-design/sidecar" },
+  { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
   { directory: "packages/standalone-proto", name: "@open-design/standalone-proto" },
   { directory: "packages/standalone-runtime", name: "@open-design/standalone-runtime" },
   { directory: "apps/standalone", name: "@open-design/standalone" },

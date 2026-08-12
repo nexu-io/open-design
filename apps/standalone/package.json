@@ -18,6 +18,10 @@
       "types": "./dist/bootloader.d.ts",
       "default": "./dist/bootloader.mjs"
     },
+    "./bootstrap": {
+      "types": "./dist/bootstrap.d.ts",
+      "default": "./dist/bootstrap.mjs"
+    },
     "./process-bridge": {
       "types": "./dist/process-bridge.d.ts",
       "default": "./dist/process-bridge.mjs"
@@ -28,9 +32,9 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter @open-design/standalone-proto build && pnpm --filter @open-design/sidecar build && pnpm --filter @open-design/standalone-runtime build && tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
+    "build": "pnpm --filter @open-design/closure-update... build && pnpm --filter @open-design/standalone-proto build && pnpm --filter @open-design/standalone-runtime build && tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
     "test": "pnpm build && vitest run",
-    "typecheck": "pnpm --filter @open-design/standalone-proto build && pnpm --filter @open-design/sidecar build && pnpm --filter @open-design/standalone-runtime build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "typecheck": "pnpm --filter @open-design/closure-update... build && pnpm --filter @open-design/standalone-proto build && pnpm --filter @open-design/standalone-runtime build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
     "@open-design/closure-store": "workspace:*",

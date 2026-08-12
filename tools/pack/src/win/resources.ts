@@ -4,10 +4,10 @@ import { dirname, join } from "node:path";
 import { hashJson, hashPath, ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
-import { copyShellNodeRuntime } from "../shell-node.js";
+import { copyShellNodeRuntime, copyStandaloneBootstrapSeed } from "../shell-node.js";
 import type { WinPaths, ResourceTreeCacheMetadata } from "./types.js";
 
-const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 8;
+const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 9;
 
 async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<string> {
   return hashJson({
@@ -16,6 +16,23 @@ async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<strin
     sevenZipDll: await hashPath(winResources.sevenZipDll),
     sevenZipExe: await hashPath(winResources.sevenZipExe),
     shellNode: await hashPath(process.execPath),
+    standaloneBootstrap: await hashPath(join(
+      config.workspaceRoot,
+      "apps",
+      "standalone",
+      "dist",
+      "bootstrap",
+      "bootloader.mjs",
+    )),
+    standaloneBaselineLauncher: await hashPath(join(
+      config.workspaceRoot,
+      "apps",
+      "standalone",
+      "dist",
+      "bootstrap",
+      "baseline",
+      "launcher.mjs",
+    )),
   });
 }
 
@@ -43,6 +60,7 @@ export async function prepareResourceTree(
       await cp(winResources.sevenZipExe, join(resourceRoot, "bin", "7z.exe"));
       await cp(winResources.sevenZipDll, join(resourceRoot, "bin", "7z.dll"));
       await copyShellNodeRuntime({ target: join(resourceRoot, "bin", "node.exe") });
+      await copyStandaloneBootstrapSeed({ resourceRoot, workspaceRoot: config.workspaceRoot });
       return { resourceName: "open-design" };
     },
   };

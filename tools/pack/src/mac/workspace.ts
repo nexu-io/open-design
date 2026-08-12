@@ -4,6 +4,7 @@ import { ensureWorkspaceBuildArtifacts, type ToolPackShellBuildIdentity } from "
 import { runPnpm } from "./commands.js";
 
 async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
+  await runPnpm(config, ["--filter", "@open-design/standalone", "build"]);
   await runPnpm(config, ["--filter", "@open-design/shell-electron...", "build"]);
 }
 

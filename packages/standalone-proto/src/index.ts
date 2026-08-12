@@ -5,6 +5,7 @@ import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
 
 export const STANDALONE_PROTOCOL_VERSION = 1 as const;
 export const STANDALONE_BOOTSTRAP_SCHEMA_VERSION = 1 as const;
+export const STANDALONE_BOOTSTRAP_RESULT_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_HANDOFF_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_UPDATER_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_BOOTLOADER_ENTRY_PATH = "bootloader.mjs" as const;
@@ -81,6 +82,30 @@ export type StandaloneBootstrapResolution = Readonly<{
   bootloaderPath: string;
   handoff: StandaloneHandoffDescriptor;
 }>;
+
+export const STANDALONE_BOOTSTRAP_ERROR_CODES = Object.freeze([
+  "installer-required",
+  "no-standalone",
+  "standalone-invalid",
+] as const);
+
+export type StandaloneBootstrapErrorCode =
+  (typeof STANDALONE_BOOTSTRAP_ERROR_CODES)[number];
+
+export type StandaloneBootstrapResult =
+  | Readonly<{
+      outcome: "resolved";
+      resolution: StandaloneBootstrapResolution;
+      schemaVersion: typeof STANDALONE_BOOTSTRAP_RESULT_SCHEMA_VERSION;
+    }>
+  | Readonly<{
+      error: Readonly<{
+        code: StandaloneBootstrapErrorCode;
+        message: string;
+      }>;
+      outcome: "rejected";
+      schemaVersion: typeof STANDALONE_BOOTSTRAP_RESULT_SCHEMA_VERSION;
+    }>;
 
 export type StandaloneProtocolJsonValue =
   | boolean
@@ -832,6 +857,66 @@ export function validateStandaloneBootstrapRequest(value: unknown): StandaloneBo
     throw new StandaloneProtocolError("standalone bootstrap capabilities must provide invoke()");
   }
   return Object.freeze({ ...descriptor, capabilities: request.capabilities as StandaloneShellCapabilityPort });
+}
+
+export function validateStandaloneBootstrapResolution(
+  value: unknown,
+): StandaloneBootstrapResolution {
+  const resolution = requireRecord(value, "standalone bootstrap resolution");
+  requireKnownKeys(resolution, ["bootloaderPath", "handoff"], "standalone bootstrap resolution");
+  const bootloaderPath = normalizePath(resolution.bootloaderPath, "standalone bootstrap bootloaderPath");
+  if (!bootloaderPath.endsWith(`/${STANDALONE_BOOTLOADER_ENTRY_PATH}`)
+    && !bootloaderPath.endsWith(`\\${STANDALONE_BOOTLOADER_ENTRY_PATH}`)) {
+    throw new StandaloneProtocolError(
+      `standalone bootstrap bootloaderPath must end with ${STANDALONE_BOOTLOADER_ENTRY_PATH}`,
+    );
+  }
+  return Object.freeze({
+    bootloaderPath,
+    handoff: validateStandaloneHandoffDescriptor(resolution.handoff),
+  });
+}
+
+export function validateStandaloneBootstrapResult(
+  value: unknown,
+): StandaloneBootstrapResult {
+  const result = requireRecord(value, "standalone bootstrap result");
+  if (result.schemaVersion !== STANDALONE_BOOTSTRAP_RESULT_SCHEMA_VERSION) {
+    throw new StandaloneProtocolError("standalone bootstrap result schemaVersion is unsupported");
+  }
+  if (result.outcome === "resolved") {
+    requireKnownKeys(
+      result,
+      ["outcome", "resolution", "schemaVersion"],
+      "standalone bootstrap result",
+    );
+    return Object.freeze({
+      outcome: "resolved",
+      resolution: validateStandaloneBootstrapResolution(result.resolution),
+      schemaVersion: STANDALONE_BOOTSTRAP_RESULT_SCHEMA_VERSION,
+    });
+  }
+  if (result.outcome !== "rejected") {
+    throw new StandaloneProtocolError("standalone bootstrap result outcome is unsupported");
+  }
+  requireKnownKeys(
+    result,
+    ["error", "outcome", "schemaVersion"],
+    "standalone bootstrap result",
+  );
+  const error = requireRecord(result.error, "standalone bootstrap error");
+  requireKnownKeys(error, ["code", "message"], "standalone bootstrap error");
+  if (!STANDALONE_BOOTSTRAP_ERROR_CODES.includes(error.code as StandaloneBootstrapErrorCode)) {
+    throw new StandaloneProtocolError("standalone bootstrap error code is unsupported");
+  }
+  return Object.freeze({
+    error: Object.freeze({
+      code: error.code as StandaloneBootstrapErrorCode,
+      message: requiredString(error.message, "standalone bootstrap error message"),
+    }),
+    outcome: "rejected",
+    schemaVersion: STANDALONE_BOOTSTRAP_RESULT_SCHEMA_VERSION,
+  });
 }
 
 export function digestStandaloneRuntimeDescriptor(value: unknown): StandaloneDigest {

@@ -118,9 +118,6 @@ describe("Standalone unresolved bootstrap", () => {
         id: "electron-shell",
         shell: { digest: `sha256:${"f".repeat(64)}`, type: "electron", version: "0.19.0-beta.1" },
       },
-      capabilities: { async invoke(request) {
-        return { attachmentId: request.attachmentId, handoff: request.handoff, outcome: "unsupported", requestId: request.requestId, schemaVersion: request.schemaVersion };
-      } },
       discovery: { metadataUrl: value.metadataUrl, target: "darwin-arm64" },
       paths: value.paths,
       repositoryConfigPath: value.repositoryConfigPath,
@@ -140,9 +137,6 @@ describe("Standalone unresolved bootstrap", () => {
         id: "electron-shell",
         shell: { digest: `sha256:${"f".repeat(64)}`, type: "electron", version: "0.19.0-beta.1" },
       },
-      capabilities: { async invoke(request) {
-        return { attachmentId: request.attachmentId, handoff: request.handoff, outcome: "unsupported", requestId: request.requestId, schemaVersion: request.schemaVersion };
-      } },
       discovery: { metadataUrl: null, target: "darwin-arm64" },
       paths: value.paths,
       repositoryConfigPath: value.repositoryConfigPath,

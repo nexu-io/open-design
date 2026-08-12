@@ -24,10 +24,13 @@ const SHELL_PACKAGE_DIRS = [
   "packages/diagnostics",
   "packages/standalone-runtime",
   "packages/standalone-proto",
+  "shells/electron",
+] as const;
+
+const STANDALONE_BOOTSTRAP_PACKAGE_DIRS = [
   "packages/closure-proto",
   "packages/closure-store",
   "packages/closure-update",
-  "shells/electron",
 ] as const;
 
 const BODY_PACKAGE_DIRS = ["apps/daemon", "apps/standalone", "apps/web"] as const;
@@ -35,7 +38,7 @@ const BODY_PACKAGE_DIRS = ["apps/daemon", "apps/standalone", "apps/web"] as cons
 async function writeWorkspace(root: string): Promise<void> {
   await writeFile(join(root, "package.json"), `${JSON.stringify({ packageManager: "pnpm@10.33.2" })}\n`);
   await writeFile(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
-  for (const directory of [...SHELL_PACKAGE_DIRS, ...BODY_PACKAGE_DIRS]) {
+  for (const directory of [...SHELL_PACKAGE_DIRS, ...STANDALONE_BOOTSTRAP_PACKAGE_DIRS, ...BODY_PACKAGE_DIRS]) {
     await mkdir(join(root, directory, "src"), { recursive: true });
     await writeFile(join(root, directory, "package.json"), `${JSON.stringify({
       ...(directory === "apps/daemon" ? {
@@ -49,6 +52,9 @@ async function writeWorkspace(root: string): Promise<void> {
     })}\n`);
     await writeFile(join(root, directory, "src", "index.ts"), "export const value = 1;\n");
   }
+  await writeFile(join(root, "apps/standalone/src/bootstrap.ts"), "export const bootstrap = 1;\n");
+  await writeFile(join(root, "apps/standalone/src/bootstrap-entry.ts"), "export const entry = 1;\n");
+  await writeFile(join(root, "apps/standalone/src/fossil-bootloader.ts"), "export const handoff = 1;\n");
   await mkdir(join(root, "tools/pack/src"), { recursive: true });
   await writeFile(join(root, "tools/pack/package.json"), `${JSON.stringify({ name: "@open-design/tools-pack" })}\n`);
   await writeFile(join(root, "tools/pack/src/index.ts"), "export const pack = 1;\n");
@@ -62,6 +68,10 @@ async function writeOutputs(root: string, value: string): Promise<void> {
   }
   await mkdir(join(root, "shells/electron/dist/main"), { recursive: true });
   await writeFile(join(root, "shells/electron/dist/main/preload.cjs"), `${value}\n`);
+  await mkdir(join(root, "apps/standalone/dist/bootstrap"), { recursive: true });
+  await writeFile(join(root, "apps/standalone/dist/bootstrap/bootloader.mjs"), `${value}\n`);
+  await mkdir(join(root, "apps/standalone/dist/bootstrap/baseline"), { recursive: true });
+  await writeFile(join(root, "apps/standalone/dist/bootstrap/baseline/launcher.mjs"), `${value}\n`);
 }
 
 function createConfig(root: string, cacheRoot: string, platform: "mac" | "win" = "win"): ToolPackConfig {
@@ -134,11 +144,16 @@ describe("Electron Shell workspace build cache", () => {
       await writeFile(join(root, "apps/standalone/src/index.ts"), "export const value = 2;\n");
       await writeFile(join(root, "apps/web/src/index.ts"), "export const value = 2;\n");
       await ensureWorkspaceBuildArtifacts(config, cache, build);
+      expect(builds).toBe(1);
+      await writeFile(join(root, "apps/standalone/src/bootstrap.ts"), "export const bootstrap = 2;\n");
+      await ensureWorkspaceBuildArtifacts(config, cache, build);
+      await writeFile(join(root, "packages/closure-update/src/index.ts"), "export const value = 2;\n");
+      await ensureWorkspaceBuildArtifacts(config, cache, build);
       await writeFile(join(root, "packages/standalone-proto/src/index.ts"), "export const value = 2;\n");
       await ensureWorkspaceBuildArtifacts(config, cache, build);
 
-      expect(builds).toBe(2);
-      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit", "miss"]);
+      expect(builds).toBe(4);
+      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit", "miss", "miss", "miss"]);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

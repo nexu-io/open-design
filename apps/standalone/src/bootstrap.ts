@@ -14,15 +14,11 @@ import {
   STANDALONE_PROTOCOL_VERSION,
   compareStandaloneVersions,
   createStandaloneHandoffEnvelope,
-  validateStandaloneBootstrapRequest,
-  type StandaloneBootstrapRequest,
+  validateStandaloneBootstrapDescriptor,
+  type StandaloneBootstrapDescriptor,
+  type StandaloneBootstrapErrorCode,
   type StandaloneBootstrapResolution,
 } from "@open-design/standalone-proto";
-
-export type StandaloneBootstrapErrorCode =
-  | "installer-required"
-  | "no-standalone"
-  | "standalone-invalid";
 
 export class StandaloneBootstrapError extends Error {
   readonly code: StandaloneBootstrapErrorCode;
@@ -40,10 +36,10 @@ export class StandaloneBootstrapError extends Error {
  * repository capability, but never choose a product version or component.
  */
 export async function resolveStandaloneBootstrap(
-  requestInput: StandaloneBootstrapRequest,
+  requestInput: StandaloneBootstrapDescriptor,
   options: Readonly<{ fetch?: typeof globalThis.fetch }> = {},
 ): Promise<StandaloneBootstrapResolution> {
-  const request = validateStandaloneBootstrapRequest(requestInput);
+  const request = validateStandaloneBootstrapDescriptor(requestInput);
   const paths = resolveClosureStorePaths({
     channel: request.scope.channel,
     namespace: request.scope.namespace,

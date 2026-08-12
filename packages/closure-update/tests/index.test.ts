@@ -66,7 +66,7 @@ describe("Closure resource repository", () => {
     roots.push(root);
     const configPath = join(root, "repository.json");
     await writeFile(configPath, JSON.stringify({
-      localSeeds: [{ root: join(root, "seed") }],
+      localSeeds: [{ root: "seed" }],
       remoteOrigins: ["https://mirror.example.test/open-design/"],
       schemaVersion: 1,
     }));

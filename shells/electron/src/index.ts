@@ -24,10 +24,6 @@ import { readProcessStamp } from "@open-design/platform";
 import { readPackagedConfig } from "./config.js";
 import { createDesktopCapabilityAdapter } from "./desktop-capability-adapter.js";
 import {
-  ensurePackagedClosureAvailable,
-  resolvePackagedClosureInstallerRequiredVersion,
-} from "./closure-update.js";
-import {
   claimPackagedDownloadAttribution,
   discoverPackagedDownloadAttribution,
 } from "./download-attribution.js";
@@ -70,11 +66,15 @@ import { findPackagedDeeplinkArg, launchPackagedPayloadDesktop } from "./payload
 import { packagedEntryUrl, registerOdProtocol } from "./protocol.js";
 import { reportStartupFailure, resolveStartupDistinctId } from "./startup-telemetry.js";
 import { createElectronShellCapabilityPort } from "./shell-capabilities.js";
+import { digestElectronShellEntry } from "./shell-identity.js";
 import {
-  digestElectronShellEntry,
-  resolveElectronStandaloneBinding,
-} from "./standalone-binding.js";
-import { createElectronStandaloneLauncher } from "./standalone-handoff.js";
+  createElectronStandaloneLauncher,
+  electronBindingFromBootstrapResolution,
+} from "./standalone-handoff.js";
+import {
+  resolveElectronStandaloneTarget,
+  resolveStandaloneViaOfficialNode,
+} from "./standalone-bootstrap.js";
 import { createStandaloneDesktopAuthRegistration } from "./standalone-commands.js";
 import { resolveShellNodeCommand, withStandaloneBootstrapEnvironment } from "./standalone-environment.js";
 import {
@@ -231,31 +231,32 @@ async function main(): Promise<void> {
 
   const metadataUrl = process.env.OD_UPDATE_METADATA_URL?.trim()
     || shellConfig.updateMetadataUrl;
-  const availability = await ensurePackagedClosureAvailable({
-    channel: shellRuntime.launcherPaths.channel,
-    installationRoot: shellRuntime.launcherPaths.root,
-    metadataUrl,
-    namespace,
-    shellVersion,
-  }).catch((error: unknown) => {
-    packagedLogger?.warn("Initial Standalone Closure materialization failed", { error });
-    return null;
-  });
-  if (availability != null) {
-    packagedLogger?.info("Standalone availability check completed", {
-      reason: availability.reason,
-      state: availability.state,
-    });
-  }
-
-  const selection = await resolveElectronStandaloneBinding({
-    channel: shellRuntime.launcherPaths.channel,
-    installerRequiredVersion: resolvePackagedClosureInstallerRequiredVersion(availability),
-    namespace,
-    paths,
-    shellDigest: await digestElectronShellEntry(import.meta.url),
-    shellVersion,
-  });
+  const target = resolveElectronStandaloneTarget();
+  if (target == null) throw new Error(`Standalone is unsupported on ${process.platform}-${process.arch}`);
+  const nodeCommand = resolveShellNodeCommand(shellConfig.nodeCommand);
+  const shellDigest = await digestElectronShellEntry(import.meta.url);
+  const binding = electronBindingFromBootstrapResolution(await resolveStandaloneViaOfficialNode({
+    bootloaderPath: join(shellConfig.resourceRoot, "standalone", "bootloader.mjs"),
+    descriptor: {
+      attachment: {
+        id: `electron-${shellDigest.slice("sha256:".length, "sha256:".length + 16)}`,
+        shell: { digest: shellDigest, type: "electron", version: shellVersion },
+      },
+      discovery: { metadataUrl, target },
+      paths: {
+        cacheRoot: paths.cacheRoot,
+        dataRoot: paths.dataRoot,
+        installationRoot: shellRuntime.launcherPaths.root,
+        logsRoot: paths.logsRoot,
+        resourceRoot: paths.resourceRoot,
+        runtimeRoot: paths.runtimeRoot,
+      },
+      repositoryConfigPath: join(shellConfig.resourceRoot, "standalone", "repository.json"),
+      schemaVersion: 1,
+      scope: { channel: shellRuntime.launcherPaths.channel, namespace },
+    },
+    nodeCommand,
+  }));
   const desktopControl = bootstrapSidecarRuntime(stamp, process.env, {
     app: APP_KEYS.DESKTOP,
     base: paths.runtimeRoot,
@@ -263,12 +264,12 @@ async function main(): Promise<void> {
   });
 
   const standalone = await withStandaloneBootstrapEnvironment({
-    appVersion: selection.pointer.version,
+    appVersion: binding.descriptor.standalone.version,
     config: shellConfig,
     mcpBootstrap,
-    nodeCommand: resolveShellNodeCommand(shellConfig.nodeCommand),
+    nodeCommand,
   }, async () => await createElectronStandaloneLauncher().launch(
-    selection.binding,
+    binding,
     createElectronShellCapabilityPort({
       handlers: createDesktopCapabilityAdapter(stamp.ipc),
     }),
@@ -287,7 +288,7 @@ async function main(): Promise<void> {
     packagedLogger?.error("Standalone terminal lifecycle observation failed", { error });
     app.quit();
   });
-  startupTelemetryContext.appVersion = selection.binding.descriptor.release.version;
+  startupTelemetryContext.appVersion = binding.descriptor.release.version;
   const identity = await writePackagedDesktopIdentity({
     paths,
     runtimeIdentity: createElectronStandaloneRuntimeIdentity(status.handoff, status),
@@ -338,7 +339,7 @@ async function main(): Promise<void> {
       });
       void syncWindowsUninstallDisplayVersion({
         namespace,
-        version: selection.binding.descriptor.release.version,
+        version: binding.descriptor.release.version,
       }).catch((error: unknown) => {
         packagedLogger?.warn("failed to sync Windows uninstall registry version", { error });
       });
@@ -349,7 +350,7 @@ async function main(): Promise<void> {
     },
     preloadPath: join(app.getAppPath(), "preload.cjs"),
     registerDesktopAuth: createStandaloneDesktopAuthRegistration({
-      attachmentId: selection.binding.attachment.id,
+      attachmentId: binding.attachment.id,
       handoff: status.handoff,
       handle: standalone,
     }),

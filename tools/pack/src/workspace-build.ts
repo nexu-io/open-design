@@ -33,6 +33,15 @@ const STANDALONE_NATIVE_DEPENDENCIES = [
   "node-pty",
 ] as const;
 
+// The Shell carries this baseline as a resource, not as Shell policy. Its
+// complete source closure must still invalidate the signed Shell bytes when it
+// changes; otherwise the workspace cache could materialize an older baseline.
+const STANDALONE_BOOTSTRAP_PACKAGES = [
+  { directory: "packages/closure-proto", name: "@open-design/closure-proto" },
+  { directory: "packages/closure-store", name: "@open-design/closure-store" },
+  { directory: "packages/closure-update", name: "@open-design/closure-update" },
+] as const;
+
 async function resolveWorkspaceBuildVersionFamily(config: ToolPackConfig): Promise<string | null> {
   if (config.platform !== "win") return null;
   const releaseVersion = await readRuntimeShellVersion(config).catch(() => null);
@@ -65,10 +74,19 @@ export async function resolveShellSourceDigest(config: ToolPackConfig): Promise<
   for (const packageInfo of definition.buildPackages) {
     packageHashes[packageInfo.name] = await hashPackageSourcePath(join(config.workspaceRoot, packageInfo.directory));
   }
+  for (const packageInfo of STANDALONE_BOOTSTRAP_PACKAGES) {
+    packageHashes[packageInfo.name] = await hashPackageSourcePath(join(config.workspaceRoot, packageInfo.directory));
+  }
   packageHashes["@open-design/tools-pack"] = await hashPackageSourcePath(join(config.workspaceRoot, "tools/pack"));
+  const standaloneBootstrapSources = await Promise.all([
+    "apps/standalone/src/bootstrap.ts",
+    "apps/standalone/src/bootstrap-entry.ts",
+    "apps/standalone/src/fossil-bootloader.ts",
+  ].map(async (path) => [path, await hashPath(join(config.workspaceRoot, path))] as const));
   return `sha256:${hashJson({
     buildCommand: definition.buildCommand,
     packageHashes,
+    standaloneBootstrapSources: Object.fromEntries(standaloneBootstrapSources),
     schemaVersion: 13,
     shell: config.shell,
   })}`;
@@ -125,7 +143,7 @@ export async function resolveShellBuildIdentity(config: ToolPackConfig): Promise
 }
 
 function workspaceBuildOutputFiles(): string[] {
-  return toolPackShellDefinition("electron").buildPackages.flatMap((entry) => entry.directory === "shells/electron"
+  return [...toolPackShellDefinition("electron").buildPackages.flatMap((entry) => entry.directory === "shells/electron"
     ? [
         `${entry.directory}/dist/index.mjs`,
         `${entry.directory}/dist/index.d.ts`,
@@ -134,12 +152,15 @@ function workspaceBuildOutputFiles(): string[] {
     : [
         `${entry.directory}/dist/index.mjs`,
         `${entry.directory}/dist/index.d.ts`,
-      ]);
+      ]),
+    "apps/standalone/dist/bootstrap/bootloader.mjs",
+    "apps/standalone/dist/bootstrap/baseline/launcher.mjs",
+  ];
 }
 
 function workspaceBuildArtifacts(): WorkspaceBuildArtifact[] {
   const outputFiles = workspaceBuildOutputFiles();
-  return toolPackShellDefinition("electron").buildPackages.map((entry) => {
+  return [...toolPackShellDefinition("electron").buildPackages.map((entry) => {
     const workspacePath = `${entry.directory}/dist`;
     return {
       cachePath: join("outputs", ...workspacePath.split("/")),
@@ -148,7 +169,11 @@ function workspaceBuildArtifacts(): WorkspaceBuildArtifact[] {
         .map((output) => [relative(workspacePath, output)]),
       workspacePath,
     };
-  });
+  }), {
+    cachePath: join("outputs", "apps", "standalone", "dist", "bootstrap"),
+    requiredPathGroups: [["bootloader.mjs"], ["baseline", "launcher.mjs"]],
+    workspacePath: "apps/standalone/dist/bootstrap",
+  }];
 }
 
 async function copyWorkspaceBuildArtifactsToCache(config: ToolPackConfig, entryRoot: string): Promise<void> {

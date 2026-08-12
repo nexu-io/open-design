@@ -28,8 +28,6 @@
     "typecheck": "pnpm --filter @open-design/standalone-proto build && pnpm --filter @open-design/standalone-runtime build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/closure-store": "workspace:*",
-    "@open-design/closure-update": "workspace:*",
     "@open-design/contracts": "workspace:*",
     "@open-design/diagnostics": "workspace:*",
     "@open-design/download": "workspace:*",
@@ -43,7 +41,6 @@
     "@open-design/standalone-proto": "workspace:*"
   },
   "devDependencies": {
-    "@open-design/closure-proto": "workspace:*",
     "@types/node": "24.12.2",
     "electron": "41.3.0",
     "esbuild": "0.28.0",

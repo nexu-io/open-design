@@ -14,6 +14,16 @@ describe("Windows Electron Shell resource tree", () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-shell-resources-"));
     const resourceRoot = join(root, "materialized", "open-design");
     try {
+      await mkdir(join(root, "workspace", "apps", "standalone", "dist", "bootstrap"), { recursive: true });
+      await writeFile(
+        join(root, "workspace", "apps", "standalone", "dist", "bootstrap", "bootloader.mjs"),
+        "bootstrap\n",
+      );
+      await mkdir(join(root, "workspace", "apps", "standalone", "dist", "bootstrap", "baseline"), { recursive: true });
+      await writeFile(
+        join(root, "workspace", "apps", "standalone", "dist", "bootstrap", "baseline", "launcher.mjs"),
+        "launcher\n",
+      );
       await prepareResourceTree(
         { workspaceRoot: join(root, "workspace") } as ToolPackConfig,
         { resourceRoot } as WinPaths,
@@ -24,8 +34,10 @@ describe("Windows Electron Shell resource tree", () => {
       expect((await readFile(join(resourceRoot, "bin", "7z.exe"))).byteLength).toBeGreaterThan(0);
       expect((await readFile(join(resourceRoot, "bin", "7z.dll"))).byteLength).toBeGreaterThan(0);
       expect((await readFile(join(resourceRoot, "bin", "node.exe"))).byteLength).toBeGreaterThan(0);
-      expect((await readdir(resourceRoot)).sort()).toEqual(["bin"]);
+      expect((await readdir(resourceRoot)).sort()).toEqual(["bin", "standalone"]);
       expect((await readdir(join(resourceRoot, "bin"))).sort()).toEqual(["7z.dll", "7z.exe", "node.exe"]);
+      expect((await readdir(join(resourceRoot, "standalone"))).sort()).toEqual(["baseline", "bootloader.mjs", "repository.json"]);
+      expect((await readdir(join(resourceRoot, "standalone", "baseline"))).sort()).toEqual(["launcher.mjs"]);
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -40,6 +52,10 @@ describe("Windows Electron Shell resource tree", () => {
       const bodyFile = join(workspaceRoot, "design-templates", "body.txt");
       await writeFile(bodyFile, "one\n", "utf8");
       const config = { workspaceRoot } as ToolPackConfig;
+      await mkdir(join(workspaceRoot, "apps", "standalone", "dist", "bootstrap"), { recursive: true });
+      await writeFile(join(workspaceRoot, "apps", "standalone", "dist", "bootstrap", "bootloader.mjs"), "bootstrap\n");
+      await mkdir(join(workspaceRoot, "apps", "standalone", "dist", "bootstrap", "baseline"), { recursive: true });
+      await writeFile(join(workspaceRoot, "apps", "standalone", "dist", "bootstrap", "baseline", "launcher.mjs"), "launcher\n");
       const paths = { resourceRoot: join(root, "materialized", "open-design") } as WinPaths;
       const first = await prepareResourceTree(config, paths, cache, { materialize: false });
       await writeFile(bodyFile, "two\n", "utf8");

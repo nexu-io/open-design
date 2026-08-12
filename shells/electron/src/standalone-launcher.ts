@@ -1,4 +1,5 @@
 import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 
 import {
   APP_KEYS,
@@ -18,10 +19,6 @@ import type {
 
 import type { PackagedConfig } from "./config.js";
 import {
-  ensurePackagedClosureAvailable,
-  resolvePackagedClosureInstallerRequiredVersion,
-} from "./closure-update.js";
-import {
   createElectronStandaloneRuntimeIdentity,
   writePackagedDesktopIdentity,
   writePackagedWebIdentity,
@@ -30,12 +27,16 @@ import {
 import { confirmPackagedLauncherRuntime, resolvePackagedLauncherRuntime } from "./launcher-runtime.js";
 import { resolvePackagedMcpBootstrapLaunch, type PackagedMcpBootstrapLaunch } from "./mcp-bootstrap.js";
 import { resolvePackagedNamespacePaths } from "./paths.js";
+import { digestElectronShellEntry } from "./shell-identity.js";
 import {
-  digestElectronShellEntry,
-  resolveElectronStandaloneBinding,
-} from "./standalone-binding.js";
+  resolveElectronStandaloneTarget,
+  resolveStandaloneViaOfficialNode,
+} from "./standalone-bootstrap.js";
 import { resolveShellNodeCommand, withStandaloneBootstrapEnvironment } from "./standalone-environment.js";
-import { createElectronStandaloneLauncher } from "./standalone-handoff.js";
+import {
+  createElectronStandaloneLauncher,
+  electronBindingFromBootstrapResolution,
+} from "./standalone-handoff.js";
 
 export {
   resolvePackagedMcpBootstrapLaunch,
@@ -182,24 +183,37 @@ export async function runPackagedStandalone(
     });
 
   await mkdir(paths.runtimeRoot, { recursive: true });
-  const availability = await ensurePackagedClosureAvailable({
-    channel: launcherRuntime.launcherPaths.channel,
-    installationRoot: launcherRuntime.launcherPaths.root,
-    metadataUrl: shellConfig.updateMetadataUrl,
-    namespace: config.namespace,
-    shellVersion,
-  }).catch((error: unknown) => {
-    console.warn("[open-design standalone] initial Closure materialization failed", error);
-    return null;
+  const target = resolveElectronStandaloneTarget();
+  if (target == null) throw new Error(`Standalone is unsupported on ${process.platform}-${process.arch}`);
+  const nodeCommand = resolveShellNodeCommand(shellConfig.nodeCommand);
+  const shellDigest = await digestElectronShellEntry(options.shellEntryUrl);
+  const resolution = await resolveStandaloneViaOfficialNode({
+    bootloaderPath: join(shellConfig.resourceRoot, "standalone", "bootloader.mjs"),
+    descriptor: {
+      attachment: {
+        id: `electron-${shellDigest.slice("sha256:".length, "sha256:".length + 16)}`,
+        shell: {
+          digest: shellDigest,
+          type: "electron",
+          version: shellVersion,
+        },
+      },
+      discovery: { metadataUrl: shellConfig.updateMetadataUrl, target },
+      paths: {
+        cacheRoot: paths.cacheRoot,
+        dataRoot: paths.dataRoot,
+        installationRoot: launcherRuntime.launcherPaths.root,
+        logsRoot: paths.logsRoot,
+        resourceRoot: paths.resourceRoot,
+        runtimeRoot: paths.runtimeRoot,
+      },
+      repositoryConfigPath: join(shellConfig.resourceRoot, "standalone", "repository.json"),
+      schemaVersion: 1,
+      scope: { channel: launcherRuntime.launcherPaths.channel, namespace: config.namespace },
+    },
+    nodeCommand,
   });
-  const selection = await resolveElectronStandaloneBinding({
-    channel: launcherRuntime.launcherPaths.channel,
-    installerRequiredVersion: resolvePackagedClosureInstallerRequiredVersion(availability),
-    namespace: config.namespace,
-    paths,
-    shellDigest: await digestElectronShellEntry(options.shellEntryUrl),
-    shellVersion,
-  });
+  const binding = electronBindingFromBootstrapResolution(resolution);
   const { shutdown, webUrl } = await acquirePackagedStandaloneStartup({
     confirmRuntime: async () => await confirmPackagedLauncherRuntime(launcherRuntime),
     createIpcServer: async ({ readStandaloneStatus, shutdown: stop, webUrl: activeWebUrl }) =>
@@ -228,13 +242,13 @@ export async function runPackagedStandalone(
       if (request.mcpInstallAgent === "codex") await installCodexMcp(daemonUrl);
     },
     startStandalone: async () => await withStandaloneBootstrapEnvironment({
-      appVersion: selection.pointer.version,
+      appVersion: binding.descriptor.standalone.version,
       config: shellConfig,
       mcpBootstrap,
-      nodeCommand: resolveShellNodeCommand(shellConfig.nodeCommand),
+      nodeCommand,
       requireDesktopAuth: false,
     }, async () => await createElectronStandaloneLauncher().launch(
-      selection.binding,
+      binding,
       {
         async invoke(command) {
           return {

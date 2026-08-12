@@ -24,7 +24,7 @@ import {
   resolveNodePtyRuntimeArch,
 } from "../node-pty-runtime.js";
 import { copyBundledResourceTrees } from "../resources.js";
-import { copyShellNodeRuntime } from "../shell-node.js";
+import { copyShellNodeRuntime, copyStandaloneBootstrapSeed } from "../shell-node.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
 import { electronBuilderVersionForShellVersion } from "../versions.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
@@ -76,8 +76,11 @@ export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths):
   await copyShellNodeRuntime({
     target: join(paths.resourceRoot, "bin", "node"),
   });
+  await copyStandaloneBootstrapSeed({
+    resourceRoot: paths.resourceRoot,
+    workspaceRoot: config.workspaceRoot,
+  });
 
-  void config;
 }
 
 export function renderMacPackagedConfig(options: {

@@ -6,6 +6,8 @@ import {
   STANDALONE_BOOTLOADER_EXPORT_NAME,
   createStandaloneHandoffEnvelope,
   validateStandaloneHandoffRequest,
+  validateStandaloneBootstrapResolution,
+  type StandaloneBootstrapResolution,
   type StandaloneHandle,
   type StandaloneHandoff,
   type StandaloneHandoffRequest,
@@ -40,6 +42,19 @@ export class ElectronStandaloneLaunchError extends Error {
 }
 
 type BootloaderModule = Readonly<Record<string, unknown>>;
+
+export function electronBindingFromBootstrapResolution(
+  value: StandaloneBootstrapResolution,
+): ElectronStandaloneBinding {
+  const resolution = validateStandaloneBootstrapResolution(value);
+  return Object.freeze({
+    attachment: resolution.handoff.attachment,
+    bootloaderPath: resolution.bootloaderPath,
+    descriptor: resolution.handoff.handoff.descriptor,
+    paths: resolution.handoff.paths,
+    scope: resolution.handoff.handoff.scope,
+  });
+}
 
 export type ElectronStandaloneLauncherOptions = Readonly<{
   importBootloader?: (bootloaderUrl: string) => Promise<BootloaderModule>;

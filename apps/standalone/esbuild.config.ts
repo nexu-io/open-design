@@ -6,6 +6,8 @@ await build({
     "./src/index.ts",
     "./src/bootloader.ts",
     "./src/bootstrap.ts",
+    "./src/bootstrap-entry.ts",
+    "./src/fossil-bootloader.ts",
     "./src/launcher-bootstrap.ts",
     "./src/process-bridge.ts",
     "./src/sidecars.ts",
@@ -30,6 +32,31 @@ await build({
   },
   format: "esm",
   outdir: "./dist",
+  outExtension: { ".js": ".mjs" },
+  packages: "bundle",
+  platform: "node",
+  target: "node24",
+});
+
+// The Shell executes this fossil using its official Node. It must carry every
+// Standalone selection/Store dependency and never resolve modules from Shell.
+await build({
+  bundle: true,
+  entryPoints: { launcher: "./src/bootstrap-entry.ts" },
+  format: "esm",
+  outdir: "./dist/bootstrap/baseline",
+  outExtension: { ".js": ".mjs" },
+  packages: "bundle",
+  platform: "node",
+  target: "node24",
+});
+
+await build({
+  bundle: true,
+  entryPoints: { bootloader: "./src/fossil-bootloader.ts" },
+  external: ["./baseline/launcher.mjs"],
+  format: "esm",
+  outdir: "./dist/bootstrap",
   outExtension: { ".js": ".mjs" },
   packages: "bundle",
   platform: "node",

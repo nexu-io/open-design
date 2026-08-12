@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
-import { chmod, cp, mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { chmod, cp, mkdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
@@ -26,4 +26,26 @@ export async function copyShellNodeRuntime(options: {
   if (options.source == null && actualVersion !== expectedVersion) {
     throw new Error(`seeded Shell Node version mismatch: expected ${expectedVersion}, got ${actualVersion}`);
   }
+}
+
+export async function copyStandaloneBootstrapSeed(options: Readonly<{
+  resourceRoot: string;
+  workspaceRoot: string;
+}>): Promise<void> {
+  const targetRoot = join(options.resourceRoot, "standalone");
+  await mkdir(targetRoot, { recursive: true });
+  await cp(
+    join(options.workspaceRoot, "apps", "standalone", "dist", "bootstrap", "bootloader.mjs"),
+    join(targetRoot, "bootloader.mjs"),
+  );
+  await mkdir(join(targetRoot, "baseline"), { recursive: true });
+  await cp(
+    join(options.workspaceRoot, "apps", "standalone", "dist", "bootstrap", "baseline", "launcher.mjs"),
+    join(targetRoot, "baseline", "launcher.mjs"),
+  );
+  await writeFile(join(targetRoot, "repository.json"), `${JSON.stringify({
+    localSeeds: [{ root: "seed" }],
+    remoteOrigins: [],
+    schemaVersion: 1,
+  }, null, 2)}\n`, "utf8");
 }
