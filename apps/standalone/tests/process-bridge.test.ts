@@ -188,6 +188,38 @@ describe("Standalone process bridge", () => {
     }
   });
 
+  it("lets a cold body attachment outlive the generic sidecar request deadline", async () => {
+    const binding = await descriptor();
+    const body = await exposeStandaloneBodyBridge({
+      descriptor: binding,
+      async handoff() {
+        await new Promise((resolve) => setTimeout(resolve, 1_600));
+        return fakeHandle(binding);
+      },
+    });
+    try {
+      const handle = await connectStandaloneBodyBridge({
+        descriptor: binding,
+        capabilities: {
+          async invoke(request) {
+            return {
+              attachmentId: request.attachmentId,
+              handoff: request.handoff,
+              outcome: "unsupported" as const,
+              requestId: request.requestId,
+              schemaVersion: request.schemaVersion,
+            };
+          },
+        },
+      });
+
+      await expect(handle.readStatus()).resolves.toMatchObject({ state: "running" });
+      await expect(handle.close()).resolves.toMatchObject({ state: "stopped" });
+    } finally {
+      await body.close();
+    }
+  });
+
   it("derives attachment-local services and fences a different generation", async () => {
     const current = await descriptor("electron-a", 3);
     const sibling = { ...current, attachment: (await descriptor("electron-b", 3)).attachment };

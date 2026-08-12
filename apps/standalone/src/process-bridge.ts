@@ -426,7 +426,12 @@ async function attachShellToStandaloneBody(
   shell: Readonly<{ service: string; sidecar: AttachedSidecar }>,
 ): Promise<StandaloneHandle> {
   validateStandaloneRuntimeStatus(
-    await client.call("attach", { descriptor, shellService: shell.service }),
+    // A cold attachment owns full Standalone acquisition (daemon + Web), so
+    // its lifecycle deadline belongs to the Shell/product policy rather than
+    // the sidecar transport's short request default. The body remains fenced
+    // by the exact generation descriptor and the caller can still terminate
+    // the owned launch if this operation rejects.
+    await client.call("attach", { descriptor, shellService: shell.service }, { timeoutMs: null }),
     { handoff: descriptor.handoff, state: "running" },
   );
   return bodyClientHandle(client, descriptor, shell.sidecar);
