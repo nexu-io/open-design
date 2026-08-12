@@ -74,9 +74,11 @@ export async function resolveShellSourceDigest(config: ToolPackConfig): Promise<
   })}`;
 }
 
-export async function resolveShellDepsDigest(config: ToolPackConfig): Promise<`sha256:${string}`> {
+export async function resolveShellDepsDigestFromWorkspace(input: Readonly<{
+  workspaceRoot: string;
+}>): Promise<`sha256:${string}`> {
   const daemonManifest = JSON.parse(
-    await readFile(join(config.workspaceRoot, "apps/daemon/package.json"), "utf8"),
+    await readFile(join(input.workspaceRoot, "apps/daemon/package.json"), "utf8"),
   ) as { dependencies?: Record<string, unknown> };
   const nativeDependencies = Object.fromEntries(STANDALONE_NATIVE_DEPENDENCIES.map((name) => {
     const version = daemonManifest.dependencies?.[name];
@@ -90,13 +92,18 @@ export async function resolveShellDepsDigest(config: ToolPackConfig): Promise<`s
   const napi = process.versions.napi;
   if (modules == null || napi == null) throw new Error("Shell Node ABI identity is unavailable");
   return `sha256:${hashJson({
-    electron: { version: config.electronVersion },
     nativeDependencies,
     node: { modules, napi, version: nodeVersion },
-    packageManager: await readPackageManager(config.workspaceRoot),
-    pnpmLock: await hashPath(join(config.workspaceRoot, "pnpm-lock.yaml")),
+    packageManager: await readPackageManager(input.workspaceRoot),
+    pnpmLock: await hashPath(join(input.workspaceRoot, "pnpm-lock.yaml")),
     schemaVersion: 1,
   })}`;
+}
+
+export async function resolveShellDepsDigest(config: ToolPackConfig): Promise<`sha256:${string}`> {
+  return await resolveShellDepsDigestFromWorkspace({
+    workspaceRoot: config.workspaceRoot,
+  });
 }
 
 export async function resolveShellBuildIdentity(config: ToolPackConfig): Promise<ToolPackShellBuildIdentity> {
@@ -108,6 +115,7 @@ export async function resolveShellBuildIdentity(config: ToolPackConfig): Promise
     buildDigest: `sha256:${hashJson({
       buildEpoch: SHELL_BUILD_EPOCH,
       depsDigest,
+      electronVersion: config.electronVersion,
       shell: config.shell,
       sourceDigest,
     })}`,

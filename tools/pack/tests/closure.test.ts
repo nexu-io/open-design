@@ -141,6 +141,14 @@ describe("tools-pack Closure archive", () => {
     }
     await mkdir(join(root, "apps", "desktop", "src"), { recursive: true });
     await writeFile(join(root, "apps", "desktop", "src", "index.ts"), "export const shell = 1;\n");
+    await mkdir(join(root, "apps", "daemon"), { recursive: true });
+    await writeFile(join(root, "apps", "daemon", "package.json"), JSON.stringify({
+      dependencies: {
+        "better-sqlite3": "12.10.0",
+        "blake3-wasm": "2.1.5",
+        "node-pty": "1.1.0",
+      },
+    }));
     const options = {
       artifactUrl: "https://releases.open-design.test/beta/closure/darwin-arm64/versions/0.18.0-beta.4/closure.zip",
       channel: "beta" as const,

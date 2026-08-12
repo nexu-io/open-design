@@ -81,7 +81,12 @@ async function writeFixture(root: string, options: { closureVersion?: string } =
     }, null, 2)}\n`),
     writeFile(join(assetsRoot, `${closureBase}-provenance.json`), `${JSON.stringify({
       artifact: { digest: archiveDigest, inventoryDigest, size: archive.byteLength },
-      build: { nodeVersion: process.version, sourceRevision: "fixture", workspaceDirty: false },
+      build: {
+        nodeVersion: process.version,
+        shellDepsDigest: digest("electron shell deps"),
+        sourceRevision: "fixture",
+        workspaceDirty: false,
+      },
       channel: "beta",
       content: { fileCount: files.length, inventoryDigest, inventoryPath: "inventory.json" },
       generatedAt: new Date(0).toISOString(),

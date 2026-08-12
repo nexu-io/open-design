@@ -30,6 +30,7 @@ import { isReleaseChannel, parseReleaseVersion, type ReleaseChannel } from "@ope
 import { hashJson, hashPath, ToolPackCache, type CacheInvalidation } from "./cache.js";
 import { WORKSPACE_ROOT } from "./config.js";
 import { hashPackageSourcePath } from "./package-source-hash.js";
+import { resolveShellDepsDigestFromWorkspace } from "./workspace-build.js";
 import { copyBundledResourceTrees } from "./resources.js";
 import {
   CLOSURE_PLATFORM_TARGETS,
@@ -119,6 +120,7 @@ export type ClosureBuildProvenanceV1 = {
   build: {
     nativeModules: readonly string[];
     nodeVersion: string;
+    shellDepsDigest: `sha256:${string}`;
     sourceRevision: string | null;
     workspaceDirty: boolean | null;
   };
@@ -159,6 +161,9 @@ export async function createClosureBuildCacheKey(options: {
   const rootPackage = JSON.parse(
     await readFile(join(options.workspaceRoot, "package.json"), "utf8"),
   ) as { packageManager?: unknown };
+  const shellDepsDigest = await resolveShellDepsDigestFromWorkspace({
+    workspaceRoot: options.workspaceRoot,
+  });
   return hashJson({
     artifactUrl: options.artifactUrl,
     channel: options.channel,
@@ -168,6 +173,7 @@ export async function createClosureBuildCacheKey(options: {
     platform: options.platform,
     pnpmLock: await hashPath(join(options.workspaceRoot, "pnpm-lock.yaml")),
     schemaVersion: 2,
+    shellDepsDigest,
     sourceHashes,
     version: options.version,
   });
@@ -793,6 +799,9 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
   ], { cwd: appRoot });
   await pruneForeignNodePtyPrebuilds(appRoot, target);
   const loadedNativeModules = await probeClosureNodeNativeModules({ appRoot });
+  const shellDepsDigest = await resolveShellDepsDigestFromWorkspace({
+    workspaceRoot,
+  });
   await rm(join(appRoot, "node_modules", ".bin"), { force: true, recursive: true });
   await rm(join(appRoot, "node_modules", ".package-lock.json"), { force: true });
   // The file: tarball coordinates above are build-stage inputs, not runtime
@@ -883,6 +892,7 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
     build: {
       nativeModules: loadedNativeModules,
       nodeVersion: process.version,
+      shellDepsDigest,
       sourceRevision: git.sourceRevision,
       workspaceDirty: git.workspaceDirty,
     },

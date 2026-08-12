@@ -264,6 +264,7 @@ function closurePublication(): {
     readFileSync(join(releaseAssetsDir, names.provenance), "utf8"),
   ) as Record<string, unknown>;
   const provenanceArtifact = provenance.artifact as Record<string, unknown> | null | undefined;
+  const provenanceBuild = provenance.build as Record<string, unknown> | null | undefined;
   if (
     provenance.schemaVersion !== 1
     || provenance.channel !== releaseChannel
@@ -272,6 +273,7 @@ function closurePublication(): {
     || provenanceArtifact?.digest !== archiveDigest
     || provenanceArtifact?.inventoryDigest !== inventoryDigest
     || provenanceArtifact?.size !== assets.archive.size
+    || (shellBuild != null && provenanceBuild?.shellDepsDigest !== shellBuild.shell.depsDigest)
   ) {
     throw new Error(`Closure provenance does not match ${target} release identity`);
   }
