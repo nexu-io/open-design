@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InstalledPluginRecord, PluginSourceKind, TrustTier } from '@open-design/contracts';
 import { PluginsView } from '../../src/components/PluginsView';
@@ -121,6 +121,7 @@ function fileDropDataTransfer(file: File): DataTransfer {
     types: ['Files'],
     files: [file],
     items: [],
+    dropEffect: 'copy',
   } as unknown as DataTransfer;
 }
 
@@ -851,6 +852,55 @@ describe('PluginsView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import' }));
 
     await waitFor(() => expect(mockedUploadPluginZip).toHaveBeenCalledWith(zip));
+  });
+
+  it('prevents busy zip drag-over and drop without replacing the selected file', async () => {
+    let resolveUpload: ((outcome: Awaited<ReturnType<typeof uploadPluginZip>>) => void) | undefined;
+    mockedUploadPluginZip.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveUpload = resolve;
+        }),
+    );
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-import-button'));
+    fireEvent.click(screen.getByRole('button', { name: /upload zip/i }));
+    const selected = new File(['selected'], 'selected-plugin.zip', { type: 'application/zip' });
+    fireEvent.change(screen.getByTestId('plugins-zip-input'), {
+      target: { files: [selected] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    await waitFor(() => expect(mockedUploadPluginZip).toHaveBeenCalledWith(selected));
+
+    const dropzone = screen.getByTestId('plugins-zip-dropzone');
+    const replacement = new File(['replacement'], 'replacement-plugin.zip', {
+      type: 'application/zip',
+    });
+    const dragOverTransfer = fileDropDataTransfer(replacement);
+    const dragOverEvent = createEvent.dragOver(dropzone, { dataTransfer: dragOverTransfer });
+    fireEvent(dropzone, dragOverEvent);
+
+    expect(dragOverEvent.defaultPrevented).toBe(true);
+    expect(dragOverTransfer.dropEffect).toBe('none');
+
+    const dropTransfer = fileDropDataTransfer(replacement);
+    const dropEvent = createEvent.drop(dropzone, { dataTransfer: dropTransfer });
+    const stopPropagation = vi.spyOn(dropEvent, 'stopPropagation');
+    fireEvent(dropzone, dropEvent);
+
+    expect(dropEvent.defaultPrevented).toBe(true);
+    expect(stopPropagation).toHaveBeenCalledOnce();
+    expect(dropTransfer.dropEffect).toBe('none');
+    expect(screen.getByText('selected-plugin.zip')).toBeTruthy();
+    expect(screen.queryByText('replacement-plugin.zip')).toBeNull();
+
+    resolveUpload?.({
+      ok: false,
+      warnings: [],
+      message: 'Import stopped for test.',
+      log: [],
+    });
   });
 
   it('preserves dropped folder relative paths before importing', async () => {

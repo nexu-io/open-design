@@ -3946,16 +3946,24 @@ function FileImportPanel({
   const [dropError, setDropError] = useState<string | null>(null);
 
   function handleDragEnter(event: ReactDragEvent<HTMLLabelElement>) {
-    if (!dragEventHasFiles(event) || working) return;
+    if (!dragEventHasFiles(event)) return;
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
+    event.dataTransfer.dropEffect = working ? 'none' : 'copy';
+    if (working) {
+      setDragOver(false);
+      return;
+    }
     setDragOver(true);
   }
 
   function handleDragOver(event: ReactDragEvent<HTMLLabelElement>) {
-    if (!dragEventHasFiles(event) || working) return;
+    if (!dragEventHasFiles(event)) return;
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
+    event.dataTransfer.dropEffect = working ? 'none' : 'copy';
+    if (working) {
+      setDragOver(false);
+      return;
+    }
     setDragOver(true);
   }
 
@@ -3966,10 +3974,14 @@ function FileImportPanel({
   }
 
   async function handleDrop(event: ReactDragEvent<HTMLLabelElement>) {
-    if (!dragEventHasFiles(event) || working) return;
+    if (!dragEventHasFiles(event)) return;
     event.preventDefault();
     event.stopPropagation();
     setDragOver(false);
+    if (working) {
+      event.dataTransfer.dropEffect = 'none';
+      return;
+    }
     const { dataTransfer } = event;
     try {
       const droppedFiles = await filesFromPluginDrop(dataTransfer);
