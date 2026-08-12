@@ -4,9 +4,17 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PACKAGED_NAMESPACE_BASE_ROOT_ENV,
+  resolveDefaultPackagedNodeCommandRelative,
   resolvePackagedAmrProfile,
   resolvePackagedNamespaceBaseRoot,
 } from '../src/config.js';
+
+describe('resolveDefaultPackagedNodeCommandRelative', () => {
+  it('uses the native Node executable name without changing the shared resource layout', () => {
+    expect(resolveDefaultPackagedNodeCommandRelative('win32')).toBe(join('open-design', 'bin', 'node.exe'));
+    expect(resolveDefaultPackagedNodeCommandRelative('darwin')).toBe(join('open-design', 'bin', 'node'));
+  });
+});
 
 describe('resolvePackagedNamespaceBaseRoot', () => {
   it('lets a historical handoff preserve the already-resolved namespace base root', () => {

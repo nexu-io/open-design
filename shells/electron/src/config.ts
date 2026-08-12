@@ -137,6 +137,12 @@ export function resolvePackagedNamespaceBaseRoot(
     ?? join(electronUserDataRoot, "namespaces");
 }
 
+export function resolveDefaultPackagedNodeCommandRelative(
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return join("open-design", "bin", platform === "win32" ? "node.exe" : "node");
+}
+
 // Config DTOs use null for optional scalar values consumed by runtime options;
 // optional paths use undefined so callers can distinguish "no path" from a resolved path string.
 function cleanOptionalString(value: string | undefined): string | null {
@@ -198,7 +204,7 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
   const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(process.resourcesPath, "open-design");
   const relativeNodeCommand =
     raw.nodeCommandRelative == null || raw.nodeCommandRelative.length === 0
-      ? join("open-design", "bin", "node")
+      ? resolveDefaultPackagedNodeCommandRelative()
       : raw.nodeCommandRelative;
   const nodeCommandCandidate = join(process.resourcesPath, relativeNodeCommand);
   const nodeCommand = (await pathExists(nodeCommandCandidate)) ? nodeCommandCandidate : null;

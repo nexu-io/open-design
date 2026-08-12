@@ -24,7 +24,12 @@ import {
 } from "@open-design/launcher-proto";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 
-import type { PackagedConfig, PackagedWebOutputMode, RawPackagedConfig } from "./config.js";
+import {
+  resolveDefaultPackagedNodeCommandRelative,
+  type PackagedConfig,
+  type PackagedWebOutputMode,
+  type RawPackagedConfig,
+} from "./config.js";
 import type { PackagedNamespacePaths } from "./paths.js";
 
 type LauncherPayloadManifest = {
@@ -307,7 +312,7 @@ async function resolvePayloadConfig(
     : raw.resourceRoot;
   const relativeNodeCommand =
     raw.nodeCommandRelative == null || raw.nodeCommandRelative.length === 0
-      ? join("open-design", "bin", process.platform === "win32" ? "node.exe" : "node")
+      ? resolveDefaultPackagedNodeCommandRelative()
       : raw.nodeCommandRelative;
   const nodeCommand = await resolveOptionalPayloadEntry(resourcesPath, relativeNodeCommand);
   const electronNodeCommand = manifest.platform === "win32"
