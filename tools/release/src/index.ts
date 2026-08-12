@@ -116,6 +116,46 @@ cli
   });
 
 cli
+  .command("prepare-closure-seed", "Prepare a validated local-first Standalone seed repository")
+  .option("--channel <channel>", "release channel")
+  .option("--manifest <path>", "canonical Closure distribution manifest")
+  .option("--mode <mode>", "metadata|required (default: metadata)")
+  .option("--output <path>", "output seed repository root")
+  .option("--release-version <version>", "release version bound by the baseline index")
+  .option("--source-blob-dir <path>", "content-addressed source blobs for required mode")
+  .option("--target <target>", "Standalone target")
+  .action(async (options: {
+    channel?: string;
+    manifest?: string;
+    mode?: string;
+    output?: string;
+    releaseVersion?: string;
+    sourceBlobDir?: string;
+    target?: string;
+  }) => {
+    if (options.channel !== "beta" && options.channel !== "preview" && options.channel !== "prerelease" && options.channel !== "stable") {
+      throw new Error("prepare-closure-seed requires a supported --channel");
+    }
+    if (options.manifest == null || options.output == null || options.releaseVersion == null || options.target == null) {
+      throw new Error("prepare-closure-seed requires --manifest, --output, --release-version, and --target");
+    }
+    if (options.mode != null && options.mode !== "metadata" && options.mode !== "required") {
+      throw new Error("prepare-closure-seed --mode must be metadata or required");
+    }
+    const { prepareClosureSeed } = await import("./storage/prepare-closure-seed.ts");
+    const result = await prepareClosureSeed({
+      channel: options.channel,
+      manifestPath: options.manifest,
+      mode: options.mode ?? "metadata",
+      outputRoot: options.output,
+      releaseVersion: options.releaseVersion,
+      ...(options.sourceBlobDir == null ? {} : { sourceBlobRoot: options.sourceBlobDir }),
+      target: options.target,
+    });
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  });
+
+cli
   .command("prepare-github-assets", "Prepare the public GitHub Release asset set")
   .action(async () => {
     await import("./storage/prepare-github-assets.ts");
