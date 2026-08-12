@@ -6,6 +6,7 @@ import {
 import { parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
 import { readFile } from "node:fs/promises";
 import { parseReleaseNotePublication, releaseNoteMetadataFromPublication } from "../release-note/publication.ts";
+import { validateClosureDistributionPublication } from "./closure-distribution-metadata.ts";
 
 const releaseDescriptor = releaseChannelDescriptor(required("RELEASE_CHANNEL"));
 const releaseChannel = releaseDescriptor.channel;
@@ -27,8 +28,10 @@ const metadata = (metadataPath.length > 0
       return response.json();
     })()) as {
   channel?: string;
+  closure?: unknown;
   control?: { launcher?: { version?: { min?: string; url?: string } } };
   releaseState?: string;
+  r2?: { publicOrigin?: string };
   releaseTargets?: Record<string, {
     artifacts?: Record<string, { digest?: string; url?: string }>;
     closure?: {
@@ -50,6 +53,7 @@ const metadata = (metadataPath.length > 0
 };
 
 const closureRequired = process.env.RELEASE_CLOSURE_REQUIRED === "true";
+const closureDistributionRequired = process.env.RELEASE_CLOSURE_DISTRIBUTION_REQUIRED === "true";
 const shellRequired = process.env.RELEASE_SHELL_REQUIRED === "true";
 
 if (metadata.channel !== releaseChannel) {
@@ -101,6 +105,30 @@ if (releaseNoteManifestPath.length === 0) {
   } else if (JSON.stringify(metadata.releaseNote) !== JSON.stringify(expectedReleaseNote)) {
     throw new Error("metadata releaseNote does not match its publication manifest");
   }
+}
+
+const expectedClosureDistributionTargets = [
+  ...(process.env.ENABLE_MAC_ARM64 === "true" && optional("MAC_ARM64_RESULT", "skipped") === "success"
+    ? ["darwin-arm64"]
+    : []),
+  ...(process.env.ENABLE_WIN_X64 === "true" && optional("WIN_X64_RESULT", "skipped") === "success"
+    ? ["win32-x64"]
+    : []),
+];
+if (closureDistributionRequired && metadata.closure == null) {
+  throw new Error("metadata is missing the version-wide Closure distribution");
+}
+if (metadata.closure != null) {
+  if (typeof metadata.r2?.publicOrigin !== "string" || metadata.r2.publicOrigin.length === 0) {
+    throw new Error("metadata r2.publicOrigin is required for Closure distribution verification");
+  }
+  validateClosureDistributionPublication({
+    channel: releaseChannel,
+    expectedTargets: expectedClosureDistributionTargets,
+    publicOrigin: metadata.r2.publicOrigin,
+    releaseVersion,
+    value: metadata.closure,
+  });
 }
 
 for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {

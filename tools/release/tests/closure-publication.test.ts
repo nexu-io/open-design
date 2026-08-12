@@ -6,7 +6,12 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { CLOSURE_ARCHIVE_ENTRY_PATH } from "@open-design/closure-proto";
+import {
+  CLOSURE_ARCHIVE_ENTRY_PATH,
+  CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  CLOSURE_PROTOCOL_VERSION,
+  createClosureDistributionManifest,
+} from "@open-design/closure-proto";
 import { afterEach, describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
@@ -16,7 +21,7 @@ const publishMetadataPath = join(workspaceRoot, "tools", "release", "src", "stor
 const verifyMetadataPath = join(workspaceRoot, "tools", "release", "src", "storage", "verify-metadata.ts");
 const temporaryRoots: string[] = [];
 
-function digest(bytes: string | Buffer): string {
+function digest(bytes: string | Buffer): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
@@ -211,6 +216,87 @@ afterEach(async () => {
 });
 
 describe("Standalone Closure release publication", () => {
+  it("publishes and verifies the sole version-wide Closure graph at release root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-closure-distribution-release-"));
+    temporaryRoots.push(root);
+    const fixture = await writeFixture(root);
+    await execFileAsync(process.execPath, ["--experimental-strip-types", publishPlatformPath], {
+      cwd: workspaceRoot,
+      env: platformEnv(fixture),
+    });
+    const distributionPath = join(root, "closure-distribution.json");
+    const launcher = digest("launcher");
+    const body = digest("body");
+    const runtime = digest("runtime");
+    const native = digest("native");
+    const artifact = (value: string) => ({
+      digest: value as `sha256:${string}`,
+      mediaType: "application/zip",
+      size: 1,
+      url: `https://releases.open-design.test/beta/blobs/${value.slice("sha256:".length)}`,
+    });
+    const distribution = createClosureDistributionManifest({
+      blobs: Object.fromEntries([launcher, body, runtime, native].map((value) => [value, artifact(value)])),
+      compatibility: { shell: { electron: { version: { min: "0.18.0" } } } },
+      identity: {
+        channel: "beta",
+        protocolVersion: CLOSURE_PROTOCOL_VERSION,
+        version: "0.18.0-beta.4",
+      },
+      required: {
+        body: { blob: body, entryPath: "bootloader.mjs", treeDigest: digest("body-tree") },
+        launcher: {
+          blob: launcher,
+          entryPath: "launcher.mjs",
+          handoffPath: "bootloader.mjs",
+          treeDigest: digest("launcher-tree"),
+        },
+        targets: {
+          "darwin-arm64": {
+            native: { blob: native, treeDigest: digest("native-tree") },
+            runtime: { blob: runtime, entryPath: "bin/node", treeDigest: digest("runtime-tree") },
+          },
+        },
+      },
+      resources: [],
+      schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+    }, digest);
+    await writeFile(distributionPath, `${JSON.stringify(distribution, null, 2)}\n`);
+
+    const common = {
+      ...process.env,
+      BASE_VERSION: "0.18.0",
+      ENABLE_MAC_ARM64: "true",
+      ENABLE_MAC_X64: "false",
+      ENABLE_WIN_X64: "false",
+      MAC_ARM64_RESULT: "success",
+      RELEASE_CHANNEL: "beta",
+      RELEASE_CLOSURE_DISTRIBUTION_REQUIRED: "true",
+      RELEASE_CLOSURE_REQUIRED: "true",
+      RELEASE_MANIFEST_DIR: fixture.manifestRoot,
+      RELEASE_METADATA_DIR: fixture.metadataRoot,
+      RELEASE_OUTPUTS_PATH: join(fixture.metadataRoot, "outputs.json"),
+      RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.test",
+      RELEASE_PUBLISH_SIDE_EFFECTS: "false",
+      RELEASE_SIGNED: "false",
+      RELEASE_VERSION: "0.18.0-beta.4",
+      STATE_SOURCE: "test",
+    };
+    await execFileAsync(process.execPath, ["--experimental-strip-types", publishMetadataPath], {
+      cwd: workspaceRoot,
+      env: { ...common, RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH: distributionPath },
+    });
+    const metadataPath = join(fixture.metadataRoot, "metadata.json");
+    const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
+    expect(metadata.closure).toEqual(distribution);
+    expect(metadata.releaseTargets.mac_arm64.closure.manifest.identity.platform).toBe("darwin-arm64");
+
+    await expect(execFileAsync(process.execPath, ["--experimental-strip-types", verifyMetadataPath], {
+      cwd: workspaceRoot,
+      env: { ...common, RELEASE_METADATA_PATH: metadataPath },
+    })).resolves.toMatchObject({ stdout: expect.stringContaining("verified beta metadata") });
+  });
+
   it("publishes a resolved Windows Shell feed against the immutable Shell identity", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-shell-feed-independent-"));
     temporaryRoots.push(root);

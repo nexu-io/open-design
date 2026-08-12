@@ -24,6 +24,7 @@ import {
   parseReleaseNotePublication,
   releaseNoteMetadataFromPublication,
 } from "../release-note/publication.ts";
+import { readClosureDistributionPublication } from "./closure-distribution-metadata.ts";
 
 type PlatformManifest = {
   artifacts?: Record<string, { digest?: string; url?: string }>;
@@ -95,6 +96,8 @@ const versionLockKey = optional(
 const latestCasRequired = process.env.RELEASE_LATEST_CAS_REQUIRED === "true";
 const latestActivationEnabled = optional("RELEASE_ACTIVATE_LATEST", "true") !== "false";
 const closureRequired = process.env.RELEASE_CLOSURE_REQUIRED === "true";
+const closureDistributionRequired = process.env.RELEASE_CLOSURE_DISTRIBUTION_REQUIRED === "true";
+const closureDistributionManifestPath = optional("RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH");
 const shellRequired = process.env.RELEASE_SHELL_REQUIRED === "true";
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
 
@@ -307,6 +310,23 @@ if (assetVersionSuffix === "auto") {
   assetVersionSuffix = allReadyTargetsSigned ? ".signed" : ".unsigned";
 }
 const versionPrefix = optional("RELEASE_VERSION_PREFIX", `${releaseChannel}/versions/${releaseVersion}${assetVersionSuffix}`);
+const expectedClosureDistributionTargets = readyTargets.flatMap((target) => (
+  target === "mac_arm64" ? ["darwin-arm64"]
+    : target === "win_x64" ? ["win32-x64"]
+      : []
+));
+if (closureDistributionRequired && closureDistributionManifestPath.length === 0) {
+  throw new Error("RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH is required");
+}
+const closureDistribution = closureDistributionManifestPath.length === 0
+  ? null
+  : readClosureDistributionPublication({
+      channel: releaseChannel,
+      expectedTargets: expectedClosureDistributionTargets,
+      path: closureDistributionManifestPath,
+      publicOrigin,
+      releaseVersion,
+    });
 
 const latestMetadataUpdated = releaseState === "complete";
 const releaseNote = readReleaseNoteMetadata();
@@ -314,6 +334,7 @@ const releaseFields = releaseMetadataFields();
 const metadata = {
   ...releaseFields,
   channel: releaseChannel,
+  ...(closureDistribution == null ? {} : { closure: closureDistribution }),
   ...controlBlock,
   expectedPlatforms: expectedTargets,
   expectedTargets,
