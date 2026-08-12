@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   createStandaloneBootstrapEnvironment,
+  resolveShellNodeCommand,
   withStandaloneBootstrapEnvironment,
 } from "../src/standalone-environment.js";
 
 describe("Electron Standalone environment projection", () => {
+  it("accepts a Shell-owned Node and rejects an Electron fallback", () => {
+    expect(resolveShellNodeCommand("/shell/node")).toBe("/shell/node");
+    if (process.versions.electron == null) expect(resolveShellNodeCommand(null)).toBe(process.execPath);
+  });
   it("projects product config without exposing body layout to the shell", () => {
     expect(createStandaloneBootstrapEnvironment({
       appVersion: "0.18.0-beta.4",
@@ -20,12 +25,13 @@ describe("Electron Standalone environment projection", () => {
         args: ["mcp", "serve"],
         command: "/Applications/Open Design.app/Contents/MacOS/Open Design",
       },
+      nodeCommand: "/Applications/Open Design.app/Contents/Resources/open-design/bin/node",
     }, { HOME: "/Users/test" })).toEqual({
       HOME: "/Users/test",
-      ELECTRON_RUN_AS_NODE: "1",
       OD_APP_VERSION: "0.18.0-beta.4",
       OD_MCP_BOOTSTRAP_ARGS: "[\"mcp\",\"serve\"]",
       OD_MCP_BOOTSTRAP_COMMAND: "/Applications/Open Design.app/Contents/MacOS/Open Design",
+      OD_NODE_BIN: "/Applications/Open Design.app/Contents/Resources/open-design/bin/node",
       OD_REQUIRE_DESKTOP_AUTH: "1",
       OD_VELA_WEB_URL: "https://vela.example.test",
       OPEN_DESIGN_AMR_PROFILE: "feature-test",
@@ -46,17 +52,18 @@ describe("Electron Standalone environment projection", () => {
         velaWebUrl: null,
       },
       mcpBootstrap: { args: [], command: null },
+      nodeCommand: "/shell/node",
       requireDesktopAuth: false,
     }, {})).toMatchObject({
-      ELECTRON_RUN_AS_NODE: "1",
+      OD_NODE_BIN: "/shell/node",
       OD_REQUIRE_DESKTOP_AUTH: "0",
     });
   });
 
   it("restores Electron-sensitive environment after the handoff resolves", async () => {
-    const previousRunAsNode = process.env.ELECTRON_RUN_AS_NODE;
+    const previousNodeBin = process.env.OD_NODE_BIN;
     const previousAppVersion = process.env.OD_APP_VERSION;
-    delete process.env.ELECTRON_RUN_AS_NODE;
+    delete process.env.OD_NODE_BIN;
     process.env.OD_APP_VERSION = "outer-version";
     try {
       await withStandaloneBootstrapEnvironment({
@@ -69,15 +76,16 @@ describe("Electron Standalone environment projection", () => {
           velaWebUrl: null,
         },
         mcpBootstrap: { args: [], command: null },
+        nodeCommand: "/shell/node",
       }, async () => {
-        expect(process.env.ELECTRON_RUN_AS_NODE).toBe("1");
+        expect(process.env.OD_NODE_BIN).toBe("/shell/node");
         expect(process.env.OD_APP_VERSION).toBe("0.18.0-beta.4");
       });
-      expect(process.env.ELECTRON_RUN_AS_NODE).toBeUndefined();
+      expect(process.env.OD_NODE_BIN).toBeUndefined();
       expect(process.env.OD_APP_VERSION).toBe("outer-version");
     } finally {
-      if (previousRunAsNode == null) delete process.env.ELECTRON_RUN_AS_NODE;
-      else process.env.ELECTRON_RUN_AS_NODE = previousRunAsNode;
+      if (previousNodeBin == null) delete process.env.OD_NODE_BIN;
+      else process.env.OD_NODE_BIN = previousNodeBin;
       if (previousAppVersion == null) delete process.env.OD_APP_VERSION;
       else process.env.OD_APP_VERSION = previousAppVersion;
     }

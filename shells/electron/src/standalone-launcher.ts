@@ -34,7 +34,7 @@ import {
   digestElectronShellEntry,
   resolveElectronStandaloneBinding,
 } from "./standalone-binding.js";
-import { withStandaloneBootstrapEnvironment } from "./standalone-environment.js";
+import { resolveShellNodeCommand, withStandaloneBootstrapEnvironment } from "./standalone-environment.js";
 import { createElectronStandaloneLauncher } from "./standalone-handoff.js";
 
 export {
@@ -231,6 +231,7 @@ export async function runPackagedStandalone(
       appVersion: selection.pointer.version,
       config: shellConfig,
       mcpBootstrap,
+      nodeCommand: resolveShellNodeCommand(shellConfig.nodeCommand),
       requireDesktopAuth: false,
     }, async () => await createElectronStandaloneLauncher().launch(
       selection.binding,

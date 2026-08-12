@@ -24,6 +24,7 @@ import {
   resolveNodePtyRuntimeArch,
 } from "../node-pty-runtime.js";
 import { copyBundledResourceTrees } from "../resources.js";
+import { copyShellNodeRuntime } from "../shell-node.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
 import { electronBuilderVersionForShellVersion } from "../versions.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
@@ -72,6 +73,9 @@ async function buildPrebundledStandaloneRuntime(
 export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths): Promise<void> {
   await rm(paths.resourceRoot, { force: true, recursive: true });
   await mkdir(paths.resourceRoot, { recursive: true });
+  await copyShellNodeRuntime({
+    target: join(paths.resourceRoot, "bin", "node"),
+  });
 
   void config;
 }

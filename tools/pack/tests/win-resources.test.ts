@@ -10,7 +10,7 @@ import { prepareResourceTree } from "../src/win/resources.js";
 import type { WinPaths } from "../src/win/types.js";
 
 describe("Windows Electron Shell resource tree", () => {
-  it("contains only the archive extractor required by Shell self-update", async () => {
+  it("contains the materializers and official Node required to enter Standalone", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-shell-resources-"));
     const resourceRoot = join(root, "materialized", "open-design");
     try {
@@ -23,8 +23,9 @@ describe("Windows Electron Shell resource tree", () => {
 
       expect((await readFile(join(resourceRoot, "bin", "7z.exe"))).byteLength).toBeGreaterThan(0);
       expect((await readFile(join(resourceRoot, "bin", "7z.dll"))).byteLength).toBeGreaterThan(0);
+      expect((await readFile(join(resourceRoot, "bin", "node.exe"))).byteLength).toBeGreaterThan(0);
       expect((await readdir(resourceRoot)).sort()).toEqual(["bin"]);
-      expect((await readdir(join(resourceRoot, "bin"))).sort()).toEqual(["7z.dll", "7z.exe"]);
+      expect((await readdir(join(resourceRoot, "bin"))).sort()).toEqual(["7z.dll", "7z.exe", "node.exe"]);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

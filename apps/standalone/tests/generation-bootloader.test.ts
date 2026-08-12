@@ -66,4 +66,15 @@ describe("Standalone generation bootloader", () => {
   it("defaults to the Node process executing the fossil bootloader", () => {
     expect(resolveStandaloneGenerationLaunch(request()).executable).toBe(process.execPath);
   });
+
+  it("consumes the Shell-projected official Node without learning Shell layout", () => {
+    const previous = process.env.OD_NODE_BIN;
+    process.env.OD_NODE_BIN = "/shell/resources/bin/node";
+    try {
+      expect(resolveStandaloneGenerationLaunch(request()).executable).toBe("/shell/resources/bin/node");
+    } finally {
+      if (previous == null) delete process.env.OD_NODE_BIN;
+      else process.env.OD_NODE_BIN = previous;
+    }
+  });
 });

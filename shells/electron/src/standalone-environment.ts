@@ -14,9 +14,15 @@ export type StandaloneBootstrapEnvironmentInput = Readonly<{
     args: readonly string[];
     command: string | null;
   }>;
+  nodeCommand: string;
   requireDesktopAuth?: boolean;
-  runElectronAsNode?: boolean;
 }>;
+
+export function resolveShellNodeCommand(configured: string | null): string {
+  if (configured != null) return configured;
+  if (process.release.name === "node" && process.versions.electron == null) return process.execPath;
+  throw new Error("Electron Shell is missing its official Node bootstrap resource; reinstall Open Design");
+}
 
 /** Project shell/installer configuration before entering immutable bootloader.mjs. */
 export function createStandaloneBootstrapEnvironment(
@@ -26,8 +32,8 @@ export function createStandaloneBootstrapEnvironment(
   return {
     ...base,
     OD_APP_VERSION: input.appVersion,
+    OD_NODE_BIN: input.nodeCommand,
     OD_REQUIRE_DESKTOP_AUTH: input.requireDesktopAuth === false ? "0" : "1",
-    ...(input.runElectronAsNode === false ? {} : { ELECTRON_RUN_AS_NODE: "1" }),
     ...(input.config.amrProfile == null ? {} : {
       OPEN_DESIGN_AMR_PROFILE: input.config.amrProfile,
     }),
@@ -46,9 +52,8 @@ export function createStandaloneBootstrapEnvironment(
 
 /**
  * Project Shell-owned launch context only while entering Standalone. Electron
- * renderer processes must never inherit ELECTRON_RUN_AS_NODE; the body has
- * already snapshotted this environment into its sidecar launch specs before
- * the first handoff resolves.
+ * The body snapshots this environment into its sidecar launch specs before the
+ * first handoff resolves. Electron itself is never repurposed as Node.
  */
 export async function withStandaloneBootstrapEnvironment<T>(
   input: StandaloneBootstrapEnvironmentInput,

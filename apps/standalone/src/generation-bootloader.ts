@@ -20,7 +20,7 @@ export type StandaloneGenerationLaunch = StandaloneBodyProcessLaunchSpec;
  */
 export function resolveStandaloneGenerationLaunch(
   requestInput: StandaloneHandoffRequest,
-  executable: string = process.execPath,
+  executable: string = process.env.OD_NODE_BIN ?? process.execPath,
 ): StandaloneGenerationLaunch {
   const request = validateStandaloneHandoffRequest(requestInput);
   const installationRoot = request.paths.installationRoot;

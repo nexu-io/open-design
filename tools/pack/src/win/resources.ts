@@ -4,9 +4,10 @@ import { dirname, join } from "node:path";
 import { hashJson, hashPath, ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
+import { copyShellNodeRuntime } from "../shell-node.js";
 import type { WinPaths, ResourceTreeCacheMetadata } from "./types.js";
 
-const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 7;
+const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 8;
 
 async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<string> {
   return hashJson({
@@ -14,6 +15,7 @@ async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<strin
     schemaVersion: RESOURCE_TREE_CACHE_SCHEMA_VERSION,
     sevenZipDll: await hashPath(winResources.sevenZipDll),
     sevenZipExe: await hashPath(winResources.sevenZipExe),
+    shellNode: await hashPath(process.execPath),
   });
 }
 
@@ -40,6 +42,7 @@ export async function prepareResourceTree(
       await mkdir(join(resourceRoot, "bin"), { recursive: true });
       await cp(winResources.sevenZipExe, join(resourceRoot, "bin", "7z.exe"));
       await cp(winResources.sevenZipDll, join(resourceRoot, "bin", "7z.dll"));
+      await copyShellNodeRuntime({ target: join(resourceRoot, "bin", "node.exe") });
       return { resourceName: "open-design" };
     },
   };
