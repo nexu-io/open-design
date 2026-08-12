@@ -6,10 +6,13 @@ import { join } from "node:path";
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_ARCHIVE_MEDIA_TYPE,
+  CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   CLOSURE_INVENTORY_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
+  createClosureDistributionManifest,
   type ClosureCandidateManifest,
+  type ClosureDistributionBlob,
 } from "@open-design/closure-proto";
 import {
   readClosureBindingDescriptor,
@@ -27,12 +30,14 @@ import type {
 
 import {
   ClosureUpdateError,
+  applyClosureDistributionUpdate,
   applyClosureUpdate,
   compareClosureShellVersions,
   decideClosureUpdate,
   discoverClosureReleaseCandidate,
   selectClosureReleaseCandidate,
   type ClosureReleaseCandidate,
+  type ClosureDistributionReleaseCandidate,
 } from "../src/index.js";
 
 const DIGEST = `sha256:${"a".repeat(64)}` as const;
@@ -199,6 +204,77 @@ async function downloadableCandidate(): Promise<{
     return new Response("not found", { status: 404 });
   }) as typeof globalThis.fetch;
   return { archive, candidate, fetch };
+}
+
+async function downloadableDistribution(): Promise<{
+  candidate: ClosureDistributionReleaseCandidate;
+  fetch: typeof globalThis.fetch;
+  resourceUrl: string;
+}> {
+  const zip = async (path: string, contents: string): Promise<Buffer> => {
+    const archive = new JSZip();
+    archive.file(path, contents, { date: new Date(0) });
+    return await archive.generateAsync({ compression: "DEFLATE", type: "nodebuffer" });
+  };
+  const archives = {
+    body: await zip("bootloader.mjs", "export const body = true;\n"),
+    launcher: await zip("launcher.mjs", "export const launcher = true;\n"),
+    native: await zip("addon.node", "native\n"),
+    resource: await zip("skills/SKILL.md", "# Skill\n"),
+    runtime: await zip("bin/node", "node\n"),
+  };
+  const artifact = (bytes: Buffer): ClosureDistributionBlob => {
+    const value = digest(bytes);
+    return {
+      digest: value,
+      mediaType: "application/zip",
+      size: bytes.byteLength,
+      url: `https://releases.open-design.test/beta/blobs/${value.slice("sha256:".length)}`,
+    };
+  };
+  const artifacts = Object.fromEntries(
+    Object.entries(archives).map(([name, bytes]) => [name, artifact(bytes)]),
+  ) as Record<keyof typeof archives, ClosureDistributionBlob>;
+  const manifest = createClosureDistributionManifest({
+    blobs: Object.fromEntries(Object.values(artifacts).map((value) => [value.digest, value])),
+    compatibility: { shell: { electron: { version: { min: "0.19.0" } } } },
+    identity: {
+      channel: "beta",
+      protocolVersion: CLOSURE_PROTOCOL_VERSION,
+      version: "0.19.0-beta.10",
+    },
+    required: {
+      body: { blob: artifacts.body.digest, entryPath: "bootloader.mjs" },
+      launcher: { blob: artifacts.launcher.digest, entryPath: "launcher.mjs" },
+      targets: {
+        "darwin-arm64": {
+          native: { blob: artifacts.native.digest },
+          runtime: { blob: artifacts.runtime.digest, entryPath: "bin/node" },
+        },
+      },
+    },
+    resources: [{ blob: artifacts.resource.digest, id: "skills", title: "Skills" }],
+    schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  }, digest);
+  const bytesByUrl = new Map(Object.entries(archives).map(([name, bytes]) => [
+    artifacts[name as keyof typeof archives].url,
+    bytes,
+  ]));
+  const fetch = vi.fn(async (input: string | URL | Request) => {
+    const url = input instanceof Request ? input.url : String(input);
+    const bytes = bytesByUrl.get(url);
+    return bytes == null
+      ? new Response("not found", { status: 404 })
+      : new Response(bytes, {
+          headers: { "content-length": String(bytes.byteLength) },
+          status: 200,
+        });
+  }) as typeof globalThis.fetch;
+  return {
+    candidate: { manifest, releaseVersion: "0.19.0-beta.10", target: "darwin-arm64" },
+    fetch,
+    resourceUrl: artifacts.resource.url,
+  };
 }
 
 describe("Closure release update selection", () => {
@@ -388,5 +464,91 @@ describe("Closure release update application", () => {
     })).resolves.toMatchObject({ reason: "another-updater-active", state: "busy" });
     expect(await readFile(lockPath, "utf8")).toContain("live-updater");
     expect(vi.mocked(fixture.fetch)).not.toHaveBeenCalled();
+  });
+});
+
+describe("layered Closure distribution application", () => {
+  it("downloads only required blobs, extracts the fixed view, and reuses channel CAS", async () => {
+    const paths = await createStore();
+    const fixture = await downloadableDistribution();
+
+    const result = await applyClosureDistributionUpdate({
+      candidate: fixture.candidate,
+      fetch: fixture.fetch,
+      paths,
+      shellType: "electron",
+      shellVersion: "0.19.0",
+    });
+
+    expect(result).toMatchObject({ reason: "no-committed-closure", state: "committed" });
+    if (result.state !== "committed") throw new Error("distribution was not committed");
+    const generationRoot = join(paths.generationsRoot, String(result.pointer.generation));
+    expect(await readFile(join(generationRoot, "body", "bootloader.mjs"), "utf8"))
+      .toContain("body = true");
+    expect(await readFile(join(generationRoot, "launcher", "launcher.mjs"), "utf8"))
+      .toContain("launcher = true");
+    expect(await readFile(join(generationRoot, "runtime", "bin", "node"), "utf8"))
+      .toContain("node");
+    expect(vi.mocked(fixture.fetch).mock.calls.map(([input]) => String(input)))
+      .not.toContain(fixture.resourceUrl);
+    expect(vi.mocked(fixture.fetch)).toHaveBeenCalledTimes(4);
+
+    const retained = await applyClosureDistributionUpdate({
+      candidate: fixture.candidate,
+      fetch: fixture.fetch,
+      paths,
+      shellType: "electron",
+      shellVersion: "0.19.0",
+    });
+    expect(retained).toMatchObject({ reason: "already-committed", state: "retained" });
+    expect(vi.mocked(fixture.fetch)).toHaveBeenCalledTimes(4);
+  });
+
+  it("keeps the binding empty when any required blob fails checksum", async () => {
+    const paths = await createStore();
+    const fixture = await downloadableDistribution();
+    const originalFetch = fixture.fetch;
+    const corruptFetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const call = vi.mocked(originalFetch).mock.calls.length;
+      if (call === 0) {
+        return new Response("corrupt", {
+          headers: { "content-length": "7" },
+          status: 200,
+        });
+      }
+      return await originalFetch(input, init);
+    }) as typeof globalThis.fetch;
+
+    await expect(applyClosureDistributionUpdate({
+      candidate: fixture.candidate,
+      fetch: corruptFetch,
+      paths,
+      shellType: "electron",
+      shellVersion: "0.19.0",
+    })).rejects.toThrow(/checksum/u);
+    expect((await readClosureBindingDescriptor(paths)).committed).toBeNull();
+  });
+
+  it("lets independent namespaces converge on the same immutable channel CAS", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-closure-update-shared-cas-"));
+    roots.push(root);
+    const left = resolveClosureStorePaths({ channel: "beta", namespace: "team-a", root });
+    const right = resolveClosureStorePaths({ channel: "beta", namespace: "team-b", root });
+    const fixture = await downloadableDistribution();
+
+    const results = await Promise.all([left, right].map(async (paths) => (
+      await applyClosureDistributionUpdate({
+        candidate: fixture.candidate,
+        fetch: fixture.fetch,
+        paths,
+        shellType: "electron",
+        shellVersion: "0.19.0",
+      })
+    )));
+
+    expect(results.map((result) => result.state)).toEqual(["committed", "committed"]);
+    expect(left.blobsRoot).toBe(right.blobsRoot);
+    expect((await readClosureBindingDescriptor(left)).committed?.standalone.namespace).toBe("team-a");
+    expect((await readClosureBindingDescriptor(right)).committed?.standalone.namespace).toBe("team-b");
   });
 });

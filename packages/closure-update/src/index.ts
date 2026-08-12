@@ -14,13 +14,19 @@ import {
   validateClosureCandidateManifest,
   validateClosureFileInventory,
   type ClosureCandidateManifest,
+  type ClosureDistributionBlob,
+  type ClosureDistributionManifest,
 } from "@open-design/closure-proto";
 import type { ClosureBindingDescriptor } from "@open-design/closure-store";
 import {
+  commitVerifiedClosureDistributionGeneration,
   commitVerifiedStoredClosureCandidate,
+  planClosureDistributionGeneration,
   readClosureBindingDescriptor,
   resolveClosureStoreVersionPaths,
+  verifyClosureDistributionBlob,
   verifyMaterializedClosureCandidate,
+  verifyMaterializedClosureDistributionGeneration,
   verifyStoredClosureCandidate,
   type ClosureRuntimePointer,
   type ClosureStorePaths,
@@ -49,6 +55,12 @@ export type ClosureReleaseCandidate = {
   releaseTarget: string;
   releaseVersion: string;
 };
+
+export type ClosureDistributionReleaseCandidate = Readonly<{
+  manifest: ClosureDistributionManifest;
+  releaseVersion: string;
+  target: string;
+}>;
 
 export type ClosureUpdateCommitReason = "newer-release-binding" | "no-committed-closure";
 
@@ -90,6 +102,24 @@ export type ApplyClosureUpdateResult =
     }
   | {
       candidate: ClosureReleaseCandidate;
+      reason: "another-updater-active";
+      state: "busy";
+    };
+
+export type ApplyClosureDistributionUpdateResult =
+  | {
+      candidate: ClosureDistributionReleaseCandidate;
+      pointer: ClosureRuntimePointer;
+      reason: ClosureUpdateCommitReason;
+      state: "committed";
+    }
+  | {
+      candidate: ClosureDistributionReleaseCandidate;
+      reason: ClosureUpdateRetainReason;
+      state: "retained";
+    }
+  | {
+      candidate: ClosureDistributionReleaseCandidate;
       reason: "another-updater-active";
       state: "busy";
     };
@@ -261,7 +291,7 @@ export function compareClosureShellVersions(left: string, right: string): number
 }
 
 export function resolveClosureShellMinimumVersion(
-  manifest: ClosureCandidateManifest,
+  manifest: Pick<ClosureCandidateManifest, "compatibility">,
   shellType: string,
 ): string | null {
   return manifest.compatibility.shell[shellType]?.version.min ?? null;
@@ -308,6 +338,67 @@ export function decideClosureUpdate(input: {
   if (comparison === 0) {
     throw new ClosureUpdateError(
       `Closure release ${committed.releaseVersion} has conflicting immutable bindings`,
+    );
+  }
+  return comparison > 0
+    ? { action: "commit", candidate, reason: "newer-release-binding" }
+    : { action: "retain", candidate, reason: "candidate-not-newer" };
+}
+
+export type ClosureDistributionUpdateDecision =
+  | {
+      action: "commit";
+      candidate: ClosureDistributionReleaseCandidate;
+      reason: ClosureUpdateCommitReason;
+    }
+  | {
+      action: "retain";
+      candidate: ClosureDistributionReleaseCandidate;
+      reason: ClosureUpdateRetainReason;
+    };
+
+export function decideClosureDistributionUpdate(input: {
+  candidate: ClosureDistributionReleaseCandidate;
+  descriptor: ClosureBindingDescriptor;
+  shellType: string;
+  shellVersion: string;
+}): ClosureDistributionUpdateDecision {
+  const { candidate } = input;
+  if (candidate.manifest.identity.channel !== input.descriptor.channel) {
+    throw new ClosureUpdateError("Closure distribution channel does not match the local Store");
+  }
+  if (candidate.manifest.required.targets[candidate.target] == null) {
+    throw new ClosureUpdateError(`Closure distribution does not contain target ${candidate.target}`);
+  }
+  const minimumShellVersion = resolveClosureShellMinimumVersion(candidate.manifest, input.shellType);
+  if (
+    minimumShellVersion == null
+    || compareClosureShellVersions(input.shellVersion, minimumShellVersion) < 0
+  ) {
+    return { action: "retain", candidate, reason: "shell-incompatible" };
+  }
+  const committed = input.descriptor.committed;
+  if (committed == null) {
+    return { action: "commit", candidate, reason: "no-committed-closure" };
+  }
+  const active = committed.standalone;
+  if (
+    active.version === candidate.manifest.identity.version
+    && active.digest === candidate.manifest.identity.digest
+    && active.target === candidate.target
+    && committed.releaseVersion === candidate.releaseVersion
+  ) {
+    return { action: "retain", candidate, reason: "already-committed" };
+  }
+  const channel = candidate.manifest.identity.channel;
+  const comparison = compareReleaseVersions(
+    candidate.releaseVersion,
+    committed.releaseVersion,
+    channel,
+  );
+  if (comparison === 0) {
+    throw new ClosureUpdateError(
+      `Closure release ${committed.releaseVersion} has conflicting immutable distribution bindings`,
     );
   }
   return comparison > 0
@@ -529,6 +620,157 @@ async function ensureCandidateMaterialized(input: {
     return { ...stagedVerification, paths: finalPaths };
   } finally {
     await rm(stageRoot, { force: true, recursive: true }).catch(() => undefined);
+  }
+}
+
+async function ensureDistributionBlob(input: {
+  artifact: ClosureDistributionBlob;
+  fetchImpl: typeof globalThis.fetch;
+  paths: ClosureStorePaths;
+}): Promise<string> {
+  if (input.artifact.mediaType !== "application/zip") {
+    throw new ClosureUpdateError(
+      `unsupported Closure distribution blob media type: ${input.artifact.mediaType}`,
+    );
+  }
+  try {
+    return await verifyClosureDistributionBlob(input.paths, input.artifact);
+  } catch {
+    const digest = input.artifact.digest.slice("sha256:".length);
+    const outputPath = join(input.paths.blobsRoot, digest);
+    const downloadedPath = join(
+      input.paths.stagingRoot,
+      "blob-downloads",
+      `${digest}-${randomUUID()}.zip`,
+    );
+    try {
+      await downloadCopyAndClear({
+        basePath: join(input.paths.stagingRoot, "downloads"),
+        bucket: "closure-blobs",
+        fetch: input.fetchImpl,
+        fileName: `${digest}.zip`,
+        outputPath: downloadedPath,
+        payload: {
+          checksum: { algorithm: "sha256", value: digest },
+          url: input.artifact.url,
+        },
+      });
+      await mkdir(input.paths.blobsRoot, { recursive: true });
+      try {
+        await rename(downloadedPath, outputPath);
+      } catch (error) {
+        if (!["EEXIST", "ENOTEMPTY", "EPERM"].includes(errorCode(error) ?? "")) throw error;
+        try {
+          return await verifyClosureDistributionBlob(input.paths, input.artifact);
+        } catch {
+          await rm(outputPath, { force: true });
+          await rename(downloadedPath, outputPath);
+        }
+      }
+    } finally {
+      await rm(downloadedPath, { force: true }).catch(() => undefined);
+    }
+    return await verifyClosureDistributionBlob(input.paths, input.artifact);
+  }
+}
+
+async function stageClosureDistributionGeneration(input: {
+  candidate: ClosureDistributionReleaseCandidate;
+  descriptor: ClosureBindingDescriptor;
+  fetchImpl: typeof globalThis.fetch;
+  paths: ClosureStorePaths;
+}) {
+  const plan = planClosureDistributionGeneration(
+    input.paths,
+    input.descriptor.nextGeneration,
+    input.candidate.manifest,
+    input.candidate.target,
+  );
+  const components = Object.entries(plan.required);
+  const ensured = new Set<string>();
+  for (const [, component] of components) {
+    if (ensured.has(component.artifact.digest)) continue;
+    await ensureDistributionBlob({
+      artifact: component.artifact,
+      fetchImpl: input.fetchImpl,
+      paths: input.paths,
+    });
+    ensured.add(component.artifact.digest);
+  }
+
+  const stageRoot = join(
+    input.paths.stagingRoot,
+    `generation-${plan.generation}-${plan.identity.digest.slice("sha256:".length)}-${randomUUID()}`,
+  );
+  await mkdir(stageRoot, { recursive: true });
+  try {
+    await Promise.all(components.map(async ([name, component]) => {
+      const componentRoot = join(stageRoot, name);
+      await mkdir(componentRoot, { recursive: true });
+      await extractZip(component.blobPath, { dir: componentRoot });
+    }));
+    await writeFile(
+      join(stageRoot, "closure.json"),
+      `${JSON.stringify(plan.manifest, null, 2)}\n`,
+      "utf8",
+    );
+    return await verifyMaterializedClosureDistributionGeneration(
+      input.paths,
+      plan,
+      stageRoot,
+    );
+  } catch (error) {
+    await rm(stageRoot, { force: true, recursive: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
+/** Apply one already-selected v2 distribution graph to the local Store. */
+export async function applyClosureDistributionUpdate(input: {
+  candidate: ClosureDistributionReleaseCandidate;
+  fetch?: typeof globalThis.fetch;
+  paths: ClosureStorePaths;
+  shellType: string;
+  shellVersion: string;
+}): Promise<ApplyClosureDistributionUpdateResult> {
+  const lock = await acquireUpdateLock(input.paths);
+  if (lock == null) {
+    return { candidate: input.candidate, reason: "another-updater-active", state: "busy" };
+  }
+  try {
+    const descriptor = await readClosureBindingDescriptor(input.paths);
+    const decision = decideClosureDistributionUpdate({
+      candidate: input.candidate,
+      descriptor,
+      shellType: input.shellType,
+      shellVersion: input.shellVersion,
+    });
+    if (decision.action === "retain") {
+      return { candidate: input.candidate, reason: decision.reason, state: "retained" };
+    }
+    const verification = await stageClosureDistributionGeneration({
+      candidate: input.candidate,
+      descriptor,
+      fetchImpl: input.fetch ?? globalThis.fetch,
+      paths: input.paths,
+    });
+    try {
+      const committed = await commitVerifiedClosureDistributionGeneration(
+        input.paths,
+        verification,
+        input.candidate.releaseVersion,
+      );
+      return {
+        candidate: input.candidate,
+        pointer: committed.committed.standalone,
+        reason: decision.reason,
+        state: "committed",
+      };
+    } finally {
+      await rm(verification.materializedRoot, { force: true, recursive: true }).catch(() => undefined);
+    }
+  } finally {
+    await releaseUpdateLock(lock);
   }
 }
 

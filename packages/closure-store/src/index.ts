@@ -129,8 +129,8 @@ export type StoredClosureVerification = {
 };
 
 export class ClosureStoreError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = "ClosureStoreError";
   }
 }
@@ -508,6 +508,18 @@ async function digestFile(path: string): Promise<{ digest: string; size: number 
   return { digest: `sha256:${hash.digest("hex")}`, size: metadata.size };
 }
 
+export async function verifyClosureDistributionBlob(
+  paths: ClosureStorePaths,
+  artifact: ClosureDistributionBlob,
+): Promise<string> {
+  const blobPath = resolveDistributionBlobPath(paths, artifact.digest);
+  const actual = await digestFile(blobPath);
+  if (actual.digest !== artifact.digest || actual.size !== artifact.size) {
+    throw new ClosureStoreError("Closure distribution blob does not match its manifest");
+  }
+  return blobPath;
+}
+
 function assertDistributionPlanMatchesStore(
   paths: ClosureStorePaths,
   plan: ClosureDistributionGenerationPlan,
@@ -604,9 +616,12 @@ export async function verifyMaterializedClosureDistributionGeneration(
       throw new ClosureStoreError(`Closure distribution ${name} blob path is invalid`);
     }
     if (!verifiedDigests.has(component.artifact.digest)) {
-      const actual = await digestFile(expectedBlobPath);
-      if (actual.digest !== component.artifact.digest || actual.size !== component.artifact.size) {
-        throw new ClosureStoreError(`Closure distribution ${name} blob does not match its manifest`);
+      try {
+        await verifyClosureDistributionBlob(paths, component.artifact);
+      } catch (error) {
+        throw new ClosureStoreError(`Closure distribution ${name} blob does not match its manifest`, {
+          cause: error,
+        });
       }
       verifiedDigests.add(component.artifact.digest);
     }
