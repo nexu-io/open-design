@@ -3503,15 +3503,16 @@ export function ProjectView({
       // silently replace unrelated project files.
       const updatesExplicitlyIdentifiedFile =
         Boolean(art.identifier?.trim()) && existing.has(fileName);
+      let collisionFileName = fileName;
       let n = 2;
       while (
-        existing.has(fileName) &&
-        savedArtifactRef.current !== fileName &&
-        !updatesExplicitlyIdentifiedFile
+        existing.has(collisionFileName) &&
+        savedArtifactRef.current !== collisionFileName
       ) {
-        fileName = `${baseName}-${n}${ext}`;
+        collisionFileName = `${baseName}-${n}${ext}`;
         n += 1;
       }
+      if (!updatesExplicitlyIdentifiedFile) fileName = collisionFileName;
       if (ext === '.html') {
         const pointerProjectFiles = filterProjectFilesByMinMtime(
           currentProjectFiles,
@@ -3519,7 +3520,7 @@ export function ProjectView({
         );
         const pointerTarget = resolveHtmlPointerArtifactTarget({
           content: artifactToPersist.html,
-          candidateFileName: fileName,
+          candidateFileName: collisionFileName,
           projectFiles: pointerProjectFiles,
         });
         if (pointerTarget) {
