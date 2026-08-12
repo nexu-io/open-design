@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Mobilework × Open Design 内部动态演示：三种通信方案、可控网站产物与双运行时架构。"
+    />
+    <title>Mobilework × Open Design · 设计生产能力演示</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="./script.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <div class="page-progress" aria-hidden="true"><span id="pageProgress"></span></div>
+    <div class="ambient ambient-one" aria-hidden="true"></div>
+    <div class="ambient ambient-two" aria-hidden="true"></div>
+
+    <header class="topbar" id="topbar">
+      <a class="brand" href="#hero" aria-label="返回首页">
+        <span class="brand-mark" aria-hidden="true">
+          <i></i><i></i><i></i>
+        </span>
+        <span>Mobilework <b>×</b> Open Design</span>
+      </a>
+
+      <nav class="main-nav" aria-label="页面章节">
+        <a href="#positioning">产品定位</a>
+        <a href="#communication">通信方案</a>
+        <a href="#output">产物约束</a>
+        <a href="#runtimes">运行时</a>
+        <a href="#evidence">案例</a>
+      </nav>
+
+      <div class="topbar-actions">
+        <button class="button button-ghost button-small" id="autoDemo" type="button">
+          <span class="button-dot" aria-hidden="true"></span>
+          <span>自动演示</span>
+        </button>
+        <button class="button button-icon" id="presentMode" type="button" aria-label="进入全屏演示">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M8 3H3v5M16 3h5v5M8 21H3v-5m13 5h5v-5" />
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero section" id="hero" data-section="hero">
+        <div class="hero-copy reveal">
+          <div class="eyebrow"><span></span>DESIGN CAPABILITY, DELIVERED</div>
+          <h1>
+            让设计生成成为<br />
+            <em>可连接、可澄清、可交付</em>的能力
+          </h1>
+          <p class="hero-lead">
+            Mobilework 承载用户工作，Open Design 负责专业设计生产。通过三种协议路径完成需求澄清，
+            再以可控的单文件或多文件结构交付网站。
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#communication">
+              开始动态演示
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+            </a>
+            <a class="button button-ghost" href="#positioning">先看产品定位</a>
+          </div>
+          <div class="hero-metrics" aria-label="当前成果概览">
+            <div><strong data-count="3">3</strong><span>种通信方案</span></div>
+            <div><strong data-count="2">2</strong><span>种强约束模式</span></div>
+            <div><strong data-count="2">2</strong><span>套独立运行时</span></div>
+          </div>
+        </div>
+
+        <div class="hero-stage reveal" aria-label="从 Mobilework 到 Open Design 的任务流示意">
+          <div class="stage-grid" aria-hidden="true"></div>
+          <div class="stage-label"><span class="live-dot"></span> LIVE ARCHITECTURE</div>
+          <div class="stage-node stage-client">
+            <span class="node-index">01</span>
+            <div class="node-icon mobilework-icon">M</div>
+            <div><b>Mobilework</b><small>用户工作空间</small></div>
+          </div>
+          <div class="stage-connection connection-one" aria-hidden="true"><i></i></div>
+          <div class="stage-node stage-protocol">
+            <span class="node-index">02</span>
+            <div class="protocol-chips"><i>A2A</i><i>MCP</i></div>
+            <div><b>澄清与委托</b><small>协议交互层</small></div>
+          </div>
+          <div class="stage-connection connection-two" aria-hidden="true"><i></i></div>
+          <div class="stage-node stage-agent">
+            <span class="node-index">03</span>
+            <div class="node-icon od-icon"><span></span><span></span></div>
+            <div><b>Open Design</b><small>设计生产运行时</small></div>
+          </div>
+          <div class="stage-output">
+            <span class="output-pulse"></span>
+            <div><b>网站产物</b><small>index.html · assets · policy</small></div>
+          </div>
+          <div class="stage-caption">
+            <span>需求</span><span>问题</span><span>确认</span><span>生成</span><span>交付</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section intro" aria-labelledby="introTitle">
+        <div class="intro-shell reveal">
+          <div class="intro-definition">
+            <span class="intro-kicker">OPEN DESIGN / IN BRIEF</span>
+            <h2 id="introTitle">专业设计 Agent 应用与设计生产平台</h2>
+            <p>把需求澄清、设计生成、产物校验与交付组织成一套可连接的专业能力。</p>
+          </div>
+          <div class="intro-components" aria-label="Open Design 的核心组成">
+            <span>Agent CLI</span>
+            <span>工具 / MCP</span>
+            <span>Skills</span>
+            <span>设计模板</span>
+            <span>Design System</span>
+            <span>Daemon / 产物系统</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="section positioning" id="positioning" data-section="positioning">
+        <div class="section-heading reveal">
+          <div>
+            <span class="section-number">01 / PRODUCT</span>
+            <h2>不是把工具搬进工作空间，<br />而是连接一套专业设计应用</h2>
+          </div>
+          <p>
+            两个产品各自守住职责边界：Mobilework 管理用户、工作空间和交互；Open Design 管理设计工作流、
+            Agent 执行、项目、产物与交付约束。
+          </p>
+        </div>
+
+        <div class="position-grid reveal">
+          <article class="product-card product-mobilework">
+            <div class="product-card-top">
+              <span class="card-kicker">HOST / CLIENT</span>
+              <span class="status-pill">用户入口</span>
+            </div>
+            <div class="product-logo mobilework-icon">M</div>
+            <h3>Mobilework</h3>
+            <p>面向用户的工作空间与任务编排客户端。</p>
+            <ul class="feature-list">
+              <li><span></span>承接用户意图与上下文</li>
+              <li><span></span>选择 A2A 或 MCP 通信路径</li>
+              <li><span></span>渲染问题、进度和最终结果</li>
+              <li><span></span>管理权限、入口和用户体验</li>
+            </ul>
+          </article>
+
+          <div class="bridge-card" aria-label="连接目标">
+            <div class="bridge-orbit"><span></span><i></i></div>
+            <b>专业能力连接</b>
+            <p>协议负责传递任务，边界保证双方可以独立演进。</p>
+            <div class="bridge-tags"><span>A2A</span><span>MCP</span><span>iframe</span></div>
+          </div>
+
+          <article class="product-card product-opendesign">
+            <div class="product-card-top">
+              <span class="card-kicker">SPECIALIST APP</span>
+              <span class="status-pill status-accent">执行引擎</span>
+            </div>
+            <div class="product-logo od-icon"><span></span><span></span></div>
+            <h3>Open Design</h3>
+            <p>面向网站与数字设计产物的专业 Agent 应用。</p>
+            <ul class="feature-list">
+              <li><span></span>动态发现与需求澄清</li>
+              <li><span></span>Workflow、Skill 与工具执行</li>
+              <li><span></span>项目、会话和产物生命周期</li>
+              <li><span></span>生成后修复、校验与可控交付</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="definition-strip reveal">
+          <span class="definition-label">一句话定性</span>
+          <p>
+            <strong>Open Design 是可独立部署的专业设计生产应用与 Agent 运行时，</strong>
+            它把“问清楚—做出来—按规则交付”封装成可被其他工作空间调用的完整能力。
+          </p>
+        </div>
+      </section>
+
+      <section class="section communication" id="communication" data-section="communication">
+        <div class="section-heading reveal">
+          <div>
+            <span class="section-number">02 / COMMUNICATION</span>
+            <h2>同一条业务闭环，<br />三种并列通信方案</h2>
+          </div>
+          <p>
+            每个任务只选择一条主路径。三种方案都完成“提出需求—返回问题—用户确认—生成—交付”，
+            差异在于状态模型、客户端能力和跨轮恢复方式。
+          </p>
+        </div>
+
+        <div class="lab reveal">
+          <div class="lab-toolbar">
+            <div class="tab-list" role="tablist" aria-label="通信方案">
+              <button class="tab is-active" role="tab" aria-selected="true" data-scheme="a2a" type="button">
+                <span>01</span>A2A
+              </button>
+              <button class="tab" role="tab" aria-selected="false" data-scheme="elicitation" type="button">
+                <span>02</span>MCP Elicitation
+              </button>
+              <button class="tab" role="tab" aria-selected="false" data-scheme="multiMcp" type="button">
+                <span>03</span>多轮 MCP
+              </button>
+            </div>
+            <span class="verification-badge"><i></i><span id="schemeVerification">已实现并通过自动测试</span></span>
+          </div>
+
+          <div class="scheme-layout">
+            <article class="scheme-summary" aria-live="polite">
+              <span class="scheme-overline" id="schemeOverline">REMOTE AGENT DELEGATION</span>
+              <h3 id="schemeTitle">A2A：把 Open Design 作为远程 Agent 委托</h3>
+              <p id="schemeDescription"></p>
+              <div class="scheme-facts">
+                <div><span>状态载体</span><strong id="schemeState"></strong></div>
+                <div><span>客户端要求</span><strong id="schemeClient"></strong></div>
+                <div><span>跨轮恢复</span><strong id="schemeResume"></strong></div>
+              </div>
+              <div class="scheme-note">
+                <span class="scheme-note-icon">i</span>
+                <p id="schemeNote"></p>
+              </div>
+            </article>
+
+            <div class="flow-console">
+              <div class="console-top">
+                <div class="window-dots"><i></i><i></i><i></i></div>
+                <span id="consoleTitle">A2A TASK · LIVE FLOW</span>
+                <span class="console-status"><i></i>CONNECTED</span>
+              </div>
+              <div class="flow-canvas" id="flowCanvas" aria-live="polite"></div>
+              <div class="console-log">
+                <span class="log-time">NOW</span>
+                <code id="consoleLog"></code>
+              </div>
+            </div>
+          </div>
+
+          <div class="intermediate-grid">
+            <article class="evidence-mini">
+              <div class="evidence-mini-head"><span>INTERMEDIATE / 01</span><b>问题交互</b></div>
+              <div class="media-placeholder" id="questionPlaceholder">
+                <span class="placeholder-icon">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H8l-4 4V5Z" /></svg>
+                </span>
+                <b>中间问题截图占位</b>
+                <small>后续替换为 Mobilework 实际 question UI</small>
+              </div>
+            </article>
+            <article class="evidence-mini">
+              <div class="evidence-mini-head"><span>INTERMEDIATE / 02</span><b>协议上下文</b></div>
+              <pre class="context-preview"><code id="contextPreview"></code></pre>
+            </article>
+            <article class="evidence-mini result-mini">
+              <div class="evidence-mini-head"><span>DELIVERY / 03</span><b>生成结果</b></div>
+              <div class="browser-placeholder">
+                <div class="browser-bar"><i></i><i></i><i></i><span>generated-site.local</span></div>
+                <div class="browser-body">
+                  <div class="browser-hero"></div><div class="browser-copy"></div><div class="browser-cards"><i></i><i></i><i></i></div>
+                  <span>最终 HTML 案例占位</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section output" id="output" data-section="output">
+        <div class="section-heading reveal">
+          <div>
+            <span class="section-number">03 / CONTROLLED OUTPUT</span>
+            <h2>通信负责把任务送到，<br />策略负责让产物可部署</h2>
+          </div>
+          <p>
+            输出策略在 daemon 层统一生效，不依赖任务来自 A2A、MCP、Web 还是 CLI。启动时可以选择强约束，
+            也可以不选择并保持 Open Design 原有行为。
+          </p>
+        </div>
+
+        <div class="output-lab reveal">
+          <div class="output-switcher" role="tablist" aria-label="网站产物模式">
+            <button class="mode-button" role="tab" aria-selected="false" data-mode="default" type="button">
+              <span>00</span><b>默认模式</b><small>保持原有行为</small>
+            </button>
+            <button class="mode-button is-active" role="tab" aria-selected="true" data-mode="single" type="button">
+              <span>01</span><b>single-html</b><small>单文件强约束</small>
+            </button>
+            <button class="mode-button" role="tab" aria-selected="false" data-mode="multi" type="button">
+              <span>02</span><b>multi-file</b><small>标准目录强约束</small>
+            </button>
+          </div>
+
+          <div class="output-stage">
+            <div class="file-explorer">
+              <div class="explorer-head">
+                <span>ARTIFACT EXPLORER</span>
+                <span class="policy-state"><i></i><b id="policyState">ENFORCED</b></span>
+              </div>
+              <div class="project-root">
+                <div class="root-line"><span class="chevron">⌄</span><span class="folder-icon"></span><b>generated-site/</b></div>
+                <div class="file-tree" id="fileTree" aria-live="polite"></div>
+              </div>
+              <div class="route-demo" id="routeDemo">
+                <span>HASH ROUTER</span>
+                <div class="route-track">
+                  <button class="route-chip is-active" type="button" data-route="#/home">#/home</button>
+                  <button class="route-chip" type="button" data-route="#/about">#/about</button>
+                  <button class="route-chip" type="button" data-route="#/contact">#/contact</button>
+                </div>
+                <div class="route-screen" id="routeScreen"><i></i><b>Home</b><small>一个 HTML，多个逻辑页面</small></div>
+              </div>
+            </div>
+
+            <article class="policy-panel" aria-live="polite">
+              <span class="scheme-overline" id="modeOverline">ONE FILE · MULTIPLE VIEWS</span>
+              <h3 id="modeTitle">单文件交付，也能表达多页面网站</h3>
+              <p id="modeDescription"></p>
+              <ul class="rule-list" id="modeRules"></ul>
+              <div class="command-card">
+                <span>启动命令</span>
+                <code id="modeCommand"></code>
+                <button id="copyCommand" type="button" aria-label="复制启动命令">复制</button>
+              </div>
+            </article>
+          </div>
+
+          <div class="enforcement-flow" aria-label="网站产物约束执行流程">
+            <div><span>01</span><b>启动参数</b><small>解析模式</small></div>
+            <i></i>
+            <div><span>02</span><b>提示词约束</b><small>生成前约定</small></div>
+            <i></i>
+            <div><span>03</span><b>事务化修复</b><small>生成后归一化</small></div>
+            <i></i>
+            <div><span>04</span><b>最终校验</b><small>失败则回滚</small></div>
+            <i></i>
+            <div class="flow-success"><span>05</span><b>可部署产物</b><small>携带策略元数据</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section runtimes" id="runtimes" data-section="runtimes">
+        <div class="section-heading reveal">
+          <div>
+            <span class="section-number">04 / RUNTIME BOUNDARY</span>
+            <h2>同一个应用入口，<br />两套明确隔离的 Agent 运行时</h2>
+          </div>
+          <p>
+            工作空间负责协议委托，侧边栏 iframe 提供完整 Studio。两者可以部署在同一产品中，
+            但不自动共享会话、任务状态或正在执行的 Agent 进程。
+          </p>
+        </div>
+
+        <div class="runtime-map reveal">
+          <article class="runtime-card runtime-workspace">
+            <div class="runtime-head">
+              <span class="runtime-number">RUNTIME / A</span><span class="status-pill">协议服务</span>
+            </div>
+            <h3>工作空间交互运行时</h3>
+            <p>Mobilework 对话中的 A2A / MCP 任务。</p>
+            <div class="runtime-stack">
+              <span>Mobilework Chat</span><i></i><span>A2A / MCP Adapter</span><i></i><span>Open Design Daemon + Agent</span>
+            </div>
+            <dl>
+              <div><dt>状态</dt><dd>task/context 或 discovery session</dd></div>
+              <div><dt>问题 UI</dt><dd>Mobilework 原生交互</dd></div>
+              <div><dt>用途</dt><dd>在工作流内委托并收回结果</dd></div>
+            </dl>
+          </article>
+
+          <div class="runtime-divider">
+            <span>NO IMPLICIT STATE SHARING</span>
+            <i></i>
+            <b>≠</b>
+            <i></i>
+            <small>需要显式桥接才能同步</small>
+          </div>
+
+          <article class="runtime-card runtime-iframe">
+            <div class="runtime-head">
+              <span class="runtime-number">RUNTIME / B</span><span class="status-pill status-accent">Web Studio</span>
+            </div>
+            <h3>侧边栏 iframe 运行时</h3>
+            <p>Open Design 完整 Web 应用与独立 Agent。</p>
+            <div class="runtime-stack iframe-stack">
+              <span>Mobilework Sidebar</span><i></i><span>Open Design Web iframe</span><i></i><span>Independent Daemon + Agent</span>
+            </div>
+            <dl>
+              <div><dt>状态</dt><dd>Web project/conversation/run</dd></div>
+              <div><dt>问题 UI</dt><dd>Open Design QuestionFormView</dd></div>
+              <div><dt>用途</dt><dd>完整 Studio 浏览、预览与迭代</dd></div>
+            </dl>
+          </article>
+        </div>
+      </section>
+
+      <section class="section evidence" id="evidence" data-section="evidence">
+        <div class="section-heading reveal">
+          <div>
+            <span class="section-number">05 / EVIDENCE</span>
+            <h2>真实案例稍后接入，<br />证据链位置已经预留</h2>
+          </div>
+          <p>
+            每个案例统一展示用户需求、中间问题、回答上下文和生成结果。后续只替换素材配置，
+            不需要改动汇报网站的结构与交互。
+          </p>
+        </div>
+
+        <div class="case-grid reveal">
+          <article class="case-card" data-case="a2a">
+            <div class="case-top"><span>CASE / 01</span><b>A2A</b><i class="case-color color-a2a"></i></div>
+            <div class="case-visual">
+              <div class="case-placeholder-lines"><i></i><i></i><i></i></div>
+              <span>问题截图 + 结果 HTML</span>
+            </div>
+            <h3>远程 Agent 多轮任务</h3>
+            <p>展示 INPUT_REQUIRED、用户回答和同一 Task 恢复生成。</p>
+            <button class="case-button" type="button">查看案例槽位 <span>→</span></button>
+          </article>
+          <article class="case-card" data-case="elicitation">
+            <div class="case-top"><span>CASE / 02</span><b>MCP Elicitation</b><i class="case-color color-elicitation"></i></div>
+            <div class="case-visual">
+              <div class="case-placeholder-lines"><i></i><i></i><i></i></div>
+              <span>固定 Schema + Question UI + 结果 HTML</span>
+            </div>
+            <h3>固定 Schema 原生 Round-trip</h3>
+            <p>展示 elicitation/create、OpenWork Question UI、稳定 raw value 和同一 tool call 恢复。</p>
+            <button class="case-button" type="button">查看案例槽位 <span>→</span></button>
+          </article>
+          <article class="case-card" data-case="multiMcp">
+            <div class="case-top"><span>CASE / 03</span><b>多轮 MCP</b><i class="case-color color-mcp"></i></div>
+            <div class="case-visual">
+              <div class="case-placeholder-lines"><i></i><i></i><i></i></div>
+              <span>动态表单 + SQLite Session + 结果 HTML</span>
+            </div>
+            <h3>动态 Discovery Session</h3>
+            <p>展示内层 Agent 问题、持久化 session、权威 brief 和新 conversation 生成。</p>
+            <button class="case-button" type="button">查看案例槽位 <span>→</span></button>
+          </article>
+        </div>
+      </section>
+
+      <section class="section conclusion" id="conclusion" data-section="conclusion">
+        <div class="conclusion-shell reveal">
+          <span class="section-number">06 / TAKEAWAY</span>
+          <h2>Mobilework 连接的不是一个生成按钮，<br />而是一套能够承担设计交付的专业应用。</h2>
+          <div class="conclusion-grid">
+            <article>
+              <span>OPEN DESIGN 是什么</span>
+              <h3>专业设计生产应用</h3>
+              <p>
+                独立拥有需求澄清、Agent 工作流、工具与技能、项目和产物生命周期，
+                并通过输出策略把生成内容变成可验证、可部署的交付物。
+              </p>
+            </article>
+            <article>
+              <span>为什么连接 MOBILEWORK</span>
+              <h3>让专业能力进入用户工作流</h3>
+              <p>
+                用户无需离开工作空间即可委托设计、回答问题并收回结果；Mobilework 无需复制 Open Design
+                的业务代码，双方仍能独立部署和演进。
+              </p>
+            </article>
+          </div>
+          <div class="final-line">
+            <span class="live-dot"></span>
+            <p><b>连接目标：</b>在统一用户体验下，获得可委托、可澄清、可控交付的专业设计生产能力。</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="brand footer-brand"><span class="brand-mark"><i></i><i></i><i></i></span><span>Mobilework <b>×</b> Open Design</span></div>
+      <p>Internal showcase · Placeholder assets are ready to be replaced</p>
+      <a href="#hero">回到顶部 ↑</a>
+    </footer>
+
+    <dialog class="case-dialog" id="caseDialog">
+      <div class="dialog-shell">
+        <div class="dialog-head">
+          <div><span id="dialogOverline">CASE / 01</span><h2 id="dialogTitle">A2A 案例槽位</h2></div>
+          <button id="closeDialog" type="button" aria-label="关闭案例详情">×</button>
+        </div>
+        <div class="dialog-progress" aria-label="案例证据链">
+          <span class="is-active">用户需求</span><i></i><span>中间问题</span><i></i><span>回答上下文</span><i></i><span>生成结果</span>
+        </div>
+        <div class="dialog-grid">
+          <article><span>INPUT</span><h3>用户原始需求</h3><div class="asset-slot text-slot" id="dialogRequest"></div></article>
+          <article><span>QUESTION</span><h3>中间问题截图</h3><div class="asset-slot image-slot" id="dialogImageSlot"><b>拖入 / 替换截图</b><small id="dialogImagePath"></small></div></article>
+          <article><span>CONTEXT</span><h3>回答与协议上下文</h3><pre class="asset-slot"><code id="dialogContext"></code></pre></article>
+          <article><span>RESULT</span><h3>生成结果 HTML</h3><div class="asset-slot result-slot" id="dialogResultSlot"><b>接入 iframe 预览</b><small id="dialogResultPath"></small></div></article>
+        </div>
+        <p class="dialog-tip">素材到位后，只需修改 <code>script.js</code> 顶部的 <code>caseData</code> 配置。</p>
+      </div>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite">命令已复制</div>
+  </body>
+</html>

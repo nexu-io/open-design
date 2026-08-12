@@ -28,9 +28,10 @@ The acceptance path is:
 
 ## Protocol baseline
 
-The implementation targets A2A Protocol 1.0 and pins the official JavaScript
-SDK at `@a2a-js/sdk@1.0.1`. JSON-RPC is the only transport in the proof of
-concept.
+The implementation targets A2A Protocol 1.0. Open Design pins the official
+JavaScript SDK at `@a2a-js/sdk@1.0.1`; the deliberately small OpenCode adapter
+uses the documented v1 ProtoJSON wire format directly. JSON-RPC is the only
+transport in the proof of concept.
 
 The implementation uses the v1 wire model:
 
@@ -80,9 +81,8 @@ changing the client protocol.
 ### OpenCode is the A2A client
 
 OpenCode core source is not modified. The proof of concept adds one
-project-level plugin under `.opencode/plugins/` and a plugin-local dependency
-manifest under `.opencode/`. The plugin uses the official A2A client SDK and
-registers four narrow tools:
+project-level custom-tool module under `.opencode/tool/`. It has no added
+runtime dependency and registers four narrow tools:
 
 - `open_design_a2a_send`: discover the Agent Card and submit an initial
   message;
@@ -92,7 +92,8 @@ registers four narrow tools:
 - `open_design_a2a_cancel`: cancel an active task.
 
 The server URL comes from `OD_A2A_URL` and defaults to the normal local Open
-Design daemon origin. The plugin does not store authoritative task state; the
+Design daemon origin. `OD_A2A_TOKEN` supplies a bearer token for a protected
+remote daemon. The tool module does not store authoritative task state; the
 model passes the returned opaque `taskId` and `contextId` into later calls.
 
 When the task requires input, the plugin returns the structured form to the
@@ -135,9 +136,9 @@ while the A2A `taskId` remains unchanged.
 
 ## Question Form transport
 
-Question Form becomes a shared transport contract rather than a web-private
-type. Pure completed-form parsing and answer formatting live in
-`packages/contracts`; progressive streaming rendering remains web-owned.
+Question Form becomes a shared transport DTO rather than a web-private type.
+Pure completed-form parsing, validation, and answer formatting live in the
+daemon A2A adapter; progressive streaming rendering remains web-owned.
 
 The input-required status message contains:
 
@@ -180,7 +181,7 @@ The answer message contains a data part with media type
 ```
 
 The server validates the form id, required questions, answer value shapes, and
-finite-choice values. It then uses the shared formatter to produce the same
+finite-choice values. It then uses the A2A formatter to produce the same
 `[form answers — <id>]` user message the Open Design web client submits today.
 This keeps the inner agent and workflow behavior identical across web and A2A.
 
@@ -204,9 +205,9 @@ explicit artifacts or continued through the existing Open Design MCP tools.
 
 ## Polling and concurrency
 
-The initial and answer calls request non-blocking execution. The client polls
-`GetTask`; the server refreshes the task from the current Open Design run on
-each retrieval.
+The initial and answer calls request non-blocking execution. The Open Design
+executor polls the current run in the background while the client polls
+`GetTask` for persisted task snapshots.
 
 Only one run may be active for a task. Answer submission is accepted only while
 the task is `INPUT_REQUIRED`. Duplicate answer submissions with the same A2A
@@ -252,23 +253,18 @@ of concept.
 
 Open Design changes are expected in these bounded areas:
 
-- `packages/contracts`: shared completed Question Form DTO, parser, validator,
-  and answer formatter;
+- `packages/contracts`: shared completed Question Form and A2A transport DTOs;
 - `apps/daemon/src/a2a/`: Agent Card, daemon HTTP client, executor, state
   mapping, and route registration;
 - `apps/daemon/src/server.ts`: one route registration and dependency wiring;
 - `apps/daemon/package.json` and `pnpm-lock.yaml`: official A2A SDK dependency;
-- `apps/daemon/tests/` and `packages/contracts/tests/`: focused protocol and
-  contract tests;
+- `apps/daemon/tests/`: focused protocol, route, and contract tests;
 - protocol usage documentation for starting Open Design and pointing a client
   at its Agent Card.
 
 OpenCode changes are limited to:
 
-- `.opencode/plugins/open-design-a2a.ts`;
-- `.opencode/package.json` for the official client SDK dependency;
-- a focused plugin test only if the repository's project-plugin test harness
-  can cover it without modifying core runtime code.
+- `.opencode/tool/open-design-a2a.ts`.
 
 ## Test strategy
 
