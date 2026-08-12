@@ -3,6 +3,7 @@ import { normalizeNamespace } from "@open-design/sidecar-proto";
 
 export const CLOSURE_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_DISTRIBUTION_SCHEMA_VERSION = 2 as const;
+export const CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_PROTOCOL_VERSION = 1 as const;
 export const CLOSURE_INVENTORY_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_SIGNATURE_SCHEMA_VERSION = 1 as const;
@@ -126,6 +127,45 @@ export type ClosureDistributionManifestDraft = {
 
 export type ClosureDistributionManifest = Omit<ClosureDistributionManifestDraft, "identity"> & {
   identity: ClosureDistributionIdentity;
+};
+
+export type ClosureDistributionSharedContribution = {
+  body: {
+    artifact: ClosureDistributionBlob;
+    entryPath: typeof CLOSURE_ARCHIVE_ENTRY_PATH;
+    treeDigest: ClosureDigest;
+  };
+  channel: ReleaseChannel;
+  launcher: {
+    artifact: ClosureDistributionBlob;
+    entryPath: typeof CLOSURE_LAUNCHER_ENTRY_PATH;
+    handoffPath: typeof CLOSURE_LAUNCHER_HANDOFF_PATH;
+    treeDigest: ClosureDigest;
+  };
+  protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
+  resources: Array<{
+    artifact: ClosureDistributionBlob;
+    id: string;
+    title: string;
+    treeDigest: ClosureDigest;
+  }>;
+  schemaVersion: typeof CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION;
+  shellCompatibility: ClosureShellCompatibility;
+  version: string;
+};
+
+export type ClosureDistributionTargetContribution = {
+  channel: ReleaseChannel;
+  native: { artifact: ClosureDistributionBlob; treeDigest: ClosureDigest };
+  protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
+  runtime: {
+    artifact: ClosureDistributionBlob;
+    entryPath: string;
+    treeDigest: ClosureDigest;
+  };
+  schemaVersion: typeof CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION;
+  target: string;
+  version: string;
 };
 
 export type ClosureDistributionDigest = (canonicalManifest: string) => ClosureDigest;
@@ -561,6 +601,17 @@ function normalizeDistributionShellCompatibility(value: unknown): ClosureShellCo
   }));
 }
 
+function normalizeDistributionBlob(value: unknown, label: string): ClosureDistributionBlob {
+  const blob = requireRecord(value, label);
+  requireKnownKeys(blob, ["digest", "mediaType", "size", "url"], label);
+  return {
+    digest: normalizeDigest(blob.digest),
+    mediaType: normalizeMediaType(blob.mediaType),
+    size: normalizePositiveInteger(blob.size, `${label} size`),
+    url: normalizeHttpUrl(blob.url),
+  };
+}
+
 function normalizeDistributionBlobs(value: unknown): Record<string, ClosureDistributionBlob> {
   const blobs = requireRecord(value, "closure distribution blobs");
   const entries = Object.entries(blobs).sort(([left], [right]) => compareCanonicalStrings(left, right));
@@ -569,21 +620,11 @@ function normalizeDistributionBlobs(value: unknown): Record<string, ClosureDistr
   }
   return Object.fromEntries(entries.map(([key, rawBlob]) => {
     const digest = normalizeDigest(key);
-    const blob = requireRecord(rawBlob, `closure distribution blob ${digest}`);
-    requireKnownKeys(
-      blob,
-      ["digest", "mediaType", "size", "url"],
-      `closure distribution blob ${digest}`,
-    );
-    if (normalizeDigest(blob.digest) !== digest) {
+    const blob = normalizeDistributionBlob(rawBlob, `closure distribution blob ${digest}`);
+    if (blob.digest !== digest) {
       throw new ClosureProtocolError(`closure distribution blob ${digest} must repeat its map digest`);
     }
-    return [digest, {
-      digest,
-      mediaType: normalizeMediaType(blob.mediaType),
-      size: normalizePositiveInteger(blob.size, `closure distribution blob ${digest} size`),
-      url: normalizeHttpUrl(blob.url),
-    }];
+    return [digest, blob];
   }));
 }
 
@@ -818,6 +859,234 @@ export function validateClosureDistributionManifest(
       digest: actualDigest,
     },
   };
+}
+
+function validateContributionIdentity(value: Record<string, unknown>): {
+  channel: ReleaseChannel;
+  protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
+  version: string;
+} {
+  if (value.schemaVersion !== CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION) {
+    throw new ClosureProtocolError(
+      `unsupported closure distribution contribution schema version: ${String(value.schemaVersion)}`,
+    );
+  }
+  return {
+    channel: normalizeChannel(value.channel),
+    protocolVersion: normalizeProtocolVersion(value.protocolVersion),
+    version: normalizeVersion(value.version, "closure distribution contribution version"),
+  };
+}
+
+function normalizeContributionArtifact(value: unknown, label: string): ClosureDistributionBlob {
+  return normalizeDistributionBlob(value, `${label} artifact`);
+}
+
+/** Parse the once-built launcher/body/resource declaration crossing job boundaries. */
+export function validateClosureDistributionSharedContribution(
+  value: unknown,
+): ClosureDistributionSharedContribution {
+  const contribution = requireRecord(value, "closure distribution shared contribution");
+  requireKnownKeys(
+    contribution,
+    [
+      "body",
+      "channel",
+      "launcher",
+      "protocolVersion",
+      "resources",
+      "schemaVersion",
+      "shellCompatibility",
+      "version",
+    ],
+    "closure distribution shared contribution",
+  );
+  const identity = validateContributionIdentity(contribution);
+  const body = requireRecord(contribution.body, "closure distribution shared body");
+  requireKnownKeys(body, ["artifact", "entryPath", "treeDigest"], "closure distribution shared body");
+  if (body.entryPath !== CLOSURE_ARCHIVE_ENTRY_PATH) {
+    throw new ClosureProtocolError(
+      `closure distribution shared body entry path must be ${CLOSURE_ARCHIVE_ENTRY_PATH}`,
+    );
+  }
+  const launcher = requireRecord(contribution.launcher, "closure distribution shared launcher");
+  requireKnownKeys(
+    launcher,
+    ["artifact", "entryPath", "handoffPath", "treeDigest"],
+    "closure distribution shared launcher",
+  );
+  if (
+    launcher.entryPath !== CLOSURE_LAUNCHER_ENTRY_PATH
+    || launcher.handoffPath !== CLOSURE_LAUNCHER_HANDOFF_PATH
+  ) {
+    throw new ClosureProtocolError("closure distribution shared launcher entries are invalid");
+  }
+  if (!Array.isArray(contribution.resources)) {
+    throw new ClosureProtocolError("closure distribution shared resources must be an array");
+  }
+  const resources = contribution.resources.map((value) => {
+    const resource = requireRecord(value, "closure distribution shared resource");
+    requireKnownKeys(
+      resource,
+      ["artifact", "id", "title", "treeDigest"],
+      "closure distribution shared resource",
+    );
+    return {
+      artifact: normalizeContributionArtifact(resource.artifact, "closure distribution shared resource"),
+      id: normalizeProtocolToken(resource.id, "closure distribution shared resource id"),
+      title: normalizeDisplayTitle(resource.title, "closure distribution shared resource title"),
+      treeDigest: normalizeDigest(resource.treeDigest),
+    };
+  }).sort((left, right) => compareCanonicalStrings(left.id, right.id));
+  for (let index = 1; index < resources.length; index += 1) {
+    if (resources[index - 1]?.id === resources[index]?.id) {
+      throw new ClosureProtocolError("closure distribution shared resource ids must be unique");
+    }
+  }
+  return {
+    body: {
+      artifact: normalizeContributionArtifact(body.artifact, "closure distribution shared body"),
+      entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
+      treeDigest: normalizeDigest(body.treeDigest),
+    },
+    ...identity,
+    launcher: {
+      artifact: normalizeContributionArtifact(launcher.artifact, "closure distribution shared launcher"),
+      entryPath: CLOSURE_LAUNCHER_ENTRY_PATH,
+      handoffPath: CLOSURE_LAUNCHER_HANDOFF_PATH,
+      treeDigest: normalizeDigest(launcher.treeDigest),
+    },
+    resources,
+    schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
+    shellCompatibility: normalizeDistributionShellCompatibility({
+      shell: contribution.shellCompatibility,
+    }),
+  };
+}
+
+/** Parse one platform-owned runtime/native declaration crossing job boundaries. */
+export function validateClosureDistributionTargetContribution(
+  value: unknown,
+): ClosureDistributionTargetContribution {
+  const contribution = requireRecord(value, "closure distribution target contribution");
+  requireKnownKeys(
+    contribution,
+    ["channel", "native", "protocolVersion", "runtime", "schemaVersion", "target", "version"],
+    "closure distribution target contribution",
+  );
+  const identity = validateContributionIdentity(contribution);
+  const native = requireRecord(contribution.native, "closure distribution target native");
+  requireKnownKeys(native, ["artifact", "treeDigest"], "closure distribution target native");
+  const runtime = requireRecord(contribution.runtime, "closure distribution target runtime");
+  requireKnownKeys(
+    runtime,
+    ["artifact", "entryPath", "treeDigest"],
+    "closure distribution target runtime",
+  );
+  return {
+    ...identity,
+    native: {
+      artifact: normalizeContributionArtifact(native.artifact, "closure distribution target native"),
+      treeDigest: normalizeDigest(native.treeDigest),
+    },
+    runtime: {
+      artifact: normalizeContributionArtifact(runtime.artifact, "closure distribution target runtime"),
+      entryPath: normalizeRelativePath(runtime.entryPath, "closure distribution target runtime entry path"),
+      treeDigest: normalizeDigest(runtime.treeDigest),
+    },
+    schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
+    target: normalizePlatform(contribution.target),
+  };
+}
+
+function insertContributionBlob(
+  blobs: Record<string, ClosureDistributionBlob>,
+  blob: ClosureDistributionBlob,
+): void {
+  const current = blobs[blob.digest];
+  if (current != null && JSON.stringify(current) !== JSON.stringify(blob)) {
+    throw new ClosureProtocolError(`closure distribution blob metadata conflicts for ${blob.digest}`);
+  }
+  blobs[blob.digest] = blob;
+}
+
+/** Merge validated cross-job declarations into the sole canonical release graph. */
+export function mergeClosureDistributionContributions(
+  sharedInput: unknown,
+  targetInputs: readonly unknown[],
+  digest: ClosureDistributionDigest,
+): ClosureDistributionManifest {
+  const shared = validateClosureDistributionSharedContribution(sharedInput);
+  if (targetInputs.length === 0) {
+    throw new ClosureProtocolError("closure distribution requires target contributions");
+  }
+  const blobs: Record<string, ClosureDistributionBlob> = {};
+  const targets: Record<string, ClosureDistributionTarget> = {};
+  for (const artifact of [
+    shared.launcher.artifact,
+    shared.body.artifact,
+    ...shared.resources.map((resource) => resource.artifact),
+  ]) insertContributionBlob(blobs, artifact);
+  for (const input of targetInputs) {
+    const contribution = validateClosureDistributionTargetContribution(input);
+    if (
+      contribution.channel !== shared.channel
+      || contribution.protocolVersion !== shared.protocolVersion
+      || contribution.version !== shared.version
+    ) {
+      throw new ClosureProtocolError(
+        "closure target contributions must describe one release identity",
+      );
+    }
+    if (targets[contribution.target] != null) {
+      throw new ClosureProtocolError(
+        `duplicate closure target contribution: ${contribution.target}`,
+      );
+    }
+    insertContributionBlob(blobs, contribution.native.artifact);
+    insertContributionBlob(blobs, contribution.runtime.artifact);
+    targets[contribution.target] = {
+      native: {
+        blob: contribution.native.artifact.digest,
+        treeDigest: contribution.native.treeDigest,
+      },
+      runtime: {
+        blob: contribution.runtime.artifact.digest,
+        entryPath: contribution.runtime.entryPath,
+        treeDigest: contribution.runtime.treeDigest,
+      },
+    };
+  }
+  return createClosureDistributionManifest({
+    blobs,
+    compatibility: { shell: shared.shellCompatibility },
+    identity: {
+      channel: shared.channel,
+      protocolVersion: shared.protocolVersion,
+      version: shared.version,
+    },
+    required: {
+      body: {
+        blob: shared.body.artifact.digest,
+        entryPath: shared.body.entryPath,
+        treeDigest: shared.body.treeDigest,
+      },
+      launcher: {
+        blob: shared.launcher.artifact.digest,
+        entryPath: shared.launcher.entryPath,
+        handoffPath: shared.launcher.handoffPath,
+        treeDigest: shared.launcher.treeDigest,
+      },
+      targets,
+    },
+    resources: shared.resources.map((resource) => ({
+      blob: resource.artifact.digest,
+      id: resource.id,
+      title: resource.title,
+      treeDigest: resource.treeDigest,
+    })),
+    schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  }, digest);
 }
 
 export function resolveClosureDistributionTarget(

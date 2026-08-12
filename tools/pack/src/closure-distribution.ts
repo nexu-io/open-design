@@ -4,20 +4,23 @@ import { stat } from "node:fs/promises";
 
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
-  CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
   CLOSURE_LAUNCHER_ENTRY_PATH,
   CLOSURE_LAUNCHER_HANDOFF_PATH,
   CLOSURE_PROTOCOL_VERSION,
   createClosureDistributionManifest,
+  mergeClosureDistributionContributions,
+  validateClosureDistributionSharedContribution,
+  validateClosureDistributionTargetContribution,
   type ClosureDigest,
   type ClosureDistributionBlob,
   type ClosureDistributionManifest,
   type ClosureDistributionManifestDraft,
   type ClosureShellCompatibility,
+  type ClosureDistributionSharedContribution,
+  type ClosureDistributionTargetContribution,
 } from "@open-design/closure-proto";
 import type { ReleaseChannel } from "@open-design/release";
-
-export const CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION = 1 as const;
 
 export type ClosureDistributionArtifactSource = Readonly<{
   mediaType: string;
@@ -34,44 +37,10 @@ export type ClosureDistributionResourceSource = ClosureDistributionArtifactSourc
   title: string;
 }>;
 
-export type ClosureDistributionSharedContribution = Readonly<{
-  body: Readonly<{
-    artifact: ClosureDistributionBlob;
-    entryPath: typeof CLOSURE_ARCHIVE_ENTRY_PATH;
-    treeDigest: ClosureDigest;
-  }>;
-  channel: ReleaseChannel;
-  launcher: Readonly<{
-    artifact: ClosureDistributionBlob;
-    entryPath: typeof CLOSURE_LAUNCHER_ENTRY_PATH;
-    handoffPath: typeof CLOSURE_LAUNCHER_HANDOFF_PATH;
-    treeDigest: ClosureDigest;
-  }>;
-  protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
-  resources: readonly Readonly<{
-    artifact: ClosureDistributionBlob;
-    id: string;
-    title: string;
-    treeDigest: ClosureDigest;
-  }>[];
-  schemaVersion: typeof CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION;
-  shellCompatibility: ClosureShellCompatibility;
-  version: string;
-}>;
-
-export type ClosureDistributionTargetContribution = Readonly<{
-  channel: ReleaseChannel;
-  native: Readonly<{ artifact: ClosureDistributionBlob; treeDigest: ClosureDigest }>;
-  protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
-  runtime: Readonly<{
-    artifact: ClosureDistributionBlob;
-    entryPath: string;
-    treeDigest: ClosureDigest;
-  }>;
-  schemaVersion: typeof CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION;
-  target: string;
-  version: string;
-}>;
+export type {
+  ClosureDistributionSharedContribution,
+  ClosureDistributionTargetContribution,
+} from "@open-design/closure-proto";
 
 export type CreateClosureDistributionSharedContributionOptions = Readonly<{
   blobOrigin: string;
@@ -136,17 +105,6 @@ async function inspectArtifact(
   };
 }
 
-function insertBlob(
-  blobs: Record<string, ClosureDistributionBlob>,
-  blob: ClosureDistributionBlob,
-): void {
-  const current = blobs[blob.digest];
-  if (current != null && JSON.stringify(current) !== JSON.stringify(blob)) {
-    throw new Error(`Closure blob metadata conflicts for ${blob.digest}`);
-  }
-  blobs[blob.digest] = blob;
-}
-
 /** Seal already-materialized build inputs into the target-neutral wire manifest. */
 export function sealClosureDistributionManifest(
   draft: ClosureDistributionManifestDraft,
@@ -166,7 +124,7 @@ export async function createClosureDistributionSharedContribution(
   if (launcher == null || body == null) {
     throw new Error("Closure shared component inspection returned an incomplete result");
   }
-  return Object.freeze({
+  return validateClosureDistributionSharedContribution({
     body: Object.freeze({
       artifact: body,
       entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
@@ -204,7 +162,7 @@ export async function createClosureDistributionTargetContribution(
     inspectArtifact(options.runtime, options),
     inspectArtifact(options.native, options),
   ]);
-  return Object.freeze({
+  return validateClosureDistributionTargetContribution({
     channel: options.channel,
     native: Object.freeze({ artifact: native, treeDigest: options.native.treeDigest }),
     protocolVersion: CLOSURE_PROTOCOL_VERSION,
@@ -219,25 +177,6 @@ export async function createClosureDistributionTargetContribution(
   });
 }
 
-function assertContributionIdentity(
-  shared: ClosureDistributionSharedContribution,
-  candidate: ClosureDistributionTargetContribution,
-): void {
-  if (
-    shared.channel !== candidate.channel
-    || shared.protocolVersion !== candidate.protocolVersion
-    || shared.version !== candidate.version
-  ) {
-    throw new Error("Closure target contributions must describe one release identity");
-  }
-}
-
-function assertContributionSchema(value: Readonly<{ schemaVersion: number }>): void {
-  if (value.schemaVersion !== CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION) {
-    throw new Error(`unsupported Closure contribution schema: ${String(value.schemaVersion)}`);
-  }
-}
-
 /**
  * Merge one once-built shared contribution and platform-owned contributions
  * into the sole public version-wide graph. Shared archives are never rebuilt in
@@ -248,63 +187,5 @@ export function mergeClosureDistributionTargetContributions(
   shared: ClosureDistributionSharedContribution,
   contributions: readonly ClosureDistributionTargetContribution[],
 ): ClosureDistributionManifest {
-  assertContributionSchema(shared);
-  if (contributions.length === 0) throw new Error("Closure distribution requires target contributions");
-  const blobs: Record<string, ClosureDistributionBlob> = {};
-  const targets: ClosureDistributionManifestDraft["required"]["targets"] = {};
-  for (const artifact of [
-    shared.launcher.artifact,
-    shared.body.artifact,
-    ...shared.resources.map((resource) => resource.artifact),
-  ]) insertBlob(blobs, artifact);
-  for (const contribution of contributions) {
-    assertContributionSchema(contribution);
-    assertContributionIdentity(shared, contribution);
-    if (targets[contribution.target] != null) {
-      throw new Error(`duplicate Closure target contribution: ${contribution.target}`);
-    }
-    insertBlob(blobs, contribution.native.artifact);
-    insertBlob(blobs, contribution.runtime.artifact);
-    targets[contribution.target] = {
-      native: {
-        blob: contribution.native.artifact.digest,
-        treeDigest: contribution.native.treeDigest,
-      },
-      runtime: {
-        blob: contribution.runtime.artifact.digest,
-        entryPath: contribution.runtime.entryPath,
-        treeDigest: contribution.runtime.treeDigest,
-      },
-    };
-  }
-  return sealClosureDistributionManifest({
-    blobs,
-    compatibility: { shell: shared.shellCompatibility },
-    identity: {
-      channel: shared.channel,
-      protocolVersion: shared.protocolVersion,
-      version: shared.version,
-    },
-    required: {
-      body: {
-        blob: shared.body.artifact.digest,
-        entryPath: shared.body.entryPath,
-        treeDigest: shared.body.treeDigest,
-      },
-      launcher: {
-        blob: shared.launcher.artifact.digest,
-        entryPath: shared.launcher.entryPath,
-        handoffPath: shared.launcher.handoffPath,
-        treeDigest: shared.launcher.treeDigest,
-      },
-      targets,
-    },
-    resources: shared.resources.map((resource) => ({
-      blob: resource.artifact.digest,
-      id: resource.id,
-      title: resource.title,
-      treeDigest: resource.treeDigest,
-    })),
-    schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
-  });
+  return mergeClosureDistributionContributions(shared, contributions, sha256CanonicalManifest);
 }
