@@ -2,7 +2,7 @@
 
 import { execFile } from 'node:child_process';
 import { access, chmod, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
@@ -313,6 +313,22 @@ type DesktopIdentityMarker = {
     standalonePid?: number;
   };
   version: number;
+};
+
+type MacLaunchServicesWitness = {
+  appPath: string;
+  bundleId: string | null;
+  embeddedConfig: Record<string, unknown> | null;
+  executablePath: string;
+  inheritedLaunchEnv: Record<string, string | null>;
+  launchConfig: Record<string, unknown> | null;
+  observations: Array<{ elapsedMs: number; processes: string[] }>;
+  openCompletedAt: string;
+  systemLog: string[];
+  startedAt: string;
+  stderrPath: string;
+  stdoutPath: string;
+  witnessPath: string;
 };
 
 type PayloadRuntimeAcceptance = {
@@ -2540,7 +2556,10 @@ async function waitForHealthyDesktop(
     await delay(1000);
   }
 
-  throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
+  throw new Error([
+    `packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`,
+    await describeMacLaunchServicesWitness(),
+  ].join('\n'));
 }
 
 async function waitForHealthyDesktopShellVersion(
@@ -3031,7 +3050,164 @@ async function launchMacAppWithLaunchServices(installedAppPath: string): Promise
   // LaunchServices on CI can retain a terminated record for a temporary test
   // bundle and accept a URL without spawning it. Prove cold activation first;
   // once healthy, the caller separately proves protocol delivery to that PID.
-  await execFileAsync('/usr/bin/open', ['-n', installedAppPath]);
+  const logsRoot = join(runtimeNamespaceRoot, 'logs', 'desktop');
+  const stdoutPath = join(logsRoot, 'launch-services.stdout.log');
+  const stderrPath = join(logsRoot, 'launch-services.stderr.log');
+  const witnessPath = join(logsRoot, 'launch-services-witness.json');
+  const plist = await readMacBundlePlist(installedAppPath);
+  const executableName = typeof plist.CFBundleExecutable === 'string'
+    ? plist.CFBundleExecutable
+    : basename(installedAppPath, '.app');
+  const executablePath = join(installedAppPath, 'Contents', 'MacOS', executableName);
+  const bundleId = typeof plist.CFBundleIdentifier === 'string' ? plist.CFBundleIdentifier : null;
+  const embeddedConfigPath = join(installedAppPath, 'Contents', 'Resources', 'open-design-config.json');
+  const launchConfigPath = join(runtimeNamespaceRoot, 'runtime', 'open-design-config.json');
+  const startedAt = new Date().toISOString();
+
+  await mkdir(logsRoot, { recursive: true });
+  await Promise.all([
+    writeFile(stdoutPath, '', 'utf8'),
+    writeFile(stderrPath, '', 'utf8'),
+    rm(witnessPath, { force: true }),
+  ]);
+  await execFileAsync('/usr/bin/open', [
+    '-n',
+    '--stdout', stdoutPath,
+    '--stderr', stderrPath,
+    installedAppPath,
+  ]);
+  const openCompletedAt = new Date().toISOString();
+  const observations = await observeMacLaunchProcesses(executablePath);
+  const witness: MacLaunchServicesWitness = {
+    appPath: installedAppPath,
+    bundleId,
+    embeddedConfig: projectPackagedConfig(await readJsonRecordIfExists(embeddedConfigPath)),
+    executablePath,
+    inheritedLaunchEnv: {
+      OD_PACKAGED_CONFIG_PATH: process.env.OD_PACKAGED_CONFIG_PATH ?? null,
+      OD_PACKAGED_NAMESPACE: process.env.OD_PACKAGED_NAMESPACE ?? null,
+      OD_PACKAGED_NAMESPACE_BASE_ROOT: process.env.OD_PACKAGED_NAMESPACE_BASE_ROOT ?? null,
+      OD_PROCESS_STAMP: process.env.OD_PROCESS_STAMP ?? null,
+    },
+    launchConfig: projectPackagedConfig(await readJsonRecordIfExists(launchConfigPath)),
+    observations,
+    openCompletedAt,
+    systemLog: await collectMacLaunchServicesLog({ bundleId, executableName }),
+    startedAt,
+    stderrPath,
+    stdoutPath,
+    witnessPath,
+  };
+  await writeFile(witnessPath, `${JSON.stringify(witness, null, 2)}\n`, 'utf8');
+  console.info(`[mac launch-services witness] ${JSON.stringify(witness)}`);
+}
+
+async function readMacBundlePlist(installedAppPath: string): Promise<Record<string, unknown>> {
+  const { stdout } = await execFileAsync('/usr/bin/plutil', [
+    '-convert',
+    'json',
+    '-o',
+    '-',
+    join(installedAppPath, 'Contents', 'Info.plist'),
+  ]);
+  const value = JSON.parse(stdout) as unknown;
+  return isRecord(value) ? value : {};
+}
+
+async function readJsonRecordIfExists(filePath: string): Promise<Record<string, unknown> | null> {
+  if (!(await pathExists(filePath))) return null;
+  try {
+    const value = JSON.parse(await readFile(filePath, 'utf8')) as unknown;
+    return isRecord(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function projectPackagedConfig(config: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (config == null) return null;
+  return Object.fromEntries([
+    'namespace',
+    'namespaceBaseRoot',
+    'releaseVersion',
+    'resourceRoot',
+    'shellVersion',
+    'webOutputMode',
+  ].filter((key) => key in config).map((key) => [key, config[key]]));
+}
+
+async function listMacLaunchProcesses(executablePath: string): Promise<string[]> {
+  const { stdout } = await execFileAsync('/bin/ps', ['-axo', 'pid=,ppid=,state=,etime=,command='], {
+    maxBuffer: 2 * 1024 * 1024,
+  });
+  return stdout.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.includes(executablePath));
+}
+
+async function observeMacLaunchProcesses(
+  executablePath: string,
+): Promise<Array<{ elapsedMs: number; processes: string[] }>> {
+  const startedAt = Date.now();
+  const observations: Array<{ elapsedMs: number; processes: string[] }> = [];
+  let lastProjection = '';
+  let firstObservedAt: number | null = null;
+  while (Date.now() - startedAt < 12_000) {
+    const processes = await listMacLaunchProcesses(executablePath);
+    const projection = JSON.stringify(processes);
+    if (projection !== lastProjection || observations.length === 0) {
+      observations.push({ elapsedMs: Date.now() - startedAt, processes });
+      lastProjection = projection;
+    }
+    if (processes.length > 0 && firstObservedAt == null) firstObservedAt = Date.now();
+    if (firstObservedAt != null && Date.now() - firstObservedAt >= 3_000) break;
+    await delay(250);
+  }
+  const finalProcesses = await listMacLaunchProcesses(executablePath);
+  if (JSON.stringify(finalProcesses) !== lastProjection) {
+    observations.push({ elapsedMs: Date.now() - startedAt, processes: finalProcesses });
+  }
+  return observations;
+}
+
+async function collectMacLaunchServicesLog(input: {
+  bundleId: string | null;
+  executableName: string;
+}): Promise<string[]> {
+  const terms = [
+    `process == ${JSON.stringify(input.executableName)}`,
+    `eventMessage CONTAINS[c] ${JSON.stringify(input.executableName)}`,
+    ...(input.bundleId == null ? [] : [`eventMessage CONTAINS[c] ${JSON.stringify(input.bundleId)}`]),
+  ];
+  try {
+    const { stdout, stderr } = await execFileAsync('/usr/bin/log', [
+      'show',
+      '--style', 'compact',
+      '--last', '2m',
+      '--predicate', terms.join(' OR '),
+    ], { maxBuffer: 4 * 1024 * 1024 });
+    return `${stdout}\n${stderr}`.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).slice(-120);
+  } catch (error) {
+    return [`log show failed: ${formatUnknown(error)}`];
+  }
+}
+
+async function describeMacLaunchServicesWitness(): Promise<string> {
+  const logsRoot = join(runtimeNamespaceRoot, 'logs', 'desktop');
+  const witnessPath = join(logsRoot, 'launch-services-witness.json');
+  const sections: string[] = ['mac LaunchServices cold-launch diagnostics:'];
+  for (const [label, filePath] of [
+    ['witness', witnessPath],
+    ['stdout', join(logsRoot, 'launch-services.stdout.log')],
+    ['stderr', join(logsRoot, 'launch-services.stderr.log')],
+    ['desktop', join(logsRoot, 'latest.log')],
+  ] as const) {
+    if (!(await pathExists(filePath))) {
+      sections.push(`[${label}] missing: ${filePath}`);
+      continue;
+    }
+    const lines = (await readFile(filePath, 'utf8')).split(/\r?\n/).filter(Boolean).slice(-160);
+    sections.push(`[${label}] ${filePath}`, ...(lines.length === 0 ? ['(empty)'] : lines));
+  }
+  return sections.join('\n');
 }
 
 async function pathExists(filePath: string): Promise<boolean> {

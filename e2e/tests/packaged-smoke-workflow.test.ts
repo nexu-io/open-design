@@ -2818,7 +2818,11 @@ process.stdin.on("end", () => {
     expect(macSpec).toContain("expectedPlatform: packagedMacClosureTarget");
     expect(macSpec).not.toContain("expectedPlatform: 'darwin-arm64'");
     expect(macSpec).toContain("launchMacAppWithLaunchServices(install.installedAppPath)");
-    expect(macSpec).toContain("['-n', installedAppPath]");
+    expect(macSpec).toContain("'--stdout', stdoutPath");
+    expect(macSpec).toContain("'--stderr', stderrPath");
+    expect(macSpec).toContain("'launch-services-witness.json'");
+    expect(macSpec).toContain("observeMacLaunchProcesses(executablePath)");
+    expect(macSpec).toContain("collectMacLaunchServicesLog({ bundleId, executableName })");
     expect(macSpec).toContain("['-a', installedAppPath, packagedInviteDeeplink]");
   });
 
