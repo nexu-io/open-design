@@ -2404,11 +2404,17 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
 .settings-section-byok .section-head {
   align-items: center;
 }
+.settings-section-byok .section-head > div:first-child {
+  flex: 0 0 auto;
+}
 .settings-byok-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   position: relative;
+}
+.settings-byok-title h3 {
+  white-space: nowrap;
 }
 .settings-byok-info-wrap {
   position: relative;
@@ -2608,13 +2614,32 @@ button.agent-group-rescan-btn:hover:not(:disabled) {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex: 1 1 auto;
   gap: 12px;
   min-height: 32px;
+  min-width: 0;
 }
 .settings-byok-connection-test-status {
   flex: 1 1 auto;
   min-width: 0;
   text-align: right;
+}
+.settings-byok-connection-test-status > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settings-byok-connection-test .settings-test-btn {
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+}
+.settings-byok-connection-test .settings-test-btn.is-icon-only {
+  width: 32px;
+  min-width: 32px;
+  padding-inline: 0;
+  gap: 0;
 }
 .settings-byok-ready {
   color: var(--text-muted);

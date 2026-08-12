@@ -36,8 +36,7 @@ export interface ByokDraftValidation {
 
 interface ValidateByokDraftOptions {
   requiresApiKey?: boolean;
-  /** A daemon-owned secure profile satisfies the credential requirement. */
-  credentialConfigured?: boolean;
+  requiresBaseUrl?: boolean;
   requireModel?: boolean;
   keyValidationBaseUrl?: string;
 }
@@ -125,14 +124,14 @@ export function validateByokDraft(
   options: ValidateByokDraftOptions = {},
 ): ByokDraftValidation {
   const requiresApiKey = options.requiresApiKey ?? true;
-  const credentialConfigured = options.credentialConfigured === true;
+  const requiresBaseUrl = options.requiresBaseUrl ?? true;
   const requireModel = options.requireModel ?? true;
   const issues: ByokDraftIssue[] = [];
   const cleanedApiKey = cleanByokApiKey(config.apiKey);
   const baseUrl = config.baseUrl.trim();
   const model = config.model.trim();
 
-  if (requiresApiKey && !cleanedApiKey && !credentialConfigured) {
+  if (requiresApiKey && !cleanedApiKey) {
     issues.push({
       field: 'api_key',
       level: 'error',
@@ -158,7 +157,7 @@ export function validateByokDraft(
     if (keyIssue) issues.push(keyIssue);
   }
 
-  if (!baseUrl) {
+  if (requiresBaseUrl && !baseUrl) {
     issues.push({
       field: 'base_url',
       level: 'error',
@@ -166,7 +165,7 @@ export function validateByokDraft(
       message: 'Base URL is required.',
       action: 'focus_base_url',
     });
-  } else {
+  } else if (baseUrl) {
     // #3225 — a `forbidden` result is a syntactically-valid URL that points at
     // an internal address. Don't block it here: the Test / model-fetch actions
     // gate on these issues, and the daemon owns the OD_ALLOWED_INTERNAL_HOSTS

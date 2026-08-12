@@ -19,6 +19,7 @@ import {
   seedBrowserConfig,
   sendPrompt,
 } from '@/playwright/amr';
+import { fulfillAgentsRoute } from '@/playwright/mock-factory';
 
 test.describe.configure({ timeout: T.xlong });
 
@@ -91,6 +92,22 @@ test('[P0] after local Sign out, the app returns to onboarding and AMR runs requ
     loggedIn: () => loggedIn,
     plan: 'free',
     profile: 'local',
+  });
+
+  await page.route('**/api/agents**', async (route) => {
+    await fulfillAgentsRoute(route, [
+      {
+        id: 'amr',
+        name: 'AMR',
+        bin: 'vela',
+        available: true,
+        version: 'test',
+        authStatus: 'ok',
+        models: [{ id: 'default', label: 'Default' }],
+        modelsSource: 'live',
+        supportsCustomModel: false,
+      },
+    ]);
   });
 
   const config = {

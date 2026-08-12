@@ -11,7 +11,12 @@ import {
 import { fetchProviderModels } from '../../src/providers/provider-models';
 import { providerModelsCacheKey } from '../../src/components/providerModelsCache';
 import { resetWorkspaceContextCache } from '../../src/collab/useWorkspaceContext';
-import type { AgentInfo, AppConfig, ProviderModelOption } from '../../src/types';
+import type {
+  AgentInfo,
+  AppConfig,
+  DeploymentProviderConfig,
+  ProviderModelOption,
+} from '../../src/types';
 import { workspaceDirectoryFixture } from '../helpers/workspace-context';
 
 const analyticsMocks = vi.hoisted(() => ({ track: vi.fn() }));
@@ -92,13 +97,14 @@ function renderSwitcher(
   config: Partial<AppConfig> = {},
   agents: AgentInfo[] = [amrAgent],
   providerModelsCache: Record<string, ProviderModelOption[]> = {},
-  options: { compact?: boolean } = {},
+  options: { compact?: boolean; deploymentProviderConfig?: DeploymentProviderConfig | null } = {},
 ) {
   const onAgentModelChange = vi.fn();
   const view = render(
     <InlineModelSwitcher
       config={{ ...baseConfig, ...config }}
       agents={agents}
+      deploymentProviderConfig={options.deploymentProviderConfig}
       providerModelsCache={providerModelsCache}
       compact={options.compact}
       daemonLive={true}
@@ -222,6 +228,7 @@ function expectVelaLoginWithAttribution(
 describe('InlineModelSwitcher AMR row', () => {
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.mocked(fetchProviderModels).mockReset();
     analyticsMocks.track.mockReset();
     vi.unstubAllGlobals();
@@ -232,6 +239,45 @@ describe('InlineModelSwitcher AMR row', () => {
       // jsdom normally exposes localStorage; keep cleanup tolerant.
     }
     resetWorkspaceContextCache();
+  });
+
+  it('keeps the popover open while the topbar chip remains visible', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function getBoundingClientRectMock(this: HTMLElement) {
+        if (this.classList.contains('entry-main--scroll')) {
+          return new DOMRect(0, 0, 1000, 800);
+        }
+        if (this.classList.contains('entry-main__topbar')) {
+          return new DOMRect(0, 0, 1000, 64);
+        }
+        if (this.getAttribute('data-testid') === 'inline-model-switcher-chip') {
+          return new DOMRect(24, 16, 180, 40);
+        }
+        return new DOMRect(0, 0, 0, 0);
+      },
+    );
+
+    render(
+      <div className="entry-main--scroll">
+        <div className="entry-main__topbar">
+          <InlineModelSwitcher
+            config={baseConfig}
+            agents={[amrAgent]}
+            daemonLive={true}
+            onModeChange={vi.fn()}
+            onAgentChange={vi.fn()}
+            onAgentModelChange={vi.fn()}
+            onApiProtocolChange={vi.fn()}
+            onApiModelChange={vi.fn()}
+            onOpenSettings={vi.fn()}
+          />
+        </div>
+      </div>,
+    );
+
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip'));
+
+    expect(screen.getByTestId('inline-model-switcher-popover')).toBeTruthy();
   });
 
   it('shows the AMR reminder dot once when another CLI is selected', async () => {
@@ -866,6 +912,7 @@ describe('InlineModelSwitcher AMR row', () => {
         protocol: 'aihubmix',
         baseUrl: 'https://aihubmix.com/v1',
         apiKey: '',
+        credentialSource: 'user',
       });
       expect(onProviderModelsCacheChange).toHaveBeenCalled();
     });
@@ -882,6 +929,90 @@ describe('InlineModelSwitcher AMR row', () => {
       'gemini-3.5-flash',
       'minimax-m3',
     ]);
+  });
+
+  it('does not add stock OpenAI presets to deployment-sourced home model lists', async () => {
+    const fetchMock = vi.mocked(fetchProviderModels);
+    fetchMock.mockResolvedValue({
+      ok: true,
+      kind: 'success',
+      latencyMs: 1,
+      models: [
+        { id: 'tenant-special-a', label: 'Tenant Special A' },
+        { id: 'tenant-special-b', label: 'Tenant Special B' },
+      ],
+    });
+
+    render(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          mode: 'api',
+          apiProtocol: 'openai',
+          apiCredentialSource: 'deployment',
+          apiKey: '',
+          baseUrl: '',
+          model: 'tenant-special-a',
+          apiProviderBaseUrl: null,
+        }}
+        deploymentProviderConfig={{
+          available: true,
+          credentialSource: 'deployment',
+          protocol: 'openai',
+          label: 'Tenant gateway',
+          kind: 'available',
+          displayHost: 'gateway.example.test',
+          defaultModel: 'tenant-default',
+        }}
+        agents={[amrAgent, codexAgent]}
+        daemonLive={true}
+        onModeChange={vi.fn()}
+        onAgentChange={vi.fn()}
+        onAgentModelChange={vi.fn()}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={vi.fn()}
+        providerModelsCache={{}}
+        onProviderModelsCacheChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    const chip = screen.getByTestId('inline-model-switcher-chip');
+    expect(chip).toHaveTextContent('Tenant gateway');
+    expect(chip).not.toHaveTextContent('BYOK');
+
+    fireEvent.click(chip);
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith({
+        protocol: 'openai',
+        credentialSource: 'deployment',
+      });
+    });
+
+    const modelPicker = screen.getByTestId('inline-model-switcher-api-model');
+    fireEvent.click(modelPicker);
+    const modelPopover = screen.getByTestId('inline-model-switcher-api-model-popover');
+    const optionLabels = within(modelPopover)
+      .getAllByRole('option')
+      .map((option) => {
+        const labelId = option.getAttribute('aria-labelledby');
+        return labelId ? document.getElementById(labelId)?.textContent?.trim() : null;
+      });
+    expect(optionLabels).toEqual([
+      'Tenant Special A',
+      'Tenant Special B',
+      'tenant-default',
+    ]);
+    expect(optionLabels.some((text) => text?.includes('gpt-4o'))).toBe(false);
+    expect(optionLabels.some((text) => text?.includes('o3'))).toBe(false);
+    expect(screen.queryByText('API key not set — open Settings to add it.')).toBeNull();
+
+    fireEvent.click(chip);
+    fireEvent.click(chip);
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('does not fetch from the home picker for a keyed protocol with no API key', async () => {

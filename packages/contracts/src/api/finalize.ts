@@ -1,4 +1,5 @@
 import type { ReasoningExecutionRequestFields } from './reasoningExecution';
+import type { ProviderRunMetadataRequestFields } from './providerCredential';
 
 // Shared DTOs for the `/api/projects/:id/finalize/<provider>` family of
 // synthesis endpoints. `/finalize/anthropic` was introduced first; the
@@ -35,19 +36,32 @@ export type FinalizeProviderProtocol =
  * the proxy, which requires it for some providers) — standard provider
  * defaults are applied by the daemon when possible.
  */
-export interface FinalizeProviderRequest extends ReasoningExecutionRequestFields {
+interface FinalizeProviderCommonRequest extends
+  ReasoningExecutionRequestFields,
+  ProviderRunMetadataRequestFields {
   /**
    * BYOK protocol selected in Settings. Omitted means `anthropic` for
    * backward compatibility with the original `/finalize/anthropic` caller.
    */
   protocol?: FinalizeProviderProtocol;
-  apiKey: string;
-  baseUrl?: string;
   model: string;
   maxTokens?: number;
   /** Azure OpenAI only. Defaults at the daemon when omitted. */
   apiVersion?: string;
 }
+
+export type FinalizeProviderRequest =
+  | (FinalizeProviderCommonRequest & {
+      credentialSource?: 'user';
+      apiKey: string;
+      baseUrl?: string;
+    })
+  | (FinalizeProviderCommonRequest & {
+      credentialSource: 'deployment';
+      protocol: 'openai';
+      apiKey?: never;
+      baseUrl?: never;
+    });
 
 export type FinalizeAnthropicRequest = FinalizeProviderRequest;
 

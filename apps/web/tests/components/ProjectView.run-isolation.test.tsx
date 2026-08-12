@@ -2784,6 +2784,34 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(playSound).toHaveBeenCalledWith('success-sound'));
   });
 
+  it('routes deployment OpenAI API chats through OpenCode without forwarding stale browser credentials', async () => {
+    listMessages.mockResolvedValue([]);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+
+    renderProjectView({
+      ...config,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: 'stale-browser-key',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-5.5',
+    });
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('send-message')).toHaveProperty('disabled', false));
+
+    fireEvent.click(screen.getByTestId('send-message'));
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'byok-opencode',
+      byokCredentialSource: 'deployment',
+      model: 'gpt-5.5',
+    }));
+    expect(streamViaDaemon.mock.calls[0]?.[0]).not.toHaveProperty('byokProvider');
+  });
+
   it.each([
     {
       mode: 'api' as const,

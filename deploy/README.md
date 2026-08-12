@@ -75,6 +75,72 @@ through that authenticated proxy. It disables daemon-side bearer enforcement for
 all `/api/*` requests, so direct access to the daemon must remain blocked. The
 Compose variable maps to daemon env `OD_DISABLE_API_AUTH`.
 
+### Deployment provider gateway
+
+Self-host administrators can optionally configure an OpenAI-compatible provider
+gateway for the deployment. This keeps provider credentials server-side while
+letting deployment-managed app configuration route provider calls without
+putting shared provider credentials in the browser. The existing AMR, local CLI,
+and direct BYOK paths remain unchanged when these variables are unset.
+
+Set both required values in `.env`:
+
+```bash
+OD_PROVIDER_ORCHESTRATOR_BASE_URL=https://provider.example.com/v1
+OD_PROVIDER_ORCHESTRATOR_API_KEY=provider-token-placeholder
+```
+
+Optional values:
+
+```bash
+OD_PROVIDER_ORCHESTRATOR_DEFAULT_MODEL=example-chat-model
+OD_PROVIDER_ORCHESTRATOR_LABEL="Provider orchestrator"
+```
+
+Gateways that require a per-run authorization record before model egress can
+also expose a server-side run-session bootstrap endpoint:
+
+```bash
+OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL=https://provider.example.com/api/runs
+OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD=0.05
+OD_PROVIDER_ORCHESTRATOR_RUN_MAX_TOTAL_COST_USD=0.10
+OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS=600
+```
+
+When configured, Open Design calls the run-session endpoint from the daemon
+before OpenAI-compatible chat egress and attaches the returned run identifier as
+provider metadata. The credential stays server-side.
+
+This is a pre-egress admission and metadata-propagation integration only. It
+does not persist an Open Design run-to-provider-session mapping, reconcile
+provider-side status after a daemon restart, call provider-side cancellation
+from `/api/runs/:id/cancel`, or guarantee idempotency across separate retry
+requests. Those behaviors remain provider-specific or future integration work.
+
+The daemon validates the configured base URL before provider egress and never
+returns the credential from `/api/provider-orchestrator/config` or `od provider
+config`. Model discovery, connection tests, OpenAI-compatible chat proxying, and
+finalize flows use the daemon-held credential when the request selects
+`credentialSource: "deployment"`.
+
+Troubleshooting:
+
+- `not_configured`: leave the variables blank to disable deployment provider
+  mode, or set both required values.
+- `missing_config`: set both `OD_PROVIDER_ORCHESTRATOR_BASE_URL` and
+  `OD_PROVIDER_ORCHESTRATOR_API_KEY`; partial configuration fails closed.
+- `invalid_base_url`: use an absolute `http://` or `https://` gateway URL that
+  passes the same provider base URL validation as direct BYOK.
+- `Deployment provider mode currently supports OpenAI-compatible provider
+  routes only`: choose the OpenAI-compatible protocol or use direct BYOK for
+  another provider protocol.
+- `Reasoning provider egress is disabled` or `not allowlisted`: update the
+  run's provider egress policy or choose a model/base URL permitted by that
+  run.
+- Empty model picker or gateway `401`/`403`/`5xx`: verify the gateway is
+  reachable from the daemon container and that the deployment credential is
+  valid for model listing and chat completions.
+
 Pin a specific published image with a digest instead of the mutable `latest` tag:
 
 ```bash

@@ -866,9 +866,24 @@ function externalPluginAttributionMismatch(
 }
 
 function hasCompleteByokOpenCodeConfig(meta: JsonRecord): boolean {
-  if (meta.agentId !== BYOK_OPENCODE_AGENT_ID) return true;
+  const usesDeploymentCredential = meta.byokCredentialSource === 'deployment';
+  if (
+    Object.prototype.hasOwnProperty.call(meta, 'byokCredentialSource')
+    && !usesDeploymentCredential
+  ) {
+    return false;
+  }
+  if (meta.agentId !== BYOK_OPENCODE_AGENT_ID) return !usesDeploymentCredential;
+  if (usesDeploymentCredential) {
+    const model = typeof meta.model === 'string' ? meta.model.trim() : '';
+    return !Object.prototype.hasOwnProperty.call(meta, 'byokProvider')
+      && Boolean(model)
+      && model.toLowerCase() !== 'default';
+  }
+  const provider = meta.byokProvider as ByokChatProviderConfig | null | undefined;
+  if (provider?.credentialSource === 'deployment') return false;
   return buildOpenCodeByokProviderConfig(
-    meta.byokProvider as ByokChatProviderConfig | null | undefined,
+    provider,
     typeof meta.model === 'string' ? meta.model : null,
   ) !== null;
 }
@@ -2091,6 +2106,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         agent_provider_id: agentProviderIdForRunAnalytics({
           agentId: reqBody.agentId,
           byokProvider: reqBody.byokProvider,
+          byokCredentialSource: reqBody.byokCredentialSource,
         }),
         skill_id: typeof reqBody.skillId === 'string' ? reqBody.skillId : null,
         ...(!isDesignSystemRun && typeof reqBody.sessionMode === 'string'

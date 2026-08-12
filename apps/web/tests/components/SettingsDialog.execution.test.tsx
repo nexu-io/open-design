@@ -118,6 +118,7 @@ import type {
   AgentInfo,
   AppConfig,
   AppVersionInfo,
+  DeploymentProviderConfig,
   ProviderModelOption,
 } from '../../src/types';
 
@@ -362,6 +363,7 @@ function renderSettingsDialog(
     appVersionInfo?: AppVersionInfo | null;
     providerModelsCache?: Record<string, ProviderModelOption[]>;
     welcome?: boolean;
+    deploymentProviderConfig?: DeploymentProviderConfig | null;
     onSilentUpdatePreferenceChange?: (allowSilentUpdates: boolean) => Promise<void>;
     onResetOnboarding?: (next: AppConfig) => void;
   } = {},
@@ -383,6 +385,7 @@ function renderSettingsDialog(
       initialSection={options.initialSection ?? 'execution'}
       providerModelsCache={options.providerModelsCache}
       welcome={options.welcome}
+      deploymentProviderConfig={options.deploymentProviderConfig}
       onPersist={onPersist}
       onSilentUpdatePreferenceChange={onSilentUpdatePreferenceChange}
       onPersistComposioKey={onPersistComposioKey}
@@ -699,6 +702,238 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
         .getByRole('link', { name: 'Get key ↗' })
         .getAttribute('href'),
     ).toBe('https://platform.openai.com/api-keys');
+  });
+
+  it('treats deployment-sourced OpenAI settings as model-only', async () => {
+    renderSettingsDialog({
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'gpt-routed',
+      apiProviderBaseUrl: null,
+      apiProtocolConfigs: {
+        openai: {
+          apiCredentialSource: 'deployment',
+          apiKey: '',
+          baseUrl: '',
+          model: 'gpt-routed',
+          apiProviderBaseUrl: null,
+        },
+      },
+    });
+
+    expect(screen.queryByLabelText('API key')).toBeNull();
+    expect(screen.queryByLabelText('Base URL')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
+
+    await waitFor(() => {
+      expect(fetchProviderModelsMock).toHaveBeenCalled();
+    });
+    const [request] = fetchProviderModelsMock.mock.calls.at(-1) ?? [];
+    expect(request).toMatchObject({
+      protocol: 'openai',
+      credentialSource: 'deployment',
+    });
+    expect(request).not.toHaveProperty('apiKey');
+    expect(request).not.toHaveProperty('baseUrl');
+  });
+
+  it('lets Settings switch existing OpenAI installs to deployment credentials', async () => {
+    fetchProviderModelsMock.mockResolvedValue({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [{ id: 'tenant-special-a', label: 'Tenant Special A' }],
+    });
+    const { onPersist } = renderSettingsDialog(
+      {
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiCredentialSource: 'user',
+        apiKey: 'sk-user-openai',
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o',
+        apiProviderBaseUrl: 'https://api.openai.com/v1',
+      },
+      {
+        deploymentProviderConfig: {
+          available: true,
+          credentialSource: 'deployment',
+          protocol: 'openai',
+          label: 'Tenant gateway',
+          kind: 'available',
+          displayHost: 'gateway.example.test',
+          defaultModel: 'tenant-special-a',
+        },
+      },
+    );
+
+    fetchProviderModelsMock.mockClear();
+    fireEvent.click(screen.getByRole('tab', { name: 'Tenant gateway' }));
+
+    expect(screen.queryByLabelText('API key')).toBeNull();
+    expect(screen.queryByLabelText('Base URL')).toBeNull();
+
+    await waitFor(() => {
+      expect(fetchProviderModelsMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+        }),
+        expect.any(AbortSignal),
+      );
+    });
+    const [request] = fetchProviderModelsMock.mock.calls.at(-1) ?? [];
+    expect(request).not.toHaveProperty('apiKey');
+    expect(request).not.toHaveProperty('baseUrl');
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        apiProtocol: 'openai',
+        apiCredentialSource: 'deployment',
+        apiKey: '',
+        baseUrl: '',
+        model: 'tenant-special-a',
+        apiProviderBaseUrl: null,
+        apiProtocolConfigs: expect.objectContaining({
+          openai: expect.objectContaining({
+            apiCredentialSource: 'user',
+            apiKey: 'sk-user-openai',
+            baseUrl: 'https://api.openai.com/v1',
+            model: 'gpt-4o',
+            apiProviderBaseUrl: 'https://api.openai.com/v1',
+          }),
+        }),
+      }),
+      {},
+    );
+  });
+
+  it('restores the saved custom OpenAI draft after leaving deployment credentials', async () => {
+    fetchProviderModelsMock.mockResolvedValue({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [{ id: 'tenant-special-a', label: 'Tenant Special A' }],
+    });
+    const { onPersist } = renderSettingsDialog(
+      {
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiCredentialSource: 'user',
+        apiKey: 'sk-custom-openai',
+        baseUrl: 'https://custom-openai.example.test/v1',
+        model: 'custom-model',
+        apiProviderBaseUrl: null,
+      },
+      {
+        deploymentProviderConfig: {
+          available: true,
+          credentialSource: 'deployment',
+          protocol: 'openai',
+          label: 'Tenant gateway',
+          kind: 'available',
+          displayHost: 'gateway.example.test',
+          defaultModel: 'tenant-special-a',
+        },
+      },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Tenant gateway' }));
+
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        apiCredentialSource: 'deployment',
+        apiKey: '',
+        baseUrl: '',
+        model: 'tenant-special-a',
+      }),
+      {},
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Custom provider' }));
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('API key') as HTMLInputElement).value).toBe(
+        'sk-custom-openai',
+      );
+      expect((screen.getByLabelText('Base URL') as HTMLInputElement).value).toBe(
+        'https://custom-openai.example.test/v1',
+      );
+      expect((screen.getByLabelText('Custom model id') as HTMLInputElement).value).toBe(
+        'custom-model',
+      );
+    });
+    await waitForPersist(
+      onPersist,
+      expect.objectContaining({
+        apiProtocol: 'openai',
+        apiCredentialSource: 'user',
+        apiKey: 'sk-custom-openai',
+        baseUrl: 'https://custom-openai.example.test/v1',
+        model: 'custom-model',
+        apiProviderBaseUrl: null,
+      }),
+      {},
+    );
+  });
+
+  it('does not add stock OpenAI presets to deployment-sourced model lists', async () => {
+    fetchProviderModelsMock.mockResolvedValueOnce({
+      ok: true,
+      kind: 'success',
+      latencyMs: 12,
+      models: [
+        { id: 'tenant-special-a', label: 'Tenant Special A' },
+        { id: 'tenant-special-b', label: 'Tenant Special B' },
+      ],
+    });
+    renderSettingsDialog(
+      {
+        mode: 'api',
+        apiProtocol: 'openai',
+        apiCredentialSource: 'deployment',
+        apiKey: '',
+        baseUrl: '',
+        model: 'tenant-special-a',
+        apiProviderBaseUrl: null,
+      },
+      {
+        deploymentProviderConfig: {
+          available: true,
+          credentialSource: 'deployment',
+          protocol: 'openai',
+          label: 'Tenant gateway',
+          kind: 'available',
+          displayHost: 'gateway.example.test',
+          defaultModel: 'tenant-default',
+        },
+      },
+    );
+
+    expect(await screen.findByText('✓ Loaded 2 models from your account.')).toBeTruthy();
+    const modelPicker = screen.getByRole('combobox', { name: 'Model' });
+    fireEvent.click(modelPicker);
+
+    const modelPopover = screen.getByTestId('settings-byok-model-popover');
+    const optionLabels = within(modelPopover)
+      .getAllByRole('option')
+      .map((option) => {
+        const labelId = option.getAttribute('aria-labelledby');
+        return labelId ? document.getElementById(labelId)?.textContent?.trim() : null;
+      });
+    expect(optionLabels).toEqual([
+      'Tenant Special A (tenant-special-a) · From your account',
+      'Tenant Special B (tenant-special-b) · From your account',
+      'tenant-default · Suggested',
+      'Custom (type below)…',
+    ]);
+    expect(optionLabels.some((text) => text?.includes('gpt-4o'))).toBe(false);
+    expect(optionLabels.some((text) => text?.includes('o3'))).toBe(false);
   });
 
   it('isolates API key draft and visibility by BYOK provider preset', () => {
@@ -2466,9 +2701,10 @@ describe('SettingsDialog execution settings BYOK interactions', () => {
     renderSettingsDialog({ apiKey: 'sk-ant-test-provider' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Test' }));
-    expect(await screen.findByRole('button', { name: 'Retry test' })).toBeTruthy();
+    const retryButton = await screen.findByRole('button', { name: 'Retry test' });
+    expect(retryButton.classList.contains('is-icon-only')).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry test' }));
+    fireEvent.click(retryButton);
 
     expect(await screen.findByText(/Connected\. Replied in 18 ms/)).toBeTruthy();
     const testConnectionCalls = fetchMock.mock.calls.filter(

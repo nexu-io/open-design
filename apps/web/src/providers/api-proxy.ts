@@ -5,6 +5,7 @@ import type {
   ProxyMessage,
   ProxyMessageContent,
   ProxyTextContentBlock,
+  ProviderRunMetadataRequestFields,
   WorkspaceCollabContext,
 } from '@open-design/contracts';
 import { projectFileUrl } from './registry';
@@ -25,7 +26,7 @@ import { isAnthropicSupportedImagePath } from '../utils/apiProtocol';
  * Other protocols ignore unknown body fields, so callers are free to
  * pass this for every protocol.
  */
-export interface ProxyContext {
+export interface ProxyContext extends ProviderRunMetadataRequestFields {
   projectId?: string;
   /** Exact persisted scope of `projectId`, captured when the turn starts. */
   workspaceContext?: WorkspaceCollabContext | null;
@@ -44,7 +45,13 @@ export async function streamProxyEndpoint(
   handlers: StreamHandlers,
   context?: ProxyContext,
 ): Promise<void> {
-  if (!cfg.apiKey) {
+  const supportsDeploymentCredentials =
+    (cfg.apiProtocol ?? (endpoint.includes('/openai/') ? 'openai' : undefined)) === 'openai';
+  const credentialSource =
+    cfg.apiCredentialSource === 'deployment' && supportsDeploymentCredentials
+      ? 'deployment'
+      : 'user';
+  if (credentialSource !== 'deployment' && !cfg.apiKey) {
     handlers.onError(new Error('Missing API key — open Settings and paste one in.'));
     return;
   }
@@ -53,6 +60,33 @@ export async function streamProxyEndpoint(
 
   try {
     const messages = await buildProxyMessages(endpoint, history, context);
+    const body = {
+      ...(credentialSource === 'deployment'
+        ? { protocol: 'openai' as const }
+        : { baseUrl: cfg.baseUrl, apiKey: cfg.apiKey }),
+      credentialSource,
+      model: cfg.model,
+      systemPrompt: system,
+      messages,
+      maxTokens: effectiveMaxTokens(cfg),
+      apiVersion: cfg.apiVersion,
+      ...(context?.projectId ? { projectId: context.projectId } : {}),
+      ...(context?.providerRunId ? { providerRunId: context.providerRunId } : {}),
+      ...(context?.providerOperationId ? { providerOperationId: context.providerOperationId } : {}),
+      ...(context?.providerRunPurpose ? { providerRunPurpose: context.providerRunPurpose } : {}),
+      ...(context?.byokImageModel
+        ? { byokImageModel: context.byokImageModel }
+        : {}),
+      ...(context?.byokVideoModel
+        ? { byokVideoModel: context.byokVideoModel }
+        : {}),
+      ...(context?.byokSpeechModel
+        ? { byokSpeechModel: context.byokSpeechModel }
+        : {}),
+      ...(context?.byokSpeechVoice
+        ? { byokSpeechVoice: context.byokSpeechVoice }
+        : {}),
+    };
     const resp = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -61,28 +95,7 @@ export async function streamProxyEndpoint(
           ? workspaceProjectHeaders(context.workspaceContext)
           : {}),
       },
-      body: JSON.stringify({
-        baseUrl: cfg.baseUrl,
-        apiKey: cfg.apiKey,
-        model: cfg.model,
-        systemPrompt: system,
-        messages,
-        maxTokens: effectiveMaxTokens(cfg),
-        apiVersion: cfg.apiVersion,
-        ...(context?.projectId ? { projectId: context.projectId } : {}),
-        ...(context?.byokImageModel
-          ? { byokImageModel: context.byokImageModel }
-          : {}),
-        ...(context?.byokVideoModel
-          ? { byokVideoModel: context.byokVideoModel }
-          : {}),
-        ...(context?.byokSpeechModel
-          ? { byokSpeechModel: context.byokSpeechModel }
-          : {}),
-        ...(context?.byokSpeechVoice
-          ? { byokSpeechVoice: context.byokSpeechVoice }
-          : {}),
-      }),
+      body: JSON.stringify(body),
       signal,
     });
 

@@ -218,6 +218,8 @@ import {
   buildOpenCodeByokProviderConfig,
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from './runtimes/byok-opencode.js';
+import { resolveDeploymentProviderProfile } from './integrations/deployment-provider.js';
+import { deploymentProviderRunMetadata } from './integrations/deployment-provider-run-session.js';
 import {
   extractPlainStreamArtifacts,
   persistPlainStreamArtifactList,
@@ -940,13 +942,17 @@ import {
   isZeroConfigClipperLibraryRequest,
   parseHostHeader,
 } from './origin-validation.js';
+import {
+  apiTokenFromEnv,
+  isApiAuthDisabled,
+  isApiTokenExemptRequest,
+} from './api-token-auth.js';
 import { registerLibraryRoutes } from './routes/library.js';
 import {
   libraryExtensionAllowedOrigins,
   seedLibraryExtensionOrigins,
 } from './library-tokens.js';
 import { listLibraryTokenOrigins } from './library-store.js';
-import { apiTokenFromEnv, isApiAuthDisabled } from './api-token-auth.js';
 import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
 import { createWhatsNewService } from './services/whats-new.js';
 import { execCommandViaLoginShell } from './services/login-shell.js';
@@ -2474,16 +2480,8 @@ export async function startServer({
   // Rich daemon status stays authenticated because it includes local
   // runtime paths.
   if (apiTokenAuthEnabled) {
-    const openProbePaths = new Set([
-      '/health',
-      '/api/health',
-      '/ready',
-      '/api/ready',
-      '/version',
-      '/api/version',
-    ]);
     app.use('/api', (req, res, next) => {
-      if (openProbePaths.has(req.path)) return next();
+      if (isApiTokenExemptRequest(req.method, req.path)) return next();
       if (req.method === 'GET') {
         const previewAsset = parseProjectPreviewAssetPath(req.path);
         if (
@@ -6500,8 +6498,10 @@ export async function startServer({
   // hostname string, so a public DNS name pointing at an internal address
   // (`internal.example.com → 10.0.0.5`) still passes. We delegate to
   // `validateBaseUrlResolved` here so every proxy and finalize handler runs
-  // the same resolved-IP check before issuing the upstream request.
-  const validateExternalApiBaseUrl = (baseUrl) => validateBaseUrlResolved(baseUrl);
+  // the same resolved-IP check before issuing the upstream request. Deployment
+  // provider routes may pass a narrower administrator-configured allowance.
+  const validateExternalApiBaseUrl = (baseUrl, options) =>
+    validateBaseUrlResolved(baseUrl, undefined, options);
 
   const resolvedPortRef = {
     get current() {
@@ -8917,6 +8917,7 @@ export async function startServer({
       context,
       titleGeneration,
       byokProvider,
+      byokCredentialSource,
       byokMediaDefaults,
     } = chatBody;
     lifecycle.mark('prompt_build_start');
@@ -8973,10 +8974,40 @@ export async function startServer({
       );
     if (!def.bin)
       return design.runs.fail(run, 'AGENT_UNAVAILABLE', 'agent has no binary');
+    let deploymentByokProvider = null;
+    let deploymentProviderMetadata;
+    if (def.id === 'byok-opencode') {
+      if (byokCredentialSource === 'deployment') {
+        const resolved = resolveDeploymentProviderProfile('openai');
+        if (!resolved.ok) {
+          return design.runs.fail(run, resolved.code, resolved.message);
+        }
+        const runMetadata = await deploymentProviderRunMetadata(
+          resolved.profile,
+          {
+            projectId,
+            providerRunId: run.id,
+            providerOperationId: `chat:${run.id}`,
+            providerRunPurpose: 'chat-completion',
+          },
+        );
+        if (!runMetadata.ok) {
+          return design.runs.fail(run, runMetadata.code, runMetadata.message);
+        }
+        deploymentProviderMetadata = runMetadata.metadata;
+        deploymentByokProvider = {
+          protocol: resolved.profile.protocol,
+          credentialSource: 'user',
+          apiKey: resolved.profile.apiKey,
+          baseUrl: resolved.profile.baseUrl,
+        };
+      }
+    }
     const byokOpenCodeProvider = def.id === 'byok-opencode'
       ? buildOpenCodeByokProviderConfig(
-          byokProvider,
+          deploymentByokProvider ?? byokProvider,
           typeof model === 'string' ? model : null,
+          deploymentProviderMetadata,
         )
       : null;
     if (def.id === 'byok-opencode' && !byokOpenCodeProvider) {

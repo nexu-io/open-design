@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
 import { seedProviderIfMissing } from '../media/config.js';
@@ -33,7 +34,27 @@ import {
 } from '../integrations/aihubmix.js';
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
-import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
+import type {
+  ConnectionTestKind,
+  ConnectionTestProtocol,
+  ConnectionTestResponse,
+} from '@open-design/contracts/api/connectionTest';
+import type { ProxyStreamRequest } from '@open-design/contracts';
+import {
+  proxyDispatcherRequestInit,
+  validateBaseUrlResolved,
+  validateUserProviderBaseUrl,
+} from '../connectionTest.js';
+import {
+  deploymentProviderConfig,
+  resolveDeploymentProviderProfile,
+  resolveProviderCredentialSource,
+  type DeploymentProviderProfile,
+} from '../integrations/deployment-provider.js';
+import {
+  deploymentProviderRunMetadata,
+  type DeploymentProviderRunMetadataResult,
+} from '../integrations/deployment-provider-run-session.js';
 import { resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
@@ -57,6 +78,77 @@ const FEEDBACK_REASON_ALLOWLIST: ReadonlySet<string> = new Set([
   'missed_design_system',
   'other',
 ]);
+
+const PROVIDER_PROTOCOLS: ReadonlySet<ConnectionTestProtocol> = new Set([
+  'anthropic',
+  'openai',
+  'azure',
+  'google',
+  'ollama',
+  'senseaudio',
+  'aihubmix',
+  'bedrock',
+]);
+
+function routeRunStringOrFallback(value: unknown, fallback: string): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function deploymentRouteRunMetadataBody(
+  sourceBody: Record<string, unknown>,
+  routePrefix: string,
+  purpose: 'chat-completion' | 'connection-test',
+): Record<string, unknown> {
+  const fallbackId = `${routePrefix}:${randomUUID()}`;
+  return {
+    ...sourceBody,
+    projectId: routeRunStringOrFallback(sourceBody.projectId, fallbackId),
+    providerRunId: routeRunStringOrFallback(sourceBody.providerRunId, fallbackId),
+    providerOperationId: routeRunStringOrFallback(sourceBody.providerOperationId, fallbackId),
+    providerRunPurpose: sourceBody.providerRunPurpose ?? purpose,
+  };
+}
+
+function deploymentProxyRunMetadataBody(proxyBody: Partial<ProxyStreamRequest>): Record<string, unknown> {
+  const body = proxyBody as Record<string, unknown>;
+  return deploymentRouteRunMetadataBody(body, 'proxy', 'chat-completion');
+}
+
+type DeploymentConnectionFailureCode =
+  Exclude<DeploymentProviderRunMetadataResult, { ok: true }>['code'];
+
+function deploymentConnectionFailureKind(
+  status: number,
+  code: DeploymentConnectionFailureCode,
+  message: string,
+): ConnectionTestKind {
+  if (code === 'UNAUTHORIZED') return 'auth_failed';
+  if (code === 'FORBIDDEN') return 'forbidden';
+  if (code === 'RATE_LIMITED') return 'rate_limited';
+  if (status === 504) return 'timeout';
+  if (status >= 500 || code === 'UPSTREAM_UNAVAILABLE') return 'upstream_unavailable';
+  if (/base URL|run-session URL|URL is invalid/i.test(message)) return 'invalid_base_url';
+  return 'unknown';
+}
+
+function deploymentConnectionFailureResponse(
+  failure: Exclude<DeploymentProviderRunMetadataResult, { ok: true }>,
+  model: unknown,
+  start: number,
+): ConnectionTestResponse {
+  return {
+    ok: false,
+    kind: deploymentConnectionFailureKind(failure.status, failure.code, failure.message),
+    latencyMs: Date.now() - start,
+    ...(typeof model === 'string' && model.trim() ? { model: model.trim() } : {}),
+    status: failure.status,
+    detail: failure.message,
+  };
+}
+
+function isProviderProtocol(value: unknown): value is ConnectionTestProtocol {
+  return typeof value === 'string' && PROVIDER_PROTOCOLS.has(value as ConnectionTestProtocol);
+}
 
 export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry' | 'appConfig'> {
   authorizeProjectRequest: AuthorizeProjectRequest;
@@ -87,6 +179,33 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         409,
         'PLUGIN_REQUIRES_DAEMON',
         'Plugin runs must go through POST /api/runs so the daemon can resolve and pin the applied plugin snapshot.',
+      );
+      return true;
+    }
+    return false;
+  };
+
+  const rejectInvalidCredentialSource = (value: unknown, res: any) => {
+    const credentialSource = resolveProviderCredentialSource(value);
+    if (!credentialSource) {
+      sendApiError(res, 400, 'BAD_REQUEST', 'credentialSource must be user or deployment');
+      return null;
+    }
+    return credentialSource;
+  };
+
+  const rejectNonOpenAiDeploymentCredentialSource = (body: Record<string, unknown>, res: any): boolean => {
+    const credentialSource = resolveProviderCredentialSource(body.credentialSource);
+    if (!credentialSource) {
+      sendApiError(res, 400, 'BAD_REQUEST', 'credentialSource must be user or deployment');
+      return true;
+    }
+    if (credentialSource === 'deployment') {
+      sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'Deployment provider mode currently supports OpenAI-compatible provider routes only.',
       );
       return true;
     }
@@ -206,10 +325,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     res.on('close', abortIfResponseClosed);
     const body = req.body || {};
     const protocol = body.protocol;
-    if (
-      typeof protocol !== 'string' ||
-      !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
-    ) {
+    if (!isProviderProtocol(protocol)) {
       return sendApiError(
         res,
         400,
@@ -217,15 +333,27 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
       );
     }
+    const credentialSource = rejectInvalidCredentialSource(body.credentialSource, res);
+    if (!credentialSource) return;
+    let effectiveBaseUrl = typeof body.baseUrl === 'string' ? body.baseUrl : '';
+    let effectiveApiKey = typeof body.apiKey === 'string' ? body.apiKey : '';
+    let allowPrivateNetworkBaseUrl = false;
+    if (credentialSource === 'deployment') {
+      const resolved = resolveDeploymentProviderProfile(protocol);
+      if (!resolved.ok) {
+        return sendApiError(res, resolved.status, resolved.code, resolved.message);
+      }
+      effectiveBaseUrl = resolved.profile.baseUrl;
+      effectiveApiKey = resolved.profile.apiKey;
+      allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
+    }
     // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, so its
     // model list loads without a key. Every other protocol needs the key to
     // hit its /v1/models endpoint.
     const apiKeyRequired = protocol !== 'aihubmix' && protocol !== 'bedrock';
     if (
-      typeof body.baseUrl !== 'string' ||
-      typeof body.apiKey !== 'string' ||
-      !body.baseUrl.trim() ||
-      (apiKeyRequired && !body.apiKey.trim())
+      !effectiveBaseUrl.trim() ||
+      (apiKeyRequired && !effectiveApiKey.trim())
     ) {
       return sendApiError(
         res,
@@ -238,7 +366,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       policy: body.reasoningExecution,
       routeKind: 'provider_models',
       provider: protocol,
-      resolvedBaseUrl: body.baseUrl,
+      resolvedBaseUrl: effectiveBaseUrl,
     });
     if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
     try {
@@ -246,12 +374,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       try {
         const result = await listProviderModels({
           protocol,
-          baseUrl: body.baseUrl,
-          apiKey: body.apiKey,
+          baseUrl: effectiveBaseUrl,
+          apiKey: effectiveApiKey,
           apiVersion:
             typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
           signal: controller.signal,
           requestInit: proxyDispatcher.requestInit,
+          allowPrivateNetworkBaseUrl,
         });
         return res.json(result);
       } finally {
@@ -268,6 +397,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     }
   });
 
+  app.get('/api/provider-orchestrator/config', (_req, res) => {
+    res.json(deploymentProviderConfig());
+  });
+
   app.post('/api/test/connection', async (req, res) => {
     const controller = new AbortController();
     const abortIfRequestAborted = () => {
@@ -281,13 +414,11 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     req.on('close', abortIfRequestAborted);
     res.on('close', abortIfResponseClosed);
     const body = req.body || {};
+    const start = Date.now();
     try {
       if (body.mode === 'provider') {
         const protocol = body.protocol;
-        if (
-          typeof protocol !== 'string' ||
-          !['anthropic', 'openai', 'azure', 'google', 'ollama', 'senseaudio', 'aihubmix', 'bedrock'].includes(protocol)
-        ) {
+        if (!isProviderProtocol(protocol)) {
           return sendApiError(
             res,
             400,
@@ -295,13 +426,31 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix|bedrock',
           );
         }
-        const apiKeyRequired = protocol !== 'bedrock';
+        const credentialSource = rejectInvalidCredentialSource(body.credentialSource, res);
+        if (!credentialSource) return;
+        let effectiveBaseUrl = typeof body.baseUrl === 'string' ? body.baseUrl : '';
+        let effectiveApiKey = typeof body.apiKey === 'string' ? body.apiKey : '';
+        const apiKeyRequired = credentialSource === 'deployment' || protocol !== 'bedrock';
+        let allowPrivateNetworkBaseUrl = false;
+        let metadata: Record<string, unknown> | undefined;
+        let deploymentProfile: DeploymentProviderProfile | null = null;
+        if (credentialSource === 'deployment') {
+          const resolved = resolveDeploymentProviderProfile(protocol);
+          if (!resolved.ok) {
+            if (protocol === 'openai') {
+              return res.json(deploymentConnectionFailureResponse(resolved, body.model, start));
+            }
+            return sendApiError(res, resolved.status, resolved.code, resolved.message);
+          }
+          effectiveBaseUrl = resolved.profile.baseUrl;
+          effectiveApiKey = resolved.profile.apiKey;
+          allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
+          deploymentProfile = resolved.profile;
+        }
         if (
-          typeof body.baseUrl !== 'string' ||
-          typeof body.apiKey !== 'string' ||
           typeof body.model !== 'string' ||
-          !body.baseUrl.trim() ||
-          (apiKeyRequired && !body.apiKey.trim()) ||
+          !effectiveBaseUrl.trim() ||
+          (apiKeyRequired && !effectiveApiKey.trim()) ||
           !body.model.trim()
         ) {
           return sendApiError(
@@ -317,19 +466,36 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           policy: body.reasoningExecution,
           routeKind: 'connection_test',
           provider: protocol,
-          resolvedBaseUrl: body.baseUrl,
+          resolvedBaseUrl: effectiveBaseUrl,
           model: body.model,
         });
         if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
+        if (deploymentProfile) {
+          const runMetadata = await deploymentProviderRunMetadata(
+            deploymentProfile,
+            deploymentRouteRunMetadataBody(
+              body as Record<string, unknown>,
+              `connection-test:${protocol}`,
+              'connection-test',
+            ),
+            controller.signal,
+          );
+          if (!runMetadata.ok) {
+            return res.json(deploymentConnectionFailureResponse(runMetadata, body.model, start));
+          }
+          metadata = runMetadata.metadata;
+        }
         try {
           const result = await testProviderConnection({
             protocol,
-            baseUrl: body.baseUrl,
-            apiKey: body.apiKey,
+            baseUrl: effectiveBaseUrl,
+            apiKey: effectiveApiKey,
             model: body.model,
             apiVersion:
               typeof body.apiVersion === 'string' ? body.apiVersion : undefined,
+            ...(metadata ? { metadata } : {}),
             signal: controller.signal,
+            allowPrivateNetworkBaseUrl,
           });
           return res.json(result);
         } catch (err: any) {
@@ -470,15 +636,39 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   // providers. This keeps BYOK setup zero-config for local users at the cost of
   // one local streaming hop through the daemon.
 
-  const redactAuthTokens = (text: string) =>
-    text.replace(/Bearer [A-Za-z0-9_\-.+/=]+/g, 'Bearer [REDACTED]');
+  const redactAuthTokens = (text: string, exactSecrets: Array<string | undefined | null> = []) => {
+    let redacted = text.replace(/Bearer [A-Za-z0-9_\-.+/=]+/g, 'Bearer [REDACTED]');
+    for (const secret of exactSecrets) {
+      if (!secret) continue;
+      redacted = redacted.split(secret).join('[REDACTED]');
+    }
+    return redacted;
+  };
+
+  const redactAuthTokensInValue = (
+    value: unknown,
+    exactSecrets: Array<string | undefined | null> = [],
+  ): unknown => {
+    if (typeof value === 'string') return redactAuthTokens(value, exactSecrets);
+    if (Array.isArray(value)) return value.map((item) => redactAuthTokensInValue(item, exactSecrets));
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, redactAuthTokensInValue(item, exactSecrets)]),
+    );
+  };
 
   // DNS-aware wrapper. The sync `validateBaseUrl` only inspects the literal
   // hostname string, so a public DNS name pointing at an internal address
   // (`internal.example.com → 10.0.0.5`) still passes. We delegate to
-  // `validateUserProviderBaseUrl` here so every proxy/stream handler runs the
-  // same resolved-IP check before issuing the upstream request.
-  const validateExternalApiBaseUrl = (baseUrl: string) => {
+  // the user-provider validator for normal BYOK URLs and the deployment
+  // private-network allowance only for administrator-configured endpoints.
+  const validateExternalApiBaseUrl = (
+    baseUrl: string,
+    options: { allowPrivateNetwork?: boolean } = {},
+  ) => {
+    if (options.allowPrivateNetwork) {
+      return validateBaseUrlResolved(baseUrl, undefined, { allowPrivateNetwork: true });
+    }
     return validateUserProviderBaseUrl(baseUrl);
   };
 
@@ -985,6 +1175,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
+    if (rejectNonOpenAiDeploymentCredentialSource(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
       proxyBody;
     if (!baseUrl || !apiKey || !model) {
@@ -1033,7 +1224,23 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     if (rejectProxyPluginContext(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } =
       proxyBody;
-    if (!baseUrl || !apiKey || !model) {
+    const credentialSource = rejectInvalidCredentialSource(proxyBody.credentialSource, res);
+    if (!credentialSource) return;
+    let effectiveBaseUrl = typeof baseUrl === 'string' ? baseUrl : '';
+    let effectiveApiKey = typeof apiKey === 'string' ? apiKey : '';
+    let allowPrivateNetworkBaseUrl = false;
+    let deploymentProfile: DeploymentProviderProfile | null = null;
+    if (credentialSource === 'deployment') {
+      const resolved = resolveDeploymentProviderProfile('openai');
+      if (!resolved.ok) {
+        return sendApiError(res, resolved.status, resolved.code, resolved.message);
+      }
+      effectiveBaseUrl = resolved.profile.baseUrl;
+      effectiveApiKey = resolved.profile.apiKey;
+      allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
+      deploymentProfile = resolved.profile;
+    }
+    if (!effectiveBaseUrl || !effectiveApiKey || !model) {
       return sendApiError(
         res,
         400,
@@ -1042,7 +1249,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       );
     }
 
-    const validated = await validateExternalApiBaseUrl(baseUrl);
+    const validated = await validateExternalApiBaseUrl(
+      effectiveBaseUrl,
+      { allowPrivateNetwork: allowPrivateNetworkBaseUrl },
+    );
     if (validated.error) {
       return sendApiError(
         res,
@@ -1055,12 +1265,36 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       policy: proxyBody.reasoningExecution,
       routeKind: 'proxy',
       provider: 'openai',
-      resolvedBaseUrl: baseUrl,
+      resolvedBaseUrl: effectiveBaseUrl,
       model,
     });
     if (reasoningDenial) return sendReasoningEgressDenial(res, reasoningDenial);
 
-    const url = appendVersionedApiPath(baseUrl, '/chat/completions');
+    if (deploymentProfile) {
+      const runSessionAbort = new AbortController();
+      const abortRunSession = (): void => {
+        if (!runSessionAbort.signal.aborted) runSessionAbort.abort();
+      };
+      res.on('close', abortRunSession);
+      let metadata: DeploymentProviderRunMetadataResult;
+      try {
+        metadata = await deploymentProviderRunMetadata(
+          deploymentProfile,
+          deploymentProxyRunMetadataBody(proxyBody),
+          runSessionAbort.signal,
+        );
+      } finally {
+        res.off('close', abortRunSession);
+      }
+      if (!metadata.ok) {
+        return sendApiError(res, metadata.status, metadata.code, metadata.message);
+      }
+      if (metadata.metadata) {
+        proxyBody.metadata = metadata.metadata;
+      }
+    }
+
+    const url = appendVersionedApiPath(effectiveBaseUrl, '/chat/completions');
     console.log(
       `[proxy:openai] ${req.method} ${validated.parsed!.hostname} model=${model}`,
     );
@@ -1072,15 +1306,20 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
 
     const effectiveMaxTokens =
       typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192;
+    const payloadMetadata = proxyBody.metadata && typeof proxyBody.metadata === 'object'
+      ? { metadata: proxyBody.metadata }
+      : {};
     const payload: any = {
       model,
       messages: payloadMessages,
+      ...payloadMetadata,
       ...buildOpenAIChatTokenParam(model, effectiveMaxTokens),
       stream: true,
     };
     const retryPayload = {
       model,
       messages: payloadMessages,
+      ...payloadMetadata,
       ...buildMaxCompletionTokensParam(effectiveMaxTokens),
       stream: true,
     };
@@ -1100,7 +1339,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+          Authorization: `Bearer ${effectiveApiKey}`,
           ...(validated.parsed!.hostname === 'openrouter.ai' ? {
             'HTTP-Referer': 'https://opendesign.dev',
             'X-Title': 'Open Design',
@@ -1131,11 +1370,11 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         }
         if (!response.ok) {
           console.error(
-            `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+            `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText, [effectiveApiKey])}`,
           );
           sendProxyError(sse, `Upstream error: ${response.status}`, {
             code: proxyErrorCode(response.status),
-            details: errorText,
+            details: redactAuthTokens(errorText, [effectiveApiKey]),
             retryable: response.status === 429 || response.status >= 500,
           });
           return sse.end();
@@ -1153,7 +1392,10 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         if (!data) return false;
         const streamError = extractStreamErrorMessage(data);
         if (streamError) {
-          sendProxyError(sse, `Provider error: ${streamError}`, { details: data });
+          const secretsToRedact = [effectiveApiKey];
+          sendProxyError(sse, `Provider error: ${redactAuthTokens(streamError, secretsToRedact)}`, {
+            details: redactAuthTokensInValue(data, secretsToRedact),
+          });
           ended = true;
           return true;
         }
@@ -1183,6 +1425,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
+    if (rejectNonOpenAiDeploymentCredentialSource(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens, apiVersion } =
       proxyBody;
     if (!baseUrl || !apiKey || !model) {
@@ -1347,6 +1590,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
     /** @type {Partial<ProxyStreamRequest>} */
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
+    if (rejectNonOpenAiDeploymentCredentialSource(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!apiKey || !model) {
       return sendApiError(
@@ -1393,6 +1637,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/proxy/ollama/stream', async (req, res) => {
     const proxyBody = req.body || {};
     if (rejectProxyPluginContext(proxyBody, res)) return;
+    if (rejectNonOpenAiDeploymentCredentialSource(proxyBody, res)) return;
     const { baseUrl, apiKey, model, systemPrompt, messages, maxTokens } = proxyBody;
     if (!apiKey || !model) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey and model are required');

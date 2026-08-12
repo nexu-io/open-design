@@ -91,11 +91,15 @@ import {
   SUGGESTED_MODELS_BY_PROTOCOL,
 } from '../state/apiProtocols';
 import {
+  canCacheProviderModels,
+  deploymentProviderModelsCacheFingerprint,
   mergeProviderModelOptions,
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
 export {
+  canCacheProviderModels,
+  deploymentProviderModelsCacheFingerprint,
   mergeProviderModelOptions,
   providerModelsCacheKey,
 } from './providerModelsCache';
@@ -113,6 +117,7 @@ import type {
   AppVersionInfo,
   ConnectionTestResponse,
   DesignSystemGenerationJob,
+  DeploymentProviderConfig,
   OrbitRunSummary,
   OrbitStatusResponse,
   ExecMode,
@@ -276,7 +281,9 @@ interface ByokProviderPreset {
   protocol: ApiProtocol;
   baseUrl: string;
   preferredModels: readonly string[];
+  retiredModels?: readonly string[];
   custom?: boolean;
+  deployment?: boolean;
 }
 
 // One-shot focus hint when opening the dialog. `'amr'` scrolls the AMR agent
@@ -503,6 +510,7 @@ interface Props {
   /** Same channel for design-system registry mutations. */
   onDesignSystemsChanged?: (affectedDesignSystemId?: string) => void;
   onDesignSystemImportRebuildJob?: (designSystemId: string, job: DesignSystemGenerationJob) => void;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
 }
 
@@ -684,12 +692,13 @@ export function shouldShowCustomModelInput(
 
 export function canRunProviderConnectionTest(
   config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model'>,
-  options: { requiresApiKey?: boolean } = {},
+  options: { requiresApiKey?: boolean; requiresBaseUrl?: boolean } = {},
 ): boolean {
   const requiresApiKey = options.requiresApiKey ?? true;
+  const requiresBaseUrl = options.requiresBaseUrl ?? true;
   return (
     (!requiresApiKey || Boolean(config.apiKey.trim())) &&
-    Boolean(config.baseUrl.trim()) &&
+    (!requiresBaseUrl || Boolean(config.baseUrl.trim())) &&
     Boolean(config.model.trim())
   );
 }
@@ -698,11 +707,12 @@ export function canFetchProviderModels(
   config: Pick<AppConfig, 'apiKey' | 'baseUrl'>,
   protocol: ApiProtocol,
 ): boolean {
+  const requiresApiKey = protocol !== 'aihubmix' && protocol !== 'bedrock';
   return (
     !isProviderModelDiscoveryUnsupported(protocol, config.baseUrl) &&
     protocol !== 'azure' &&
     protocol !== 'ollama' &&
-    (protocol === 'bedrock' || Boolean(config.apiKey.trim())) &&
+    (!requiresApiKey || Boolean(config.apiKey.trim())) &&
     Boolean(config.baseUrl.trim()) &&
     isValidApiBaseUrl(config.baseUrl)
   );
@@ -749,12 +759,19 @@ function missingByokModelFetchFields(
 
 function providerConnectionTestKey(
   protocol: ApiProtocol,
-  config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model' | 'apiVersion'>,
+  config: Pick<AppConfig, 'apiKey' | 'baseUrl' | 'model' | 'apiVersion' | 'apiCredentialSource'>,
 ): string {
+  const credentialSource =
+    protocol === 'openai' && config.apiCredentialSource === 'deployment'
+      ? 'deployment'
+      : 'user';
   return [
     protocol,
-    config.baseUrl.trim().replace(/\/+$/, ''),
-    config.apiKey.trim(),
+    credentialSource,
+    credentialSource === 'deployment'
+      ? ''
+      : config.baseUrl.trim().replace(/\/+$/, ''),
+    credentialSource === 'deployment' ? '' : config.apiKey.trim(),
     config.model.trim(),
     protocol === 'azure' ? config.apiVersion?.trim() ?? '' : '',
   ].join('\n');
@@ -1009,6 +1026,7 @@ function currentApiProtocolConfig(config: AppConfig): ApiProtocolConfig {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
     model: config.model,
+    apiCredentialSource: config.apiCredentialSource ?? 'user',
     apiVersion: config.apiVersion ?? '',
     apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
     byokImageModel: config.byokImageModel ?? '',
@@ -1141,9 +1159,14 @@ function applyApiProtocolConfig(
   protocol: ApiProtocol,
   apiConfig: ApiProtocolConfig,
 ): AppConfig {
+  const apiCredentialSource =
+    protocol === 'openai' && apiConfig.apiCredentialSource === 'deployment'
+      ? 'deployment'
+      : 'user';
   return {
     ...config,
     apiProtocol: protocol,
+    apiCredentialSource,
     apiKey: apiConfig.apiKey,
     baseUrl: resolveFixedOriginBaseUrl(protocol, apiConfig.baseUrl),
     model: apiConfig.model,
@@ -1210,13 +1233,14 @@ export function updateCurrentApiProtocolConfig(
       ? { model: defaultModel }
       : {}),
   };
+  const nextApiProtocolConfigs = { ...(config.apiProtocolConfigs ?? {}) };
+  if (!(protocol === 'openai' && nextApiConfig.apiCredentialSource === 'deployment')) {
+    nextApiProtocolConfigs[protocol] = nextApiConfig;
+  }
   return applyApiProtocolConfig(
     {
       ...config,
-      apiProtocolConfigs: {
-        ...(config.apiProtocolConfigs ?? {}),
-        [protocol]: nextApiConfig,
-      },
+      apiProtocolConfigs: nextApiProtocolConfigs,
     },
     protocol,
     nextApiConfig,
@@ -1411,6 +1435,9 @@ export function shouldEnableSettingsSave(
       cfg.agentId && agents.find((a) => a.id === cfg.agentId)?.available,
     );
   }
+  if (cfg.apiProtocol === 'openai' && cfg.apiCredentialSource === 'deployment') {
+    return Boolean(cfg.model.trim());
+  }
   return Boolean(cfg.apiKey.trim() && cfg.model.trim() && isBaseUrlValid);
 }
 
@@ -1446,6 +1473,7 @@ export function sanitizeSettingsSavePayload(
     ...cfg,
     mode: initial.mode,
     apiKey: initial.apiKey,
+    apiCredentialSource: initial.apiCredentialSource,
     apiProtocol: initial.apiProtocol,
     apiVersion: initial.apiVersion,
     apiProtocolConfigs: initial.apiProtocolConfigs,
@@ -1467,8 +1495,10 @@ export function switchApiProtocolConfig(
   const currentProtocol = config.apiProtocol ?? 'anthropic';
   const apiProtocolConfigs = {
     ...(config.apiProtocolConfigs ?? {}),
-    [currentProtocol]: currentApiProtocolConfig(config),
   };
+  if (!(currentProtocol === 'openai' && config.apiCredentialSource === 'deployment')) {
+    apiProtocolConfigs[currentProtocol] = currentApiProtocolConfig(config);
+  }
   const nextApiConfig = nextApiProtocolConfig(
     {
       ...config,
@@ -1485,6 +1515,40 @@ export function switchApiProtocolConfig(
     protocol,
     nextApiConfig,
   );
+}
+
+export function byokProviderSelectionPatch(
+  provider: {
+    custom?: boolean;
+    deployment?: boolean;
+    baseUrl: string;
+    preferredModels: readonly string[];
+  },
+  providerChanged: boolean,
+): Partial<ApiProtocolConfig> {
+  if (provider.deployment) {
+    return {
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: provider.preferredModels[0]?.trim() ?? '',
+      apiProviderBaseUrl: null,
+    };
+  }
+  if (provider.custom) {
+    return {
+      apiCredentialSource: 'user',
+      apiProviderBaseUrl: null,
+      ...(providerChanged ? { model: '' } : {}),
+    };
+  }
+  return {
+    apiCredentialSource: 'user',
+    ...(providerChanged ? { apiKey: '' } : {}),
+    baseUrl: provider.baseUrl,
+    model: provider.preferredModels[0] ?? '',
+    apiProviderBaseUrl: provider.baseUrl,
+  };
 }
 
 export function SettingsDialog({
@@ -1514,6 +1578,7 @@ export function SettingsDialog({
   onProjectsRefresh,
   onDesignSystemsChanged,
   onDesignSystemImportRebuildJob,
+  deploymentProviderConfig = null,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
   onDraftChange,
@@ -1530,6 +1595,8 @@ export function SettingsDialog({
   const initialFormConfig = initial.mode === 'api'
     ? restorePendingByokProviderDraft(normalizedInitialConfig)
     : normalizedInitialConfig;
+  const deploymentProviderModelsFingerprint =
+    deploymentProviderModelsCacheFingerprint(deploymentProviderConfig);
   const [cfg, setCfg] = useState<AppConfig>(() => initialFormConfig);
   const [maxTokensInput, setMaxTokensInput] = useState(
     initialFormConfig.maxTokens == null ? '' : String(initialFormConfig.maxTokens),
@@ -1839,20 +1906,32 @@ export function SettingsDialog({
   const [providerModelsCommittedKey, setProviderModelsCommittedKey] =
     useState<string | null>(() => {
       const protocol = initial.apiProtocol ?? 'anthropic';
+      const credentialSource =
+        protocol === 'openai' && initial.apiCredentialSource === 'deployment'
+          ? 'deployment'
+          : 'user';
+      const deploymentCredentialMode = credentialSource === 'deployment';
       if (
         initial.mode !== 'api' ||
         protocol === 'azure' ||
         protocol === 'ollama' ||
-        missingByokModelFetchFields(initial, protocol).length > 0 ||
-        !isValidApiBaseUrl(initial.baseUrl)
+        (
+          !deploymentCredentialMode &&
+          (
+            missingByokModelFetchFields(initial, protocol).length > 0 ||
+            !isValidApiBaseUrl(initial.baseUrl)
+          )
+        )
       ) {
         return null;
       }
       return providerModelsCacheKey(
         protocol,
-        initial.baseUrl,
-        initial.apiKey,
+        deploymentCredentialMode ? '' : initial.baseUrl,
+        deploymentCredentialMode ? '' : initial.apiKey,
         initial.apiVersion ?? '',
+        credentialSource,
+        deploymentCredentialMode ? deploymentProviderModelsFingerprint : '',
       );
     });
   const agentTestAbortRef = useRef<AbortController | null>(null);
@@ -2196,7 +2275,10 @@ export function SettingsDialog({
   const setByokProvider = (provider: ByokProviderPreset) => {
     const currentDraftKey = byokProviderKeyForConfig(cfg);
     const currentApiConfig = currentApiProtocolConfig(cfg);
-    if ((cfg.apiProviderBaseUrl ?? null) === null) {
+    const currentIsDeploymentCredentialMode =
+      (cfg.apiProtocol ?? 'anthropic') === 'openai' &&
+      cfg.apiCredentialSource === 'deployment';
+    if ((cfg.apiProviderBaseUrl ?? null) === null && !currentIsDeploymentCredentialMode) {
       lastCustomByokProviderDraftKeysRef.current[cfg.apiProtocol ?? 'anthropic'] =
         currentDraftKey;
     }
@@ -2210,20 +2292,27 @@ export function SettingsDialog({
       apiModelCustomEditing,
       apiModelUserSelected: apiModelUserSelectedRef.current,
     };
-    const nextProviderBaseUrlForCurrent = provider.custom ? null : provider.baseUrl;
-    const providerChangedBeforeSwitch = provider.custom
-      ? (cfg.apiProviderBaseUrl ?? null) !== null
-      : (cfg.apiProtocol ?? 'anthropic') !== provider.protocol ||
-        (cfg.apiProviderBaseUrl ?? null) !== nextProviderBaseUrlForCurrent;
-    focusByokRequiredFieldAfterProtocolSwitchRef.current = !provider.custom;
+    const providerUsesCustomStorage = provider.custom || provider.deployment;
+    const nextProviderBaseUrlForCurrent = providerUsesCustomStorage ? null : provider.baseUrl;
+    const providerChangedBeforeSwitch = provider.deployment
+      ? !currentIsDeploymentCredentialMode
+      : provider.custom
+        ? (cfg.apiProviderBaseUrl ?? null) !== null || currentIsDeploymentCredentialMode
+        : (cfg.apiProtocol ?? 'anthropic') !== provider.protocol ||
+          (cfg.apiProviderBaseUrl ?? null) !== nextProviderBaseUrlForCurrent;
+    focusByokRequiredFieldAfterProtocolSwitchRef.current = !providerUsesCustomStorage;
     providerModelsSkipNextResetRef.current = providerChangedBeforeSwitch;
     setCfg((current) => {
       const currentProtocol = current.apiProtocol ?? 'anthropic';
-      const nextProviderBaseUrl = provider.custom ? null : provider.baseUrl;
-      const providerChanged = provider.custom
-        ? (current.apiProviderBaseUrl ?? null) !== null
-        : currentProtocol !== provider.protocol ||
-          (current.apiProviderBaseUrl ?? null) !== nextProviderBaseUrl;
+      const currentIsDeploymentCredentialMode =
+        currentProtocol === 'openai' && current.apiCredentialSource === 'deployment';
+      const nextProviderBaseUrl = providerUsesCustomStorage ? null : provider.baseUrl;
+      const providerChanged = provider.deployment
+        ? !currentIsDeploymentCredentialMode
+        : provider.custom
+          ? (current.apiProviderBaseUrl ?? null) !== null || currentIsDeploymentCredentialMode
+          : currentProtocol !== provider.protocol ||
+            (current.apiProviderBaseUrl ?? null) !== nextProviderBaseUrl;
       const switched = switchApiProtocolConfig(current, provider.protocol);
       const fallbackApiConfig = currentApiProtocolConfig(switched);
       const customDraftKey = provider.custom
@@ -2287,20 +2376,18 @@ export function SettingsDialog({
         currentDraftKey,
         currentApiProtocolConfig(current),
       );
-      if (provider.custom) {
+      if (providerUsesCustomStorage) {
         applyDraftUiState(undefined);
-        return updateCurrentApiProtocolConfig(switchedWithCurrentDraft, {
-          apiProviderBaseUrl: null,
-          ...(providerChanged ? { model: '' } : {}),
-        });
+        return updateCurrentApiProtocolConfig(
+          switchedWithCurrentDraft,
+          byokProviderSelectionPatch(provider, providerChanged),
+        );
       }
       applyDraftUiState(undefined);
-      return updateCurrentApiProtocolConfig(switchedWithCurrentDraft, {
-        ...(providerChanged ? { apiKey: '' } : {}),
-        baseUrl: provider.baseUrl,
-        model: provider.preferredModels[0] ?? '',
-        apiProviderBaseUrl: provider.baseUrl,
-      });
+      return updateCurrentApiProtocolConfig(
+        switchedWithCurrentDraft,
+        byokProviderSelectionPatch(provider, providerChanged),
+      );
     });
   };
   const updateApiConfig = (patch: Partial<ApiProtocolConfig>) =>
@@ -2598,19 +2685,29 @@ export function SettingsDialog({
       }
     };
     try {
-      const result = await testApiProvider(
-        {
-          protocol: apiProtocol,
-          baseUrl: cfg.baseUrl,
-          apiKey: cleanByokApiKey(cfg.apiKey),
-          model: cfg.model,
-          apiVersion:
-            apiProtocol === 'azure'
-              ? cfg.apiVersion?.trim() || undefined
-              : undefined,
-        },
-        controller.signal,
-      );
+      const result = isDeploymentCredentialMode
+        ? await testApiProvider(
+            {
+              protocol: 'openai',
+              credentialSource: 'deployment',
+              model: cfg.model,
+            },
+            controller.signal,
+          )
+        : await testApiProvider(
+            {
+              protocol: apiProtocol,
+              credentialSource: 'user',
+              baseUrl: cfg.baseUrl,
+              apiKey: cleanByokApiKey(cfg.apiKey),
+              model: cfg.model,
+              apiVersion:
+                apiProtocol === 'azure'
+                  ? cfg.apiVersion?.trim() || undefined
+                  : undefined,
+            },
+            controller.signal,
+          );
       if (controller.signal.aborted) return;
       if (providerTestRevisionRef.current !== revision) {
         clearIfStale();
@@ -2792,11 +2889,15 @@ export function SettingsDialog({
     }
     const cacheKey = providerModelsCacheKey(
       apiProtocol,
-      cfg.baseUrl,
-      cfg.apiKey,
+      isDeploymentCredentialMode ? '' : cfg.baseUrl,
+      isDeploymentCredentialMode ? '' : cfg.apiKey,
       cfg.apiVersion ?? '',
+      isDeploymentCredentialMode ? 'deployment' : 'user',
+      isDeploymentCredentialMode ? deploymentProviderModelsFingerprint : '',
     );
-    const cachedModels = activeProviderModelsCache[cacheKey];
+    const cachedModels = shouldCacheProviderModels
+      ? activeProviderModelsCache[cacheKey]
+      : undefined;
     if (cachedModels) {
       trackModelsFetchResult(
         {
@@ -2830,11 +2931,17 @@ export function SettingsDialog({
     };
     try {
       const result = await fetchProviderModels(
-        {
-          protocol: apiProtocol,
-          baseUrl: cfg.baseUrl,
-          apiKey: cleanByokApiKey(cfg.apiKey),
-        },
+        isDeploymentCredentialMode
+          ? {
+              protocol: 'openai',
+              credentialSource: 'deployment',
+            }
+          : {
+              protocol: apiProtocol,
+              credentialSource: 'user',
+              baseUrl: cfg.baseUrl,
+              apiKey: cleanByokApiKey(cfg.apiKey),
+            },
         controller.signal,
       );
       if (controller.signal.aborted) return;
@@ -2842,7 +2949,7 @@ export function SettingsDialog({
         clearIfStale();
         return;
       }
-      if (result.ok && result.models?.length) {
+      if (shouldCacheProviderModels && result.ok && result.models?.length) {
         activeSetProviderModelsCache((prev) => ({
           ...prev,
           [cacheKey]: result.models ?? [],
@@ -2975,6 +3082,8 @@ export function SettingsDialog({
   };
 
   const apiProtocol = cfg.apiProtocol ?? 'anthropic';
+  const isDeploymentCredentialMode =
+    apiProtocol === 'openai' && cfg.apiCredentialSource === 'deployment';
   const defaultApiKeyConsoleLink = API_KEY_CONSOLE_LINKS[apiProtocol];
   const byokProviderPresets: ReadonlyArray<ByokProviderPreset> = [
     ...BYOK_PROVIDER_PRESETS,
@@ -3002,6 +3111,20 @@ export function SettingsDialog({
   );
   const byokProviderOptions: ReadonlyArray<ByokProviderPreset> = [
     ...byokProviderPresets.filter((provider) => !provider.custom),
+    ...(deploymentProviderConfig?.available && deploymentProviderConfig.protocol === 'openai'
+      ? [{
+        id: 'deployment',
+        title: deploymentProviderConfig.label,
+        protocol: 'openai' as const,
+        baseUrl: '',
+        preferredModels: [
+          deploymentProviderConfig.defaultModel?.trim() || (
+            isDeploymentCredentialMode ? cfg.model : ''
+          ),
+        ].filter(Boolean),
+        deployment: true,
+      }]
+      : []),
     ...API_PROTOCOL_TABS.filter((tab) => !byokPresetProtocols.has(tab.id)).map((tab) => {
       const fallback = defaultApiProtocolConfig(tab.id);
       return {
@@ -3017,7 +3140,9 @@ export function SettingsDialog({
     customByokProvider,
   ];
   const selectedByokProvider =
-    cfg.apiProviderBaseUrl === null
+    isDeploymentCredentialMode
+      ? byokProviderOptions.find((provider) => provider.deployment) ?? customByokProvider
+      : cfg.apiProviderBaseUrl === null
       ? customByokProvider
       : byokProviderOptions.find(
         (provider) =>
@@ -3025,8 +3150,8 @@ export function SettingsDialog({
           provider.protocol === apiProtocol &&
           provider.baseUrl === cfg.apiProviderBaseUrl,
       ) ?? customByokProvider;
-  const baseUrlValid = isValidApiBaseUrl(cfg.baseUrl);
-  const baseUrlInvalid = Boolean(cfg.baseUrl.trim() && !baseUrlValid);
+  const baseUrlValid = isDeploymentCredentialMode || isValidApiBaseUrl(cfg.baseUrl);
+  const baseUrlInvalid = !isDeploymentCredentialMode && Boolean(cfg.baseUrl.trim() && !baseUrlValid);
   const byokRequiredLabel = (field: ByokRequiredField): string => {
     switch (field) {
       case 'api_key':
@@ -3391,19 +3516,26 @@ export function SettingsDialog({
   const apiKeyConsoleLink =
     selectedProvider?.apiKeyConsoleLink ?? defaultApiKeyConsoleLink;
   const showProviderPreset =
-    protocolProviders.length > 0 && !isFixedOriginGateway(apiProtocol);
+    !isDeploymentCredentialMode &&
+    protocolProviders.length > 0 &&
+    !isFixedOriginGateway(apiProtocol);
   // Fixed-origin gateways resolve their Base URL automatically; nothing for the
   // user to edit, so hide the field entirely.
-  const showBaseUrlField = !isFixedOriginGateway(apiProtocol);
+  const showBaseUrlField =
+    !isDeploymentCredentialMode && !isFixedOriginGateway(apiProtocol);
   const byokRequiresApiKey = byokProviderRequiresApiKey(
     apiProtocol,
     selectedProvider,
     cfg.baseUrl,
-  );
+  ) && !isDeploymentCredentialMode;
   const byokProviderConfigured = (provider: ByokProviderPreset): boolean => {
+    if (provider.deployment) {
+      return isDeploymentCredentialMode && Boolean(cfg.model.trim());
+    }
     if (provider.custom) {
       return canRunProviderConnectionTest(currentApiProtocolConfig(cfg), {
         requiresApiKey: byokRequiresApiKey,
+        requiresBaseUrl: !isDeploymentCredentialMode,
       }) && isValidApiBaseUrl(cfg.baseUrl);
     }
     const providerDraft = cfg.byokProviderConfigDrafts?.[
@@ -3451,6 +3583,7 @@ export function SettingsDialog({
       },
       {
         requiresApiKey: byokRequiresApiKey,
+        requiresBaseUrl: !isDeploymentCredentialMode,
         keyValidationBaseUrl: byokKeyValidationBaseUrl,
       },
     ),
@@ -3459,8 +3592,10 @@ export function SettingsDialog({
       byokKeyValidationBaseUrl,
       byokRequiresApiKey,
       cfg.apiKey,
+      cfg.apiCredentialSource,
       cfg.baseUrl,
       cfg.model,
+      isDeploymentCredentialMode,
     ],
   );
   const byokBlockingDraftIssues = useMemo(
@@ -3471,6 +3606,7 @@ export function SettingsDialog({
     () => byokPreflightBlockReason(cfg),
     [
       cfg.apiKey,
+      cfg.apiCredentialSource,
       cfg.apiProtocol,
       cfg.apiProviderBaseUrl,
       cfg.baseUrl,
@@ -3490,6 +3626,7 @@ export function SettingsDialog({
       },
       {
         requiresApiKey: byokRequiresApiKey,
+        requiresBaseUrl: !isDeploymentCredentialMode,
         requireModel: false,
         keyValidationBaseUrl: byokKeyValidationBaseUrl,
       },
@@ -3499,20 +3636,41 @@ export function SettingsDialog({
       byokKeyValidationBaseUrl,
       byokRequiresApiKey,
       cfg.apiKey,
+      cfg.apiCredentialSource,
       cfg.baseUrl,
       cfg.model,
+      isDeploymentCredentialMode,
     ],
   );
   const providerModelsKey = useMemo(
     () => providerModelsCacheKey(
       apiProtocol,
+      isDeploymentCredentialMode ? '' : cfg.baseUrl,
+      isDeploymentCredentialMode ? '' : cfg.apiKey,
+      cfg.apiVersion ?? '',
+      isDeploymentCredentialMode ? 'deployment' : 'user',
+      isDeploymentCredentialMode ? deploymentProviderModelsFingerprint : '',
+    ),
+    [
+      apiProtocol,
       cfg.baseUrl,
       cfg.apiKey,
-      cfg.apiVersion ?? '',
-    ),
-    [apiProtocol, cfg.baseUrl, cfg.apiKey, cfg.apiVersion],
+      cfg.apiVersion,
+      deploymentProviderModelsFingerprint,
+      isDeploymentCredentialMode,
+    ],
   );
+  const shouldCacheProviderModels = canCacheProviderModels(
+    isDeploymentCredentialMode ? 'deployment' : 'user',
+  );
+  const fetchedProviderModelsResult =
+    providerModelsState.status === 'done' &&
+    providerModelsState.cacheKey === providerModelsKey &&
+    providerModelsState.result.ok
+      ? providerModelsState.result.models ?? []
+      : [];
   const providerModelDiscoveryUnavailable =
+    !isDeploymentCredentialMode &&
     apiProtocol !== 'azure' &&
     apiProtocol !== 'ollama' &&
     isProviderModelDiscoveryUnsupported(apiProtocol, cfg.baseUrl);
@@ -3523,9 +3681,15 @@ export function SettingsDialog({
   const fetchedApiModelOptions =
     providerModelDiscoveryUnavailable
       ? []
-      : activeProviderModelsCache[providerModelsKey] ?? [];
+      : shouldCacheProviderModels
+        ? activeProviderModelsCache[providerModelsKey] ?? fetchedProviderModelsResult
+        : fetchedProviderModelsResult;
   const providerPreferredModels =
-    selectedProvider?.preferredModels ?? SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol];
+    isDeploymentCredentialMode
+      ? deploymentProviderConfig?.defaultModel?.trim()
+        ? [deploymentProviderConfig.defaultModel.trim()]
+        : []
+      : selectedProvider?.preferredModels ?? SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol];
   const providerManagedModelIds = useMemo(
     () => new Set([
       ...providerPreferredModels,
@@ -3674,7 +3838,13 @@ export function SettingsDialog({
     // debounce-commit — fetch as soon as the tab is selected. Every other
     // protocol waits until the key/baseUrl inputs are committed (on blur) so we
     // don't fire on each keystroke.
-    if (apiProtocol !== 'aihubmix' && providerModelsCommittedKey !== providerModelsKey) return;
+    if (
+      !isDeploymentCredentialMode &&
+      apiProtocol !== 'aihubmix' &&
+      providerModelsCommittedKey !== providerModelsKey
+    ) {
+      return;
+    }
     const timer = window.setTimeout(() => {
       void handleFetchProviderModels({ silent: true });
     }, 300);
@@ -3689,6 +3859,7 @@ export function SettingsDialog({
     byokModelFetchDraftValidation,
     providerModelsCommittedKey,
     providerModelsKey,
+    isDeploymentCredentialMode,
     visualStabilityMode,
   ]);
   const currentProviderModelsResult =
@@ -3734,6 +3905,10 @@ export function SettingsDialog({
       : null;
   const suggestedApiModelIds = useMemo(
     () => {
+      if (isDeploymentCredentialMode) {
+        const defaultModel = deploymentProviderConfig?.defaultModel?.trim();
+        return defaultModel ? [defaultModel] : [];
+      }
       if (providerModelDiscoveryUnavailable) {
         return selectedProvider?.preferredModels.length
           ? Array.from(new Set(selectedProvider.preferredModels))
@@ -3745,7 +3920,13 @@ export function SettingsDialog({
           : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
       ));
     },
-    [apiProtocol, selectedProvider, providerModelDiscoveryUnavailable],
+    [
+      apiProtocol,
+      deploymentProviderConfig?.defaultModel,
+      isDeploymentCredentialMode,
+      selectedProvider,
+      providerModelDiscoveryUnavailable,
+    ],
   );
   const apiModelOptions = useMemo(
     () => mergeProviderModelOptions(
@@ -5390,6 +5571,7 @@ export function SettingsDialog({
                     !byokFirstPartyBaseUrl?.hostTypo &&
                     canRunProviderConnectionTest(cfg, {
                       requiresApiKey: byokRequiresApiKey,
+                      requiresBaseUrl: !isDeploymentCredentialMode,
                     })
                   }
                   labels={{
@@ -5456,51 +5638,53 @@ export function SettingsDialog({
                   }}
                 />
               ) : null}
-              <ByokKeyField
-                apiKey={cfg.apiKey}
-                apiKeyConsoleLink={apiKeyConsoleLink}
-                apiProtocol={apiProtocol}
-                inputRef={apiKeyInputRef}
-                labels={{
-                  apiHint: t('settings.apiHint'),
-                  apiKey: t('settings.apiKey'),
-                  apiKeyCleaned: t('settings.apiKeyCleaned'),
-                  apiKeyGetLink: t('settings.apiKeyGetLink', {
-                    host: apiKeyConsoleLink.host,
-                  }),
-                  apiKeyInvalid: t('settings.apiKeyInvalid'),
-                  hide: t('settings.hide'),
-                  hideKey: t('settings.hideKey'),
-                  required: t('settings.required'),
-                  show: t('settings.show'),
-                  showKey: t('settings.showKey'),
-                }}
-                requiresApiKey={byokRequiresApiKey}
-                showApiKeyInvalid={Boolean(
-                  apiKeyFieldAuthFailed ||
-                    byokPreconditionNotice?.field === 'api_key' ||
-                    apiKeyDraftInvalid,
-                )}
-                showApiKey={showApiKey}
-                onBlur={onByokKeyCommit}
-                onChange={(value) => {
-                  committedClearedByokProviderKeyRef.current = null;
-                  updateApiConfig({ apiKey: value });
-                }}
-                onFocus={() => {
-                  const byokProviderId = byokProtocolToTracking(apiProtocol);
-                  if (byokProviderId) {
-                    trackSettingsByokFieldClick(analytics.track, {
-                      page_name: 'settings',
-                      area: 'configure_execution_mode_byok',
-                      element: 'api_key',
-                      provider_id: byokProviderId,
-                      has_value: Boolean(cfg.apiKey?.trim()),
-                    });
-                  }
-                }}
-                onToggleShowApiKey={() => setShowApiKey((v) => !v)}
-              />
+              {!isDeploymentCredentialMode ? (
+                <ByokKeyField
+                  apiKey={cfg.apiKey}
+                  apiKeyConsoleLink={apiKeyConsoleLink}
+                  apiProtocol={apiProtocol}
+                  inputRef={apiKeyInputRef}
+                  labels={{
+                    apiHint: t('settings.apiHint'),
+                    apiKey: t('settings.apiKey'),
+                    apiKeyCleaned: t('settings.apiKeyCleaned'),
+                    apiKeyGetLink: t('settings.apiKeyGetLink', {
+                      host: apiKeyConsoleLink.host,
+                    }),
+                    apiKeyInvalid: t('settings.apiKeyInvalid'),
+                    hide: t('settings.hide'),
+                    hideKey: t('settings.hideKey'),
+                    required: t('settings.required'),
+                    show: t('settings.show'),
+                    showKey: t('settings.showKey'),
+                  }}
+                  requiresApiKey={byokRequiresApiKey}
+                  showApiKeyInvalid={Boolean(
+                    apiKeyFieldAuthFailed ||
+                      byokPreconditionNotice?.field === 'api_key' ||
+                      apiKeyDraftInvalid,
+                  )}
+                  showApiKey={showApiKey}
+                  onBlur={onByokKeyCommit}
+                  onChange={(value) => {
+                    committedClearedByokProviderKeyRef.current = null;
+                    updateApiConfig({ apiKey: value });
+                  }}
+                  onFocus={() => {
+                    const byokProviderId = byokProtocolToTracking(apiProtocol);
+                    if (byokProviderId) {
+                      trackSettingsByokFieldClick(analytics.track, {
+                        page_name: 'settings',
+                        area: 'configure_execution_mode_byok',
+                        element: 'api_key',
+                        provider_id: byokProviderId,
+                        has_value: Boolean(cfg.apiKey?.trim()),
+                      });
+                    }
+                  }}
+                  onToggleShowApiKey={() => setShowApiKey((v) => !v)}
+                />
+              ) : null}
               {showBaseUrlField ? (
                 <ByokProviderBaseUrl
                   apiProtocol={apiProtocol}

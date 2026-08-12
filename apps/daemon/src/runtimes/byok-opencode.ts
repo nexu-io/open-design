@@ -42,8 +42,10 @@ export function opencodeByokModelId(model: string | null | undefined): string | 
 export function buildOpenCodeByokProviderConfig(
   provider: ByokChatProviderConfig | null | undefined,
   model: string | null | undefined,
+  providerMetadata?: Record<string, unknown>,
 ): OpenCodeByokProviderConfig | null {
   if (!provider || typeof provider !== 'object') return null;
+  if (provider.credentialSource === 'deployment') return null;
   const protocol = provider.protocol;
   if (!Object.prototype.hasOwnProperty.call(DEFAULT_BASE_URL_BY_PROTOCOL, protocol)) {
     return null;
@@ -70,6 +72,7 @@ export function buildOpenCodeByokProviderConfig(
     baseUrl,
     provider.apiVersion,
     needsApiKey,
+    providerMetadata,
   );
   const config = {
     provider: {
@@ -174,10 +177,12 @@ function buildProviderEntry(
   baseUrl: string,
   apiVersion: string | undefined,
   includeApiKey: boolean,
+  providerMetadata?: Record<string, unknown>,
 ): { npm: ProviderPackage; options: Record<string, unknown> } {
   const apiKeyOption = includeApiKey
     ? { apiKey: `{env:${BYOK_OPENCODE_API_KEY_ENV}}` }
     : {};
+  const metadataOption = providerMetadataOption(providerMetadata);
   const usesAzureOpenAICompatiblePath =
     protocol === 'azure' && /\/openai\/v\d+(?:$|\/)/.test(safeUrlPathname(baseUrl));
   switch (protocol) {
@@ -186,6 +191,7 @@ function buildProviderEntry(
         npm: '@ai-sdk/anthropic',
         options: {
           ...apiKeyOption,
+          ...metadataOption,
           ...(baseUrl ? { baseURL: baseUrl } : {}),
         },
       };
@@ -194,6 +200,7 @@ function buildProviderEntry(
         npm: '@ai-sdk/azure',
         options: {
           ...apiKeyOption,
+          ...metadataOption,
           ...(baseUrl ? { baseURL: baseUrl } : {}),
           ...(usesAzureOpenAICompatiblePath
             ? {}
@@ -206,6 +213,7 @@ function buildProviderEntry(
         npm: '@ai-sdk/google',
         options: {
           ...apiKeyOption,
+          ...metadataOption,
           ...(baseUrl ? { baseURL: baseUrl } : {}),
         },
       };
@@ -215,6 +223,7 @@ function buildProviderEntry(
         options: {
           baseURL: baseUrl,
           ...apiKeyOption,
+          ...metadataOption,
         },
       };
     case 'openai':
@@ -226,6 +235,7 @@ function buildProviderEntry(
           npm: '@ai-sdk/openai',
           options: {
             ...apiKeyOption,
+            ...metadataOption,
             ...(baseUrl ? { baseURL: baseUrl } : {}),
           },
         };
@@ -235,6 +245,7 @@ function buildProviderEntry(
         options: {
           baseURL: baseUrl,
           ...apiKeyOption,
+          ...metadataOption,
         },
       };
     case 'senseaudio':
@@ -244,9 +255,24 @@ function buildProviderEntry(
         options: {
           baseURL: baseUrl,
           ...apiKeyOption,
+          ...metadataOption,
         },
       };
   }
+}
+
+function providerMetadataOption(metadata: Record<string, unknown> | undefined): Record<string, unknown> {
+  if (!metadata) return {};
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    const header = `x-${key.replace(/_/g, '-')}`;
+    if (typeof value === 'string' && value.trim()) {
+      headers[header] = value.trim();
+    } else if (typeof value === 'number' && Number.isFinite(value)) {
+      headers[header] = String(value);
+    }
+  }
+  return Object.keys(headers).length > 0 ? { headers } : {};
 }
 
 function safeUrlPathname(value: string): string {

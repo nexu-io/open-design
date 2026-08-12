@@ -103,6 +103,13 @@ describe('byok-opencode runtime config', () => {
     });
   });
 
+  it('rejects deployment selections without a server-resolved provider', () => {
+    expect(buildOpenCodeByokProviderConfig(
+      { protocol: 'openai', credentialSource: 'deployment' },
+      'gpt-5.5',
+    )).toBeNull();
+  });
+
   it('routes OpenAI-protocol BYOK with a non-OpenAI base URL to the OpenAI-compatible provider package', () => {
     expect(buildOpenCodeByokProviderConfig(
       { protocol: 'openai', apiKey: 'sk-deepseek', baseUrl: 'https://api.deepseek.com' },

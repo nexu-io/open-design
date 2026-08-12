@@ -18,6 +18,7 @@ import type {
   ApiProtocol,
   AppConfig,
   DesignSystemSummary,
+  DeploymentProviderConfig,
   ExecMode,
   Project,
   ProjectKind,
@@ -85,6 +86,7 @@ interface Props {
   // sticky top-bar can expose the active CLI/BYOK + model and persist
   // changes through the same channels as the project view.
   config: AppConfig;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   providerModelsCache?: Record<string, ProviderModelOption[]>;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<Record<string, ProviderModelOption[]>>>;
   integrationInitialTab?: IntegrationTab;
@@ -260,6 +262,7 @@ export function EntryView({
   amrLoggedIn,
   amrAccountPlan,
   config,
+  deploymentProviderConfig,
   providerModelsCache,
   onProviderModelsCacheChange,
   integrationInitialTab,
@@ -386,6 +389,7 @@ export function EntryView({
       designSystemsLoading={designSystemsLoading}
       projectsLoading={projectsLoading}
       config={config}
+      deploymentProviderConfig={deploymentProviderConfig}
       providerModelsCache={providerModelsCache}
       onProviderModelsCacheChange={onProviderModelsCacheChange}
       agents={agents}

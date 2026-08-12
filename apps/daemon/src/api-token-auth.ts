@@ -14,3 +14,16 @@ export function apiTokenFromEnv(env: NodeJS.ProcessEnv = process.env): string {
 export function isApiTokenMiddlewareEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return apiTokenFromEnv(env).length > 0 && !isApiAuthDisabled(env);
 }
+
+const apiTokenOpenProbePaths = new Set([
+  '/health',
+  '/api/health',
+  '/ready',
+  '/api/ready',
+  '/version',
+  '/api/version',
+]);
+
+export function isApiTokenExemptRequest(_method: string, path: string): boolean {
+  return apiTokenOpenProbePaths.has(path);
+}

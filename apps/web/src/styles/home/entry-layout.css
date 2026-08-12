@@ -2743,23 +2743,27 @@
   color: var(--text);
 }
 
-/* Two runtime-choice buttons ("local CLI" or "your own key") on one row,
-   centered as a unit under the full-width primary CTA above. */
+/* Runtime-choice buttons sit below the primary Cloud CTA. */
 .onboarding-cloud__alts {
   display: flex;
   align-items: center;
   justify-content: center;
   align-self: stretch;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 22px;
 }
 
-/* Double-class selector to out-specificity the shared Button module's
-   `.button`/`.subtle` rules (same 0-1-0 specificity) without `!important`. */
 .onboarding-cloud__alts .onboarding-cloud__alt-btn {
   border-radius: var(--radius-pill);
   color: var(--text-muted);
   font-size: 14px;
+}
+
+.onboarding-cloud__alts .onboarding-cloud__deployment-alt {
+  flex-basis: 100%;
+  width: 100%;
+  justify-content: center;
 }
 
 .onboarding-cloud__alts-or {

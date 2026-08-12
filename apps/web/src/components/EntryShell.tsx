@@ -82,6 +82,7 @@ import type {
   AppConfig,
   ConnectionTestResponse,
   DesignSystemSummary,
+  DeploymentProviderConfig,
   ExecMode,
   Project,
   ProjectMetadata,
@@ -213,6 +214,8 @@ import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { summarizeProjectNameFromPrompt } from '../utils/projectName';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import {
+  canCacheProviderModels,
+  deploymentProviderModelsCacheFingerprint,
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
@@ -406,6 +409,7 @@ interface Props {
   // top-bar `InlineModelSwitcher` can render the active mode/agent/model
   // and persist changes through the same callbacks the project view uses.
   config: AppConfig;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   providerModelsCache?: ProviderModelsCache;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
@@ -545,6 +549,7 @@ export function EntryShell({
   designSystemsLoading = false,
   projectsLoading = false,
   config,
+  deploymentProviderConfig = null,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
   agents,
@@ -1464,6 +1469,7 @@ export function EntryShell({
         <main className="entry-onboarding-modal" aria-label={t('settings.welcomeTitle')}>
           <OnboardingView
             config={config}
+            deploymentProviderConfig={deploymentProviderConfig}
             agents={agents}
             agentsLoading={agentsLoading}
             providerModelsCache={activeProviderModelsCache}
@@ -1488,6 +1494,7 @@ export function EntryShell({
     <InlineModelSwitcher
       compact
       config={config}
+      deploymentProviderConfig={deploymentProviderConfig}
       agents={agents}
       providerModelsCache={activeProviderModelsCache}
       onProviderModelsCacheChange={activeSetProviderModelsCache}
@@ -1930,6 +1937,7 @@ export function EntryShell({
 
 function OnboardingView({
   config,
+  deploymentProviderConfig = null,
   providerModelsCache: sharedProviderModelsCache,
   onProviderModelsCacheChange,
   agents,
@@ -1946,6 +1954,7 @@ function OnboardingView({
   onFinish,
 }: {
   config: AppConfig;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   providerModelsCache?: ProviderModelsCache;
   onProviderModelsCacheChange?: Dispatch<SetStateAction<ProviderModelsCache>>;
   agents: AgentInfo[];
@@ -1966,8 +1975,14 @@ function OnboardingView({
 }) {
   const t = useT();
   const analytics = useAnalytics();
-  const [step, setStep] = useState(0);
-  const [runtime, setRuntime] = useState<'amr' | 'local' | 'byok' | null>(null);
+  const persistedDeploymentRuntime =
+    config.mode === 'api' &&
+    config.apiProtocol === 'openai' &&
+    config.apiCredentialSource === 'deployment';
+  const [step, setStep] = useState(persistedDeploymentRuntime ? 2 : 0);
+  const [runtime, setRuntime] = useState<
+    'amr' | 'local' | 'byok' | 'deployment' | null
+  >(persistedDeploymentRuntime ? 'deployment' : null);
   const [modelSource, setModelSource] = useState<'amr' | 'local' | 'byok'>('amr');
   const modelSourceOptionRefs = useRef<
     Record<'amr' | 'local' | 'byok', HTMLButtonElement | null>
@@ -2005,6 +2020,11 @@ function OnboardingView({
     | { status: 'running'; inputKey: string }
     | { status: 'done'; inputKey: string; result: ProviderModelsResponse }
   >({ status: 'idle' });
+  const [onboardingConfigPersistState, setOnboardingConfigPersistState] = useState<
+    | { status: 'idle' }
+    | { status: 'saving'; token: number }
+    | { status: 'error'; token: number }
+  >({ status: 'idle' });
   const [localProviderModelsCache, setLocalProviderModelsCache] =
     useState<ProviderModelsCache>({});
   const hasSharedProviderModelsCache =
@@ -2031,6 +2051,7 @@ function OnboardingView({
   const amrAuthAttemptIdRef = useRef<string | null>(null);
   const providerModelsAutoFetchKeyRef = useRef<string | null>(null);
   const providerAutoTestKeyRef = useRef<string | null>(null);
+  const onboardingConfigPersistTokenRef = useRef(0);
   const providerModelAutoSelectRef = useRef({
     model: config.model,
     providerModelsInputKey: '',
@@ -2038,7 +2059,16 @@ function OnboardingView({
     step,
   });
   const apiProtocol = config.apiProtocol ?? 'anthropic';
+  const deploymentProviderAvailable =
+    deploymentProviderConfig?.available === true &&
+    deploymentProviderConfig.protocol === 'openai';
+  const deploymentProviderHasConcreteModel =
+    Boolean(config.model.trim()) && config.model.trim().toLowerCase() !== 'default';
+  const providerCredentialSource = runtime === 'deployment' ? 'deployment' : 'user';
+  const deploymentProviderModelsFingerprint =
+    deploymentProviderModelsCacheFingerprint(deploymentProviderConfig);
   const providerTestInputKey = [
+    providerCredentialSource,
     apiProtocol,
     config.baseUrl.trim(),
     config.model.trim(),
@@ -2050,7 +2080,10 @@ function OnboardingView({
     config.baseUrl,
     config.apiKey,
     config.apiVersion ?? '',
+    providerCredentialSource,
+    providerCredentialSource === 'deployment' ? deploymentProviderModelsFingerprint : '',
   );
+  const shouldCacheProviderModels = canCacheProviderModels(providerCredentialSource);
   providerModelAutoSelectRef.current = {
     model: config.model,
     providerModelsInputKey,
@@ -2064,9 +2097,11 @@ function OnboardingView({
   const canFetchProviderModels =
     apiProtocol !== 'azure' &&
     apiProtocol !== 'ollama' &&
-    Boolean(config.apiKey.trim()) &&
-    Boolean(config.baseUrl.trim()) &&
-    isLikelyHttpUrl(config.baseUrl);
+    (providerCredentialSource === 'deployment'
+      ? deploymentProviderAvailable && apiProtocol === 'openai'
+      : Boolean(config.apiKey.trim()) &&
+        Boolean(config.baseUrl.trim()) &&
+        isLikelyHttpUrl(config.baseUrl));
   const visibleProviderTestState =
     providerTestState.status !== 'idle' &&
     providerTestState.inputKey === providerTestInputKey
@@ -2108,11 +2143,17 @@ function OnboardingView({
   const runtimeSetupStep = step === 2;
   const byokConnectionVerified =
     visibleProviderTestState.status === 'done' && visibleProviderTestState.result.ok;
+  const deploymentProviderReady =
+    runtime === 'deployment' &&
+    deploymentProviderAvailable &&
+    deploymentProviderHasConcreteModel &&
+    onboardingConfigPersistState.status === 'idle';
   const localConnectionVerified =
     visibleAgentTestState.status === 'done' && visibleAgentTestState.result.ok;
   const connectStepRuntimeReady =
     (runtime === 'local' && selectedAgent !== null && localConnectionVerified) ||
-    (runtime === 'byok' && byokConnectionVerified);
+    (runtime === 'byok' && byokConnectionVerified) ||
+    deploymentProviderReady;
   const connectStepBlocked = runtimeSetupStep && !connectStepRuntimeReady;
   const connectGateReason: 'no_runtime' | 'local_agent_unavailable' | 'byok_unverified' | null =
     !runtimeSetupStep
@@ -2135,7 +2176,9 @@ function OnboardingView({
 
   const hasRestorableModelSourceConfig =
     config.mode === 'api'
-      ? Boolean(config.apiKey.trim() && config.baseUrl.trim() && config.model.trim())
+      ? config.apiProtocol === 'openai' && config.apiCredentialSource === 'deployment'
+        ? deploymentProviderAvailable && deploymentProviderHasConcreteModel
+        : Boolean(config.apiKey.trim() && config.baseUrl.trim() && config.model.trim())
       : config.agentId === 'amr'
         || Boolean(
           config.agentId
@@ -2263,7 +2306,7 @@ function OnboardingView({
   function currentRuntimeType(): TrackingOnboardingRuntimeType {
     if (runtime === 'amr') return 'amr_cloud';
     if (runtime === 'local') return 'local_cli';
-    if (runtime === 'byok') return 'byok';
+    if (runtime === 'byok' || runtime === 'deployment') return 'byok';
     return 'none';
   }
   function stepInfo(stepIdx: number): {
@@ -2345,13 +2388,21 @@ function OnboardingView({
       label: model.label ?? model.id,
     })) ?? [];
   const fetchedProviderModels =
-    activeProviderModelsCache[providerModelsInputKey] ?? [];
+    shouldCacheProviderModels
+      ? activeProviderModelsCache[providerModelsInputKey] ?? []
+      : visibleProviderModelsState.status === 'done' && visibleProviderModelsState.result.ok
+        ? visibleProviderModelsState.result.models ?? []
+        : [];
   const byokModelOptions = mergeOnboardingProviderModelOptions(
     fetchedProviderModels,
-    selectedProvider?.preferredModels.length
-      ? selectedProvider.preferredModels
-      : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
-    config.model,
+    providerCredentialSource === 'deployment'
+      ? deploymentProviderConfig?.defaultModel?.trim()
+        ? [deploymentProviderConfig.defaultModel.trim()]
+        : []
+      : selectedProvider?.preferredModels.length
+        ? selectedProvider.preferredModels
+        : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
+    providerCredentialSource === 'deployment' ? '' : config.model,
   ).map((model) => ({
     value: model.id,
     label: onboardingProviderModelLabel(model),
@@ -2363,6 +2414,7 @@ function OnboardingView({
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
       model: config.model,
+      apiCredentialSource: 'user',
       apiVersion: config.apiVersion ?? '',
       apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
     };
@@ -2374,6 +2426,7 @@ function OnboardingView({
       ...config,
       mode: 'api',
       apiProtocol: protocol,
+      apiCredentialSource: 'user',
       apiKey: nextProtocolConfig.apiKey,
       baseUrl: nextProtocolConfig.baseUrl,
       model: nextProtocolConfig.model,
@@ -2385,6 +2438,118 @@ function OnboardingView({
       },
     };
     void onConfigPersist(nextConfig);
+  }
+
+  function persistOnboardingConfig(nextConfig: AppConfig): void {
+    const token = onboardingConfigPersistTokenRef.current + 1;
+    onboardingConfigPersistTokenRef.current = token;
+    setOnboardingConfigPersistState({ status: 'saving', token });
+    void Promise.resolve(onConfigPersist(nextConfig))
+      .then(() => {
+        if (onboardingConfigPersistTokenRef.current === token) {
+          setOnboardingConfigPersistState({ status: 'idle' });
+        }
+      })
+      .catch(() => {
+        if (onboardingConfigPersistTokenRef.current === token) {
+          setOnboardingConfigPersistState({ status: 'error', token });
+        }
+      });
+  }
+
+  function preservedOpenAiUserDraft(): ApiProtocolConfig | undefined {
+    const saved = config.apiProtocolConfigs?.openai;
+    if (saved && saved.apiCredentialSource !== 'deployment') return saved;
+    if (
+      config.apiProtocol !== 'openai' ||
+      config.apiCredentialSource === 'deployment'
+    ) {
+      return undefined;
+    }
+    return {
+      apiKey: config.apiKey,
+      baseUrl: config.baseUrl,
+      model: config.model,
+      apiCredentialSource: 'user',
+      apiVersion: config.apiVersion ?? '',
+      apiProviderBaseUrl: config.apiProviderBaseUrl ?? null,
+    };
+  }
+
+  function buildDeploymentProviderConfig(model: string): AppConfig {
+    const apiProtocolConfigs = { ...(config.apiProtocolConfigs ?? {}) };
+    const openAiUserDraft = preservedOpenAiUserDraft();
+    if (openAiUserDraft) {
+      apiProtocolConfigs.openai = {
+        ...openAiUserDraft,
+        apiCredentialSource: 'user',
+      };
+    } else {
+      delete apiProtocolConfigs.openai;
+    }
+    return {
+      ...config,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: model.trim(),
+      apiVersion: '',
+      apiProviderBaseUrl: null,
+      apiProtocolConfigs,
+    };
+  }
+
+  function restoredOpenAiUserDraftConfig(): AppConfig | null {
+    if (
+      config.apiProtocol !== 'openai' ||
+      config.apiCredentialSource !== 'deployment'
+    ) {
+      return null;
+    }
+    const openAiUserDraft = preservedOpenAiUserDraft();
+    if (!openAiUserDraft) return null;
+    return {
+      ...config,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'user',
+      apiKey: openAiUserDraft.apiKey,
+      baseUrl: openAiUserDraft.baseUrl,
+      model: openAiUserDraft.model,
+      apiVersion: openAiUserDraft.apiVersion ?? '',
+      apiProviderBaseUrl: openAiUserDraft.apiProviderBaseUrl ?? null,
+      apiProtocolConfigs: {
+        ...(config.apiProtocolConfigs ?? {}),
+        openai: {
+          ...openAiUserDraft,
+          apiCredentialSource: 'user',
+        },
+      },
+    };
+  }
+
+  function selectByokRuntime(): void {
+    const restoredConfig = restoredOpenAiUserDraftConfig();
+    setRuntime('byok');
+    if (restoredConfig) persistOnboardingConfig(restoredConfig);
+  }
+
+  function selectDeploymentProvider(): void {
+    if (!deploymentProviderAvailable) return;
+    setRuntime('deployment');
+    onModeChange('api');
+    setStep(2);
+    persistOnboardingConfig(
+      buildDeploymentProviderConfig(
+        deploymentProviderConfig?.defaultModel?.trim() ?? '',
+      ),
+    );
+  }
+
+  function updateDeploymentProviderModel(model: string): void {
+    persistOnboardingConfig(buildDeploymentProviderConfig(model));
   }
 
   function selectPreferredProviderModelWhenEmpty(
@@ -2577,7 +2742,7 @@ function OnboardingView({
     }
 
     emitOnboardingClick('byok', 'select_runtime', { runtime_type: 'byok' });
-    setRuntime('byok');
+    selectByokRuntime();
     setStep(2);
   }
   async function handlePrimaryAction() {
@@ -2597,6 +2762,10 @@ function OnboardingView({
       emitOnboardingClick('continue', 'continue', { runtime_type: 'byok' });
       completeStreamlinedOnboarding('byok');
       return;
+    }
+    if (runtime === 'deployment') {
+      emitOnboardingClick('continue', 'continue', { runtime_type: 'byok' });
+      completeStreamlinedOnboarding('byok');
     }
   }
 
@@ -2995,7 +3164,9 @@ function OnboardingView({
     if (!canFetchProviderModels || providerModelsState.status === 'running') return;
     const inputKey = providerModelsInputKey;
     providerModelsAutoFetchKeyRef.current = inputKey;
-    const cachedModels = activeProviderModelsCache[inputKey];
+    const cachedModels = shouldCacheProviderModels
+      ? activeProviderModelsCache[inputKey]
+      : undefined;
     if (cachedModels) {
       selectPreferredProviderModelWhenEmpty(cachedModels, inputKey);
       setProviderModelsState({
@@ -3012,17 +3183,23 @@ function OnboardingView({
     }
     setProviderModelsState({ status: 'running', inputKey });
     try {
-      const result = await fetchProviderModels({
-        protocol: apiProtocol,
-        baseUrl: config.baseUrl,
-        apiKey: config.apiKey,
-      });
+      const request = providerCredentialSource === 'deployment'
+        ? { protocol: 'openai' as const, credentialSource: 'deployment' as const }
+        : {
+            protocol: apiProtocol,
+            baseUrl: config.baseUrl,
+            apiKey: config.apiKey,
+            credentialSource: 'user' as const,
+          };
+      const result = await fetchProviderModels(request);
       if (result.ok && result.models?.length) {
-        selectPreferredProviderModelWhenEmpty(result.models, inputKey);
-        activeSetProviderModelsCache((current) => ({
-          ...current,
-          [inputKey]: result.models ?? [],
-        }));
+        if (shouldCacheProviderModels) {
+          selectPreferredProviderModelWhenEmpty(result.models, inputKey);
+          activeSetProviderModelsCache((current) => ({
+            ...current,
+            [inputKey]: result.models ?? [],
+          }));
+        }
       }
       setProviderModelsState({ status: 'done', inputKey, result });
     } catch (error) {
@@ -3040,7 +3217,7 @@ function OnboardingView({
   }
 
   useEffect(() => {
-    if (runtime !== 'byok' || !runtimeSetupStep) return;
+    if ((runtime !== 'byok' && runtime !== 'deployment') || !runtimeSetupStep) return;
     if (!canFetchProviderModels) return;
     if (providerModelsState.status === 'running') return;
     if (providerModelsAutoFetchKeyRef.current === providerModelsInputKey) return;
@@ -3126,6 +3303,22 @@ function OnboardingView({
                       : t('settings.onboardingCloudSignIn')}
               </span>
             </button>
+            {!cloudBusy && deploymentProviderAvailable ? (
+              <div className="onboarding-cloud__alts">
+                <Button
+                  variant="subtle"
+                  className="onboarding-cloud__alt-btn onboarding-cloud__deployment-alt"
+                  onClick={() => {
+                    emitOnboardingClick('byok', 'select_runtime', {
+                      runtime_type: 'byok',
+                    });
+                    selectDeploymentProvider();
+                  }}
+                >
+                  {deploymentProviderConfig?.label ?? t('settings.modeApi')}
+                </Button>
+              </div>
+            ) : null}
             {amrLoginError ? (
               <span className="onboarding-cloud__error" role="alert">
                 {amrLoginError}
@@ -3331,12 +3524,16 @@ function OnboardingView({
             </button>
             <OnboardingPanelHeader
               title={
-                runtime === 'byok'
+                runtime === 'deployment'
+                  ? deploymentProviderConfig?.label ?? t('settings.modeApi')
+                  : runtime === 'byok'
                   ? t('settings.onboardingByokTitle')
                   : t('settings.onboardingLocalTitle')
               }
               body={
-                runtime === 'byok'
+                runtime === 'deployment'
+                  ? t('settings.onboardingByokBody')
+                  : runtime === 'byok'
                   ? t('settings.onboardingByokBody')
                   : t('settings.onboardingLocalBody')
               }
@@ -3413,12 +3610,32 @@ function OnboardingView({
                   onFetchModels={() => void fetchProviderModelsInline()}
                 />
               ) : null}
+              {runtime === 'deployment' ? (
+                deploymentProviderConfig ? (
+                  <OnboardingDeploymentProviderPanel
+                    provider={deploymentProviderConfig}
+                    model={config.model}
+                    modelOptions={byokModelOptions}
+                    modelsState={visibleProviderModelsState}
+                    canFetchModels={canFetchProviderModels}
+                    onFetchModels={() => void fetchProviderModelsInline()}
+                    onModelChange={updateDeploymentProviderModel}
+                  />
+                ) : (
+                  <OnboardingDeploymentProviderPendingPanel />
+                )
+              ) : null}
             </div>
           </div>
           <div className="onboarding-view__actions">
             {amrLoginError ? (
               <span className="onboarding-view__action-status is-error" role="alert">
                 {amrLoginError}
+              </span>
+            ) : null}
+            {runtime === 'deployment' && onboardingConfigPersistState.status === 'error' ? (
+              <span className="onboarding-view__action-status is-error" role="alert">
+                {t('settings.autosaveError')}
               </span>
             ) : null}
             <button
@@ -3566,6 +3783,105 @@ function OnboardingCliSetupPanel({
           )}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+function OnboardingDeploymentProviderPanel({
+  provider,
+  model,
+  modelOptions,
+  modelsState,
+  canFetchModels,
+  onFetchModels,
+  onModelChange,
+}: {
+  provider: DeploymentProviderConfig;
+  model: string;
+  modelOptions: Array<{ value: string; label: string }>;
+  modelsState:
+    | { status: 'idle' }
+    | { status: 'running'; inputKey: string }
+    | { status: 'done'; inputKey: string; result: ProviderModelsResponse };
+  canFetchModels: boolean;
+  onFetchModels: () => void;
+  onModelChange: (model: string) => void;
+}) {
+  const t = useT();
+  const fetchingModels = modelsState.status === 'running';
+  return (
+    <div className="onboarding-view__setup-panel">
+      <div className="onboarding-view__setup-head">
+        <div>
+          <strong>{provider.label}</strong>
+          <p>
+            {provider.displayHost
+              ? `${t('settings.modeApi')} · ${provider.displayHost}`
+              : t('settings.modeApi')}
+          </p>
+        </div>
+        <div className="onboarding-view__setup-head-actions">
+          <button
+            type="button"
+            className={`onboarding-view__mini-button${fetchingModels ? ' is-loading' : ''}`}
+            onClick={onFetchModels}
+            disabled={fetchingModels || !canFetchModels}
+            title={t('settings.fetchModelsTitle')}
+          >
+            {fetchingModels ? t('settings.fetchModelsRunning') : t('settings.fetchModels')}
+          </button>
+        </div>
+      </div>
+      {modelOptions.length > 0 ? (
+        <OnboardingDropdown
+          label={t('settings.model')}
+          placeholder={provider.defaultModel ?? 'gpt-4.1'}
+          value={model}
+          options={modelOptions}
+          onChange={onModelChange}
+          placement="top"
+          searchable
+          searchPlaceholder={t('newproj.modelSearch')}
+        />
+      ) : (
+        <label className="onboarding-view__inline-field">
+          <span>{t('settings.model')}</span>
+          <input
+            type="text"
+            value={model}
+            placeholder={provider.defaultModel ?? 'gpt-4.1'}
+            onChange={(event) => onModelChange(event.target.value.trim())}
+          />
+        </label>
+      )}
+      {modelsState.status === 'running' ? (
+        <p className="onboarding-view__test-status is-running" role="status">
+          {t('settings.fetchModelsRunning')}
+        </p>
+      ) : modelsState.status === 'done' ? (
+        <p
+          className={`onboarding-view__test-status is-${onboardingProviderModelsVariant(
+            modelsState.result,
+          )}`}
+          role={modelsState.result.ok ? 'status' : 'alert'}
+        >
+          {renderOnboardingProviderModelsMessage(t, modelsState.result)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function OnboardingDeploymentProviderPendingPanel() {
+  const t = useT();
+  return (
+    <div className="onboarding-view__setup-panel" role="status" aria-live="polite">
+      <div className="onboarding-view__setup-head">
+        <div>
+          <strong>{t('settings.modeApi')}</strong>
+          <p>{t('common.loading')}</p>
+        </div>
+      </div>
     </div>
   );
 }

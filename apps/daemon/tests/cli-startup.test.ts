@@ -19,6 +19,7 @@ describe('CLI startup boundaries', () => {
     ['doctor', ['doctor', '--help']],
     ['config', ['config', 'get', 'apiProtocol', '--daemon-url', 'http://127.0.0.1:9']],
     ['diagnostics', ['diagnostics', 'export', '--daemon-url', 'http://127.0.0.1:9']],
+    ['provider', ['provider', 'config', '--help']],
     ['amr', ['amr', 'status', '--daemon-url', 'http://127.0.0.1:9']],
   ])('initializes flag constants before dispatching od %s', async (_name, args) => {
     let output = '';
@@ -41,7 +42,107 @@ describe('CLI startup boundaries', () => {
     expect(output).not.toContain('before initialization');
     expect(output).not.toContain('CONFIG_STRING_FLAGS');
     expect(output).not.toContain('DIAGNOSTICS_STRING_FLAGS');
+    expect(output).not.toContain('PROVIDER_STRING_FLAGS');
     expect(output).not.toContain('AMR_STRING_FLAGS');
+  });
+
+  it('mirrors deployment provider config through od provider config', async () => {
+    const seen: string[] = [];
+    const server = http.createServer((req, res) => {
+      seen.push(req.url ?? '');
+      req.resume();
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        available: true,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Provider orchestrator',
+        kind: 'available',
+        defaultModel: 'gpt-routed',
+        displayHost: 'gateway.example.test',
+      }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    const daemonUrl = `http://127.0.0.1:${port}`;
+
+    try {
+      const result = await execFileAsync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          cliEntry,
+          'provider',
+          'config',
+          '--json',
+          '--daemon-url',
+          daemonUrl,
+        ],
+        {
+          cwd: daemonRoot,
+          env: { ...process.env },
+        },
+      );
+
+      expect(seen).toEqual(['/api/provider-orchestrator/config']);
+      expect(result.stdout).not.toContain('deployment-secret');
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        available: true,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        defaultModel: 'gpt-routed',
+        displayHost: 'gateway.example.test',
+      });
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('mirrors invalid deployment provider config through od provider config', async () => {
+    const server = http.createServer((req, res) => {
+      req.resume();
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        available: false,
+        credentialSource: 'deployment',
+        protocol: 'openai',
+        label: 'Provider orchestrator',
+        kind: 'invalid_run_session_config',
+        detail: 'Deployment provider run sessions require OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD.',
+        displayHost: 'gateway.example.test',
+      }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+
+    try {
+      const result = await execFileAsync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          cliEntry,
+          'provider',
+          'config',
+          '--daemon-url',
+          `http://127.0.0.1:${port}`,
+        ],
+        {
+          cwd: daemonRoot,
+          env: { ...process.env },
+        },
+      );
+
+      expect(result.stdout).toContain('[provider] unavailable (invalid_run_session_config)');
+      expect(result.stdout).toContain(
+        'Deployment provider run sessions require OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD.',
+      );
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
   });
 
   it('keeps od daemon start alive until SIGTERM and reports the actual listening port', async () => {

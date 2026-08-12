@@ -42,7 +42,38 @@ describe('BYOK draft validation', () => {
     ]);
   });
 
-  it('accepts an empty browser key when a daemon secure profile is configured', () => {
+  it('can treat deployment provider drafts as model-only', () => {
+    const validation = validateByokDraft(
+      'openai',
+      {
+        apiKey: '',
+        baseUrl: '',
+        model: 'gpt-routed',
+      },
+      {
+        requiresApiKey: false,
+        requiresBaseUrl: false,
+      },
+    );
+    expect(validation.ok).toBe(true);
+    expect(blockingByokDraftFields(validation)).toEqual([]);
+
+    const missingModel = validateByokDraft(
+      'openai',
+      {
+        apiKey: '',
+        baseUrl: '',
+        model: '',
+      },
+      {
+        requiresApiKey: false,
+        requiresBaseUrl: false,
+      },
+    );
+    expect(blockingByokDraftFields(missingModel)).toEqual(['model']);
+  });
+
+  it('requires a browser key for user-scoped credentials', () => {
     const validation = validateByokDraft(
       'openai',
       {
@@ -52,12 +83,11 @@ describe('BYOK draft validation', () => {
       },
       {
         requiresApiKey: true,
-        credentialConfigured: true,
       },
     );
 
-    expect(validation.ok).toBe(true);
-    expect(validation.issues).not.toEqual(
+    expect(validation.ok).toBe(false);
+    expect(validation.issues).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ code: 'api_key_required' }),
       ]),

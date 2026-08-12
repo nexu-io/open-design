@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   agentRefreshOptionsForConfig,
   amrWalletValueLabel,
+  byokProviderSelectionPatch,
+  canCacheProviderModels,
   canFetchProviderModels,
   canRunProviderConnectionTest,
   deriveAboutUpdateControl,
@@ -360,6 +362,24 @@ describe('SettingsDialog API protocol switching', () => {
     );
   });
 
+  it('separates deployment provider model cache keys by deployment fingerprint', () => {
+    expect(
+      providerModelsCacheKey('openai', '', '', '', 'deployment', 'gateway-a.example.test'),
+    ).not.toBe(
+      providerModelsCacheKey('openai', '', '', '', 'deployment', 'gateway-b.example.test'),
+    );
+    expect(
+      providerModelsCacheKey('openai', 'https://api.openai.com/v1', 'sk-test', '', 'user', 'ignored'),
+    ).toBe(
+      providerModelsCacheKey('openai', 'https://api.openai.com/v1', 'sk-test', '', 'user', ''),
+    );
+  });
+
+  it('does not cache deployment provider model lists without a daemon revision', () => {
+    expect(canCacheProviderModels('user')).toBe(true);
+    expect(canCacheProviderModels('deployment')).toBe(false);
+  });
+
   it('stores the current custom protocol config while preserving custom endpoint details', () => {
     const config: AppConfig = {
       ...baseConfig,
@@ -418,6 +438,135 @@ describe('SettingsDialog API protocol switching', () => {
       baseUrl: 'https://google-proxy.example.com',
       model: 'google-model',
       apiProviderBaseUrl: null,
+    });
+  });
+
+  it('clears deployment credential mode outside OpenAI while preserving the user OpenAI draft', () => {
+    const openaiDeployment = switchApiProtocolConfig({
+      ...baseConfig,
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'gpt-routed',
+      apiProviderBaseUrl: null,
+      apiProtocolConfigs: {
+        openai: {
+          apiCredentialSource: 'user',
+          apiKey: 'openai-key',
+          baseUrl: 'https://openai-proxy.example.com',
+          model: 'openai-model',
+          apiVersion: '',
+          apiProviderBaseUrl: null,
+        },
+      },
+    }, 'google');
+
+    expect(openaiDeployment).toMatchObject({
+      apiProtocol: 'google',
+      apiCredentialSource: 'user',
+    });
+    expect(openaiDeployment.apiProtocolConfigs?.openai).toMatchObject({
+      apiCredentialSource: 'user',
+      apiKey: 'openai-key',
+      baseUrl: 'https://openai-proxy.example.com',
+      model: 'openai-model',
+    });
+
+    const restoredOpenai = switchApiProtocolConfig(openaiDeployment, 'openai');
+    expect(restoredOpenai).toMatchObject({
+      apiProtocol: 'openai',
+      apiCredentialSource: 'user',
+      apiKey: 'openai-key',
+      baseUrl: 'https://openai-proxy.example.com',
+      model: 'openai-model',
+    });
+  });
+
+  it('keeps deployment model edits out of the saved user OpenAI draft', () => {
+    const deploymentConfig: AppConfig = {
+      ...baseConfig,
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'deployment-one',
+      apiProviderBaseUrl: null,
+      apiProtocolConfigs: {
+        openai: {
+          apiCredentialSource: 'user',
+          apiKey: 'openai-key',
+          baseUrl: 'https://openai-proxy.example.com',
+          model: 'openai-model',
+          apiVersion: '',
+          apiProviderBaseUrl: null,
+        },
+      },
+    };
+
+    const deploymentEdited = updateCurrentApiProtocolConfig(deploymentConfig, {
+      model: 'deployment-two',
+    });
+
+    expect(deploymentEdited).toMatchObject({
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'deployment-two',
+    });
+    expect(deploymentEdited.apiProtocolConfigs?.openai).toMatchObject({
+      apiCredentialSource: 'user',
+      apiKey: 'openai-key',
+      baseUrl: 'https://openai-proxy.example.com',
+      model: 'openai-model',
+    });
+
+    const restoredOpenai = switchApiProtocolConfig(
+      switchApiProtocolConfig(deploymentEdited, 'google'),
+      'openai',
+    );
+    expect(restoredOpenai).toMatchObject({
+      apiProtocol: 'openai',
+      apiCredentialSource: 'user',
+      apiKey: 'openai-key',
+      baseUrl: 'https://openai-proxy.example.com',
+      model: 'openai-model',
+    });
+  });
+
+  it('forces user credential mode when selecting a BYOK provider from deployment-only OpenAI', () => {
+    const deploymentOnlyConfig: AppConfig = {
+      ...baseConfig,
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'deployment-model',
+      apiProviderBaseUrl: null,
+      apiProtocolConfigs: {},
+    };
+
+    const next = updateCurrentApiProtocolConfig(
+      deploymentOnlyConfig,
+      byokProviderSelectionPatch({
+        baseUrl: 'https://api.openai.com/v1',
+        preferredModels: ['gpt-4o'],
+      }, true),
+    );
+
+    expect(next).toMatchObject({
+      apiProtocol: 'openai',
+      apiCredentialSource: 'user',
+      apiKey: '',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
+      apiProviderBaseUrl: 'https://api.openai.com/v1',
+    });
+    expect(next.apiProtocolConfigs?.openai).toMatchObject({
+      apiCredentialSource: 'user',
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o',
     });
   });
 
@@ -541,6 +690,21 @@ describe('SettingsDialog provider connection test requirements', () => {
       canRunProviderConnectionTest({ ...baseConfig, model: '' }),
     ).toBe(false);
   });
+
+  it('allows deployment provider tests to use only a model', () => {
+    expect(
+      canRunProviderConnectionTest(
+        { apiKey: '', baseUrl: '', model: 'gpt-routed' },
+        { requiresApiKey: false, requiresBaseUrl: false },
+      ),
+    ).toBe(true);
+    expect(
+      canRunProviderConnectionTest(
+        { apiKey: '', baseUrl: '', model: '' },
+        { requiresApiKey: false, requiresBaseUrl: false },
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('SettingsDialog provider model fetch helpers', () => {
@@ -560,6 +724,12 @@ describe('SettingsDialog provider model fetch helpers', () => {
     // #3225 — an internal-IP endpoint is now fetchable from the UI's
     // perspective; the daemon enforces the OD_ALLOWED_INTERNAL_HOSTS allowlist
     // and returns the authoritative allow/block decision.
+    expect(
+      canFetchProviderModels(
+        { apiKey: '', baseUrl: 'https://api.aihubmix.com/v1' },
+        'aihubmix',
+      ),
+    ).toBe(true);
     expect(
       canFetchProviderModels(
         { apiKey: 'sk-openai', baseUrl: 'http://10.0.0.5:11434/v1' },
@@ -1443,6 +1613,27 @@ describe('shouldEnableSettingsSave', () => {
     expect(shouldEnableSettingsSave({ ...validApiCfg, apiKey: '   ' }, 'execution', [], true)).toBe(false);
     expect(shouldEnableSettingsSave({ ...validApiCfg, model: '' }, 'execution', [], true)).toBe(false);
     expect(shouldEnableSettingsSave(validApiCfg, 'execution', [], false)).toBe(false);
+  });
+
+  it('on execution + deployment provider: returns true when only the model is set', () => {
+    const deploymentCfg: AppConfig = {
+      ...validApiCfg,
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'gpt-routed',
+    };
+
+    expect(shouldEnableSettingsSave(deploymentCfg, 'execution', [], false)).toBe(true);
+    expect(
+      shouldEnableSettingsSave(
+        { ...deploymentCfg, model: '' },
+        'execution',
+        [],
+        false,
+      ),
+    ).toBe(false);
   });
 
   it('on execution: incomplete BYOK still disables save (existing behavior preserved)', () => {

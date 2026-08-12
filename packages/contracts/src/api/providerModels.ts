@@ -1,4 +1,5 @@
 import type { ConnectionTestKind, ConnectionTestProtocol } from './connectionTest';
+import type { ProviderCredentialSourceRequestFields } from './providerCredential';
 import type { ReasoningExecutionRequestFields } from './reasoningExecution';
 import type { AgentModelOption } from './registry';
 
@@ -7,14 +8,12 @@ export type ProviderModelsKind =
   | 'no_models'
   | 'unsupported_protocol';
 
-export interface ProviderModelsRequest extends ReasoningExecutionRequestFields {
+export type ProviderModelsRequest = ReasoningExecutionRequestFields & ProviderCredentialSourceRequestFields & {
   protocol: ConnectionTestProtocol;
-  baseUrl: string;
-  apiKey: string;
   // Azure only. Kept in the contract so the request shape can stay aligned
   // with provider testing, even though Azure model discovery is not supported.
   apiVersion?: string;
-}
+};
 
 export type ProviderModelOption = AgentModelOption;
 

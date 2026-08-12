@@ -6,13 +6,20 @@ import { blockingByokDraftIssues, validateByokDraft } from './validation';
 
 type ByokPreflightConfig = Pick<
   AppConfig,
-  'apiKey' | 'apiProtocol' | 'apiProviderBaseUrl' | 'baseUrl' | 'model'
+  | 'apiCredentialSource'
+  | 'apiKey'
+  | 'apiProtocol'
+  | 'apiProviderBaseUrl'
+  | 'baseUrl'
+  | 'model'
 >;
 
 export function byokPreflightBlockReason(
   config: ByokPreflightConfig,
 ): TrackingByokPreflightBlockReason | null {
   const protocol = config.apiProtocol ?? 'anthropic';
+  const deploymentOpenAi =
+    protocol === 'openai' && config.apiCredentialSource === 'deployment';
   const selectedProvider = KNOWN_PROVIDERS.find(
     (provider) =>
       provider.protocol === protocol &&
@@ -31,7 +38,8 @@ export function byokPreflightBlockReason(
         protocol,
         selectedProvider,
         config.baseUrl,
-      ),
+      ) && !deploymentOpenAi,
+      requiresBaseUrl: !deploymentOpenAi,
     },
   );
   const missingReasons = new Set<TrackingByokPreflightBlockReason>();

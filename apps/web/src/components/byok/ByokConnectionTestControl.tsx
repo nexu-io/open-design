@@ -1,3 +1,5 @@
+import { VisuallyHidden } from '@open-design/components';
+
 import type { ConnectionTestResponse } from '../../types';
 import { Icon } from '../Icon';
 
@@ -39,6 +41,8 @@ export function ByokConnectionTestControl({
     providerTestState.status === 'done' && !suppressResultStatus;
   const showStatus =
     providerTestState.status === 'running' || showResultStatus || showReadyState;
+  const showFailedRetry =
+    providerTestState.status === 'done' && !providerTestState.result.ok;
   if (!showTestButton && !showStatus) return null;
 
   return (
@@ -77,11 +81,13 @@ export function ByokConnectionTestControl({
           type="button"
           className={
             'ghost icon-btn settings-test-btn' +
-            (providerTestState.status === 'running' ? ' loading' : '')
+            (providerTestState.status === 'running' ? ' loading' : '') +
+            (showFailedRetry ? ' is-icon-only' : '')
           }
           onClick={() => void onTestProvider()}
           disabled={providerTestState.status === 'running'}
-          title={labels.testTitle}
+          title={showFailedRetry ? labels.testRetry : labels.testTitle}
+          aria-label={showFailedRetry ? labels.testRetry : undefined}
         >
           {providerTestState.status === 'running' ? (
             <>
@@ -92,11 +98,10 @@ export function ByokConnectionTestControl({
               />
               <span>{labels.test}</span>
             </>
-          ) : providerTestState.status === 'done' &&
-            !providerTestState.result.ok ? (
+          ) : showFailedRetry ? (
             <>
               <Icon name="reload" size={14} />
-              <span>{labels.testRetry}</span>
+              <VisuallyHidden>{labels.testRetry}</VisuallyHidden>
             </>
           ) : (
             labels.test

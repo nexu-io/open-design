@@ -63,7 +63,14 @@ import {
   startVelaLogin,
   type VelaLoginStatus,
 } from '../providers/daemon';
-import type { AgentInfo, ApiProtocol, AppConfig, ExecMode } from '../types';
+import type {
+  AgentInfo,
+  ApiProtocol,
+  AppConfig,
+  DeploymentProviderConfig,
+  ExecMode,
+  ProviderModelOption,
+} from '../types';
 import { apiProtocolLabel } from '../utils/apiProtocol';
 import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { AgentIcon } from './AgentIcon';
@@ -90,6 +97,8 @@ import {
   SearchableModelSelect,
 } from './modelOptions';
 import {
+  canCacheProviderModels,
+  deploymentProviderModelsCacheFingerprint,
   mergeProviderModelOptions,
   providerModelsCacheKey,
   type ProviderModelsCache,
@@ -99,6 +108,7 @@ import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-
 
 interface Props {
   config: AppConfig;
+  deploymentProviderConfig?: DeploymentProviderConfig | null;
   agents: AgentInfo[];
   providerModelsCache?: ProviderModelsCache;
   compact?: boolean;
@@ -173,6 +183,7 @@ function displayAgentChipName(agent: Pick<AgentInfo, 'id' | 'name'>): string {
 
 export function InlineModelSwitcher({
   config,
+  deploymentProviderConfig = null,
   agents,
   providerModelsCache,
   compact = false,
@@ -259,6 +270,10 @@ export function InlineModelSwitcher({
   }, [open]);
   const chipRef = useRef<HTMLButtonElement | null>(null);
   const providerModelsFetchingRef = useRef<Set<string>>(new Set());
+  const [uncachedProviderModels, setUncachedProviderModels] = useState<{
+    key: string;
+    models: ProviderModelOption[];
+  } | null>(null);
   const [amrStatus, setAmrStatus] = useState<VelaLoginStatus | null>(null);
   const [amrWalletSnapshot, setAmrWalletSnapshot] =
     useState<AmrWalletSnapshot | null>(null);
@@ -273,6 +288,13 @@ export function InlineModelSwitcher({
   const amrLoginStartPendingRef = useRef(false);
   const amrLoginCancelRequestedRef = useRef(false);
   const amrAuthAttemptIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setUncachedProviderModels(null);
+      providerModelsFetchingRef.current.clear();
+    }
+  }, [open]);
 
   const getModelPopoverBoundary = useCallback(() => {
     const scrollContainer = wrapRef.current?.closest<HTMLElement>(
@@ -953,6 +975,12 @@ export function InlineModelSwitcher({
   const amrStatusIconName = amrLoginPending ? 'spinner' : null;
 
   const apiProtocol = config.apiProtocol ?? 'anthropic';
+  const credentialSource =
+    apiProtocol === 'openai' && config.apiCredentialSource === 'deployment'
+      ? 'deployment'
+      : 'user';
+  const deploymentProviderModelsFingerprint =
+    deploymentProviderModelsCacheFingerprint(deploymentProviderConfig);
   const providerForProtocol = useMemo(
     () =>
       KNOWN_PROVIDERS.find(
@@ -971,10 +999,26 @@ export function InlineModelSwitcher({
         config.baseUrl,
         config.apiKey,
         config.apiVersion ?? '',
+        credentialSource,
+        credentialSource === 'deployment'
+          ? deploymentProviderModelsFingerprint
+          : '',
       ),
-    [apiProtocol, config.apiKey, config.apiVersion, config.baseUrl],
+    [
+      apiProtocol,
+      config.apiKey,
+      config.apiVersion,
+      config.baseUrl,
+      credentialSource,
+      deploymentProviderModelsFingerprint,
+    ],
   );
-  const fetchedApiModelOptions = providerModelsCache?.[providerModelsKey] ?? [];
+  const shouldCacheProviderModels = canCacheProviderModels(credentialSource);
+  const fetchedApiModelOptions = shouldCacheProviderModels
+    ? providerModelsCache?.[providerModelsKey] ?? []
+    : uncachedProviderModels?.key === providerModelsKey
+      ? uncachedProviderModels.models
+      : [];
 
   // Warm the shared provider-models cache from the home picker itself. The
   // picker otherwise depends on Settings/onboarding having fetched first, so on
@@ -985,27 +1029,43 @@ export function InlineModelSwitcher({
   // keyed identically to Settings (`providerModelsKey`), so a single fetch
   // serves both surfaces and replaces any stale slot.
   useEffect(() => {
-    if (!open || config.mode !== 'api' || !onProviderModelsCacheChange) return;
+    if (!open || config.mode !== 'api') return;
+    if (shouldCacheProviderModels && !onProviderModelsCacheChange) return;
     if (apiProtocol === 'azure' || apiProtocol === 'ollama') return;
-    if (apiProtocol !== 'aihubmix' && !config.apiKey.trim()) return;
+    if (credentialSource === 'deployment' && apiProtocol !== 'openai') return;
+    if (
+      credentialSource !== 'deployment' &&
+      apiProtocol !== 'aihubmix' &&
+      !config.apiKey.trim()
+    ) {
+      return;
+    }
     const baseUrl = config.baseUrl.trim();
-    if (!/^https?:\/\//i.test(baseUrl)) return;
+    if (credentialSource !== 'deployment' && !/^https?:\/\//i.test(baseUrl)) return;
     const key = providerModelsKey;
     if (fetchedApiModelOptions.length) return;
     if (providerModelsFetchingRef.current.has(key)) return;
     providerModelsFetchingRef.current.add(key);
     let active = true;
-    void fetchProviderModels({
-      protocol: apiProtocol,
-      baseUrl,
-      apiKey: config.apiKey,
-    })
+    const request = credentialSource === 'deployment'
+      ? { protocol: 'openai' as const, credentialSource: 'deployment' as const }
+      : {
+          protocol: apiProtocol,
+          credentialSource: 'user' as const,
+          baseUrl,
+          apiKey: config.apiKey,
+        };
+    void fetchProviderModels(request)
       .then((result) => {
         if (active && result.ok && result.models?.length) {
-          onProviderModelsCacheChange((current) => ({
-            ...current,
-            [key]: result.models ?? [],
-          }));
+          if (shouldCacheProviderModels) {
+            onProviderModelsCacheChange?.((current) => ({
+              ...current,
+              [key]: result.models ?? [],
+            }));
+          } else {
+            setUncachedProviderModels({ key, models: result.models ?? [] });
+          }
         }
       })
       .catch(() => {
@@ -1023,21 +1083,28 @@ export function InlineModelSwitcher({
     config.apiKey,
     config.baseUrl,
     apiProtocol,
+    credentialSource,
     providerModelsKey,
     fetchedApiModelOptions.length,
     onProviderModelsCacheChange,
+    shouldCacheProviderModels,
   ]);
 
   const suggestedApiModelIds = useMemo(
-    () =>
-      Array.from(
+    () => {
+      if (credentialSource === 'deployment') {
+        const defaultModel = deploymentProviderConfig?.defaultModel?.trim();
+        return defaultModel ? [defaultModel] : [];
+      }
+      return Array.from(
         new Set(
           providerForProtocol?.preferredModels.length
             ? providerForProtocol.preferredModels
             : SUGGESTED_MODELS_BY_PROTOCOL[apiProtocol],
         ),
-      ),
-    [apiProtocol, providerForProtocol],
+      );
+    },
+    [apiProtocol, credentialSource, deploymentProviderConfig?.defaultModel, providerForProtocol],
   );
   const apiModelOptions = useMemo(
     () => mergeProviderModelOptions(fetchedApiModelOptions, suggestedApiModelIds),
@@ -1057,13 +1124,17 @@ export function InlineModelSwitcher({
   const chipMode =
     config.mode === 'daemon'
       ? t('inlineSwitcher.chipCli')
-      : t('inlineSwitcher.chipByok');
+      : credentialSource === 'deployment'
+        ? t('settings.modeApi')
+        : t('inlineSwitcher.chipByok');
   const chipPrimary =
     config.mode === 'daemon'
       ? currentAgent
         ? displayAgentChipName(currentAgent)
         : t('inlineSwitcher.noAgent')
-      : apiProtocolLabel(apiProtocol);
+      : credentialSource === 'deployment'
+        ? deploymentProviderConfig?.label?.trim() || 'Deployment'
+        : apiProtocolLabel(apiProtocol);
   const chipModel =
     config.mode === 'daemon'
       ? isDeepSeekV4FlashCampaignModel(currentModelId)
@@ -1372,7 +1443,7 @@ export function InlineModelSwitcher({
                 )}
               </div>
 
-              {!config.apiKey ? (
+              {credentialSource !== 'deployment' && !config.apiKey ? (
                 <div className="inline-switcher__warn" role="status">
                   {t('inlineSwitcher.missingApiKey')}
                 </div>

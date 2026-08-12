@@ -1,3 +1,7 @@
+import type {
+  ProviderCredentialSourceRequestFields,
+  ProviderRunMetadataRequestFields,
+} from './providerCredential';
 import type { ReasoningExecutionRequestFields } from './reasoningExecution';
 
 export type ProxyMessageRole = 'system' | 'user' | 'assistant' | 'tool';
@@ -25,9 +29,9 @@ export interface ProxyMessage {
   content: ProxyMessageContent;
 }
 
-export interface ProxyStreamRequest extends ReasoningExecutionRequestFields {
-  baseUrl: string;
-  apiKey: string;
+export type ProxyStreamRequest = ReasoningExecutionRequestFields &
+  ProviderCredentialSourceRequestFields &
+  ProviderRunMetadataRequestFields & {
   model: string;
   systemPrompt?: string;
   messages: ProxyMessage[];
@@ -36,7 +40,7 @@ export interface ProxyStreamRequest extends ReasoningExecutionRequestFields {
   maxTokens?: number;
   // Azure OpenAI only. Defaults at the daemon when omitted.
   apiVersion?: string;
-}
+};
 
 export interface ProxyStreamStartPayload {
   model?: string;

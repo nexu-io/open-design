@@ -1,5 +1,10 @@
 import type { Express, Response } from 'express';
 import { PROJECT_EXPORT_MANIFEST_SCHEMA, isExportFormat } from '@open-design/contracts';
+import type { ConnectionTestProtocol } from '@open-design/contracts/api/connectionTest';
+import type { FinalizeProviderRequest } from '@open-design/contracts/api/finalize';
+import type { ProviderRunMetadataRequestFields } from '@open-design/contracts/api/providerCredential';
+import type { ReasoningExecutionRequestFields } from '@open-design/contracts/api/reasoningExecution';
+import { randomUUID } from 'node:crypto';
 import nodePath from 'node:path';
 import os from 'node:os';
 import { readFile, rm } from 'node:fs/promises';
@@ -28,6 +33,12 @@ import {
 } from './deck-export.js';
 import { readProjectFileVersion } from './project-file-versions.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from './reasoning-egress.js';
+import {
+  resolveDeploymentProviderProfile,
+  resolveProviderCredentialSource,
+  type DeploymentProviderProfile,
+} from './integrations/deployment-provider.js';
+import { deploymentProviderRunMetadata } from './integrations/deployment-provider-run-session.js';
 import { sandboxImportedProjectRootUnavailableReason } from './sandbox-mode.js';
 import { parseOrchestratorWorkspace } from './workspace-contract.js';
 import {
@@ -1732,7 +1743,20 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
     redactSecrets,
   } = ctx.finalize;
   app.post('/api/projects/:id/finalize/:provider', async (req, res) => {
-    const { apiKey, baseUrl, model, maxTokens, apiVersion, protocol: bodyProtocol, reasoningExecution } = req.body || {};
+    const body = (req.body || {}) as Partial<FinalizeProviderRequest> &
+      ProviderRunMetadataRequestFields &
+      ReasoningExecutionRequestFields;
+    const {
+      apiKey,
+      baseUrl,
+      model,
+      maxTokens,
+      apiVersion,
+      protocol: bodyProtocol,
+      reasoningExecution,
+      credentialSource: rawCredentialSource,
+    } = body;
+    let secretsToRedact = [typeof apiKey === 'string' ? apiKey : ''];
     try {
       // Centralized path-traversal guard. `isSafeId` (apps/daemon/src/projects.ts)
       // rejects pure-dot ids (`.`, `..`, etc.) which would otherwise pass
@@ -1756,24 +1780,46 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       if (bodyProtocol !== undefined && bodyProtocol !== protocol) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'body protocol must match route provider');
       }
+      const credentialSource = resolveProviderCredentialSource(rawCredentialSource);
+      if (!credentialSource) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'credentialSource must be user or deployment');
+      }
 
-      if (typeof apiKey !== 'string' || !apiKey.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
-      }
-      if (typeof model !== 'string' || !model.trim()) {
-        return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
-      }
+      let effectiveApiKey = typeof apiKey === 'string' ? apiKey : '';
       let effectiveBaseUrl = defaultBaseUrlForFinalizeProtocol(protocol);
-      if (baseUrl !== undefined) {
+      let allowPrivateNetworkBaseUrl = false;
+      let deploymentProfile: DeploymentProviderProfile | null = null;
+      if (credentialSource !== 'deployment' && baseUrl !== undefined) {
         if (typeof baseUrl !== 'string' || !baseUrl.trim()) {
           return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl must be a non-empty string when provided');
         }
         effectiveBaseUrl = baseUrl.trim();
       }
+      if (credentialSource === 'deployment') {
+        const resolved = resolveDeploymentProviderProfile(protocol as ConnectionTestProtocol);
+        if (!resolved.ok) {
+          return sendApiError(res, resolved.status, resolved.code, resolved.message);
+        }
+        effectiveApiKey = resolved.profile.apiKey;
+        effectiveBaseUrl = resolved.profile.baseUrl;
+        allowPrivateNetworkBaseUrl = resolved.profile.allowPrivateNetworkBaseUrl;
+        deploymentProfile = resolved.profile;
+      }
+      secretsToRedact = [effectiveApiKey];
+
+      if (!effectiveApiKey.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'apiKey is required');
+      }
+      if (typeof model !== 'string' || !model.trim()) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'model is required');
+      }
       if (!effectiveBaseUrl) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseUrl is required for this provider');
       }
-      const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);
+      const validated = await validateExternalApiBaseUrl(
+        effectiveBaseUrl,
+        { allowPrivateNetwork: allowPrivateNetworkBaseUrl },
+      );
       if (validated.error) {
         return sendApiError(
           res,
@@ -1816,6 +1862,25 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
 
       let result;
       try {
+        let metadata: Record<string, unknown> | undefined;
+        if (deploymentProfile) {
+          const fallbackRunId = `finalize:${randomUUID()}:${req.params.id}`;
+          const runMetadata = await deploymentProviderRunMetadata(
+            deploymentProfile,
+            {
+              ...(body as Record<string, unknown>),
+              projectId: req.params.id,
+              providerRunId: body.providerRunId ?? fallbackRunId,
+              providerOperationId: body.providerOperationId ?? fallbackRunId,
+              providerRunPurpose: 'finalize',
+            },
+            finalizeAbort.signal,
+          );
+          if (!runMetadata.ok) {
+            return sendApiError(res, runMetadata.status, runMetadata.code, runMetadata.message);
+          }
+          metadata = runMetadata.metadata;
+        }
         result = await finalizeDesignPackage(
           db,
           PROJECTS_DIR,
@@ -1823,10 +1888,11 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
           req.params.id,
           {
             protocol,
-            apiKey,
+            apiKey: effectiveApiKey,
             baseUrl: effectiveBaseUrl,
             model,
             maxTokens,
+            ...(metadata ? { metadata } : {}),
             ...(typeof apiVersion === 'string' && apiVersion.trim()
               ? { apiVersion: apiVersion.trim() }
               : {}),
@@ -1851,7 +1917,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       // echoes the inbound headers. Codes per @lefarcen P2 on PR #832:
       // 401 -> UNAUTHORIZED, 429 -> RATE_LIMITED, others -> UPSTREAM_UNAVAILABLE.
       if (err instanceof FinalizeUpstreamError) {
-        const safeDetails = redactSecrets(err.rawText || '', [apiKey]);
+        const safeDetails = redactSecrets(err.rawText || '', secretsToRedact);
         const init = safeDetails ? { details: safeDetails } : {};
         if (err.status === 401) {
           return sendApiError(res, 401, 'UNAUTHORIZED', err.message, init);
@@ -1877,7 +1943,7 @@ export function registerFinalizeRoutes(app: Express, ctx: RegisterFinalizeRoutes
       // generic 500 with the shared INTERNAL_ERROR code. Run the message
       // through redactSecrets defensively.
       console.error('[finalize]', err);
-      const safeMsg = redactSecrets(String(err?.message || err), [apiKey]);
+      const safeMsg = redactSecrets(String(err?.message || err), secretsToRedact);
       return sendApiError(res, 500, 'INTERNAL_ERROR', safeMsg);
     }
   });

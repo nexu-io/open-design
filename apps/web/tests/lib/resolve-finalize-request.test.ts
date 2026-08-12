@@ -59,6 +59,104 @@ describe('resolve-finalize-request', () => {
     })).toBe(true);
   });
 
+  it('allows default provider finalize configs without a base URL', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      mode: 'api' as const,
+      apiProtocol: 'anthropic' as const,
+      apiKey: 'anthropic-key',
+      baseUrl: '',
+      model: 'claude-sonnet-4-5',
+    };
+
+    expect(isFinalizeByokConfigured(config)).toBe(true);
+    expect(buildFinalizeRequest(config)).toMatchObject({
+      protocol: 'anthropic',
+      credentialSource: 'user',
+      apiKey: 'anthropic-key',
+      model: 'claude-sonnet-4-5',
+    });
+    expect(buildFinalizeRequest(config)).not.toHaveProperty('baseUrl');
+  });
+
+  it('builds deployment-sourced OpenAI finalize requests without browser credentials', () => {
+    const request = buildFinalizeRequest({
+      ...DEFAULT_CONFIG,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: 'stale-browser-key',
+      baseUrl: 'https://stale.example.test/v1',
+      model: 'gpt-routed',
+    });
+
+    expect(request).toMatchObject({
+      protocol: 'openai',
+      credentialSource: 'deployment',
+      model: 'gpt-routed',
+    });
+    expect(request).not.toMatchObject({
+      apiKey: 'stale-browser-key',
+      baseUrl: 'https://stale.example.test/v1',
+    });
+    expect(isFinalizeByokConfigured({
+      ...DEFAULT_CONFIG,
+      mode: 'api',
+      apiProtocol: 'openai',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'gpt-routed',
+    })).toBe(true);
+  });
+
+  it('uses the live deployment model instead of the preserved OpenAI BYOK draft', () => {
+    const config = {
+      ...DEFAULT_CONFIG,
+      mode: 'api' as const,
+      apiProtocol: 'openai' as const,
+      apiCredentialSource: 'deployment' as const,
+      apiKey: '',
+      baseUrl: '',
+      model: 'gpt-routed',
+      apiProtocolConfigs: {
+        openai: {
+          apiKey: 'user-openai-key',
+          baseUrl: 'https://api.openai.com/v1',
+          model: 'gpt-user',
+          apiCredentialSource: 'user' as const,
+        },
+      },
+    };
+
+    expect(buildFinalizeRequest(config)).toMatchObject({
+      protocol: 'openai',
+      credentialSource: 'deployment',
+      model: 'gpt-routed',
+    });
+    expect(isFinalizeByokConfigured(config)).toBe(true);
+    expect(buildFinalizeRequest({
+      ...config,
+      model: '',
+    })).toBeNull();
+    expect(isFinalizeByokConfigured({
+      ...config,
+      model: '',
+    })).toBe(false);
+  });
+
+  it('rejects deployment-sourced finalize requests for non-OpenAI protocols', () => {
+    expect(buildFinalizeRequest({
+      ...DEFAULT_CONFIG,
+      mode: 'api',
+      apiProtocol: 'anthropic',
+      apiCredentialSource: 'deployment',
+      apiKey: '',
+      baseUrl: '',
+      model: 'claude-sonnet-4-5',
+    })).toBeNull();
+  });
+
   it('surfaces a Local CLI-specific toast when finalize lacks BYOK settings', () => {
     expect(
       buildFinalizeCredentialsMissingToast({

@@ -5,6 +5,7 @@ import { basename } from 'node:path';
 import { runDaemonCliStartup, startDaemonRuntime } from './daemon-startup.js';
 import { runLiveArtifactsMcpServer } from './mcp-live-artifacts-server.js';
 import { runArtifactsCli } from './artifacts-cli.js';
+import { runProviderCli } from './provider-cli.js';
 import { runResource } from './resource-cli.js';
 import { runProjectHandoff } from './handoff-cli.js';
 import { runConnectorsToolCli } from './tools-connectors-cli.js';
@@ -126,7 +127,6 @@ const RESEARCH_SEARCH_BOOLEAN_FLAGS = new Set([
   'help',
   'h',
 ]);
-
 const PLUGIN_STRING_FLAGS = new Set([
   'daemon-url',
   'source',
@@ -245,7 +245,7 @@ const PROJECT_RESOURCE_STRING_FLAGS = new Set([
   'workspace',
   'workspace-member',
 ]);
-const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow']);
+const PROJECT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'follow', 'deployment-credential']);
 const WORKSPACE_STRING_FLAGS = new Set([
   'daemon-url', 'workspace', 'view', 'visibility', 'owner', 'project',
   'member', 'role', 'email', 'app-user', 'lifecycle-state',
@@ -372,6 +372,7 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 const SUBCOMMAND_MAP = {
   artifacts: runArtifacts,
   media: runMedia,
+  provider: runProvider,
   mcp: runMcp,
   amr: runAmr,
   collab: runCollab,
@@ -703,6 +704,9 @@ function printRootHelp() {
   od research search --query <text> [--max-sources 5] [--daemon-url <url>]
       Run agent-callable Tavily research through the local daemon.
 
+  od provider config [--json] [--daemon-url <url>]
+      Inspect daemon-managed provider availability without printing credentials.
+
   od plugin <list|info|install|uninstall|apply|doctor|replay|trust> [args]
       Discover, install, and apply plugins through the local daemon.
   od plugin publish-repo <folder>
@@ -777,6 +781,19 @@ What the daemon does:
   * proxies messages (text + images) to the selected agent via child-process spawn
   * exposes /api/projects/:id/media/generate — the unified image/video/audio
      dispatcher that the agent calls via \`od media generate\`.`);
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: od provider …
+// ---------------------------------------------------------------------------
+
+async function runProvider(args) {
+  return runProviderCli(args, {
+    parseFlags,
+    daemonBaseUrl: cliDaemonBaseUrl,
+    exitWithStructuredError,
+    structuredHttpFailure,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -7128,8 +7145,9 @@ async function runRun(args) {
     console.log(`Usage:
   od run start --project <projectId> [--conversation <id>] [--message "<text>"]
                [--plugin <id>] [--inputs <json>] [--grant-caps a,b]
-               [--agent claude|codex|opencode] [--model <id>] [--service-tier <id>]
+               [--agent claude|codex|opencode|byok-opencode] [--model <id>] [--service-tier <id>]
                [--workspace <id> --workspace-member <id>] [--follow] [--json]
+               [--deployment-credential]
   od run redesign [--path <folder>] [--message "<text>" | --prompt-file <path|->]
                [--agent claude] [--model <id>] [--service-tier <id>] [--follow] [--json]
   od run watch  <runId>                     ND-JSON event stream on stdout.
@@ -7144,6 +7162,10 @@ Common options:
   --daemon-url <url>         Open Design daemon HTTP base.
   --workspace <id>           Explicit Workspace id for a bound project.
   --workspace-member <id>    Explicit Workspace member id for a bound project.
+  --deployment-credential
+                       Use the daemon-managed deployment credential with the
+                       BYOK OpenCode agent; requires --model <id> and sends no
+                       browser credential.
   --json                     Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -7358,6 +7380,18 @@ Common options:
       if (flags.agent) body.agentId = flags.agent;
       if (flags.model) body.model = flags.model;
       if (flags['service-tier']) body.serviceTier = flags['service-tier'];
+      if (flags['deployment-credential']) {
+        if (flags.agent && flags.agent !== 'byok-opencode') {
+          console.error('--deployment-credential requires --agent byok-opencode when --agent is set');
+          process.exit(2);
+        }
+        if (!flags.model) {
+          console.error('--deployment-credential requires --model <id>');
+          process.exit(2);
+        }
+        body.agentId = 'byok-opencode';
+        body.byokCredentialSource = 'deployment';
+      }
       if (flags.inputs) {
         try { body.pluginInputs = JSON.parse(flags.inputs); } catch (err) {
           console.error(`--inputs must be valid JSON: ${err.message}`);

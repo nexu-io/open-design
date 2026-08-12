@@ -11,6 +11,7 @@ await build({
     "./src/api/orbit.ts",
     "./src/api/finalize.ts",
     "./src/api/handoff.ts",
+    "./src/api/providerCredential.ts",
     "./src/api/providerModels.ts",
     "./src/api/reasoningExecution.ts",
     "./src/api/research.ts",

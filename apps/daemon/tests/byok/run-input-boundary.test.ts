@@ -24,6 +24,26 @@ describe('BYOK run input boundary', () => {
     })).toBe(false);
   });
 
+  it('accepts the non-secret deployment credential selection', () => {
+    expect(__forTestHasCompleteByokOpenCodeConfig({
+      agentId: 'byok-opencode',
+      model: 'gpt-5.4-mini',
+      byokCredentialSource: 'deployment',
+    })).toBe(true);
+  });
+
+  it('rejects a deployment credential selection without a concrete model', () => {
+    expect(__forTestHasCompleteByokOpenCodeConfig({
+      agentId: 'byok-opencode',
+      byokCredentialSource: 'deployment',
+    })).toBe(false);
+    expect(__forTestHasCompleteByokOpenCodeConfig({
+      agentId: 'byok-opencode',
+      model: 'default',
+      byokCredentialSource: 'deployment',
+    })).toBe(false);
+  });
+
   it('accepts a keyless run-scoped provider when the protocol permits it', () => {
     expect(__forTestHasCompleteByokOpenCodeConfig({
       agentId: 'byok-opencode',
@@ -40,6 +60,7 @@ describe('BYOK run input boundary', () => {
     const sanitized = __forTestWithoutSensitiveRunInput({
       agentId: 'byok-opencode',
       byokProfileId: 'byok-openrouter',
+      byokCredentialSource: 'deployment',
       byokProvider: { apiKey: 'nested-secret' },
       apiKey: 'top-level-secret',
       rechargeResumeCapability: 'capability-secret',
@@ -48,6 +69,7 @@ describe('BYOK run input boundary', () => {
 
     expect(sanitized).toEqual({
       agentId: 'byok-opencode',
+      byokCredentialSource: 'deployment',
       message: 'Create a site',
     });
     expect(JSON.stringify(sanitized)).not.toContain('secret');

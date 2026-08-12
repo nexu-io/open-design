@@ -52,8 +52,9 @@ export type ByokChatProtocol =
   | 'senseaudio'
   | 'aihubmix';
 
-export interface ByokChatProviderConfig {
+export interface UserByokChatProviderConfig {
   protocol: ByokChatProtocol;
+  credentialSource?: 'user';
   apiKey: string;
   baseUrl?: string;
   apiVersion?: string;
@@ -67,6 +68,19 @@ export interface ByokChatProviderConfig {
    */
   model?: string;
 }
+
+export interface DeploymentByokChatProviderConfig {
+  protocol: 'openai';
+  credentialSource: 'deployment';
+  apiKey?: never;
+  baseUrl?: never;
+  apiVersion?: never;
+  requiresApiKey?: never;
+}
+
+export type ByokChatProviderConfig =
+  | UserByokChatProviderConfig
+  | DeploymentByokChatProviderConfig;
 
 export interface ByokMediaDefaults {
   imageModel?: string;
@@ -108,7 +122,13 @@ export interface ChatRequest {
    * adapter. The daemon must not persist this object; it is translated into
    * child env + OPENCODE_CONFIG_CONTENT for the current run only.
    */
-  byokProvider?: ByokChatProviderConfig;
+  byokProvider?: UserByokChatProviderConfig;
+  /**
+   * Selects the administrator-managed deployment provider for a BYOK OpenCode
+   * run. This is deliberately a discriminator only: no credential or endpoint
+   * is accepted from the browser.
+   */
+  byokCredentialSource?: 'deployment';
   /**
    * Run-scoped BYOK media defaults selected in the chat UI. The daemon uses
    * these to guide OpenCode-backed `od media generate` calls for this run only.

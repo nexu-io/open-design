@@ -44,8 +44,10 @@ export function runtimeTypeForRunAnalytics(args: {
 export function agentProviderIdForRunAnalytics(args: {
   agentId: unknown;
   byokProvider?: unknown;
+  byokCredentialSource?: unknown;
 }): TrackingCliProviderId | TrackingByokProviderId {
   if (args.agentId === 'byok-opencode') {
+    if (args.byokCredentialSource === 'deployment') return 'openai';
     const protocol = readByokProviderProtocol(args.byokProvider);
     return byokProtocolToTracking(protocol) ?? 'other';
   }

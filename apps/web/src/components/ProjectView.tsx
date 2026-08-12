@@ -59,7 +59,7 @@ import { useCoalescedCallback } from '../hooks/useCoalescedCallback';
 import { requestAmrArtifactUpgrade } from '../runtime/amr-artifact-upgrade';
 import {
   type AmrWalletSnapshot,
-  type ByokChatProviderConfig,
+  type UserByokChatProviderConfig,
   type ByokMediaDefaults,
   type ByokChatProtocol,
   type ChatTaskExecutionAnalytics,
@@ -1566,8 +1566,11 @@ function byokMediaDefaultsForRun(input: {
 
 function byokOpenCodeProviderFromConfig(
   config: AppConfig,
-): ByokChatProviderConfig | undefined {
+): UserByokChatProviderConfig | undefined {
   if (!isOpenCodeByokChatProtocol(config.apiProtocol)) return undefined;
+  if (config.apiProtocol === 'openai' && config.apiCredentialSource === 'deployment') {
+    return undefined;
+  }
   const selectedProvider = selectedKnownProviderForConfig(config);
   const model = config.model.trim();
   if (
@@ -1606,6 +1609,16 @@ function selectedKnownProviderForConfig(config: AppConfig) {
         || provider.baseUrl === config.apiProviderBaseUrl
       ),
   );
+}
+
+function byokOpenCodeCredentialSourceFromConfig(
+  config: AppConfig,
+): 'deployment' | undefined {
+  if (!isOpenCodeByokChatProtocol(config.apiProtocol)) return undefined;
+  if (config.apiProtocol !== 'openai' || config.apiCredentialSource !== 'deployment') {
+    return undefined;
+  }
+  return byokPreflightBlockReason(config) === null ? 'deployment' : undefined;
 }
 
 function isOpenCodeByokChatProtocol(
@@ -6409,10 +6422,11 @@ export function ProjectView({
         ),
       );
       const byokOpenCodeProvider = byokOpenCodeProviderFromConfig(config);
+      const byokCredentialSource = byokOpenCodeCredentialSourceFromConfig(config);
       const requiresByokPreflight =
         (config.mode === 'api' && config.apiProtocol !== 'bedrock') ||
         (config.mode === 'daemon' && config.agentId === 'byok-opencode');
-      if (requiresByokPreflight && !byokOpenCodeProvider) {
+      if (requiresByokPreflight && !byokOpenCodeProvider && !byokCredentialSource) {
         const blockReason = byokPreflightBlockReason(config) ?? 'config_invalid';
         const recoveryActionInstanceId = `blocked:${taskAnalytics.taskExecutionId}`;
         const recoveryActionType: TrackingRunRecoveryActionType =
@@ -7663,6 +7677,9 @@ export function ProjectView({
           ...(daemonByokOpenCode && byokOpenCodeProvider
             ? { byokProvider: byokOpenCodeProvider }
             : {}),
+          ...(daemonByokOpenCode && byokCredentialSource
+            ? { byokCredentialSource }
+            : {}),
           ...(daemonByokOpenCode
             ? {
                 byokMediaDefaults: byokMediaDefaultsForRun({
@@ -7836,6 +7853,7 @@ export function ProjectView({
           reasoning: null,
           serviceTier: null,
           ...(byokOpenCodeProvider ? { byokProvider: byokOpenCodeProvider } : {}),
+          ...(byokCredentialSource ? { byokCredentialSource } : {}),
           byokMediaDefaults: byokMediaDefaultsForRun({
             imageModelOverride: byokImageModelOverride,
             videoModelOverride: byokVideoModelOverride,

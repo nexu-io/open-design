@@ -1,4 +1,5 @@
 import type { ApiProtocol, ProviderModelOption } from '../types';
+import type { ProviderCredentialSource } from '@open-design/contracts';
 
 export type ProviderModelsCache = Record<string, ProviderModelOption[]>;
 
@@ -16,13 +17,33 @@ export function providerModelsCacheKey(
   baseUrl: string,
   apiKey: string,
   apiVersion = '',
+  credentialSource: ProviderCredentialSource = 'user',
+  deploymentFingerprint = '',
 ): string {
   return [
     protocol,
+    credentialSource,
+    credentialSource === 'deployment' ? deploymentFingerprint.trim() : '',
     baseUrl.trim().replace(/\/+$/, ''),
     fingerprintSecret(apiKey.trim()),
     protocol === 'azure' ? apiVersion.trim() : '',
   ].join('\n');
+}
+
+export function deploymentProviderModelsCacheFingerprint(
+  provider: { displayHost?: string; label?: string } | null | undefined,
+): string {
+  if (!provider) return '';
+  return [
+    provider.displayHost?.trim() ?? '',
+    provider.label?.trim() ?? '',
+  ].join('\n');
+}
+
+export function canCacheProviderModels(
+  credentialSource: ProviderCredentialSource,
+): boolean {
+  return credentialSource !== 'deployment';
 }
 
 export function mergeProviderModelOptions(

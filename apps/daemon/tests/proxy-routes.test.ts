@@ -1,4 +1,5 @@
 import type http from 'node:http';
+import { promises as dnsPromises } from 'node:dns';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -9,6 +10,40 @@ import { AIHUBMIX_APP_CODE } from '../src/integrations/aihubmix.js';
 
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
+const DEPLOYMENT_PROVIDER_ENV_KEYS = [
+  'OD_PROVIDER_ORCHESTRATOR_BASE_URL',
+  'OD_PROVIDER_ORCHESTRATOR_API_KEY',
+  'OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL',
+  'OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD',
+  'OD_PROVIDER_ORCHESTRATOR_RUN_MAX_TOTAL_COST_USD',
+  'OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS',
+  'HTTPS_PROXY',
+  'HTTP_PROXY',
+  'ALL_PROXY',
+  'NO_PROXY',
+] as const;
+
+async function withDeploymentProviderEnv<T>(
+  env: Partial<Record<typeof DEPLOYMENT_PROVIDER_ENV_KEYS[number], string | undefined>>,
+  run: () => Promise<T>,
+): Promise<T> {
+  const previous = new Map<string, string | undefined>();
+  for (const key of DEPLOYMENT_PROVIDER_ENV_KEYS) {
+    previous.set(key, process.env[key]);
+    const value = env[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  try {
+    return await run();
+  } finally {
+    for (const key of DEPLOYMENT_PROVIDER_ENV_KEYS) {
+      const value = previous.get(key);
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
 
 describe('API proxy routes', () => {
   const realFetch = globalThis.fetch;
@@ -69,6 +104,931 @@ describe('API proxy routes', () => {
         redirect: 'error',
       }),
     );
+  });
+
+  it('routes OpenAI-compatible proxy requests through the deployment provider credential', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/root',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        expect(url).toBe('https://gateway.example.test/root/v1/chat/completions');
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer deployment-secret',
+        });
+        expect(init?.headers).not.toMatchObject({
+          Authorization: 'Bearer caller-secret',
+        });
+        return Promise.resolve(sseResponse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          baseUrl: 'https://caller.example.test/v1',
+          apiKey: 'caller-secret',
+          model: 'gpt-routed',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
+    });
+  });
+
+  it('rejects deployment provider proxy requests for non-OpenAI protocols', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/root',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`unexpected provider egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/anthropic/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'claude-test',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'Deployment provider mode currently supports OpenAI-compatible provider routes only.',
+        },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it('allows deployment provider proxy requests to an administrator private-network hostname', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.private.example.test/root',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const dnsSpy = vi
+        .spyOn(dnsPromises, 'lookup')
+        .mockImplementation((async (hostname: string) => {
+          if (hostname === 'gateway.private.example.test') {
+            return [{ address: '100.90.158.89', family: 4 }];
+          }
+          const err: NodeJS.ErrnoException = new Error('ENOTFOUND');
+          err.code = 'ENOTFOUND';
+          throw err;
+        }) as unknown as typeof dnsPromises.lookup);
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        expect(url).toBe('https://gateway.private.example.test/root/v1/chat/completions');
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer deployment-secret',
+        });
+        return Promise.resolve(sseResponse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      try {
+        const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            credentialSource: 'deployment',
+            model: 'gpt-routed',
+            messages: [{ role: 'user', content: 'hello' }],
+          }),
+        });
+
+        expect(res.status).toBe(200);
+        await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
+        expect(dnsSpy).not.toHaveBeenCalled();
+      } finally {
+        dnsSpy.mockRestore();
+      }
+    });
+  });
+
+  it('attaches deployment provider run-session metadata before OpenAI-compatible proxy egress', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+      OD_PROVIDER_ORCHESTRATOR_RUN_MAX_TOTAL_COST_USD: '0.10',
+      OD_PROVIDER_ORCHESTRATOR_RUN_TTL_SECONDS: '600',
+      HTTPS_PROXY: 'http://proxy.example.test:8080',
+      HTTP_PROXY: undefined,
+      ALL_PROXY: undefined,
+      NO_PROXY: undefined,
+    }, async () => {
+      const seen: string[] = [];
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        seen.push(url);
+        if (url === 'https://authority.example.test/api/runs') {
+          expect(init?.dispatcher).toBeDefined();
+          expect(init?.signal).toBeInstanceOf(AbortSignal);
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer deployment-secret',
+          });
+          expect(JSON.parse(String(init?.body))).toMatchObject({
+            od_project_id: 'project_1',
+            od_run_id: 'conversation_1',
+            purpose: 'chat-completion',
+            allowed_surfaces: ['reasoning'],
+            max_total_cost_usd: 0.10,
+            ttl_seconds: 600,
+          });
+          return Promise.resolve(Response.json({
+            schema: 'deployment-provider.run-session.v1',
+            run_session_id: 'odrs_123',
+          }, { status: 201 }));
+        }
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        const body = JSON.parse(String(init?.body));
+        expect(body.metadata).toMatchObject({
+          opendesign_run_session_id: 'odrs_123',
+          opendesign_cost_cap_usd: 0.05,
+          opendesign_idempotency_key: 'message_1',
+        });
+        expect(body.metadata.opendesign_operation_nonce).toMatch(/^nonce-/);
+        expect(JSON.stringify(body)).not.toContain('deployment-secret');
+        return Promise.resolve(sseResponse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          projectId: 'project_1',
+          providerRunId: 'conversation_1',
+          providerOperationId: 'message_1',
+          providerRunPurpose: 'chat-completion',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
+      expect(seen).toEqual([
+        'https://authority.example.test/api/runs',
+        'https://gateway.example.test/v1/chat/completions',
+      ]);
+    });
+  });
+
+  it('keeps deployment run-session metadata on Azure OpenAI-compatible max-token retries', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const providerBodies: Record<string, unknown>[] = [];
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url === 'https://authority.example.test/api/runs') {
+          return Promise.resolve(Response.json({
+            schema: 'deployment-provider.run-session.v1',
+            run_session_id: 'odrs_azure_retry',
+          }, { status: 201 }));
+        }
+        expect(url).toBe(
+          'https://resource.services.ai.azure.com/api/projects/project/openai/v1/chat/completions',
+        );
+        expect(init?.headers).toMatchObject({
+          Authorization: 'Bearer deployment-secret',
+        });
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        providerBodies.push(body);
+        expect(JSON.stringify(body)).not.toContain('deployment-secret');
+        if ('max_tokens' in body) {
+          return Promise.resolve(new Response(
+            JSON.stringify({
+              error: {
+                message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+              },
+            }),
+            { status: 400, headers: { 'content-type': 'application/json' } },
+          ));
+        }
+        return Promise.resolve(sseResponse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-chat-latest',
+          maxTokens: 1234,
+          projectId: 'project_1',
+          providerRunId: 'conversation_1',
+          providerOperationId: 'message_1',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
+      expect(providerBodies).toHaveLength(2);
+      expect(providerBodies[0]).toMatchObject({
+        max_tokens: 1234,
+        metadata: {
+          opendesign_run_session_id: 'odrs_azure_retry',
+          opendesign_cost_cap_usd: 0.05,
+          opendesign_idempotency_key: 'message_1',
+        },
+      });
+      expect(providerBodies[0]).not.toHaveProperty('max_completion_tokens');
+      expect(providerBodies[1]).toMatchObject({
+        max_completion_tokens: 1234,
+        metadata: {
+          opendesign_run_session_id: 'odrs_azure_retry',
+          opendesign_cost_cap_usd: 0.05,
+          opendesign_idempotency_key: 'message_1',
+        },
+      });
+      expect(providerBodies[1]).not.toHaveProperty('max_tokens');
+    });
+  });
+
+  it('uses route-owned deployment provider run-session ids for minimal OpenAI-compatible proxy requests', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      let fallbackRunId: string | undefined;
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url === 'https://authority.example.test/api/runs') {
+          const requestBody = JSON.parse(String(init?.body));
+          expect(requestBody).toMatchObject({
+            purpose: 'chat-completion',
+            allowed_surfaces: ['reasoning'],
+            max_total_cost_usd: 0.05,
+          });
+          expect(requestBody.od_run_id).toMatch(/^proxy:/);
+          expect(requestBody.od_project_id).toBe(requestBody.od_run_id);
+          fallbackRunId = requestBody.od_run_id;
+          return Promise.resolve(Response.json({
+            schema: 'deployment-provider.run-session.v1',
+            run_session_id: 'odrs_proxy_minimal',
+          }, { status: 201 }));
+        }
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        const providerBody = JSON.parse(String(init?.body));
+        expect(providerBody.metadata).toMatchObject({
+          opendesign_run_session_id: 'odrs_proxy_minimal',
+          opendesign_idempotency_key: fallbackRunId,
+        });
+        return Promise.resolve(sseResponse('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n'));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.text()).resolves.toContain('event: delta\ndata: {"delta":"hi"}');
+    });
+  });
+
+  it('honors explicit deployment provider connection-test run-session ids', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url === 'https://authority.example.test/api/runs') {
+          const requestBody = JSON.parse(String(init?.body));
+          expect(requestBody).toMatchObject({
+            od_project_id: 'project_1',
+            od_run_id: 'conversation_1',
+            purpose: 'connection-test',
+          });
+          return Promise.resolve(Response.json({
+            schema: 'deployment-provider.run-session.v1',
+            run_session_id: 'odrs_connection_explicit',
+          }, { status: 201 }));
+        }
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        const providerBody = JSON.parse(String(init?.body));
+        expect(providerBody.metadata).toMatchObject({
+          opendesign_run_session_id: 'odrs_connection_explicit',
+          opendesign_idempotency_key: 'message_1',
+        });
+        return Promise.resolve(Response.json({
+          choices: [{ message: { content: 'ok' } }],
+        }));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/test/connection`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'provider',
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          projectId: 'project_1',
+          providerRunId: 'conversation_1',
+          providerOperationId: 'message_1',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        ok: true,
+        kind: 'success',
+        model: 'gpt-routed',
+      });
+    });
+  });
+
+  it('denies deployment provider proxy egress before creating a run session', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`unexpected egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          projectId: 'project_1',
+          providerRunId: 'conversation_1',
+          providerOperationId: 'message_1',
+          messages: [{ role: 'user', content: 'hello' }],
+          reasoningExecution: { mode: 'disabled' },
+        }),
+      });
+
+      expect(res.status).toBe(403);
+      await expect(res.json()).resolves.toMatchObject({
+        error: { code: 'reasoning_execution_disabled' },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it('fails closed on invalid deployment provider run-session URL before provider egress', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'not-a-url',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`unexpected provider egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          projectId: 'project_1',
+          providerRunId: 'conversation_1',
+          providerOperationId: 'message_1',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      await expect(res.json()).resolves.toMatchObject({
+        error: {
+          code: 'BAD_REQUEST',
+          message: 'Deployment provider run-session URL is invalid.',
+        },
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it.each([
+    {
+      name: 'times out',
+      failure: () => Promise.reject(new DOMException('timed out', 'TimeoutError')),
+      status: 504,
+      code: 'UPSTREAM_UNAVAILABLE',
+      message: 'Deployment provider run session endpoint timed out.',
+    },
+    {
+      name: 'is unreachable',
+      failure: () => Promise.reject(new TypeError('fetch failed')),
+      status: 502,
+      code: 'UPSTREAM_UNAVAILABLE',
+      message: 'Deployment provider run session endpoint was unreachable.',
+    },
+  ])(
+    'fails closed when the deployment provider run-session endpoint $name before provider egress',
+    async ({ failure, status, code, message }) => {
+      await withDeploymentProviderEnv({
+        OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+        OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+        OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+        OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+      }, async () => {
+        const seen: string[] = [];
+        const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+          const url = String(input);
+          if (url.startsWith(baseUrl)) return realFetch(input, init);
+          seen.push(url);
+          if (url === 'https://authority.example.test/api/runs') {
+            expect(init?.headers).toMatchObject({
+              Authorization: 'Bearer deployment-secret',
+            });
+            return failure();
+          }
+          throw new Error(`unexpected provider egress to ${url}`);
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            credentialSource: 'deployment',
+            model: 'gpt-routed',
+            projectId: 'project_1',
+            providerRunId: 'conversation_1',
+            providerOperationId: 'message_1',
+            messages: [{ role: 'user', content: 'hello' }],
+          }),
+        });
+
+        expect(res.status).toBe(status);
+        await expect(res.json()).resolves.toMatchObject({
+          error: { code, message },
+        });
+        expect(seen).toEqual(['https://authority.example.test/api/runs']);
+      });
+    },
+  );
+
+  it.each([
+    {
+      name: 'authenticates unsuccessfully',
+      upstreamStatus: 401,
+      expectedStatus: 401,
+      expectedCode: 'UNAUTHORIZED',
+    },
+    {
+      name: 'is forbidden',
+      upstreamStatus: 403,
+      expectedStatus: 403,
+      expectedCode: 'FORBIDDEN',
+    },
+    {
+      name: 'rejects the request',
+      upstreamStatus: 422,
+      expectedStatus: 422,
+      expectedCode: 'UPSTREAM_UNAVAILABLE',
+    },
+    {
+      name: 'rate limits the request',
+      upstreamStatus: 429,
+      expectedStatus: 429,
+      expectedCode: 'RATE_LIMITED',
+    },
+    {
+      name: 'is unavailable',
+      upstreamStatus: 503,
+      expectedStatus: 503,
+      expectedCode: 'UPSTREAM_UNAVAILABLE',
+    },
+  ])(
+    'maps deployment provider run-session non-2xx responses when the endpoint $name',
+    async ({ upstreamStatus, expectedStatus, expectedCode }) => {
+      await withDeploymentProviderEnv({
+        OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+        OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+        OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+        OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+      }, async () => {
+        const seen: string[] = [];
+        const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+          const url = String(input);
+          if (url.startsWith(baseUrl)) return realFetch(input, init);
+          seen.push(url);
+          if (url === 'https://authority.example.test/api/runs') {
+            expect(init?.headers).toMatchObject({
+              Authorization: 'Bearer deployment-secret',
+            });
+            return Promise.resolve(Response.json({ error: 'session rejected' }, { status: upstreamStatus }));
+          }
+          throw new Error(`unexpected provider egress to ${url}`);
+        });
+        vi.stubGlobal('fetch', fetchMock);
+
+        const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            credentialSource: 'deployment',
+            model: 'gpt-routed',
+            projectId: 'project_1',
+            providerRunId: 'conversation_1',
+            providerOperationId: 'message_1',
+            messages: [{ role: 'user', content: 'hello' }],
+          }),
+        });
+
+        expect(res.status).toBe(expectedStatus);
+        await expect(res.json()).resolves.toMatchObject({
+          error: {
+            code: expectedCode,
+            message: `Deployment provider run session failed: ${upstreamStatus}`,
+          },
+        });
+        expect(seen).toEqual(['https://authority.example.test/api/runs']);
+      });
+    },
+  );
+
+  it('maps malformed deployment provider run-session success responses to upstream unavailable', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const seen: string[] = [];
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        seen.push(url);
+        if (url === 'https://authority.example.test/api/runs') {
+          return Promise.resolve(Response.json({ schema: 'deployment-provider.run-session.v1' }));
+        }
+        throw new Error(`unexpected provider egress to ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          projectId: 'project_1',
+          providerRunId: 'conversation_1',
+          providerOperationId: 'message_1',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(502);
+      await expect(res.json()).resolves.toMatchObject({
+        error: {
+          code: 'UPSTREAM_UNAVAILABLE',
+          message: 'Deployment provider run session response did not include run_session_id.',
+        },
+      });
+      expect(seen).toEqual(['https://authority.example.test/api/runs']);
+    });
+  });
+
+  it('redacts deployment provider credentials from OpenAI-compatible upstream errors', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        return Promise.resolve(new Response(
+          JSON.stringify({ error: { message: 'bad key deployment-secret' } }),
+          { status: 401, headers: { 'content-type': 'application/json' } },
+        ));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain('[REDACTED]');
+      expect(text).not.toContain('deployment-secret');
+    });
+  });
+
+  it('redacts deployment provider credentials from OpenAI-compatible stream error frames', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      vi.stubGlobal('fetch', vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        return Promise.resolve(sseResponse(
+          'data: {"error":{"message":"bad key deployment-secret","details":{"authorization":"Bearer deployment-secret"}}}\n\n',
+        ));
+      }));
+
+      const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+          messages: [{ role: 'user', content: 'hello' }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain('Provider error: bad key [REDACTED]');
+      expect(text).toContain('Bearer [REDACTED]');
+      expect(text).not.toContain('deployment-secret');
+    });
+  });
+
+  it('redacts deployment provider credentials from OpenAI finalize upstream errors', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+    }, async () => {
+      const projectId = `finalize-redaction-${Date.now()}`;
+      await realFetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Finalize redaction' }),
+      });
+      await realFetch(`${baseUrl}/api/projects/${projectId}/files`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'index.html',
+          content: '<main><h1>Draft</h1></main>',
+          artifact: true,
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Draft',
+            entry: 'index.html',
+            renderer: 'html',
+            exports: ['html'],
+            updatedAt: '2026-06-21T00:00:00.000Z',
+          },
+        }),
+      });
+
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        expect(init?.headers).toMatchObject({
+          authorization: 'Bearer deployment-secret',
+        });
+        return Promise.resolve(new Response(
+          JSON.stringify({ error: { message: 'bad key deployment-secret' } }),
+          { status: 401, headers: { 'content-type': 'application/json' } },
+        ));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/projects/${projectId}/finalize/openai`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+        }),
+      });
+
+      expect(res.status).toBe(401);
+      const text = await res.text();
+      expect(text).toContain('[REDACTED]');
+      expect(text).not.toContain('deployment-secret');
+    });
+  });
+
+  it('attaches deployment provider run-session metadata before OpenAI finalize egress', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const projectId = `finalize-session-${Date.now()}`;
+      await realFetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Finalize session' }),
+      });
+      await realFetch(`${baseUrl}/api/projects/${projectId}/files`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'index.html',
+          content: '<main><h1>Draft</h1></main>',
+          artifact: true,
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Draft',
+            entry: 'index.html',
+            renderer: 'html',
+            exports: ['html'],
+            updatedAt: '2026-06-21T00:00:00.000Z',
+          },
+        }),
+      });
+
+      const seen: string[] = [];
+      let fallbackRunId: string | undefined;
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        seen.push(url);
+        if (url === 'https://authority.example.test/api/runs') {
+          expect(init?.headers).toMatchObject({
+            Authorization: 'Bearer deployment-secret',
+          });
+          const requestBody = JSON.parse(String(init?.body));
+          expect(requestBody).toMatchObject({
+            od_project_id: projectId,
+            purpose: 'finalize',
+            allowed_surfaces: ['reasoning'],
+            max_total_cost_usd: 0.05,
+          });
+          expect(requestBody.od_run_id).toMatch(new RegExp(`^finalize:[^:]+:${projectId}$`));
+          expect(requestBody.od_run_id).not.toBe(`finalize:${projectId}`);
+          fallbackRunId = requestBody.od_run_id;
+          return Promise.resolve(Response.json({ run_session_id: 'odrs_finalize' }, { status: 201 }));
+        }
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        expect(init?.headers).toMatchObject({
+          authorization: 'Bearer deployment-secret',
+        });
+        const body = JSON.parse(String(init?.body));
+        expect(body.metadata).toMatchObject({
+          opendesign_run_session_id: 'odrs_finalize',
+          opendesign_cost_cap_usd: 0.05,
+          opendesign_idempotency_key: fallbackRunId,
+        });
+        return Promise.resolve(Response.json({
+          choices: [{ message: { content: '# Final design\n' } }],
+          usage: { prompt_tokens: 3, completion_tokens: 4 },
+        }));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const res = await realFetch(`${baseUrl}/api/projects/${projectId}/finalize/openai`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          protocol: 'openai',
+          credentialSource: 'deployment',
+          model: 'gpt-routed',
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        model: 'gpt-routed',
+        inputTokens: 3,
+        outputTokens: 4,
+      });
+      expect(seen).toEqual([
+        'https://authority.example.test/api/runs',
+        'https://gateway.example.test/v1/chat/completions',
+      ]);
+    });
+  });
+
+  it('uses fresh deployment provider fallback ids for repeated OpenAI finalize attempts', async () => {
+    await withDeploymentProviderEnv({
+      OD_PROVIDER_ORCHESTRATOR_BASE_URL: 'https://gateway.example.test/v1',
+      OD_PROVIDER_ORCHESTRATOR_API_KEY: 'deployment-secret',
+      OD_PROVIDER_ORCHESTRATOR_RUN_SESSION_URL: 'https://authority.example.test/api/runs',
+      OD_PROVIDER_ORCHESTRATOR_RUN_COST_CAP_USD: '0.05',
+    }, async () => {
+      const projectId = `finalize-session-repeat-${Date.now()}`;
+      await realFetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: projectId, name: 'Finalize session repeat' }),
+      });
+      await realFetch(`${baseUrl}/api/projects/${projectId}/files`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'index.html',
+          content: '<main><h1>Draft</h1></main>',
+          artifact: true,
+          artifactManifest: {
+            version: 1,
+            kind: 'html',
+            title: 'Draft',
+            entry: 'index.html',
+            renderer: 'html',
+            exports: ['html'],
+            updatedAt: '2026-06-21T00:00:00.000Z',
+          },
+        }),
+      });
+
+      const runIds: string[] = [];
+      const idempotencyKeys: string[] = [];
+      const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+        const url = String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        if (url === 'https://authority.example.test/api/runs') {
+          const requestBody = JSON.parse(String(init?.body));
+          runIds.push(String(requestBody.od_run_id));
+          return Promise.resolve(Response.json(
+            { run_session_id: `odrs_finalize_${runIds.length}` },
+            { status: 201 },
+          ));
+        }
+        expect(url).toBe('https://gateway.example.test/v1/chat/completions');
+        const body = JSON.parse(String(init?.body));
+        idempotencyKeys.push(String(body.metadata?.opendesign_idempotency_key));
+        return Promise.resolve(Response.json({
+          choices: [{ message: { content: '# Final design\n' } }],
+          usage: { prompt_tokens: 3, completion_tokens: 4 },
+        }));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const res = await realFetch(`${baseUrl}/api/projects/${projectId}/finalize/openai`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            protocol: 'openai',
+            credentialSource: 'deployment',
+            model: 'gpt-routed',
+          }),
+        });
+        expect(res.status).toBe(200);
+      }
+
+      expect(runIds).toHaveLength(2);
+      expect(new Set(runIds).size).toBe(2);
+      expect(runIds.every((id) => id.startsWith('finalize:') && id.endsWith(`:${projectId}`))).toBe(true);
+      expect(idempotencyKeys).toEqual(runIds);
+    });
   });
 
   it.each([

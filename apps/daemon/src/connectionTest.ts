@@ -118,6 +118,9 @@ export { validateBaseUrl } from '@open-design/contracts/api/connectionTest';
 
 export type DnsLookupAddress = { address: string; family: number };
 export type DnsLookupFn = (hostname: string) => Promise<DnsLookupAddress[]>;
+export interface ResolvedBaseUrlValidationOptions extends ValidateBaseUrlOptions {
+  allowPrivateNetwork?: boolean;
+}
 
 const defaultDnsLookup: DnsLookupFn = async (hostname) => {
   const result = await dnsPromises.lookup(hostname, { all: true, family: 0 });
@@ -132,13 +135,29 @@ function looksLikeIpLiteral(hostname: string): boolean {
   return host.includes(':');
 }
 
+function validateConfiguredBaseUrl(baseUrl: string): BaseUrlValidationResult {
+  let parsed: ParsedBaseUrl;
+  try {
+    parsed = new URL(String(baseUrl).replace(/\/+$/, ''));
+  } catch {
+    return { error: 'Invalid baseUrl' };
+  }
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    return { error: 'Only http/https allowed' };
+  }
+  return { parsed };
+}
+
 export async function validateBaseUrlResolved(
   baseUrl: string,
   lookup: DnsLookupFn = defaultDnsLookup,
-  options: ValidateBaseUrlOptions = {},
+  options: ResolvedBaseUrlValidationOptions = {},
 ): Promise<BaseUrlValidationResult> {
-  const sync = validateBaseUrl(baseUrl, options);
+  const sync = options.allowPrivateNetwork
+    ? validateConfiguredBaseUrl(baseUrl)
+    : validateBaseUrl(baseUrl, options);
   if (sync.error || !sync.parsed) return sync;
+  if (options.allowPrivateNetwork) return sync;
 
   const hostname = sync.parsed.hostname.toLowerCase();
   if (isLoopbackApiHost(hostname)) return sync;
@@ -730,7 +749,13 @@ export function redactSecrets(
   return redacted;
 }
 
-type ProviderConnectionInput = ProviderTestRequest & { signal?: AbortSignal };
+type ProviderConnectionInput = Omit<ProviderTestRequest, 'baseUrl' | 'apiKey'> & {
+  baseUrl: string;
+  apiKey: string;
+  metadata?: Record<string, unknown>;
+  signal?: AbortSignal;
+  allowPrivateNetworkBaseUrl?: boolean;
+};
 type AgentConnectionInput = AgentTestRequest & { signal?: AbortSignal };
 
 function appendVersionedApiPath(baseUrl: string, suffix: string): string {
@@ -1166,8 +1191,15 @@ interface ProviderCallShape {
   retryBodyOnUnsupportedMaxTokens?: unknown;
 }
 
+function metadataField(value: unknown): { metadata?: Record<string, unknown> } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return { metadata: value as Record<string, unknown> };
+}
+
 export function resolveOpenAIConnectionTestRunProviderPackage(
-  input: Pick<ProviderTestRequest, 'protocol' | 'baseUrl' | 'apiKey' | 'apiVersion' | 'model'>,
+  input: Pick<ProviderTestRequest, 'protocol' | 'baseUrl' | 'apiKey' | 'model'> & {
+    apiVersion?: ProviderTestRequest['apiVersion'];
+  },
 ): string | null {
   if (input.protocol !== 'openai') return null;
   const providerConfig = {
@@ -1192,6 +1224,7 @@ function openAIChatCompletionsProviderCall(
   baseUrl: string,
   apiKey: string,
   model: string,
+  metadata?: unknown,
 ): ProviderCallShape {
   const messages = [{ role: 'user', content: SMOKE_PROMPT }];
   const isAzureHosted = isAzureOpenAIHostname(new URL(baseUrl).hostname);
@@ -1207,6 +1240,7 @@ function openAIChatCompletionsProviderCall(
     },
     body: {
       model,
+      ...metadataField(metadata),
       ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
       messages,
       stream: false,
@@ -1227,6 +1261,7 @@ function openAIResponsesProviderCall(
   baseUrl: string,
   apiKey: string,
   model: string,
+  metadata?: unknown,
 ): ProviderCallShape {
   return {
     url: appendVersionedApiPath(baseUrl, '/responses'),
@@ -1236,6 +1271,7 @@ function openAIResponsesProviderCall(
     },
     body: {
       model,
+      ...metadataField(metadata),
       input: SMOKE_PROMPT,
       max_output_tokens: PROVIDER_MAX_TOKENS,
     },
@@ -1290,6 +1326,7 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
         },
         body: {
           model,
+          ...metadataField(input.metadata),
           ...buildOpenAIChatTokenParam(model, PROVIDER_MAX_TOKENS),
           messages: [{ role: 'user', content: SMOKE_PROMPT }],
           stream: false,
@@ -1306,13 +1343,13 @@ function buildProviderCall(input: ProviderTestRequest): ProviderCallShape {
       if (input.protocol === 'openai') {
         const runProviderPackage = resolveOpenAIConnectionTestRunProviderPackage(input);
         if (runProviderPackage === '@ai-sdk/openai') {
-          return openAIResponsesProviderCall(baseUrl, apiKey, model);
+          return openAIResponsesProviderCall(baseUrl, apiKey, model, input.metadata);
         }
         if (runProviderPackage === '@ai-sdk/openai-compatible') {
-          return openAIChatCompletionsProviderCall(baseUrl, apiKey, model);
+          return openAIChatCompletionsProviderCall(baseUrl, apiKey, model, input.metadata);
         }
       }
-      return openAIChatCompletionsProviderCall(baseUrl, apiKey, model);
+      return openAIChatCompletionsProviderCall(baseUrl, apiKey, model, input.metadata);
     case 'azure': {
       const url = new URL(baseUrl);
       const basePath = url.pathname.replace(/\/+$/, '');
@@ -1448,7 +1485,12 @@ export async function testProviderConnection(
   const start = Date.now();
   const model = String(input.model ?? '');
   const normalizedInput = normalizeProviderTestInput(input);
-  const validated = await validateUserProviderBaseUrl(normalizedInput.baseUrl);
+  const validated =
+    input.allowPrivateNetworkBaseUrl === true
+      ? await validateBaseUrlResolved(normalizedInput.baseUrl, undefined, {
+          allowPrivateNetwork: true,
+        })
+      : await validateUserProviderBaseUrl(normalizedInput.baseUrl);
   if (validated.error || !validated.parsed) {
     const kind: ConnectionTestKind = validated.forbidden ? 'forbidden' : 'invalid_base_url';
     return {

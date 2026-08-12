@@ -9,13 +9,20 @@ import type {
 } from '@open-design/contracts/api/providerModels';
 import type { ModelCapability, ModelCost, ModelMetadata } from '@open-design/contracts';
 import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
-import { redactSecrets, validateUserProviderBaseUrl } from '../connectionTest.js';
+import {
+  redactSecrets,
+  validateBaseUrlResolved,
+  validateUserProviderBaseUrl,
+} from '../connectionTest.js';
 import { googleProviderModelsUrl, normalizeGoogleModelId } from './google-models.js';
 import { aihubmixHeaders, aihubmixCatalogUrl, parseAIHubMixCatalog } from './aihubmix.js';
 
-type ProviderModelsInput = ProviderModelsRequest & {
+type ProviderModelsInput = Omit<ProviderModelsRequest, 'baseUrl' | 'apiKey'> & {
+  baseUrl: string;
+  apiKey: string;
   signal?: AbortSignal;
   requestInit?: Pick<RequestInit, 'dispatcher'>;
+  allowPrivateNetworkBaseUrl?: boolean;
 };
 
 const PROVIDER_MODELS_TIMEOUT_MS = 12_000;
@@ -304,7 +311,12 @@ export async function listProviderModels(
     };
   }
 
-  const validated = await validateUserProviderBaseUrl(input.baseUrl);
+  const validated =
+    input.allowPrivateNetworkBaseUrl === true
+      ? await validateBaseUrlResolved(input.baseUrl, undefined, {
+          allowPrivateNetwork: true,
+        })
+      : await validateUserProviderBaseUrl(input.baseUrl);
   if (validated.error || !validated.parsed) {
     return {
       ok: false,
