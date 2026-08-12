@@ -16,6 +16,7 @@
     .check-results li { margin: 4px 0; font: var(--md-sys-type-body-small); }
     .check-pass { color: #146c2e; }
     .check-fail { color: var(--md-sys-color-error); }
+    .responsive-check-frame { position: fixed; top: 0; left: -10000px; border: 0; }
   </style>
 </head>
 <body>
@@ -56,9 +57,73 @@
     }
 
     function setControlledValue(element, value) {
-      const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+      const view = element.ownerDocument.defaultView;
+      const prototype = element instanceof view.HTMLTextAreaElement ? view.HTMLTextAreaElement.prototype : view.HTMLInputElement.prototype;
       Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, value);
-      element.dispatchEvent(new Event('input', { bubbles: true }));
+      element.dispatchEvent(new view.Event('input', { bubbles: true }));
+    }
+
+    const settleWindow = (view) => new Promise((resolve) => view.requestAnimationFrame(() => view.requestAnimationFrame(resolve)));
+
+    async function waitFor(predicate, timeout = 5000) {
+      const startedAt = performance.now();
+      while (!predicate()) {
+        if (performance.now() - startedAt > timeout) throw new Error('Responsive fixture did not become ready.');
+        await delay(25);
+      }
+    }
+
+    async function withResponsiveFrame(width, height, callback) {
+      const frame = document.createElement('iframe');
+      frame.className = 'responsive-check-frame';
+      frame.width = width;
+      frame.height = height;
+      frame.title = `${width} by ${height} responsive fixture`;
+      frame.src = 'index.html';
+      const loaded = new Promise((resolve, reject) => {
+        const timeout = window.setTimeout(() => reject(new Error(`Responsive fixture ${width}×${height} did not load.`)), 5000);
+        frame.addEventListener('load', () => {
+          window.clearTimeout(timeout);
+          resolve();
+        }, { once: true });
+      });
+      document.body.append(frame);
+      try {
+        await loaded;
+        await waitFor(() => frame.contentDocument?.querySelector('.fab'));
+        await settleWindow(frame.contentWindow);
+        return await callback(frame.contentDocument, frame.contentWindow);
+      } finally {
+        frame.remove();
+      }
+    }
+
+    function assertSeparated(first, second, gap, message) {
+      const firstRect = first.getBoundingClientRect();
+      const secondRect = second.getBoundingClientRect();
+      const separated = firstRect.right + gap <= secondRect.left
+        || secondRect.right + gap <= firstRect.left
+        || firstRect.bottom + gap <= secondRect.top
+        || secondRect.bottom + gap <= firstRect.top;
+      assert(separated, message);
+    }
+
+    async function openComposerIn(documentRoot) {
+      documentRoot.querySelector('.fab').click();
+      await settleWindow(documentRoot.defaultView);
+      return documentRoot.querySelector('[role="dialog"]');
+    }
+
+    async function sendMessageIn(documentRoot, index) {
+      const dialog = await openComposerIn(documentRoot);
+      const fields = dialog.querySelectorAll('input, textarea');
+      setControlledValue(fields[0], `person${index}@example.com`);
+      setControlledValue(fields[1], `Responsive subject ${index}`);
+      setControlledValue(fields[2], `Responsive message ${index}`);
+      await settleWindow(documentRoot.defaultView);
+      dialog.querySelector('button[type="submit"]').click();
+      await settleWindow(documentRoot.defaultView);
+      assert(documentRoot.querySelector('[role="status"]'), 'Sending did not create responsive feedback.');
     }
 
     async function typeThroughCurrentFocus(element, text) {
@@ -171,6 +236,68 @@
         await settle();
         assert(document.querySelectorAll('.mail-item').length === 4, 'Undo did not restore a valid message item.');
         report('Archive undo, action contrast, and target sizes meet the package contract', true);
+
+        for (const width of [390, 640]) {
+          await withResponsiveFrame(width, 844, async (responsiveDocument) => {
+            await sendMessageIn(responsiveDocument, width);
+            assertSeparated(
+              responsiveDocument.querySelector('.fab'),
+              responsiveDocument.querySelector('.snackbar'),
+              12,
+              `Snackbar collides with Compose at ${width}px.`,
+            );
+          });
+        }
+        report('Responsive feedback preserves the Compose action', true);
+
+        await withResponsiveFrame(667, 375, async (responsiveDocument, responsiveWindow) => {
+          await openComposerIn(responsiveDocument);
+          const dialog = responsiveDocument.querySelector('.dialog');
+          const actions = responsiveDocument.querySelector('.dialog-actions');
+          const dialogRect = dialog.getBoundingClientRect();
+          const actionsRect = actions.getBoundingClientRect();
+          assert(dialogRect.top >= 0 && dialogRect.bottom <= responsiveWindow.innerHeight, 'Composer escapes the short viewport.');
+          assert(actionsRect.top >= 0 && actionsRect.bottom <= responsiveWindow.innerHeight, 'Composer actions are clipped in a short viewport.');
+        });
+        report('Short viewports keep Composer actions reachable', true);
+
+        await withResponsiveFrame(840, 600, async (responsiveDocument) => {
+          responsiveDocument.querySelector('[aria-label="Archive message"]').click();
+          await settleWindow(responsiveDocument.defaultView);
+          assert(responsiveDocument.querySelector('.snackbar'), 'Archive did not create feedback before opening Composer.');
+          await openComposerIn(responsiveDocument);
+          assert(!responsiveDocument.querySelector('.snackbar'), 'Background feedback remains visible over Composer.');
+        });
+        report('Composer does not stack over stale feedback', true);
+
+        for (const [width, height] of [[320, 568], [600, 568], [840, 600]]) {
+          await withResponsiveFrame(width, height, async (responsiveDocument) => {
+            if (width < 840) {
+              responsiveDocument.querySelector('.mail-item').click();
+              await settleWindow(responsiveDocument.defaultView);
+            }
+            const messageRect = responsiveDocument.querySelector('.message').getBoundingClientRect();
+            const fabRect = responsiveDocument.querySelector('.fab').getBoundingClientRect();
+            assert(messageRect.bottom + 12 <= fabRect.top, `Message scrollport enters the FAB safe area at ${width}×${height}.`);
+          });
+        }
+        report('Message content reserves a FAB-safe action area', true);
+
+        await withResponsiveFrame(600, 568, async (responsiveDocument, responsiveWindow) => {
+          responsiveDocument.querySelector('.mail-item').click();
+          await settleWindow(responsiveWindow);
+          const toolbar = responsiveDocument.querySelector('.detail-toolbar');
+          const rail = responsiveDocument.querySelector('.navigation-rail');
+          const messageScroller = responsiveDocument.querySelector('.message');
+          const toolbarTop = toolbar.getBoundingClientRect().top;
+          const railTop = rail.getBoundingClientRect().top;
+          messageScroller.scrollTop = messageScroller.scrollHeight;
+          await settleWindow(responsiveWindow);
+          assert(responsiveWindow.scrollY === 0, 'The document scrolls instead of the detail pane.');
+          assert(toolbar.getBoundingClientRect().top === toolbarTop, 'The detail toolbar scrolls out of view.');
+          assert(rail.getBoundingClientRect().top === railTop, 'The navigation rail scrolls out of view.');
+        });
+        report('Detail scrolling preserves navigation and Back access', true);
 
         document.body.dataset.result = 'pass';
         summary.textContent = `${log.children.length} checks passed.`;

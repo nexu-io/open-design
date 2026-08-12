@@ -22,6 +22,10 @@ function App() {
 
   const closeComposer = React.useCallback(() => setComposerOpen(false), []);
   const dismissSnackbar = React.useCallback(() => setSnackbar(null), []);
+  const openComposer = React.useCallback(() => {
+    setSnackbar(null);
+    setComposerOpen(true);
+  }, []);
   const showSnackbar = React.useCallback((nextSnackbar) => {
     snackbarIdRef.current += 1;
     setSnackbar({ id: snackbarIdRef.current, ...nextSnackbar });
@@ -58,7 +62,7 @@ function App() {
 
   const reply = (message) => {
     setDraft({ to: message.email, subject: `Re: ${message.subject}`, body: '' });
-    setComposerOpen(true);
+    openComposer();
   };
 
   const toggleStar = (id) => {
@@ -79,7 +83,7 @@ function App() {
         <NavigationRail theme={theme} onToggleTheme={() => setTheme((value) => value === 'light' ? 'dark' : 'light')} />
         <MailList messages={visibleMessages} selectedId={selected?.id} query={query} unreadOnly={unreadOnly} mobileHidden={!showList} onQueryChange={setQuery} onUnreadChange={setUnreadOnly} onSelect={selectMessage} />
         <MessageDetail message={selected} mobileHidden={showList} onBack={() => setShowList(true)} onArchive={archive} onReply={reply} onToggleStar={toggleStar} />
-        <button className="fab" type="button" onClick={() => setComposerOpen(true)}>✎ Compose</button>
+        <button className="fab" type="button" onClick={openComposer}>✎ Compose</button>
         {snackbar && <Snackbar key={snackbar.id} notificationId={snackbar.id} message={snackbar.message} actionLabel={snackbar.actionLabel} onAction={undoArchive} onDismiss={dismissSnackbar} />}
       </div>
       {composerOpen && <ComposerDialog draft={draft} onChange={(field, value) => setDraft((current) => ({ ...current, [field]: value }))} onClose={closeComposer} onSend={send} />}
