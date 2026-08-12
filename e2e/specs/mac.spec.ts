@@ -3031,7 +3031,7 @@ async function launchMacAppWithLaunchServices(installedAppPath: string): Promise
   // LaunchServices on CI can retain a terminated record for a temporary test
   // bundle and accept a URL without spawning it. Prove cold activation first;
   // once healthy, the caller separately proves protocol delivery to that PID.
-  await execFileAsync('/usr/bin/open', ['-n', '-a', installedAppPath]);
+  await execFileAsync('/usr/bin/open', ['-n', installedAppPath]);
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
