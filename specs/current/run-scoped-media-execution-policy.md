@@ -441,10 +441,6 @@ mode:
 | `request-only` | Instruct the agent to create media requests through the OD wrapper. State that OD will not execute provider calls. |
 | `external` | Instruct the agent to create/delegate media requests through OD wrapper only. Do not name provider credentials or direct provider APIs. |
 
-The Codex built-in imagegen override must render only when the effective policy
-is `enabled`. Otherwise Codex can bypass OD's dispatcher and violate the run
-policy.
-
 ### External MCP tools
 
 `apps/daemon/src/server.ts` injects connected external MCP instructions into
@@ -603,8 +599,8 @@ Use the existing fake-agent harness:
 3. Store effective policy on runs in `apps/daemon/src/runtimes/runs.ts`; expose it in
    run status responses.
 4. Add `apps/daemon/src/media/policy.ts` with pure helpers:
-   `normalizeMediaExecutionPolicy`, `assertMediaAllowed`,
-   `shouldRenderMediaContract`, and `shouldRenderCodexImagegenOverrideForPolicy`.
+   `normalizeMediaExecutionPolicy`, `assertMediaAllowed`, and
+   `shouldRenderMediaContract`.
 5. Extend `apps/daemon/src/tool-tokens.ts` with media endpoint/operation grants.
 6. Add `/api/tools/media/generate` and media request CRUD/fulfill routes.
 7. Update `apps/daemon/src/cli.ts` so in-run `od media generate` uses the
@@ -672,11 +668,6 @@ Docs:
 If in-run `od media generate` falls back to `/api/projects/:id/media/generate`
 after token failure, the policy is ineffective. The CLI must fail closed when a
 token is present.
-
-### Risk: Codex imagegen bypass
-
-The Codex built-in imagegen override is a direct byte-generation path. It must
-be gated by effective policy, not only by agent/model metadata.
 
 ### Risk: request-only modeled as plain text
 

@@ -11,7 +11,7 @@ import type {
   Conversation,
   ProjectFile,
 } from '../../types';
-import type { ChatSessionMode } from '@open-design/contracts';
+import type { ChatSessionMode, WorkspaceCollabContext } from '@open-design/contracts';
 import type { ChatSendMeta } from '../ChatComposer';
 import { useConversationChat } from './useConversationChat';
 import styles from './SideChatTab.module.css';
@@ -29,6 +29,7 @@ export interface ActiveConversationChatState {
     commentAttachments?: ChatCommentAttachment[];
   }>;
   error: string | null;
+  errorSourceAssistantId?: string | null;
   onSend: (
     prompt: string,
     attachments: ChatAttachment[],
@@ -68,6 +69,11 @@ interface Props {
   config: AppConfig;
   agentsById: Map<string, AgentInfo>;
   locale: string;
+  /** The caller's current workspace identity, forwarded to `streamViaDaemon`
+   *  so a side-chat send carries the same `x-od-workspace-*` headers the
+   *  primary chat loop sends — otherwise a team-bound project's side chat
+   *  401s against the daemon's workspace mutation gate. */
+  workspaceContext?: WorkspaceCollabContext | null;
   /** Project files for the composer's @-mention picker and produced-file chips. */
   projectFiles: ProjectFile[];
   projectFileNames?: Set<string>;
@@ -98,6 +104,7 @@ export function SideChatTab({
   config,
   agentsById,
   locale,
+  workspaceContext,
   projectFiles,
   projectFileNames,
   projectResolvedDir,
@@ -119,6 +126,7 @@ export function SideChatTab({
     agentsById,
     locale,
     sessionMode,
+    workspaceContext,
   });
   const controlledChat =
     activeConversationChat?.conversationId === conversationId
@@ -145,6 +153,7 @@ export function SideChatTab({
           onReorderQueuedSends={controlledChat?.onReorderQueuedSends}
           onSendQueuedNow={controlledChat?.onSendQueuedNow}
           error={controlledChat ? controlledChat.error : chat.error}
+          errorSourceAssistantId={controlledChat?.errorSourceAssistantId}
           projectId={projectId}
           sessionMode={sessionMode}
           onSessionModeChange={(mode) => onSessionModeChange?.(conversationId, mode)}

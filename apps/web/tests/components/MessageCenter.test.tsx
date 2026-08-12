@@ -87,6 +87,23 @@ describe('MessageCenter', () => {
     expect(String(anonymousPull?.[0])).not.toContain('startedAt=');
   });
 
+  it('falls back to the public feed when the AMR runtime is unavailable', async () => {
+    mockFetch({
+      onStatus: async () => Response.json({ error: 'amr-runtime-unavailable' }, { status: 503 }),
+    });
+
+    renderMessageCenter();
+    const dialog = await openCenter();
+
+    expect(within(dialog).getByText('Open Design 0.14 is available')).toBeTruthy();
+    expect(
+      vi.mocked(fetch).mock.calls.some(([url]) =>
+        String(url).includes('/api/integrations/vela/message-center-public/messages?'),
+      ),
+    ).toBe(true);
+    expect(screen.queryByText('Check failed. Please retry.')).toBeNull();
+  });
+
   it('keeps anonymous read state locally and restores it', async () => {
     renderMessageCenter();
     await openCenter();

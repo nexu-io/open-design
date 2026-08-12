@@ -1,21 +1,50 @@
-import type { Express } from 'express';
+import type { Express, Response } from 'express';
 import type Database from 'better-sqlite3';
 import path from 'node:path';
 import fs from 'node:fs';
-import type { DesignSystemTokenContractRebuildJobResponse } from '@open-design/contracts';
+import type {
+  DesignSystemTokenContractRebuildJobResponse,
+  WorkspaceCollabContext,
+} from '@open-design/contracts';
+import { TeamResourceCopyForbiddenError } from '@open-design/contracts';
+import {
+  enforceTeamResourceCopyAllowed,
+  type TeamResourceStateProvider,
+} from '../collab/team-resource-state.js';
 import { detectAgents, detectAgentsStream } from '../agents.js';
 import {
   SkillImportError,
   deleteUserSkill,
   findSkillById,
   importUserSkill,
+  listSkills,
   listSkillFiles,
   splitDerivedSkillId,
   updateUserSkill,
 } from '../skills.js';
+import { workspaceTeamSkillBindingResourceId } from '../skills/workspace-team-binding.js';
+import { parseFrontmatter } from '../design-systems/frontmatter.js';
+import {
+  deleteWorkspaceResourceByResourceId,
+  ensureWorkspaceResource,
+  getWorkspaceResource,
+  getWorkspaceResourceByResourceId,
+} from '../db.js';
+import {
+  enforceVerifiedWorkspaceResourceMutation,
+  resolveOptionalWorkspaceRequestAuthority,
+  type VerifyWorkspaceRequestAuthority,
+} from '../collab/workspace-resource-mutation.js';
 import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
 import { syncCommunityPets } from '../community-pets-sync.js';
-import { readDesignSystem } from '../design-systems/index.js';
+import {
+  readDesignSystem,
+  writeUserDesignSystemWorkspaceClaim,
+} from '../design-systems/index.js';
+import {
+  designSystemLogicalResourceId,
+  workspaceTeamDesignSystemBindingResourceId,
+} from '../design-systems/workspace-team-binding.js';
 import {
   LocalDesignSystemImportError,
   importLocalDesignSystemProject,
@@ -26,7 +55,15 @@ import { renderDesignSystemPreview } from '../design-systems/preview.js';
 import { renderDesignSystemShowcase } from '../design-systems/showcase.js';
 import { listPromptTemplates, readPromptTemplate } from '../media/prompt-templates.js';
 import { readAppConfig } from '../app-config.js';
-import { installFromTarget, uninstallById } from '../library-install.js';
+import {
+  installFromTarget,
+  sanitizeRepoName,
+  uninstallById,
+} from '../library-install.js';
+import {
+  installSkillFromRemoteSource,
+  type SkillInstallErrorCode,
+} from '../services/skill-installation.js';
 import type { RouteDeps } from '../server-context.js';
 
 export interface RegisterAtomRoutesDeps {
@@ -34,12 +71,19 @@ export interface RegisterAtomRoutesDeps {
   resources: { FIRST_PARTY_ATOMS: Array<{ id: string; taskKinds: string[]; [key: string]: unknown }> };
 }
 
-export interface RegisterStaticResourceRoutesDeps extends RouteDeps<'http' | 'paths' | 'resources'> {
+export interface RegisterStaticResourceRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'resources'> {
+  /** Settled, TTL-bounded authority for pure local catalog reads. */
+  verifyWorkspaceReadAuthority?: VerifyWorkspaceRequestAuthority;
+  /** Fresh authority for mutations, materialization, and detail reads. */
+  verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   tokenContractRebuild?: {
     maybeStartForImportedDesignSystem?: (
       designSystemId: string,
     ) => Promise<DesignSystemTokenContractRebuildJobResponse | undefined>;
   };
+  /** Team-resource copy red-line (D3). When present, a frozen team skill cannot
+   *  be edit-shadowed into a personal editable copy. Omit to skip (no-op). */
+  teamResources?: TeamResourceStateProvider;
 }
 
 export function registerAtomRoutes(app: Express, ctx: RegisterAtomRoutesDeps) {
@@ -69,6 +113,7 @@ export function registerAtomRoutes(app: Express, ctx: RegisterAtomRoutesDeps) {
 }
 
 export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticResourceRoutesDeps) {
+  const { db } = ctx;
   const {
     RUNTIME_DATA_DIR,
     RUNTIME_DATA_DIR_CANONICAL,
@@ -87,13 +132,223 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     listAllDesignTemplates,
     listAllSkillLikeEntries,
     listAllDesignSystems,
+    resolveWorkspaceScope,
+    canMutateUserDesignSystem,
     mimeFor,
   } = ctx.resources;
   const { isLocalSameOrigin, resolvedPortRef, sendApiError } = ctx.http;
+  const teamResources = ctx.teamResources;
   const requireLocalOrigin = (req: any, res: any) => {
     if (isLocalSameOrigin(req, resolvedPortRef.current)) return true;
     sendApiError(res, 403, 'FORBIDDEN', 'local origin required');
     return false;
+  };
+  const sendWorkspaceScopeError = (res: Response, error: unknown): boolean => {
+    if (
+      !error
+      || typeof error !== 'object'
+      || !('status' in error)
+      || (error.status !== 400 && error.status !== 403 && error.status !== 409 && error.status !== 503)
+      || !('code' in error)
+      || typeof error.code !== 'string'
+    ) {
+      return false;
+    }
+    res.status(error.status).json({
+      error: error.code,
+      message: error instanceof Error ? error.message : String(error.code),
+      ...('retryable' in error && error.retryable === true ? { retryable: true } : {}),
+    });
+    return true;
+  };
+  // Stamp a freshly imported/installed skill with the caller's workspace, the
+  // same moment plugin install does (`installOrUpgradePlugin` in server.ts).
+  // A caller with no workspace headers (`od skill import`, a not-logged-in
+  // web session) leaves the skill unbound — visible everywhere, same as
+  // every skill imported before this shipped ("no retroactive tagging").
+  const bindImportedSkillToWorkspace = (
+    authority: WorkspaceCollabContext | null,
+    skillId: string,
+  ): void => {
+    if (!authority) return;
+    ensureWorkspaceResource(db, 'skill', authority.workspaceId, skillId, {
+      visibility: 'personal',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: authority.workspaceMemberId,
+      updatedByWorkspaceMemberId: authority.workspaceMemberId,
+    });
+  };
+  const readSkillIdFromDirectory = (directory: string): string | null => {
+    try {
+      const raw = fs.readFileSync(path.join(directory, 'SKILL.md'), 'utf8');
+      const parsed = parseFrontmatter(raw) as { data?: { name?: unknown } };
+      return typeof parsed.data?.name === 'string' && parsed.data.name.trim()
+        ? parsed.data.name.trim()
+        : null;
+    } catch {
+      return null;
+    }
+  };
+  const skillIdentityConflict = async (
+    authority: WorkspaceCollabContext | null,
+    skillId: string,
+    preexistingUserSkillIds?: ReadonlySet<string>,
+  ): Promise<boolean> => {
+    if (!authority) return false;
+    const binding = getWorkspaceResourceByResourceId(db, 'skill', skillId);
+    if (binding) {
+      return !(
+        binding.workspaceId === authority.workspaceId
+        && binding.visibility === 'personal'
+        && binding.resourceState !== 'deleted'
+        && binding.createdByWorkspaceMemberId === authority.workspaceMemberId
+      );
+    }
+    // An explicit Workspace may create a shadow of a bundled skill, but it
+    // must not adopt an existing unbound user skill from the shared daemon
+    // registry merely by installing another folder with the same manifest id.
+    return preexistingUserSkillIds
+      ? preexistingUserSkillIds.has(skillId)
+      : (await listSkills(USER_SKILLS_DIR)).some((skill) => skill.id === skillId);
+  };
+  const rejectSkillIdentityConflict = async (
+    res: Response,
+    authority: WorkspaceCollabContext | null,
+    skillId: string,
+  ): Promise<boolean> => {
+    if (!await skillIdentityConflict(authority, skillId)) return false;
+    sendApiError(
+      res,
+      409,
+      'WORKSPACE_RESOURCE_ID_CONFLICT',
+      'a Personal skill with this id belongs to another workspace member',
+    );
+    return true;
+  };
+  const removeFreshSkillInstall = (directory: string): void => {
+    try {
+      const stat = fs.lstatSync(directory);
+      if (stat.isSymbolicLink()) fs.unlinkSync(directory);
+      else fs.rmSync(directory, { recursive: true, force: true });
+    } catch {}
+  };
+  const requestWithNavigationScope = (req: any): any | 'conflict' => {
+    const workspaceId = typeof req.query?.workspaceId === 'string'
+      ? req.query.workspaceId.trim()
+      : '';
+    const workspaceMemberId = typeof req.query?.workspaceMemberId === 'string'
+      ? req.query.workspaceMemberId.trim()
+      : '';
+    if (!workspaceId && !workspaceMemberId) return req;
+    const headerWorkspaceId = req.get('x-od-workspace-id')?.trim() ?? '';
+    const headerWorkspaceMemberId =
+      req.get('x-od-workspace-member-id')?.trim() ?? '';
+    if (
+      (headerWorkspaceId || headerWorkspaceMemberId)
+      && (
+        headerWorkspaceId !== workspaceId
+        || headerWorkspaceMemberId !== workspaceMemberId
+      )
+    ) {
+      return 'conflict';
+    }
+    return {
+      get(name: string) {
+        const normalized = name.toLowerCase();
+        if (normalized === 'x-od-workspace-id') return workspaceId || undefined;
+        if (normalized === 'x-od-workspace-member-id') {
+          return workspaceMemberId || undefined;
+        }
+        return req.get(name);
+      },
+    };
+  };
+  const resolveWorkspaceAuthority = async (
+    req: any,
+    res: Response,
+    options: {
+      allowNavigationQuery?: boolean;
+      verifyAuthority?: VerifyWorkspaceRequestAuthority | undefined;
+    } = {},
+  ): Promise<WorkspaceCollabContext | null | undefined> => {
+    const scopedRequest = options.allowNavigationQuery
+      ? requestWithNavigationScope(req)
+      : req;
+    if (scopedRequest === 'conflict') {
+      sendApiError(
+        res,
+        400,
+        'WORKSPACE_CONTEXT_CONFLICT',
+        'workspace header and navigation scope must match',
+      );
+      return undefined;
+    }
+    const authority = await resolveOptionalWorkspaceRequestAuthority(
+      scopedRequest,
+      options.verifyAuthority ?? ctx.verifyWorkspaceRequestAuthority,
+    );
+    if (!authority.ok) {
+      sendApiError(res, authority.status, authority.code, authority.message, {
+        ...(authority.retryable ? { retryable: true } : {}),
+      });
+      return undefined;
+    }
+    return authority.context;
+  };
+  // Gate a mutation route for a skill bound into `workspace_resources`. Only
+  // applies when the skill actually carries a binding row (installed/imported
+  // through the workspace-aware routes above after this shipped) — an unbound
+  // legacy skill stays outside the isolation regime, mirroring the plugin
+  // uninstall route's same conditional gate.
+  const enforceSkillWorkspaceMutation = async (
+    req: any,
+    res: any,
+    skillId: string,
+    capability: 'delete' | 'writeFiles',
+  ): Promise<boolean> => {
+    const binding = getWorkspaceResourceByResourceId(db, 'skill', skillId);
+    if (!binding) return true;
+    return enforceVerifiedWorkspaceResourceMutation(
+      'skill',
+      req,
+      res,
+      sendApiError,
+      (dbArg, workspaceId, resourceId) => getWorkspaceResource(dbArg as typeof db, 'skill', workspaceId, resourceId),
+      (dbArg, resourceId) => getWorkspaceResourceByResourceId(dbArg as typeof db, 'skill', resourceId),
+      db,
+      skillId,
+      capability,
+      ctx.verifyWorkspaceRequestAuthority,
+    );
+  };
+  const hasActiveTeamSkillBinding = (
+    authority: WorkspaceCollabContext | null,
+    skillId: string,
+  ): boolean => {
+    const workspaceId = authority?.workspaceId?.trim();
+    if (!workspaceId) return false;
+    const binding = getWorkspaceResource(
+      db,
+      'skill',
+      workspaceId,
+      workspaceTeamSkillBindingResourceId(workspaceId, skillId),
+    );
+    return binding?.visibility === 'team' && binding.resourceState !== 'deleted';
+  };
+  const denyTeamSkillMutation = (
+    res: Response,
+    authority: WorkspaceCollabContext | null,
+    skillId: string,
+    teamSynced = false,
+  ): boolean => {
+    if (!teamSynced && !hasActiveTeamSkillBinding(authority, skillId)) return false;
+    sendApiError(
+      res,
+      403,
+      'WORKSPACE_RESOURCE_MANAGE_DENIED',
+      'Team Skill mirrors are read-only',
+    );
+    return true;
   };
   const importedDesignSystemResponse = async <T extends { id: string }>(designSystem: T) => {
     let tokenContractRebuild: DesignSystemTokenContractRebuildJobResponse | undefined;
@@ -106,6 +361,74 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       designSystem,
       ...(tokenContractRebuild ? { tokenContractRebuild } : {}),
     };
+  };
+  const claimImportedDesignSystem = async (
+    dirId: string,
+    context: WorkspaceCollabContext | null,
+  ): Promise<void> => {
+    if (!context) return;
+    const resourceId = userDesignSystemCatalogId(dirId);
+    const conflict = () => Object.assign(
+      new Error('a design system with this id already belongs to a Workspace'),
+      { status: 409, code: 'DESIGN_SYSTEM_ID_CONFLICT' },
+    );
+    try {
+      if (reservedDesignSystemResourceIds().has(resourceId)) throw conflict();
+      await writeUserDesignSystemWorkspaceClaim(
+        USER_DESIGN_SYSTEMS_DIR,
+        dirId,
+        context.workspaceId,
+      );
+      // Re-check after the async metadata write. Another request may have
+      // claimed the logical id while this import was materializing bytes.
+      if (reservedDesignSystemResourceIds().has(resourceId)) throw conflict();
+      const binding = ensureWorkspaceResource(
+        db,
+        'design_system',
+        context.workspaceId,
+        resourceId,
+        {
+          visibility: 'personal',
+          resourceState: 'active',
+          createdByWorkspaceMemberId: context.workspaceMemberId,
+          updatedByWorkspaceMemberId: context.workspaceMemberId,
+        },
+      );
+      if (
+        binding?.workspaceId !== context.workspaceId
+        || binding.visibility === 'team'
+        || binding.createdByWorkspaceMemberId !== context.workspaceMemberId
+      ) {
+        throw conflict();
+      }
+    } catch (error) {
+      await fs.promises.rm(path.join(USER_DESIGN_SYSTEMS_DIR, dirId), {
+        recursive: true,
+        force: true,
+      });
+      throw error;
+    }
+  };
+  const reservedDesignSystemResourceIds = (): Set<string> => {
+    const ids = new Set<string>();
+    const bindings = db.prepare(
+      `SELECT resource_id AS resourceId
+         FROM workspace_resources
+        WHERE resource_type = 'design_system'`,
+    ).all() as Array<{ resourceId?: string }>;
+    for (const binding of bindings) {
+      const resourceId = binding.resourceId?.trim();
+      if (!resourceId) continue;
+      ids.add(designSystemLogicalResourceId(resourceId));
+    }
+    return ids;
+  };
+  const reservedDesignSystemDirIds = (systems: Array<{ id: string }>): string[] => {
+    const ids = new Set(designSystemDirIdsFromCatalog(systems));
+    for (const resourceId of reservedDesignSystemResourceIds()) {
+      ids.add(resourceId.startsWith('user:') ? resourceId.slice('user:'.length) : resourceId);
+    }
+    return [...ids];
   };
 
   app.get('/api/agents', async (req, res) => {
@@ -161,9 +484,22 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
-  app.get('/api/skills', async (_req, res) => {
+  app.get('/api/skills', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      // Workspace-scoped (see `skillVisibleFromWorkspace` in skills.ts): a
+      // skill imported into a different workspace than the caller's is
+      // hidden, same one-way rule `GET /api/plugins` already applies.
+      const authority = await resolveWorkspaceAuthority(req, res, {
+        verifyAuthority:
+          ctx.verifyWorkspaceReadAuthority
+          ?? ctx.verifyWorkspaceRequestAuthority,
+      });
+      if (authority === undefined) return;
+      const workspaceId = authority?.workspaceId ?? null;
+      const skills = await listAllSkills({
+        workspaceId,
+        workspaceMemberId: authority?.workspaceMemberId ?? null,
+      });
       // Strip full body + on-disk dir from the listing — frontend fetches the
       // body via /api/skills/:id when needed (keeps the listing payload small).
       res.json({
@@ -179,7 +515,13 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
 
   app.get('/api/skills/:id', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const workspaceId = authority?.workspaceId ?? null;
+      const skills = await listAllSkills({
+        workspaceId,
+        workspaceMemberId: authority?.workspaceMemberId ?? null,
+      });
       const skill = findSkillById(skills, req.params.id);
       if (!skill) return res.status(404).json({ error: 'skill not found' });
       const { dir: _dir, ...serializable } = skill;
@@ -224,8 +566,18 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // automatically because listSkills walks USER_SKILLS_DIR first.
   app.post('/api/skills/import', async (req, res) => {
     try {
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const requestedSkillId = typeof req.body?.name === 'string'
+        ? req.body.name.trim()
+        : '';
+      if (requestedSkillId && await rejectSkillIdentityConflict(res, authority, requestedSkillId)) return;
       const result = await importUserSkill(USER_SKILLS_DIR, req.body || {});
-      const skills = await listAllSkills();
+      bindImportedSkillToWorkspace(authority, result.id);
+      const skills = await listAllSkills({
+        workspaceId: authority?.workspaceId ?? null,
+        workspaceMemberId: authority?.workspaceMemberId ?? null,
+      });
       const skill = findSkillById(skills, result.id);
       if (!skill) {
         return sendApiError(
@@ -258,17 +610,52 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // the bundled assets/references/scripts/examples). See PR #955 review.
   app.put('/api/skills/:id', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      if (denyTeamSkillMutation(res, authority, req.params.id)) return;
+      const skills = await listAllSkills({
+        workspaceId: authority?.workspaceId ?? null,
+        workspaceMemberId: authority?.workspaceMemberId ?? null,
+      });
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return sendApiError(res, 404, 'NOT_FOUND', 'skill not found');
       }
+      if (denyTeamSkillMutation(res, authority, skill.id, skill.teamSynced === true)) return;
+      const existingBinding = getWorkspaceResourceByResourceId(db, 'skill', skill.id);
+      if (
+        authority
+        && existingBinding
+        && !(
+          existingBinding.workspaceId === authority.workspaceId
+          && existingBinding.visibility === 'personal'
+          && existingBinding.createdByWorkspaceMemberId === authority.workspaceMemberId
+        )
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'WORKSPACE_RESOURCE_ID_CONFLICT',
+          'a Personal skill with this id belongs to another workspace member',
+        );
+      }
+      // AC-9 copy red-line (D3): a frozen team skill cannot be edit-shadowed into
+      // a personal editable copy. No-op until the resource-hub reports this skill
+      // as a frozen team resource.
+      if (teamResources) {
+        await enforceTeamResourceCopyAllowed(teamResources, { kind: 'skill', resourceId: skill.id });
+      }
+      if (!await enforceSkillWorkspaceMutation(req, res, skill.id, 'writeFiles')) return;
       const result = await updateUserSkill(USER_SKILLS_DIR, {
         ...(req.body || {}),
         id: skill.id,
         sourceDir: skill.dir,
       });
-      const next = await listAllSkills();
+      bindImportedSkillToWorkspace(authority, result.id);
+      const next = await listAllSkills({
+        workspaceId: authority?.workspaceId ?? null,
+        workspaceMemberId: authority?.workspaceMemberId ?? null,
+      });
       const updated = findSkillById(next, result.id);
       if (!updated) {
         return sendApiError(
@@ -286,6 +673,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         },
       });
     } catch (err: any) {
+      if (err instanceof TeamResourceCopyForbiddenError) {
+        return sendApiError(res, 403, err.code, err.message);
+      }
       if (err instanceof SkillImportError) {
         const status = err.code === 'NOT_FOUND' ? 404 : err.code === 'BAD_REQUEST' ? 400 : 500;
         return sendApiError(res, status, err.code, err.message);
@@ -299,7 +689,13 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   // file tree (capped server-side to keep payload bounded).
   app.get('/api/skills/:id/files', async (req, res) => {
     try {
-      const skills = await listAllSkills();
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const workspaceId = authority?.workspaceId ?? null;
+      const skills = await listAllSkills({
+        workspaceId,
+        workspaceMemberId: authority?.workspaceMemberId ?? null,
+      });
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return sendApiError(res, 404, 'NOT_FOUND', 'skill not found');
@@ -386,13 +782,76 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
-  app.get('/api/design-systems', async (_req, res) => {
+  app.get('/api/design-systems', async (req, res) => {
     try {
-      const systems = await listAllDesignSystems();
-      res.json({
-        designSystems: systems.map(({ body, ...rest }) => rest),
+      // The library CATALOG is workspace-scoped (#145): user design systems all
+      // share one directory on disk, so without this the systems authored in
+      // one workspace also filled a brand-new one. Every other caller of
+      // `listAllDesignSystems` resolves a system by id and stays unscoped.
+      const catalogAuthority =
+        ctx.verifyWorkspaceReadAuthority
+        ?? ctx.verifyWorkspaceRequestAuthority;
+      const workspaceContext = catalogAuthority
+        ? await resolveWorkspaceAuthority(req, res, {
+            verifyAuthority: catalogAuthority,
+          })
+        : null;
+      if (workspaceContext === undefined) return;
+      const workspaceId = workspaceContext?.workspaceId
+        ?? (catalogAuthority ? null : (await resolveWorkspaceScope?.(req)) ?? null);
+      const workspaceMemberId = workspaceContext?.workspaceMemberId ?? null;
+      const catalog = await listAllDesignSystems({
+        workspaceId,
+        workspaceMemberId,
       });
+      const visibleSystems = workspaceId && workspaceMemberId
+        ? catalog.filter((system) => {
+            if (system.source !== 'user') return true;
+            const teamBinding = getWorkspaceResourceByResourceId(
+              db,
+              'design_system',
+              workspaceTeamDesignSystemBindingResourceId(workspaceId, system.id),
+            );
+            if (
+              teamBinding?.workspaceId === workspaceId
+              && teamBinding.visibility === 'team'
+              && teamBinding.resourceState !== 'deleted'
+            ) {
+              return true;
+            }
+            const personalBinding = getWorkspaceResourceByResourceId(
+              db,
+              'design_system',
+              system.id,
+            );
+            return personalBinding?.workspaceId === workspaceId
+              && personalBinding.visibility !== 'team'
+              && personalBinding.resourceState !== 'deleted'
+              && personalBinding.createdByWorkspaceMemberId === workspaceMemberId;
+          })
+        : catalog;
+      // recvqb6mfyqXLD: decorate every teamSynced entry with the same
+      // mutate verdict the PATCH/DELETE routes enforce, so any surface that
+      // renders straight off this list (e.g. `ProjectView`'s in-project
+      // Design System tab, which resolves its own `designSystemEditable`
+      // from this exact array rather than the single-item detail fetch) can
+      // gate its Publish toggle / delete affordances on it too — not just
+      // the detail route. Skipped for anything not `teamSynced` (the
+      // overwhelming majority: every built-in preset plus the caller's own
+      // systems) so a hot, frequently-polled list read does not pay a
+      // per-item disk/hub round trip it already knows the answer to.
+      const designSystems = canMutateUserDesignSystem
+        ? await Promise.all(
+            visibleSystems.map(async ({ body, ...rest }) => (
+              rest.teamSynced
+                ? { ...rest, canMutate: await canMutateUserDesignSystem(USER_DESIGN_SYSTEMS_DIR, rest.id, req) }
+                : rest
+            )),
+          )
+        : visibleSystems.map(({ body, ...rest }) => rest);
+      res.json({ designSystems });
     } catch (err: any) {
+      if (sendWorkspaceScopeError(res, err)) return;
       res.status(500).json({ error: String(err) });
     }
   });
@@ -456,7 +915,18 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       // HTML rewrites assets to /api/skills/<id>/... and we want those URLs
       // to keep resolving regardless of which root owns the backing folder
       // after the skills/design-templates split.
-      const skills = await listAllSkillLikeEntries();
+      const authority = await resolveWorkspaceAuthority(req, res, {
+        allowNavigationQuery: true,
+      });
+      if (authority === undefined) return;
+      const workspaceId = authority?.workspaceId ?? null;
+      const skills = await listAllSkillLikeEntries({
+        workspaceId,
+        workspaceMemberId: authority?.workspaceMemberId ?? null,
+      });
+      const workspaceQuery = authority
+        ? `?workspaceId=${encodeURIComponent(authority.workspaceId)}&workspaceMemberId=${encodeURIComponent(authority.workspaceMemberId)}`
+        : '';
 
       // 1. Derived `<parent>:<child>` id — resolve straight to the matching
       // file under <parentDir>/examples/. Done before findSkillById so the
@@ -477,7 +947,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           const html = await fs.promises.readFile(candidate, 'utf8');
           return res
             .type('text/html')
-            .send(rewriteSkillAssetUrls(html, parent.id));
+            .send(rewriteSkillAssetUrls(html, parent.id, workspaceQuery));
         }
         return res
           .status(404)
@@ -495,7 +965,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         const html = await fs.promises.readFile(baked, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
       }
 
       const tpl = path.join(skill.dir, 'assets', 'template.html');
@@ -507,7 +977,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           const assembled = assembleExample(tplHtml, slidesHtml, skill.name);
           return res
             .type('text/html')
-            .send(rewriteSkillAssetUrls(assembled, skill.id));
+            .send(rewriteSkillAssetUrls(assembled, skill.id, workspaceQuery));
         } catch {
           // Fall through to raw template on read failure.
         }
@@ -516,14 +986,14 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         const html = await fs.promises.readFile(tpl, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
       }
       const idx = path.join(skill.dir, 'assets', 'index.html');
       if (fs.existsSync(idx)) {
         const html = await fs.promises.readFile(idx, 'utf8');
         return res
           .type('text/html')
-          .send(rewriteSkillAssetUrls(html, skill.id));
+          .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
       }
 
       // Friendly fallback for skills that aggregate examples in a sibling
@@ -551,7 +1021,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
             const html = await fs.promises.readFile(direct, 'utf8');
             return res
               .type('text/html')
-              .send(rewriteSkillAssetUrls(html, skill.id));
+              .send(rewriteSkillAssetUrls(html, skill.id, workspaceQuery));
           } catch {
             continue;
           }
@@ -580,7 +1050,15 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     try {
       // Same rationale as /example above — assets need to resolve whether
       // the owning skill folder lives under skills/ or design-templates/.
-      const skills = await listAllSkillLikeEntries();
+      const authority = await resolveWorkspaceAuthority(req, res, {
+        allowNavigationQuery: true,
+      });
+      if (authority === undefined) return;
+      const workspaceId = authority?.workspaceId ?? null;
+      const skills = await listAllSkillLikeEntries({
+        workspaceId,
+        workspaceMemberId: authority?.workspaceMemberId ?? null,
+      });
       const skill = findSkillById(skills, req.params.id);
       if (!skill) {
         return res.status(404).type('text/plain').send('skill not found');
@@ -610,16 +1088,85 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.post('/api/skills/install', async (req, res) => {
     if (!requireLocalOrigin(req, res)) return;
     try {
-      const result = await installFromTarget(req.body, USER_SKILLS_DIR, 'skill');
-      if (!result.ok) return res.status(400).json({ error: result.error });
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      const body = req.body && typeof req.body === 'object' ? req.body : {};
+      const preexistingUserSkillIds = new Set(
+        (await listSkills(USER_SKILLS_DIR)).map((skill) => skill.id),
+      );
+      const isLegacyTarget =
+        (body.source === 'github' && typeof body.url === 'string') ||
+        (body.source === 'local' && typeof body.path === 'string');
+      if (body.source === 'local' && typeof body.path === 'string') {
+        const localSkillId = readSkillIdFromDirectory(body.path);
+        if (localSkillId && await rejectSkillIdentityConflict(res, authority, localSkillId)) return;
+      }
+      const result = isLegacyTarget
+        ? await installFromTarget(body, USER_SKILLS_DIR, 'skill')
+        : await installSkillFromRemoteSource(
+            USER_SKILLS_DIR,
+            typeof body.source === 'string' ? body.source : '',
+            {
+              allowInstallIdentity: async ({ id }) =>
+                !await skillIdentityConflict(authority, id),
+            },
+          );
+      if (!result.ok) {
+        const statusByCode: Partial<Record<SkillInstallErrorCode, number>> = {
+          BAD_REQUEST: 400,
+          FETCH_FAILED: 502,
+          INVALID_ARCHIVE: 400,
+          INVALID_MANIFEST: 400,
+          CONFLICT: 409,
+          INTERNAL_ERROR: 500,
+        };
+        const code = 'code' in result ? result.code : undefined;
+        return res
+          .status((code && statusByCode[code]) || 400)
+          .json({ error: result.error, ...(code ? { code } : {}) });
+      }
       if (typeof result.dir !== 'string' || !result.dir) {
         return res.status(500).json({ error: 'skill install did not return an installation directory' });
       }
-      const skills = await listAllSkills();
+      const installedSkillId = 'id' in result && typeof result.id === 'string'
+        ? result.id
+        : readSkillIdFromDirectory(result.dir);
+      if (
+        installedSkillId
+        && await skillIdentityConflict(
+          authority,
+          installedSkillId,
+          preexistingUserSkillIds,
+        )
+      ) {
+        // Legacy GitHub installs only reveal their manifest identity after
+        // cloning. Compensate before binding so a same-id install cannot
+        // reassign another member's Personal skill; the original folder and
+        // binding are never touched.
+        removeFreshSkillInstall(result.dir);
+        return sendApiError(
+          res,
+          409,
+          'WORKSPACE_RESOURCE_ID_CONFLICT',
+          'a Personal skill with this id belongs to another workspace member',
+        );
+      }
       const installedDir = fs.realpathSync.native(result.dir);
-      const skill = skills.find((candidate) => fs.realpathSync.native(candidate.dir) === installedDir);
-      if (!skill) {
+      const unscopedSkills = await listAllSkills();
+      const installed = unscopedSkills.find(
+        (candidate) => fs.realpathSync.native(candidate.dir) === installedDir,
+      );
+      if (!installed) {
         return res.status(500).json({ error: `installed skill was not found in catalog: ${result.dir}` });
+      }
+      bindImportedSkillToWorkspace(authority, installed.id);
+      const scopedSkills = await listAllSkills({
+        workspaceId: authority?.workspaceId ?? null,
+        workspaceMemberId: authority?.workspaceMemberId ?? null,
+      });
+      const skill = findSkillById(scopedSkills, installed.id);
+      if (!skill) {
+        return res.status(500).json({ error: 'installed skill was not found in scoped catalog' });
       }
       res.json({
         skill: {
@@ -634,11 +1181,37 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
   });
 
+  // This route used to carry NO permission check at all: any caller (any
+  // workspace, any role) could delete any skill, including one installed by
+  // someone else or pulled in from a team share. Now gated the same way
+  // `POST /api/plugins/:id/uninstall` is, via the shared
+  // `enforceWorkspaceResourceMutation` — see `enforceSkillWorkspaceMutation`
+  // above for the "only when a binding row exists" conditional.
   app.delete('/api/skills/:id', async (req, res) => {
     if (!requireLocalOrigin(req, res)) return;
     try {
+      const authority = await resolveWorkspaceAuthority(req, res);
+      if (authority === undefined) return;
+      if (denyTeamSkillMutation(res, authority, req.params.id)) return;
+      const skills = await listAllSkills({
+        workspaceId: authority?.workspaceId ?? null,
+        workspaceMemberId: authority?.workspaceMemberId ?? null,
+      });
+      const skill = findSkillById(skills, req.params.id);
+      if (!skill) {
+        return sendApiError(res, 404, 'NOT_FOUND', 'skill not found');
+      }
+      if (denyTeamSkillMutation(res, authority, skill.id, skill.teamSynced === true)) return;
+      if (!await enforceSkillWorkspaceMutation(req, res, req.params.id, 'delete')) return;
       const result = await uninstallById(req.params.id, USER_SKILLS_DIR, SKILLS_DIR, 'skill');
       if (!result.ok) return res.status(result.status || 400).json({ error: result.error });
+      // Clean up the binding row too — `workspace_resources` has no
+      // FOREIGN KEY ... ON DELETE CASCADE (see db.ts's doc comment on the
+      // table), so skipping this would leave an orphan binding that
+      // re-importing the same skill id would find and silently reuse (stale
+      // workspace/visibility). A DELETE against a row that never existed is a
+      // no-op.
+      deleteWorkspaceResourceByResourceId(db, 'skill', req.params.id);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
@@ -648,19 +1221,40 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.post('/api/design-systems/install', async (req, res) => {
     if (!requireLocalOrigin(req, res)) return;
     try {
+      const workspaceContext = await resolveWorkspaceAuthority(req, res);
+      if (workspaceContext === undefined) return;
+      const installTarget = req.body && typeof req.body === 'object' ? req.body : {};
+      const candidateId = installTarget.source === 'github' && typeof installTarget.url === 'string'
+        ? sanitizeRepoName(installTarget.url)
+        : installTarget.source === 'local' && typeof installTarget.path === 'string'
+          ? path.basename(installTarget.path.replace(/[\\/]+$/, ''))
+          : '';
+      if (
+        candidateId
+        && reservedDesignSystemResourceIds().has(userDesignSystemCatalogId(candidateId))
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'DESIGN_SYSTEM_ID_CONFLICT',
+          'a design system with this id already belongs to a Workspace',
+        );
+      }
       const result = await installFromTarget(req.body, USER_DESIGN_SYSTEMS_DIR, 'design-system');
       if (!result.ok) return res.status(400).json({ error: result.error });
       if (typeof result.dir !== 'string' || !result.dir) {
         return res.status(500).json({ error: 'design system install did not return an installation directory' });
       }
-      const systems = await listAllDesignSystems();
       const designSystemId = path.basename(fs.realpathSync.native(result.dir));
+      await claimImportedDesignSystem(designSystemId, workspaceContext);
+      const systems = await listAllDesignSystems();
       const designSystem = findUserDesignSystemInCatalog(systems, designSystemId);
       if (!designSystem) {
         return res.status(500).json({ error: `installed design system was not found in catalog: ${result.dir}` });
       }
       res.json({ designSystem });
     } catch (err: any) {
+      if (sendWorkspaceScopeError(res, err)) return;
       res.status(500).json({ error: String(err) });
     }
   });
@@ -668,6 +1262,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.post('/api/design-systems/import/local', async (req, res) => {
     if (!requireLocalOrigin(req, res)) return;
     try {
+      const workspaceContext = await resolveWorkspaceAuthority(req, res);
+      if (workspaceContext === undefined) return;
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const inputPath =
         typeof body.baseDir === 'string'
@@ -711,8 +1307,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
         ...(typeof body.name === 'string' ? { name: body.name } : {}),
         ...(importMode ? { importMode } : {}),
         ...(craftApplies ? { craftApplies } : {}),
-        reservedIds: designSystemDirIdsFromCatalog(before),
+        reservedIds: reservedDesignSystemDirIds(before),
       });
+      await claimImportedDesignSystem(result.id, workspaceContext);
       const systems = await listAllDesignSystems();
       const designSystem = findUserDesignSystemInCatalog(systems, result.id);
       if (!designSystem) {
@@ -725,6 +1322,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       }
       res.status(201).json(await importedDesignSystemResponse(designSystem));
     } catch (err: any) {
+      if (sendWorkspaceScopeError(res, err)) return;
       if (err instanceof LocalDesignSystemImportError) {
         return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
       }
@@ -735,6 +1333,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.post('/api/design-systems/import/github', async (req, res) => {
     if (!requireLocalOrigin(req, res)) return;
     try {
+      const workspaceContext = await resolveWorkspaceAuthority(req, res);
+      if (workspaceContext === undefined) return;
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const githubUrl =
         typeof body.githubUrl === 'string'
@@ -754,9 +1354,10 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           ...(typeof body.branch === 'string' ? { branch: body.branch } : {}),
           ...(importMode ? { importMode } : {}),
           ...(craftApplies ? { craftApplies } : {}),
-          reservedIds: designSystemDirIdsFromCatalog(before),
+          reservedIds: reservedDesignSystemDirIds(before),
         },
       );
+      await claimImportedDesignSystem(result.id, workspaceContext);
       const systems = await listAllDesignSystems();
       const designSystem = findUserDesignSystemInCatalog(systems, result.id);
       if (!designSystem) {
@@ -769,6 +1370,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       }
       res.status(201).json(await importedDesignSystemResponse(designSystem));
     } catch (err: any) {
+      if (sendWorkspaceScopeError(res, err)) return;
       if (err instanceof LocalDesignSystemImportError) {
         return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
       }
@@ -779,6 +1381,8 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   app.post('/api/design-systems/import/shadcn', async (req, res) => {
     if (!requireLocalOrigin(req, res)) return;
     try {
+      const workspaceContext = await resolveWorkspaceAuthority(req, res);
+      if (workspaceContext === undefined) return;
       const body = req.body && typeof req.body === 'object' ? req.body : {};
       const reference =
         typeof body.reference === 'string'
@@ -800,9 +1404,10 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
           ...(typeof body.name === 'string' ? { name: body.name } : {}),
           ...(importMode ? { importMode } : {}),
           ...(craftApplies ? { craftApplies } : {}),
-          reservedIds: designSystemDirIdsFromCatalog(before),
+          reservedIds: reservedDesignSystemDirIds(before),
         },
       );
+      await claimImportedDesignSystem(result.id, workspaceContext);
       const systems = await listAllDesignSystems();
       const designSystem = findUserDesignSystemInCatalog(systems, result.id);
       if (!designSystem) {
@@ -815,6 +1420,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       }
       res.status(201).json(await importedDesignSystemResponse(designSystem));
     } catch (err: any) {
+      if (sendWorkspaceScopeError(res, err)) return;
       if (err instanceof LocalDesignSystemImportError) {
         return sendApiError(res, err.code === 'BAD_REQUEST' ? 400 : 500, err.code, err.message);
       }
@@ -885,14 +1491,18 @@ export function assembleExample(templateHtml: string, slidesHtml: string, title:
     .replace(/<title>.*?<\/title>/, `<title>${title} | Open Design Example</title>`);
 }
 
-export function rewriteSkillAssetUrls(html: string, skillId: string) {
+export function rewriteSkillAssetUrls(
+  html: string,
+  skillId: string,
+  workspaceQuery = '',
+) {
   if (typeof html !== 'string' || html.length === 0) return html;
   return html.replace(
     /(\s(?:src|href)\s*=\s*)(['"])((?:\.\.\/([^/'"#?]+)\/)?(?:\.\/)?assets\/([^'"#?]+))(\2)/gi,
     (_match, attr, openQuote, _fullPath, siblingSkillId, relPath, closeQuote) => {
       const resolvedSkillId = siblingSkillId || skillId;
       const prefix = `/api/skills/${encodeURIComponent(resolvedSkillId)}/assets/`;
-      return `${attr}${openQuote}${prefix}${relPath}${closeQuote}`;
+      return `${attr}${openQuote}${prefix}${relPath}${workspaceQuery}${closeQuote}`;
     },
   );
 }

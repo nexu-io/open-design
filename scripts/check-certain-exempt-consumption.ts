@@ -2,7 +2,11 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import ts from "typescript";
 
-import { CERTAIN_EXEMPT_EXACT, CERTAIN_EXEMPT_PREFIXES } from "./scopes.ts";
+import {
+  CERTAIN_DAEMON_CORE_EXACT,
+  CERTAIN_EXEMPT_EXACT,
+  CERTAIN_EXEMPT_PREFIXES,
+} from "./scopes.ts";
 
 // Guard for the certain-tier exempt core in `scripts/scopes.ts` (rule
 // `certain-exempt-surface`; methodology in `specs/current/ci.md`).
@@ -70,11 +74,6 @@ const allowedConsumers = new Map<string, string>([
     "apps/daemon/tests/project-classifiers.test.ts",
     "file-kind classifier input; the LICENSE literal is never resolved or opened",
   ],
-  // NOTE: apps/daemon/tests/runtimes/trae-cli.test.ts is a conditional
-  // exception added in checkCertainExemptConsumption(), not here: it genuinely
-  // reads docs/agent-adapters.md, and its exemption holds only while the
-  // ci.yml daemon lane runs nothing but project-watchers.test.ts. See
-  // DAEMON_LANE_ALLOWED_TEST_COMMAND below.
   [
     "apps/web/tests/components/ChatPane.imported-folder-artifacts.test.tsx",
     "imported-project artifact fixture paths rendered from in-memory test data",
@@ -105,130 +104,27 @@ const allowedConsumers = new Map<string, string>([
   ],
 ]);
 
-// apps/daemon/tests/runtimes/trae-cli.test.ts genuinely consumes repository
-// docs (docs/agent-adapters.md coverage assertion). It is tolerable only
-// because ci.yml currently executes exactly one daemon test command, targeting
-// a single test file that is not it. If the daemon test inventory ever widens,
-// the exception disappears and the guard reports the read, forcing
-// reclassification (docs → daemon scope rule, or relocating the consistency
-// test to e2e/tests/) instead of letting the entry rot.
-const DAEMON_LANE_ALLOWED_TEST_COMMAND =
-  "pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts";
-
-const CONDITIONAL_CONSUMER = "apps/daemon/tests/runtimes/trae-cli.test.ts";
-
-function workflowRunBodies(workflow: string): string[] {
-  const runBodies: string[] = [];
-  const lines = workflow.split("\n");
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const match = lines[index]?.match(/^(\s*)(?:-\s+)?run:\s*(.*)$/);
-    if (match === null || match === undefined) continue;
-    const indentation = match[1]?.length ?? 0;
-    const value = match[2]?.trim() ?? "";
-    if (!/^[|>][+-]?$/.test(value)) {
-      runBodies.push(value);
-      continue;
-    }
-
-    const bodyLines: string[] = [];
-    while (index + 1 < lines.length) {
-      const nextLine = lines[index + 1] ?? "";
-      const nextIndentation = nextLine.match(/^\s*/)?.[0].length ?? 0;
-      if (nextLine.trim() !== "" && nextIndentation <= indentation) break;
-      index += 1;
-      bodyLines.push(nextLine.slice(Math.min(nextIndentation, indentation + 2)));
-    }
-    runBodies.push(bodyLines.join(value.startsWith(">") ? " " : "\n"));
-  }
-
-  return runBodies;
-}
-
-function shellCommands(body: string): string[][] {
-  const commands: string[][] = [];
-  let command: string[] = [];
-  let token = "";
-  let quote: "'" | '"' | undefined;
-  let escaped = false;
-
-  const finishToken = (): void => {
-    if (token !== "") command.push(token);
-    token = "";
-  };
-  const finishCommand = (): void => {
-    finishToken();
-    if (command.length > 0) commands.push(command);
-    command = [];
-  };
-
-  for (const character of body) {
-    if (escaped) {
-      token += character;
-      escaped = false;
-    } else if (character === "\\" && quote !== "'") {
-      escaped = true;
-    } else if (quote !== undefined) {
-      if (character === quote) quote = undefined;
-      else token += character;
-    } else if (character === "'" || character === '"') {
-      quote = character;
-    } else if (/\s/.test(character)) {
-      finishToken();
-      if (character === "\n") finishCommand();
-    } else if (character === ";" || character === "|" || character === "&") {
-      finishCommand();
-    } else {
-      token += character;
-    }
-  }
-  finishCommand();
-  return commands;
-}
-
-export function daemonTestInvocationsFromWorkflow(workflow: string): string[] {
-  const invocations: string[] = [];
-
-  for (const tokens of workflowRunBodies(workflow).flatMap(shellCommands)) {
-    const pnpmIndex = tokens.indexOf("pnpm");
-    if (pnpmIndex === -1) continue;
-    const pnpmTokens = tokens.slice(pnpmIndex + 1);
-    const selectsDaemon = pnpmTokens.some(
-      (token, index) =>
-        ((token === "--filter" || token === "-F") && pnpmTokens[index + 1] === "@open-design/daemon") ||
-        token === "--filter=@open-design/daemon" ||
-        token === "-F=@open-design/daemon" ||
-        ((token === "--dir" || token === "-C") && pnpmTokens[index + 1] === "apps/daemon") ||
-        token === "--dir=apps/daemon" ||
-        token === "-C=apps/daemon",
-    );
-    if (!selectsDaemon) continue;
-
-    const testIndex = pnpmTokens.findIndex(
-      (token, index) =>
-        token === "test" ||
-        token === "vitest" ||
-        (token === "exec" && pnpmTokens[index + 1] === "vitest") ||
-        (token === "run" && pnpmTokens[index + 1] === "test"),
-    );
-    if (testIndex === -1) continue;
-    invocations.push(
-      `pnpm --filter @open-design/daemon ${pnpmTokens.slice(testIndex).join(" ")}`,
-    );
-  }
-
-  return invocations;
-}
-
-export function workflowRunsOnlyAllowedDaemonTest(workflow: string): boolean {
-  const invocations = daemonTestInvocationsFromWorkflow(workflow);
-  return invocations.length === 1 && invocations[0] === DAEMON_LANE_ALLOWED_TEST_COMMAND;
-}
+// Content dependencies whose producers are classified into the same certain
+// lane as their consumers. Unlike allowedConsumers, these exceptions are
+// exact producer/consumer pairs so another exempt read in the same file still
+// fails closed.
+const allowedConsumerTargets = new Map<string, ReadonlyMap<string, string>>([
+  [
+    "apps/daemon/tests/runtimes/trae-cli.test.ts",
+    new Map([
+      [
+        CERTAIN_DAEMON_CORE_EXACT[0],
+        "the exact consumed document is daemon core, so producer and consumer run the same suite",
+      ],
+    ]),
+  ],
+]);
 
 type ConsumptionViolation = {
   filePath: string;
   lineNumber: number;
   literal: string;
+  repositoryTarget: string;
 };
 
 function toRepositoryPath(filePath: string): string {
@@ -333,6 +229,7 @@ export function collectCertainExemptConsumptionFromSource(
             filePath: repositoryPath,
             lineNumber: sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile)).line + 1,
             literal: candidate.display,
+            repositoryTarget: candidate.path,
           });
           return;
         }
@@ -343,6 +240,17 @@ export function collectCertainExemptConsumptionFromSource(
 
   visit(sourceFile);
   return violations;
+}
+
+export function collectDisallowedCertainExemptConsumptionFromSource(
+  repositoryPath: string,
+  source: string,
+): ConsumptionViolation[] {
+  if (allowedConsumers.has(repositoryPath)) return [];
+  const allowedTargets = allowedConsumerTargets.get(repositoryPath);
+  return collectCertainExemptConsumptionFromSource(repositoryPath, source).filter(
+    (violation) => !allowedTargets?.has(violation.repositoryTarget),
+  );
 }
 
 async function collectCheckedFiles(directory: string): Promise<string[]> {
@@ -376,16 +284,10 @@ async function collectCheckedFiles(directory: string): Promise<string[]> {
 export async function checkCertainExemptConsumption(): Promise<boolean> {
   const violations: ConsumptionViolation[] = [];
 
-  const ciWorkflow = await readFile(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
-  const conditionallyAllowed = workflowRunsOnlyAllowedDaemonTest(ciWorkflow)
-    ? new Set([CONDITIONAL_CONSUMER])
-    : new Set<string>();
-
   for (const root of checkedRoots) {
     for (const repositoryPath of await collectCheckedFiles(path.join(repoRoot, root))) {
-      if (allowedConsumers.has(repositoryPath) || conditionallyAllowed.has(repositoryPath)) continue;
       const source = await readFile(path.join(repoRoot, repositoryPath), "utf8");
-      violations.push(...collectCertainExemptConsumptionFromSource(repositoryPath, source));
+      violations.push(...collectDisallowedCertainExemptConsumptionFromSource(repositoryPath, source));
     }
   }
 

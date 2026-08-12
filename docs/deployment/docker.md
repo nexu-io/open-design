@@ -67,10 +67,10 @@ Success looks like:
 ![Docker Desktop container running](../screenshots/deployment/docker/02-docker-desktop-container-running.png)
 ![docker-compose ps healthy output (sanitized)](../screenshots/deployment/docker/04-docker-compose-ps-healthy.png)
 
-## Step 5: Verify HTTP Response
+## Step 5: Verify Container Health Over HTTP
 
 ```bash
-curl -i http://127.0.0.1:7456/
+curl -i http://127.0.0.1:7456/api/health
 ```
 
 Success looks like:
@@ -81,9 +81,12 @@ Success looks like:
 ## Step 6: Open Open Design in Your Browser
 
 Open:
-- `http://localhost:7456/`
+- `http://127.0.0.1:7456/`
 
-You should see the Open Design interface.
+If the browser displays a sign-in dialog, enter `open-design` as the username
+and the `OD_API_TOKEN` value from `deploy/.env` as the password. You should then
+see the Open Design interface. Docker bridge peers remain authenticated; no host
+networking override is required.
 
 ![Open Design home (desktop)](../screenshots/deployment/docker/01-open-design-home.png)
 ![Open Design home (mobile)](../screenshots/deployment/docker/03-open-design-mobile.png)
@@ -95,4 +98,4 @@ You should see the Open Design interface.
 - `curl: (7) Failed to connect`: container is still starting; wait 10-20 seconds and retry
 - `pull access denied` or `authentication required` for `ghcr.io/nexu-io/od`: the GHCR package must be public for anonymous Docker, Compose, and Dokploy pulls. An organization maintainer must open GitHub -> Packages -> `od` -> Package settings and change visibility to Public.
 - reverse proxy + `OD_API_TOKEN`: either inject `Authorization: Bearer <OD_API_TOKEN>` at the proxy, or set `OPEN_DESIGN_DISABLE_API_AUTH=1` only when that proxy already authenticates every request and the daemon is not directly exposed.
-- `Authorization: Bearer <OD_API_TOKEN> required` on macOS: Docker Desktop bridge networking makes the daemon see requests as non-loopback. See [Docker Desktop on macOS](../../deploy/README.md#docker-desktop-on-macos) for the host networking workaround.
+- browser sign-in repeats: use username `open-design` and the exact `OD_API_TOKEN` value from `deploy/.env`; recreate the container after changing the token.

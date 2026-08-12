@@ -18,7 +18,7 @@
   align-items: center;
   gap: 8px;
   padding: 0 9px;
-  font-size: 12.5px;
+  font-size: 13px;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -138,7 +138,7 @@
 
 .deploy-social-share__label {
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 12px;
   line-height: 1;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -147,7 +147,7 @@
 .deploy-social-share__url {
   min-width: 0;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.2;
   text-decoration: none;
   overflow: hidden;

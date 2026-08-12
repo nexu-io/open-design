@@ -1,5 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen, openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
+import { settingsSurface } from '@/playwright/amr';
 import type { Locator, Page } from '@playwright/test';
 import { applyStandardMocks } from '@/playwright/mock-factory';
 import { T } from '@/timeouts';
@@ -14,25 +15,35 @@ test('[P0] @critical home loads with the primary entry controls', async ({ page 
   await gotoEntryHome(page);
 
   // The rail is collapsed by default — the hero owns the first screen and the
-  // only chrome affordance is the topbar toggle. Expand to reach the rail nav.
-  await expect(page.getByTestId('entry-rail-toggle')).toBeVisible();
+  // only chrome affordance is the pinned Home tab's sidebar toggle in the
+  // workspace tabs bar. Expand to reach the rail nav.
+  await expect(page.getByTestId('workspace-home-rail-toggle')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
   await ensureRailOpen(page);
-  await expect(page.getByTestId('entry-nav-logo')).toBeVisible();
   await expect(page.getByTestId('entry-nav-home')).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByTestId('entry-nav-new-project')).toBeVisible();
+  // #5517's rail has no "+ New project" button; project creation starts from
+  // the composer, or from the Projects view's own CTA (see the modal spec below).
+  await expect(page.getByTestId('entry-nav-search')).toBeVisible();
+  await expect(page.getByTestId('entry-nav-design-systems')).toBeVisible();
 });
 
 test('[P0] @critical settings dialog is reachable from home', async ({ page }) => {
   await gotoEntryHome(page);
 
-  // The home settings entry is a menu: open it, then the "Settings" item
-  // opens the full execution-mode dialog.
-  await clickVisible(page.getByTestId('entry-settings-menu-trigger'));
-  await clickVisible(page.getByTestId('entry-settings-open-details'));
-  const settingsDialog = page.getByRole('dialog');
+  // #5971 cut the rail-footer settings chip; signed out, Settings is the rail's
+  // own nav item — `entry-settings-button` is the testid that item carries (see
+  // EntryNavRail: it is the ONLY signed-out settings entry, and the e2e
+  // contract). Collapsed, the rail is `inert` and it cannot be clicked, so
+  // expand first.
+  await ensureRailOpen(page);
+  await clickVisible(page.getByTestId('entry-settings-button'));
+  // From the entry, settings is now a routed page (`role="region"`), not a
+  // modal — `.modal-settings` is the class both presentations share.
+  const settingsDialog = settingsSurface(page);
   await expect(settingsDialog).toBeVisible();
-  await expect(settingsDialog.getByRole('heading', { name: 'Execution mode' })).toBeVisible();
+  // The surface's own <h2> is consumed as its accessible name (aria-labelledby),
+  // so assert on the section nav instead — that is what proves settings opened.
+  await expect(settingsDialog.getByTestId('settings-nav-execution')).toBeVisible();
 });
 
 test('[P0] @critical prototype project creation reaches the workspace shell', async ({ page }) => {

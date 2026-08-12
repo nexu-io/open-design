@@ -22,7 +22,7 @@ import {
   ACP_RAW_EVENT_SHAPE_DIAGNOSTIC_LIMIT,
   AMR_STDERR_RETRY_TAIL_LIMIT,
 } from './constants.js';
-import { errorMessage, asObject, extractAcpUpdateText } from './json.js';
+import { errorMessage, asObject, extractAcpUpdateText, extractAcpStatusDetail } from './json.js';
 import {
   sendRpc,
   sendRpcResult,
@@ -30,6 +30,7 @@ import {
   rpcErrorMessage,
   rpcErrorData,
   rpcErrorRetryable,
+  inferRpcErrorRetryable,
   promotedOpenCodeSessionErrorPayload,
   formatUsage,
   choosePermissionOutcome,
@@ -92,9 +93,11 @@ export interface AttachAcpSessionOptions {
   // `onCliReady` fires once on the first well-formed ACP JSON-RPC message
   // (the CLI is up and speaking the protocol); `onSessionInit` fires once when
   // the `session/new` handshake is acknowledged (a session id is established).
-  // Both are best-effort and the caller dedupes, so extra calls are harmless.
+  // `onPromptComplete` fires once when a clean `session/prompt` result is
+  // accepted. Error paths never invoke it.
   onCliReady?: () => void;
   onSessionInit?: () => void;
+  onPromptComplete?: () => void;
 }
 /**
  * Attaches an ACP protocol session to an already-spawned child process and
@@ -139,6 +142,7 @@ export function attachAcpSession({
   resumeSessionId,
   onCliReady,
   onSessionInit,
+  onPromptComplete,
 }: AttachAcpSessionOptions) {
   const runStartedAt = Date.now();
   const effectiveCwd = path.resolve(cwd || process.cwd());
@@ -375,6 +379,84 @@ export function attachAcpSession({
     });
   };
 
+  const emitAcpExecutionObservability = (update: JsonObject): boolean => {
+    const name = typeof update.sessionUpdate === 'string' ? update.sessionUpdate : '';
+    if (
+      name !== 'assistant_message_lifecycle' &&
+      name !== 'model_step_lifecycle' &&
+      name !== 'model_retry'
+    ) {
+      return false;
+    }
+    const numberField = (key: string) => {
+      const value = update[key];
+      return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+    };
+    const stringField = (key: string) => {
+      const value = update[key];
+      return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+    };
+    const usage = asObject(update.usage);
+    send('agent', {
+      type: 'diagnostic',
+      name,
+      source: 'amr-opencode',
+      elapsedMs: Date.now() - runStartedAt,
+      ...(stringField('phase') ? { phase: stringField('phase') } : {}),
+      ...(stringField('status') ? { status: stringField('status') } : {}),
+      ...(stringField('reason') ? { reason: stringField('reason') } : {}),
+      ...(stringField('provider') ? { provider: stringField('provider') } : {}),
+      ...(stringField('model') ? { model: stringField('model') } : {}),
+      ...(stringField('errorClass') ? { errorClass: stringField('errorClass') } : {}),
+      ...(stringField('timingEvidence')
+        ? { timingEvidence: stringField('timingEvidence') }
+        : {}),
+      ...(numberField('assistantMessageIndex') !== undefined
+        ? { assistantMessageIndex: numberField('assistantMessageIndex') }
+        : {}),
+      ...(numberField('stepIndex') !== undefined
+        ? { stepIndex: numberField('stepIndex') }
+        : {}),
+      ...(numberField('startedAtMs') !== undefined
+        ? { startedAtMs: numberField('startedAtMs') }
+        : {}),
+      ...(numberField('endedAtMs') !== undefined
+        ? { endedAtMs: numberField('endedAtMs') }
+        : {}),
+      ...(numberField('durationMs') !== undefined
+        ? { durationMs: numberField('durationMs') }
+        : {}),
+      ...(numberField('attempt') !== undefined
+        ? { attempt: numberField('attempt') }
+        : {}),
+      ...(usage
+        ? {
+            usage: {
+              ...(typeof usage.inputTokens === 'number'
+                ? { inputTokens: usage.inputTokens }
+                : {}),
+              ...(typeof usage.outputTokens === 'number'
+                ? { outputTokens: usage.outputTokens }
+                : {}),
+              ...(typeof usage.totalTokens === 'number'
+                ? { totalTokens: usage.totalTokens }
+                : {}),
+              ...(typeof usage.reasoningTokens === 'number'
+                ? { reasoningTokens: usage.reasoningTokens }
+                : {}),
+              ...(typeof usage.cacheReadTokens === 'number'
+                ? { cacheReadTokens: usage.cacheReadTokens }
+                : {}),
+              ...(typeof usage.cacheWriteTokens === 'number'
+                ? { cacheWriteTokens: usage.cacheWriteTokens }
+                : {}),
+            },
+          }
+        : {}),
+    });
+    return true;
+  };
+
   const emitVisibleTextDelta = (delta: string) => {
     if (!delta) return;
     emittedVisibleTextChunk = true;
@@ -511,6 +593,10 @@ export function attachAcpSession({
 
   const finishCleanPrompt = (usageSource?: unknown) => {
     if (finished) return;
+    // Mark the prompt finished before notifying observers so duplicate results
+    // and callback re-entry cannot report clean completion more than once.
+    finished = true;
+    onPromptComplete?.();
     // Flush any tools still open when the prompt completes so traces stay
     // complete (one tool_use + tool_result per id).
     flushOpenAcpTools();
@@ -524,7 +610,6 @@ export function attachAcpSession({
     emitToolCallTextSuppressionSummary();
     emitArtifactTextSuppressionSummary();
     emitUsageIfPresent(usageSource);
-    finished = true;
     clearStageTimer();
     stdin.end();
     // Some ACP agents keep the child process alive after stdin closes,
@@ -607,7 +692,7 @@ export function attachAcpSession({
         failWithPayload(promotedPayload);
         return;
       }
-      const retryable = rpcErrorRetryable(details);
+      const retryable = rpcErrorRetryable(details) ?? inferRpcErrorRetryable(rpcErr, details);
       fail(rpcErr, {
         details,
         ...(retryable === undefined ? {} : { retryable }),
@@ -627,10 +712,15 @@ export function attachAcpSession({
           return;
         }
       }
+      if (emitAcpExecutionObservability(update)) {
+        return;
+      }
       if (update.sessionUpdate !== 'agent_message_chunk' && update.sessionUpdate !== 'agent_thought_chunk') {
+        const detail = extractAcpStatusDetail(update);
         send('agent', {
           type: 'status',
           label: String(update.sessionUpdate || 'session_update'),
+          ...(detail ? { detail } : {}),
           elapsedMs: Date.now() - runStartedAt,
         });
         emitAcpRawShapeDiagnostic(update);

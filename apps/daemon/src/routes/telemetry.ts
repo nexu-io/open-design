@@ -22,6 +22,7 @@ import {
 
 export interface DaemonTelemetry {
   analyticsService: ReturnType<typeof createAnalyticsService>;
+  disposeFatalHandlers: () => void;
   getCachedAppVersion: () => any;
   reportFeedback: (req: {
     runId: string;
@@ -241,7 +242,7 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
     res.json({ ok: true });
   });
 
-  installFatalTelemetryHandlers({
+  const disposeFatalHandlers = installFatalTelemetryHandlers({
     analyticsService,
     getAppVersion: () => cachedAppVersion,
   });
@@ -265,6 +266,7 @@ export function registerTelemetryRoutes(app: Express, deps: RegisterTelemetryRou
 
   return {
     analyticsService,
+    disposeFatalHandlers,
     getCachedAppVersion: () => cachedAppVersion,
     reportFeedback: (req) =>
       reportRunFeedbackFromDaemon({
@@ -578,7 +580,7 @@ function installFatalTelemetryHandlers({
 }: {
   analyticsService: ReturnType<typeof createAnalyticsService>;
   getAppVersion: () => any;
-}): void {
+}): () => void {
   const FATAL_FLUSH_TIMEOUT_MS = 1000;
   let fatalShuttingDown = false;
   const triggerFatalShutdown = (
@@ -610,19 +612,28 @@ function installFatalTelemetryHandlers({
       process.exit(1);
     });
   };
-  process.on('uncaughtException', (error) => {
+  const onUncaughtException = (error: Error) => {
     triggerFatalShutdown('daemon_uncaught_exception', {
       error_message: error?.message ?? String(error),
       error_name: error?.name ?? 'Error',
       error_stack: typeof error?.stack === 'string' ? error.stack.slice(0, 8192) : undefined,
     });
-  });
-  process.on('unhandledRejection', (reason) => {
+  };
+  const onUnhandledRejection = (reason: unknown) => {
     const asError = reason instanceof Error ? reason : null;
     triggerFatalShutdown('daemon_unhandled_rejection', {
       error_message: asError?.message ?? (typeof reason === 'string' ? reason : String(reason)),
       error_name: asError?.name ?? 'NonErrorRejection',
       error_stack: typeof asError?.stack === 'string' ? asError.stack.slice(0, 8192) : undefined,
     });
-  });
+  };
+  process.on('uncaughtException', onUncaughtException);
+  process.on('unhandledRejection', onUnhandledRejection);
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    process.off('uncaughtException', onUncaughtException);
+    process.off('unhandledRejection', onUnhandledRejection);
+  };
 }

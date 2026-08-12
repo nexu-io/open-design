@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  designDeliveryReconciliationStale,
   designDeliveryVerificationPending,
   resolveDesignDeliveryOutcome,
 } from '../../src/runtime/design-delivery';
@@ -235,6 +236,77 @@ describe('resolveDesignDeliveryOutcome', () => {
         content: '<question-form id="brief">{"questions":[]}</question-form>',
         events: [],
       }),
+    ).toBe(false);
+  });
+});
+
+describe('designDeliveryReconciliationStale', () => {
+  const now = 1_000_000;
+
+  it('treats a run that finished long ago as stale (no more auto-replay)', () => {
+    expect(
+      designDeliveryReconciliationStale(
+        {
+          sessionMode: 'design',
+          runStatus: 'succeeded',
+          endedAt: now - 24 * 60 * 60 * 1000,
+        },
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps a freshly completed run reconcilable', () => {
+    expect(
+      designDeliveryReconciliationStale(
+        {
+          sessionMode: 'design',
+          runStatus: 'succeeded',
+          endedAt: now - 30_000,
+        },
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it('does not mark a row with no timestamp at all as stale', () => {
+    expect(
+      designDeliveryReconciliationStale(
+        { sessionMode: 'design', runStatus: 'succeeded' },
+        now,
+      ),
+    ).toBe(false);
+  });
+
+  it('treats a legacy row without endedAt as stale when its start time is old', () => {
+    // #6505 rows persisted before `endedAt` existed carry only `startedAt`;
+    // the age bound falls back to it so reloads stop auto-replaying.
+    expect(
+      designDeliveryReconciliationStale(
+        { sessionMode: 'design', runStatus: 'succeeded', startedAt: now - 24 * 60 * 60 * 1000 },
+        now,
+      ),
+    ).toBe(true);
+  });
+
+  it('ignores already-resolved deliveries and non-design/non-succeeded rows', () => {
+    expect(
+      designDeliveryReconciliationStale(
+        { sessionMode: 'design', runStatus: 'succeeded', resultDeliveryState: 'delivered', endedAt: 1 },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      designDeliveryReconciliationStale(
+        { sessionMode: 'chat', runStatus: 'succeeded', endedAt: 1 },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      designDeliveryReconciliationStale(
+        { sessionMode: 'design', runStatus: 'failed', endedAt: 1 },
+        now,
+      ),
     ).toBe(false);
   });
 });

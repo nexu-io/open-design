@@ -34,6 +34,13 @@ OPEN_DESIGN_IMAGE=ghcr.io/nexu-io/od:latest docker compose up -d --no-build
 Use `ghcr.io/nexu-io/od:latest` for the latest stable image, or
 `ghcr.io/nexu-io/od:<version>` to pin a supported release.
 
+Open `http://127.0.0.1:7456`. When Docker's bridge makes the browser appear as a
+non-loopback peer, the browser displays its native sign-in dialog. Enter
+`open-design` as the username and the `OD_API_TOKEN` value from `.env` as the
+password. The browser reuses those credentials for same-origin API requests;
+CLI clients and reverse proxies can continue to send
+`Authorization: Bearer <OD_API_TOKEN>`.
+
 The published `ghcr.io/nexu-io/od` package must be public for anonymous
 `docker pull`, Docker Compose, and Dokploy installs to work. If GHCR returns an
 authentication or access-denied error for this image, an organization maintainer
@@ -50,10 +57,11 @@ Defaults:
 - Node heap cap: `--max-old-space-size=192`
 - Compose memory cap: `384m` (`OPEN_DESIGN_MEM_LIMIT=256m` to override)
 
-Do not publish the daemon directly on a public or shared LAN interface. The API is
-unauthenticated for non-browser clients, so remote deployments should keep Compose
-bound to localhost and put an authenticated reverse proxy, SSH tunnel, or VPN in
-front of it.
+Do not publish the daemon directly on a public or shared LAN interface. The shared
+API token is single-tenant authentication, not user-level access control, and both
+Basic and Bearer credentials require TLS outside localhost. Remote deployments
+should keep Compose bound to localhost and put an authenticated TLS reverse proxy,
+SSH tunnel, or VPN in front of it.
 
 When exposing the service through an authenticated public IP, domain, or reverse
 proxy, set `OPEN_DESIGN_ALLOWED_ORIGINS` to the exact browser origins that should
@@ -238,34 +246,8 @@ custom `COLIMA_BUILD_SWAPFILE`, cleanup refuses to remove it unless
 
 ### Docker Desktop on macOS
 
-When running Docker Compose on macOS with `OD_API_TOKEN` enabled, Docker Desktop bridge networking may cause the daemon to see API requests as non-loopback peers. In that case, the web UI can fail with:
-
-`Authorization: Bearer <OD_API_TOKEN> required`
-
-Workaround:
-
-1. Enable host networking in Docker Desktop:
-   `Docker Desktop → Settings → Resources → Network → Enable host networking → Apply and restart`
-
-2. Use a local override to docker-compose.yml:
-
-   ```yaml
-   services:
-     open-design:
-       network_mode: host
-       ports: []
-   ```
-
-3. Recreate the container:
-
-   ```bash
-   docker compose down
-   docker compose up -d --force-recreate
-   ```
-
-4. Verify:
-
-   ```bash
-   docker inspect open-design --format '{{.HostConfig.NetworkMode}}'
-   # host
-   ```
+Docker Desktop bridge networking makes host-browser traffic appear to the daemon
+as a non-loopback peer. This is expected: keep the default bridge configuration
+and complete the browser's native sign-in prompt with username `open-design` and
+the `OD_API_TOKEN` value from `.env`. Host networking is no longer required for
+the web UI authentication path.

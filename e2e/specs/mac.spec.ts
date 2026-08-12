@@ -39,6 +39,8 @@ const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_U
 const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_VERSION);
 const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH);
 const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE);
+const packagedInviteDeeplink =
+  'opendesign://workspace/invite/continue?workspace_id=packaged-smoke-workspace&member_id=packaged-smoke-member&invite_id=packaged-smoke-invite&nonce=packaged-smoke-nonce';
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'mac', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'mac', 'namespaces', namespace);
@@ -139,26 +141,13 @@ const packagedOnboardingExpression = `
   (() => {
     const onboardingShell = document.querySelector('.entry-shell--onboarding');
     const onboardingModal = document.querySelector('.entry-onboarding-modal');
-    // Redesigned connect step: a cloud sign-in landing (primary CTA + two
-    // secondary runtime links) replaces the old selectable runtime cards.
+    // Identity is the first gate; runtime selection follows Cloud sign-in.
     const cloudSignIn = document.querySelector('.onboarding-cloud__primary');
-    const secondaryLinks = Array.from(
-      document.querySelectorAll('.onboarding-cloud__secondary'),
-    );
-    const localLink = secondaryLinks[0] ?? null;
-    const byokLink = secondaryLinks[1] ?? null;
-    const backToCloud = document.querySelector('.onboarding-view__back-to-cloud');
-    const setupPanel = document.querySelector('.onboarding-view__setup-panel');
 
     return {
-      backVisible: backToCloud instanceof HTMLElement,
-      byokLinkVisible: byokLink instanceof HTMLElement,
       cloudSignInVisible: cloudSignIn instanceof HTMLElement,
       href: location.href,
-      inputCount: setupPanel instanceof HTMLElement ? setupPanel.querySelectorAll('input').length : 0,
-      localLinkVisible: localLink instanceof HTMLElement,
       onboardingVisible: onboardingShell instanceof HTMLElement && onboardingModal instanceof HTMLElement,
-      setupPanelVisible: setupPanel instanceof HTMLElement,
       text: onboardingModal?.textContent?.trim().slice(0, 2000) ?? null,
       title: document.title,
     };
@@ -344,20 +333,10 @@ type UpdaterRecoverySummary = {
   recovered: NonNullable<MacInspectResult['update']>;
 };
 
-// The redesigned connect step exposes the two alternative runtimes as
-// secondary links on the cloud sign-in landing (AMR is the primary cloud CTA,
-// not a selectable link).
-type OnboardingRuntime = 'local' | 'byok';
-
 type PackagedOnboardingEvalValue = {
-  backVisible: boolean;
-  byokLinkVisible: boolean;
   cloudSignInVisible: boolean;
   href: string;
-  inputCount: number;
-  localLinkVisible: boolean;
   onboardingVisible: boolean;
-  setupPanelVisible: boolean;
   text: string | null;
   title: string;
 };
@@ -397,6 +376,7 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(install.detached).toBe(true);
       expectPathInside(install.dmgPath, join(outputNamespaceRoot, 'dmg'));
       expectPathInside(install.installedAppPath, join(outputNamespaceRoot, 'install', 'Applications'));
+      await assertMacInviteProtocolRegistration(install.installedAppPath);
 
       await seedPackagedOnboardingComplete();
 
@@ -466,6 +446,24 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(pty.cleanup.projectStatus).toBe(200);
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
+
+      const protocolHotPid = inspect.status?.pid ?? start.pid;
+      await invokeMacInviteDeeplink(install.installedAppPath);
+      const protocolHotInspect = await waitForHealthyDesktop();
+      expect(protocolHotInspect.status?.pid).toBe(protocolHotPid);
+
+      if (verifyCoreOnly) {
+        const protocolStop = await runToolsPackJson<MacStopResult>('stop');
+        started = false;
+        expect(protocolStop.status).not.toBe('partial');
+        expect(protocolStop.remainingPids).toEqual([]);
+
+        await invokeMacInviteDeeplink(install.installedAppPath);
+        started = true;
+        const protocolColdInspect = await waitForHealthyDesktop();
+        expect(protocolColdInspect.status?.state).toBe('running');
+        expect(protocolColdInspect.status?.pid).not.toBe(protocolHotPid);
+      }
 
       if (!verifyCoreOnly) {
         const updaterVersion = expectedPayloadUpdateVersion;
@@ -1011,7 +1009,7 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
   let installedAppPath: string | null = null;
   let started = false;
 
-  test('[P0] @electron-smoke starts a fresh packaged app on onboarding with AMR, Local CLI, and BYOK visible', async () => {
+  test('[P0] @electron-smoke starts a fresh packaged app on the Cloud identity gate', async () => {
     const report = await createPackagedSmokeReport('mac');
     let passed = false;
     try {
@@ -1037,41 +1035,11 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
       expect(health.health.ok).toBe(true);
 
       const initial = await waitForPackagedOnboarding((snapshot) =>
-        snapshot.onboardingVisible &&
-        snapshot.cloudSignInVisible &&
-        snapshot.localLinkVisible &&
-        snapshot.byokLinkVisible,
-        'fresh packaged onboarding cloud sign-in landing',
+        snapshot.onboardingVisible && snapshot.cloudSignInVisible,
+        'fresh packaged onboarding Cloud identity gate',
       );
       expect(initial.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       expect(initial.cloudSignInVisible).toBe(true);
-      expect(initial.localLinkVisible).toBe(true);
-      expect(initial.byokLinkVisible).toBe(true);
-
-      // Expand the BYOK panel from the landing, then collapse back via Back.
-      await clickPackagedOnboardingRuntime('byok');
-      const byok = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.setupPanelVisible && snapshot.inputCount > 0,
-        'packaged onboarding BYOK setup panel',
-      );
-      expect(byok.setupPanelVisible).toBe(true);
-
-      // The secondary links only live on the landing, so Back before Local.
-      await clickPackagedOnboardingBack();
-      await clickPackagedOnboardingRuntime('local');
-      const local = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.setupPanelVisible,
-        'packaged onboarding Local CLI setup panel',
-      );
-      expect(local.setupPanelVisible).toBe(true);
-
-      // Back once more lands on the cloud sign-in surface for the screenshot.
-      await clickPackagedOnboardingBack();
-      const landing = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.cloudSignInVisible && !snapshot.setupPanelVisible,
-        'packaged onboarding cloud sign-in landing after Back',
-      );
-      expect(landing.cloudSignInVisible).toBe(true);
 
       const onboardingScreenshotPath = join(toolsPackDir, 'screenshots', `${namespace}-onboarding.png`);
       await mkdir(dirname(onboardingScreenshotPath), { recursive: true });
@@ -1080,11 +1048,8 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
       expect(await fileSizeBytes(onboardingScreenshotPath)).toBeGreaterThan(0);
       await report.report.save('screenshots/open-design-mac-onboarding-smoke.png', await readFile(onboardingScreenshotPath));
       await report.report.json('onboarding-summary.json', {
-        byok,
         health,
         initial,
-        landing,
-        local,
         namespace,
         screenshot: 'screenshots/open-design-mac-onboarding-smoke.png',
         start: {
@@ -1208,6 +1173,14 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     });
   }, 45_000);
 
+  // #5517 removed the theme segmented control from Settings, so the packaged
+  // "preview then save" appearance loop is now driven by the accent swatches —
+  // the only appearance control the section still owns. The invariants under
+  // test are the same ones the theme leg used to prove: the edit previews
+  // immediately on the live document, and it survives the dialog closing via
+  // Save. The seeded `theme` is a LEGACY dark value: the theme setting is gone
+  // and the app ships light-only, so the packaged runtime must coerce it to
+  // light on read rather than carry it into the document.
   test('previews and saves the desktop appearance preference', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
@@ -1222,19 +1195,22 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       onboardingCompleted: true,
       mediaProviders: {},
       agentModels: {},
-      theme: 'system',
+      theme: 'dark',
     }, 'theme');
 
     await desktop.openSettings();
     await openDesktopSettingsSection(desktop, 'Appearance');
-    await clickDesktopSegmentButton(desktop, 'Dark');
+    await clickDesktopAccentSwatch(desktop, '#87ea5c');
 
     await waitFor(async () => {
       const snapshot = await readDesktopAppearanceSnapshot(desktop);
       expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.activeTheme).toBe('Dark');
-      expect(snapshot.documentTheme).toBe('dark');
-      expect(snapshot.savedTheme).toBe('system');
+      // Live preview lands on the document before anything is saved.
+      expect(snapshot.documentAccent).toBe('#87ea5c');
+      // The seeded legacy `dark` never reaches the document, and the coerced
+      // value is written back so the dark preference stops existing on disk.
+      expect(snapshot.documentTheme).toBe('light');
+      expect(snapshot.savedTheme).toBe('light');
     });
 
     await clickDesktopSettingsFooterButton(desktop, 'primary');
@@ -1242,8 +1218,9 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     await waitFor(async () => {
       const snapshot = await readDesktopAppearanceSnapshot(desktop);
       expect(snapshot.dialogOpen).toBe(false);
-      expect(snapshot.documentTheme).toBe('dark');
-      expect(snapshot.savedTheme).toBe('dark');
+      expect(snapshot.documentAccent).toBe('#87ea5c');
+      expect(snapshot.savedAccent).toBe('#87ea5c');
+      expect(snapshot.savedTheme).toBe('light');
     });
   }, 45_000);
 
@@ -1430,252 +1407,6 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     });
   }, 45_000);
 
-  test('opens the Orbit section from the desktop shell and renders its primary surface', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: true },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Orbit');
-      expect(snapshot.sectionTitle).toBe('Orbit');
-      expect(snapshot.runButtonVisible).toBe(true);
-      expect(snapshot.gateVisible || snapshot.automationCardVisible).toBe(true);
-    });
-  }, 45_000);
-
-  test('renders the Orbit Open artifact link as a desktop new-tab link when a live artifact target exists', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: true },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.eval(`
-      (() => {
-        const originalFetch = window.fetch.bind(window);
-        window.fetch = async (input, init) => {
-          const url = typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-          if (url === '/api/orbit/status') {
-            return new Response(JSON.stringify({
-              running: false,
-              nextRunAt: null,
-              lastRun: {
-                completedAt: '2026-05-06T10:00:00.000Z',
-                trigger: 'manual',
-                templateSkillId: 'orbit-general',
-                connectorsChecked: 5,
-                connectorsSucceeded: 3,
-                connectorsSkipped: 2,
-                connectorsFailed: 0,
-                markdown: 'General latest summary',
-                artifactId: 'artifact-123',
-                artifactProjectId: 'project-456',
-              },
-              lastRunsByTemplate: {
-                'orbit-general': {
-                  completedAt: '2026-05-06T10:00:00.000Z',
-                  trigger: 'manual',
-                  templateSkillId: 'orbit-general',
-                  connectorsChecked: 5,
-                  connectorsSucceeded: 3,
-                  connectorsSkipped: 2,
-                  connectorsFailed: 0,
-                  markdown: 'General latest summary',
-                  artifactId: 'artifact-123',
-                  artifactProjectId: 'project-456',
-                },
-              },
-            }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-          return originalFetch(input, init);
-        };
-        return true;
-      })()
-    `);
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Orbit');
-      expect(snapshot.sectionTitle).toBe('Orbit');
-      expect(snapshot.openArtifactHref).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
-      expect(snapshot.openArtifactTarget).toBe('_blank');
-      expect(snapshot.openArtifactRel).toContain('noreferrer');
-    });
-  }, 45_000);
-
-  test('clicking the Orbit Open artifact link keeps the desktop settings dialog stable', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: true },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.eval(`
-      (() => {
-        const originalFetch = window.fetch.bind(window);
-        window.fetch = async (input, init) => {
-          const url = typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-          if (url === '/api/orbit/status') {
-            return new Response(JSON.stringify({
-              running: false,
-              nextRunAt: null,
-              lastRun: {
-                completedAt: '2026-05-06T10:00:00.000Z',
-                trigger: 'manual',
-                templateSkillId: 'orbit-general',
-                connectorsChecked: 5,
-                connectorsSucceeded: 3,
-                connectorsSkipped: 2,
-                connectorsFailed: 0,
-                markdown: 'General latest summary',
-                artifactId: 'artifact-123',
-                artifactProjectId: 'project-456',
-              },
-              lastRunsByTemplate: {
-                'orbit-general': {
-                  completedAt: '2026-05-06T10:00:00.000Z',
-                  trigger: 'manual',
-                  templateSkillId: 'orbit-general',
-                  connectorsChecked: 5,
-                  connectorsSucceeded: 3,
-                  connectorsSkipped: 2,
-                  connectorsFailed: 0,
-                  markdown: 'General latest summary',
-                  artifactId: 'artifact-123',
-                  artifactProjectId: 'project-456',
-                },
-              },
-            }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-          return originalFetch(input, init);
-        };
-        window.__odLastOpenArtifactHref = null;
-        window.__odOpenArtifactClickCount = 0;
-        if (!window.__odOpenArtifactClickCaptureInstalled) {
-          document.addEventListener('click', (event) => {
-            const target = event.target instanceof Element ? event.target.closest('a') : null;
-            if (!(target instanceof HTMLAnchorElement)) return;
-            if (target.textContent?.trim() !== 'Open artifact') return;
-            window.__odLastOpenArtifactHref = target.getAttribute('href');
-            window.__odOpenArtifactClickCount += 1;
-            event.preventDefault();
-          }, true);
-          window.__odOpenArtifactClickCaptureInstalled = true;
-        }
-        return true;
-      })()
-    `);
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.openArtifactHref).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
-    });
-
-    const clicked = await desktop.eval<boolean>(`
-      (() => {
-        const link = Array.from(document.querySelectorAll('a'))
-          .find((node) => node.textContent?.trim() === 'Open artifact');
-        if (!(link instanceof HTMLAnchorElement)) return false;
-        link.click();
-        return true;
-      })()
-    `);
-    expect(clicked).toBe(true);
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Orbit');
-      expect(snapshot.sectionTitle).toBe('Orbit');
-      expect(snapshot.openArtifactHref).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
-    });
-
-    const clickCapture = await desktop.eval<{ count: number; href: string | null }>(`
-      (() => ({
-        count: typeof window.__odOpenArtifactClickCount === 'number' ? window.__odOpenArtifactClickCount : 0,
-        href: typeof window.__odLastOpenArtifactHref === 'string' ? window.__odLastOpenArtifactHref : null,
-      }))()
-    `);
-    expect(clickCapture.count).toBeGreaterThan(0);
-    expect(clickCapture.href).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
-  }, 45_000);
-
   test('keeps the desktop workspace stable when the artifact Open link is clicked', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
@@ -1786,56 +1517,6 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     expect(clickCapture.href).toBe('/api/projects/' + seeded.projectId + '/raw/desktop-open.html?v=0&r=0');
   }, 45_000);
 
-  test('routes the Orbit gate CTA to the Connectors section inside the desktop shell', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: false },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.gateVisible).toBe(true);
-    });
-
-    const clicked = await desktop.eval<boolean>(`
-      (() => {
-        const action = document.querySelector('[data-testid="orbit-config-gate-action"]');
-        if (!(action instanceof HTMLElement)) return false;
-        action.click();
-        return true;
-      })()
-    `);
-    expect(clicked).toBe(true);
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopConnectorsSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Connectors');
-      expect(snapshot.sectionTitle).toBe('Connectors');
-      expect(snapshot.apiKeyLabelVisible).toBe(true);
-    });
-  }, 45_000);
-
   test('opens the Media providers section from the desktop shell and shows provider controls', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
@@ -1895,7 +1576,13 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     });
   }, 45_000);
 
-  test('opens the Appearance section from the desktop shell and shows theme controls', async () => {
+  // #5517 (product confirmed 2026-07-20) removed the 系统/浅色/深色 segmented
+  // control from Appearance; the theme now moves only through the account
+  // menu's 切换主题 row. The point of this test is unchanged — the packaged
+  // desktop shell can reach the Appearance section and render its controls —
+  // so it now asserts on the accent swatches, the section's surviving control,
+  // and guards that the theme segmented control has not come back.
+  test('opens the Appearance section from the desktop shell and shows the accent controls', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
       apiKey: 'sk-test',
@@ -1920,9 +1607,9 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.dialogOpen).toBe(true);
       expect(snapshot.heading).toBe('Appearance');
       expect(snapshot.sectionTitle).toBe('Appearance');
-      expect(snapshot.systemVisible).toBe(true);
-      expect(snapshot.lightVisible).toBe(true);
-      expect(snapshot.darkVisible).toBe(true);
+      expect(snapshot.accentSwatchesVisible).toBe(true);
+      expect(snapshot.defaultAccentVisible).toBe(true);
+      expect(snapshot.themeSegControlVisible).toBe(false);
     });
   }, 45_000);
 });
@@ -2067,9 +1754,10 @@ type DesktopLocalCliSnapshot = {
 };
 
 type DesktopAppearanceSnapshot = {
-  activeTheme: string | null;
   dialogOpen: boolean;
+  documentAccent: string | null;
   documentTheme: string | null;
+  savedAccent: string | null;
   savedTheme: string | null;
 };
 
@@ -2081,18 +1769,6 @@ type DesktopConnectorsSnapshot = {
   gateVisible: boolean;
   gridVisible: boolean;
   heading: string | null;
-  sectionTitle: string | null;
-};
-
-type DesktopOrbitSnapshot = {
-  automationCardVisible: boolean;
-  dialogOpen: boolean;
-  gateVisible: boolean;
-  heading: string | null;
-  openArtifactHref: string | null;
-  openArtifactRel: string | null;
-  openArtifactTarget: string | null;
-  runButtonVisible: boolean;
   sectionTitle: string | null;
 };
 
@@ -2113,12 +1789,13 @@ type DesktopAboutSnapshot = {
 };
 
 type DesktopAppearanceSectionSnapshot = {
-  darkVisible: boolean;
+  accentSwatchesVisible: boolean;
+  defaultAccentVisible: boolean;
   dialogOpen: boolean;
   heading: string | null;
-  lightVisible: boolean;
   sectionTitle: string | null;
-  systemVisible: boolean;
+  /** #5517 removed it; kept as a negative assertion so it cannot creep back. */
+  themeSegControlVisible: boolean;
 };
 
 type DesktopArtifactOpenSnapshot = {
@@ -2195,16 +1872,26 @@ async function clickDesktopExecutionModeTab(
   expect(clicked).toBe(true);
 }
 
-async function clickDesktopSegmentButton(
+/**
+ * Click an accent swatch in the Settings › Appearance section.
+ *
+ * Replaces the old `clickDesktopSegmentButton` theme helper: the
+ * 系统/浅色/深色 segmented control is gone (#5517 hid it, and the theme setting
+ * was removed outright because the app ships light-only), leaving the accent
+ * swatches as the only appearance control Settings still owns. Swatches carry
+ * the hex as their aria-label (the default swatch is "Default accent color").
+ */
+async function clickDesktopAccentSwatch(
   desktop: DesktopHarness,
   label: string,
 ): Promise<void> {
   const clicked = await desktop.eval<boolean>(`
     (() => {
-      const button = Array.from(document.querySelectorAll('[role="dialog"] button'))
-        .find((node) => node.textContent?.trim() === ${JSON.stringify(label)});
-      if (!(button instanceof HTMLElement)) return false;
-      button.click();
+      const swatch = document.querySelector(
+        '[role="dialog"] .pet-swatches [role="radio"][aria-label=' + ${JSON.stringify(JSON.stringify(label))} + ']',
+      );
+      if (!(swatch instanceof HTMLElement)) return false;
+      swatch.click();
       return true;
     })()
   `);
@@ -2271,13 +1958,11 @@ async function readDesktopAppearanceSnapshot(
     (() => {
       const raw = window.localStorage.getItem(${JSON.stringify(STORAGE_KEY)});
       const config = raw ? JSON.parse(raw) : {};
-      const activeButton = Array.from(document.querySelectorAll('[role="dialog"] button[aria-pressed="true"]'))
-        .find((node) => ['Light', 'Dark', 'System'].includes(node.textContent?.trim() ?? ''));
-
       return {
-        activeTheme: activeButton?.textContent?.trim() ?? null,
         dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
+        documentAccent: document.documentElement.style.getPropertyValue('--accent').trim() || null,
         documentTheme: document.documentElement.getAttribute('data-theme'),
+        savedAccent: typeof config.accentColor === 'string' ? config.accentColor : null,
         savedTheme: typeof config.theme === 'string' ? config.theme : null,
       };
     })()
@@ -2303,31 +1988,6 @@ async function readDesktopConnectorsSnapshot(
         gateVisible: Boolean(document.querySelector('[data-testid="connector-gate"]')),
         gridVisible: Boolean(document.querySelector('[data-testid="connector-grid-wrap"]')),
         heading: document.querySelector('[role="dialog"] h2')?.textContent?.trim() ?? null,
-        sectionTitle,
-      };
-    })()
-  `);
-}
-
-async function readDesktopOrbitSnapshot(
-  desktop: DesktopHarness,
-): Promise<DesktopOrbitSnapshot> {
-  return await desktop.eval<DesktopOrbitSnapshot>(`
-    (() => {
-      const sectionTitle = document.querySelector('.orbit-section .orbit-hero-title')
-        ?.textContent?.trim() ?? null;
-      const openArtifactLink = Array.from(document.querySelectorAll('a'))
-        .find((node) => node.textContent?.trim() === 'Open artifact');
-      return {
-        automationCardVisible: Boolean(document.querySelector('[data-testid="orbit-automation-card"]')),
-        dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
-        gateVisible: Boolean(document.querySelector('[data-testid="orbit-config-gate"]')),
-        heading: document.querySelector('[role="dialog"] h2')?.textContent?.trim() ?? null,
-        openArtifactHref: openArtifactLink?.getAttribute('href') ?? null,
-        openArtifactRel: openArtifactLink?.getAttribute('rel') ?? null,
-        openArtifactTarget: openArtifactLink?.getAttribute('target') ?? null,
-        runButtonVisible: Boolean(Array.from(document.querySelectorAll('button'))
-          .find((node) => node.textContent?.trim() === 'Run it now')),
         sectionTitle,
       };
     })()
@@ -2380,15 +2040,23 @@ async function readDesktopAppearanceSectionSnapshot(
     (() => {
       const sectionTitle = document.querySelector('.settings-section .section-head h3')
         ?.textContent?.trim() ?? null;
-      const labels = Array.from(document.querySelectorAll('.seg-control .seg-title'))
-        .map((node) => node.textContent?.trim() ?? '');
+      const accentGroup = document.querySelector('.settings-section .pet-swatches[role="radiogroup"]');
+      const accentSwatches = accentGroup
+        ? Array.from(accentGroup.querySelectorAll('[role="radio"]'))
+        : [];
       return {
-        darkVisible: labels.includes('Dark'),
+        accentSwatchesVisible: accentSwatches.length > 0,
+        defaultAccentVisible: accentSwatches.some(
+          (node) => node.getAttribute('aria-label') === 'Default accent color',
+        ),
         dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
         heading: document.querySelector('[role="dialog"] h2')?.textContent?.trim() ?? null,
-        lightVisible: labels.includes('Light'),
         sectionTitle,
-        systemVisible: labels.includes('System'),
+        // Scoped by aria-label: the Notifications controls in the same dialog
+        // are seg-controls too, and they are not what #5517 removed.
+        themeSegControlVisible: Boolean(
+          document.querySelector('.seg-control[aria-label="Appearance"]'),
+        ),
       };
     })()
   `);
@@ -2532,22 +2200,6 @@ async function waitForPackagedOnboarding(
   }
 
   throw new Error(`${label}: packaged onboarding timed out: ${formatUnknown(lastResult)}`);
-}
-
-async function clickPackagedOnboardingRuntime(runtime: OnboardingRuntime): Promise<void> {
-  const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickPackagedOnboardingRuntimeExpression(runtime)]);
-  const value = inspect.eval?.value;
-  if (!isRecord(value) || value.clicked !== true) {
-    throw new Error(`failed to click packaged onboarding ${runtime} runtime: ${formatUnknown(value)}`);
-  }
-}
-
-async function clickPackagedOnboardingBack(): Promise<void> {
-  const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickPackagedOnboardingBackExpression()]);
-  const value = inspect.eval?.value;
-  if (!isRecord(value) || value.clicked !== true) {
-    throw new Error(`failed to click packaged onboarding back: ${formatUnknown(value)}`);
-  }
 }
 
 async function waitForUpdaterStatus(
@@ -2880,39 +2532,6 @@ function assertUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue {
   return normalized;
 }
 
-function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): string {
-  // Secondary runtime links on the cloud landing, in DOM order: [0] Local,
-  // [1] BYOK. Clicking one expands its setup panel.
-  const index = runtime === 'local' ? 0 : 1;
-  return `
-    (async () => {
-      const links = Array.from(document.querySelectorAll('.onboarding-cloud__secondary'));
-      const target = links[${index}] ?? null;
-      if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-runtime-link', runtime: ${JSON.stringify(runtime)} };
-      }
-      target.click();
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return { clicked: true, runtime: ${JSON.stringify(runtime)} };
-    })()
-  `;
-}
-
-function clickPackagedOnboardingBackExpression(): string {
-  // Collapse an expanded runtime setup panel back to the cloud sign-in landing.
-  return `
-    (async () => {
-      const target = document.querySelector('.onboarding-view__back-to-cloud');
-      if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-back' };
-      }
-      target.click();
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return { clicked: true };
-    })()
-  `;
-}
-
 function asHealthEvalValue(value: unknown): HealthEvalValue | null {
   if (!isRecord(value)) return null;
   if (typeof value.href !== 'string' || typeof value.status !== 'number' || typeof value.title !== 'string') return null;
@@ -2922,14 +2541,9 @@ function asHealthEvalValue(value: unknown): HealthEvalValue | null {
 
 function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalValue | null {
   if (!isRecord(value)) return null;
-  if (typeof value.backVisible !== 'boolean') return null;
-  if (typeof value.byokLinkVisible !== 'boolean') return null;
   if (typeof value.cloudSignInVisible !== 'boolean') return null;
   if (typeof value.href !== 'string') return null;
-  if (typeof value.inputCount !== 'number') return null;
-  if (typeof value.localLinkVisible !== 'boolean') return null;
   if (typeof value.onboardingVisible !== 'boolean') return null;
-  if (typeof value.setupPanelVisible !== 'boolean') return null;
   if (value.text != null && typeof value.text !== 'string') return null;
   if (typeof value.title !== 'string') return null;
   return value as PackagedOnboardingEvalValue;
@@ -2959,6 +2573,30 @@ function expectPathInside(filePath: string, expectedRoot: string): void {
     normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}${sep}`),
     `${normalizedPath} should be inside ${normalizedRoot}`,
   ).toBe(true);
+}
+
+async function assertMacInviteProtocolRegistration(installedAppPath: string): Promise<void> {
+  const plistPath = join(installedAppPath, 'Contents', 'Info.plist');
+  const { stdout } = await execFileAsync('/usr/bin/plutil', [
+    '-convert',
+    'json',
+    '-o',
+    '-',
+    plistPath,
+  ]);
+  const plist = JSON.parse(stdout) as {
+    CFBundleURLTypes?: Array<{ CFBundleURLSchemes?: string[] }>;
+  };
+  const schemes = (plist.CFBundleURLTypes ?? []).flatMap(
+    (entry) => entry.CFBundleURLSchemes ?? [],
+  );
+  expect(schemes).toContain('opendesign');
+}
+
+async function invokeMacInviteDeeplink(installedAppPath: string): Promise<void> {
+  // `-a` pins delivery to this namespace's installed test bundle instead of a
+  // developer's stable Open Design app that may own the same global scheme.
+  await execFileAsync('/usr/bin/open', ['-a', installedAppPath, packagedInviteDeeplink]);
 }
 
 async function pathExists(filePath: string): Promise<boolean> {

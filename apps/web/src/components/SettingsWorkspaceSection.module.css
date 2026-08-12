@@ -1,0 +1,100 @@
+/* Settings > Workspace region (E-frontend, D4.3). Shell-only: a role-gated list
+   of entry points into other lanes' workspace destinations. The destinations
+   render as TeamSlotPlaceholder until B/A/D wire their views in. */
+
+.entryList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
+  border-radius: 12px;
+  background: var(--surface-1, rgba(0, 0, 0, 0.02));
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 200ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.entry:hover:not(:disabled) {
+  background: var(--surface-2, rgba(0, 0, 0, 0.05));
+  border-color: var(--border-strong, rgba(0, 0, 0, 0.18));
+}
+
+.entry:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.entryIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: var(--surface-2, rgba(0, 0, 0, 0.06));
+  color: var(--text-secondary, rgba(0, 0, 0, 0.6));
+}
+
+.entryText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.entryText strong {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.entryText small {
+  font-size: 12px;
+  color: var(--text-secondary, rgba(0, 0, 0, 0.55));
+}
+
+.entryBack {
+  margin-bottom: 14px;
+}
+
+.locked {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--warning-border, rgba(200, 120, 0, 0.35));
+  background: var(--warning-surface, rgba(200, 120, 0, 0.08));
+}
+
+.lockedHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lockedAction {
+  align-self: flex-start;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+}

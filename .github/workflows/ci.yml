@@ -326,25 +326,34 @@ jobs:
             fi
           fi
 
-      - name: Probe watcher environment
-        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          node -e "const os=require('node:os'); console.log(JSON.stringify({node:process.version, platform:process.platform, arch:process.arch, tmpdir:os.tmpdir(), env:{NODE_ENV:process.env.NODE_ENV, VITEST:process.env.VITEST, CHOKIDAR_USEPOLLING:process.env.CHOKIDAR_USEPOLLING, CHOKIDAR_INTERVAL:process.env.CHOKIDAR_INTERVAL}}, null, 2))"
-          df -T /tmp "$RUNNER_TEMP" "$GITHUB_WORKSPACE" || true
-          mount | grep -E ' /tmp |/home/runner|_work' || true
-          cat /proc/sys/fs/inotify/max_user_watches /proc/sys/fs/inotify/max_user_instances || true
 
-      - name: Prebuild daemon entrypoint declarations
-        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
-        run: pnpm --filter @open-design/daemon build
+  daemon_unit_tests:
+    name: Daemon tests (${{ matrix.shard }}/4)
+    needs: [scopes, runners]
+    if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).workspace_unit }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
 
-      - name: Daemon workspace tests
-        if: ${{ needs.scopes.outputs.daemon_tests_required == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Configure CI parallelism
+        uses: ./.github/actions/configure-ci-parallelism
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).workspace_unit) }}
+
+      - name: Run daemon test shard
         env:
           OD_WATCHER_TEST_DEBUG: "1"
-        run: pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts
+        run: pnpm --filter @open-design/daemon test --shard=${{ matrix.shard }}/4
 
   windows_tools_pack_payload_tests:
     name: Windows tools-pack payload tests
@@ -366,11 +375,15 @@ jobs:
         run: pnpm --filter @open-design/tools-pack exec vitest run tests/launcher-payload.test.ts
 
   web_workspace_tests:
-    name: Web workspace tests
+    name: Web workspace tests (${{ matrix.shard }}/2)
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_web_workspace_tests == 'true' }}
     runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).js_hot }}
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
 
     steps:
       - name: Checkout
@@ -388,7 +401,7 @@ jobs:
         run: pnpm --filter @open-design/web build:sidecar
 
       - name: Web workspace tests
-        run: pnpm --filter @open-design/web test
+        run: pnpm --filter @open-design/web exec vitest run -c vitest.config.ts --maxWorkers=2 --shard=${{ matrix.shard }}/2
 
   e2e_vitest:
     name: E2E Vitest
@@ -477,7 +490,7 @@ jobs:
     name: UI P0 (${{ matrix.name }})
     needs: [scopes, runners]
     if: ${{ needs.scopes.outputs.run_ui_p0 == 'true' }}
-    runs-on: ${{ fromJSON(needs.runners.outputs.runs_on).ui_hot }}
+    runs-on: ${{ matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0 }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -494,14 +507,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
+          runner-labels: ${{ toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ toJSON(fromJSON(needs.runners.outputs.runs_on).ui_hot) }}
+          runner-labels: ${{ toJSON(matrix.shard == 'project-collab' && fromJSON(needs.runners.outputs.runs_on).ui_p0_heavy || fromJSON(needs.runners.outputs.runs_on).ui_p0) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -614,6 +627,7 @@ jobs:
           name: visual-pr-capture-${{ github.event.pull_request.number }}-${{ github.run_id }}-${{ matrix.name }}
           path: |
             e2e/ui/reports/visual-screenshots
+            e2e/ui/reports/visual-test-results
             e2e/ui/reports/visual-results.json
             e2e/ui/reports/visual-report/manifest.json
           if-no-files-found: ignore
@@ -626,6 +640,7 @@ jobs:
           name: visual-ci-${{ github.run_id }}-${{ matrix.name }}
           path: |
             e2e/ui/reports/visual-screenshots
+            e2e/ui/reports/visual-test-results
             e2e/ui/reports/visual-results.json
           if-no-files-found: ignore
           retention-days: 7
@@ -642,6 +657,7 @@ jobs:
       - static_gate
       - preflight
       - workspace_unit_tests
+      - daemon_unit_tests
       - windows_tools_pack_payload_tests
       - web_workspace_tests
       - e2e_vitest
@@ -653,7 +669,7 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      # The needs-validation gate below produces a `handoff/comment` artifact when it ejects a
+      # The merge-blocking label gate below produces a `handoff/comment` artifact when it ejects a
       # queued PR, and that production goes through `.github/scripts/handoff.py` (the only
       # sanctioned source of handoff names and layout). Only the merge_group context can eject,
       # so pull_request runs skip the checkout entirely.
@@ -688,6 +704,7 @@ jobs:
               ["scopes", "static_gate"]
               + when($out.run_preflight == "true"; ["preflight"])
               + when($out.run_workspace_unit_tests == "true"; ["workspace_unit_tests"])
+              + when($out.daemon_tests_required == "true"; ["daemon_unit_tests"])
               + when($out.run_windows_tools_pack_payload_tests == "true"; ["windows_tools_pack_payload_tests"])
               + when($out.run_web_workspace_tests == "true"; ["web_workspace_tests"])
               + when($out.run_e2e_vitest == "true"; ["e2e_vitest"])
@@ -704,12 +721,12 @@ jobs:
             exit 1
           fi
 
-      - name: Block merge while the needs-validation label is present
-        id: needs_validation_gate
-        # Hard gate: a PR that still carries `needs-validation` must not merge. Enforced ONLY in
-        # the merge_group (merge-queue) context — never on pull_request. main requires the merge
-        # queue, so every merge passes through merge_group; a needs-validation entry fails this
-        # step there and is ejected from the queue, so it can never land.
+      - name: Block merge while a merge-blocking label is present
+        id: merge_blocking_label_gate
+        # Hard gate: a PR that still carries `needs-validation` or `needs-maintainer-check` must
+        # not merge. Enforced ONLY in the merge_group (merge-queue) context — never on
+        # pull_request. main requires the merge queue, so every merge passes through merge_group;
+        # a labeled entry fails this step there and is ejected from the queue, so it can never land.
         #
         # Why not also fail on pull_request: that turns the PR's own required `Validate workspace`
         # check red, and a deliberately-red required check is indistinguishable from a real CI
@@ -719,7 +736,8 @@ jobs:
         # forever). The merge_group run executes on the queue's transient ref, so this failure does
         # NOT appear in the PR head's status rollup; the PR stays green until the label is cleared.
         # Fails closed: any label-lookup error blocks rather than silently waving the merge through.
-        # Respects skip-validation implicitly (that override means needs-validation is never added).
+        # `skip-validation` continues to override only the `needs-validation` producer; it has no
+        # effect on the independent maintainer-check policy.
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
@@ -735,7 +753,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$EVENT_NAME" != "merge_group" ]; then
-            echo "needs-validation is gated at merge time in the merge_group context; nothing to enforce on $EVENT_NAME (PR check stays green)."
+            echo "Merge-blocking labels are gated in the merge_group context; nothing to enforce on $EVENT_NAME (PR check stays green)."
           else
             # An ejection is invisible from the PR: this failure runs on the queue's transient
             # ref, the PR's own checks stay green, and `mergeQueueEntry` just goes null. Leave a
@@ -744,23 +762,41 @@ jobs:
             # completes. Best-effort: a handoff failure must never soften the block itself.
             emit_ejection_notice() {
               local pr="$1"
-              local pr_json pr_head pr_base handoff_id handoff_root handoff_dir marker
+              local blocking_label="$2"
+              local pr_json pr_head pr_base handoff_id handoff_root handoff_dir marker next_step
               pr_json="$(gh api "repos/$REPO/pulls/$pr")"
               pr_head="$(jq -r '.head.sha' <<< "$pr_json")"
               pr_base="$(jq -r '.base.sha' <<< "$pr_json")"
-              handoff_id="needs-validation-pr-$pr"
+              case "$blocking_label" in
+                needs-validation)
+                  handoff_id="needs-validation-pr-$pr"
+                  marker="<!-- merge-queue-needs-validation -->"
+                  # Markdown code spans are intentional literal text.
+                  # shellcheck disable=SC2016
+                  next_step='To land this PR: complete the QA pass the label is tracking, remove the `needs-validation` label, then add the PR back to the merge queue.'
+                  ;;
+                needs-maintainer-check)
+                  handoff_id="needs-maintainer-check-pr-$pr"
+                  marker="<!-- merge-queue-needs-maintainer-check -->"
+                  # Markdown code spans are intentional literal text.
+                  # shellcheck disable=SC2016
+                  next_step='To land this PR: have a maintainer complete the check, remove the `needs-maintainer-check` label, then add the PR back to the merge queue.'
+                  ;;
+                *)
+                  echo "Unsupported merge-blocking label: $blocking_label" >&2
+                  return 1
+                  ;;
+              esac
               handoff_root="$RUNNER_TEMP/handoff-comment-$handoff_id"
               handoff_dir="$(python3 .github/scripts/handoff.py dir comment "$handoff_id" --root "$handoff_root")"
               mkdir -p "$handoff_dir"
-              marker="<!-- merge-queue-needs-validation -->"
+              # Markdown code spans are intentionally literal in these single-quoted strings.
+              # shellcheck disable=SC2016
               {
                 printf '%s\n' "$marker"
-                # Markdown code spans are intentional literal text.
-                # shellcheck disable=SC2016
-                printf 'Ejected from the merge queue: this PR still carries the `needs-validation` label.\n\n'
+                printf 'Ejected from the merge queue: this PR still carries the `%s` label.\n\n' "$blocking_label"
                 printf 'The merge queue gate ([run %s](%s/%s/actions/runs/%s)) blocked the queued group because of the label. That failure runs on the queue'"'"'s transient ref, so it never appears in this PR'"'"'s own checks — they stay green, and this notice is the only visible trace on the PR.\n\n' "$RUN_ID" "$GITHUB_SERVER_URL" "$REPO" "$RUN_ID"
-                # shellcheck disable=SC2016
-                printf 'To land this PR: complete the QA pass the label is tracking, remove the `needs-validation` label, then add the PR back to the merge queue.\n'
+                printf '%s\n' "$next_step"
               } > "$handoff_dir/body.md"
               jq -n \
                 --arg kind "comment" \
@@ -824,31 +860,37 @@ jobs:
                 fi
                 covered=1
                 case " $checked " in *" $pr "*) ;; *) checked="$checked $pr";; esac
-                if printf '%s\n' "$labels" | grep -qx 'needs-validation'; then
-                  echo "::error::PR #$pr still has 'needs-validation' — blocking merge."
+                blocking_label=""
+                if printf '%s\n' "$labels" | grep -qx 'needs-maintainer-check'; then
+                  blocking_label="needs-maintainer-check"
+                elif printf '%s\n' "$labels" | grep -qx 'needs-validation'; then
+                  blocking_label="needs-validation"
+                fi
+                if [ -n "$blocking_label" ]; then
+                  echo "::error::PR #$pr still has '$blocking_label' — blocking merge."
                   # Fail-fast keeps this per-run notice on the FIRST labeled PR found; every
                   # labeled entry also fails its own queue run, so each still gets its own notice.
-                  emit_ejection_notice "$pr" || echo "::warning::could not produce the ejection-notice handoff for PR #$pr; the block itself still stands."
+                  emit_ejection_notice "$pr" "$blocking_label" || echo "::warning::could not produce the ejection-notice handoff for PR #$pr; the block itself still stands."
                   exit 1
                 fi
-                echo "PR #$pr: no needs-validation label."
+                echo "PR #$pr: no merge-blocking label."
               done
               if [ "$covered" -eq 0 ]; then
-                echo "::error::merge-group commit $sha resolved to no pull request (candidates: ${candidates:-none}) — cannot verify needs-validation; blocking merge (fail closed)."
+                echo "::error::merge-group commit $sha resolved to no pull request (candidates: ${candidates:-none}) — cannot verify merge-blocking labels; blocking merge (fail closed)."
                 exit 1
               fi
             done
-            echo "No 'needs-validation' label in the queued group ($checked ) — clear to merge."
+            echo "No merge-blocking label in the queued group ($checked ) — clear to merge."
           fi
 
       # `failure()` is required: the gate exits 1 on the very path that produces the handoff,
       # and the default `success()` condition would skip this upload exactly when it matters.
       - name: Upload merge-queue ejection notice handoff
-        if: ${{ failure() && steps.needs_validation_gate.outputs.comment_created == 'true' }}
+        if: ${{ failure() && steps.merge_blocking_label_gate.outputs.comment_created == 'true' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.needs_validation_gate.outputs.comment_name }}
-          path: ${{ steps.needs_validation_gate.outputs.comment_path }}
+          name: ${{ steps.merge_blocking_label_gate.outputs.comment_name }}
+          path: ${{ steps.merge_blocking_label_gate.outputs.comment_path }}
 
   runtime_summary:
     name: Runtime summary

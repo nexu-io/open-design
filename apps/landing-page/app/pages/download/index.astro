@@ -2,14 +2,15 @@
 /*
  * /download/ — dedicated download center.
  *
- * Auto-reflects the latest GitHub release. The platform matrix is
- * rendered at build time from `getLatestRelease()` (SEO-friendly, works
+ * Auto-reflects the latest stable release. The platform matrix is
+ * rendered at build time from `getLatestStableRelease()` (SEO-friendly, works
  * without JS); an inline enhancer detects the visitor's OS, highlights
- * the matching row, and refetches `releases/latest` to keep hrefs live
- * between rebuilds. Asset-name conventions mirror header-enhancer.astro.
+ * the matching row, and refetches the canonical R2 metadata to keep the
+ * complete visible release snapshot current between rebuilds.
  */
 import Layout from '../../_components/sub-page-layout.astro';
-import { getLatestRelease, type ReleaseAsset } from '../../_lib/github';
+import { getLatestStableRelease, type ReleaseAsset } from '../../_lib/github';
+import { RELEASE_METADATA_URL } from '../../_lib/release-metadata';
 import { getInfoPageCopy } from '../../info-page-i18n';
 import { localeFromPath, localizedHref } from '../../i18n';
 
@@ -19,7 +20,7 @@ const copy = getInfoPageCopy(locale);
 const page = copy.download;
 const common = copy.common;
 
-const release = await getLatestRelease();
+const release = await getLatestStableRelease();
 const m = release.matrix;
 const directAssets = {
   macArm64: m.macArm64Dmg?.url ?? '',
@@ -189,15 +190,19 @@ const jsonLd = [
             <span data-dl-auto-label>{page.autoCtaFallback}</span>
             <span class="dl-auto-os" data-dl-auto-os hidden></span>
           </a>
-          <a class="dl-hero-release-link" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">
+          <a class="dl-hero-release-link" href={release.releaseUrl} data-release-notes-link target="_blank" rel="noreferrer noopener">
             {page.releaseNotes} ↗
           </a>
         </div>
         <p class="dl-hero-meta">
-          <a class="inline-link" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">
-            {release.versionLabel}
+          <a class="inline-link" href={release.releaseUrl} data-release-notes-link target="_blank" rel="noreferrer noopener">
+            <span data-release-version>{release.versionLabel}</span>
           </a>
-          {publishedLabel && <span class="dl-version-date"> · {page.publishedPrefix} {publishedLabel}</span>}
+          {publishedLabel && (
+            <span class="dl-version-date">
+              {' · '}{page.publishedPrefix} <span data-release-date>{publishedLabel}</span>
+            </span>
+          )}
         </p>
       </div>
 
@@ -225,7 +230,7 @@ const jsonLd = [
             <h2 class="dl-os">{card.osLabel}</h2>
             <p class="dl-card-sub">
               {card.arch && <span class="dl-arch">{card.arch}</span>}
-              <span class="dl-card-version">{release.versionLabel}</span>
+              <span class="dl-card-version" data-release-version>{release.versionLabel}</span>
             </p>
 
             {card.rows.length > 0 && (
@@ -237,11 +242,8 @@ const jsonLd = [
                         <a class="dl-link" href={row.asset.url} data-dl-key={row.key}>
                           <span class="dl-dl-icon" aria-hidden="true">{ICON_DOWNLOAD}</span>
                           {page.downloadVerb} <strong>{row.variant}</strong>
-                          {fmtSize(row.asset.size) && <span class="dl-size">{fmtSize(row.asset.size)}</span>}
+                          {fmtSize(row.asset.size) && <span class="dl-size" data-dl-size>{fmtSize(row.asset.size)}</span>}
                         </a>
-                        {row.asset.sha256Url && (
-                          <a class="dl-sha" href={row.asset.sha256Url} target="_blank" rel="noreferrer noopener">{page.checksum}</a>
-                        )}
                       </>
                     ) : (
                       <a class="dl-link dl-link-fallback" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">
@@ -260,7 +262,7 @@ const jsonLd = [
              */}
             {card.note && (
               <p class="dl-note">
-                <a class="inline-link" href={release.releaseUrl} target="_blank" rel="noreferrer noopener">{card.note}</a>
+                <a class="inline-link" href={release.releaseUrl} data-release-notes-link target="_blank" rel="noreferrer noopener">{card.note}</a>
               </p>
             )}
           </div>
@@ -291,13 +293,20 @@ const jsonLd = [
       </div>
       <div class="info-cta-meta">
         <span class="stamp">● {common.live}</span>
-        <span>{release.versionLabel} · Apache-2.0</span>
+        <span><span data-release-version>{release.versionLabel}</span> · Apache-2.0</span>
         <span>{common.macWinLinux}</span>
       </div>
     </section>
   </article>
 
-  <script is:inline define:vars={{ autoPrefix: page.autoCtaPrefix, directAssets }}>
+  <script
+    is:inline
+    define:vars={{
+      autoPrefix: page.autoCtaPrefix,
+      directAssets,
+      releaseMetadataUrl: RELEASE_METADATA_URL,
+    }}
+  >
     (() => {
       // Download-intent analytics: capture clicks on the hero auto-CTA and on
       // every platform card link so the /download/ funnel is measurable. PostHog
@@ -325,8 +334,6 @@ const jsonLd = [
           if (auto) { fire('auto-detected', auto); return; }
         });
       })();
-
-      const REPO_API = 'https://api.github.com/repos/nexu-io/open-design';
 
       const ua = (navigator.userAgent || '').toLowerCase();
       const devicePlatform = (
@@ -380,25 +387,26 @@ const jsonLd = [
       };
 
       const platform = detect();
-      if (!platform) return;
 
       // Highlight the recommended card + set the hero CTA OS label.
-      for (const card of document.querySelectorAll('[data-dl-card]')) {
-        if (card.getAttribute('data-dl-match') === platform.matchKey) {
-          card.setAttribute('data-dl-recommended', 'true');
-          const rec = card.querySelector('[data-dl-rec]');
-          if (rec) rec.hidden = false;
+      if (platform) {
+        for (const card of document.querySelectorAll('[data-dl-card]')) {
+          if (card.getAttribute('data-dl-match') === platform.matchKey) {
+            card.setAttribute('data-dl-recommended', 'true');
+            const rec = card.querySelector('[data-dl-rec]');
+            if (rec) rec.hidden = false;
+          }
         }
+        const osSlot = document.querySelector('[data-dl-auto-os]');
+        const labelSlot = document.querySelector('[data-dl-auto-label]');
+        if (osSlot) { osSlot.textContent = ` ${platform.os}`; osSlot.hidden = false; }
+        if (labelSlot) labelSlot.textContent = autoPrefix;
       }
-      const osSlot = document.querySelector('[data-dl-auto-os]');
-      const labelSlot = document.querySelector('[data-dl-auto-label]');
-      if (osSlot) { osSlot.textContent = ` ${platform.os}`; osSlot.hidden = false; }
-      if (labelSlot) labelSlot.textContent = autoPrefix;
 
       // Use the build-time latest asset immediately, closing the short window
       // where the primary CTA could still route through the download page.
       const hero = document.querySelector('[data-dl-auto]');
-      const staticAsset = directAssets[platform.assetKey];
+      const staticAsset = platform ? directAssets[platform.assetKey] : null;
       if (hero && staticAsset) {
         hero.href = staticAsset;
         hero.setAttribute('download', '');
@@ -406,36 +414,95 @@ const jsonLd = [
         hero.removeAttribute('rel');
       }
 
-      // Live refetch: keep the hero CTA + matrix links current between rebuilds.
-      fetch(`${REPO_API}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } })
+      // Live refetch: replace the complete visible release snapshot from the
+      // canonical stable R2 metadata, so labels and links cannot drift apart.
+      fetch(releaseMetadataUrl, { headers: { Accept: 'application/json' } })
         .then((r) => (r.ok ? r.json() : null))
-        .then((release) => {
-          const assets = Array.isArray(release && release.assets) ? release.assets : [];
-          if (assets.length === 0) return;
-          const byName = (re) =>
-            assets.find((a) => a && typeof a.name === 'string' && typeof a.browser_download_url === 'string' && re(a.name));
-          const map = {
-            'mac-arm64-dmg': (n) => n.endsWith('mac-arm64.dmg'),
-            'mac-arm64-zip': (n) => n.endsWith('mac-arm64.zip'),
-            'mac-x64-dmg': (n) => n.endsWith('mac-x64.dmg'),
-            'mac-x64-zip': (n) => n.endsWith('mac-x64.zip'),
-            'win-setup': (n) => /win.*setup\.exe$/.test(n),
-            'win-portable': (n) => /win.*portable\.zip$/.test(n),
-            'linux-appimage': (n) => /\.appimage$/i.test(n),
+        .then((metadata) => {
+          if (!metadata || metadata.channel !== 'stable' || metadata.releaseState !== 'complete') return;
+          const versionMatch = typeof metadata.releaseVersion === 'string'
+            ? metadata.releaseVersion.match(/^v?(\d+\.\d+\.\d+(?:[-+][\w.-]+)?)$/)
+            : null;
+          if (!versionMatch || !metadata.platforms || typeof metadata.platforms !== 'object') return;
+          const releaseVersion = versionMatch[1];
+          const expectedTag = `open-design-v${releaseVersion}`;
+          if (metadata.versionTag !== expectedTag) return;
+          const versionPrefix = `/stable/versions/${releaseVersion}`;
+
+          const artifact = (platformKey, artifactKey) => {
+            const value = metadata.platforms?.[platformKey]?.artifacts?.[artifactKey];
+            if (!value || typeof value.url !== 'string' || !Number.isFinite(value.size) || value.size <= 0) return null;
+            try {
+              const url = new URL(value.url);
+              if (
+                url.origin !== 'https://releases.open-design.ai' ||
+                (url.pathname !== versionPrefix &&
+                  !url.pathname.startsWith(`${versionPrefix}/`) &&
+                  !url.pathname.startsWith(`${versionPrefix}.`))
+              ) return null;
+            } catch {
+              return null;
+            }
+            return { url: value.url, size: value.size };
           };
-          for (const [key, re] of Object.entries(map)) {
-            const asset = byName(re);
-            if (!asset) continue;
-            for (const link of document.querySelectorAll(`[data-dl-key="${key}"]`)) {
-              link.href = asset.browser_download_url;
+          const assets = {
+            'mac-arm64-dmg': artifact('mac', 'dmg'),
+            'mac-x64-dmg': artifact('macIntel', 'dmg'),
+            'win-setup': artifact('win', 'installer'),
+            'linux-appimage': artifact('linux', 'appImage') || artifact('linux', 'appimage'),
+          };
+          const linkUpdates = [];
+          for (const link of document.querySelectorAll('[data-dl-key]')) {
+            const key = link.getAttribute('data-dl-key');
+            const asset = key ? assets[key] : null;
+            if (!key || !asset) return;
+            linkUpdates.push({ link, asset });
+          }
+          const versionLabel = `v${releaseVersion}`;
+          const releaseDate = typeof metadata.generatedAt === 'string'
+            ? metadata.generatedAt.slice(0, 10)
+            : null;
+          const releaseUrl = `https://github.com/nexu-io/open-design/releases/tag/${encodeURIComponent(expectedTag)}`;
+          const formatSize = (bytes) => {
+            const mb = bytes / (1024 * 1024);
+            return mb >= 1 ? `${mb.toFixed(0)} MB` : `${(bytes / 1024).toFixed(0)} KB`;
+          };
+
+          for (const slot of document.querySelectorAll('[data-release-version]')) {
+            slot.textContent = versionLabel;
+          }
+          if (releaseDate) {
+            for (const slot of document.querySelectorAll('[data-release-date]')) {
+              slot.textContent = releaseDate;
             }
           }
-          const heroAsset = byName(platform.match);
+          if (releaseUrl) {
+            for (const link of document.querySelectorAll('[data-release-notes-link]')) {
+              link.href = releaseUrl;
+            }
+          }
+          for (const { link, asset } of linkUpdates) {
+            link.href = asset.url;
+            const size = link.querySelector('[data-dl-size]');
+            if (size) size.textContent = formatSize(asset.size);
+          }
+          const heroAssetKey = platform && {
+            macArm64: 'mac-arm64-dmg',
+            macX64: 'mac-x64-dmg',
+            windows: 'win-setup',
+            linux: 'linux-appimage',
+          }[platform.assetKey];
+          const heroAsset = heroAssetKey ? assets[heroAssetKey] : null;
           if (heroAsset && hero) {
-            hero.href = heroAsset.browser_download_url;
+            hero.href = heroAsset.url;
             hero.setAttribute('download', '');
             hero.removeAttribute('target');
             hero.removeAttribute('rel');
+          } else if (releaseUrl && hero) {
+            hero.href = releaseUrl;
+            hero.removeAttribute('download');
+            hero.setAttribute('target', '_blank');
+            hero.setAttribute('rel', 'noreferrer noopener');
           }
         })
         .catch(() => {});
@@ -813,8 +880,6 @@ const jsonLd = [
   .dl-link:hover .dl-dl-icon { transform: translateY(2px); }
   .dl-size { font-size: 0.74rem; opacity: 0.55; }
   /* Skill link color (颜色.md 链接/信息) instead of the UA default blue. */
-  .dl-sha { font-size: 0.68rem; opacity: 0.5; text-decoration: none; color: #1a74ff; }
-  .dl-sha:hover { opacity: 1; text-decoration: underline; }
   .dl-note {
     font-size: 0.82rem;
     opacity: 0.78;

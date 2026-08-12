@@ -183,6 +183,34 @@ describe('Langfuse message finalization gate', () => {
     expect(prompt).not.toContain('## assistant');
   });
 
+  // Issue #6239: the form-answer transition block already embeds the
+  // trimmed `currentPrompt` verbatim, so appending `body = currentPrompt`
+  // after it on the resume (skipTranscript) path shipped the submitted
+  // answers twice in the same `# User request`.
+  it('ships the submitted form answers exactly once on the resume (skipTranscript) path', () => {
+    const currentPrompt = [
+      '[form answers — discovery]',
+      '- output: Dashboard / tool UI',
+      '- brand: Pick a direction for me [value: pick_direction]',
+    ].join('\n');
+    const transcript = [
+      '## user',
+      'initial brief',
+      '',
+      '## assistant',
+      '<question-form id="discovery">…</question-form>',
+      '',
+      '## user',
+      currentPrompt,
+    ].join('\n');
+
+    const prompt = composeChatUserRequestForAgent(transcript, currentPrompt, {
+      skipTranscript: true,
+    });
+
+    expect(prompt.split(currentPrompt).length - 1).toBe(1);
+  });
+
   // The aggressive form-answered OVERRIDE block is what tells weak
   // plain agents (GPT-OSS-120B Medium, Gemini 3.5 Flash) to skip
   // RULE 1's form example on follow-up turns. We pin the trigger

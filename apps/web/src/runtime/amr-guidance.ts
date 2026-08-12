@@ -4,37 +4,130 @@
 // its own module so ChatPane / ProjectView / AssistantMessage can import it
 // without a circular dependency.
 
-// AMR model-gateway console wallet (account, balance, recharge).
+// AMR model-gateway console (account, balance, top-up, plans).
 // `source=open_design` tags the landing page_view so vela analytics can
 // attribute the visit to Open Design (per-product revenue/traffic attribution).
+//
+// The console's dashboard — not a wallet page — is the account surface every
+// entry here targets. A wallet route still answers on B's side, but it is no
+// longer part of the product's information architecture: balance, manual
+// top-up and the auto-recharge policy were all rehomed onto the dashboard
+// (vela #1055), so sending a user to /wallet would drop them on a surface the
+// product no longer navigates to.
 export const AMR_CONSOLE_URL =
-  'https://open-design.ai/amr/wallet?source=open_design';
-export const AMR_RECHARGE_URL = AMR_CONSOLE_URL;
+  'https://open-design.ai/amr/dashboard?source=open_design';
+export const DEFAULT_AMR_RECHARGE_URL = AMR_CONSOLE_URL;
+export const AMR_RECHARGE_URL = DEFAULT_AMR_RECHARGE_URL;
+
+// Path + attribution the console is always reached through, so a runtime
+// origin only has to carry the host.
+const AMR_CONSOLE_PATH = '/dashboard?source=open_design';
+
+/**
+ * The console's `billing=<intent>` value that means "open the upgrade surface
+ * that matches THIS workspace".
+ *
+ * B's dashboard resolves it against the workspace's own subscription state
+ * rather than trusting the caller: a personal owner gets the personal plan
+ * modal (the same one the console's 「升级订阅」 hero button opens), a team
+ * that never subscribed gets first-checkout, and a subscribed team gets
+ * change-plan. That is why this client links one intent for every state
+ * instead of guessing a per-state parameter — a wrong guess used to open
+ * nothing at all (recvpSQKna0LwR).
+ */
+export const AMR_CONSOLE_UPGRADE_INTENT = 'plan';
 
 const AMR_CONSOLE_URL_BY_PROFILE: Record<string, string> = {
-  prod: AMR_CONSOLE_URL,
-  test: 'https://vela.powerformer.net/wallet?source=open_design',
-  local: 'http://localhost:5173/wallet?source=open_design',
+  prod: DEFAULT_AMR_RECHARGE_URL,
+  test: 'https://vela.powerformer.net/dashboard?source=open_design',
+  local: 'http://localhost:5173/dashboard?source=open_design',
 };
+
+// Every AMR profile the packaged runtime can be built with (mirrors the daemon's
+// resolveAmrProfile allowlist). Anything else is treated as prod.
+const KNOWN_AMR_PROFILES: ReadonlySet<string> = new Set([
+  'prod',
+  'test',
+  'feature-test',
+  'local',
+]);
+
+// Console origin the daemon reported for THIS runtime (GET
+// /api/integrations/vela/status -> consoleOrigin, sourced from OD_VELA_WEB_URL).
+//
+// The web bundle ships publicly, so the hostnames of internal (non-public) AMR
+// environments are not literals in this source tree: packaging injects the
+// origin from a CI secret and the daemon hands it to the client at runtime.
+// Kept module-level rather than threaded through every caller because it is a
+// property of the runtime, not of any one call site, and it is written once per
+// status fetch (see setRuntimeAmrConsoleOrigin's single caller in
+// providers/daemon.ts).
+let runtimeAmrConsoleOrigin: string | null = null;
+
+/**
+ * Record the vela console origin the daemon reported, or clear it with a blank
+ * value. Normalizes away a trailing slash so callers can append console paths.
+ */
+export function setRuntimeAmrConsoleOrigin(origin: string | null | undefined): void {
+  const normalized = origin?.trim().replace(/\/$/, '') ?? '';
+  runtimeAmrConsoleOrigin = normalized.length > 0 ? normalized : null;
+}
 
 export function amrConsoleUrlForProfile(profile: string | null | undefined): string {
   const normalized = profile?.trim() || 'prod';
-  return AMR_CONSOLE_URL_BY_PROFILE[normalized] ?? AMR_CONSOLE_URL;
+  // prod's console is the public product URL and stays pinned to it: a runtime
+  // origin must never be able to redirect a production user's account, plan, or
+  // upgrade links somewhere else. Unrecognized profiles are treated as prod for
+  // the same reason.
+  if (normalized === 'prod' || !KNOWN_AMR_PROFILES.has(normalized)) {
+    return DEFAULT_AMR_RECHARGE_URL;
+  }
+  if (runtimeAmrConsoleOrigin) return `${runtimeAmrConsoleOrigin}${AMR_CONSOLE_PATH}`;
+  return AMR_CONSOLE_URL_BY_PROFILE[normalized] ?? DEFAULT_AMR_RECHARGE_URL;
 }
 
 export function amrRechargeUrlForProfile(profile: string | null | undefined): string {
   return amrConsoleUrlForProfile(profile);
 }
 
-// Console wallet deep-linked to open the subscription/plans modal
-// (`view=plans`), used by the "Upgrade" affordances next to the plan tier.
+function amrWorkspaceUrl(
+  profile: string | null | undefined,
+  workspaceId: string | null | undefined,
+  intent?: 'plans',
+): string | null {
+  const normalizedWorkspaceId = workspaceId?.trim();
+  if (!normalizedWorkspaceId) return null;
+  const url = new URL(amrConsoleUrlForProfile(profile));
+  url.searchParams.set('workspaceId', normalizedWorkspaceId);
+  if (intent === 'plans') url.searchParams.set('billing', AMR_CONSOLE_UPGRADE_INTENT);
+  return url.toString();
+}
+
+export function amrConsoleUrlForWorkspace(
+  profile: string | null | undefined,
+  workspaceId: string | null | undefined,
+): string | null {
+  return amrWorkspaceUrl(profile, workspaceId);
+}
+
+export function amrPlansUrlForWorkspace(
+  profile: string | null | undefined,
+  workspaceId: string | null | undefined,
+): string | null {
+  return amrWorkspaceUrl(profile, workspaceId, 'plans');
+}
+
+// Console dashboard deep-linked to open the subscription/plans modal, used by
+// the "Upgrade" affordances next to the plan tier.
 export function amrPlansUrlForProfile(profile: string | null | undefined): string {
   const base = amrConsoleUrlForProfile(profile);
-  return base.includes('?') ? `${base}&view=plans` : `${base}?view=plans`;
+  const intent = `billing=${AMR_CONSOLE_UPGRADE_INTENT}`;
+  return base.includes('?') ? `${base}&${intent}` : `${base}?${intent}`;
 }
 
 export function amrProfileBadgeLabel(profile: string | null | undefined): string | null {
   if (profile === 'test') return 'TEST';
+  if (profile === 'feature-test') return 'FEATURE TEST';
   if (profile === 'local') return 'LOCAL';
   return null;
 }
@@ -54,8 +147,8 @@ const PROMOTE_AMR_CODES = new Set<string>([
 // Primary action offered in the gray error card.
 //   - retry:                       re-run with the current agent.
 //   - authorize:                   AMR sign-in/authorize flow, then auto-retry on success.
-//   - recharge:                    open the AMR wallet (manual retry afterwards).
-//   - upgrade:                     open the AMR plans view (manual retry afterwards).
+//   - recharge:                    open the AMR console (manual retry afterwards).
+//   - upgrade:                     open the AMR plan modal (manual retry afterwards).
 //   - launch-terminal-auth:        Antigravity-specific. agy's `-p`
 //                                  print mode cannot complete Google
 //                                  Sign-In on its own (no input field

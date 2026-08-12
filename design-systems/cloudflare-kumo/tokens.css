@@ -1,0 +1,123 @@
+/* Cloudflare Kumo UI — Open Design semantic bindings.
+ * Official sources:
+ * - https://kumo-ui.com/colors/
+ * - https://github.com/cloudflare/kumo/tree/0c5832575c99988917b81cd752002e10f3dc9c7a
+ * - packages/kumo/scripts/theme-generator/config.ts at that commit
+ *
+ * Upstream token values are adapted from @cloudflare/kumo 2.9.2,
+ * Copyright (c) 2026 Cloudflare, Inc., licensed under the MIT License.
+ * This is an Open Design curated integration, not an official Cloudflare package.
+ */
+
+:root {
+  /* Kumo canvas, component base, and recessed surface. */
+  --bg: oklch(98.75% 0 0);
+  --surface: #ffffff;
+  --surface-warm: oklch(96% 0 0);
+
+  /* Kumo default and subtle text. B-slots collapse where Kumo has no matching tier. */
+  --fg: oklch(21% 0.006 285.885);
+  --fg-2: var(--fg);
+  --muted: oklch(55.6% 0 0);
+  --meta: var(--muted);
+
+  /* Kumo line and hairline roles. */
+  --border: oklch(14.5% 0 0 / 0.1);
+  --border-soft: oklch(93.5% 0 0);
+
+  /* Kumo brand background and its documented hover state. */
+  --accent: oklch(0.5772 0.2324 260);
+  --accent-on: #ffffff;
+  --accent-hover: oklch(48.8% 0.243 264.376);
+  --accent-active: var(--accent-hover);
+
+  /* Kumo solid semantic indicators. */
+  --success: oklch(59.6% 0.145 163.225);
+  --warn: oklch(73.9% 0.177 58.2);
+  --danger: oklch(63.7% 0.237 25.331);
+
+  /* Inter is used by Kumo's official documentation and Figma resources. */
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Kumo's compact 12/13/14/16 scale, extended with its inherited Tailwind heading steps. */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+  --text-4xl: 36px;
+  --leading-body: 1.5;
+  --leading-tight: 1.2;
+  --tracking-display: 0;
+
+  /* Open Design compatibility bindings aligned to Kumo's 4px utility rhythm. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 64px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+
+  /* Kumo control radii map to Tailwind sm/md/lg; pills stay fully rounded. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 9999px;
+
+  /* Ring-led elevation mirrors Kumo LayerCard composition. */
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0 1px 2px 0 oklch(0% 0 0 / 0.08);
+  --focus-ring: 0 0 0 2px oklch(15% 0 0);
+
+  /* 150ms states/dialogs and the 250ms sidebar motion are upstream values. */
+  --motion-fast: 150ms;
+  --motion-base: 250ms;
+  --ease-standard: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* Open Design layout bindings preserve Kumo's compact dashboard density. */
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}
+
+/* Kumo uses data-mode="dark". The data-theme selector keeps generated Open
+ * Design artifacts compatible with the repository's standard theme hook. */
+[data-theme="dark"],
+[data-mode="dark"] {
+  --bg: oklch(10% 0 0);
+  --surface: oklch(17% 0 0);
+  --surface-warm: oklch(15% 0 0);
+  --fg: oklch(97% 0 0);
+  --fg-2: var(--fg);
+  --muted: oklch(70.8% 0 0);
+  --meta: var(--muted);
+  --border: oklch(32% 0 0);
+  --border-soft: oklch(26.9% 0 0);
+  --accent: color-mix(in oklch, oklch(0.5772 0.2324 260), black 10%);
+  --accent-on: #ffffff;
+  --accent-hover: oklch(48.8% 0.243 264.376);
+  --accent-active: var(--accent-hover);
+  --success: oklch(76.5% 0.177 163.223);
+  --warn: oklch(64.5% 0.168 50);
+  --danger: oklch(57.7% 0.245 27.325);
+  --elev-raised: 0 1px 2px 0 oklch(0% 0 0 / 0.3);
+  --focus-ring: 0 0 0 2px oklch(93.5% 0 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+  }
+}

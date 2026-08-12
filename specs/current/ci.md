@@ -17,7 +17,9 @@ Every changed file is classified by the additive rule table in
 `scripts/scopes.ts`: effects union across matched rules, confidence is the
 minimum across matched rules. Each evaluation context brings a trust threshold:
 PR and manual-hot runs believe `medium`, the merge queue believes only
-`certain`, manual-full runs believe nothing. A file below threshold — or
+`certain`, manual-full runs believe nothing. Renames contribute both the
+current and previous filename so moving a file cannot discard the source
+path's validation effects. A file below threshold — or
 matching no rule — escalates fail-closed to the full radius.
 
 The policy floor never moves: `run_preflight` is true in every plan, and its
@@ -91,11 +93,10 @@ Requirements:
    guard report at the change that broke the premise — not a rationale that
    rotted silently years earlier. Worked example: the consumption guard
    tolerates `apps/daemon/tests/runtimes/trae-cli.test.ts` reading
-   `docs/agent-adapters.md` only while `ci.yml`'s daemon lane still runs
-   nothing but `project-watchers.test.ts` — the exception is conditional on
-   that exclusive invocation check (`workflowRunsOnlyAllowedDaemonTest` in
-   `scripts/check-certain-exempt-consumption.ts`); widening the lane revives
-   the violation and forces reclassification.
+   `docs/agent-adapters.md` because that exact document is classified as
+   daemon core. Editing the consumed document therefore runs the same full
+   daemon suite as editing its consumer; the allowlist cannot create a skipped
+   producer/consumer edge.
 
 No general demotion policy is defined. One hard rule is active: if a guard
 check is deleted or renamed, the rule-table invariant test fails CI — a

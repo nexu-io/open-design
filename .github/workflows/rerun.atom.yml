@@ -1,0 +1,69 @@
+name: rerun.atom
+
+# Atomic capability: when a completed `ci` run lost leaf jobs to runner/spot
+# cancel, request one automatic `gh run rerun --failed`. Decision logic lives in
+# `.github/scripts/rerun_infra_cancel.py` so the gate stays unit-testable and
+# checkout stays on the trusted default branch only.
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+  # Helper reads check-run annotations (infra fingerprint) and commit→pulls
+  # (live PR head). With a workflow-level permissions block, unspecified scopes
+  # default to none — omit these and real runs hit Resource not accessible.
+  checks: read
+  pull-requests: read
+
+concurrency:
+  group: rerun-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  rerun_infra_cancel:
+    name: Rerun infra-cancelled ci jobs
+    # pull_request + merge_group only. Fork PR runs are allowed when the token
+    # can rerun them; the helper no-ops cleanly when the head is stale or the
+    # fingerprint does not match.
+    if: >-
+      ${{
+        github.repository == 'nexu-io/open-design'
+        && github.event.workflow_run.name == 'ci'
+        && github.event.workflow_run.conclusion != 'success'
+        && github.event.workflow_run.conclusion != 'skipped'
+        && github.event.workflow_run.run_attempt < 2
+        && (
+          github.event.workflow_run.event == 'pull_request'
+          || github.event.workflow_run.event == 'merge_group'
+        )
+      }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout trusted workflow code
+        uses: actions/checkout@v6.0.2
+        with:
+          repository: ${{ github.repository }}
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: |
+            .github/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Self-check rerun helper
+        run: python3 .github/scripts/rerun_infra_cancel.py self-check
+
+      - name: Detect infra cancel and rerun failed jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          MAX_ATTEMPT: "2"
+        run: python3 .github/scripts/rerun_infra_cancel.py run

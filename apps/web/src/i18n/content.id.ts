@@ -959,6 +959,7 @@ export const ID_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'claymorphism': 'Bentuk 3D lembut dan membulat yang menyerupai tanah liat lentur dengan elemen ceria menggembung dan permukaan penuh warna.',
   'clean': 'Desain yang berfokus pada kesederhanaan dengan ruang kosong yang luas, tipografi yang mudah dibaca, dan palet warna terbatas untuk mengurangi kekacauan visual.',
   'clickhouse': 'Basis data analitik cepat. Bergaya dokumentasi teknis dengan aksen kuning.',
+  'cloudflare-kumo': 'Sistem komponen Cloudflare untuk aplikasi web modern: token semantik terang/gelap, tipografi Inter yang ringkas, permukaan netral berlapis, kontrol aksesibel, dan panduan warna siap bagan.',
   'cohere': 'Platform AI enterprise. Gradien yang hidup, estetika dasbor yang kaya data.',
   'coinbase': 'Bursa kripto. Identitas biru yang bersih, berfokus pada kepercayaan, bernuansa institusional.',
   'colorful': 'Palet dan gradien yang hidup serta kontras tinggi untuk pengalaman pengguna yang menarik, berkesan, dan modern.',

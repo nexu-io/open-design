@@ -12,6 +12,9 @@ od:
   mode: deck
   category: slides
   upstream: "https://github.com/zarazhangrui/frontend-slides"
+  craft:
+    requires:
+      - typography
 ---
 
 # frontend-slides

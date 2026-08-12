@@ -10,6 +10,16 @@ import { pathToFileURL } from 'node:url';
 import { Socks5ProxyAgent } from 'undici';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import * as platform from '@open-design/platform';
+
+const { resolveSystemProxyEnvMock } = vi.hoisted(() => ({
+  resolveSystemProxyEnvMock: vi.fn(() => ({})),
+}));
+
+vi.mock('@open-design/platform', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@open-design/platform')>()),
+  resolveSystemProxyEnv: resolveSystemProxyEnvMock,
+}));
+
 import {
   createAgentSink,
   isSmokeOkReply,
@@ -1498,6 +1508,63 @@ describe('POST /api/test/connection provider mode', () => {
     expect(secondBody).not.toHaveProperty('max_tokens');
   });
 
+  it('retries Azure-hosted OpenAI protocol alias connection tests when max_tokens is rejected', async () => {
+    const fetchMock = passThroughOrUpstream((url, init) => {
+      if (url.endsWith('/models')) {
+        return jsonResponse({
+          data: [{ id: 'gpt-chat-latest', object: 'model' }],
+        });
+      }
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return jsonResponse({
+          error: {
+            message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+            type: 'invalid_request_error',
+            param: 'max_tokens',
+            code: 'unsupported_parameter',
+          },
+        }, { status: 400 });
+      }
+      return jsonResponse({
+        choices: [{ message: { role: 'assistant', content: 'ok' } }],
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/test/connection`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'provider',
+        protocol: 'openai',
+        baseUrl: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+        apiKey: 'azure-key',
+        model: 'gpt-chat-latest',
+      }),
+    });
+
+    const responseBody = (await res.json()) as Record<string, unknown>;
+    expect(responseBody.ok).toBe(true);
+    const chatCalls = fetchMock.mock.calls.filter(
+      ([input]) => String(input).endsWith('/chat/completions'),
+    );
+    expect(chatCalls).toHaveLength(2);
+    const firstBody = JSON.parse(String(chatCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(chatCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({
+      model: 'gpt-chat-latest',
+      max_tokens: 100,
+      stream: false,
+    });
+    expect(secondBody).toMatchObject({
+      model: 'gpt-chat-latest',
+      max_completion_tokens: 100,
+      stream: false,
+    });
+    expect(secondBody).not.toHaveProperty('max_tokens');
+  });
+
   it('retries Azure deployment-mode connection tests with max_completion_tokens when max_tokens is rejected', async () => {
     const fetchMock = passThroughOrUpstream((_url, init) => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
@@ -2175,7 +2242,7 @@ describe('POST /api/test/connection provider mode', () => {
     const proxySpy = vi.spyOn(platform, 'resolveSystemProxyEnv').mockReturnValue({});
 
     try {
-      const { close, requestInit } = proxyDispatcherRequestInit();
+      const { close, requestInit } = proxyDispatcherRequestInit({});
 
       expect(proxySpy).toHaveBeenCalledWith();
       expect(requestInit).toEqual({});
@@ -3818,11 +3885,8 @@ process.stdin.on('end', () => {
   });
 
   it('surfaces OpenCode provider connectivity errors captured before timeout (#4999)', async () => {
-    const oldTimeout = process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
-    process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = '1500';
-    try {
-      await withFakeOpenCode(
-        `
+    await withFakeOpenCode(
+      `
 const args = process.argv.slice(2);
 if (args[0] === 'models') {
   console.log('ollama/qwen3.5-9b');
@@ -3832,28 +3896,21 @@ console.error('Cannot connect to API: Unable to connect. Is the computer able to
 console.log('UNRELATED_STDOUT_TAIL_MARKER');
 setInterval(() => {}, 1000);
 `,
-        async () => {
-          const result = await testAgentConnection({
-            agentId: 'opencode',
-            model: 'ollama/qwen3.5-9b',
-          });
+      async () => {
+        const result = await testAgentConnection({
+          agentId: 'opencode',
+          model: 'ollama/qwen3.5-9b',
+        });
 
-          expect(result.ok).toBe(false);
-          expect(result.kind).toBe('upstream_unavailable');
-          expect(result.detail).toContain('OpenCode reported a provider connectivity failure');
-          expect(result.detail).toContain('Cannot connect to API');
-          expect(result.detail).not.toContain('UNRELATED_STDOUT_TAIL_MARKER');
-          expect(result.diagnostics?.phase).toBe('connection_smoke_test');
-          expect(result.diagnostics?.stderrTail).toContain('Cannot connect to API');
-        },
-      );
-    } finally {
-      if (oldTimeout === undefined) {
-        delete process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
-      } else {
-        process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = oldTimeout;
-      }
-    }
+        expect(result.ok).toBe(false);
+        expect(result.kind).toBe('upstream_unavailable');
+        expect(result.detail).toContain('OpenCode reported a provider connectivity failure');
+        expect(result.detail).toContain('Cannot connect to API');
+        expect(result.detail).not.toContain('UNRELATED_STDOUT_TAIL_MARKER');
+        expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        expect(result.diagnostics?.stderrTail).toContain('Cannot connect to API');
+      },
+    );
   });
 
   it.each([
@@ -3870,11 +3927,8 @@ setInterval(() => {}, 1000);
   ])(
     'surfaces OpenCode provider connectivity errors from %s before timeout (#4999)',
     async (_name, stderrLine, expectedDetail) => {
-      const oldTimeout = process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
-      process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = '1500';
-      try {
-        await withFakeOpenCode(
-          `
+      await withFakeOpenCode(
+        `
 const args = process.argv.slice(2);
 if (args[0] === 'models') {
   console.log('ollama/qwen3.5-9b');
@@ -3883,25 +3937,18 @@ if (args[0] === 'models') {
 console.error(${JSON.stringify(stderrLine)});
 setInterval(() => {}, 1000);
 `,
-          async () => {
-            const result = await testAgentConnection({
-              agentId: 'opencode',
-              model: 'ollama/qwen3.5-9b',
-            });
+        async () => {
+          const result = await testAgentConnection({
+            agentId: 'opencode',
+            model: 'ollama/qwen3.5-9b',
+          });
 
-            expect(result.ok).toBe(false);
-            expect(result.kind).toBe('upstream_unavailable');
-            expect(result.detail).toContain(expectedDetail);
-            expect(result.diagnostics?.phase).toBe('connection_smoke_test');
-          },
-        );
-      } finally {
-        if (oldTimeout === undefined) {
-          delete process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS;
-        } else {
-          process.env.OD_CONNECTION_TEST_AGENT_TIMEOUT_MS = oldTimeout;
-        }
-      }
+          expect(result.ok).toBe(false);
+          expect(result.kind).toBe('upstream_unavailable');
+          expect(result.detail).toContain(expectedDetail);
+          expect(result.diagnostics?.phase).toBe('connection_smoke_test');
+        },
+      );
     },
   );
 

@@ -1,16 +1,16 @@
 import { expect, test } from '@/playwright/suite';
 import { ensureRailOpen } from '@/playwright/rail';
+import { settingsSurface } from '@/playwright/amr';
 import { routeAgents } from '@/playwright/mock-factory';
+import { T } from '@/timeouts';
 import type { Page } from '@playwright/test';
 
 const STORAGE_KEY = 'open-design:config';
-const LOCAL_CLI_LABEL = /Local CLI|本机 CLI|本地 CLI/i;
-const OPEN_SETTINGS_LABEL = /Open settings|打开设置|開啟設定/i;
 
-test.describe.configure({ timeout: 30_000 });
+test.describe.configure({ timeout: T.xlong });
 
 async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: 15_000 });
+  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: T.long });
 }
 
 async function gotoEntryHome(page: Page) {
@@ -20,7 +20,10 @@ async function gotoEntryHome(page: Page) {
   if (await privacyDialog.isVisible().catch(() => false)) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
   }
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+  // The settings button moved into the collapsed-by-default rail (#5517), so
+  // the hero is the reliable "entry is ready" signal now.
+  await expect(page.getByTestId('home-hero')).toBeVisible();
+  await expect(page.getByTestId('home-hero-input')).toBeVisible();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -95,75 +98,51 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('[P2] home topbar shows the new entry chips and links', async ({ page }) => {
+// #5517 deleted the entry topbar outright (`EntryShell` renders
+// `entry-shell--no-header` and its comment spells this out). Everything the bar
+// used to carry either moved or went away:
+//   • GitHub star badge  — `GithubStarBadge` is no longer rendered anywhere
+//   • Discord badge      — removed
+//   • "Use everywhere"   — removed; the guide keeps its Integrations tab
+//   • Settings button    — moved into the (collapsed-by-default) rail footer
+//   • Execution pill     — moved into the Home composer footer
+// The chip/link inventory and external-link-contract specs are therefore gone;
+// what remains below pins the two controls that survived, at their new homes.
+
+test('[P2] home chrome exposes the composer execution pill and the rail settings entry', async ({ page }) => {
   await gotoEntryHome(page);
 
-  const topbar = page.locator('.entry-main__topbar');
-  await expect(topbar).toBeVisible();
-
-  const star = page.getByTestId('entry-star-badge');
-  await expect(star).toBeVisible();
-  await expect(star).toHaveAttribute('href', 'https://github.com/nexu-io/open-design');
-  await expect(star).toContainText('Star');
-  await expect(star).toContainText('51.6K');
-
-  const discord = page.getByTestId('entry-discord-badge');
-  await expect(discord).toBeVisible();
-  await expect(discord).toHaveAttribute('href', 'https://discord.gg/mHAjSMV6gz');
-  await expect(discord).toContainText('Join Discord');
-
+  await expect(page.locator('.entry-main__topbar')).toHaveCount(0);
   await expect(page.getByTestId('inline-model-switcher-chip')).toBeVisible();
-  await expect(page.getByTestId('entry-use-everywhere-button')).toBeVisible();
-  await expect(page.getByRole('button', { name: OPEN_SETTINGS_LABEL })).toBeVisible();
+
+  await ensureRailOpen(page);
+  await expect(page.getByTestId('entry-settings-button')).toBeVisible();
 });
 
-test('[P1] home topbar execution pill reflects the selected Local CLI agent and opens the switcher', async ({ page }) => {
+test('[P1] home execution pill reflects the selected Local CLI agent and opens the switcher', async ({ page }) => {
   await gotoEntryHome(page);
 
+  // The composer pill is icon-only now: the selected agent + model live on its
+  // accessible name / tooltip rather than in visible text.
   const pill = page.getByTestId('inline-model-switcher-chip');
-  await expect(pill).toContainText(LOCAL_CLI_LABEL);
-  await expect(pill).toContainText(/Codex CLI/i);
-  await expect(pill).toContainText(/default/i);
+  await expect(pill).toHaveAttribute('aria-label', /Codex CLI/i);
+  await expect(pill).toHaveAttribute('aria-label', /default/i);
 
   await pill.click();
 
   const popover = page.getByTestId('inline-model-switcher-popover');
   await expect(popover).toBeVisible();
-  await expect(page.getByTestId('inline-model-switcher-mode-daemon')).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  await expect(page.getByTestId('inline-model-switcher-agent-codex')).toBeVisible();
-  await expect(page.getByTestId('inline-model-switcher-agent-mock')).toBeVisible();
-  await expect(popover.getByRole('radio', { name: /Codex CLI/i })).toBeVisible();
+  // The composer's switcher is the compact variant: it drops the Local CLI /
+  // BYOK segmented control and the full agent list, opening straight on the
+  // CURRENT agent's models plus an entry into the execution settings where a
+  // different agent is chosen.
+  await expect(popover.getByTestId('inline-model-switcher-compact-model-default')).toBeVisible();
+  await expect(popover.getByTestId('inline-model-switcher-mode-daemon')).toHaveCount(0);
+  await expect(popover.getByTestId('inline-model-switcher-agent-codex')).toHaveCount(0);
+  await expect(popover.getByTestId('inline-model-switcher-open-settings')).toBeVisible();
 });
 
-test('[P2] home topbar star and discord badges expose the current external-link contract', async ({ page }) => {
-  await gotoEntryHome(page);
-
-  const star = page.getByTestId('entry-star-badge');
-  await expect(star).toHaveAttribute('target', '_blank');
-  await expect(star).toHaveAttribute('rel', /noreferrer/);
-  await expect(star).toHaveAttribute('rel', /noopener/);
-
-  const discord = page.getByTestId('entry-discord-badge');
-  await expect(discord).toHaveAttribute('href', 'https://discord.gg/mHAjSMV6gz');
-  await expect(discord).toHaveAttribute('aria-label', /Join the Open Design Discord/i);
-  await expect(discord).toHaveAttribute('data-tooltip', /Join the Open Design Discord/i);
-});
-
-test('[P2] home topbar Use everywhere navigates to Integrations with the tab selected', async ({ page }) => {
-  await gotoEntryHome(page);
-
-  await page.getByTestId('entry-use-everywhere-button').click();
-  await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
-  await expect(page.getByTestId('integrations-tab-use-everywhere')).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-});
-
-test('[P1] home topbar settings menu opens settings and closes the execution popover', async ({ page }) => {
+test('[P1] rail settings entry opens settings and closes the execution popover', async ({ page }) => {
   await gotoEntryHome(page);
 
   const pill = page.getByTestId('inline-model-switcher-chip');
@@ -172,22 +151,20 @@ test('[P1] home topbar settings menu opens settings and closes the execution pop
   await pill.click();
   await expect(popover).toBeVisible();
 
-  await page.getByRole('button', { name: OPEN_SETTINGS_LABEL }).click();
+  // Settings is a rail nav item now, so the rail has to be expanded before it
+  // is interactive (collapsed the rail is `inert`).
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-settings-button').click();
+  await expect(settingsSurface(page)).toBeVisible();
   await expect(popover).toHaveCount(0);
-  await expect(page.getByTestId('entry-settings-menu')).toBeVisible();
-
-  await page.getByTestId('entry-settings-open-details').click();
-  const settings = page.locator('.modal-settings');
-  await expect(settings).toBeVisible();
-  await expect(settings.getByRole('heading', { name: 'Execution mode' })).toBeVisible();
-  await expect(page.getByTestId('entry-settings-menu')).toHaveCount(0);
 });
 
 test('[P2] returning from another entry view via the home nav reaches the home hero', async ({ page }) => {
   await gotoEntryHome(page);
 
-  await page.getByTestId('entry-use-everywhere-button').click();
-  await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
+  await ensureRailOpen(page);
+  await page.getByTestId('entry-nav-design-systems').click();
+  await expect(page).toHaveURL(/\/design-systems$/);
 
   // The logo doubles as a hover-to-collapse control now, so home is reached
   // through the explicit Home nav item rather than clicking the brand mark.
@@ -195,6 +172,5 @@ test('[P2] returning from another entry view via the home nav reaches the home h
   await page.getByTestId('entry-nav-home').click();
   await expect(page.getByTestId('home-hero')).toBeVisible();
   await expect(page.getByTestId('home-hero-input')).toBeVisible();
-  await expect(page.getByTestId('home-hero-type-tabs')).toBeVisible();
-  await expect(page.getByTestId('entry-star-badge')).toBeVisible();
+  await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
 });

@@ -1,10 +1,10 @@
 /*
- * `/open-design-pugin/` — localized product-page copy.
+ * `/codex-plugin/` — localized product-page copy.
  *
  * English is the authoritative source. Every active non-English landing
  * locale provides a complete, structurally identical copy object in
- * `open-design-plugin-locales/`; product names, URLs, install instructions,
- * prompts, asset paths and numeric facts remain in the page component.
+ * `open-design-plugin-locales/`; product names, URLs, command lines, prompts,
+ * asset paths and numeric facts remain in the page component.
  */
 import type { LandingLocaleCode } from './i18n';
 import { OPEN_DESIGN_PLUGIN_TRANSLATIONS } from './open-design-plugin-locales';
@@ -116,7 +116,7 @@ export const OPEN_DESIGN_PLUGIN_EN: OpenDesignPluginCopy = {
     chatgptLabel: 'ChatGPT desktop app',
     installAria: 'Install Open Design Cloud in Codex/ChatGPT',
     copy: 'Copy',
-    github: 'View source on GitHub ↗',
+    github: 'View installation guide on GitHub ↗',
   },
   demo: {
     title: 'Install once. Create from Codex/ChatGPT.',
@@ -131,7 +131,7 @@ export const OPEN_DESIGN_PLUGIN_EN: OpenDesignPluginCopy = {
     installPhase: 'Install',
     installTitle: 'Ask Codex to install it',
     installBody:
-      'Paste this instruction into a Codex task. Codex reads the repository’s install lane and completes the plugin and local MCP setup without relying on a public marketplace listing.',
+      'Paste this instruction into a Codex task. Codex adds the canonical Git marketplace source, installs the plugin only if it is missing and completes the local MCP setup without requiring a public catalog listing.',
     installNote: 'Paste into Codex once—the installation details are handled for you.',
     steps: [
       {

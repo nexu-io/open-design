@@ -320,12 +320,27 @@ function hasNonEmptyEnv(env: RuntimeEnv, keys: string[]): boolean {
   });
 }
 
-function hasProbeSatisfyingApiKey(agentId: string, env: RuntimeEnv): boolean {
+const CLAUDE_ENTERPRISE_PROVIDER_FLAGS = [
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_USE_VERTEX',
+] as const;
+
+// `claude auth status` reports Claude.ai credentials only. An explicitly
+// enabled enterprise provider is therefore the authoritative authentication
+// path and must not be mistaken for a missing Claude.ai login.
+function hasClaudeEnterpriseProviderAuth(env: RuntimeEnv): boolean {
+  return CLAUDE_ENTERPRISE_PROVIDER_FLAGS.some((key) => env[key] === '1');
+}
+
+function hasProbeSatisfyingAuth(agentId: string, env: RuntimeEnv): boolean {
   if (agentId === 'codex') {
     return hasNonEmptyEnv(env, ['CODEX_API_KEY', 'OPENAI_API_KEY']);
   }
   if (agentId === 'claude') {
-    return hasNonEmptyEnv(env, ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']);
+    return (
+      hasNonEmptyEnv(env, ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']) ||
+      hasClaudeEnterpriseProviderAuth(env)
+    );
   }
   return false;
 }
@@ -367,7 +382,7 @@ export async function probeAgentAuthStatus(
   // through to the generic classifier (#4456).
   const classifierId = probe.classifierAgentId ?? def.id;
   const agentName = def.name || def.id;
-  if (hasProbeSatisfyingApiKey(classifierId, env)) return { status: 'ok' };
+  if (hasProbeSatisfyingAuth(classifierId, env)) return { status: 'ok' };
   // Codex custom providers authenticate via a provider-specific `env_key` (e.g.
   // AZURE_OPENAI_API_KEY) declared in config.toml, even when `codex login
   // status` (a ChatGPT/OpenAI-login check) exits non-zero. Honor that key so a

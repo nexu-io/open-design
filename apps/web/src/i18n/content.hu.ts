@@ -959,6 +959,7 @@ export const HU_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'claymorphism': 'Lágy, lekerekített, 3D-szerű formák, amelyek a formálható agyagot idézik, játékos, pufók elemekkel és színes felületekkel.',
   'clean': 'Egyszerűségre összpontosító dizájn bőséges üres terekkel, jól olvasható tipográfiával és korlátozott színpalettával a vizuális zsúfoltság csökkentésére.',
   'clickhouse': 'Gyors analitikai adatbázis. Sárga kiemelésű, technikai dokumentációs stílus.',
+  'cloudflare-kumo': 'A Cloudflare komponensrendszere modern webalkalmazásokhoz: szemantikus világos/sötét tokenek, kompakt Inter tipográfia, rétegzett semleges felületek, akadálymentes vezérlők és diagramokhoz készült színútmutató.',
   'cohere': 'Vállalati AI-platform. Élénk színátmenetek, adatgazdag irányítópult-esztétika.',
   'coinbase': 'Kriptotőzsde. Letisztult kék arculat, bizalomközpontú, intézményi érzet.',
   'colorful': 'Élénk, nagy kontrasztú paletták és színátmenetek a magával ragadó, emlékezetes és modern felhasználói élményért.',

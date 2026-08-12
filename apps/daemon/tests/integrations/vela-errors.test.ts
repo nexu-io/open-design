@@ -9,6 +9,18 @@ import {
 } from '../../src/integrations/vela-errors.js';
 
 describe('AMR account failure classification', () => {
+  // The recharge link the daemon hands to the client is a real destination a
+  // user clicks. Product retired the console's wallet page — balance and manual
+  // top-up report on its dashboard now (vela #1055) — so pin the literal here:
+  // every other assertion in this file references the constant symbolically and
+  // would keep passing while pointing users at a surface the product no longer
+  // navigates to.
+  it('points the recharge link at the console dashboard, not a wallet page', () => {
+    expect(DEFAULT_AMR_RECHARGE_URL).toBe(
+      'https://open-design.ai/amr/dashboard?source=open_design',
+    );
+  });
+
   it('classifies insufficient_balance JSON-RPC failures as rechargeable AMR balance errors', () => {
     const failure = classifyAmrAccountFailure(
       'JSON-RPC error -32000: {"code":"insufficient_balance","message":"insufficient balance"}',

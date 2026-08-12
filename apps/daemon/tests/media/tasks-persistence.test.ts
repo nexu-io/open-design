@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import {
   deleteMediaTask,
@@ -10,6 +10,8 @@ import {
   reconcileMediaTasksOnBoot,
   updateMediaTask,
 } from '../../src/media/tasks.js';
+import { createMediaTaskStore, TASK_TTL_AFTER_DONE_MS } from '../../src/media/task-store.js';
+import { resolveChatToolTokenTtlMs, ToolTokenRegistry } from '../../src/tool-tokens.js';
 
 function freshDb(): Database.Database {
   const db = new Database(':memory:');
@@ -30,6 +32,42 @@ function freshDb(): Database.Database {
 }
 
 describe('media task persistence', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('retains a terminal task while its owning run token stays active', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    const registry = new ToolTokenRegistry();
+    const runId = 'run-active';
+    const tokenTtlMs = resolveChatToolTokenTtlMs(30 * 60 * 1000);
+    const grant = registry.mint({ runId, projectId: 'p1', ttlMs: tokenTtlMs });
+    const store = createMediaTaskStore(db, {
+      isRunActive: (candidateRunId) => registry.activeRunTokenCount(candidateRunId) > 0,
+    });
+    const task = store.createMediaTask('terminal-task', 'p1', { runId });
+    task.status = 'done';
+    task.endedAt = Date.now();
+    store.persistMediaTask(task);
+    store.notifyTaskWaiters(task);
+
+    vi.advanceTimersByTime(30 * 60 * 1000);
+    registry.refreshToken(grant.token, { ttlMs: tokenTtlMs });
+    vi.advanceTimersByTime(30 * 60 * 1000);
+    registry.refreshToken(grant.token, { ttlMs: tokenTtlMs });
+    vi.advanceTimersByTime(10 * 60 * 1000);
+
+    expect(Date.now()).toBeGreaterThan(TASK_TTL_AFTER_DONE_MS);
+    expect(store.getLiveMediaTask(task.id)?.status).toBe('done');
+    expect(getMediaTask(db, task.id)?.status).toBe('done');
+
+    registry.revokeRun(runId, 'child_exit');
+    vi.advanceTimersByTime(TASK_TTL_AFTER_DONE_MS - 10 * 60 * 1000);
+    expect(store.getLiveMediaTask(task.id)).toBeNull();
+    expect(getMediaTask(db, task.id)).toBeNull();
+  });
+
   let db: Database.Database;
 
   beforeEach(() => {

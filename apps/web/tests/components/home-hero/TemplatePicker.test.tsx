@@ -57,8 +57,8 @@ describe('TemplatePicker', () => {
     const reset = screen.getByTestId('home-hero-template-reset');
     const resetIcon = reset.querySelector('svg');
     expect(resetIcon).not.toBeNull();
-    expect(resetIcon?.getAttribute('width')).toBe('11');
-    expect(resetIcon?.getAttribute('height')).toBe('11');
+    expect(resetIcon?.getAttribute('width')).toBe('16');
+    expect(resetIcon?.getAttribute('height')).toBe('16');
 
     fireEvent.click(reset);
     expect(onClear).toHaveBeenCalledTimes(1);
@@ -77,6 +77,9 @@ describe('TemplatePicker', () => {
 
     expect(screen.getByTestId('home-hero-template-picker').className).not.toContain('has-selection');
     expect(screen.queryByTestId('home-hero-template-reset')).toBeNull();
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('None');
+    // #5517 dropped the explicit "None" placeholder at rest — the gray
+    // "Creation type" kicker alone reads as the empty state, and the label slot
+    // only appears once a template is selected.
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Creation type');
   });
 });

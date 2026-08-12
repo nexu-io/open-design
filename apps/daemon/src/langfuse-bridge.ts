@@ -12,7 +12,11 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 
-import { modelIdForTracking } from '@open-design/contracts/analytics';
+import {
+  modelIdForTracking,
+  type TrackingRunCancelOrigin,
+  type TrackingRunTerminalTrigger,
+} from '@open-design/contracts/analytics';
 
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import type { AppVersionInfo } from './app-version.js';
@@ -76,6 +80,8 @@ interface DaemonRunRecord {
   signal?: string | null;
   error?: string | null;
   errorCode?: string | null;
+  cancelOrigin?: TrackingRunCancelOrigin | null;
+  terminalTrigger?: TrackingRunTerminalTrigger | null;
   analyticsTelemetry?: RunTelemetryTimestamps | null;
   createdAt: number;
   updatedAt: number;
@@ -552,6 +558,7 @@ function collectAgentEvents(
         typeof data.label === 'string' && data.label.length > 0
           ? data.label
           : 'working';
+      if (label === 'tool_call' || label === 'tool_call_update') continue;
       const index = statusCounts.get(label) ?? 0;
       statusCounts.set(label, index + 1);
       out.push({
@@ -1060,6 +1067,8 @@ export async function reportRunCompletedFromDaemon(
       },
       ...(errorCode ? { errorCode } : {}),
       agentId: run.agentId,
+      cancelOrigin: run.cancelOrigin ?? null,
+      terminalTrigger: run.terminalTrigger ?? null,
       events: run.events,
     });
     const timings = summarizeRunTimingAnalytics({

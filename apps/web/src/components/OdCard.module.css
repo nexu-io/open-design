@@ -68,7 +68,7 @@
 
 .briefTitle {
   margin: 0 0 10px;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -84,7 +84,7 @@
 }
 
 .briefField dt {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -213,7 +213,7 @@
   align-items: center;
   padding: 2px 9px;
   border-radius: var(--radius-pill, 999px);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.3px;
   text-transform: uppercase;
@@ -320,7 +320,35 @@
   color: var(--text-muted);
 }
 
-/* ----- rule-proposal details ------------------------------------------- */
+/* ----- rule-proposal: name/assertion/check/rationale + actions ----------- */
+
+.ruleCard {
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-panel);
+  color: var(--text);
+}
+
+.ruleHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ruleHeadIcon {
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.ruleKicker {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 
 .ruleSummary {
   display: flex;
@@ -330,14 +358,14 @@
 
 .ruleName {
   margin: 0;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-strong);
 }
 
 .ruleDescription {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-muted);
   line-height: 1.45;
 }
@@ -354,7 +382,7 @@
 }
 
 .ruleFacts dt {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -379,7 +407,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -390,7 +418,7 @@
 .ruleFieldLabel textarea {
   width: 100%;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
   letter-spacing: normal;
   text-transform: none;
   color: var(--text);
@@ -410,7 +438,7 @@
 }
 
 .ruleAction {
-  font-size: 12.5px;
+  font-size: 13px;
   padding: 5px 12px;
 }
 

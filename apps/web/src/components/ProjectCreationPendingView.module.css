@@ -1,0 +1,41 @@
+.split {
+  height: 100%;
+}
+
+.chatPane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--veil-panel);
+}
+
+.workspace {
+  grid-column: 3;
+}
+
+.addIcon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+}
+
+.workspaceBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 18px;
+  padding: 28px 24px;
+}
+
+.workspaceTitle {
+  color: var(--text-strong);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.workspaceEmpty {
+  color: var(--text-faint);
+  font-size: 13px;
+}

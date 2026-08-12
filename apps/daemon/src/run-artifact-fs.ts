@@ -27,7 +27,32 @@ import {
 // (`DESIGN.md`). Preview modules (`preview/*.html`) are already covered by the
 // artifact-extension check; they are classified at diff time.
 function isTrackedRunFile(name: string): boolean {
-  return isArtifactPath(name) || isDesignSystemFile(name);
+  return isArtifactPath(name) || isDesignSystemFile(name) || isRenderDependencyPath(name);
+}
+
+const RENDER_DEPENDENCY_EXTENSIONS = new Set([
+  '.css',
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+]);
+
+const SUPPORTING_MEDIA_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.avif', '.svg',
+  '.mp4', '.mov', '.webm', '.mp3', '.wav', '.m4a',
+]);
+
+function extensionOf(filePath: string): string {
+  return path.extname(filePath).toLowerCase();
+}
+
+function isRenderDependencyPath(filePath: string): boolean {
+  return RENDER_DEPENDENCY_EXTENSIONS.has(extensionOf(filePath));
+}
+
+function isSupportingMediaPath(filePath: string): boolean {
+  return SUPPORTING_MEDIA_EXTENSIONS.has(extensionOf(filePath));
 }
 
 export interface ArtifactFingerprint {
@@ -51,6 +76,22 @@ function fingerprintFile(full: string, size: number, mtimeMs: number): ArtifactF
   if (size <= HASH_MAX_BYTES) {
     try {
       hash = createHash('sha1').update(fs.readFileSync(full)).digest('hex');
+    } catch {
+      hash = null;
+    }
+  }
+  return { size, mtimeMs, hash };
+}
+
+async function fingerprintFileAsync(
+  full: string,
+  size: number,
+  mtimeMs: number,
+): Promise<ArtifactFingerprint> {
+  let hash: string | null = null;
+  if (size <= HASH_MAX_BYTES) {
+    try {
+      hash = createHash('sha1').update(await fs.promises.readFile(full)).digest('hex');
     } catch {
       hash = null;
     }
@@ -112,6 +153,68 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
   return snapshot;
 }
 
+// Async counterpart used by the normal run start/finish path. It deliberately
+// preserves the synchronous snapshot's traversal order, cap, filtering, and
+// best-effort error behavior; the only difference is that directory, stat, and
+// content reads yield the daemon event loop instead of pausing unrelated HTTP
+// and SSE traffic while a large project is scanned.
+export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<ArtifactSnapshot> {
+  const snapshot: ArtifactSnapshot = new Map();
+  const trackedFiles: string[] = [];
+  const walk = async (dir: string): Promise<void> => {
+    if (trackedFiles.length >= MAX_FILES) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (trackedFiles.length >= MAX_FILES) return;
+      if (entry.isDirectory()) {
+        if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
+        await walk(path.join(dir, entry.name));
+      } else if (entry.isFile() && isTrackedRunFile(entry.name)) {
+        trackedFiles.push(path.join(dir, entry.name));
+      }
+    }
+  };
+  await walk(rootDir);
+
+  // A small worker pool prevents a 5k-file project from turning the async
+  // safety fix into a long serial tail, while still bounding filesystem load.
+  // Results are committed in traversal order so diff output remains stable.
+  const fingerprints = new Array<readonly [string, ArtifactFingerprint] | null>(trackedFiles.length);
+  let nextIndex = 0;
+  const fingerprintWorker = async (): Promise<void> => {
+    for (;;) {
+      const index = nextIndex;
+      if (index >= trackedFiles.length) return;
+      nextIndex += 1;
+      const full = trackedFiles[index]!;
+      try {
+        const stat = await fs.promises.stat(full);
+        fingerprints[index] = [
+          full,
+          await fingerprintFileAsync(full, stat.size, stat.mtimeMs),
+        ];
+      } catch {
+        fingerprints[index] = null;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(16, trackedFiles.length) },
+      () => fingerprintWorker(),
+    ),
+  );
+  for (const fingerprint of fingerprints) {
+    if (fingerprint) snapshot.set(fingerprint[0], fingerprint[1]);
+  }
+  return snapshot;
+}
+
 export interface RunArtifactDiff {
   // Artifact files (HTML / image / video / audio) present after the run but not
   // before. `DESIGN.md` is NOT an artifact extension and is excluded here.
@@ -134,6 +237,19 @@ export interface RunArtifactDiff {
   // that need per-file side effects, such as HTML version snapshots, can filter
   // this list without re-walking the project tree.
   touchedPaths: string[];
+  // Content-only v4 counters. For hashable files, a timestamp-only rewrite is
+  // excluded; the legacy counters above intentionally keep their old mtime
+  // semantics during the compatibility window.
+  contentCreated: number;
+  contentModified: number;
+  contentTouched: number;
+  contentTouchedPaths: string[];
+  // HTML rendering dependencies are not legacy artifacts, but changing them
+  // can visibly modify the primary preview and must inform
+  // primary_artifact_change.
+  renderDependencyTouched: number;
+  renderDependencyTouchedPaths: string[];
+  supportingMediaTouched: number;
 }
 
 // Classify created vs modified tracked files between two snapshots into the
@@ -149,6 +265,12 @@ export function diffRunArtifacts(
   let previewModuleCount = 0;
   let designSystemCreated = false;
   const touchedPaths: string[] = [];
+  let contentCreated = 0;
+  let contentModified = 0;
+  let renderDependencyTouched = 0;
+  let supportingMediaTouched = 0;
+  const contentTouchedPaths: string[] = [];
+  const renderDependencyTouchedPaths: string[] = [];
   for (const [filePath, fingerprint] of after) {
     const prior = before.get(filePath);
     const isNew = !prior;
@@ -158,6 +280,11 @@ export function diffRunArtifacts(
         prior.mtimeMs !== fingerprint.mtimeMs ||
         prior.hash !== fingerprint.hash);
     if (!isNew && !isChanged) continue;
+    const contentChanged = isNew || (!!prior && (
+      prior.hash !== null && fingerprint.hash !== null
+        ? prior.hash !== fingerprint.hash
+        : prior.size !== fingerprint.size || prior.mtimeMs !== fingerprint.mtimeMs
+    ));
     // Snapshot keys are native paths (`path.join` → backslashes on Windows),
     // but `isPreviewModulePath` / `isDesignSystemFile` match forward slashes
     // only. Normalize separators so the design-system / preview signals work on
@@ -167,6 +294,16 @@ export function diffRunArtifacts(
       if (isNew) created += 1;
       else modified += 1;
       touchedPaths.push(filePath);
+      if (contentChanged) {
+        if (isNew) contentCreated += 1;
+        else contentModified += 1;
+        contentTouchedPaths.push(filePath);
+        if (isSupportingMediaPath(classifyPath)) supportingMediaTouched += 1;
+      }
+    }
+    if (contentChanged && isRenderDependencyPath(classifyPath)) {
+      renderDependencyTouched += 1;
+      renderDependencyTouchedPaths.push(filePath);
     }
     if (isPreviewModulePath(classifyPath)) previewModuleCount += 1;
     if (isDesignSystemFile(classifyPath)) designSystemCreated = true;
@@ -178,7 +315,69 @@ export function diffRunArtifacts(
     designSystemCreated,
     previewModuleCount,
     touchedPaths,
+    contentCreated,
+    contentModified,
+    contentTouched: contentCreated + contentModified,
+    contentTouchedPaths,
+    renderDependencyTouched,
+    renderDependencyTouchedPaths,
+    supportingMediaTouched,
   };
+}
+
+export type PrimaryArtifactChange = 'none' | 'created' | 'modified';
+
+export function primaryArtifactChangeForRun(input: {
+  diff: RunArtifactDiff;
+  projectKind: string | null;
+  hadExistingArtifacts: boolean;
+  interactionMode?: string;
+  clarificationRequested: boolean;
+}): PrimaryArtifactChange | undefined {
+  if (
+    input.projectKind === 'design_system'
+    || input.interactionMode === 'ask'
+    || input.interactionMode === 'plan'
+    || input.clarificationRequested
+  ) {
+    return undefined;
+  }
+
+  const changed = (() => {
+    switch (input.projectKind) {
+      case 'prototype':
+      case 'live_artifact':
+      case 'slide_deck':
+      case 'template':
+        return input.diff.contentTouchedPaths.some((filePath) => /\.html?$/i.test(filePath))
+          || input.diff.renderDependencyTouched > 0;
+      case 'image':
+        return input.diff.contentTouchedPaths.some((filePath) =>
+          /\.(?:png|jpe?g|gif|webp|avif|svg)$/i.test(filePath));
+      case 'video':
+        return input.diff.contentTouchedPaths.some((filePath) =>
+          /\.(?:mp4|mov|webm)$/i.test(filePath));
+      case 'audio':
+        return input.diff.contentTouchedPaths.some((filePath) =>
+          /\.(?:mp3|wav|m4a)$/i.test(filePath));
+      default:
+        return input.diff.contentTouched > 0 || input.diff.renderDependencyTouched > 0;
+    }
+  })();
+  if (!changed) return 'none';
+  return input.hadExistingArtifacts ? 'modified' : 'created';
+}
+
+export function supportingAssetFilesChangedForRun(
+  diff: RunArtifactDiff,
+  projectKind: string | null,
+): number | undefined {
+  return projectKind === 'prototype'
+    || projectKind === 'live_artifact'
+    || projectKind === 'slide_deck'
+    || projectKind === 'template'
+    ? diff.supportingMediaTouched
+    : undefined;
 }
 
 export interface RunArtifactBaseline {

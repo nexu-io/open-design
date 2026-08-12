@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { UserActionCard } from '../../src/components/UserActionCard';
 
@@ -37,5 +37,41 @@ describe('UserActionCard', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(disclosure?.classList.contains('open')).toBe(true);
     expect(details?.hasAttribute('inert')).toBe(false);
+  });
+
+  it('keeps full localized recovery labels actionable in the footer', () => {
+    const onRecharge = vi.fn();
+    const onRetry = vi.fn();
+
+    const { container } = render(
+      <UserActionCard
+        dataKind="run-recovery"
+        icon="alert-triangle"
+        title="余额不足"
+        footerActions={
+          <>
+            <button type="button" onClick={onRecharge}>
+              为 Open Design Cloud 充值
+            </button>
+            <button type="button" onClick={onRetry}>
+              Retry the Open Design Cloud request
+            </button>
+          </>
+        }
+      />,
+    );
+
+    const footer = container.querySelector('[data-user-action-footer="true"]');
+    const recharge = screen.getByRole('button', { name: '为 Open Design Cloud 充值' });
+    const retry = screen.getByRole('button', {
+      name: 'Retry the Open Design Cloud request',
+    });
+    expect(footer?.contains(recharge)).toBe(true);
+    expect(footer?.contains(retry)).toBe(true);
+
+    fireEvent.click(recharge);
+    fireEvent.click(retry);
+    expect(onRecharge).toHaveBeenCalledOnce();
+    expect(onRetry).toHaveBeenCalledOnce();
   });
 });

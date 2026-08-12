@@ -67,6 +67,13 @@ export interface ResolveSnapshotInput {
   // plugins that declared `od.context.designSystem.primary: true` get
   // bound to the project's DS at apply time.
   activeProjectDesignSystem?: { id: string; title?: string } | undefined;
+  /**
+   * Run creation may only reuse a snapshot already pinned to the same
+   * project. Project creation deliberately leaves this false because it can
+   * create a fresh snapshot, while run routes set it after project authority
+   * has been established.
+   */
+  requireSnapshotProjectMatch?: boolean | undefined;
 }
 
 export interface ResolveSnapshotOk {
@@ -167,6 +174,25 @@ export function resolvePluginSnapshot(input: ResolveSnapshotInput): ResolveSnaps
           },
         },
       };
+    }
+    if (input.requireSnapshotProjectMatch) {
+      const row = input.db
+        .prepare('SELECT project_id AS projectId FROM applied_plugin_snapshots WHERE id = ?')
+        .get(fields.snapshotId) as { projectId?: unknown } | undefined;
+      if (row?.projectId !== input.projectId) {
+        return {
+          ok: false,
+          status: 404,
+          exitCode: 65,
+          body: {
+            error: {
+              code: 'snapshot-not-found',
+              message: `Applied plugin snapshot ${fields.snapshotId} not found`,
+              data: { snapshotId: fields.snapshotId },
+            },
+          },
+        };
+      }
     }
     if (snapshot.status === 'stale') {
       return {

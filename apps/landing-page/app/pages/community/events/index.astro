@@ -30,6 +30,28 @@ const jsonLd = {
       </div>
     </section>
 
+
+    <section class="events-section events-lead">
+      <a class="event-launch" href="/community/events/launch-week/">
+        <span class="event-launch-media">
+          <img
+            src="/launch-week/launch-week-card.jpg"
+            alt="Open Design Launch Week Vol.01"
+            loading="eager"
+          />
+        </span>
+        <span class="event-launch-copy">
+          <span class="event-pill">Happening now · Aug 10–14</span>
+          <strong class="event-launch-title">Launch Week <span>Vol.01</span></strong>
+          <span class="event-launch-body">
+            Five days, five design jobs, one launch a day — each one aimed at a tool
+            your team already pays for.
+          </span>
+          <span class="event-launch-link">See the lineup -></span>
+        </span>
+      </a>
+    </section>
+
     <section class="events-section">
       <div class="events-wrap">
         <div class="events-section-head">
@@ -89,6 +111,78 @@ const jsonLd = {
   </main>
 
   <style is:global>
+    /* Launch Week lead band — the flagship event carries its own campaign
+       language (ink, acid, condensed display) so it reads as the headline
+       rather than one more card in a neutral list. */
+    .events-lead { padding-top: 34px; }
+    .event-launch {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1.32fr) minmax(0, 1fr);
+      align-items: stretch;
+      width: min(1100px, calc(100% - 40px));
+      margin: 0 auto;
+      overflow: hidden;
+      color: var(--event-ink);
+      background: #fff;
+      border: 1px solid var(--event-line);
+      border-radius: 18px;
+      text-decoration: none;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+    .event-launch:hover { transform: translateY(-3px); box-shadow: 0 24px 48px -28px rgba(7,7,7,.55); }
+    .event-launch-media { display: block; aspect-ratio: 16 / 9; }
+    .event-launch-media::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(rgba(7,7,7,.05), rgba(7,7,7,.12));
+      opacity: 0;
+      transition: opacity .18s ease;
+    }
+    .event-launch:hover .event-launch-media::after { opacity: 1; }
+    .event-launch-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .event-launch-copy {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 12px;
+      padding: clamp(24px, 2.6vw, 38px);
+    }
+    .event-launch-title {
+      font-family: var(--sans);
+      font-size: clamp(26px, 2.6vw, 34px);
+      font-weight: 800;
+      line-height: 1.04;
+      letter-spacing: -.03em;
+    }
+    .event-launch-title span { color: var(--event-green-dark); }
+    .event-launch-body {
+      max-width: 34ch;
+      font-size: 14.5px;
+      line-height: 1.55;
+      color: var(--event-soft);
+    }
+    .event-launch-link {
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      color: var(--event-green-dark);
+    }
+    @media (max-width: 860px) {
+      .event-launch { grid-template-columns: 1fr; }
+      .event-launch-media { position: relative; aspect-ratio: 16 / 9; }
+      .event-launch-media::after { background: linear-gradient(rgba(7,7,7,0) 40%, rgba(7,7,7,.9)); }
+      .event-launch-copy { padding: 22px 20px 26px; }
+    }
+
     .od-events {
       --event-paper: #fafafa;
       --event-ink: #262626;

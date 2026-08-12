@@ -9,18 +9,22 @@ import {
 } from '../../src/providers/daemon';
 import { requestAmrArtifactUpgrade } from '../../src/runtime/amr-artifact-upgrade';
 
-function publishFinishedRun(detail: Partial<DaemonRunFinishedEventDetail> = {}) {
+type RuntimeAwareFinishedRunDetail = DaemonRunFinishedEventDetail & {
+  agentId?: string;
+};
+
+function publishFinishedRun(detail: Partial<RuntimeAwareFinishedRunDetail> = {}): void {
+  const payload: RuntimeAwareFinishedRunDetail = {
+    runId: detail.runId ?? 'run-1',
+    projectId: detail.projectId ?? 'project-1',
+    conversationId: detail.conversationId ?? 'conversation-1',
+    result: detail.result ?? 'success',
+    artifactCount: detail.artifactCount ?? 1,
+    agentId: detail.agentId ?? 'amr',
+  };
   window.dispatchEvent(new CustomEvent<DaemonRunFinishedEventDetail>(
     DAEMON_RUN_FINISHED_EVENT,
-    {
-      detail: {
-        runId: detail.runId ?? 'run-1',
-        projectId: detail.projectId ?? 'project-1',
-        conversationId: detail.conversationId ?? 'conversation-1',
-        result: detail.result ?? 'success',
-        artifactCount: detail.artifactCount ?? 1,
-      },
-    },
+    { detail: payload },
   ));
 }
 
@@ -71,6 +75,15 @@ describe('AmrArtifactUpgradeGate', () => {
     act(() => publishFinishedRun());
 
     await expect(requestSend('project-1', 'conversation-2')).resolves.toBe('proceed');
+    expect(screen.queryByTestId('amr-artifact-upgrade-dialog')).toBeNull();
+  });
+
+  it('does not prompt a Free-plan user after Kimi creates an artifact', async () => {
+    render(<AmrArtifactUpgradeGate {...BASE_PROPS} plan="free" planResolved />);
+
+    act(() => publishFinishedRun({ agentId: 'kimi' }));
+
+    await expect(requestSend()).resolves.toBe('proceed');
     expect(screen.queryByTestId('amr-artifact-upgrade-dialog')).toBeNull();
   });
 
@@ -243,4 +256,45 @@ describe('AmrArtifactUpgradeGate', () => {
     view.unmount();
     await expect(decision).resolves.toBe('cancel');
   });
+
+  // Acceptance #40: a Team Pro account finished a generation and Home showed the
+  // free-user upsell banner. Every team-namespaced plan id is paid, so neither
+  // the Home offer nor the Send interception may fire for one.
+  it.each(['team', 'team_basic', 'team_plus', 'team_pro', 'team_max'])(
+    'offers no free-tier upsell on the %s plan',
+    async (plan) => {
+      const onHomeOfferChange = vi.fn();
+      const view = render(
+        <AmrArtifactUpgradeGate
+          {...BASE_PROPS}
+          plan={plan}
+          planResolved
+          onHomeOfferChange={onHomeOfferChange}
+        />,
+      );
+
+      act(() => publishFinishedRun());
+      view.rerender(
+        <AmrArtifactUpgradeGate
+          {...BASE_PROPS}
+          activeProjectId={null}
+          activeConversationId={null}
+          activeFileName={null}
+          homeVisible
+          plan={plan}
+          planResolved
+          onHomeOfferChange={onHomeOfferChange}
+        />,
+      );
+
+      // The paid path clears any standing offer instead of publishing one.
+      await waitFor(() => expect(onHomeOfferChange).toHaveBeenCalledWith(null));
+      expect(onHomeOfferChange).not.toHaveBeenCalledWith(expect.objectContaining({
+        sessionKey: JSON.stringify(['project-1', 'conversation-1']),
+      }));
+
+      await expect(requestSend()).resolves.toBe('proceed');
+      expect(screen.queryByTestId('amr-artifact-upgrade-dialog')).toBeNull();
+    },
+  );
 });

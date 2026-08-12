@@ -44,6 +44,7 @@ const chatPaneHarness = vi.hoisted(() => ({
     meta?: unknown,
   ) => unknown),
   onStop: null as null | (() => void),
+  openRequestNames: [] as string[],
 }));
 
 vi.mock('../../src/i18n', () => ({
@@ -133,19 +134,30 @@ vi.mock('../../src/components/ChatPane', () => ({
 
 vi.mock('../../src/components/FileWorkspace', () => ({
   DESIGN_SYSTEM_TAB: '__design_system__',
-  FileWorkspace: () => null,
+  FileWorkspace: ({ openRequest }: { openRequest?: { name?: string } | null }) => {
+    const name = openRequest?.name;
+    if (name && chatPaneHarness.openRequestNames.at(-1) !== name) {
+      chatPaneHarness.openRequestNames.push(name);
+    }
+    return null;
+  },
 }));
 
 vi.mock('../../src/components/Loading', () => ({
   CenteredLoader: () => null,
 }));
 
-function renderProjectView() {
+function renderProjectView(options?: { resolvedDir?: string | null }) {
+  const project = {
+    id: 'project-1',
+    name: 'Project',
+    skillId: null,
+    designSystemId: null,
+  } as never;
   return render(
     <ProjectView
-      project={
-        { id: 'project-1', name: 'Project', skillId: null, designSystemId: null } as never
-      }
+      project={project}
+      initialProjectDetail={{ project, resolvedDir: options?.resolvedDir ?? null }}
       routeFileName={null}
       config={
         {
@@ -209,6 +221,41 @@ describe('computeProducedFiles', () => {
 
   it('returns undefined when no baseline is provided', () => {
     expect(computeProducedFiles(undefined, [] as never)).toBeUndefined();
+  });
+
+  it('uses authoritative run paths so an edited existing artifact is produced but its input is not', () => {
+    const before = new Set(['input.png', 'existing.png']);
+    const next = [
+      { name: 'input.png', path: 'input.png', kind: 'image', size: 10 },
+      { name: 'existing.png', path: 'existing.png', kind: 'image', size: 20 },
+    ];
+
+    expect(
+      computeProducedFiles(
+        before,
+        next as never,
+        ['existing.png'],
+        'project-1',
+      ),
+    ).toEqual([
+      expect.objectContaining({ name: 'existing.png' }),
+    ]);
+  });
+
+  it('keeps newly created non-artifact files when authoritative artifact paths are empty', () => {
+    const before = new Set(['input.png']);
+    const next = [
+      { name: 'input.png', path: 'input.png', kind: 'image', size: 10 },
+      { name: 'generated-plugin/open-design.json', path: 'generated-plugin/open-design.json', kind: 'code', size: 20 },
+      { name: 'generated-plugin/SKILL.md', path: 'generated-plugin/SKILL.md', kind: 'code', size: 30 },
+    ];
+
+    expect(
+      computeProducedFiles(before, next as never, [], 'project-1')?.map((file) => file.name),
+    ).toEqual([
+      'generated-plugin/open-design.json',
+      'generated-plugin/SKILL.md',
+    ]);
   });
 });
 
@@ -450,7 +497,107 @@ describe('ProjectView daemon reattach restore', () => {
     vi.clearAllMocks();
     chatPaneHarness.onSend = null;
     chatPaneHarness.onStop = null;
+    chatPaneHarness.openRequestNames = [];
     window.sessionStorage.clear();
+  });
+
+  it('keeps terminal artifact selection and ignores external project-alias writes', async () => {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: ['plan.md'], activeTabId: 'plan.md' });
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+
+    const beforeFiles = [
+      { name: 'plan.md', path: 'plan.md', size: 10, mtime: 1, kind: 'markdown', mime: 'text/markdown' },
+    ];
+    const afterFiles = [
+      { name: 'index.html', path: 'index.html', size: 20, mtime: Date.now(), kind: 'html', mime: 'text/html' },
+      { name: 'plan.md', path: 'plan.md', size: 11, mtime: Date.now(), kind: 'markdown', mime: 'text/markdown' },
+    ];
+    fetchProjectFiles.mockResolvedValue(beforeFiles);
+
+    let handlers: {
+      onAgentEvent: (event: unknown) => void;
+      onDone: (text?: string) => void;
+    } | null = null;
+    streamViaDaemon.mockImplementation(async (options: any) => {
+      options.onRunCreated('run-plan-artifact');
+      handlers = options.handlers;
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView({ resolvedDir: '/tmp/projects/project-1' });
+    await waitFor(() => expect(chatPaneHarness.onSend).toBeTruthy());
+    await waitFor(() => expect(fetchProjectFiles).toHaveBeenCalled());
+
+    let resolveHtmlWriteRefresh!: (files: typeof afterFiles) => void;
+    let resolvePlanWriteRefresh!: (files: typeof afterFiles) => void;
+    let refreshCall = 0;
+    fetchProjectFiles.mockClear();
+    fetchProjectFiles.mockImplementation(() => {
+      refreshCall += 1;
+      if (refreshCall === 1) {
+        return new Promise<typeof afterFiles>((resolve) => { resolveHtmlWriteRefresh = resolve; });
+      }
+      if (refreshCall === 2) {
+        return new Promise<typeof afterFiles>((resolve) => { resolvePlanWriteRefresh = resolve; });
+      }
+      return Promise.resolve(afterFiles);
+    });
+
+    void chatPaneHarness.onSend!('Generate from the plan', [], []);
+    await waitFor(() => expect(handlers).toBeTruthy());
+    handlers!.onAgentEvent({
+      kind: 'tool_use',
+      id: 'write-html',
+      name: 'Write',
+      input: { file_path: '/tmp/projects/project-1/index.html' },
+    });
+    handlers!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'write-html',
+      content: 'ok',
+      isError: false,
+    });
+    handlers!.onAgentEvent({
+      kind: 'tool_use',
+      id: 'write-plan',
+      name: 'Write',
+      input: { file_path: '/tmp/projects/project-1/plan.md' },
+    });
+    handlers!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'write-plan',
+      content: 'ok',
+      isError: false,
+    });
+    handlers!.onAgentEvent({
+      kind: 'tool_use',
+      id: 'write-external-html',
+      name: 'Write',
+      input: { file_path: '/tmp/external/projects/project-1/ghost.html' },
+    });
+    handlers!.onAgentEvent({
+      kind: 'tool_result',
+      toolUseId: 'write-external-html',
+      content: 'ok',
+      isError: false,
+    });
+    await waitFor(() => expect(chatPaneHarness.openRequestNames.at(-1)).toBe('index.html'));
+    handlers!.onDone('Generated index.html from plan.md.');
+
+    await waitFor(() => expect(chatPaneHarness.openRequestNames.at(-1)).toBe('index.html'));
+    resolveHtmlWriteRefresh(afterFiles);
+    resolvePlanWriteRefresh(afterFiles);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(chatPaneHarness.openRequestNames.at(-1)).toBe('index.html');
+    expect(chatPaneHarness.openRequestNames).not.toContain('ghost.html');
   });
 
   it('does not replay a terminal succeeded row just because produced files are missing', async () => {
@@ -496,6 +643,7 @@ describe('ProjectView daemon reattach restore', () => {
       {
         id: 'msg-reattach',
         role: 'assistant',
+        agentId: 'kimi',
         content: '',
         createdAt: startedAt,
         startedAt,
@@ -542,6 +690,7 @@ describe('ProjectView daemon reattach restore', () => {
 
     await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
     expect(reattachDaemonRun).toHaveBeenCalledWith(expect.objectContaining({
+      agentId: 'kimi',
       publishRunFinishedEvent: true,
     }));
     expect(capturedHandlers).not.toBeNull();
@@ -1190,13 +1339,13 @@ describe('ProjectView daemon reattach restore', () => {
 
     reattachDaemonRun.mockImplementation(async (options: any) => {
       const error = new Error(
-        'AMR Cloud reported insufficient balance for this model. Recharge your AMR wallet at https://open-design.ai/amr/wallet, then retry this run.',
+        'AMR Cloud reported insufficient balance for this model. Top up your AMR balance at https://open-design.ai/amr/dashboard, then retry this run.',
       ) as Error & { code: string; details: unknown };
       error.code = 'AMR_INSUFFICIENT_BALANCE';
       error.details = {
         kind: 'amr_account',
         action: 'recharge',
-        actionUrl: 'https://open-design.ai/amr/wallet',
+        actionUrl: 'https://open-design.ai/amr/dashboard',
       };
       options.handlers.onError(error);
     });

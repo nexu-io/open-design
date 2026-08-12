@@ -101,6 +101,51 @@ describe('message event persistence', () => {
     expect(listMessages(db, 'conv-1')[0]?.createdAt).toBe(createdAt);
   });
 
+  it('persists task analytics lineage across message reloads and updates', () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    insertProject(db, {
+      id: 'proj-1',
+      name: 'Task lineage project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertConversation(db, {
+      id: 'conv-1',
+      projectId: 'proj-1',
+      title: 'Task lineage run',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    upsertMessage(db, 'conv-1', {
+      id: 'assistant-task-1',
+      role: 'assistant',
+      content: '',
+      taskAnalytics: {
+        taskExecutionId: 'task-1',
+        taskRunIndex: 0,
+      },
+    });
+    upsertMessage(db, 'conv-1', {
+      id: 'assistant-task-1',
+      role: 'assistant',
+      content: 'failed',
+      runId: 'run-1',
+      taskAnalytics: {
+        taskExecutionId: 'task-1',
+        initialRunId: 'run-1',
+        taskRunIndex: 0,
+      },
+    });
+
+    expect(listMessages(db, 'conv-1')[0]?.taskAnalytics).toEqual({
+      taskExecutionId: 'task-1',
+      initialRunId: 'run-1',
+      taskRunIndex: 0,
+    });
+  });
+
   it('appends agent events and mirrors text deltas into message content', () => {
     const db = openDatabase(tempDir, { dataDir: tempDir });
     const now = Date.now();
