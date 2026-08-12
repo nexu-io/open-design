@@ -24,7 +24,7 @@
   ],
   "scripts": {
     "build": "pnpm --filter @open-design/standalone-proto build && pnpm --filter @open-design/standalone-runtime build && node ./esbuild.config.mjs && tsc -p tsconfig.json",
-    "test": "pnpm --filter @open-design/standalone-proto build && pnpm --filter @open-design/standalone-runtime build && vitest run -c vitest.config.ts",
+    "test": "pnpm --filter @open-design/standalone build && pnpm --filter @open-design/standalone-runtime build && vitest run -c vitest.config.ts",
     "typecheck": "pnpm --filter @open-design/standalone-proto build && pnpm --filter @open-design/standalone-runtime build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
@@ -41,9 +41,11 @@
     "@open-design/standalone-proto": "workspace:*"
   },
   "devDependencies": {
+    "@open-design/closure-proto": "workspace:*",
     "@types/node": "24.12.2",
     "electron": "41.3.0",
     "esbuild": "0.28.0",
+    "jszip": "3.10.1",
     "typescript": "6.0.3",
     "vitest": "4.1.6"
   },

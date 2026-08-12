@@ -41,6 +41,9 @@ await build({
 // The Shell executes this fossil using its official Node. It must carry every
 // Standalone selection/Store dependency and never resolve modules from Shell.
 await build({
+  banner: {
+    js: 'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);',
+  },
   bundle: true,
   entryPoints: { launcher: "./src/bootstrap-entry.ts" },
   format: "esm",
