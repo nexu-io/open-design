@@ -6,6 +6,7 @@ import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_ARCHIVE_MEDIA_TYPE,
   CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
   CLOSURE_INVENTORY_SCHEMA_VERSION,
   CLOSURE_LAUNCHER_ENTRY_PATH,
   CLOSURE_LAUNCHER_HANDOFF_PATH,
@@ -17,6 +18,7 @@ import {
   bindClosureCandidateIdentity,
   createClosureComponentTreeDigest,
   createClosureDistributionManifest,
+  mergeClosureDistributionContributions,
   resolveClosureDistributionTarget,
   serializeClosureCandidateManifestForSigning,
   validateClosureBindingIdentity,
@@ -24,6 +26,8 @@ import {
   validateClosureCandidateManifest,
   validateClosureCandidateSignature,
   validateClosureDistributionManifest,
+  validateClosureDistributionSharedContribution,
+  validateClosureDistributionTargetContribution,
   validateClosureFileInventory,
   type ClosureCandidateIdentity,
   type ClosureCandidateManifest,
@@ -438,5 +442,77 @@ describe("layered Closure distribution manifest", () => {
         },
       },
     }, digestCanonical)).toThrow(/unsupported fields: namespace/u);
+  });
+});
+
+describe("layered Closure cross-job contributions", () => {
+  const artifact = (digestValue: ClosureDigest) => blob(digestValue);
+  const shared = {
+    body: {
+      artifact: artifact(distributionDigests.body),
+      entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
+      treeDigest: distributionDigests.body,
+    },
+    channel: "beta",
+    launcher: {
+      artifact: artifact(distributionDigests.launcher),
+      entryPath: CLOSURE_LAUNCHER_ENTRY_PATH,
+      handoffPath: CLOSURE_LAUNCHER_HANDOFF_PATH,
+      treeDigest: distributionDigests.launcher,
+    },
+    protocolVersion: CLOSURE_PROTOCOL_VERSION,
+    resources: [{
+      artifact: artifact(distributionDigests.resource),
+      id: "design-system-core",
+      title: "Open Design Core",
+      treeDigest: distributionDigests.resource,
+    }],
+    schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
+    shellCompatibility: distributionDraft.compatibility.shell,
+    version: "0.19.0-beta.10",
+  } as const;
+  const mac = {
+    channel: "beta",
+    native: {
+      artifact: artifact(distributionDigests.nativeMac),
+      treeDigest: distributionDigests.nativeMac,
+    },
+    protocolVersion: CLOSURE_PROTOCOL_VERSION,
+    runtime: {
+      artifact: artifact(distributionDigests.runtimeMac),
+      entryPath: "bin/node",
+      treeDigest: distributionDigests.runtimeMac,
+    },
+    schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
+    target: "darwin-arm64",
+    version: "0.19.0-beta.10",
+  } as const;
+
+  it("parses both declarations and seals the same canonical graph", () => {
+    expect(validateClosureDistributionSharedContribution(shared)).toEqual(shared);
+    expect(validateClosureDistributionTargetContribution(mac)).toEqual(mac);
+    const merged = mergeClosureDistributionContributions(shared, [mac], digestCanonical);
+    expect(merged.required.targets["darwin-arm64"]).toEqual({
+      native: distributionDraft.required.targets["darwin-arm64"]?.native,
+      runtime: distributionDraft.required.targets["darwin-arm64"]?.runtime,
+    });
+    expect(merged.resources[0]?.blob).toBe(distributionDigests.resource);
+  });
+
+  it("fails closed on drift, duplicates, and undeclared job fields", () => {
+    expect(() => mergeClosureDistributionContributions(shared, [mac, mac], digestCanonical))
+      .toThrow(/duplicate/u);
+    expect(() => mergeClosureDistributionContributions(shared, [{
+      ...mac,
+      version: "0.19.0-beta.11",
+    }], digestCanonical)).toThrow(/one release identity/u);
+    expect(() => validateClosureDistributionTargetContribution({
+      ...mac,
+      localArtifactPath: "/tmp/node.zip",
+    })).toThrow(/unsupported fields/u);
+    expect(() => validateClosureDistributionSharedContribution({
+      ...shared,
+      namespace: "release-beta",
+    })).toThrow(/unsupported fields/u);
   });
 });
