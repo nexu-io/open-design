@@ -36,7 +36,10 @@ const PLATFORM_ACCEPTANCE_SOURCES = {
     "e2e/lib/vitest/packaged-win-identity.ts",
     "e2e/lib/vitest/win-installer-log.ts",
     "e2e/specs/win.spec.ts",
+    "tools/pack/resources/win/nsis/installer-hooks.nsh",
+    "tools/pack/resources/win/nsis/installer.nsi.tmpl",
     "tools/pack/src/win/custom-installer.ts",
+    "tools/pack/tests/fixtures/win/nsis/installer-faults.nsh",
   ],
 } as const satisfies Record<ShellSmokeAcceptancePlatform, readonly string[]>;
 

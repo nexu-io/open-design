@@ -24,6 +24,7 @@ import {
   hashWinNsisBasePayloadInputs,
   buildWinNsisBasePayload,
   buildWinNsisOverlayPayload,
+  resolveWinNsisInstallerHooks,
   resolveWinNsisOverlayRequiredPaths,
 } from "./custom-installer.js";
 import {
@@ -73,11 +74,20 @@ const WIN_ARCHIVE_CACHE_VERSION = 3;
 const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 8;
 const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2;
 
-async function hashWinNsisInstallerImplementation(config: ToolPackConfig): Promise<string> {
+export async function hashWinNsisInstallerImplementation(
+  config: ToolPackConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<string> {
   const sourceModulePath = join(config.workspaceRoot, "tools", "pack", "src", "win", "custom-installer.ts");
-  if (await pathExists(sourceModulePath)) return hashPath(sourceModulePath);
-  const currentModulePath = fileURLToPath(import.meta.url);
-  return hashPath(currentModulePath);
+  const implementationPath = (await pathExists(sourceModulePath)) ? sourceModulePath : fileURLToPath(import.meta.url);
+  const installerHooks = resolveWinNsisInstallerHooks(config, env);
+  return hashJson({
+    implementation: await hashPath(implementationPath),
+    installerHooks: await hashPath(installerHooks.path),
+    installerHooksMode: installerHooks.mode,
+    installerTemplate: await hashPath(winResources.nsisInstallerTemplate),
+    schemaVersion: 1,
+  });
 }
 
 function logWinBuildProgress(message: string, fields: Record<string, unknown> = {}): void {

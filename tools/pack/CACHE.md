@@ -89,6 +89,13 @@ Existing links: `win.workspace-tarballs` carries `workspaceBuildKey`;
 `basePayloadKey` and `overlayPayloadKey`; `win.launcher-payload` carries
 `sourceKey`.
 
+`win.nsis-installer` also hashes its TypeScript orchestration, the production
+NSIS template, and the selected hook include. The default include is the
+no-op production resource under `resources/win/nsis`; saturation builds may
+select the test-only fault include under `tests/fixtures/win/nsis`. Selecting
+that fixture therefore invalidates only the Windows installer node and cannot
+reuse a production installer cache entry.
+
 **R3 — Build outputs are never direct key inputs.** `hashPackageSourcePath`
 excludes `dist`, `.next`, `out`, `node_modules`, and `.od`. A node that
 consumes another node's build output must obtain that output's identity

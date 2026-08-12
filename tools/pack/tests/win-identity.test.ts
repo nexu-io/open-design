@@ -14,6 +14,14 @@ import { resolveWinInstallIdentity } from "../src/win/identity.js";
 
 const execFileAsync = promisify(execFile);
 
+async function readInstallerImplementation(): Promise<string> {
+  const [orchestration, template] = await Promise.all([
+    readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8"),
+    readFile(new URL("../resources/win/nsis/installer.nsi.tmpl", import.meta.url), "utf8"),
+  ]);
+  return `${orchestration}\n${template}`;
+}
+
 describe("resolveWinInstallIdentity", () => {
   it("keeps the default namespace on the canonical Windows display name", () => {
     expect(resolveWinInstallIdentity({ namespace: "default" })).toMatchObject({
@@ -81,9 +89,9 @@ describe("resolveWinInstallIdentity", () => {
   });
 
   it("keeps the registry DisplayName free of the package version", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
-    expect(source).toContain('WriteRegStr HKCU "${registryKey}" "DisplayName" "${productName}"');
-    expect(source).not.toContain('"DisplayName" "${productName} \\${APP_VERSION}"');
+    const source = await readInstallerImplementation();
+    expect(source).toContain('WriteRegStr HKCU "@@REGISTRY_KEY@@" "DisplayName" "@@PRODUCT_NAME@@"');
+    expect(source).not.toContain('"DisplayName" "@@PRODUCT_NAME@@ ${APP_VERSION}"');
   });
 
   it("emits a valid NSIS command literal for executable paths containing spaces", () => {
@@ -96,40 +104,40 @@ describe("resolveWinInstallIdentity", () => {
   });
 
   it("removes an Electron-refreshed invite protocol while this install still owns it", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    const source = await readInstallerImplementation();
     expect(source).toContain('const inviteProtocolKey = "Software\\\\Classes\\\\opendesign"');
-    expect(source).toContain('WriteRegStr HKCU "${inviteProtocolKey}" "URL Protocol" ""');
+    expect(source).toContain('WriteRegStr HKCU "@@INVITE_PROTOCOL_KEY@@" "URL Protocol" ""');
     expect(source).toContain(
-      'WriteRegStr HKCU "${inviteProtocolKey}\\\\shell\\\\open\\\\command" "" ${inviteProtocolCommand}',
+      'WriteRegStr HKCU "@@INVITE_PROTOCOL_KEY@@\\shell\\open\\command" "" @@INVITE_PROTOCOL_COMMAND@@',
     );
     expect(source).toContain('$INSTDIR\\\\${exeName}');
     expect(source).toContain(
-      'ReadRegStr $0 HKCU "${inviteProtocolKey}\\\\shell\\\\open\\\\command" ""',
+      'ReadRegStr $0 HKCU "@@INVITE_PROTOCOL_KEY@@\\shell\\open\\command" ""',
     );
     expect(source).toContain(
       "const inviteProtocolExecutablePrefix = createNsisQuotedCommandLiteral([`$INSTDIR\\\\${exeName}`])",
     );
-    expect(source).toContain("StrCpy $1 ${inviteProtocolExecutablePrefix}");
+    expect(source).toContain("StrCpy $1 @@INVITE_PROTOCOL_EXECUTABLE_PREFIX@@");
     expect(source).toContain("StrLen $2 $1");
     expect(source).toContain("StrCpy $3 $0 $2");
     expect(source).toContain("StrCmp $3 $1 0 preserve_invite_protocol");
     expect(source).not.toContain(
-      "StrCmp $0 ${inviteProtocolCommand} 0 preserve_invite_protocol",
+      "StrCmp $0 @@INVITE_PROTOCOL_COMMAND@@ 0 preserve_invite_protocol",
     );
-    expect(source).toContain('DeleteRegKey HKCU "${inviteProtocolKey}"');
+    expect(source).toContain('DeleteRegKey HKCU "@@INVITE_PROTOCOL_KEY@@"');
     expect(source).toContain("preserve_invite_protocol:");
     expect(source.indexOf("StrCmp $3 $1")).toBeLessThan(
-      source.indexOf('DeleteRegKey HKCU "${inviteProtocolKey}"'),
+      source.indexOf('DeleteRegKey HKCU "@@INVITE_PROTOCOL_KEY@@"'),
     );
-    expect(source.indexOf('DeleteRegKey HKCU "${inviteProtocolKey}"')).toBeLessThan(
+    expect(source.indexOf('DeleteRegKey HKCU "@@INVITE_PROTOCOL_KEY@@"')).toBeLessThan(
       source.indexOf("preserve_invite_protocol:"),
     );
   });
 
   it("checks the silent install target directory for running instances before overwriting files", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
-    const silentCheck = source.slice(source.indexOf("silent_check:"), source.indexOf("IfFileExists \"$INSTDIR\\\\${exeName}\" existing_install"));
-    expect(silentCheck).toContain('IfFileExists "$INSTDIR\\\\${exeName}" 0 silent_detect_running_instances');
+    const source = await readInstallerImplementation();
+    const silentCheck = source.slice(source.indexOf("silent_check:"), source.indexOf('IfFileExists "$INSTDIR\\@@EXE_NAME@@" existing_install'));
+    expect(silentCheck).toContain('IfFileExists "$INSTDIR\\@@EXE_NAME@@" 0 silent_detect_running_instances');
     expect(silentCheck).toContain('StrCpy $RunningInstancesInstallRoot "$INSTDIR"');
     expect(silentCheck.indexOf('StrCpy $RunningInstancesInstallRoot "$INSTDIR"')).toBeLessThan(
       silentCheck.indexOf("Call DetectRunningInstances"),
@@ -137,7 +145,7 @@ describe("resolveWinInstallIdentity", () => {
   });
 
   it("syncs launcher runtime metadata after a successful Windows install", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    const source = await readInstallerImplementation();
     expect(source).toContain("Function SyncLauncherRuntime");
     expect(source).toContain("sync-launcher-runtime.ps1");
     expect(source).toContain("-CleanupPath");
@@ -147,22 +155,22 @@ describe("resolveWinInstallIdentity", () => {
     expect(source).toContain('Push "event=launcher_runtime_after_write path=${escapedRuntimePath}"');
     expect(source.indexOf("Call CommitInstallTransaction")).toBeLessThan(source.indexOf("Call SyncLauncherRuntime"));
     expect(source.indexOf("Call SyncLauncherRuntime")).toBeLessThan(
-      source.indexOf('Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"'),
+      source.indexOf('Push "event=registry_after_write key=@@REGISTRY_KEY@@ appPathsKey=@@APP_PATHS_KEY@@"'),
     );
-    expect(source.indexOf('Push "event=registry_after_write key=${registryKey} appPathsKey=${appPathsKey}"')).toBeLessThan(
+    expect(source.indexOf('Push "event=registry_after_write key=@@REGISTRY_KEY@@ appPathsKey=@@APP_PATHS_KEY@@"')).toBeLessThan(
       source.indexOf('Push "install section done"'),
     );
   });
 
   it("stages and validates a replacement before atomically switching the install directory", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    const source = await readInstallerImplementation();
     expect(source).toContain('StrCpy $InstallStagingDir "$INSTDIR.__od_staging"');
     expect(source).toContain('StrCpy $InstallBackupDir "$INSTDIR.__od_backup"');
-    expect(source).toContain('IfFileExists "$InstallStagingDir\\\\resources\\\\open-design-config.json" 0 invalid_staging');
+    expect(source).toContain('IfFileExists "$InstallStagingDir\\resources\\open-design-config.json" 0 invalid_staging');
     expect(source).toContain('Rename "$INSTDIR" "$InstallBackupDir"');
     expect(source).toContain('Rename "$InstallStagingDir" "$INSTDIR"');
     expect(source).toContain("Function RemoveInstallTree");
-    expect(source).toContain('rmdir /s /q "\\\\\\\\?\\\\$2"');
+    expect(source).toContain('rmdir /s /q "\\\\?\\$2"');
     expect(source).not.toContain('RMDir /r "$InstallBackupDir"');
     expect(source).not.toContain('RMDir /r "$InstallStagingDir"');
     expect(source).toContain("Call RollbackInstallTransaction");
@@ -172,7 +180,7 @@ describe("resolveWinInstallIdentity", () => {
   });
 
   it("preserves desktop shortcut absence on silent repair while creating one for a fresh install", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    const source = await readInstallerImplementation();
     expect(source).toContain("StrCpy $ExistingInstallWasPresent 0");
     expect(source).toContain("StrCpy $DesktopShortcutWasPresent 0");
     expect(source).toContain("\${If} $ExistingInstallWasPresent == 0");
@@ -180,7 +188,7 @@ describe("resolveWinInstallIdentity", () => {
   });
 
   it("makes the generated uninstaller stop namespace processes before changing files", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    const source = await readInstallerImplementation();
     const uninstallSection = source.slice(source.indexOf('Section "Uninstall"'));
     expect(source).toContain("Function un.GuardRunningInstancesBeforeUninstall");
     expect(source).toContain("Call un.CloseRunningInstances");
@@ -270,7 +278,7 @@ describe("resolveWinInstallIdentity", () => {
   });
 
   it("keeps installer diagnostic log events ASCII-only for silent overwrite", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    const source = await readInstallerImplementation();
     expect(source).toContain('Push "existing installation found; silent install will overwrite it"');
     expect(source).not.toContain('Push "$(ExistingInstallSilentOverwrite)"');
   });

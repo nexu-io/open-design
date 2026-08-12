@@ -47,6 +47,8 @@ export const macResources = {
 
 export const winResources = {
   icon: join(resourcesRoot, "win", "icon.ico"),
+  nsisInstallerHooks: join(resourcesRoot, "win", "nsis", "installer-hooks.nsh"),
+  nsisInstallerTemplate: join(resourcesRoot, "win", "nsis", "installer.nsi.tmpl"),
   sevenZipDll: join(resourcesRoot, "win", "7zip", "7z.dll"),
   sevenZipExe: join(resourcesRoot, "win", "7zip", "7z.exe"),
   webStandaloneAfterPackHook: join(resourcesRoot, "web-standalone-after-pack.cjs"),
