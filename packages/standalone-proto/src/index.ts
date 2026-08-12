@@ -4,12 +4,18 @@ import { isAbsolute, posix, win32 } from "node:path";
 import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
 
 export const STANDALONE_PROTOCOL_VERSION = 1 as const;
+export const STANDALONE_BOOTSTRAP_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_HANDOFF_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_UPDATER_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_BOOTLOADER_ENTRY_PATH = "bootloader.mjs" as const;
 export const STANDALONE_BOOTLOADER_EXPORT_NAME = "handoff" as const;
 
 export type StandaloneDigest = `sha256:${string}`;
+
+export type StandaloneBootstrapScope = Readonly<{
+  channel: ReleaseChannel;
+  namespace: string;
+}>;
 
 export type StandaloneHandoffScope = Readonly<{
   channel: ReleaseChannel;
@@ -53,6 +59,27 @@ export type StandalonePaths = Readonly<{
   logsRoot: string;
   resourceRoot: string;
   runtimeRoot: string;
+}>;
+
+export type StandaloneBootstrapDescriptor = Readonly<{
+  attachment: StandaloneAttachmentDescriptor;
+  discovery: Readonly<{
+    metadataUrl: string | null;
+    target: string;
+  }>;
+  paths: StandalonePaths;
+  repositoryConfigPath: string;
+  schemaVersion: typeof STANDALONE_BOOTSTRAP_SCHEMA_VERSION;
+  scope: StandaloneBootstrapScope;
+}>;
+
+export type StandaloneBootstrapRequest = StandaloneBootstrapDescriptor & Readonly<{
+  capabilities: StandaloneShellCapabilityPort;
+}>;
+
+export type StandaloneBootstrapResolution = Readonly<{
+  bootloaderPath: string;
+  handoff: StandaloneHandoffDescriptor;
 }>;
 
 export type StandaloneProtocolJsonValue =
@@ -426,6 +453,20 @@ function normalizePath(value: unknown, label: string): string {
   return value;
 }
 
+function normalizeNullableHttpUrl(value: unknown, label: string): string | null {
+  if (value == null) return null;
+  if (typeof value !== "string" || value.length === 0 || value !== value.trim()) {
+    throw new StandaloneProtocolError(`${label} must be null or an absolute http(s) URL`);
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("unsupported protocol");
+    return parsed.toString();
+  } catch {
+    throw new StandaloneProtocolError(`${label} must be null or an absolute http(s) URL`);
+  }
+}
+
 function normalizeJsonValue(
   value: unknown,
   label: string,
@@ -727,6 +768,70 @@ export function validateStandaloneAttachmentDescriptor(
       version: normalizeVersion(shell.version, "standalone shell version"),
     },
   };
+}
+
+export function validateStandaloneBootstrapScope(value: unknown): StandaloneBootstrapScope {
+  const scope = requireRecord(value, "standalone bootstrap scope");
+  requireKnownKeys(scope, ["channel", "namespace"], "standalone bootstrap scope");
+  if (!isReleaseChannel(scope.channel)) {
+    throw new StandaloneProtocolError(`unsupported standalone channel: ${String(scope.channel)}`);
+  }
+  return Object.freeze({
+    channel: scope.channel,
+    namespace: normalizeNamespace(scope.namespace),
+  });
+}
+
+export function validateStandaloneBootstrapDescriptor(
+  value: unknown,
+): StandaloneBootstrapDescriptor {
+  const descriptor = requireRecord(value, "standalone bootstrap descriptor");
+  requireKnownKeys(
+    descriptor,
+    ["attachment", "discovery", "paths", "repositoryConfigPath", "schemaVersion", "scope"],
+    "standalone bootstrap descriptor",
+  );
+  if (descriptor.schemaVersion !== STANDALONE_BOOTSTRAP_SCHEMA_VERSION) {
+    throw new StandaloneProtocolError("standalone bootstrap schemaVersion is unsupported");
+  }
+  const discovery = requireRecord(descriptor.discovery, "standalone bootstrap discovery");
+  requireKnownKeys(discovery, ["metadataUrl", "target"], "standalone bootstrap discovery");
+  return Object.freeze({
+    attachment: validateStandaloneAttachmentDescriptor(descriptor.attachment),
+    discovery: Object.freeze({
+      metadataUrl: normalizeNullableHttpUrl(discovery.metadataUrl, "standalone bootstrap metadataUrl"),
+      target: normalizeToken(discovery.target, "standalone bootstrap target"),
+    }),
+    paths: validateStandalonePaths(descriptor.paths),
+    repositoryConfigPath: normalizePath(
+      descriptor.repositoryConfigPath,
+      "standalone bootstrap repositoryConfigPath",
+    ),
+    schemaVersion: STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
+    scope: validateStandaloneBootstrapScope(descriptor.scope),
+  });
+}
+
+export function validateStandaloneBootstrapRequest(value: unknown): StandaloneBootstrapRequest {
+  const request = requireRecord(value, "standalone bootstrap request");
+  requireKnownKeys(
+    request,
+    ["attachment", "capabilities", "discovery", "paths", "repositoryConfigPath", "schemaVersion", "scope"],
+    "standalone bootstrap request",
+  );
+  const descriptor = validateStandaloneBootstrapDescriptor({
+    attachment: request.attachment,
+    discovery: request.discovery,
+    paths: request.paths,
+    repositoryConfigPath: request.repositoryConfigPath,
+    schemaVersion: request.schemaVersion,
+    scope: request.scope,
+  });
+  const capabilities = requireRecord(request.capabilities, "standalone bootstrap capabilities");
+  if (typeof capabilities.invoke !== "function") {
+    throw new StandaloneProtocolError("standalone bootstrap capabilities must provide invoke()");
+  }
+  return Object.freeze({ ...descriptor, capabilities: request.capabilities as StandaloneShellCapabilityPort });
 }
 
 export function digestStandaloneRuntimeDescriptor(value: unknown): StandaloneDigest {

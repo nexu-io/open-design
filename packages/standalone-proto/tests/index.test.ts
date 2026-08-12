@@ -8,6 +8,8 @@ import {
   STANDALONE_UPDATER_SCHEMA_VERSION,
   compareStandaloneVersions,
   createStandaloneHandoffEnvelope,
+  validateStandaloneBootstrapDescriptor,
+  validateStandaloneBootstrapRequest,
   validateStandaloneHandoffDescriptor,
   validateStandaloneHandoffRequest,
   validateStandaloneHandoffEnvelope,
@@ -76,6 +78,30 @@ function request(): StandaloneHandoffRequest {
 }
 
 describe("Standalone bootloader protocol", () => {
+  it("separates unresolved discovery scope from the committed generation handoff", () => {
+    const full = request();
+    const bootstrap = {
+      attachment: full.attachment,
+      capabilities: full.capabilities,
+      discovery: {
+        metadataUrl: "https://releases.example.test/beta/latest/metadata.json",
+        target: "darwin-arm64",
+      },
+      paths: full.paths,
+      repositoryConfigPath: "/shell/resources/repository.json",
+      schemaVersion: 1,
+      scope: { channel: "beta", namespace: "release-beta" },
+    };
+    expect(validateStandaloneBootstrapRequest(bootstrap)).toMatchObject({
+      discovery: { target: "darwin-arm64" },
+      scope: { channel: "beta", namespace: "release-beta" },
+    });
+    const { capabilities: _capabilities, ...descriptor } = bootstrap;
+    expect(validateStandaloneBootstrapDescriptor(descriptor)).toMatchObject({ schemaVersion: 1 });
+    expect(bootstrap).not.toHaveProperty("generation");
+    expect(bootstrap).not.toHaveProperty("handoff");
+  });
+
   it("round-trips the transport-neutral handoff descriptor as JSON", () => {
     const full = request();
     const descriptor = validateStandaloneHandoffDescriptor({
