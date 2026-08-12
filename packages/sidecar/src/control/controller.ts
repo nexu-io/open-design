@@ -88,11 +88,18 @@ function childExit(child: ReturnType<typeof spawn>): Promise<SidecarExit> {
 }
 
 function createClient<TMethods>(descriptor: PrivateReadyDescriptor): SidecarControlClient<TMethods> {
-  const invoke = async (operation: Parameters<typeof createPrivateRequest>[1]): Promise<unknown> => {
+  const invoke = async (
+    operation: Parameters<typeof createPrivateRequest>[1],
+    timeoutMs?: number | null,
+  ): Promise<unknown> => {
     const request = createPrivateRequest(descriptor, operation);
     let response: PrivateControlResponse;
     try {
-      response = await requestJsonIpc<PrivateControlResponse>(descriptor.endpointPath, request);
+      response = await requestJsonIpc<PrivateControlResponse>(
+        descriptor.endpointPath,
+        request,
+        timeoutMs === undefined ? {} : { timeoutMs },
+      );
     } catch (error) {
       throw new SidecarControlError("peer-unavailable", "sidecar peer request failed", { cause: error });
     }
@@ -100,8 +107,8 @@ function createClient<TMethods>(descriptor: PrivateReadyDescriptor): SidecarCont
   };
 
   return Object.freeze({
-    async call(method, input) {
-      return (await invoke({ kind: "call", input, method })) as never;
+    async call(method, input, options) {
+      return (await invoke({ kind: "call", input, method }, options?.timeoutMs)) as never;
     },
     identity: descriptor.identity,
     async probe() {

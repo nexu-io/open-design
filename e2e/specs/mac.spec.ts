@@ -13,6 +13,7 @@ import {
   commitPackagedStandaloneDistributionFixture,
   damagePackagedStandaloneDistributionFixture,
   readPackagedStandaloneDistributionBinding,
+  readPackagedStandaloneDistributionFixture,
   type PackagedStandaloneDistributionFixture,
 } from '@/vitest/standalone-distribution-fixture';
 import {
@@ -69,6 +70,7 @@ const closureDistributionManifestPath = normalizeOptionalEnv(
   process.env.OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH,
 );
 const closureBlobRoots = parsePathListEnv(process.env.OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON);
+const standaloneSeedEmbedded = process.env.OD_PACKAGED_E2E_STANDALONE_SEED_EMBEDDED === '1';
 const legacyDmgPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH);
 const legacyVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_VERSION);
 const minimumShellVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION);
@@ -396,7 +398,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       await assertMacInviteProtocolRegistration(install.installedAppPath);
 
       await seedPackagedOnboardingComplete();
-      if (!shellAbsorbsStandaloneAcceptance) await seedConfiguredPackagedClosure();
+      if (!standaloneSeedEmbedded && !shellAbsorbsStandaloneAcceptance) await seedConfiguredPackagedClosure();
 
       let expectedPayloadUpdateVersion: string | null = updateVersion;
       if (!verifyCoreOnly) {
@@ -603,7 +605,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           postUpdateInspect.launcher,
           updaterVersion,
           updateScenario.expectedCurrentVersion,
-          updaterVersion,
+          updateScenario.expectedCurrentVersion,
         );
         expect(postUpdateInspect.launcher.attempt).toBeNull();
         assertSettledDesktopHandoff(postUpdateInspect.launcher.handoff);
@@ -649,7 +651,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           coldInspect.launcher,
           updaterVersion,
           updateScenario.expectedCurrentVersion,
-          updaterVersion,
+          updateScenario.expectedCurrentVersion,
         );
         expect(coldIdentity.pid).not.toBe(identity.pid);
         const coldPptxInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', persistedPptxExpression]);
@@ -1334,7 +1336,7 @@ macLegacyMigrationDescribe('packaged mac historical outer migration acceptance',
       const currentInspect = await waitForHealthyDesktop();
       const currentHealth = assertHealthEvalValue(currentInspect.eval?.value);
       expect(currentHealth.health.version).toBe(targetReleaseVersion);
-      expect(currentInspect.update?.currentVersion).toBe(requiredShellVersion);
+      expect(currentInspect.update?.currentVersion).toBe(shellVersion ?? targetReleaseVersion);
       if (distribution != null) {
         assertClosureDesktopIdentity(await readDesktopIdentityMarker(), distribution.manifest.identity.version);
       }
@@ -3047,6 +3049,7 @@ async function seedPackagedOnboardingComplete(): Promise<void> {
  */
 async function seedConfiguredPackagedClosure(): Promise<PackagedStandaloneDistributionFixture | null> {
   if (closureDistributionManifestPath != null) {
+    if (standaloneSeedEmbedded) return null;
     const version = releaseVersion ?? shellVersion;
     if (version == null) throw new Error('Standalone distribution fixture requires a release version');
     return await commitPackagedStandaloneDistributionFixture({
@@ -3083,11 +3086,10 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
     await runToolsPackJson<MacInstallResult>('install');
     installed = true;
     await seedPackagedOnboardingComplete();
-    const fixture = await seedConfiguredPackagedClosure();
-    if (fixture == null) throw new Error('Standalone distribution fixture was not configured');
     const first = await runToolsPackJson<MacStartResult>('start');
     started = true;
     await waitForHealthyDesktop();
+    const fixture = await readConfiguredPackagedStandaloneDistribution();
     assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
 
     await runToolsPackJson<MacStopResult>('stop');
@@ -3106,11 +3108,10 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
     expect((await readPackagedStandaloneDistributionBinding(fixture)).committed?.standalone).toEqual(fixture.pointer);
 
     await rm(fixture.storePaths.namespaceRoot, { force: true, recursive: true });
-    const recovered = await seedConfiguredPackagedClosure();
-    if (recovered == null) throw new Error('Standalone distribution recovery fixture was not configured');
     await runToolsPackJson<MacStartResult>('start');
     started = true;
     await waitForHealthyDesktop();
+    const recovered = await readConfiguredPackagedStandaloneDistribution();
     assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
   } finally {
     if (started) await runToolsPackJson<MacStopResult>('stop').catch(() => undefined);
@@ -3120,6 +3121,24 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
       recursive: true,
     }).catch(() => undefined);
   }
+}
+
+async function readConfiguredPackagedStandaloneDistribution(): Promise<PackagedStandaloneDistributionFixture> {
+  if (closureDistributionManifestPath == null) {
+    throw new Error('Standalone distribution manifest was not configured');
+  }
+  const version = releaseVersion ?? shellVersion;
+  if (version == null) throw new Error('Standalone distribution fixture requires a release version');
+  return await readPackagedStandaloneDistributionFixture({
+    blobRoots: closureBlobRoots,
+    channel: updateScenario.channel,
+    installationRoot: join(toolsPackDir, 'runtime', 'mac'),
+    manifestPath: closureDistributionManifestPath,
+    namespace,
+    releaseVersion: version,
+    target: process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64',
+    workspaceRoot,
+  });
 }
 
 function parsePathListEnv(value: string | undefined): string[] {

@@ -191,7 +191,7 @@ export async function runPackagedStandalone(
     bootloaderPath: join(shellConfig.resourceRoot, "standalone", "bootloader.mjs"),
     descriptor: {
       attachment: {
-        id: `electron-${shellDigest.slice("sha256:".length, "sha256:".length + 16)}`,
+        id: `electron-${shellDigest.slice("sha256:".length, "sha256:".length + 16)}-${process.pid}`,
         shell: {
           digest: shellDigest,
           type: "electron",

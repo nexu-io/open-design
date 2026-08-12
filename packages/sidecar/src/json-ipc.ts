@@ -280,7 +280,7 @@ export async function createJsonIpcServer({
 export async function requestJsonIpc<T = any>(
   socketPath: string,
   payload: unknown,
-  { timeoutMs = 1500 }: { timeoutMs?: number } = {},
+  { timeoutMs = 1500 }: { timeoutMs?: number | null } = {},
 ): Promise<T> {
   return await new Promise<T>((resolveRequest, rejectRequest) => {
     const socket = createConnection(socketPath);
@@ -296,20 +296,22 @@ export async function requestJsonIpc<T = any>(
     const settle = (callback: () => void) => {
       if (settled) return;
       settled = true;
-      clearTimeout(timeout);
+      if (timeout != null) clearTimeout(timeout);
       callback();
     };
-    const timeout = setTimeout(() => {
-      traceJsonIpc("client.timeout", {
-        durationMs: jsonIpcTraceDurationMs(startedAt),
-        message: messageSummary,
-        socketPath,
-        timeoutMs,
-        traceId,
-      });
-      socket.destroy();
-      settle(() => rejectRequest(new Error(`IPC request timed out: ${socketPath}`)));
-    }, timeoutMs);
+    const timeout = timeoutMs == null
+      ? null
+      : setTimeout(() => {
+          traceJsonIpc("client.timeout", {
+            durationMs: jsonIpcTraceDurationMs(startedAt),
+            message: messageSummary,
+            socketPath,
+            timeoutMs,
+            traceId,
+          });
+          socket.destroy();
+          settle(() => rejectRequest(new Error(`IPC request timed out: ${socketPath}`)));
+        }, timeoutMs);
 
     socket.on("connect", () => {
       traceJsonIpc("client.connected", {

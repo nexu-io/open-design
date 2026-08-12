@@ -101,6 +101,55 @@ export async function commitPackagedStandaloneDistributionFixture(input: {
   }
 }
 
+export async function readPackagedStandaloneDistributionFixture(input: {
+  blobRoots: readonly string[];
+  channel: string;
+  installationRoot: string;
+  manifestPath: string;
+  namespace: string;
+  releaseVersion: string;
+  target: string;
+  workspaceRoot: string;
+}): Promise<PackagedStandaloneDistributionFixture> {
+  const manifest = validateClosureDistributionManifest(
+    JSON.parse(await readFile(resolveInput(input.workspaceRoot, input.manifestPath), 'utf8')) as unknown,
+    digestCanonical,
+  );
+  if (manifest.identity.channel !== input.channel || manifest.required.targets[input.target] == null) {
+    throw new Error(`Standalone distribution does not contain ${input.channel}/${input.target}`);
+  }
+  const paths = resolveClosureStorePaths({
+    channel: input.channel,
+    namespace: input.namespace,
+    root: input.installationRoot,
+  });
+  const pointer = (await readClosureBindingDescriptor(paths)).committed?.standalone;
+  if (pointer == null || pointer.digest !== manifest.identity.digest || pointer.target !== input.target) {
+    throw new Error('Installed Shell did not commit the expected embedded Standalone distribution');
+  }
+
+  const seedRoot = await mkdtemp(join(tmpdir(), 'od-standalone-distribution-read-'));
+  try {
+    const seedBlobs = join(seedRoot, input.channel, 'blobs');
+    for (const root of input.blobRoots) {
+      await cp(resolveInput(input.workspaceRoot, root), seedBlobs, { force: false, recursive: true });
+    }
+    const firstResource = manifest.resources[0];
+    const ensuredResource = firstResource == null
+      ? null
+      : await ensureClosureResource({
+          id: firstResource.id,
+          manifest,
+          paths,
+          repository: { localSeeds: [{ root: seedRoot }], remoteOrigins: [], schemaVersion: 1 },
+          target: input.target,
+        });
+    return { ensuredResource, manifest, pointer, releaseVersion: input.releaseVersion, storePaths: paths };
+  } finally {
+    await rm(seedRoot, { force: true, recursive: true });
+  }
+}
+
 export async function damagePackagedStandaloneDistributionFixture(
   fixture: PackagedStandaloneDistributionFixture,
 ): Promise<void> {

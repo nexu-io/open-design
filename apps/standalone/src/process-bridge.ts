@@ -385,7 +385,7 @@ function bodyClientHandle(
   return {
     async close() {
       if (closeTask == null) {
-        closeTask = client.call("close", { attachmentId })
+        closeTask = client.call("close", { attachmentId }, { timeoutMs: null })
           .then((status) => validateTerminalStatus(status, descriptor))
           .finally(closeShell);
       }
@@ -396,7 +396,7 @@ function bodyClientHandle(
         attachmentId,
         handoff: descriptor.handoff,
       });
-      return validateStandaloneRuntimeCommandResult(await client.call("invoke", command), {
+      return validateStandaloneRuntimeCommandResult(await client.call("invoke", command, { timeoutMs: null }), {
         attachmentId,
         handoff: descriptor.handoff,
         requestId: command.requestId,
@@ -410,7 +410,7 @@ function bodyClientHandle(
     async waitForTerminal() {
       try {
         return validateTerminalStatus(
-          await client.call("waitForTerminal", { attachmentId }),
+          await client.call("waitForTerminal", { attachmentId }, { timeoutMs: null }),
           descriptor,
         );
       } finally {

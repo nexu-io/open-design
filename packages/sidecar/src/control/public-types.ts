@@ -73,11 +73,17 @@ export type SidecarStopResult = Readonly<{
   accepted: true;
 }>;
 
+export type SidecarCallOptions = Readonly<{
+  /** `null` is reserved for lifecycle calls whose response is the terminal event itself. */
+  timeoutMs?: number | null;
+}>;
+
 export type SidecarControlClient<TMethods> = Readonly<{
   identity: SidecarControlIdentity;
   call<TMethod extends Extract<keyof TMethods, string>>(
     method: TMethod,
     input: MethodInput<TMethods, TMethod>,
+    options?: SidecarCallOptions,
   ): Promise<MethodOutput<TMethods, TMethod>>;
   probe(): Promise<SidecarProbeResult>;
   requestStop(): Promise<SidecarStopResult>;

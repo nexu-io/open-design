@@ -104,6 +104,32 @@ describe("independent sidecar controller and body", () => {
     await expect(controller.connect("shell")).rejects.toThrow(/unavailable/);
   });
 
+  it("keeps lifecycle calls open only when the caller explicitly opts out of the request deadline", async () => {
+    const { roots, scope } = await createFixture();
+    const controller = createDemoController(scope, roots);
+    const hosted = await controller.expose<DemoMethods>({
+      handlers: {
+        async context(_input, context) {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          return context;
+        },
+        echo(input) {
+          return input;
+        },
+      },
+      service: "shell",
+    });
+    cleanups.push(() => hosted.close());
+
+    const client = await controller.connect<DemoMethods>("shell");
+    await expect(client.call("context", {}, { timeoutMs: 5 })).rejects.toMatchObject({
+      code: "peer-unavailable",
+    });
+    await expect(client.call("context", {}, { timeoutMs: null })).resolves.toMatchObject({
+      identity: { ...scope, service: "shell" },
+    });
+  });
+
   it("initializes the body from validated roots before publishing readiness", async () => {
     const { roots, scope } = await createFixture();
     const launch = createPrivateLaunchForTest({
