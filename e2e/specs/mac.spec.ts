@@ -17,9 +17,9 @@ import {
 } from '@/vitest/standalone-distribution-fixture';
 import {
   hasPackagedSmokeLane,
-  MAC_PACKAGED_SMOKE_SCENARIOS,
   resolvePackagedSmokeLanes,
-} from '@/vitest/packaged-smoke-plan';
+} from '@/vitest/packaged-smoke-contract';
+import { MAC_PACKAGED_SMOKE_SCENARIOS } from '@/vitest/packaged-smoke-plan-mac';
 import { resolvePackagedSmokeProfile } from '@/vitest/packaged-smoke-profile';
 import {
   assertPackagedPtySmokeResult,

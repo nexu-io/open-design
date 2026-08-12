@@ -1755,8 +1755,9 @@ process.stdin.on("end", () => {
     const betaMacArm64Job = sectionBetween(releaseBetaWorkflow, "  build_mac_arm64:", "  build_mac_x64:");
     const betaMacX64Job = sectionBetween(releaseBetaWorkflow, "  build_mac_x64:", "  build_win_x64:");
     expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v3");
-    expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles(");
-    expect(betaMacArm64Job.match(/hashFiles\('\.github\/workflows\/release-beta\.yml'/gu)).toHaveLength(2);
+    expect(betaMacArm64Job).toContain("Resolve mac_arm64 Shell smoke acceptance identity");
+    expect(betaMacArm64Job).toContain("shell-smoke-acceptance.ts mac_arm64");
+    expect(betaMacArm64Job).not.toContain("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles(");
     expect(betaMacArm64Job).toContain(
       `RELEASE_STANDALONE_PROTOCOL_VERSION: "${STANDALONE_PROTOCOL_VERSION}"`,
     );
@@ -1785,7 +1786,9 @@ process.stdin.on("end", () => {
     expect(betaWinJob).toContain("OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json");
     expect(betaWinJob).toContain("Resolve immutable win_x64 Electron Shell");
     expect(betaWinJob).toContain("RELEASE_SHELL_SMOKE_MATRIX: win-shell-v1");
-    expect(betaWinJob.match(/hashFiles\('\.github\/workflows\/release-beta\.yml'/gu)).toHaveLength(2);
+    expect(betaWinJob).toContain("Resolve win_x64 Shell smoke acceptance identity");
+    expect(betaWinJob).toContain("shell-smoke-acceptance.ts win_x64");
+    expect(betaWinJob).not.toContain("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles(");
     expect(betaWinJob).toContain(
       `RELEASE_STANDALONE_PROTOCOL_VERSION: "${STANDALONE_PROTOCOL_VERSION}"`,
     );

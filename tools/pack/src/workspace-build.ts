@@ -77,7 +77,15 @@ export async function resolveShellSourceDigest(config: ToolPackConfig): Promise<
   for (const packageInfo of STANDALONE_BOOTSTRAP_PACKAGES) {
     packageHashes[packageInfo.name] = await hashPackageSourcePath(join(config.workspaceRoot, packageInfo.directory));
   }
-  packageHashes["@open-design/tools-pack"] = await hashPackageSourcePath(join(config.workspaceRoot, "tools/pack"));
+  const toolsPackRoot = join(config.workspaceRoot, "tools/pack");
+  packageHashes["@open-design/tools-pack/common"] = await hashPackageSourcePath(toolsPackRoot, {
+    ignoredRelativePaths: ["resources/mac", "resources/win", "src/mac", "src/win"],
+  });
+  packageHashes[`@open-design/tools-pack/${config.platform}`] = await hashPackageSourcePath(toolsPackRoot, {
+    ignoredRelativePaths: config.platform === "mac"
+      ? ["resources/win", "src/win"]
+      : ["resources/mac", "src/mac"],
+  });
   const standaloneBootstrapSources = await Promise.all([
     "apps/standalone/src/bootstrap.ts",
     "apps/standalone/src/bootstrap-entry.ts",
@@ -87,7 +95,7 @@ export async function resolveShellSourceDigest(config: ToolPackConfig): Promise<
     buildCommand: definition.buildCommand,
     packageHashes,
     standaloneBootstrapSources: Object.fromEntries(standaloneBootstrapSources),
-    schemaVersion: 13,
+    schemaVersion: 14,
     shell: config.shell,
   })}`;
 }

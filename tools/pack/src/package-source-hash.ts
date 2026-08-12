@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { lstat, readFile, readdir, readlink } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 
+export type HashPackageSourcePathOptions = Readonly<{
+  /** Repo/package-relative subtrees excluded from this source identity. */
+  ignoredRelativePaths?: readonly string[];
+}>;
+
 function normalizeRelativePath(path: string): string {
   return path.split("\\").join("/");
 }
@@ -25,8 +30,16 @@ async function readNormalizedFile(filePath: string): Promise<Buffer | string> {
   return body;
 }
 
-export async function hashPackageSourcePath(path: string): Promise<string> {
+export async function hashPackageSourcePath(
+  path: string,
+  options: HashPackageSourcePathOptions = {},
+): Promise<string> {
   const hash = createHash("sha256");
+  const sourceRootPrefix = normalizeRelativePath(relative(dirname(path), path));
+  const ignoredRelativePaths = (options.ignoredRelativePaths ?? [])
+    .map((entry) => normalizeRelativePath(entry).replace(/^\.\//u, "").replace(/\/$/u, ""))
+    .filter((entry) => entry.length > 0)
+    .map((entry) => `${sourceRootPrefix}/${entry}`);
   const ignoredDirectoryNames = new Set([
     ".next",
     ".od",
@@ -41,8 +54,11 @@ export async function hashPackageSourcePath(path: string): Promise<string> {
   ]);
 
   async function visit(current: string, root: string): Promise<void> {
-    const metadata = await lstat(current);
     const relativePath = normalizeRelativePath(relative(root, current));
+    if (ignoredRelativePaths.some((entry) => relativePath === entry || relativePath.startsWith(`${entry}/`))) {
+      return;
+    }
+    const metadata = await lstat(current);
     hash.update(relativePath);
     if (metadata.isSymbolicLink()) {
       hash.update("symlink");

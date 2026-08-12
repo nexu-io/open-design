@@ -31,4 +31,22 @@ describe("hashPackageSourcePath", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it("can exclude explicit relative platform-owned subtrees", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-package-source-scope-"));
+    try {
+      await mkdir(join(root, "src", "mac"), { recursive: true });
+      await mkdir(join(root, "src", "win"), { recursive: true });
+      await writeFile(join(root, "src", "common.ts"), "export const common = 1;\n", "utf8");
+      await writeFile(join(root, "src", "mac", "index.ts"), "export const mac = 1;\n", "utf8");
+      await writeFile(join(root, "src", "win", "index.ts"), "export const win = 1;\n", "utf8");
+      const before = await hashPackageSourcePath(root, { ignoredRelativePaths: ["src/win"] });
+      await writeFile(join(root, "src", "win", "index.ts"), "export const win = 2;\n", "utf8");
+      expect(await hashPackageSourcePath(root, { ignoredRelativePaths: ["src/win"] })).toBe(before);
+      await writeFile(join(root, "src", "mac", "index.ts"), "export const mac = 2;\n", "utf8");
+      expect(await hashPackageSourcePath(root, { ignoredRelativePaths: ["src/win"] })).not.toBe(before);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });

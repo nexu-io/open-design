@@ -628,6 +628,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve mac_arm64 Shell smoke acceptance identity
+        run: |
+          set -euo pipefail
+          digest="$(pnpm exec tsx .github/scripts/release/shell-smoke-acceptance.ts mac_arm64)"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST=$digest" >> "$GITHUB_ENV"
+
       - name: Download shared Standalone contract
         uses: actions/download-artifact@v8
         with:
@@ -641,7 +648,6 @@ jobs:
           RELEASE_CHANNEL: beta
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
-          RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles('.github/workflows/release-beta.yml', 'e2e/specs/mac.spec.ts', 'e2e/scripts/release-smoke.ts', 'e2e/lib/vitest/packaged-smoke-plan.ts', 'e2e/lib/vitest/standalone-distribution-fixture.ts', 'e2e/lib/vitest/tools-serve-updater-fixture.ts', 'tools/serve/src/index.ts', 'tools/serve/src/updater-fixture.ts') }}
           RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v3
           RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/shell-plan.json
           RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
@@ -1007,7 +1013,6 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
           RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/shell-plan.json
-          RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles('.github/workflows/release-beta.yml', 'e2e/specs/mac.spec.ts', 'e2e/scripts/release-smoke.ts', 'e2e/lib/vitest/packaged-smoke-plan.ts', 'e2e/lib/vitest/standalone-distribution-fixture.ts', 'e2e/lib/vitest/tools-serve-updater-fixture.ts', 'tools/serve/src/index.ts', 'tools/serve/src/updater-fixture.ts') }}
           RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v3
           RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.json
           RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
@@ -1558,6 +1563,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve win_x64 Shell smoke acceptance identity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $digest = (pnpm.cmd exec tsx .github/scripts/release/shell-smoke-acceptance.ts win_x64).Trim()
+          if ($LASTEXITCODE -ne 0 -or $digest -notmatch '^sha256:[0-9a-f]{64}$') {
+            throw "invalid win_x64 Shell smoke acceptance digest: $digest"
+          }
+          "RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST=$digest" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Download shared Standalone contract
         uses: actions/download-artifact@v8
         with:
@@ -1573,7 +1588,6 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
           RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\shell-plan.json
-          RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles('.github/workflows/release-beta.yml', 'e2e/specs/win.spec.ts', 'e2e/scripts/release-smoke.ts', 'e2e/lib/vitest/packaged-smoke-plan.ts', 'e2e/lib/vitest/standalone-distribution-fixture.ts', 'e2e/lib/vitest/tools-serve-updater-fixture.ts', 'e2e/lib/vitest/win-installer-log.ts', 'tools/pack/src/win/custom-installer.ts', 'tools/serve/src/index.ts', 'tools/serve/src/updater-fixture.ts') }}
           RELEASE_SHELL_SMOKE_MATRIX: win-shell-v1
           RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
@@ -1838,7 +1852,6 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
           RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\shell-plan.json
-          RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles('.github/workflows/release-beta.yml', 'e2e/specs/win.spec.ts', 'e2e/scripts/release-smoke.ts', 'e2e/lib/vitest/packaged-smoke-plan.ts', 'e2e/lib/vitest/standalone-distribution-fixture.ts', 'e2e/lib/vitest/tools-serve-updater-fixture.ts', 'e2e/lib/vitest/win-installer-log.ts', 'tools/pack/src/win/custom-installer.ts', 'tools/serve/src/index.ts', 'tools/serve/src/updater-fixture.ts') }}
           RELEASE_SHELL_SMOKE_MATRIX: win-shell-v1
           RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}\release-report\win_x64\summary.json
           RELEASE_STANDALONE_PROTOCOL_VERSION: "1"

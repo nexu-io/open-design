@@ -66,6 +66,10 @@ registered source directory. For the macOS and Windows delivery lanes the
 registered shell is currently `electron`, rooted at `shells/electron`; changing
 shell source invalidates the node, while changes confined to `apps/standalone`
 do not because Standalone Closure is built and distributed independently.
+The key also hashes tools-pack in two scopes: common packaging sources/resources
+invalidate both platforms, while `src/mac` + `resources/mac` and `src/win` +
+`resources/win` invalidate only their owning platform. A platform-only input
+must stay in its platform owner rather than being moved into the common scope.
 
 ## Determinant rules
 

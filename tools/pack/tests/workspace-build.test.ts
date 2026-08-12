@@ -55,9 +55,16 @@ async function writeWorkspace(root: string): Promise<void> {
   await writeFile(join(root, "apps/standalone/src/bootstrap.ts"), "export const bootstrap = 1;\n");
   await writeFile(join(root, "apps/standalone/src/bootstrap-entry.ts"), "export const entry = 1;\n");
   await writeFile(join(root, "apps/standalone/src/fossil-bootloader.ts"), "export const handoff = 1;\n");
-  await mkdir(join(root, "tools/pack/src"), { recursive: true });
+  await mkdir(join(root, "tools/pack/resources/mac"), { recursive: true });
+  await mkdir(join(root, "tools/pack/resources/win"), { recursive: true });
+  await mkdir(join(root, "tools/pack/src/mac"), { recursive: true });
+  await mkdir(join(root, "tools/pack/src/win"), { recursive: true });
   await writeFile(join(root, "tools/pack/package.json"), `${JSON.stringify({ name: "@open-design/tools-pack" })}\n`);
   await writeFile(join(root, "tools/pack/src/index.ts"), "export const pack = 1;\n");
+  await writeFile(join(root, "tools/pack/src/mac/index.ts"), "export const mac = 1;\n");
+  await writeFile(join(root, "tools/pack/src/win/index.ts"), "export const win = 1;\n");
+  await writeFile(join(root, "tools/pack/resources/mac/entitlements.plist"), "mac-1\n");
+  await writeFile(join(root, "tools/pack/resources/win/icon.ico"), "win-1\n");
 }
 
 async function writeOutputs(root: string, value: string): Promise<void> {
@@ -175,13 +182,31 @@ describe("Electron Shell workspace build cache", () => {
     }
   });
 
-  it("keeps one Shell source identity across physical platform targets", async () => {
+  it("keeps shared inputs coupled while scoping platform-owned sources and resources", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-shell-platform-"));
     try {
       await writeWorkspace(root);
       const mac = createConfig(root, join(root, ".cache-mac"), "mac");
       const win = createConfig(root, join(root, ".cache-win"), "win");
-      expect(await resolveShellSourceDigest(mac)).toBe(await resolveShellSourceDigest(win));
+      const initialMac = await resolveShellSourceDigest(mac);
+      const initialWin = await resolveShellSourceDigest(win);
+      expect(initialMac).not.toBe(initialWin);
+
+      await writeFile(join(root, "tools/pack/src/win/index.ts"), "export const win = 2;\n");
+      await writeFile(join(root, "tools/pack/resources/win/icon.ico"), "win-2\n");
+      expect(await resolveShellSourceDigest(mac)).toBe(initialMac);
+      const winAfterWinChange = await resolveShellSourceDigest(win);
+      expect(winAfterWinChange).not.toBe(initialWin);
+
+      await writeFile(join(root, "tools/pack/src/mac/index.ts"), "export const mac = 2;\n");
+      await writeFile(join(root, "tools/pack/resources/mac/entitlements.plist"), "mac-2\n");
+      expect(await resolveShellSourceDigest(win)).toBe(winAfterWinChange);
+      const macAfterMacChange = await resolveShellSourceDigest(mac);
+      expect(macAfterMacChange).not.toBe(initialMac);
+
+      await writeFile(join(root, "tools/pack/src/index.ts"), "export const pack = 2;\n");
+      expect(await resolveShellSourceDigest(mac)).not.toBe(macAfterMacChange);
+      expect(await resolveShellSourceDigest(win)).not.toBe(winAfterWinChange);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

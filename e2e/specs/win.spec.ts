@@ -39,8 +39,8 @@ import {
 import {
   hasPackagedSmokeLane,
   resolvePackagedSmokeLanes,
-  WIN_PACKAGED_SMOKE_SCENARIOS,
-} from '@/vitest/packaged-smoke-plan';
+} from '@/vitest/packaged-smoke-contract';
+import { WIN_PACKAGED_SMOKE_SCENARIOS } from '@/vitest/packaged-smoke-plan-win';
 import { resolvePackagedSmokeProfile } from '@/vitest/packaged-smoke-profile';
 import {
   assertPackagedPtySmokeResult,

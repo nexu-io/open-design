@@ -6,11 +6,11 @@ import { fileURLToPath } from 'node:url';
 
 import { createReport } from '../lib/vitest/report.ts';
 import {
-  MAC_PACKAGED_SMOKE_SCENARIOS,
   resolvePackagedSmokeLanes,
   type PackagedSmokeScenario,
-  WIN_PACKAGED_SMOKE_SCENARIOS,
-} from '../lib/vitest/packaged-smoke-plan.ts';
+} from '../lib/vitest/packaged-smoke-contract.ts';
+import { MAC_PACKAGED_SMOKE_SCENARIOS } from '../lib/vitest/packaged-smoke-plan-mac.ts';
+import { WIN_PACKAGED_SMOKE_SCENARIOS } from '../lib/vitest/packaged-smoke-plan-win.ts';
 import { resolvePackagedSmokeProfile } from '../lib/vitest/packaged-smoke-profile.ts';
 
 type Platform = 'mac' | 'win';

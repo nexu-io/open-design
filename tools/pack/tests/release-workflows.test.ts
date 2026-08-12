@@ -105,7 +105,9 @@ describe("release workflows", () => {
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_arm64_update_fixture.outputs.update_build_json_path }}");
     expect(mac).toContain("RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v3");
-    expect(mac).toContain("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles(");
+    expect(mac).toContain("Resolve mac_arm64 Shell smoke acceptance identity");
+    expect(mac).toContain("shell-smoke-acceptance.ts mac_arm64");
+    expect(mac).not.toContain("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles(");
     expect(mac).toContain('RELEASE_STANDALONE_PROTOCOL_VERSION: "1"');
     expect(mac).toMatch(/Build beta mac_arm64 update fixture[\s\S]*?--to app/);
     expect(mac).toContain("steps.mac_arm64_shell_resolution.outputs.smoke_proof != 'hit'");
@@ -182,6 +184,8 @@ describe("release workflows", () => {
     expect(buildWin).toContain('$buildArgs += "--require-vela-cli"');
     expect(buildWin).toContain('$updateArgs += "--require-vela-cli"');
     expect(win).toContain("tools-pack win validate-payload");
+    expect(win).toContain("Resolve win_x64 Shell smoke acceptance identity");
+    expect(win).toContain("shell-smoke-acceptance.ts win_x64");
     expect(win).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
     expect(win).toContain("$env:OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON = @(");
     expect(win).toContain(") | ConvertTo-Json -Compress");
