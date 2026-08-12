@@ -522,7 +522,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         expect(protocolStop.status).not.toBe('partial');
         expect(protocolStop.remainingPids).toEqual([]);
 
-        await invokeMacInviteDeeplink(install.installedAppPath);
+        await invokeMacInviteDeeplink(install.installedAppPath, { forceNewInstance: true });
         started = true;
         const protocolColdInspect = await waitForHealthyDesktop();
         expect(protocolColdInspect.status?.state).toBe('running');
@@ -3017,10 +3017,22 @@ async function assertMacInviteProtocolRegistration(installedAppPath: string): Pr
   expect(schemes).toContain('opendesign');
 }
 
-async function invokeMacInviteDeeplink(installedAppPath: string): Promise<void> {
+async function invokeMacInviteDeeplink(
+  installedAppPath: string,
+  options: { forceNewInstance?: boolean } = {},
+): Promise<void> {
   // `-a` pins delivery to this namespace's installed test bundle instead of a
   // developer's stable Open Design app that may own the same global scheme.
-  await execFileAsync('/usr/bin/open', ['-a', installedAppPath, packagedInviteDeeplink]);
+  // After an explicit lifecycle stop, LaunchServices can retain a terminated
+  // application record and accept the URL without spawning a replacement.
+  // `-n` makes the cold-start contract deterministic while the hot path above
+  // deliberately keeps exercising delivery to the existing process.
+  await execFileAsync('/usr/bin/open', [
+    ...(options.forceNewInstance ? ['-n'] : []),
+    '-a',
+    installedAppPath,
+    packagedInviteDeeplink,
+  ]);
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
