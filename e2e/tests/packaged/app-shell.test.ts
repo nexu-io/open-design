@@ -254,13 +254,13 @@ describe('packaged app-shell policy', () => {
     expect(packagedAppShellSettled(landing, policy)).toBe(true);
   });
 
-  it('requires home when the scenario does not establish auth-first permission', () => {
+  it('accepts the signed-out identity gate once completion is retained', () => {
     expect(
       packagedAppShellPolicy({ coreProfile: true, daemonOnboardingCompleted: true, seededOnboardingCompleted: false }),
-    ).toEqual({ acceptOnboardingLanding: false });
+    ).toEqual({ acceptOnboardingLanding: true });
     expect(
-      packagedAppShellPolicy({ coreProfile: false, daemonOnboardingCompleted: true, seededOnboardingCompleted: true }),
-    ).toEqual({ acceptOnboardingLanding: false });
+      packagedAppShellPolicy({ coreProfile: false, daemonOnboardingCompleted: true, seededOnboardingCompleted: false }),
+    ).toEqual({ acceptOnboardingLanding: true });
   });
 
   it('accepts the landing only when the daemon reports onboarding is not completed', () => {
@@ -269,12 +269,11 @@ describe('packaged app-shell policy', () => {
     ).toEqual({ acceptOnboardingLanding: true });
   });
 
-  it('does not infer completed-user auth permission without a seed', () => {
+  it('lets a completed but signed-out user settle on the identity gate', () => {
     const landing = probe(renderFixture(CLOUD_SIGN_IN_LANDING));
     const policy = packagedAppShellPolicy({ coreProfile: true, daemonOnboardingCompleted: true, seededOnboardingCompleted: false });
 
-    expect(packagedAppShellSettled(landing, policy)).toBe(false);
-    expect(packagedAppShellFailureReason(landing, policy)).toContain('needs home');
+    expect(packagedAppShellSettled(landing, policy)).toBe(true);
   });
 
   // Swept alongside the probe fix: both of these read their input for
@@ -585,12 +584,12 @@ describe('packaged launch scenarios', () => {
     expect(result).toEqual({ appShell: 'home', onboardingCompleted: true });
   });
 
-  it('settles a retained completed user on the core auth-first landing', async () => {
+  it('settles a completed but signed-out user on the cloud identity gate', async () => {
     const clock = virtualClock();
     const landing = probe(renderFixture(CLOUD_SIGN_IN_LANDING));
 
     const result = await runPackagedAppShellPhase({
-      coreProfile: true,
+      coreProfile: false,
       now: clock.now,
       observe: async () => landing,
       readOnboardingConfig: async () => ({ kind: 'reading', ok: true, onboardingCompleted: true, status: 200 }),

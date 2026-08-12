@@ -918,9 +918,10 @@ winDescribe('packaged windows runtime smoke', () => {
         // environment — so it is a different daemon, and only it can say what
         // config the surface being asserted on is actually running under.
         // Phase 2 — the completed user. The seed must have been confirmed before
-        // this point; the core auth-first profile may legitimately stop at the
-        // cloud sign-in landing, while the full updater profile still needs
-        // Home. Either way, a cold launch that lost the seed fails first.
+        // this point. A signed-out completed user may legitimately stop at the
+        // cloud identity gate under either smoke profile; the full updater is
+        // driven through Shell IPC. Either way, a cold launch that lost the
+        // seed fails first.
         if (seededOnboardingCompleted !== true) {
           throw new Error('reached the completed-user app-shell check without a confirmed seeded onboarding state');
         }
@@ -935,7 +936,7 @@ winDescribe('packaged windows runtime smoke', () => {
         );
         onboardingCompleted = completedUser.onboardingCompleted;
         appShell = completedUser.appShell;
-        if (!verifyCoreOnly) expect(appShell).toBe('home');
+        expect(['home', 'onboarding-landing']).toContain(appShell);
 
         if (verifyUpgradePersistence) {
           const seedInspect = await measureSmokeStep(timings, 'seed pre-update persistence project', async () =>
@@ -2273,11 +2274,10 @@ async function runInstallerFallbackAcceptance(options: {
   const downloadedSha256 = await sha256File(downloadPath);
   expect(downloadedSha256).toBe(options.fixture.info.artifactSha256);
 
-  const fixtureNamespaceRoot = dirname(dirname(options.fixture.info.artifactPath));
   const install = await runDirectInstaller(
     downloadPath,
     options.installDir,
-    options.nsisLogPath ?? join(fixtureNamespaceRoot, 'logs', 'nsis.log'),
+    options.nsisLogPath ?? portableNsisLogPath,
   );
   expect(install.code).toBe(0);
   assertWorkingWinInstallerOverwriteLog(install.nsisLogTail);

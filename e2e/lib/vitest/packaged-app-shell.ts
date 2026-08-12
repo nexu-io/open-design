@@ -351,13 +351,13 @@ export type PackagedAppShellPolicyInput = {
 /**
  * Which terminal states this run may settle on.
  *
- * Derived from the daemon's own `onboardingCompleted`, never from the smoke
- * profile, so a run's setup and its accepted terminal state cannot disagree.
- * The smoke seeds `onboardingCompleted: true` before start and independently
- * confirms that the daemon retains it. The auth-first entry shell may still
- * route a signed-out core run to the cloud sign-in landing; that is an identity
- * gate, not evidence that onboarding state was lost. A genuine first run may
- * stop on the same surface after the daemon explicitly reports `false`.
+ * The daemon's own `onboardingCompleted` remains the authority for whether a
+ * seed survived a relaunch. It is not, however, an authentication fact: the
+ * current EntryShell deliberately returns a completed-but-signed-out user to
+ * the Cloud identity gate. A retained completed seed may therefore settle on
+ * either Home (signed in) or the positively identified Cloud landing (signed
+ * out). `assertSeededOnboardingRetained` still fails before this policy can
+ * absorb a missing or false seed.
  *
  * `coreProfile` only narrows a genuinely fresh, unseeded launch. Full release
  * acceptance controls the Shell updater through the Shell IPC plane, so it is
@@ -366,20 +366,19 @@ export type PackagedAppShellPolicyInput = {
 export function packagedAppShellPolicy(
   input: PackagedAppShellPolicyInput,
 ): { readonly acceptOnboardingLanding: boolean } {
-  if (input.coreProfile !== true) return { acceptOnboardingLanding: false };
-  // A completed-user run earns auth-first permission only when both the seed
-  // and the daemon reading are explicit `true`. `assertSeededOnboardingRetained`
-  // turns the `true -> false` cold-launch regression into a named failure before
-  // this policy is applied.
-  if (input.seededOnboardingCompleted === true) {
-    return { acceptOnboardingLanding: input.daemonOnboardingCompleted === true };
-  }
-  // A first-run landing likewise requires two explicit facts. Closed checks
-  // keep malformed values from falling through to the permissive branch.
-  return {
-    acceptOnboardingLanding:
-      input.seededOnboardingCompleted === false && input.daemonOnboardingCompleted === false,
-  };
+  // Exact true means the persisted completion fact survived. The renderer may
+  // still choose the identity gate when Cloud reports signed out.
+  if (input.daemonOnboardingCompleted === true) return { acceptOnboardingLanding: true };
+  // A seeded run that no longer reads true is a regression, not a genuine
+  // first run. `assertSeededOnboardingRetained` raises the named error before
+  // settling; keep this direction closed as a second line of defence.
+  if (input.seededOnboardingCompleted !== false) return { acceptOnboardingLanding: false };
+  // Only an explicit `false` — a daemon that positively said "not completed" —
+  // buys permission. Testing for truthiness instead would let any non-boolean
+  // that leaked past the type fall through to the permissive branch, which is
+  // the same shape of defect as coercing the reading in the first place.
+  if (input.daemonOnboardingCompleted !== false) return { acceptOnboardingLanding: false };
+  return { acceptOnboardingLanding: input.coreProfile === true };
 }
 
 /**
@@ -462,11 +461,13 @@ export function assertSeededOnboardingRetained(input: {
 /**
  * The two launch scenarios the packaged app legitimately has.
  *
- * Both are real product behaviour, not a contradiction. A first run reaches
- * the cloud sign-in landing because setup has not completed; a completed but
- * signed-out core run can reach the same landing because identity is now the
- * entry gate. The daemon config reading distinguishes the two and the retained
- * seed proves a protocol cold launch did not switch data roots.
+ * Both are real product behaviour, not a contradiction.
+ * `shouldRouteToFirstRunOnboarding` (apps/web/src/App.tsx) keys purely on
+ * `onboardingCompleted`, and `connectStepRuntimeReady` (EntryShell.tsx) lets
+ * onboarding complete through cloud sign-in *or* a local CLI *or* a verified
+ * BYOK key. In addition, EntryShell's Cloud identity effect means "completed
+ * setup, currently signed out -> cloud sign-in landing" is also correct; the
+ * daemon config and rendered identity surface are separate assertions.
  */
 export type PackagedLaunchScenario = 'completed-user' | 'first-run';
 
