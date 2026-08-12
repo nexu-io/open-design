@@ -13,7 +13,6 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
-import { rebuild, type RebuildOptions } from "@electron/rebuild";
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_ARCHIVE_MEDIA_TYPE,
@@ -29,7 +28,7 @@ import { createPackageManagerInvocation } from "@open-design/platform";
 import { isReleaseChannel, parseReleaseVersion, type ReleaseChannel } from "@open-design/release";
 
 import { hashJson, hashPath, ToolPackCache, type CacheInvalidation } from "./cache.js";
-import { resolveElectronVersion, WORKSPACE_ROOT } from "./config.js";
+import { WORKSPACE_ROOT } from "./config.js";
 import { hashPackageSourcePath } from "./package-source-hash.js";
 import { copyBundledResourceTrees } from "./resources.js";
 import {
@@ -57,7 +56,7 @@ export const CLOSURE_INTERNAL_PACKAGES = [
 ] as const;
 
 export const CLOSURE_DAEMON_EXTERNALS = ["better-sqlite3", "blake3-wasm", "node-pty"] as const;
-export const CLOSURE_ELECTRON_NATIVE_MODULES = ["better-sqlite3"] as const;
+export const CLOSURE_NODE_NATIVE_MODULES = [...CLOSURE_DAEMON_EXTERNALS] as const;
 const CLOSURE_FORBIDDEN_BUNDLE_INPUTS = [
   "/shells/electron/",
   "/payload-desktop-handoff.",
@@ -118,7 +117,6 @@ export type ClosureBuildProvenanceV1 = {
     size: number;
   };
   build: {
-    electronVersion: string;
     nativeModules: readonly string[];
     nodeVersion: string;
     sourceRevision: string | null;
@@ -149,7 +147,6 @@ export type ClosureBuildReport = {
 export async function createClosureBuildCacheKey(options: {
   artifactUrl: string;
   channel: ReleaseChannel;
-  electronVersion: string;
   minShellVersion: string;
   platform: ClosurePlatformTarget;
   version: string;
@@ -165,68 +162,56 @@ export async function createClosureBuildCacheKey(options: {
   return hashJson({
     artifactUrl: options.artifactUrl,
     channel: options.channel,
-    electronVersion: options.electronVersion,
     minShellVersion: options.minShellVersion,
     nodeVersion: process.version,
     packageManager: rootPackage.packageManager,
     platform: options.platform,
     pnpmLock: await hashPath(join(options.workspaceRoot, "pnpm-lock.yaml")),
-    schemaVersion: 1,
+    schemaVersion: 2,
     sourceHashes,
     version: options.version,
   });
 }
 
-export function createClosureElectronRebuildOptions(options: {
+export async function probeClosureNodeNativeModules(options: {
   appRoot: string;
-  electronVersion: string;
-  target: ClosurePlatformTarget;
-}): RebuildOptions {
-  const target = normalizeClosurePlatformTarget(options.target);
-  return {
-    arch: target === CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64 ? "arm64" : "x64",
-    buildFromSource: false,
-    buildPath: options.appRoot,
-    electronVersion: options.electronVersion,
-    force: true,
-    mode: "sequential",
-    onlyModules: [...CLOSURE_ELECTRON_NATIVE_MODULES],
-    platform: target === CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64 ? "darwin" : "win32",
-    projectRootPath: options.appRoot,
-  };
-}
-
-function closureNativeRebuildOutputPath(appRoot: string): string {
-  return join(appRoot, "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node");
-}
-
-export async function runClosureElectronRebuild(options: {
-  appRoot: string;
-  electronVersion: string;
-  target: ClosurePlatformTarget;
-}): Promise<void> {
-  const foundModules = new Set<string>();
-  const rebuildResult = rebuild(createClosureElectronRebuildOptions(options));
-  rebuildResult.lifecycle.on("modules-found", (modules: string[]) => {
-    for (const moduleName of modules) foundModules.add(moduleName);
-    process.stderr.write(
-      `[tools-pack closure] rebuilding Electron ABI modules: ${modules.join(", ") || "none"}\n`,
-    );
+  executable?: string;
+  modules?: readonly string[];
+}): Promise<readonly string[]> {
+  const modules = [...new Set(options.modules ?? CLOSURE_NODE_NATIVE_MODULES)].sort();
+  const script = [
+    'const {createRequire}=require("node:module");',
+    'const {join}=require("node:path");',
+    'const root=process.argv[1];',
+    'const names=JSON.parse(process.argv[2]);',
+    'const load=createRequire(join(root,"probe.cjs"));',
+    'for(const name of names)load(name);',
+    'process.stdout.write(JSON.stringify(names));',
+  ].join("");
+  const executable = options.executable ?? process.execPath;
+  const output = await new Promise<string>((resolveProbe, rejectProbe) => {
+    const child = spawn(executable, ["--eval", script, options.appRoot, JSON.stringify(modules)], {
+      env: { ...process.env, NODE_PATH: join(options.appRoot, "node_modules") },
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf8").on("data", (value: string) => { stdout += value; });
+    child.stderr.setEncoding("utf8").on("data", (value: string) => { stderr += value; });
+    child.once("error", rejectProbe);
+    child.once("close", (code, signal) => {
+      if (code === 0) resolveProbe(stdout);
+      else rejectProbe(new Error(
+        `Closure native load probe failed with ${signal ?? `exit code ${code ?? "unknown"}`}${stderr.trim().length === 0 ? "" : `: ${stderr.trim()}`}`,
+      ));
+    });
   });
-  await rebuildResult;
-  const missingModules = CLOSURE_ELECTRON_NATIVE_MODULES.filter(
-    (moduleName) => !foundModules.has(moduleName),
-  );
-  if (missingModules.length > 0) {
-    throw new Error(
-      `Closure Electron ABI rebuild did not discover required native module(s): ${missingModules.join(", ")}`,
-    );
+  const loaded = JSON.parse(output) as unknown;
+  if (!Array.isArray(loaded) || JSON.stringify(loaded) !== JSON.stringify(modules)) {
+    throw new Error("Closure native load probe returned an invalid module set");
   }
-  const nativePath = closureNativeRebuildOutputPath(options.appRoot);
-  const metadata = await stat(nativePath).catch(() => null);
-  if (metadata == null || !metadata.isFile() || metadata.size < 100_000) {
-    throw new Error(`Closure Electron ABI rebuild output is missing or invalid: ${nativePath}`);
-  }
+  return Object.freeze(modules);
 }
 
 function assertNativeBuildHost(target: ClosurePlatformTarget): void {
@@ -806,9 +791,8 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
     "--omit=dev",
     "--no-package-lock",
   ], { cwd: appRoot });
-  const electronVersion = resolveElectronVersion(workspaceRoot);
-  await runClosureElectronRebuild({ appRoot, electronVersion, target });
   await pruneForeignNodePtyPrebuilds(appRoot, target);
+  const loadedNativeModules = await probeClosureNodeNativeModules({ appRoot });
   await rm(join(appRoot, "node_modules", ".bin"), { force: true, recursive: true });
   await rm(join(appRoot, "node_modules", ".package-lock.json"), { force: true });
   // The file: tarball coordinates above are build-stage inputs, not runtime
@@ -897,8 +881,7 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
       size: archiveBytes.byteLength,
     },
     build: {
-      electronVersion,
-      nativeModules: [...CLOSURE_ELECTRON_NATIVE_MODULES],
+      nativeModules: loadedNativeModules,
       nodeVersion: process.version,
       sourceRevision: git.sourceRevision,
       workspaceDirty: git.workspaceDirty,
@@ -1002,11 +985,9 @@ async function readClosureBuildReport(
 export async function buildClosureArchive(options: ClosureBuildOptions): Promise<ClosureBuildReport> {
   const resolved = closureOutputRoot(options);
   if (options.cacheDir == null) return await buildClosureArchiveUncached(options);
-  const electronVersion = resolveElectronVersion(resolved.workspaceRoot);
   const key = await createClosureBuildCacheKey({
     artifactUrl: options.artifactUrl,
     channel: resolved.channel,
-    electronVersion,
     minShellVersion: options.minShellVersion,
     platform: resolved.platform,
     version: options.version,

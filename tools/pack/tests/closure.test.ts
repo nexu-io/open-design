@@ -7,16 +7,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CLOSURE_DAEMON_EXTERNALS,
   CLOSURE_BUILD_SOURCE_PATHS,
-  CLOSURE_ELECTRON_NATIVE_MODULES,
+  CLOSURE_NODE_NATIVE_MODULES,
   CLOSURE_INTERNAL_PACKAGES,
   CLOSURE_PLATFORM_TARGETS,
   standaloneBodySource,
   standaloneBootloaderSource,
   standaloneInnerBootloaderSource,
   createClosureBuildCacheKey,
-  createClosureElectronRebuildOptions,
   materializeClosureWebPublicHoist,
   normalizeClosurePlatformTarget,
+  probeClosureNodeNativeModules,
   resolveClosureArchiveInvocation,
   resolveClosureRuntimeDependencies,
 } from "../src/closure.js";
@@ -52,31 +52,30 @@ describe("tools-pack Closure archive", () => {
     expect(windows.args).toEqual(["a", "-tzip", "-mx=5", "C:\\closure.zip", ".\\*"]);
   });
 
-  it("rebuilds Closure native modules for the shell Electron ABI", () => {
-    expect(createClosureElectronRebuildOptions({
-      appRoot: "/tmp/closure",
-      electronVersion: "41.3.0",
-      target: CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64,
-    })).toMatchObject({
-      arch: "arm64",
-      buildPath: "/tmp/closure",
-      electronVersion: "41.3.0",
-      onlyModules: [...CLOSURE_ELECTRON_NATIVE_MODULES],
-      platform: "darwin",
-      projectRootPath: "/tmp/closure",
-    });
-    expect(createClosureElectronRebuildOptions({
-      appRoot: "C:\\closure",
-      electronVersion: "41.3.0",
-      target: CLOSURE_PLATFORM_TARGETS.WIN32_X64,
-    })).toMatchObject({
-      arch: "x64",
-      buildPath: "C:\\closure",
-      electronVersion: "41.3.0",
-      onlyModules: [...CLOSURE_ELECTRON_NATIVE_MODULES],
-      platform: "win32",
-      projectRootPath: "C:\\closure",
-    });
+  it("models Closure native modules against the Shell-provided official Node", () => {
+    expect(CLOSURE_NODE_NATIVE_MODULES).toEqual([
+      "better-sqlite3",
+      "blake3-wasm",
+      "node-pty",
+    ]);
+  });
+
+  it("loads the prepared dependency set through the official Node executable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-closure-node-probe-"));
+    roots.push(root);
+    const moduleRoot = join(root, "node_modules", "probe-module");
+    await mkdir(moduleRoot, { recursive: true });
+    await writeFile(join(moduleRoot, "package.json"), JSON.stringify({ main: "index.cjs" }));
+    await writeFile(join(moduleRoot, "index.cjs"), "module.exports = true;\n");
+
+    await expect(probeClosureNodeNativeModules({
+      appRoot: root,
+      modules: ["probe-module"],
+    })).resolves.toEqual(["probe-module"]);
+    await expect(probeClosureNodeNativeModules({
+      appRoot: root,
+      modules: ["missing-module"],
+    })).rejects.toThrow(/native load probe failed/u);
   });
 
   it("publishes a fossil root, registered inner bootloader and separate body", () => {
@@ -145,7 +144,6 @@ describe("tools-pack Closure archive", () => {
     const options = {
       artifactUrl: "https://releases.open-design.test/beta/closure/darwin-arm64/versions/0.18.0-beta.4/closure.zip",
       channel: "beta" as const,
-      electronVersion: "41.3.0",
       minShellVersion: "0.16.2",
       platform: CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64,
       version: "0.18.0-beta.4",
