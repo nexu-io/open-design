@@ -5,6 +5,7 @@ await build({
   entryPoints: [
     "./src/index.ts",
     "./src/bootloader.ts",
+    "./src/bootstrap.ts",
     "./src/launcher-bootstrap.ts",
     "./src/process-bridge.ts",
     "./src/sidecars.ts",

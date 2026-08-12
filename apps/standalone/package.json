@@ -33,13 +33,17 @@
     "typecheck": "pnpm --filter @open-design/standalone-proto build && pnpm --filter @open-design/sidecar build && pnpm --filter @open-design/standalone-runtime build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-design/closure-store": "workspace:*",
+    "@open-design/closure-update": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/standalone-proto": "workspace:*",
     "@open-design/standalone-runtime": "workspace:*"
   },
   "devDependencies": {
+    "@open-design/closure-proto": "workspace:*",
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
+    "jszip": "3.10.1",
     "tsx": "4.22.3",
     "typescript": "6.0.3",
     "vitest": "4.1.6"
