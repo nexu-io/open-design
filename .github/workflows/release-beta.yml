@@ -997,7 +997,6 @@ jobs:
       - name: Smoke beta mac_arm64 packaged runtime
         id: mac_arm64_smoke
         if: ${{ inputs.mac_arm64_smoke_mode != 'skip' }}
-        continue-on-error: true
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_arm64/build.json
@@ -1823,7 +1822,6 @@ jobs:
         working-directory: e2e
         env:
           OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
-          OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON: '["${{ runner.temp }}\\release-closure\\shared\\blobs","${{ runner.temp }}\\release-build\\win_x64\\closure-blobs"]'
           OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH: ${{ runner.temp }}\release-build\win_x64\closure-distribution.json
           OD_PACKAGED_E2E_NAMESPACE: release-beta-win
           OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
@@ -1841,7 +1839,16 @@ jobs:
           OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
           OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.win_x64_shell_resolution.outputs.smoke_proof }}
           OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.win_x64_shell_resolution.outputs.shell_version != '' && steps.win_x64_shell_resolution.outputs.shell_version || needs.metadata.outputs.shell_version }}
-        run: pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
+        shell: pwsh
+        run: |
+          # Native runner paths contain backslashes. Let PowerShell serialize
+          # the array so the spec always receives valid JSON instead of a
+          # hand-escaped string whose substituted RUNNER_TEMP can corrupt it.
+          $env:OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON = @(
+            "${{ runner.temp }}\release-closure\shared\blobs"
+            "${{ runner.temp }}\release-build\win_x64\closure-blobs"
+          ) | ConvertTo-Json -Compress
+          pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
 
       - name: Register win_x64 Electron Shell full-smoke proof
         if: ${{ inputs.win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' }}

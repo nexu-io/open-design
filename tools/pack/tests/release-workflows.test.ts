@@ -112,6 +112,7 @@ describe("release workflows", () => {
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}");
     expect(mac).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_arm64_shell_resolution.outputs.smoke_proof }}");
     expect(mac).toContain("Register mac_arm64 Electron Shell full-smoke proof");
+    expect(mac).not.toMatch(/Smoke beta mac_arm64 packaged runtime[\s\S]*?continue-on-error: true[\s\S]*?Register mac_arm64 Electron Shell full-smoke proof/);
     expect(mac).toContain("run: pnpm exec tools-release register-shell-smoke");
     expect(mac).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
     expect(mac).toContain("bash .github/scripts/release/cache/mac.sh");
@@ -182,6 +183,9 @@ describe("release workflows", () => {
     expect(buildWin).toContain('$updateArgs += "--require-vela-cli"');
     expect(win).toContain("tools-pack win validate-payload");
     expect(win).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");
+    expect(win).toContain("$env:OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON = @(");
+    expect(win).toContain(") | ConvertTo-Json -Compress");
+    expect(win).not.toContain("OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON: '[");
     expect(win).toContain(".\\.github\\scripts\\release\\cache\\win.ps1");
     for (const metadata of [betaMetadata, previewMetadata, prereleaseMetadata, stableMetadata]) {
       expect(metadata).toContain("uses: pnpm/action-setup@v5");

@@ -3086,10 +3086,14 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
     await runToolsPackJson<MacInstallResult>('install');
     installed = true;
     await seedPackagedOnboardingComplete();
+    let fixture = standaloneSeedEmbedded ? null : await seedConfiguredPackagedClosure();
+    if (!standaloneSeedEmbedded && fixture == null) {
+      throw new Error('Standalone distribution fixture was not configured');
+    }
     const first = await runToolsPackJson<MacStartResult>('start');
     started = true;
     await waitForHealthyDesktop();
-    const fixture = await readConfiguredPackagedStandaloneDistribution();
+    fixture ??= await readConfiguredPackagedStandaloneDistribution();
     assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
 
     await runToolsPackJson<MacStopResult>('stop');
@@ -3108,10 +3112,14 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
     expect((await readPackagedStandaloneDistributionBinding(fixture)).committed?.standalone).toEqual(fixture.pointer);
 
     await rm(fixture.storePaths.namespaceRoot, { force: true, recursive: true });
+    const recoveredFixture = standaloneSeedEmbedded ? null : await seedConfiguredPackagedClosure();
+    if (!standaloneSeedEmbedded && recoveredFixture == null) {
+      throw new Error('Standalone distribution recovery fixture was not configured');
+    }
     await runToolsPackJson<MacStartResult>('start');
     started = true;
     await waitForHealthyDesktop();
-    const recovered = await readConfiguredPackagedStandaloneDistribution();
+    const recovered = recoveredFixture ?? await readConfiguredPackagedStandaloneDistribution();
     assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
   } finally {
     if (started) await runToolsPackJson<MacStopResult>('stop').catch(() => undefined);
