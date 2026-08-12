@@ -522,11 +522,15 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         expect(protocolStop.status).not.toBe('partial');
         expect(protocolStop.remainingPids).toEqual([]);
 
-        await invokeMacInviteDeeplink(install.installedAppPath, { forceNewInstance: true });
+        await launchMacAppWithLaunchServices(install.installedAppPath);
         started = true;
+        const protocolColdStarted = await waitForHealthyDesktop();
+        expect(protocolColdStarted.status?.state).toBe('running');
+        expect(protocolColdStarted.status?.pid).not.toBe(protocolHotPid);
+
+        await invokeMacInviteDeeplink(install.installedAppPath);
         const protocolColdInspect = await waitForHealthyDesktop();
-        expect(protocolColdInspect.status?.state).toBe('running');
-        expect(protocolColdInspect.status?.pid).not.toBe(protocolHotPid);
+        expect(protocolColdInspect.status?.pid).toBe(protocolColdStarted.status?.pid);
       }
 
       if (!verifyCoreOnly) {
@@ -3017,20 +3021,17 @@ async function assertMacInviteProtocolRegistration(installedAppPath: string): Pr
   expect(schemes).toContain('opendesign');
 }
 
-async function invokeMacInviteDeeplink(
-  installedAppPath: string,
-  options: { forceNewInstance?: boolean } = {},
-): Promise<void> {
+async function invokeMacInviteDeeplink(installedAppPath: string): Promise<void> {
   // `-a` pins delivery to this namespace's installed test bundle instead of a
   // developer's stable Open Design app that may own the same global scheme.
-  // After an explicit lifecycle stop, LaunchServices on CI can accept a URL
-  // for a terminated app record without spawning its temporary test bundle.
-  // Keep the two OS contracts observable: first cold-activate the exact app,
-  // then deliver the URL through the same protocol route used by the hot path.
-  if (options.forceNewInstance) {
-    await execFileAsync('/usr/bin/open', ['-n', '-a', installedAppPath]);
-  }
   await execFileAsync('/usr/bin/open', ['-a', installedAppPath, packagedInviteDeeplink]);
+}
+
+async function launchMacAppWithLaunchServices(installedAppPath: string): Promise<void> {
+  // LaunchServices on CI can retain a terminated record for a temporary test
+  // bundle and accept a URL without spawning it. Prove cold activation first;
+  // once healthy, the caller separately proves protocol delivery to that PID.
+  await execFileAsync('/usr/bin/open', ['-n', '-a', installedAppPath]);
 }
 
 async function pathExists(filePath: string): Promise<boolean> {

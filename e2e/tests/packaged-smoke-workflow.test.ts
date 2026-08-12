@@ -2817,7 +2817,7 @@ process.stdin.on("end", () => {
     expect(macSpec).toContain("const packagedMacClosureTarget = process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64';");
     expect(macSpec).toContain("expectedPlatform: packagedMacClosureTarget");
     expect(macSpec).not.toContain("expectedPlatform: 'darwin-arm64'");
-    expect(macSpec).toContain("forceNewInstance: true");
+    expect(macSpec).toContain("launchMacAppWithLaunchServices(install.installedAppPath)");
     expect(macSpec).toContain("['-n', '-a', installedAppPath]");
     expect(macSpec).toContain("['-a', installedAppPath, packagedInviteDeeplink]");
   });
