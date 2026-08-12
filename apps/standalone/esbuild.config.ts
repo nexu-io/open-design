@@ -23,7 +23,10 @@ await build({
 // select and enter.
 await build({
   bundle: true,
-  entryPoints: { launcher: "./src/launcher.ts" },
+  entryPoints: {
+    "generation-bootloader": "./src/generation-bootloader.ts",
+    launcher: "./src/launcher.ts",
+  },
   format: "esm",
   outdir: "./dist",
   outExtension: { ".js": ".mjs" },

@@ -8,6 +8,7 @@ import {
   archiveClosureComponent,
   buildClosureDistributionSharedContribution,
   buildClosureDistributionTargetContribution,
+  prepareClosureLauncherComponent,
   type ClosureComponentArchiveRunner,
 } from "../src/closure-components.js";
 import { mergeClosureDistributionTargetContributions } from "../src/closure-distribution.js";
@@ -102,7 +103,11 @@ describe("tools-pack Closure component archives", () => {
       blobOrigin: "https://releases.open-design.ai/",
       bodyRoot: await componentRoot(root, "body", "bootloader.mjs"),
       channel: "beta",
-      launcherRoot: await componentRoot(root, "launcher", "launcher.mjs"),
+      launcherRoot: await (async () => {
+        const launcherRoot = await componentRoot(root, "launcher", "launcher.mjs");
+        await writeFile(join(launcherRoot, "bootloader.mjs"), "export const handoff = true;\n");
+        return launcherRoot;
+      })(),
       outputRoot,
       resources: [{
         id: "skills",
@@ -138,5 +143,23 @@ describe("tools-pack Closure component archives", () => {
     expect(manifest.resources.map(({ id }) => id)).toEqual(["skills"]);
     expect(await readFile(join(outputRoot, "shared", "body.zip"), "utf8")).toMatch(/^PK/u);
     expect(await readFile(join(outputRoot, "targets", target, "native.zip"), "utf8")).toMatch(/^PK/u);
+  });
+
+  it("materializes only the handoff and official-Node fossil launcher entries", async () => {
+    const root = await tempRoot("launcher-layout");
+    const distRoot = join(root, "dist");
+    await mkdir(distRoot, { recursive: true });
+    await writeFile(join(distRoot, "generation-bootloader.mjs"), "handoff\n");
+    await writeFile(join(distRoot, "launcher.mjs"), "launcher\n");
+    await writeFile(join(distRoot, "sidecars.mjs"), "not part of launcher\n");
+
+    const launcherRoot = await prepareClosureLauncherComponent({
+      outputRoot: join(root, "prepared"),
+      standaloneDistRoot: distRoot,
+    });
+
+    await expect(readFile(join(launcherRoot, "bootloader.mjs"), "utf8")).resolves.toBe("handoff\n");
+    await expect(readFile(join(launcherRoot, "launcher.mjs"), "utf8")).resolves.toBe("launcher\n");
+    await expect(readFile(join(launcherRoot, "sidecars.mjs"), "utf8")).rejects.toThrow();
   });
 });

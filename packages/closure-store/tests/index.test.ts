@@ -129,9 +129,17 @@ async function materializeDistributionGeneration(
     path,
     size: Buffer.byteLength(contents),
   }], digest);
+  const launcherFiles = [
+    ["bootloader.mjs", "export const handoff = true;\n"],
+    ["launcher.mjs", "export const launcher = true;\n"],
+  ] as const;
   const trees = {
     body: tree("bootloader.mjs", "export const body = true;\n"),
-    launcher: tree("launcher.mjs", "export const launcher = true;\n"),
+    launcher: createClosureComponentTreeDigest(launcherFiles.map(([path, contents]) => ({
+      digest: digest(contents),
+      path,
+      size: Buffer.byteLength(contents),
+    })), digest),
     native: tree("addon.node", "native\n"),
     resource: tree("skills/sample/SKILL.md", "resource\n"),
     runtime: tree("bin/node", "node\n"),
@@ -149,6 +157,7 @@ async function materializeDistributionGeneration(
       launcher: {
         blob: artifacts.launcher.digest,
         entryPath: "launcher.mjs",
+        handoffPath: "bootloader.mjs",
         treeDigest: trees.launcher,
       },
       targets: {
@@ -183,6 +192,7 @@ async function materializeDistributionGeneration(
   await mkdir(join(stageRoot, "runtime", "bin"), { recursive: true });
   await writeFile(join(stageRoot, "body", "bootloader.mjs"), "export const body = true;\n");
   await writeFile(join(stageRoot, "launcher", "launcher.mjs"), "export const launcher = true;\n");
+  await writeFile(join(stageRoot, "launcher", "bootloader.mjs"), "export const handoff = true;\n");
   await writeFile(join(stageRoot, "native", "addon.node"), "native\n");
   await writeFile(join(stageRoot, "runtime", "bin", "node"), "node\n");
   await writeFile(join(stageRoot, "closure.json"), `${JSON.stringify(manifest, null, 2)}\n`);
@@ -216,7 +226,7 @@ describe("layered Closure distribution consumer", () => {
 
     expect(consumed.manifest.identity).toMatchObject({
       channel: "beta",
-      digest: "sha256:340d0a042f17cda52f172c1fcdcba02670e15a022d121fa46d0809542344d81a",
+      digest: "sha256:6103d15d4bfe640a9d8213169adf24f6e6cf3e439580ced941e39847b1f4d09c",
       version: "0.19.0-beta.10",
     });
     expect(consumed.target.required.runtime.entryPath).toBe("node.exe");

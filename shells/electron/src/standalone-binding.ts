@@ -9,6 +9,8 @@ import {
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
   verifyStoredClosureCandidate,
+  verifyStoredClosureDistributionGeneration,
+  type ClosureDistributionGenerationPlan,
   type ClosureRuntimePointer,
   type ClosureStorePaths,
   type StoredClosureVerification,
@@ -35,9 +37,10 @@ export class ElectronStandaloneBindingError extends Error {
 
 export type ElectronStandaloneSelection = Readonly<{
   binding: ElectronStandaloneBinding;
+  distribution: ClosureDistributionGenerationPlan | null;
   pointer: ClosureRuntimePointer;
   storePaths: ClosureStorePaths;
-  verification: StoredClosureVerification;
+  verification: StoredClosureVerification | null;
 }>;
 
 function hostStandalonePlatform(
@@ -101,20 +104,40 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
     );
   }
 
-  let verification: StoredClosureVerification;
+  let distribution: Awaited<ReturnType<typeof verifyStoredClosureDistributionGeneration>> | null = null;
+  let verification: StoredClosureVerification | null = null;
+  let distributionError: unknown = null;
   try {
-    verification = await verifyStoredClosureCandidate(
-      storePaths,
-      closureBindingIdentityFromRuntimePointer(pointer),
-    );
+    distribution = await verifyStoredClosureDistributionGeneration(storePaths, pointer);
   } catch (error) {
+    distributionError = error;
+  }
+  if (distribution == null) {
+    try {
+      verification = await verifyStoredClosureCandidate(
+        storePaths,
+        closureBindingIdentityFromRuntimePointer(pointer),
+      );
+    } catch (error) {
+      const cause = new AggregateError(
+        [distributionError, error].filter((value) => value != null),
+        "Neither layered nor legacy Closure generation passed immutable verification",
+      );
+      throw new ElectronStandaloneBindingError(
+        "standalone-invalid",
+        "Committed Standalone failed immutable Store verification",
+        { cause },
+      );
+    }
+  }
+  if (distribution == null && verification == null) {
     throw new ElectronStandaloneBindingError(
       "standalone-invalid",
       "Committed Standalone failed immutable Store verification",
-      { cause: error },
     );
   }
-  const minShellVersion = verification.manifest.compatibility.shell.electron?.version.min;
+  const minShellVersion = distribution?.plan.manifest.compatibility.shell.electron?.version.min
+    ?? verification?.manifest.compatibility.shell.electron?.version.min;
   if (minShellVersion == null) {
     throw new ElectronStandaloneBindingError(
       "installer-required",
@@ -138,9 +161,9 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
           version: input.shellVersion,
         }),
       }),
-      bootloaderPath: join(
-        verification.paths.payloadRoot,
-        verification.manifest.artifact.entryPath,
+      bootloaderPath: distribution?.plan.required.launcher.resolvedHandoffPath ?? join(
+        verification!.paths.payloadRoot,
+        verification!.manifest.artifact.entryPath,
       ),
       descriptor: Object.freeze({
         release: Object.freeze({ version: releaseVersion }),
@@ -153,9 +176,11 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
       paths: Object.freeze({
         cacheRoot: input.paths.cacheRoot,
         dataRoot: input.paths.dataRoot,
-        installationRoot: verification.paths.payloadRoot,
+        installationRoot: distribution?.plan.installationRoot ?? verification!.paths.payloadRoot,
         logsRoot: input.paths.logsRoot,
-        resourceRoot: join(verification.paths.payloadRoot, "resources", "open-design"),
+        resourceRoot: distribution == null
+          ? join(verification!.paths.payloadRoot, "resources", "open-design")
+          : join(storePaths.channelRoot, "resources"),
         runtimeRoot: input.paths.runtimeRoot,
       }),
       scope: Object.freeze({
@@ -164,6 +189,7 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
         namespace: storePaths.namespace,
       }),
     }),
+    distribution: distribution?.plan ?? null,
     pointer,
     storePaths,
     verification,

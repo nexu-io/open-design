@@ -6,6 +6,7 @@ import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   CLOSURE_LAUNCHER_ENTRY_PATH,
+  CLOSURE_LAUNCHER_HANDOFF_PATH,
   CLOSURE_PROTOCOL_VERSION,
   createClosureDistributionManifest,
   type ClosureDigest,
@@ -43,6 +44,7 @@ export type ClosureDistributionSharedContribution = Readonly<{
   launcher: Readonly<{
     artifact: ClosureDistributionBlob;
     entryPath: typeof CLOSURE_LAUNCHER_ENTRY_PATH;
+    handoffPath: typeof CLOSURE_LAUNCHER_HANDOFF_PATH;
     treeDigest: ClosureDigest;
   }>;
   protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
@@ -174,6 +176,7 @@ export async function createClosureDistributionSharedContribution(
     launcher: Object.freeze({
       artifact: launcher,
       entryPath: CLOSURE_LAUNCHER_ENTRY_PATH,
+      handoffPath: CLOSURE_LAUNCHER_HANDOFF_PATH,
       treeDigest: options.launcher.treeDigest,
     }),
     protocolVersion: CLOSURE_PROTOCOL_VERSION,
@@ -291,6 +294,7 @@ export function mergeClosureDistributionTargetContributions(
       launcher: {
         blob: shared.launcher.artifact.digest,
         entryPath: shared.launcher.entryPath,
+        handoffPath: shared.launcher.handoffPath,
         treeDigest: shared.launcher.treeDigest,
       },
       targets,

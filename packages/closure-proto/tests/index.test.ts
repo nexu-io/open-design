@@ -8,6 +8,7 @@ import {
   CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   CLOSURE_INVENTORY_SCHEMA_VERSION,
   CLOSURE_LAUNCHER_ENTRY_PATH,
+  CLOSURE_LAUNCHER_HANDOFF_PATH,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
   CLOSURE_SIGNATURE_ALGORITHM,
@@ -102,6 +103,7 @@ const distributionDraft: ClosureDistributionManifestDraft = {
     launcher: {
       blob: distributionDigests.launcher,
       entryPath: CLOSURE_LAUNCHER_ENTRY_PATH,
+      handoffPath: CLOSURE_LAUNCHER_HANDOFF_PATH,
       treeDigest: distributionDigests.launcher,
     },
     targets: {

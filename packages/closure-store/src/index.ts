@@ -19,6 +19,7 @@ import {
   type ClosureDistributionBlob,
   type ClosureDistributionEntrypointComponent,
   type ClosureDistributionIdentity,
+  type ClosureDistributionLauncherComponent,
   type ClosureDistributionManifest,
   type ClosureFileInventory,
   type ResolvedClosureDistributionTarget,
@@ -62,6 +63,11 @@ export type ClosureDistributionEntrypointPlan = ClosureDistributionComponentPlan
   resolvedEntryPath: string;
 }>;
 
+export type ClosureDistributionLauncherPlan = ClosureDistributionEntrypointPlan & Readonly<{
+  handoffPath: string;
+  resolvedHandoffPath: string;
+}>;
+
 export type ClosureDistributionResourcePlan = Readonly<{
   artifact: ClosureDistributionBlob;
   blobPath: string;
@@ -80,7 +86,7 @@ export type ClosureDistributionGenerationPlan = Readonly<{
   namespace: string;
   required: Readonly<{
     body: ClosureDistributionEntrypointPlan;
-    launcher: ClosureDistributionEntrypointPlan;
+    launcher: ClosureDistributionLauncherPlan;
     native: ClosureDistributionComponentPlan;
     runtime: ClosureDistributionEntrypointPlan;
   }>;
@@ -175,7 +181,14 @@ function planDistributionComponent(
 function planDistributionComponent(
   paths: ClosureStorePaths,
   generationRoot: string,
-  componentName: "body" | "launcher" | "runtime",
+  componentName: "launcher",
+  component: ClosureDistributionLauncherComponent,
+  manifest: ClosureDistributionManifest,
+): ClosureDistributionLauncherPlan;
+function planDistributionComponent(
+  paths: ClosureStorePaths,
+  generationRoot: string,
+  componentName: "body" | "runtime",
   component: ClosureDistributionEntrypointComponent,
   manifest: ClosureDistributionManifest,
 ): ClosureDistributionEntrypointPlan;
@@ -183,9 +196,14 @@ function planDistributionComponent(
   paths: ClosureStorePaths,
   generationRoot: string,
   componentName: "body" | "launcher" | "native" | "runtime",
-  component: Readonly<{ blob: ClosureDigest; entryPath?: string; treeDigest: ClosureDigest }>,
+  component: Readonly<{
+    blob: ClosureDigest;
+    entryPath?: string;
+    handoffPath?: string;
+    treeDigest: ClosureDigest;
+  }>,
   manifest: ClosureDistributionManifest,
-): ClosureDistributionComponentPlan | ClosureDistributionEntrypointPlan {
+): ClosureDistributionComponentPlan | ClosureDistributionEntrypointPlan | ClosureDistributionLauncherPlan {
   const artifact = manifest.blobs[component.blob];
   if (artifact == null) {
     throw new ClosureStoreError(`Closure distribution component ${componentName} references an unknown blob`);
@@ -198,10 +216,16 @@ function planDistributionComponent(
     treeDigest: component.treeDigest,
   };
   if (component.entryPath == null) return common;
-  return {
+  const entrypoint = {
     ...common,
     entryPath: component.entryPath,
     resolvedEntryPath: assertUnderRoot(paths.root, join(componentRoot, component.entryPath)),
+  };
+  if (component.handoffPath == null) return entrypoint;
+  return {
+    ...entrypoint,
+    handoffPath: component.handoffPath,
+    resolvedHandoffPath: assertUnderRoot(paths.root, join(componentRoot, component.handoffPath)),
   };
 }
 
@@ -654,6 +678,9 @@ async function verifyClosureDistributionGenerationRoot(
     }
     if ("entryPath" in component) {
       await assertMaterializedEntrypoint(join(componentRoot, component.entryPath), name);
+    }
+    if ("handoffPath" in component && typeof component.handoffPath === "string") {
+      await assertMaterializedEntrypoint(join(componentRoot, component.handoffPath), `${name} handoff`);
     }
   }
   if (verifiedDigests.size !== new Set(plan.requiredBlobPaths).size) {

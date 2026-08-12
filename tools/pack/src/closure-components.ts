@@ -4,6 +4,7 @@ import { createReadStream } from "node:fs";
 import {
   lstat,
   mkdir,
+  copyFile,
   readdir,
   rm,
   stat,
@@ -13,6 +14,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_LAUNCHER_ENTRY_PATH,
+  CLOSURE_LAUNCHER_HANDOFF_PATH,
   createClosureComponentTreeDigest,
   type ClosureComponentTreeFile,
   type ClosureDigest,
@@ -55,6 +57,30 @@ export type ClosureSharedResourceRoot = Readonly<{
   root: string;
   title: string;
 }>;
+
+/** Materialize the two fossil entries that every launcher archive must carry. */
+export async function prepareClosureLauncherComponent(options: Readonly<{
+  outputRoot: string;
+  standaloneDistRoot: string;
+}>): Promise<string> {
+  const outputRoot = resolve(options.outputRoot);
+  const sourceRoot = resolve(options.standaloneDistRoot);
+  await rm(outputRoot, { force: true, recursive: true });
+  await mkdir(outputRoot, { recursive: true });
+  await Promise.all([
+    copyFile(
+      join(sourceRoot, "generation-bootloader.mjs"),
+      join(outputRoot, CLOSURE_LAUNCHER_HANDOFF_PATH),
+    ),
+    copyFile(
+      join(sourceRoot, CLOSURE_LAUNCHER_ENTRY_PATH),
+      join(outputRoot, CLOSURE_LAUNCHER_ENTRY_PATH),
+    ),
+  ]).catch((error: unknown) => {
+    throw new Error("Standalone launcher build outputs are incomplete", { cause: error });
+  });
+  return outputRoot;
+}
 
 function runArchive(invocation: ClosureArchiveInvocation, cwd: string): Promise<void> {
   return new Promise<void>((resolveRun, rejectRun) => {
@@ -148,6 +174,7 @@ async function inspectComponentTree(
 export async function archiveClosureComponent(options: Readonly<{
   entryPath?: string;
   outputPath: string;
+  requiredPaths?: readonly string[];
   run?: ClosureComponentArchiveRunner;
   sourceRoot: string;
   target: ClosurePlatformTarget;
@@ -160,11 +187,15 @@ export async function archiveClosureComponent(options: Readonly<{
   ));
   const fileCount = files.length;
   if (fileCount === 0) throw new Error(`Closure component source is empty: ${sourceRoot}`);
-  if (options.entryPath != null) {
-    const entryPath = join(sourceRoot, ...safeEntrySegments(options.entryPath));
+  const requiredPaths = new Set([
+    ...(options.entryPath == null ? [] : [options.entryPath]),
+    ...(options.requiredPaths ?? []),
+  ]);
+  for (const requiredPath of requiredPaths) {
+    const entryPath = join(sourceRoot, ...safeEntrySegments(requiredPath));
     const entry = await lstat(entryPath).catch(() => null);
     if (entry == null || entry.isSymbolicLink() || !entry.isFile()) {
-      throw new Error(`Closure component entry is missing: ${options.entryPath}`);
+      throw new Error(`Closure component entry is missing: ${requiredPath}`);
     }
   }
   await mkdir(dirname(outputPath), { recursive: true });
@@ -217,6 +248,7 @@ export async function buildClosureDistributionSharedContribution(options: Readon
   const launcher = await archiveClosureComponent({
     entryPath: CLOSURE_LAUNCHER_ENTRY_PATH,
     outputPath: join(outputRoot, "shared", "launcher.zip"),
+    requiredPaths: [CLOSURE_LAUNCHER_HANDOFF_PATH],
     run: options.run,
     sourceRoot: options.launcherRoot,
     target: options.archiveTarget,

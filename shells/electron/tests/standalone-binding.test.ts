@@ -6,16 +6,23 @@ import { dirname, join } from "node:path";
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_ARCHIVE_MEDIA_TYPE,
+  CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   CLOSURE_INVENTORY_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
   bindClosureCandidateIdentity,
+  createClosureComponentTreeDigest,
+  createClosureDistributionManifest,
+  type ClosureDistributionBlob,
   type ClosureCandidateManifest,
 } from "@open-design/closure-proto";
 import {
   commitStoredClosureCandidate,
+  commitVerifiedClosureDistributionGeneration,
+  planClosureDistributionGeneration,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
+  verifyMaterializedClosureDistributionGeneration,
 } from "@open-design/closure-store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -121,6 +128,107 @@ async function materialize(root: string, version: string, options: {
   return { committed, storePaths, versionPaths };
 }
 
+async function materializeDistribution(root: string) {
+  const storePaths = resolveClosureStorePaths({
+    channel: "beta",
+    namespace: "release-beta",
+    root,
+  });
+  const sources = {
+    body: Buffer.from("body-archive"),
+    launcher: Buffer.from("launcher-archive"),
+    native: Buffer.from("native-archive"),
+    runtime: Buffer.from("runtime-archive"),
+  };
+  const artifact = (bytes: Buffer): ClosureDistributionBlob => {
+    const value = digest(bytes);
+    return {
+      digest: value,
+      mediaType: "application/zip",
+      size: bytes.byteLength,
+      url: `https://releases.open-design.test/beta/blobs/${value.slice("sha256:".length)}`,
+    };
+  };
+  const artifacts = Object.fromEntries(
+    Object.entries(sources).map(([name, bytes]) => [name, artifact(bytes)]),
+  ) as Record<keyof typeof sources, ClosureDistributionBlob>;
+  const trees = {
+    body: [["bootloader.mjs", "body\n"]],
+    launcher: [["bootloader.mjs", "handoff\n"], ["launcher.mjs", "launcher\n"]],
+    native: [["node_modules/addon/addon.node", "native\n"]],
+    runtime: [["bin/node", "node\n"]],
+  } as const;
+  const treeDigest = (files: readonly (readonly [string, string])[]) => (
+    createClosureComponentTreeDigest(files.map(([path, contents]) => ({
+      digest: digest(contents),
+      path,
+      size: Buffer.byteLength(contents),
+    })), digest)
+  );
+  const manifest = createClosureDistributionManifest({
+    blobs: Object.fromEntries(Object.values(artifacts).map((value) => [value.digest, value])),
+    compatibility: { shell: { electron: { version: { min: "0.18.0-beta.1" } } } },
+    identity: {
+      channel: "beta",
+      protocolVersion: CLOSURE_PROTOCOL_VERSION,
+      version: "0.19.0-beta.10",
+    },
+    required: {
+      body: {
+        blob: artifacts.body.digest,
+        entryPath: "bootloader.mjs",
+        treeDigest: treeDigest(trees.body),
+      },
+      launcher: {
+        blob: artifacts.launcher.digest,
+        entryPath: "launcher.mjs",
+        handoffPath: "bootloader.mjs",
+        treeDigest: treeDigest(trees.launcher),
+      },
+      targets: {
+        "darwin-arm64": {
+          native: { blob: artifacts.native.digest, treeDigest: treeDigest(trees.native) },
+          runtime: {
+            blob: artifacts.runtime.digest,
+            entryPath: "bin/node",
+            treeDigest: treeDigest(trees.runtime),
+          },
+        },
+      },
+    },
+    resources: [],
+    schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  }, digest);
+  const plan = planClosureDistributionGeneration(storePaths, 0, manifest, "darwin-arm64");
+  await mkdir(storePaths.blobsRoot, { recursive: true });
+  for (const [name, bytes] of Object.entries(sources)) {
+    await writeFile(join(
+      storePaths.blobsRoot,
+      artifacts[name as keyof typeof sources].digest.slice("sha256:".length),
+    ), bytes);
+  }
+  const stageRoot = join(storePaths.stagingRoot, "generation-0");
+  for (const [component, files] of Object.entries(trees)) {
+    for (const [path, contents] of files) {
+      const target = join(stageRoot, component, ...path.split("/"));
+      await mkdir(dirname(target), { recursive: true });
+      await writeFile(target, contents);
+    }
+  }
+  await writeFile(join(stageRoot, "closure.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  const verification = await verifyMaterializedClosureDistributionGeneration(
+    storePaths,
+    plan,
+    stageRoot,
+  );
+  const committed = await commitVerifiedClosureDistributionGeneration(
+    storePaths,
+    verification,
+    "0.19.0-beta.10",
+  );
+  return { committed, plan, storePaths };
+}
+
 function input(root: string) {
   return {
     channel: "beta",
@@ -133,6 +241,28 @@ function input(root: string) {
 }
 
 describe("Electron Standalone Store binding", () => {
+  it("projects a verified layered generation through its launcher handoff entry", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-electron-layered-binding-"));
+    roots.push(root);
+    const candidate = await materializeDistribution(root);
+
+    const selected = await resolveElectronStandaloneBinding({
+      ...input(root),
+      shellVersion: "0.19.0-beta.10",
+    }, {
+      arch: "arm64",
+      platform: "darwin",
+    });
+
+    expect(selected.distribution).toEqual(candidate.plan);
+    expect(selected.verification).toBeNull();
+    expect(selected.binding.bootloaderPath).toBe(
+      join(candidate.plan.installationRoot, "launcher", "bootloader.mjs"),
+    );
+    expect(selected.binding.paths.installationRoot).toBe(candidate.plan.installationRoot);
+    expect(selected.binding.paths.resourceRoot).toBe(join(candidate.storePaths.channelRoot, "resources"));
+  });
+
   it("projects verified Store truth into one protocol-only handoff", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-electron-standalone-binding-"));
     roots.push(root);

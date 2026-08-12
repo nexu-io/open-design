@@ -212,17 +212,21 @@ async function downloadableDistribution(): Promise<{
   fetch: typeof globalThis.fetch;
   resourceUrl: string;
 }> {
-  const zip = async (path: string, contents: string): Promise<Buffer> => {
+  const zip = async (...files: Array<readonly [string, string]>): Promise<Buffer> => {
     const archive = new JSZip();
-    archive.file(path, contents, { date: new Date(0) });
+    for (const [path, contents] of files) archive.file(path, contents, { date: new Date(0) });
     return await archive.generateAsync({ compression: "DEFLATE", type: "nodebuffer" });
   };
+  const launcherFiles = [
+    ["bootloader.mjs", "export const handoff = true;\n"],
+    ["launcher.mjs", "export const launcher = true;\n"],
+  ] as const;
   const archives = {
-    body: await zip("bootloader.mjs", "export const body = true;\n"),
-    launcher: await zip("launcher.mjs", "export const launcher = true;\n"),
-    native: await zip("addon.node", "native\n"),
-    resource: await zip("skills/SKILL.md", "# Skill\n"),
-    runtime: await zip("bin/node", "node\n"),
+    body: await zip(["bootloader.mjs", "export const body = true;\n"]),
+    launcher: await zip(...launcherFiles),
+    native: await zip(["addon.node", "native\n"]),
+    resource: await zip(["skills/SKILL.md", "# Skill\n"]),
+    runtime: await zip(["bin/node", "node\n"]),
   };
   const artifact = (bytes: Buffer): ClosureDistributionBlob => {
     const value = digest(bytes);
@@ -243,7 +247,11 @@ async function downloadableDistribution(): Promise<{
   }], digest);
   const trees = {
     body: tree("bootloader.mjs", "export const body = true;\n"),
-    launcher: tree("launcher.mjs", "export const launcher = true;\n"),
+    launcher: createClosureComponentTreeDigest(launcherFiles.map(([path, contents]) => ({
+      digest: digest(contents),
+      path,
+      size: Buffer.byteLength(contents),
+    })), digest),
     native: tree("addon.node", "native\n"),
     resource: tree("skills/SKILL.md", "# Skill\n"),
     runtime: tree("bin/node", "node\n"),
@@ -261,6 +269,7 @@ async function downloadableDistribution(): Promise<{
       launcher: {
         blob: artifacts.launcher.digest,
         entryPath: "launcher.mjs",
+        handoffPath: "bootloader.mjs",
         treeDigest: trees.launcher,
       },
       targets: {

@@ -12,6 +12,7 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the deploy
 - Composition of validated Standalone-owned and attachment-local Shell updater provider ports into one opaque projection; it must not interpret provider action ids.
 - Serialization adapters that project attachment-local Shell capabilities and generation-shared Standalone body handles through the generic Sidecar control plane; transport-private service names stay out of standalone-proto.
 - The bundled `launcher.mjs` official-Node entry: decode one caller-fenced bootstrap, import one absolute body `bootloader.mjs`, attach the generation body service, and exit after the final attachment or stop request.
+- The bundled generation `bootloader.mjs`: derive official Node, native and launcher paths from the fixed four-component installation root, then enter the process bridge once. Keep these layout details inside this fossil wrapper rather than expanding the shared handoff protocol.
 
 ## Does not own
 

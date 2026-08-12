@@ -9,6 +9,7 @@ export const CLOSURE_SIGNATURE_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_ARCHIVE_MEDIA_TYPE = "application/vnd.open-design.closure.zip-v1" as const;
 export const CLOSURE_ARCHIVE_ENTRY_PATH = "bootloader.mjs" as const;
 export const CLOSURE_LAUNCHER_ENTRY_PATH = "launcher.mjs" as const;
+export const CLOSURE_LAUNCHER_HANDOFF_PATH = CLOSURE_ARCHIVE_ENTRY_PATH;
 export const CLOSURE_SIGNATURE_ALGORITHM = "ed25519" as const;
 
 export type ClosureDigest = `sha256:${string}`;
@@ -84,6 +85,10 @@ export type ClosureDistributionEntrypointComponent = ClosureDistributionComponen
   entryPath: string;
 };
 
+export type ClosureDistributionLauncherComponent = ClosureDistributionEntrypointComponent & {
+  handoffPath: typeof CLOSURE_LAUNCHER_HANDOFF_PATH;
+};
+
 export type ClosureDistributionTarget = {
   native: ClosureDistributionComponent;
   runtime: ClosureDistributionEntrypointComponent;
@@ -112,7 +117,7 @@ export type ClosureDistributionManifestDraft = {
   identity: ClosureDistributionIdentityDraft;
   required: {
     body: ClosureDistributionEntrypointComponent;
-    launcher: ClosureDistributionEntrypointComponent;
+    launcher: ClosureDistributionLauncherComponent;
     targets: Record<string, ClosureDistributionTarget>;
   };
   resources: ClosureDistributionResource[];
@@ -130,7 +135,7 @@ export type ClosureComponentTreeFile = ClosureFileInventoryEntry;
 export type ResolvedClosureDistributionTarget = {
   required: {
     body: ClosureDistributionEntrypointComponent;
-    launcher: ClosureDistributionEntrypointComponent;
+    launcher: ClosureDistributionLauncherComponent;
     native: ClosureDistributionComponent;
     runtime: ClosureDistributionEntrypointComponent;
   };
@@ -607,6 +612,26 @@ function normalizeDistributionEntrypointComponent(
   };
 }
 
+function normalizeDistributionLauncherComponent(
+  value: unknown,
+  label: string,
+): ClosureDistributionLauncherComponent {
+  const component = requireRecord(value, label);
+  requireKnownKeys(component, ["blob", "entryPath", "handoffPath", "treeDigest"], label);
+  const normalized = {
+    blob: normalizeDigest(component.blob),
+    entryPath: normalizeRelativePath(component.entryPath, `${label} entry path`),
+    handoffPath: normalizeRelativePath(component.handoffPath, `${label} handoff path`),
+    treeDigest: normalizeDigest(component.treeDigest),
+  };
+  if (normalized.handoffPath !== CLOSURE_LAUNCHER_HANDOFF_PATH) {
+    throw new ClosureProtocolError(
+      `closure distribution launcher handoff path must be ${CLOSURE_LAUNCHER_HANDOFF_PATH}`,
+    );
+  }
+  return normalized as ClosureDistributionLauncherComponent;
+}
+
 function normalizeDistributionResources(value: unknown): ClosureDistributionResource[] {
   if (!Array.isArray(value)) {
     throw new ClosureProtocolError("closure distribution resources must be an array");
@@ -697,7 +722,7 @@ function normalizeClosureDistributionManifestDraft(value: unknown): ClosureDistr
       `closure distribution body entry path must be ${CLOSURE_ARCHIVE_ENTRY_PATH}`,
     );
   }
-  const launcher = normalizeDistributionEntrypointComponent(
+  const launcher = normalizeDistributionLauncherComponent(
     required.launcher,
     "closure distribution launcher component",
   );
