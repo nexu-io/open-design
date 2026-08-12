@@ -43,6 +43,8 @@ const metadata = (metadataPath.length > 0
     };
     shell?: {
       artifacts?: Record<string, { digest?: string; url?: string }>;
+      buildDigest?: string;
+      depsDigest?: string;
       sourceDigest?: string;
       type?: string;
       version?: string;
@@ -152,7 +154,12 @@ for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {
   if (targetMetadata.shell != null) {
     const shell = targetMetadata.shell;
     const expectedPlatform = target === "mac_arm64" ? "darwin-arm64" : target === "mac_x64" ? "darwin-x64" : "win32-x64";
-    if (shell.type !== "electron" || !/^sha256:[0-9a-f]{64}$/.test(String(shell.sourceDigest))) {
+    if (
+      shell.type !== "electron"
+      || !/^sha256:[0-9a-f]{64}$/.test(String(shell.buildDigest))
+      || !/^sha256:[0-9a-f]{64}$/.test(String(shell.depsDigest))
+      || !/^sha256:[0-9a-f]{64}$/.test(String(shell.sourceDigest))
+    ) {
       throw new Error(`metadata target ${target} has an invalid Shell identity`);
     }
     try {

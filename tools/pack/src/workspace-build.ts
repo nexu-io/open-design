@@ -19,6 +19,20 @@ type WorkspaceBuildArtifact = {
   workspacePath: string;
 };
 
+export const SHELL_BUILD_EPOCH = 1 as const;
+
+export type ToolPackShellBuildIdentity = Readonly<{
+  buildDigest: `sha256:${string}`;
+  depsDigest: `sha256:${string}`;
+  sourceDigest: `sha256:${string}`;
+}>;
+
+const STANDALONE_NATIVE_DEPENDENCIES = [
+  "better-sqlite3",
+  "blake3-wasm",
+  "node-pty",
+] as const;
+
 async function resolveWorkspaceBuildVersionFamily(config: ToolPackConfig): Promise<string | null> {
   if (config.platform !== "win") return null;
   const releaseVersion = await readRuntimeShellVersion(config).catch(() => null);
@@ -54,13 +68,52 @@ export async function resolveShellSourceDigest(config: ToolPackConfig): Promise<
   packageHashes["@open-design/tools-pack"] = await hashPackageSourcePath(join(config.workspaceRoot, "tools/pack"));
   return `sha256:${hashJson({
     buildCommand: definition.buildCommand,
-    nodeVersion: process.version,
     packageHashes,
-    packageManager: await readPackageManager(config.workspaceRoot),
-    pnpmLock: await hashPath(join(config.workspaceRoot, "pnpm-lock.yaml")),
-    schemaVersion: 12,
+    schemaVersion: 13,
     shell: config.shell,
   })}`;
+}
+
+export async function resolveShellDepsDigest(config: ToolPackConfig): Promise<`sha256:${string}`> {
+  const daemonManifest = JSON.parse(
+    await readFile(join(config.workspaceRoot, "apps/daemon/package.json"), "utf8"),
+  ) as { dependencies?: Record<string, unknown> };
+  const nativeDependencies = Object.fromEntries(STANDALONE_NATIVE_DEPENDENCIES.map((name) => {
+    const version = daemonManifest.dependencies?.[name];
+    if (typeof version !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(version)) {
+      throw new Error(`Shell dependency ${name} must use an exact version`);
+    }
+    return [name, version];
+  }));
+  const nodeVersion = process.versions.node;
+  const modules = process.versions.modules;
+  const napi = process.versions.napi;
+  if (modules == null || napi == null) throw new Error("Shell Node ABI identity is unavailable");
+  return `sha256:${hashJson({
+    electron: { version: config.electronVersion },
+    nativeDependencies,
+    node: { modules, napi, version: nodeVersion },
+    packageManager: await readPackageManager(config.workspaceRoot),
+    pnpmLock: await hashPath(join(config.workspaceRoot, "pnpm-lock.yaml")),
+    schemaVersion: 1,
+  })}`;
+}
+
+export async function resolveShellBuildIdentity(config: ToolPackConfig): Promise<ToolPackShellBuildIdentity> {
+  const [sourceDigest, depsDigest] = await Promise.all([
+    resolveShellSourceDigest(config),
+    resolveShellDepsDigest(config),
+  ]);
+  return Object.freeze({
+    buildDigest: `sha256:${hashJson({
+      buildEpoch: SHELL_BUILD_EPOCH,
+      depsDigest,
+      shell: config.shell,
+      sourceDigest,
+    })}`,
+    depsDigest,
+    sourceDigest,
+  });
 }
 
 function workspaceBuildOutputFiles(): string[] {
@@ -112,8 +165,9 @@ export async function ensureWorkspaceBuildArtifacts(
   config: ToolPackConfig,
   cache: ToolPackCache,
   build: () => Promise<void>,
-): Promise<`sha256:${string}`> {
-  const key = await resolveShellSourceDigest(config);
+): Promise<ToolPackShellBuildIdentity> {
+  const identity = await resolveShellBuildIdentity(config);
+  const key = identity.buildDigest;
   const nodeId = `${config.platform}.workspace-build`;
   const artifacts = workspaceBuildArtifacts();
   const versionFamily = await resolveWorkspaceBuildVersionFamily(config);
@@ -164,5 +218,5 @@ export async function ensureWorkspaceBuildArtifacts(
     },
     seedFrom: versionFamilyAlias == null ? [] : [{ aliasKey: versionFamilyAlias, materialize }],
   });
-  return key;
+  return identity;
 }

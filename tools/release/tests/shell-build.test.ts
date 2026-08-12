@@ -19,6 +19,8 @@ import {
 } from "../src/storage/shell-build.js";
 
 const sourceDigest = `sha256:${"a".repeat(64)}` as const;
+const depsDigest = `sha256:${"b".repeat(64)}` as const;
+const buildDigest = `sha256:${"c".repeat(64)}` as const;
 const acceptanceDigest = `sha256:${"e".repeat(64)}` as const;
 const temporaryRoots: string[] = [];
 
@@ -32,16 +34,16 @@ const plan = {
   profileDigest: `sha256:${"d".repeat(64)}` as const,
   releaseVersion: "0.19.0-beta.2",
   runtimeNamespaceRoot: "/tmp/runtime",
-  schemaVersion: 1 as const,
-  shell: { sourceDigest, type: "electron", version: "0.19.0-beta.2" },
+  schemaVersion: 2 as const,
+  shell: { buildDigest, depsDigest, sourceDigest, type: "electron", version: "0.19.0-beta.2" },
   target: "darwin-arm64" as const,
   to: "dmg",
 };
 
 describe("immutable Shell build storage", () => {
   it("keeps source lookup and physical version paths separate", () => {
-    expect(shellBuildIndexObjectKey("beta", "electron", sourceDigest, "darwin-arm64")).toBe(
-      `beta/shells/electron/builds/${"a".repeat(64)}/artifacts/darwin-arm64.json`,
+    expect(shellBuildIndexObjectKey("beta", "electron", buildDigest, plan.profileDigest, "darwin-arm64")).toBe(
+      `beta/shells/electron/builds/${"c".repeat(64)}/profiles/${"d".repeat(64)}/artifacts/darwin-arm64.json`,
     );
     expect(shellBuildVersionPrefix("beta", "electron", "0.19.0-beta.2", "darwin-arm64")).toBe(
       "beta/shells/electron/versions/0.19.0-beta.2/darwin-arm64",
@@ -49,13 +51,13 @@ describe("immutable Shell build storage", () => {
     expect(shellSmokeProofObjectKey(
       "beta",
       "electron",
-      sourceDigest,
+      buildDigest,
       "darwin-arm64",
       "mac-shell-v3",
       acceptanceDigest,
       1,
     )).toBe(
-      `beta/shells/electron/builds/${"a".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
+      `beta/shells/electron/builds/${"c".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
     );
   });
 
@@ -76,7 +78,7 @@ describe("immutable Shell build storage", () => {
       createdAt: "2026-08-09T00:00:00.000Z",
       provenance: {},
       profileDigest: plan.profileDigest,
-      schemaVersion: 1,
+      schemaVersion: 2,
       shell: { ...plan.shell, version: "0.19.0-beta.1" },
       target: "darwin-arm64",
     }, validatedPlan, "beta");
@@ -91,7 +93,7 @@ describe("immutable Shell build storage", () => {
       createdAt: "2026-08-09T00:00:00.000Z",
       provenance: {},
       profileDigest: plan.profileDigest,
-      schemaVersion: 1,
+      schemaVersion: 2,
       shell: { ...plan.shell, sourceDigest: `sha256:${"c".repeat(64)}` },
       target: "darwin-arm64",
     }, plan, "beta")).toThrow(/identity/);
@@ -270,12 +272,12 @@ describe("immutable Shell build storage", () => {
           matrix: "mac-shell-v3",
           standaloneProtocolVersion: 1,
           state: "hit",
-          url: `https://releases.example/beta/shells/electron/builds/${"a".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
+          url: `https://releases.example/beta/shells/electron/builds/${"c".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
         });
         const proofKey = shellSmokeProofObjectKey(
           "beta",
           "electron",
-          sourceDigest,
+          buildDigest,
           "darwin-arm64",
           "mac-shell-v3",
           acceptanceDigest,

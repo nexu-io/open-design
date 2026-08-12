@@ -44,7 +44,7 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
     }
   };
 
-  const shellSourceDigest = await runPhase("workspace-build", async () =>
+  const shellBuildIdentity = await runPhase("workspace-build", async () =>
     await ensureMacWorkspaceBuild(config, cache));
   await runPhase("seed-app-config", async () => {
     await seedPackagedAppConfig(config);
@@ -82,7 +82,7 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
     resourceRoot: paths.resourceRoot,
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
     releaseVersion: config.releaseVersion ?? null,
-    shell: { sourceDigest: shellSourceDigest, type: config.shell, version: shellVersion },
+    shell: { ...shellBuildIdentity, type: config.shell, version: shellVersion },
     sizeReport,
     timings,
     to: config.to,

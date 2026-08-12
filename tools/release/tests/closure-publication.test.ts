@@ -122,6 +122,8 @@ async function writeFixture(root: string, options: { closureVersion?: string } =
       state: "reused",
     },
     shell: {
+      buildDigest: digest("electron shell build"),
+      depsDigest: digest("electron shell deps"),
       sourceDigest: digest("electron shell source"),
       type: "electron",
       version: "0.18.0-beta.3",
@@ -206,7 +208,13 @@ async function writeResolvedWindowsShellFixture(root: string): Promise<{
       recordUrl: "https://releases.open-design.test/beta/shells/electron/builds/source/artifacts/win32-x64.json",
       state: "reused",
     },
-    shell: { sourceDigest: digest("electron shell source"), type: "electron", version: shellVersion },
+    shell: {
+      buildDigest: digest("electron shell build"),
+      depsDigest: digest("electron shell deps"),
+      sourceDigest: digest("electron shell source"),
+      type: "electron",
+      version: shellVersion,
+    },
   }, null, 2)}\n`);
   return { assetsRoot, manifestRoot, shellBuildJsonPath };
 }

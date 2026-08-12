@@ -59,6 +59,8 @@ type PlatformManifest = {
   signed?: boolean;
   shell?: {
     artifacts?: Record<string, { digest?: string; url?: string }>;
+    buildDigest?: string;
+    depsDigest?: string;
     sourceDigest?: string;
     type?: string;
     version?: string;
@@ -226,6 +228,12 @@ function validateManifest(target: string, manifest: PlatformManifest): string | 
     }
     if (!/^sha256:[0-9a-f]{64}$/.test(String(manifest.shell.sourceDigest))) {
       return `shell.sourceDigest=${String(manifest.shell.sourceDigest)}`;
+    }
+    if (!/^sha256:[0-9a-f]{64}$/.test(String(manifest.shell.buildDigest))) {
+      return `shell.buildDigest=${String(manifest.shell.buildDigest)}`;
+    }
+    if (!/^sha256:[0-9a-f]{64}$/.test(String(manifest.shell.depsDigest))) {
+      return `shell.depsDigest=${String(manifest.shell.depsDigest)}`;
     }
     const shellPrefix = `${publicOrigin}/${releaseChannel}/shells/electron/versions/${manifest.shell.version}/${expectedPlatform}/`;
     for (const [name, artifact] of Object.entries(manifest.artifacts ?? {})) {

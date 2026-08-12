@@ -49,6 +49,8 @@ type ShellBuildReport = {
     state: "registered" | "reused";
   };
   shell: {
+    buildDigest: `sha256:${string}`;
+    depsDigest: `sha256:${string}`;
     sourceDigest: `sha256:${string}`;
     type: string;
     version: string;
@@ -121,6 +123,9 @@ function readShellBuildReport(): ShellBuildReport | null {
   parseReleaseVersion(String(shell.version), releaseChannel);
   if (!/^sha256:[0-9a-f]{64}$/.test(String(shell.sourceDigest))) {
     throw new Error("Shell build report sourceDigest must be a lowercase sha256 digest");
+  }
+  if (!/^sha256:[0-9a-f]{64}$/.test(String(shell.buildDigest)) || !/^sha256:[0-9a-f]{64}$/.test(String(shell.depsDigest))) {
+    throw new Error("Shell build report buildDigest/depsDigest must be lowercase sha256 digests");
   }
   if (report.artifacts == null || typeof report.artifacts !== "object") {
     throw new Error("Shell build report must contain artifact descriptors");
@@ -573,6 +578,8 @@ const manifest = {
         buildRecordUrl: shellBuild.resolution.recordUrl,
         resolution: shellBuild.resolution.state,
       }),
+      buildDigest: shellBuild.shell.buildDigest,
+      depsDigest: shellBuild.shell.depsDigest,
       sourceDigest: shellBuild.shell.sourceDigest,
       type: shellBuild.shell.type,
       version: shellBuild.shell.version,
@@ -605,6 +612,8 @@ if (closure != null) {
   outputs.closure_version_prefix = closure.versionPrefix;
 }
 if (shellBuild != null && shellVersionPrefix != null) {
+  outputs.shell_build_digest = shellBuild.shell.buildDigest;
+  outputs.shell_deps_digest = shellBuild.shell.depsDigest;
   outputs.shell_source_digest = shellBuild.shell.sourceDigest;
   outputs.shell_version = shellBuild.shell.version;
   outputs.shell_version_prefix = shellVersionPrefix;

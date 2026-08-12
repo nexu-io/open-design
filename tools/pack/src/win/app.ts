@@ -131,7 +131,7 @@ async function buildWorkspaceArtifacts(config: ToolPackConfig): Promise<void> {
   await runPnpm(config, ["--filter", "@open-design/shell-electron...", "build"]);
 }
 
-export async function ensureWinWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<`sha256:${string}`> {
+export async function ensureWinWorkspaceBuild(config: ToolPackConfig, cache: ToolPackCache): Promise<import("../workspace-build.js").ToolPackShellBuildIdentity> {
   return ensureWorkspaceBuildArtifacts(config, cache, async () => {
     await buildWorkspaceArtifacts(config);
   });

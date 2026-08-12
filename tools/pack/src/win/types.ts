@@ -123,6 +123,8 @@ export type WinPackResult = {
   segments: WinPackTiming[];
   sizeReport: WinSizeReport;
   shell: {
+    buildDigest: `sha256:${string}`;
+    depsDigest: `sha256:${string}`;
     sourceDigest: `sha256:${string}`;
     type: ToolPackConfig["shell"];
     version: string;

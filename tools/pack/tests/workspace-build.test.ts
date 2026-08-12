@@ -6,7 +6,11 @@ import { describe, expect, it } from "vitest";
 
 import { ToolPackCache } from "../src/cache.js";
 import type { ToolPackConfig } from "../src/config.js";
-import { ensureWorkspaceBuildArtifacts, resolveShellSourceDigest } from "../src/workspace-build.js";
+import {
+  ensureWorkspaceBuildArtifacts,
+  resolveShellBuildIdentity,
+  resolveShellSourceDigest,
+} from "../src/workspace-build.js";
 
 const SHELL_PACKAGE_DIRS = [
   "packages/release",
@@ -33,7 +37,16 @@ async function writeWorkspace(root: string): Promise<void> {
   await writeFile(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
   for (const directory of [...SHELL_PACKAGE_DIRS, ...BODY_PACKAGE_DIRS]) {
     await mkdir(join(root, directory, "src"), { recursive: true });
-    await writeFile(join(root, directory, "package.json"), `${JSON.stringify({ name: directory })}\n`);
+    await writeFile(join(root, directory, "package.json"), `${JSON.stringify({
+      ...(directory === "apps/daemon" ? {
+        dependencies: {
+          "better-sqlite3": "12.10.0",
+          "blake3-wasm": "2.1.5",
+          "node-pty": "1.1.0",
+        },
+      } : {}),
+      name: directory,
+    })}\n`);
     await writeFile(join(root, directory, "src", "index.ts"), "export const value = 1;\n");
   }
   await mkdir(join(root, "tools/pack/src"), { recursive: true });
@@ -154,6 +167,26 @@ describe("Electron Shell workspace build cache", () => {
       const mac = createConfig(root, join(root, ".cache-mac"), "mac");
       const win = createConfig(root, join(root, ".cache-win"), "win");
       expect(await resolveShellSourceDigest(mac)).toBe(await resolveShellSourceDigest(win));
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("separates Shell logic identity from Node and native dependency identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-shell-deps-"));
+    try {
+      await writeWorkspace(root);
+      const config = createConfig(root, join(root, ".cache"));
+      const before = await resolveShellBuildIdentity(config);
+      const manifestPath = join(root, "apps/daemon/package.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      manifest.dependencies["better-sqlite3"] = "12.11.0";
+      await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
+      const after = await resolveShellBuildIdentity(config);
+
+      expect(after.sourceDigest).toBe(before.sourceDigest);
+      expect(after.depsDigest).not.toBe(before.depsDigest);
+      expect(after.buildDigest).not.toBe(before.buildDigest);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -3,7 +3,7 @@ import { hashJson } from "./cache.js";
 import { resolveMacPaths } from "./mac/paths.js";
 import { resolveWinPaths } from "./win/paths.js";
 import { readRuntimeShellVersion } from "./versions.js";
-import { resolveShellSourceDigest } from "./workspace-build.js";
+import { resolveShellBuildIdentity } from "./workspace-build.js";
 
 export type ToolPackShellBuildPlan = Readonly<{
   artifacts: Readonly<Record<string, string | null>>;
@@ -11,8 +11,10 @@ export type ToolPackShellBuildPlan = Readonly<{
   profileDigest: `sha256:${string}`;
   releaseVersion: string | null;
   runtimeNamespaceRoot: string;
-  schemaVersion: 1;
+  schemaVersion: 2;
   shell: Readonly<{
+    buildDigest: `sha256:${string}`;
+    depsDigest: `sha256:${string}`;
     sourceDigest: `sha256:${string}`;
     type: ToolPackConfig["shell"];
     version: string;
@@ -23,7 +25,7 @@ export type ToolPackShellBuildPlan = Readonly<{
 
 export async function resolveToolPackShellBuildPlan(config: ToolPackConfig): Promise<ToolPackShellBuildPlan> {
   const shell = {
-    sourceDigest: await resolveShellSourceDigest(config),
+    ...await resolveShellBuildIdentity(config),
     type: config.shell,
     version: await readRuntimeShellVersion(config),
   } as const;
@@ -55,7 +57,7 @@ export async function resolveToolPackShellBuildPlan(config: ToolPackConfig): Pro
       profileDigest,
       releaseVersion: config.releaseVersion ?? null,
       runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
-      schemaVersion: 1,
+      schemaVersion: 2,
       shell,
       target: process.arch === "arm64" ? "darwin-arm64" : "darwin-x64",
       to: config.to,
@@ -74,7 +76,7 @@ export async function resolveToolPackShellBuildPlan(config: ToolPackConfig): Pro
     profileDigest,
     releaseVersion: config.releaseVersion ?? null,
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
-    schemaVersion: 1,
+    schemaVersion: 2,
     shell,
     target: "win32-x64",
     to: config.to,
