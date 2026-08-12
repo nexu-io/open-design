@@ -114,7 +114,9 @@ function injectBaseHref(doc: string, baseHref: string | undefined): string {
 
 function injectTitle(doc: string, title: string): string {
   const tag = `<title>${escapeText(title)}</title>`;
-  if (/<title[^>]*>.*?<\/title>/is.test(doc)) return doc.replace(/<title[^>]*>.*?<\/title>/is, tag);
+  // Function replacement: a string replacement would expand the title's
+  // $$, $&, $`, $' substitution patterns, corrupting it (issue #6795).
+  if (/<title[^>]*>.*?<\/title>/is.test(doc)) return doc.replace(/<title[^>]*>.*?<\/title>/is, () => tag);
   if (/<head[^>]*>/i.test(doc)) return doc.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
   return doc;
 }
