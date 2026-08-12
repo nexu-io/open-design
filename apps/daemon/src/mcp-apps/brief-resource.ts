@@ -1,9 +1,10 @@
-export const OPEN_DESIGN_BRIEF_APP_VERSION = 'v8' as const;
+export const OPEN_DESIGN_BRIEF_APP_VERSION = 'v9' as const;
 
 /**
  * Self-contained MCP Apps resource. It intentionally has no remote assets,
- * cookies, or browser persistence: the server-issued draft and immutable
- * confirmation are the only business truth.
+ * cookies, or browser storage. The server-issued draft and immutable
+ * confirmation are the only business truth; optional Host widget state only
+ * restores this card's presentation after an iframe remount.
  */
 export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
 <html lang="en">
@@ -66,6 +67,7 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
         let draft = null;
         let phase = "loading";
         let confirmedPayload = null;
+        let deliveryContextCleanupFailed = false;
         let standardBridgeReady = false;
         let standardBridgeInitialization = null;
         let hostCapabilities = null;
@@ -256,6 +258,89 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
           }
         }
 
+        function restoredWidgetState(briefDraftId) {
+          // Host state is an optional UI cache, never a confirmation source.
+          // Bind it to this draft so one card cannot restore another card's UI.
+          const widgetState =
+            window.openai
+            && window.openai.widgetState
+            && typeof window.openai.widgetState === "object"
+              ? window.openai.widgetState
+              : null;
+          const privateContent =
+            widgetState
+            && widgetState.privateContent
+            && typeof widgetState.privateContent === "object"
+              ? widgetState.privateContent
+              : null;
+          const saved =
+            privateContent
+            && privateContent.openDesignBrief
+            && typeof privateContent.openDesignBrief === "object"
+              ? privateContent.openDesignBrief
+              : null;
+          if (
+            !saved
+            || saved.version !== 1
+            || saved.briefDraftId !== briefDraftId
+          ) {
+            return null;
+          }
+          const savedConfirmation =
+            saved.confirmedPayload
+            && typeof saved.confirmedPayload === "object"
+            && saved.confirmedPayload.briefConfirmationId
+              ? saved.confirmedPayload
+              : null;
+          const savedPhase =
+            saved.phase === "delivered"
+              ? "delivered"
+              : saved.phase === "confirmed_publish_failed" && savedConfirmation
+                ? "confirmed_publish_failed"
+                : "ready";
+          return {
+            answers:
+              saved.answers && typeof saved.answers === "object"
+                ? saved.answers
+                : {},
+            confirmedPayload: savedConfirmation,
+            deliveryContextCleanupFailed:
+              savedPhase === "delivered"
+              && saved.deliveryContextCleanupFailed === true,
+            phase: savedPhase,
+          };
+        }
+
+        function persistWidgetState() {
+          if (
+            !draft
+            || !window.openai
+            || typeof window.openai.setWidgetState !== "function"
+          ) {
+            return;
+          }
+          const persistedPhase =
+            phase === "delivered"
+              ? "delivered"
+              : confirmedPayload
+                ? "confirmed_publish_failed"
+                : "ready";
+          window.openai.setWidgetState({
+            privateContent: {
+              openDesignBrief: {
+                version: 1,
+                briefDraftId: draft.briefDraftId,
+                phase: persistedPhase,
+                answers: selections(),
+                ...(confirmedPayload ? { confirmedPayload } : {}),
+                ...(persistedPhase === "delivered" && deliveryContextCleanupFailed
+                  ? { deliveryContextCleanupFailed: true }
+                  : {}),
+              },
+            },
+          });
+        }
+
         function applyPhase(nextPhase, message) {
           phase = nextPhase;
           const locked = phase !== "ready";
@@ -277,12 +362,15 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
           } else if (phase === "confirmed_publishing") {
             status.textContent = copy().continuing;
           } else if (phase === "delivered") {
-            status.textContent = copy().delivered;
+            status.textContent = deliveryContextCleanupFailed
+              ? copy().deliveredContextCleanupFailed
+              : copy().delivered;
           } else if (phase === "confirmed_publish_failed") {
             status.textContent = copy().confirmedPublishFailed;
           } else {
             status.textContent = "";
           }
+          persistWidgetState();
           scheduleSizeChanged();
         }
 
@@ -297,13 +385,21 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
           if (!payload || payload.view !== "brief-form" || !payload.briefDraftId) return;
           const sameDraft =
             draft && draft.briefDraftId === payload.briefDraftId;
+          const restored = sameDraft
+            ? null
+            : restoredWidgetState(payload.briefDraftId);
           const previousAnswers =
             sameDraft
               ? selections()
-              : {};
+              : restored
+                ? restored.answers
+                : {};
           if (!sameDraft) {
-            confirmedPayload = null;
-            phase = "ready";
+            confirmedPayload = restored ? restored.confirmedPayload : null;
+            deliveryContextCleanupFailed = restored
+              ? restored.deliveryContextCleanupFailed
+              : false;
+            phase = restored ? restored.phase : "ready";
           }
           draft = payload;
           const locale = effectiveLocale();
@@ -440,6 +536,7 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
             artifactType: draft.artifactType,
             answers: selections(),
           };
+          persistWidgetState();
           if (!standardBridgeReady || !hostSupports("updateModelContext")) {
             return;
           }
@@ -473,13 +570,12 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
             return;
           }
           confirmedPayload = payload;
+          deliveryContextCleanupFailed = false;
           applyPhase("confirmed_publishing");
           try {
             const contextCleared = await publishConfirmation(confirmedPayload);
-            applyPhase(
-              "delivered",
-              contextCleared ? undefined : copy().deliveredContextCleanupFailed,
-            );
+            deliveryContextCleanupFailed = !contextCleared;
+            applyPhase("delivered");
           } catch {
             applyPhase("confirmed_publish_failed");
           }
@@ -491,10 +587,8 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
           applyPhase("confirmed_publishing");
           try {
             const contextCleared = await publishConfirmation(confirmedPayload);
-            applyPhase(
-              "delivered",
-              contextCleared ? undefined : copy().deliveredContextCleanupFailed,
-            );
+            deliveryContextCleanupFailed = !contextCleared;
+            applyPhase("delivered");
           } catch {
             applyPhase("confirmed_publish_failed");
           }
@@ -526,7 +620,7 @@ export const OPEN_DESIGN_BRIEF_APP_HTML = String.raw`<!doctype html>
         showLoading();
         standardBridgeInitialization = request("ui/initialize", {
           protocolVersion: "2026-01-26",
-          appInfo: { name: "open-design-brief", version: "v8" },
+          appInfo: { name: "open-design-brief", version: "v9" },
           appCapabilities: {},
         }).then((result) => {
           standardBridgeReady = true;

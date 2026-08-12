@@ -75,6 +75,12 @@ async function eventually(assertion: () => void, timeoutMs = 2_000): Promise<voi
   throw lastError;
 }
 
+async function settleAnimationFrame(window: any): Promise<void> {
+  await new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => resolve());
+  });
+}
+
 function createBriefAppHarness(options: {
   deferInitialization?: boolean;
   hostCapabilities?: Record<string, unknown>;
@@ -83,6 +89,7 @@ function createBriefAppHarness(options: {
   failFirstLegacyFollowUp?: boolean;
   legacyFollowUp?: boolean;
   nativeToolOutput?: typeof WEBSITE_BRIEF_PAYLOAD;
+  widgetStateStore?: { current: unknown };
 } = {}) {
   const requests: JsonRpcMessage[] = [];
   const legacyFollowUps: Array<{ prompt: string; scrollToBottom?: boolean }> = [];
@@ -169,11 +176,21 @@ function createBriefAppHarness(options: {
   const dom = new JSDOM(OPEN_DESIGN_BRIEF_APP_HTML, {
     beforeParse(window) {
       widgetWindow = window;
-      if (options.legacyFollowUp || options.nativeToolOutput) {
+      if (
+        options.legacyFollowUp
+        || options.nativeToolOutput
+        || options.widgetStateStore
+      ) {
         const openai: Record<string, unknown> = {};
         if (options.nativeToolOutput) {
           openai.toolOutput = options.nativeToolOutput;
           openai.callTool = async () => confirmationResult();
+        }
+        if (options.widgetStateStore) {
+          openai.widgetState = options.widgetStateStore.current;
+          openai.setWidgetState = (state: unknown) => {
+            options.widgetStateStore!.current = state;
+          };
         }
         if (options.legacyFollowUp) {
           openai.sendFollowUpMessage = async (
@@ -255,15 +272,15 @@ describe('local Open Design MCP brief app', () => {
       name: 'collect_brief',
       _meta: {
         ui: {
-          resourceUri: 'ui://open-design/artifact-card-v8.html',
+          resourceUri: 'ui://open-design/artifact-card-v9.html',
         },
-        'ui/resourceUri': 'ui://open-design/artifact-card-v8.html',
-        'openai/outputTemplate': 'ui://open-design/artifact-card-v8.html',
+        'ui/resourceUri': 'ui://open-design/artifact-card-v9.html',
+        'openai/outputTemplate': 'ui://open-design/artifact-card-v9.html',
       },
     });
     expect(localMcpResourceDefinitions()).toContainEqual(
       expect.objectContaining({
-        uri: 'ui://open-design/artifact-card-v8.html',
+        uri: 'ui://open-design/artifact-card-v9.html',
         mimeType: 'text/html;profile=mcp-app',
       }),
     );
@@ -310,7 +327,10 @@ describe('local Open Design MCP brief app', () => {
     expect(OPEN_DESIGN_BRIEF_APP_HTML).not.toContain(
       'error instanceof Error ? error.message',
     );
-    expect(OPEN_DESIGN_BRIEF_APP_HTML).not.toContain('setWidgetState');
+    expect(OPEN_DESIGN_BRIEF_APP_HTML).toContain('window.openai.widgetState');
+    expect(OPEN_DESIGN_BRIEF_APP_HTML).toContain('window.openai.setWidgetState');
+    expect(OPEN_DESIGN_BRIEF_APP_HTML).toContain('privateContent');
+    expect(OPEN_DESIGN_BRIEF_APP_HTML).not.toContain('localStorage');
   });
 
   it('keeps a confirmed brief locked and retries only Host publication', async () => {
@@ -436,6 +456,107 @@ describe('local Open Design MCP brief app', () => {
     expect(contextUpdates[0]?.params).toEqual({});
 
     harness.dom.window.close();
+  });
+
+  it('restores a delivered brief after the Codex task remounts the card', async () => {
+    const widgetStateStore = { current: null as unknown };
+    const firstMount = createBriefAppHarness({
+      legacyFollowUp: true,
+      nativeToolOutput: WEBSITE_BRIEF_PAYLOAD,
+      widgetStateStore,
+    });
+
+    await eventually(() => {
+      expect(firstMount.dom.window.document.querySelector('form')?.hidden)
+        .toBe(false);
+    });
+    firstMount.dom.window.document.querySelector('form')?.dispatchEvent(
+      new firstMount.dom.window.Event('submit', {
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await eventually(() => {
+      expect(firstMount.dom.window.document.querySelector('#status')?.textContent)
+        .toContain('sent');
+    });
+    await settleAnimationFrame(firstMount.dom.window);
+    firstMount.dom.window.close();
+
+    const restoredMount = createBriefAppHarness({
+      legacyFollowUp: true,
+      nativeToolOutput: WEBSITE_BRIEF_PAYLOAD,
+      widgetStateStore,
+    });
+    const { document } = restoredMount.dom.window;
+
+    await eventually(() => {
+      expect(document.querySelector('#status')?.textContent).toContain('sent');
+      expect(document.querySelector('#confirm')?.hidden).toBe(true);
+      expect(document.querySelector('input')?.disabled).toBe(true);
+    });
+    expect(restoredMount.legacyFollowUps).toHaveLength(0);
+    expect(
+      restoredMount.requests.filter((request) => request.method === 'tools/call'),
+    ).toHaveLength(0);
+
+    await settleAnimationFrame(restoredMount.dom.window);
+    restoredMount.dom.window.close();
+  });
+
+  it('restores publication retry without confirming again after a Codex task remount', async () => {
+    const widgetStateStore = { current: null as unknown };
+    const firstMount = createBriefAppHarness({
+      failFirstLegacyFollowUp: true,
+      legacyFollowUp: true,
+      nativeToolOutput: WEBSITE_BRIEF_PAYLOAD,
+      widgetStateStore,
+    });
+
+    await eventually(() => {
+      expect(firstMount.dom.window.document.querySelector('form')?.hidden)
+        .toBe(false);
+    });
+    firstMount.dom.window.document.querySelector('form')?.dispatchEvent(
+      new firstMount.dom.window.Event('submit', {
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await eventually(() => {
+      expect(firstMount.dom.window.document.querySelector('#continue')?.hidden)
+        .toBe(false);
+    });
+    await settleAnimationFrame(firstMount.dom.window);
+    firstMount.dom.window.close();
+
+    const restoredMount = createBriefAppHarness({
+      legacyFollowUp: true,
+      nativeToolOutput: WEBSITE_BRIEF_PAYLOAD,
+      widgetStateStore,
+    });
+    const { document } = restoredMount.dom.window;
+
+    await eventually(() => {
+      expect(document.querySelector('#continue')?.hidden).toBe(false);
+      expect(document.querySelector('#confirm')?.hidden).toBe(true);
+      expect(document.querySelector('input')?.disabled).toBe(true);
+    });
+    expect(
+      restoredMount.requests.filter((request) => request.method === 'tools/call'),
+    ).toHaveLength(0);
+
+    document.querySelector('#continue')?.click();
+    await eventually(() => {
+      expect(document.querySelector('#status')?.textContent).toContain('sent');
+    });
+    expect(restoredMount.legacyFollowUps).toHaveLength(1);
+    expect(
+      restoredMount.requests.filter((request) => request.method === 'tools/call'),
+    ).toHaveLength(0);
+
+    await settleAnimationFrame(restoredMount.dom.window);
+    restoredMount.dom.window.close();
   });
 
   it('waits for delayed bridge initialization before clearing native brief context', async () => {
