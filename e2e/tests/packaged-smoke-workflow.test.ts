@@ -2685,7 +2685,7 @@ process.stdin.on("end", () => {
 
   it("publishes one shared-plus-target Standalone graph in release-beta", async () => {
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
-    const sharedJob = sectionBetween(workflow, "  closure_shared:", "  build_mac_arm64:");
+    const sharedJob = sectionBetween(workflow, "  metadata:", "  build_mac_arm64:");
     const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
     const winJob = sectionBetween(workflow, "  build_win_x64:", "  publish:");
     const publishJob = sectionBetween(workflow, "  publish:", "  public_win_x64_acceptance:");
@@ -2698,6 +2698,13 @@ process.stdin.on("end", () => {
 
     expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.4");
     expect(workflow).toContain("OPEN_DESIGN_POSTINSTALL_CONCURRENCY: 2");
+    expect(workflow).not.toContain("  closure_shared:");
+    expect(workflow).not.toContain("needs.closure_shared");
+    expect(sharedJob.match(/      - name: Checkout/g)?.length ?? 0).toBe(1);
+    expect(sharedJob.match(/      - name: Install dependencies/g)?.length ?? 0).toBe(1);
+    expect(sharedJob).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-prepare");
+    expect(sharedJob).toContain("fetch-depth: 1");
+    expect(sharedJob).toContain("cache: pnpm");
     expect(macJob).toContain("Materialize legacy mac_arm64 migration fixture");
     expect(workflow).toContain("LEGACY_MAC_ARM64_VERSION: 0.16.2-beta.155");
     expect(workflow).toContain('RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}');
@@ -2715,6 +2722,8 @@ process.stdin.on("end", () => {
     expect(sharedJob).toContain("tools-release publish-closure-contribution");
     expect(sharedJob).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: shared");
     expect(sharedJob).toContain('cp -R "$blob_root"');
+    expect(macJob).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-platform");
+    expect(macJob).toContain("cache: pnpm");
     expect(macJob).toContain("Build beta mac_arm64 Standalone native contribution");
     expect(macJob).toContain("Resolve immutable mac_arm64 Electron Shell");
     expect(macJob).toContain("tools-pack mac identity");

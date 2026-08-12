@@ -270,6 +270,7 @@ describe("postinstall script contract", () => {
 
       const result = runFixturePostinstall(sandbox, { OPEN_DESIGN_POSTINSTALL_CONCURRENCY: "" });
       expect(result.status, String(result.stderr)).toBe(0);
+      expect(result.stdout).toContain("postinstall: level=full");
       expect(result.stdout).not.toContain("dependency-aware parallel build enabled");
       expect(result.stdout).toContain("postinstall: skipping apps/daemon (no tsconfig.json in this context)");
 
@@ -307,6 +308,75 @@ describe("postinstall script contract", () => {
       expect(eventIndex(events, "done", "packages/release")).toBeLessThan(eventIndex(events, "start", "packages/contracts"));
       expect(eventIndex(events, "done", "packages/contracts")).toBeLessThan(eventIndex(events, "start", "packages/components"));
       expect(events.filter((event) => event.event === "start").map((event) => event.target)).toContain("packages/download");
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it("[P1] selects release profiles by recursive workspace dependency closure", () => {
+    const sandbox = createSandbox();
+    try {
+      writeTarget(sandbox, "packages/release", { name: "@fixture/release" });
+      writeTarget(sandbox, "packages/closure-proto", {
+        dependencies: { "@fixture/release": "workspace:*" },
+        name: "@fixture/closure-proto",
+      });
+      writeTarget(sandbox, "tools/pack", {
+        dependencies: { "@fixture/closure-proto": "workspace:*" },
+        name: "@fixture/tools-pack",
+      });
+      writeTarget(sandbox, "tools/release", {
+        dependencies: { "@fixture/release": "workspace:*" },
+        name: "@fixture/tools-release",
+      });
+      writeTarget(sandbox, "tools/serve", {
+        dependencies: { "@fixture/release": "workspace:*" },
+        name: "@fixture/tools-serve",
+      });
+      writeTarget(sandbox, "packages/components", { name: "@open-design/components" });
+      const invocationLog = writePnpmStub(sandbox);
+
+      const prepare = runFixturePostinstall(sandbox, {
+        OPEN_DESIGN_POSTINSTALL_LEVEL: "release-prepare",
+      });
+      expect(prepare.status, String(prepare.stderr)).toBe(0);
+      expect(prepare.stdout).toContain("postinstall: level=release-prepare");
+      expect(prepare.stdout).toContain("skipping native addon verification for level=release-prepare");
+      const prepareTargets = readStubEvents(invocationLog)
+        .filter((event) => event.event === "start")
+        .map((event) => event.target);
+      expect(prepareTargets).toEqual([
+        "packages/release",
+        "packages/closure-proto",
+        "tools/pack",
+        "tools/release",
+      ]);
+
+      writeFileSync(invocationLog, "");
+      const platform = runFixturePostinstall(sandbox, {
+        OPEN_DESIGN_POSTINSTALL_LEVEL: "release-platform",
+      });
+      expect(platform.status, String(platform.stderr)).toBe(0);
+      const platformTargets = readStubEvents(invocationLog)
+        .filter((event) => event.event === "start")
+        .map((event) => event.target);
+      expect(platformTargets).toEqual([...prepareTargets, "tools/serve"]);
+      expect(platformTargets).not.toContain("packages/components");
+    } finally {
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+
+  it("[P1] rejects unknown postinstall levels", () => {
+    const sandbox = createSandbox();
+    try {
+      const result = runFixturePostinstall(sandbox, {
+        OPEN_DESIGN_POSTINSTALL_LEVEL: "release-mystery",
+      });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain(
+        "OPEN_DESIGN_POSTINSTALL_LEVEL must be one of full, release-prepare, release-platform",
+      );
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }

@@ -34,6 +34,21 @@ const buildTargets = [
   "tools/serve",
 ];
 
+const postinstallLevels = {
+  full: {
+    roots: buildTargets,
+    verifyNativeAddon: true,
+  },
+  "release-prepare": {
+    roots: ["tools/pack", "tools/release"],
+    verifyNativeAddon: false,
+  },
+  "release-platform": {
+    roots: ["tools/pack", "tools/release", "tools/serve"],
+    verifyNativeAddon: true,
+  },
+};
+
 const jsExtensions = new Set([".js", ".cjs", ".mjs"]);
 
 function resolvePackageManagerInvocation() {
@@ -169,6 +184,33 @@ function buildDependencyMap(targets) {
   return dependenciesByTarget;
 }
 
+function postinstallLevel() {
+  const raw = process.env.OPEN_DESIGN_POSTINSTALL_LEVEL?.trim() || "full";
+  if (!(raw in postinstallLevels)) {
+    throw new Error(
+      `OPEN_DESIGN_POSTINSTALL_LEVEL must be one of ${Object.keys(postinstallLevels).join(", ")}; got: ${raw}`,
+    );
+  }
+  return raw;
+}
+
+function buildTargetsForLevel(availableTargets, level) {
+  if (level === "full") return availableTargets;
+
+  const dependenciesByTarget = buildDependencyMap(availableTargets);
+  const selected = new Set();
+  const visit = (target) => {
+    if (selected.has(target)) return;
+    if (!dependenciesByTarget.has(target)) {
+      throw new Error(`postinstall: ${level} requires unavailable build target ${target}`);
+    }
+    selected.add(target);
+    for (const dependency of dependenciesByTarget.get(target)) visit(dependency);
+  };
+  for (const root of postinstallLevels[level].roots) visit(root);
+  return buildTargets.filter((target) => selected.has(target));
+}
+
 function postinstallConcurrency() {
   const raw = process.env.OPEN_DESIGN_POSTINSTALL_CONCURRENCY;
   if (raw == null || raw.trim() === "") return 1;
@@ -216,9 +258,10 @@ async function runBuildTargetsInParallel(targets, concurrency) {
   }
 }
 
-async function runBuildTargets() {
-  const targets = availableBuildTargets();
+async function runBuildTargets(level) {
+  const targets = buildTargetsForLevel(availableBuildTargets(), level);
   const concurrency = postinstallConcurrency();
+  process.stdout.write(`postinstall: level=${level}; targets=${targets.join(", ")}\n`);
   if (concurrency <= 1) {
     for (const target of targets) {
       runBuildTargetSync(target);
@@ -229,8 +272,10 @@ async function runBuildTargets() {
   await runBuildTargetsInParallel(targets, concurrency);
 }
 
+let activeLevel;
 try {
-  await runBuildTargets();
+  activeLevel = postinstallLevel();
+  await runBuildTargets(activeLevel);
 } catch (error) {
   process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
   process.exit(1);
@@ -245,10 +290,14 @@ try {
 const req = createRequire(resolve(repoRoot, "apps/daemon/package.json"));
 let needsRebuild = false;
 try {
-  // Try to actually use the native addon; merely requiring the JS wrapper
-  // succeeds even when the binary is missing (e.g. after `pnpm install --ignore-scripts`).
-  const Database = req("better-sqlite3");
-  new Database(":memory:");
+  if (!postinstallLevels[activeLevel].verifyNativeAddon) {
+    process.stdout.write(`postinstall: skipping native addon verification for level=${activeLevel}\n`);
+  } else {
+    // Try to actually use the native addon; merely requiring the JS wrapper
+    // succeeds even when the binary is missing (e.g. after `pnpm install --ignore-scripts`).
+    const Database = req("better-sqlite3");
+    new Database(":memory:");
+  }
 } catch (e) {
   // MODULE_NOT_FOUND means daemon deps aren't installed yet — not our problem.
   // Any other error (missing binary, ERR_DLOPEN_FAILED, ABI mismatch, etc.) warrants a rebuild.
