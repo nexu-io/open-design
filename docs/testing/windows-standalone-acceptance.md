@@ -20,6 +20,9 @@ proof, packaged platform proof, and proof made from public immutable bytes.
 - A native NSIS overwrite is failure-atomic. It either commits the candidate or
   restores the prior install. It refuses mutation if owned namespace processes
   cannot be stopped.
+- The native uninstaller removes shortcuts and cache by default, preserves the
+  namespace product-data root by default, and removes that root only after an
+  explicit UI choice or `/ODREMOVELOCALDATA=1` automation switch.
 - Public activation is staged: immutable objects first, public Windows smoke
   second, immutable acceptance credential third, `latest/metadata.json` CAS
   fourth, blocking public readback last.
@@ -38,11 +41,13 @@ proof, packaged platform proof, and proof made from public immutable bytes.
 | WIN-COLD-04 | restart | Cold protocol launch reuses the exact committed generation, reaches a healthy renderer or Cloud identity gate, and preserves the persisted onboarding state | packaged shell lane | local + public smoke |
 | WIN-INS-01 | unsigned NSIS | Installer builds and installs successfully with no signing step; manifests truthfully report unsigned | tools-pack identity/builder tests; workflow topology | local + release-beta |
 | WIN-INS-02 | install identity | Install directory, display name, uninstall entry, namespace token, and executable identity agree | tools-pack identity tests; packaged shell lane | local |
-| WIN-INS-03 | shortcuts | Fresh silent install creates desktop and Start Menu shortcuts; update/repair preserves the prior desktop shortcut presence/absence | custom NSIS tests; packaged full lane | local + release-beta full |
+| WIN-INS-03 | shortcuts | Fresh silent install creates desktop and Start Menu shortcuts; update/repair preserves the prior desktop shortcut presence/absence | custom NSIS tests; `win-native-install-boundaries` | local + release-beta full |
 | WIN-INS-04 | registry | Uninstall keys and stable `opendesign://` command point to the installed outer executable, never a generation payload | custom NSIS/identity tests; packaged shell lane | local + public smoke |
-| WIN-INS-05 | overwrite transaction | Candidate is staged, prior install is backed up, commit is logged, and any failed replacement restores the prior bytes | custom NSIS tests; packaged rollback/reinstall scenarios | local + release-beta full |
+| WIN-INS-05 | overwrite transaction | Candidate is staged, prior install is backed up, commit is logged, and a fault immediately after tree commit restores the prior bytes and registry version | custom NSIS tests; `win-native-install-boundaries` | local + release-beta full |
 | WIN-INS-06 | process guard | Install/uninstall stops only owned namespace processes and refuses filesystem/registry mutation if any remain | lifecycle/custom NSIS tests; packaged full lane | local + release-beta full |
 | WIN-INS-07 | long-path cleanup | Transaction backup/staging and uninstall remove owned long paths without broad deletion | custom NSIS tests; packaged migration/uninstall | local + release-beta full |
+| WIN-INS-08 | post-commit repair | A failure after the healthy candidate commits but before registry/shortcut integration leaves the candidate intact; rerunning the same installer reconciles every integration point | `win-native-install-boundaries` | local + release-beta full |
+| WIN-INS-09 | embedded 7zip | Installed `7z.exe` and `7z.dll` exist under the product resource root and the executable runs successfully | tools-pack resource tests; `win-native-install-boundaries` | local + release-beta full |
 | WIN-RUN-01 | installed lifecycle | install → start → health/eval → PTY → screenshot → stop/uninstall succeeds | packaged shell lane | local + public smoke |
 | WIN-RUN-02 | protocol delivery | Hot delivery keeps the process; cold delivery starts a new process; continuation reaches the daemon | packaged shell lane | local + public smoke |
 | WIN-RUN-03 | `od://` isolation | Electron proxy resolves only the selected channel/namespace/generation runtime | Electron boundary tests; packaged lanes | local |
@@ -54,6 +59,8 @@ proof, packaged platform proof, and proof made from public immutable bytes.
 | WIN-UPD-05 | crash recovery | Crashing payload rolls back to last-successful and a later valid update self-heals | packaged rollback lane | local + release-beta full |
 | WIN-UN-01 | native uninstall | Native uninstaller removes executable, uninstaller, shortcuts, protocol and uninstall registry entries | packaged shell lane | local + public smoke |
 | WIN-UN-02 | residue observation | No owned process, registry residue, shortcut, executable, uninstaller, or selected product-data root remains | tools-pack uninstall result assertions | local + public smoke |
+| WIN-UN-03 | data defaults | Silent/default native uninstall removes cache but preserves namespace product data; explicit `/ODREMOVELOCALDATA=1` removes the exact namespace root | `win-native-install-boundaries` | local + release-beta full |
+| WIN-UN-04 | protocol ownership | Uninstall removes `opendesign://` only while its executable prefix still owns the handler; a different current owner is preserved | custom NSIS tests; `win-native-install-boundaries` | local + release-beta full |
 | WIN-PUB-01 | immutable stage | Platform assets/manifests and combined version metadata publish without changing latest when Windows is enabled | tools-release publication tests; workflow topology | release-beta publish=true |
 | WIN-PUB-02 | public re-download | Acceptance runner downloads the installer from its immutable public URL and rechecks exact digest/size | tools-release public-acceptance tests/job | release-beta publish=true |
 | WIN-PUB-03 | public Closure feedback | Public installer performs a real online first boot; smoke summary records the committed Closure digest/version/platform/namespace | packaged shell lane + credential issuer | release-beta publish=true |
@@ -68,7 +75,9 @@ proof, packaged platform proof, and proof made from public immutable bytes.
    closure-update, tools-pack, tools-release, Electron and e2e topology.
 2. Build the Windows Shell/NSIS once with `tools-pack`; run the full shell,
    standalone, rollback, migration, protocol, data and uninstall lanes against
-   local fixtures. Preserve the Shell build and its full-smoke proof.
+   local fixtures. `win-shell-v2` additionally requires
+   `win-native-install-boundaries`. Preserve the Shell build and its full-smoke
+   proof.
 3. Rebuild only Closure and prove the Shell build and every Shell smoke lane are
    skipped. Run the standalone-bound proof against the new Closure.
 4. Dispatch `release-beta` with `publish=true`, `enable_win_x64=true`,

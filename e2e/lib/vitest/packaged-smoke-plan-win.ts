@@ -19,6 +19,12 @@ export const WIN_PACKAGED_SMOKE_SCENARIOS = {
     lane: 'shell',
     title: 'rolls back a crashing payload and self-heals on the next good update',
   },
+  nativeInstallBoundaries: {
+    domains: ['shell', 'distribution', 'contract'],
+    id: 'win-native-install-boundaries',
+    lane: 'shell',
+    title: '[P0] proves native Windows install transaction, repair, integration ownership, embedded 7zip, and uninstall data defaults',
+  },
   standaloneClosure: {
     domains: ['standalone', 'contract'],
     id: 'win-standalone-closure',

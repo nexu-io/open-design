@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 
 import {
@@ -364,22 +364,28 @@ export async function startPackedWinApp(
   const logPath = desktopLogPath(runtimeConfig);
   await mkdir(dirname(logPath), { recursive: true });
   await writeFile(logPath, "", "utf8");
-  const spawned = await spawnBackgroundProcess({
-    args: createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
-    command: target.executablePath,
-    cwd: dirname(target.executablePath),
-    env: createSidecarLaunchEnv({
-      base: join(runtimeConfig.roots.runtime.namespaceRoot, "runtime"),
-      contract: OPEN_DESIGN_SIDECAR_CONTRACT,
-      extraEnv: {
-        ...process.env,
-        [DESKTOP_LOG_ECHO_ENV]: "0",
-        ...(target.configPath == null ? {} : { [PACKAGED_CONFIG_PATH_ENV]: target.configPath }),
-      },
-      stamp,
-    }),
-    logFd: null,
-  });
+  const logHandle = await open(logPath, "a");
+  let spawned: Awaited<ReturnType<typeof spawnBackgroundProcess>>;
+  try {
+    spawned = await spawnBackgroundProcess({
+      args: createProcessStampArgs(stamp, OPEN_DESIGN_SIDECAR_CONTRACT),
+      command: target.executablePath,
+      cwd: dirname(target.executablePath),
+      env: createSidecarLaunchEnv({
+        base: join(runtimeConfig.roots.runtime.namespaceRoot, "runtime"),
+        contract: OPEN_DESIGN_SIDECAR_CONTRACT,
+        extraEnv: {
+          ...process.env,
+          [DESKTOP_LOG_ECHO_ENV]: "0",
+          ...(target.configPath == null ? {} : { [PACKAGED_CONFIG_PATH_ENV]: target.configPath }),
+        },
+        stamp,
+      }),
+      logFd: logHandle.fd,
+    });
+  } finally {
+    await logHandle.close().catch(() => undefined);
+  }
   const statusWait = options.waitForStatus === false
     ? { durationMs: 0, pollCount: 0, processExited: false, status: null }
     : await waitForDesktopStatus(runtimeConfig, spawned.pid);

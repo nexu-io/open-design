@@ -740,7 +740,7 @@ winDescribe('packaged windows runtime smoke', () => {
       else await seedPackagedOnboardingComplete();
 
       const startDesktop = async (step: string): Promise<WinStartResult> => {
-        const nextStart = await measureSmokeStep(timings, step, async () => runToolsPackJson<WinStartResult>('start'));
+        const nextStart = await measureSmokeStep(timings, step, async () => startWindowsDesktopOrThrow(step));
         started = true;
         return nextStart;
       };
@@ -1432,6 +1432,116 @@ winDescribe('packaged windows runtime smoke', () => {
       }
     }
   }, 720_000);
+
+  const nativeInstallBoundariesTest = !verifyCoreOnly && updateFixture === 'tools-serve' ? test : test.skip;
+  nativeInstallBoundariesTest(WIN_PACKAGED_SMOKE_SCENARIOS.nativeInstallBoundaries.title, async () => {
+    const baseVersion = normalizeOptionalEnv(releaseVersion) ?? normalizeOptionalEnv(shellVersion);
+    if (baseVersion == null) throw new Error('native Windows installer boundaries require a base release version');
+    const update = await resolveLocalUpdateFixture();
+    const fakeProtocolCommand = '"C:\\Other Vendor\\Other Design.exe" "%1"';
+    const dataMarkerPath = join(nativeRuntimeNamespaceRoot, 'data', 'native-installer-boundary.json');
+    const cacheMarkerPath = join(nativeRuntimeNamespaceRoot, 'cache', 'native-installer-boundary.tmp');
+    let installed = false;
+
+    try {
+      await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => null);
+      await deleteWindowsInviteProtocolRegistration().catch(() => undefined);
+      const install = await runToolsPackJson<WinInstallResult>('install');
+      installed = true;
+      const basePackageVersion = await readInstalledWindowsShellVersion(install.installDir);
+      expect(basePackageVersion).toBe(baseVersion);
+
+      await rm(install.desktopShortcutPath, { force: true });
+      await mkdir(dirname(dataMarkerPath), { recursive: true });
+      await mkdir(dirname(cacheMarkerPath), { recursive: true });
+      await writeFile(dataMarkerPath, 'preserve product data\n', 'utf8');
+      await writeFile(cacheMarkerPath, 'remove cache data\n', 'utf8');
+
+      const rollbackFault = await runDirectInstaller(
+        update.installerPath,
+        install.installDir,
+        portableNsisLogPath,
+        ['/ODTESTFAULTAFTERTREECOMMIT'],
+      );
+      expect(rollbackFault.code).toBe(86);
+      expect(rollbackFault.nsisLogTail).toContain('test-only installer fault injected=after-install-tree-commit');
+      expect(rollbackFault.nsisLogTail).toContain('install transaction rollback restored previous install');
+      expect(await readInstalledWindowsShellVersion(install.installDir)).toBe(baseVersion);
+      expect(await readRegisteredWindowsShellVersion(baseVersion)).toBe(baseVersion);
+      expect(await fileExists(install.desktopShortcutPath)).toBe(false);
+      expect(await fileExists(dataMarkerPath)).toBe(true);
+
+      const integrationFault = await runDirectInstaller(
+        update.installerPath,
+        install.installDir,
+        portableNsisLogPath,
+        ['/ODTESTFAULTBEFOREINTEGRATION'],
+      );
+      expect(integrationFault.code).toBe(87);
+      expect(integrationFault.nsisLogTail).toContain('test-only installer fault injected=before-post-commit-integration');
+      expect(await readInstalledWindowsShellVersion(install.installDir)).toBe(update.targetVersion);
+      expect(await readRegisteredWindowsShellVersion(baseVersion)).toBe(baseVersion);
+      expect(await fileExists(install.desktopShortcutPath)).toBe(false);
+      expect(await fileExists(dataMarkerPath)).toBe(true);
+
+      const repair = await runDirectInstaller(update.installerPath, install.installDir, portableNsisLogPath);
+      expect(repair.code).toBe(0);
+      assertWorkingWinInstallerOverwriteLog(repair.nsisLogTail);
+      expect(await readRegisteredWindowsShellVersion(update.targetVersion)).toBe(update.targetVersion);
+      expect(await fileExists(install.desktopShortcutPath)).toBe(false);
+      expect(await fileExists(install.startMenuShortcutPath)).toBe(true);
+      await assertWindowsInviteProtocolRegistration(install.installDir);
+
+      const sevenZipExe = join(install.installDir, 'resources', 'open-design', 'bin', '7z.exe');
+      const sevenZipDll = join(install.installDir, 'resources', 'open-design', 'bin', '7z.dll');
+      expect((await stat(sevenZipExe)).isFile()).toBe(true);
+      expect((await stat(sevenZipDll)).isFile()).toBe(true);
+      const sevenZipInfo = await execFileAsync(sevenZipExe, ['i']);
+      expect(`${sevenZipInfo.stdout}\n${sevenZipInfo.stderr}`).toMatch(/7-Zip/i);
+
+      await writeWindowsInviteProtocolCommand(fakeProtocolCommand);
+      const defaultUninstall = await runToolsPackJsonForVersion<WinUninstallResult>('uninstall', update.targetVersion);
+      installed = false;
+      expect(defaultUninstall.residueObservation?.installedExeExists).toBe(false);
+      expect(defaultUninstall.residueObservation?.registryResidues ?? []).toEqual([]);
+      expect(await fileExists(install.desktopShortcutPath)).toBe(false);
+      expect(await fileExists(install.startMenuShortcutPath)).toBe(false);
+      expect(await fileExists(cacheMarkerPath)).toBe(false);
+      expect(await fileExists(dataMarkerPath)).toBe(true);
+      expect(await readWindowsInviteProtocolCommand()).toBe(fakeProtocolCommand);
+
+      const reinstall = await runDirectInstaller(update.installerPath, install.installDir, portableNsisLogPath);
+      expect(reinstall.code).toBe(0);
+      installed = true;
+      expect(await fileExists(dataMarkerPath)).toBe(true);
+      expect(await fileExists(install.desktopShortcutPath)).toBe(true);
+      await assertWindowsInviteProtocolRegistration(install.installDir);
+
+      const explicitUninstall = await runHiddenWindowsExecutable(
+        join(install.installDir, `Uninstall ${installIdentity.displayName}.exe`),
+        ['/S', '/ODREMOVELOCALDATA=1'],
+      );
+      expect(explicitUninstall).toBe(0);
+      await waitForWindowsNativeUninstall({
+        installDir: install.installDir,
+        startMenuShortcutPath: install.startMenuShortcutPath,
+        userDesktopShortcutPath: install.desktopShortcutPath,
+      });
+      installed = false;
+      expect(await fileExists(nativeRuntimeNamespaceRoot)).toBe(false);
+      await assertWindowsInviteProtocolRemoved();
+    } finally {
+      if (installed) {
+        await runToolsPackJsonForVersion<WinUninstallResult>(
+          'uninstall',
+          update.targetVersion,
+          ['--remove-product-user-data'],
+        ).catch(() => undefined);
+      }
+      await deleteWindowsInviteProtocolRegistration().catch(() => undefined);
+      await rm(nativeRuntimeNamespaceRoot, { force: true, recursive: true }).catch(() => undefined);
+    }
+  }, 300_000);
 });
 
 winProtocolDebugDescribe('packaged windows invite protocol debug', () => {
@@ -2305,35 +2415,42 @@ async function runDirectInstaller(
   installerPath: string,
   installDir: string,
   nsisLogPath = join(outputNamespaceRoot, 'logs', 'nsis.log'),
+  extraArgs: string[] = [],
 ): Promise<DirectInstallerResult> {
   const previousLogLines = await readNsisLogLines(nsisLogPath);
-  const command =
-    process.platform === 'win32'
-      ? execFileAsync(
-          'powershell.exe',
+  const command = process.platform === 'win32'
+    ? execFileAsync(
+        'powershell.exe',
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
           [
-            '-NoLogo',
-            '-NoProfile',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-Command',
-            "& { $process = Start-Process -FilePath $env:OD_TEST_INSTALLER_PATH -ArgumentList '/S', $env:OD_TEST_INSTALL_DIR_ARG -Wait -PassThru -WindowStyle Hidden; exit $process.ExitCode }",
-          ],
-          {
-            cwd: dirname(installerPath),
-            env: {
-              ...process.env,
-              OD_TEST_INSTALL_DIR_ARG: `/D=${installDir}`,
-              OD_TEST_INSTALLER_PATH: installerPath,
-            },
-            maxBuffer: 20 * 1024 * 1024,
-          },
-        )
-      : execFileAsync(installerPath, ['/S', `/D=${installDir}`], {
+            `$launchArgs = @('/S')`,
+            'if (-not [string]::IsNullOrWhiteSpace($env:OD_TEST_INSTALLER_EXTRA_ARGS)) { $launchArgs += @($env:OD_TEST_INSTALLER_EXTRA_ARGS) }',
+            `$launchArgs += @('/D=' + $env:OD_TEST_INSTALL_DIR)`,
+            '$process = Start-Process -FilePath $env:OD_TEST_INSTALLER_PATH -ArgumentList $launchArgs -Wait -PassThru -WindowStyle Hidden',
+            'exit $process.ExitCode',
+          ].join('\n'),
+        ],
+        {
           cwd: dirname(installerPath),
-          env: process.env,
+          env: {
+            ...process.env,
+            OD_TEST_INSTALLER_EXTRA_ARGS: extraArgs.join(' '),
+            OD_TEST_INSTALLER_PATH: installerPath,
+            OD_TEST_INSTALL_DIR: installDir,
+          },
           maxBuffer: 20 * 1024 * 1024,
-        });
+        },
+      )
+    : execFileAsync(installerPath, ['/S', ...extraArgs, `/D=${installDir}`], {
+        cwd: dirname(installerPath),
+        env: process.env,
+        maxBuffer: 20 * 1024 * 1024,
+      });
   const error = await command.then(
     () => null,
     (caught: unknown) => caught,
@@ -2343,6 +2460,45 @@ async function runDirectInstaller(
     code,
     nsisLogTail: (await readNsisLogLines(nsisLogPath)).slice(previousLogLines.length),
   };
+}
+
+async function runHiddenWindowsExecutable(executablePath: string, args: string[]): Promise<number | null> {
+  const command = process.platform === 'win32'
+    ? execFileAsync(
+        'powershell.exe',
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-Command',
+          [
+            '$process = Start-Process -FilePath $env:OD_TEST_EXECUTABLE_PATH -ArgumentList $env:OD_TEST_EXECUTABLE_ARGUMENT_LINE -Wait -PassThru -WindowStyle Hidden',
+            'exit $process.ExitCode',
+          ].join('\n'),
+        ],
+        {
+          cwd: workspaceRoot,
+          env: {
+            ...process.env,
+            OD_TEST_EXECUTABLE_ARGUMENT_LINE: args
+              .map((arg) => /\s|"/u.test(arg) ? `"${arg.replaceAll('"', '\\"')}"` : arg)
+              .join(' '),
+            OD_TEST_EXECUTABLE_PATH: executablePath,
+          },
+          maxBuffer: 20 * 1024 * 1024,
+        },
+      )
+    : execFileAsync(executablePath, args, {
+        cwd: workspaceRoot,
+        env: process.env,
+        maxBuffer: 20 * 1024 * 1024,
+      });
+  const error = await command.then(
+    () => null,
+    (caught: unknown) => caught,
+  );
+  return isExecError(error) ? Number(error.code) : error == null ? 0 : null;
 }
 
 async function readNsisLogLines(nsisLogPath = join(outputNamespaceRoot, 'logs', 'nsis.log')): Promise<string[]> {
@@ -3084,6 +3240,85 @@ async function assertWindowsInviteProtocolRegistration(installDir: string): Prom
   expect(command?.toLowerCase()).not.toContain('\\versions\\');
 }
 
+async function readWindowsInviteProtocolCommand(): Promise<string | null> {
+  const result = await execFileAsync('reg.exe', [
+    'query',
+    'HKCU\\Software\\Classes\\opendesign\\shell\\open\\command',
+    '/ve',
+  ]).catch((error: unknown) => {
+    if (isExecError(error) && Number(error.code) === 1) return null;
+    throw error;
+  });
+  if (result == null) return null;
+  return result.stdout.match(/REG_SZ\s+(.+)$/mi)?.[1]?.trim() ?? null;
+}
+
+async function writeWindowsInviteProtocolCommand(command: string): Promise<void> {
+  await execFileAsync('reg.exe', [
+    'add',
+    'HKCU\\Software\\Classes\\opendesign\\shell\\open\\command',
+    '/ve',
+    '/t',
+    'REG_SZ',
+    '/d',
+    command,
+    '/f',
+  ]);
+}
+
+async function deleteWindowsInviteProtocolRegistration(): Promise<void> {
+  await execFileAsync('reg.exe', [
+    'delete',
+    'HKCU\\Software\\Classes\\opendesign',
+    '/f',
+  ]).catch((error: unknown) => {
+    if (!isExecError(error) || Number(error.code) !== 1) throw error;
+  });
+}
+
+async function readInstalledWindowsShellVersion(installDir: string): Promise<string | null> {
+  const packageJson = JSON.parse(
+    stripUtf8Bom(await readFile(join(installDir, 'resources', 'app', 'package.json'), 'utf8')),
+  ) as { version?: unknown };
+  return typeof packageJson.version === 'string' ? packageJson.version : null;
+}
+
+async function readRegisteredWindowsShellVersion(appVersion: string): Promise<string | null> {
+  const list = await runToolsPackJsonForVersion<WinListResult>('list', appVersion);
+  return list.current.registryEntries[0]?.displayVersion ?? null;
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  return await stat(filePath).then(() => true, () => false);
+}
+
+async function waitForWindowsNativeUninstall(paths: {
+  installDir: string;
+  startMenuShortcutPath: string;
+  userDesktopShortcutPath: string;
+}, timeoutMs = 15_000): Promise<void> {
+  const uninstallRegistryKey = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-${installIdentity.namespaceToken}`;
+  const startedAt = Date.now();
+  let pending: string[] = [];
+  do {
+    const [installDirExists, startMenuExists, desktopExists, registryExists] = await Promise.all([
+      fileExists(paths.installDir),
+      fileExists(paths.startMenuShortcutPath),
+      fileExists(paths.userDesktopShortcutPath),
+      execFileAsync('reg.exe', ['query', uninstallRegistryKey]).then(() => true, () => false),
+    ]);
+    pending = [
+      ...(installDirExists ? [paths.installDir] : []),
+      ...(startMenuExists ? [paths.startMenuShortcutPath] : []),
+      ...(desktopExists ? [paths.userDesktopShortcutPath] : []),
+      ...(registryExists ? [uninstallRegistryKey] : []),
+    ];
+    if (pending.length === 0) return;
+    await delay(100);
+  } while (Date.now() - startedAt < timeoutMs);
+  throw new Error(`native Windows uninstall did not settle: ${pending.join(', ')}`);
+}
+
 async function invokeWindowsInviteDeeplink(): Promise<void> {
   await invokeWindowsProtocolProcess(packagedInviteDeeplink);
 }
@@ -3372,12 +3607,17 @@ async function runWinStandaloneDistributionAcceptance(): Promise<void> {
   try {
     await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => null);
     await resetPackagedUpdaterNamespaceRoots();
+    await resetPackagedClosureFixture({
+      channel: updateScenario.channel,
+      installationRoot,
+      namespace,
+    });
     await runToolsPackJson<WinInstallResult>('install');
     installed = true;
     await seedPackagedOnboardingComplete();
     const fixture = await seedConfiguredPackagedClosure();
     if (fixture == null) throw new Error('Standalone distribution fixture was not configured');
-    const first = await runToolsPackJson<WinStartResult>('start');
+    const first = await startWindowsDesktopOrThrow('first distribution start');
     started = true;
     await waitForHealthyDesktop();
     assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
@@ -3385,7 +3625,7 @@ async function runWinStandaloneDistributionAcceptance(): Promise<void> {
     await runToolsPackJson<WinStopResult>('stop');
     started = false;
     await runToolsPackJson<WinInstallResult>('install');
-    const restarted = await runToolsPackJson<WinStartResult>('start');
+    const restarted = await startWindowsDesktopOrThrow('distribution reinstall start');
     started = true;
     expect(restarted.pid).not.toBe(first.pid);
     await waitForHealthyDesktop();
@@ -3402,7 +3642,7 @@ async function runWinStandaloneDistributionAcceptance(): Promise<void> {
     await rm(fixture.storePaths.namespaceRoot, { force: true, recursive: true });
     const recovered = await seedConfiguredPackagedClosure();
     if (recovered == null) throw new Error('Standalone distribution recovery fixture was not configured');
-    await runToolsPackJson<WinStartResult>('start');
+    await startWindowsDesktopOrThrow('recovered distribution start');
     started = true;
     await waitForHealthyDesktop();
     assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
@@ -3416,6 +3656,13 @@ async function runWinStandaloneDistributionAcceptance(): Promise<void> {
       recursive: true,
     }).catch(() => undefined);
   }
+}
+
+async function startWindowsDesktopOrThrow(step: string): Promise<WinStartResult> {
+  const start = await runToolsPackJson<WinStartResult>('start');
+  if (!start.processExitedBeforeStatus) return start;
+  const logTail = await readFile(start.logPath, 'utf8').catch(() => '');
+  throw new Error(`packaged Windows desktop exited before status during ${step}:\n${logTail}`);
 }
 
 function parsePathListEnv(value: string | undefined): string[] {

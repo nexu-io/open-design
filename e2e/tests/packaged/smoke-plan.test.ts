@@ -54,6 +54,7 @@ describe('packaged smoke plan', () => {
       'win-shell-lifecycle',
       'win-shell-silent-update',
       'win-shell-rollback',
+      'win-native-install-boundaries',
       'win-legacy-migration',
     ]);
     expect(scenarios

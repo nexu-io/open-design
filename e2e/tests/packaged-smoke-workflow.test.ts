@@ -1785,7 +1785,7 @@ process.stdin.on("end", () => {
     expect(betaWinJob).toContain("tools-pack-win-v1-beta-$env:RUNNER_OS-");
     expect(betaWinJob).toContain("OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json");
     expect(betaWinJob).toContain("Resolve immutable win_x64 Electron Shell");
-    expect(betaWinJob).toContain("RELEASE_SHELL_SMOKE_MATRIX: win-shell-v1");
+    expect(betaWinJob).toContain("RELEASE_SHELL_SMOKE_MATRIX: win-shell-v2");
     expect(betaWinJob).toContain("Resolve win_x64 Shell smoke acceptance identity");
     expect(betaWinJob).toContain("shell-smoke-acceptance.ts win_x64");
     expect(betaWinJob).not.toContain("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles(");
@@ -1797,6 +1797,18 @@ process.stdin.on("end", () => {
     expect(betaWinJob).toContain("OD_PACKAGED_E2E_WIN_SMOKE_LANES: ${{ inputs.win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}");
     expect(betaWinJob).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.win_x64_shell_resolution.outputs.smoke_proof }}");
     expect(betaWinJob).toContain("Materialize legacy win_x64 migration fixture");
+    const betaWinUpdateFixtureStep = sectionBetween(
+      betaWinJob,
+      "      - name: Build beta win_x64 update fixture",
+      "      - name: Materialize legacy win_x64 migration fixture",
+    );
+    expect(betaWinUpdateFixtureStep).toContain("OD_TOOLS_PACK_WIN_NSIS_TEST_HOOKS: faults");
+    expect(betaWinUpdateFixtureStep).toContain('"--portable"');
+    expect(sectionBetween(
+      betaWinJob,
+      "      - name: Build beta win_x64\n",
+      "      - name: Retry beta win_x64 without restored cache",
+    )).not.toContain("OD_TOOLS_PACK_WIN_NSIS_TEST_HOOKS");
     expect(betaWinJob).toContain("Register win_x64 Electron Shell full-smoke proof");
     expect(betaWinJob).toContain("RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}\\release-report\\win_x64\\summary.json");
     expect(betaWinJob).toContain('"tools-pack", "win", "build"');

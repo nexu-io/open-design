@@ -1588,7 +1588,7 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
           RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\shell-plan.json
-          RELEASE_SHELL_SMOKE_MATRIX: win-shell-v1
+          RELEASE_SHELL_SMOKE_MATRIX: win-shell-v2
           RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
@@ -1777,12 +1777,14 @@ jobs:
       - name: Build beta win_x64 update fixture
         if: ${{ inputs.win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '' }}
         shell: pwsh
+        env:
+          OD_TOOLS_PACK_WIN_NSIS_TEST_HOOKS: faults
         run: |
           $ErrorActionPreference = "Stop"
           $match = [regex]::Match("${{ needs.metadata.outputs.beta_version }}", "^(?<base>\d+\.\d+\.\d+)-beta\.(?<number>\d+)$")
           if (-not $match.Success) { throw "full Windows smoke requires a counted beta version; got ${{ needs.metadata.outputs.beta_version }}" }
           $updateVersion = "{0}-beta.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--release-version", $updateVersion, "--shell-version", $updateVersion, "--to", "nsis", "--require-vela-cli", "--json")
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--release-version", $updateVersion, "--shell-version", $updateVersion, "--to", "nsis", "--require-vela-cli", "--json")
           if ("${{ inputs.win_x64_sign_mode }}" -eq "on") { $buildArgs += "--signed" }
           $updateOutput = pnpm.cmd @buildArgs
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
@@ -1852,7 +1854,7 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
           RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\shell-plan.json
-          RELEASE_SHELL_SMOKE_MATRIX: win-shell-v1
+          RELEASE_SHELL_SMOKE_MATRIX: win-shell-v2
           RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}\release-report\win_x64\summary.json
           RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
