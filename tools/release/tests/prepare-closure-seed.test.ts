@@ -92,4 +92,14 @@ describe("Closure seed producer", () => {
       releaseVersion: "0.19.0-beta.3", sourceBlobRoot: value.blobRoot, target: "darwin-arm64",
     })).rejects.toThrow(/size|digest/u);
   });
+
+  it("never replaces a source blob tree through an overlapping output", async () => {
+    const value = await fixture();
+    await expect(prepareClosureSeed({
+      channel: "beta", manifestPath: value.manifestPath, mode: "required", outputRoot: value.root,
+      releaseVersion: "0.19.0-beta.3", sourceBlobRoot: value.blobRoot, target: "darwin-arm64",
+    })).rejects.toThrow(/must not overlap/u);
+    await expect(readFile(join(value.blobRoot, value.artifacts.body.digest.slice("sha256:".length))))
+      .resolves.toEqual(Buffer.from("body"));
+  });
 });

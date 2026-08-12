@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import {
   resolveClosureDistributionTarget,
@@ -66,7 +66,23 @@ export async function prepareClosureSeed(
   const target = resolveClosureDistributionTarget(manifest, input.target);
   const outputRoot = resolve(input.outputRoot);
   const channelRoot = join(outputRoot, input.channel);
-  await rm(outputRoot, { force: true, recursive: true });
+  if (!isAbsolute(channelRoot) || channelRoot === outputRoot) {
+    throw new Error("Closure seed channel root is invalid");
+  }
+  if (input.sourceBlobRoot != null) {
+    const sourceBlobRoot = resolve(input.sourceBlobRoot);
+    const sourceInsideOutput = relative(outputRoot, sourceBlobRoot);
+    const outputInsideSource = relative(sourceBlobRoot, outputRoot);
+    if (
+      sourceInsideOutput === ""
+      || (!sourceInsideOutput.startsWith(`..${sep}`) && sourceInsideOutput !== ".." && !isAbsolute(sourceInsideOutput))
+      || outputInsideSource === ""
+      || (!outputInsideSource.startsWith(`..${sep}`) && outputInsideSource !== ".." && !isAbsolute(outputInsideSource))
+    ) {
+      throw new Error("Closure seed output and source blob roots must not overlap");
+    }
+  }
+  await rm(channelRoot, { force: true, recursive: true });
   await mkdir(join(channelRoot, "blobs"), { recursive: true });
   const copiedBlobs: ClosureDigest[] = [];
   if (input.mode === "required") {
