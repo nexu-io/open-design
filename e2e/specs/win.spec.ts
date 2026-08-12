@@ -3497,9 +3497,15 @@ async function seedNativePackagedOnboardingComplete(): Promise<void> {
 }
 
 async function resetNativePackagedExperienceState(): Promise<void> {
+  const removalOptions = {
+    force: true,
+    maxRetries: 10,
+    recursive: true,
+    retryDelay: 100,
+  } as const;
   await Promise.all([
-    rm(join(nativeRuntimeNamespaceRoot, 'data'), { force: true, recursive: true }),
-    rm(join(nativeRuntimeNamespaceRoot, 'user-data'), { force: true, recursive: true }),
+    rm(join(nativeRuntimeNamespaceRoot, 'data'), removalOptions),
+    rm(join(nativeRuntimeNamespaceRoot, 'user-data'), removalOptions),
   ]);
 }
 
