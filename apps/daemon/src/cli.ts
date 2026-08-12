@@ -616,7 +616,7 @@ async function runDirectionsToolCli(args) {
 
 function printRootHelp() {
   console.log(`Usage:
-  od [--port <n>] [--host <addr>] [--no-open]
+  od [--port <n>] [--host <addr>] [--no-open] [--site-output-mode <single-html|multi-file>]
       Start the local daemon and open the web UI.
 
   od tools live-artifacts <create|list|update|refresh> [options]
@@ -700,6 +700,9 @@ Options:
                    Set to a specific IP (e.g. a Tailscale address) to restrict access
                    to that interface only.
   --no-open        Do not open the browser after start.
+  --site-output-mode <single-html|multi-file>
+                   Enforce one website output layout for this daemon lifetime
+                   (env: OD_SITE_OUTPUT_MODE).
 
 What the daemon does:
   * scans PATH for installed code-agent CLIs (claude, codex, devin, opencode, cursor-agent, ...)

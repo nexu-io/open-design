@@ -34,9 +34,17 @@ export type ToolDevOptions = {
   json?: boolean;
   namespace?: string;
   prod?: boolean;
+  siteOutputMode?: string;
   toolsDevRoot?: string;
   webPort?: number | string | null;
 };
+
+export function parseSiteOutputModeOption(value: string | null | undefined): 'single-html' | 'multi-file' | null {
+  if (value == null) return null;
+  const normalized = value.trim();
+  if (normalized === 'single-html' || normalized === 'multi-file') return normalized;
+  throw new Error('--site-output-mode must be one of: single-html, multi-file');
+}
 
 export type ToolDevAppConfig = {
   app: ToolDevAppName;

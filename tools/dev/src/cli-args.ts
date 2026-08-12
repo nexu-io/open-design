@@ -6,6 +6,7 @@ const OPTIONS_WITH_VALUE = new Set([
   "--namespace",
   "--path",
   "--selector",
+  "--site-output-mode",
   "--timeout",
   "--tools-dev-root",
   "--update-action",

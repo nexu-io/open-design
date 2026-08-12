@@ -14,6 +14,7 @@ import type { MediaExecutionPolicy } from './media.js';
 import type { AppliedPluginSnapshot } from '../plugins/apply.js';
 import type { McpAuthMode, McpServerConfig, McpTransport } from './mcp';
 import type { TrackingRuntimeType } from '../analytics/public-params.js';
+import type { QuestionFormEnvelope } from './a2a.js';
 import type {
   TrackingRunFailureCategory,
   TrackingRunFailureDetail,
@@ -500,6 +501,16 @@ export interface ChatRunStatusResponse {
   /** Authoritative artifact files created or modified by this run. Mirrors
    *  ChatSseEndPayload.artifactCount and run_finished.artifact_count. */
   artifactCount?: number;
+  /** Website output layout enforced by the daemon after generation. */
+  outputPolicy?: import('./site-output.js').SiteOutputPolicyResult;
+  /** Canonical structured clarification form emitted by this run. */
+  questionForm?: QuestionFormEnvelope;
+  /** How a malformed or misrouted form was recovered for A2A consumers. */
+  questionFormDiagnostic?: {
+    source: 'assistant-text' | 'tool-result' | 'fallback';
+    repaired: boolean;
+    reason?: string;
+  };
   /** Absolute path to the per-run JSONL event log the daemon mirrors
    *  the SSE stream to (see runs.ts `runsLogDir`). Null when the
    *  daemon was launched without event persistence configured. */

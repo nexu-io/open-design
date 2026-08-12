@@ -33,6 +33,7 @@
     "typecheck": "pnpm --filter @open-design/contracts build && pnpm --filter @open-design/registry-protocol build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@a2a-js/sdk": "1.0.1",
     "@modelcontextprotocol/sdk": "1.29.0",
     "@open-design/agui-adapter": "workspace:*",
     "@open-design/contracts": "workspace:*",

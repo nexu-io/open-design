@@ -37,6 +37,7 @@ import {
   DEFAULT_START_APPS,
   DEFAULT_STOP_APPS,
   parsePortOption,
+  parseSiteOutputModeOption,
   resolveRunApps,
   resolveStartApps,
   resolveStopApps,
@@ -425,6 +426,7 @@ async function spawnDaemonRuntime(
 ): Promise<{ pid: number }> {
   const daemonPort = parsePortOption(options.daemonPort, "--daemon-port");
   const webPort = parsePortOption(options.webPort, "--web-port");
+  const siteOutputMode = parseSiteOutputModeOption(options.siteOutputMode);
   const logHandle = await openAppLog(config, APP_KEYS.DAEMON);
 
   try {
@@ -449,6 +451,7 @@ async function spawnDaemonRuntime(
         ...(webPort == null ? {} : { [SIDECAR_ENV.WEB_PORT]: String(webPort) }),
         ...(options.parentPid == null ? {} : { [TOOLS_DEV_PARENT_PID_ENV]: String(options.parentPid) }),
         ...(spawnOptions.requireDesktopAuth ? { OD_REQUIRE_DESKTOP_AUTH: "1" } : {}),
+        ...(siteOutputMode == null ? {} : { OD_SITE_OUTPUT_MODE: siteOutputMode }),
       },
       logHandle,
     });
@@ -1118,6 +1121,7 @@ function addPortOptions(command: ReturnType<typeof cli.command>) {
   return command
     .option("--daemon-port <port>", "force daemon port; conflict quick-fails")
     .option("--web-port <port>", "force web port; conflict quick-fails")
+    .option("--site-output-mode <single-html|multi-file>", "enforce a website output layout for this daemon lifetime")
     .option("--prod", "use production build (requires pnpm --filter @open-design/web build first)");
 }
 

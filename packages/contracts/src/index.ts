@@ -1,6 +1,7 @@
 export * from './common.js';
 export * from './errors.js';
 export * from './tasks.js';
+export * from './api/a2a.js';
 export * from './api/app-config.js';
 export * from './api/agent-sessions.js';
 export * from './api/attribution.js';
@@ -37,6 +38,7 @@ export * from './api/research.js';
 export * from './api/run-completeness.js';
 export * from './api/reasoningExecution.js';
 export * from './api/social-share.js';
+export * from './api/site-output.js';
 export * from './api/terminals.js';
 export * from './api/version.js';
 export * from './api/whats-new.js';

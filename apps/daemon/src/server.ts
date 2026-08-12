@@ -19,6 +19,7 @@ import os from 'node:os';
 import net from 'node:net';
 import { executionProfileFromStreamFormat, PLUGIN_SHARE_ACTION_PLUGIN_IDS } from '@open-design/contracts';
 import { isTodoWriteToolName, stopReasonIsTruncation, todoItemsFromTodoWriteInput } from '@open-design/contracts';
+import type { SiteOutputMode } from '@open-design/contracts';
 import {
   composeSystemPrompt,
   detectDeckIntentSignal,
@@ -29,7 +30,13 @@ import {
   resolveExclusiveSurface,
 } from './prompts/system.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
+import {
+  resolveA2AQuestionForm,
+  standaloneQuestionFormToolResult,
+} from './a2a/question-form.js';
 import { resolveProjectRoot } from './project-root.js';
+import { renderSiteOutputModePrompt, resolveSiteOutputMode } from './site-output/mode.js';
+import { enforceSiteOutputPolicy } from './site-output/enforce.js';
 import {
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
@@ -600,6 +607,7 @@ import { registerPluginAssetRoutes } from './routes/plugins/assets.js';
 import { registerPluginMarketplaceRoutes } from './routes/plugins/marketplaces.js';
 import { registerPluginEventRoutes, registerPluginRoutes, registerProjectPluginRoutes } from './routes/plugins/index.js';
 import { registerMcpRoutes } from './mcp-routes.js';
+import { registerA2ARoutes } from './routes/a2a.js';
 import { registerXaiRoutes } from './routes/xai.js';
 import { registerLiveArtifactRoutes } from './routes/live-artifact.js';
 import { registerDesignSystemToolRoutes } from './routes/design-system-tool.js';
@@ -1990,6 +1998,7 @@ export interface StartServerOptions {
   port?: number;
   returnServer?: boolean;
   runtime?: DaemonRuntimeContext | null;
+  siteOutputMode?: SiteOutputMode | null;
 }
 
 export interface StartServerResult {
@@ -2007,8 +2016,12 @@ export async function startServer({
   desktopSlideRenderer = null,
   desktopArtifactExporter = null,
   runtime = null,
+  siteOutputMode,
 }: StartServerOptions = {}) {
   host = normalizeDaemonBindHost(host);
+  const resolvedSiteOutputMode = siteOutputMode === undefined
+    ? resolveSiteOutputMode()
+    : siteOutputMode;
   let resolvedPort = port;
   let daemonShuttingDown = false;
   const extraAllowedOrigins = configuredAllowedOrigins();
@@ -2903,6 +2916,12 @@ export async function startServer({
     http: httpDeps,
     paths: pathDeps,
     mcp: { pendingAuth: mcpPendingAuth, daemonUrlRef },
+  });
+  registerA2ARoutes(app, {
+    daemonUrlRef,
+    appVersion: design.getAppVersion(),
+    requiresBearerAuth: isApiTokenMiddlewareEnabled() && !isLoopbackHostname(host),
+    publicBaseUrl: getPublicBaseUrl,
   });
   registerXaiRoutes(app, {
     http: httpDeps,
@@ -4616,6 +4635,9 @@ export async function startServer({
         mediaHintSignal: intentSignals.media,
         platformHintSignal: intentSignals.platform,
       });
+    const siteOutputPolicyPrompt = resolvedSiteOutputMode
+      ? renderSiteOutputModePrompt(resolvedSiteOutputMode)
+      : '';
 
     run.designSystemId = designSystemSelection?.id ?? null;
     run.designSystemRequestedId = designSystemSelection?.requestedId ?? null;
@@ -4942,7 +4964,7 @@ export async function startServer({
     // turns and changed-hash turns send the full block (byte-identical to the
     // previous behavior); non-resume agents have isResuming === false and so
     // always send the full block.
-    const stableInstructionFingerprint = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt]
+    const stableInstructionFingerprint = [daemonSystemPrompt, runtimeToolPrompt, systemPrompt, siteOutputPolicyPrompt]
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
       .join('\n\n---\n\n');
     const currentStableHash = hashStableInstructions(stableInstructionFingerprint);
@@ -4982,7 +5004,7 @@ export async function startServer({
     // giving the model the current MCP auth state on every turn.
     const mcpConnectedDirective = renderConnectedExternalMcpDirective(connectedExternalMcp);
     const clientInstructionParts = includeStableInstructions
-      ? [researchCommandContract, runContextPrompt, mcpConnectedDirective, browserUsePromptGuard, titleGenerationPrompt, systemPrompt]
+      ? [researchCommandContract, runContextPrompt, mcpConnectedDirective, browserUsePromptGuard, titleGenerationPrompt, systemPrompt, siteOutputPolicyPrompt]
       : [researchCommandContract, runContextPrompt, mcpConnectedDirective, browserUsePromptGuard, titleGenerationPrompt];
     const clientInstructionPrompt = clientInstructionParts
       .map((part) => (typeof part === 'string' ? part.trim() : ''))
@@ -5101,6 +5123,7 @@ export async function startServer({
     // `emittedRenderableQuestionForm`).
     const CLARIFYING_QUESTION_BUFFER_CAP = 256 * 1024;
     let clarifyingQuestionText = '';
+    let standaloneQuestionFormToolText = null;
     let visibleAssistantText = '';
     // Reply text handed to the background memory extractor at child-close.
     // Captures the GUARDED, visible reply from BOTH channels a run can emit on:
@@ -5135,6 +5158,14 @@ export async function startServer({
           0,
           CLARIFYING_QUESTION_BUFFER_CAP,
         );
+      }
+      if (
+        event === 'agent' &&
+        data &&
+        data.type === 'tool_result' &&
+        standaloneQuestionFormToolText == null
+      ) {
+        standaloneQuestionFormToolText = standaloneQuestionFormToolResult(data.content);
       }
       if (
         event === 'agent' &&
@@ -7553,6 +7584,31 @@ export async function startServer({
         ));
         return finishWithRetryDecision('failed', code, signal);
       }
+      if (status === 'succeeded' && run.a2aClient && !run.questionForm) {
+        const resolvedQuestionForm = resolveA2AQuestionForm({
+          assistantText: clarifyingQuestionText,
+          standaloneToolResult: standaloneQuestionFormToolText,
+          prompt: typeof message === 'string' ? message : '',
+        });
+        if (resolvedQuestionForm) {
+          run.questionForm = {
+            schemaVersion: 1,
+            form: resolvedQuestionForm.form,
+          };
+          run.questionFormDiagnostic = {
+            source: resolvedQuestionForm.source,
+            repaired: resolvedQuestionForm.repaired,
+            ...(resolvedQuestionForm.reason ? { reason: resolvedQuestionForm.reason } : {}),
+          };
+          send('agent', {
+            type: 'diagnostic',
+            name: 'a2a_question_form_resolved',
+            source: resolvedQuestionForm.source,
+            repaired: resolvedQuestionForm.repaired,
+            ...(resolvedQuestionForm.reason ? { reason: resolvedQuestionForm.reason } : {}),
+          });
+        }
+      }
       if (
         code === 0 &&
         !run.cancelRequested &&
@@ -7862,6 +7918,45 @@ export async function startServer({
             ));
             return finishWithRetryDecision('failed', 1, null);
           }
+        }
+      }
+      if (
+        status === 'succeeded' &&
+        resolvedSiteOutputMode &&
+        run.projectId &&
+        !run.questionForm &&
+        !emittedRenderableQuestionForm(clarifyingQuestionText)
+      ) {
+        try {
+          const project = getProject(db, run.projectId);
+          if (!project) throw new Error('project not found during site output finalization');
+          const projectRoot = resolveProjectDir(PROJECTS_DIR, run.projectId, project.metadata);
+          const outputPolicy = await enforceSiteOutputPolicy({
+            dataRoot: RUNTIME_DATA_DIR,
+            mode: resolvedSiteOutputMode,
+            projectRoot,
+            runId: run.id,
+            entryFile: typeof project.metadata?.entryFile === 'string' ? project.metadata.entryFile : null,
+          });
+          run.outputPolicy = outputPolicy;
+          updateProject(db, run.projectId, {
+            metadata: { ...(project.metadata ?? {}), entryFile: outputPolicy.entryFile },
+          });
+          send('agent', {
+            type: 'diagnostic',
+            name: 'site_output_policy_applied',
+            source: 'daemon-run-finalize',
+            outputPolicy,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          send('error', createSseErrorPayload(
+            'SITE_OUTPUT_POLICY_FAILED',
+            message,
+            { retryable: false },
+          ));
+          design.runs.finish(run, 'failed', 1, signal);
+          return;
         }
       }
       // Capture the pi session file path for conversational continuity.

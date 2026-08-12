@@ -114,6 +114,9 @@ export function createChatRunService({
       endedWithUnfinishedWork: false,
       artifactCount: undefined as number | undefined,
       artifactOutcome: undefined,
+      outputPolicy: undefined,
+      questionForm: undefined,
+      questionFormDiagnostic: undefined,
       eventsLogPath: runsLogDir ? path.join(runsLogDir, id, 'events.jsonl') : null,
       eventsLogStream: null,
       // Set once finish() has closed the log stream, so a late post-finish emit
@@ -229,6 +232,9 @@ export function createChatRunService({
     ...(run.promptCache ? { promptCache: run.promptCache } : {}),
     ...(run.nativeSessionRecovery ? { nativeSessionRecovery: run.nativeSessionRecovery } : {}),
     ...(run.browserUse ? { browserUse: run.browserUse } : {}),
+    ...(run.outputPolicy ? { outputPolicy: run.outputPolicy } : {}),
+    ...(run.questionForm ? { questionForm: run.questionForm } : {}),
+    ...(run.questionFormDiagnostic ? { questionFormDiagnostic: run.questionFormDiagnostic } : {}),
   });
 
   const finish = (run, status, code: number | null = null, signal: string | null = null) => {
@@ -262,6 +268,7 @@ export function createChatRunService({
       resumable: run.resumable ?? false,
       endedWithUnfinishedWork: run.endedWithUnfinishedWork,
       ...(Number.isFinite(run.artifactCount) ? { artifactCount: run.artifactCount } : {}),
+      ...(run.outputPolicy ? { outputPolicy: run.outputPolicy } : {}),
       failureCategory: run.failureCategory ?? null,
       failureDetail: run.failureDetail ?? null,
     });

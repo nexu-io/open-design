@@ -155,6 +155,7 @@ interface ChatRun {
   appliedPluginSnapshotId?: string | null;
   pluginId?: string | null;
   clientType?: 'desktop' | 'web';
+  a2aClient?: boolean;
   sessionMode?: string | null;
   context?: Record<string, unknown> | null;
   events: RunEventRecord[];
@@ -712,6 +713,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       console.warn('[runs] message create pin failed', err);
     }
     const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
+    run.a2aClient = declaredClient === 'a2a';
     if (declaredClient === 'desktop' || declaredClient === 'web') {
       run.clientType = declaredClient;
     } else {

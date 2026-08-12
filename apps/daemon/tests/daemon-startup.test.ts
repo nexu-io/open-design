@@ -10,6 +10,7 @@ describe('daemon startup CLI parsing', () => {
         host: '0.0.0.0',
         open: false,
         port: 8123,
+        siteOutputMode: null,
       },
     });
   });
@@ -21,6 +22,7 @@ describe('daemon startup CLI parsing', () => {
         host: '127.0.0.2',
         open: true,
         port: 7345,
+        siteOutputMode: null,
       },
     });
   });
@@ -32,6 +34,7 @@ describe('daemon startup CLI parsing', () => {
         host: '127.0.0.1',
         open: true,
         port: 7456,
+        siteOutputMode: null,
       },
     });
     expect(parseDaemonCliStartupArgs(['--host', '   '], {})).toEqual({
@@ -40,6 +43,7 @@ describe('daemon startup CLI parsing', () => {
         host: '127.0.0.1',
         open: true,
         port: 7456,
+        siteOutputMode: null,
       },
     });
   });
@@ -57,6 +61,34 @@ describe('daemon startup CLI parsing', () => {
       ok: false,
       kind: 'error',
       message: 'unknown option: --url',
+    });
+  });
+
+  it('parses site output mode from CLI with precedence over the environment', () => {
+    expect(parseDaemonCliStartupArgs(
+      ['--site-output-mode', 'single-html'],
+      { OD_SITE_OUTPUT_MODE: 'multi-file' },
+    )).toEqual({
+      ok: true,
+      config: {
+        host: '127.0.0.1',
+        open: true,
+        port: 7456,
+        siteOutputMode: 'single-html',
+      },
+    });
+  });
+
+  it('rejects invalid or empty site output modes', () => {
+    expect(parseDaemonCliStartupArgs([], { OD_SITE_OUTPUT_MODE: '' })).toEqual({
+      ok: false,
+      kind: 'error',
+      message: 'OD_SITE_OUTPUT_MODE must be one of: single-html, multi-file',
+    });
+    expect(parseDaemonCliStartupArgs(['--site-output-mode', 'bundle'], {})).toEqual({
+      ok: false,
+      kind: 'error',
+      message: '--site-output-mode must be one of: single-html, multi-file',
     });
   });
 

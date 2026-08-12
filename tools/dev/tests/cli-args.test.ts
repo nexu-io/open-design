@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { rewriteCliArgsForDefaultStart } from "../src/cli-args.js";
+import { parseSiteOutputModeOption } from "../src/config.js";
 
 const toolsDevRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -29,6 +30,12 @@ describe("tools-dev CLI argument rewriting", () => {
       "--web-port",
       "17573",
     ]);
+    assert.deepEqual(rewriteCliArgsForDefaultStart(["--site-output-mode", "single-html", "daemon"]), [
+      "--site-output-mode",
+      "single-html",
+      "start",
+      "daemon",
+    ]);
     assert.deepEqual(rewriteCliArgsForDefaultStart(["--namespace", "demo", "daemon"]), [
       "--namespace",
       "demo",
@@ -51,5 +58,14 @@ describe("tools-dev CLI argument rewriting", () => {
     assert.equal(result.status, 1);
     assert.match(result.stderr, /unsupported tools-dev app: not-an-app/);
     assert.doesNotMatch(result.stderr, /option `--env-file <path>` value is missing/);
+  });
+});
+
+describe("tools-dev site output mode", () => {
+  it("accepts only supported daemon-wide modes", () => {
+    assert.equal(parseSiteOutputModeOption(undefined), null);
+    assert.equal(parseSiteOutputModeOption("single-html"), "single-html");
+    assert.equal(parseSiteOutputModeOption("multi-file"), "multi-file");
+    assert.throws(() => parseSiteOutputModeOption("bundle"), /single-html, multi-file/);
   });
 });

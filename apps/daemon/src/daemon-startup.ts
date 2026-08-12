@@ -1,6 +1,8 @@
 import type { Server } from 'node:http';
 
 import type { StartServerOptions } from './server.js';
+import type { SiteOutputMode } from '@open-design/contracts';
+import { resolveSiteOutputMode } from './site-output/mode.js';
 
 type StartedServer = {
   server: Server;
@@ -21,6 +23,7 @@ export type DaemonCliStartupConfig = {
   host: string;
   open: boolean;
   port: number;
+  siteOutputMode: SiteOutputMode | null;
 };
 
 export type DaemonCliStartupParseResult =
@@ -49,6 +52,12 @@ export function parseDaemonCliStartupArgs(
   let port = Number(env.OD_PORT) || 7456;
   let host = normalizeDaemonBindHost(env.OD_BIND_HOST);
   let open = true;
+  let siteOutputMode: SiteOutputMode | null;
+  try {
+    siteOutputMode = resolveSiteOutputMode({ env });
+  } catch (error) {
+    return { ok: false, kind: 'error', message: error instanceof Error ? error.message : String(error) };
+  }
 
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -65,6 +74,14 @@ export function parseDaemonCliStartupArgs(
       const next = requiredOptionValue(a, argv[++i], 'an address');
       if (typeof next !== 'string') return next;
       host = normalizeDaemonBindHost(next);
+    } else if (a === '--site-output-mode') {
+      const next = requiredOptionValue(a, argv[++i], 'single-html or multi-file');
+      if (typeof next !== 'string') return next;
+      try {
+        siteOutputMode = resolveSiteOutputMode({ cliValue: next, env });
+      } catch (error) {
+        return { ok: false, kind: 'error', message: error instanceof Error ? error.message : String(error) };
+      }
     } else if (a === '--no-open') {
       open = false;
     } else if (a === '-h' || a === '--help') {
@@ -76,7 +93,7 @@ export function parseDaemonCliStartupArgs(
     }
   }
 
-  return { ok: true, config: { host, open, port } };
+  return { ok: true, config: { host, open, port, siteOutputMode } };
 }
 
 export async function closeHttpServer(
@@ -159,13 +176,14 @@ export async function runDaemonCliStartup(argv: string[], options: { printHelp?:
     options.printHelp?.();
     return;
   }
-  const { host, open, port } = parsed.config;
+  const { host, open, port, siteOutputMode } = parsed.config;
 
   const runtime = await startDaemonRuntime({
     host,
     logListening: true,
     openBrowser: open,
     port,
+    siteOutputMode,
   });
   let shuttingDown = false;
   const stop = () => {
