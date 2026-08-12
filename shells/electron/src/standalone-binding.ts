@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { compareStandaloneVersions, STANDALONE_PROTOCOL_VERSION } from "@open-design/standalone-proto";
 import {
   closureBindingIdentityFromRuntimePointer,
+  hasStoredClosureDistributionGeneration,
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
   verifyStoredClosureCandidate,
@@ -104,37 +105,32 @@ export async function resolveElectronStandaloneBinding(input: Readonly<{
     );
   }
 
+  const usesDistribution = await hasStoredClosureDistributionGeneration(storePaths, pointer);
   let distribution: Awaited<ReturnType<typeof verifyStoredClosureDistributionGeneration>> | null = null;
   let verification: StoredClosureVerification | null = null;
-  let distributionError: unknown = null;
-  try {
-    distribution = await verifyStoredClosureDistributionGeneration(storePaths, pointer);
-  } catch (error) {
-    distributionError = error;
-  }
-  if (distribution == null) {
+  if (usesDistribution) {
+    try {
+      distribution = await verifyStoredClosureDistributionGeneration(storePaths, pointer);
+    } catch (error) {
+      throw new ElectronStandaloneBindingError(
+        "standalone-invalid",
+        "Committed Standalone failed immutable Store verification",
+        { cause: error },
+      );
+    }
+  } else {
     try {
       verification = await verifyStoredClosureCandidate(
         storePaths,
         closureBindingIdentityFromRuntimePointer(pointer),
       );
     } catch (error) {
-      const cause = new AggregateError(
-        [distributionError, error].filter((value) => value != null),
-        "Neither layered nor legacy Closure generation passed immutable verification",
-      );
       throw new ElectronStandaloneBindingError(
         "standalone-invalid",
         "Committed Standalone failed immutable Store verification",
-        { cause },
+        { cause: error },
       );
     }
-  }
-  if (distribution == null && verification == null) {
-    throw new ElectronStandaloneBindingError(
-      "standalone-invalid",
-      "Committed Standalone failed immutable Store verification",
-    );
   }
   const minShellVersion = distribution?.plan.manifest.compatibility.shell.electron?.version.min
     ?? verification?.manifest.compatibility.shell.electron?.version.min;

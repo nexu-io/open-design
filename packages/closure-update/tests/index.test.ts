@@ -35,8 +35,11 @@ import {
   applyClosureUpdate,
   compareClosureShellVersions,
   decideClosureUpdate,
+  discoverClosureDistributionReleaseCandidate,
   discoverClosureReleaseCandidate,
+  selectClosureDistributionReleaseCandidate,
   selectClosureReleaseCandidate,
+  updateClosureFromRelease,
   type ClosureReleaseCandidate,
   type ClosureDistributionReleaseCandidate,
 } from "../src/index.js";
@@ -411,6 +414,64 @@ describe("Closure release update selection", () => {
   });
 });
 
+describe("version-wide Closure distribution selection", () => {
+  it("selects the sole root graph for the requested target", async () => {
+    const fixture = await downloadableDistribution();
+    const value = metadata({
+      closure: fixture.candidate.manifest,
+      releaseVersion: fixture.candidate.releaseVersion,
+    });
+
+    expect(selectClosureDistributionReleaseCandidate(value, {
+      channel: "beta",
+      target: "darwin-arm64",
+    })).toEqual(fixture.candidate);
+  });
+
+  it("uses absence as the only legacy fallback signal", async () => {
+    const fixture = await downloadableDistribution();
+    expect(selectClosureDistributionReleaseCandidate(metadata(), {
+      channel: "beta",
+      target: "darwin-arm64",
+    })).toBeNull();
+
+    const invalid = {
+      ...fixture.candidate.manifest,
+      identity: {
+        ...fixture.candidate.manifest.identity,
+        version: "0.19.0-beta.11",
+      },
+    };
+    expect(() => selectClosureDistributionReleaseCandidate(metadata({ closure: invalid }), {
+      channel: "beta",
+      target: "darwin-arm64",
+    })).toThrow(/distribution is invalid/u);
+    expect(() => selectClosureDistributionReleaseCandidate(metadata({
+      closure: fixture.candidate.manifest,
+    }), {
+      channel: "beta",
+      target: "win32-x64",
+    })).toThrow(/does not contain target win32-x64/u);
+  });
+
+  it("discovers the root graph from the combined metadata endpoint", async () => {
+    const fixture = await downloadableDistribution();
+    const metadataUrl = "https://releases.open-design.test/beta/metadata.json";
+    const fetch = vi.fn(async () => new Response(JSON.stringify(metadata({
+      closure: fixture.candidate.manifest,
+      releaseVersion: fixture.candidate.releaseVersion,
+    })), { status: 200 })) as typeof globalThis.fetch;
+
+    await expect(discoverClosureDistributionReleaseCandidate({
+      channel: "beta",
+      fetch,
+      metadataUrl,
+      target: "darwin-arm64",
+    })).resolves.toEqual(fixture.candidate);
+    expect(fetch).toHaveBeenCalledWith(metadataUrl, { headers: { accept: "application/json" } });
+  });
+});
+
 describe("Closure release update application", () => {
   it("downloads, verifies, and atomically commits a candidate", async () => {
     const paths = await createStore();
@@ -503,6 +564,42 @@ describe("Closure release update application", () => {
 });
 
 describe("layered Closure distribution application", () => {
+  it("discovers and commits the root graph without consulting the legacy target", async () => {
+    const paths = await createStore();
+    const fixture = await downloadableDistribution();
+    const metadataUrl = "https://releases.open-design.test/beta/metadata.json";
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url === metadataUrl) {
+        return new Response(JSON.stringify({
+          channel: "beta",
+          closure: fixture.candidate.manifest,
+          releaseState: "complete",
+          releaseVersion: fixture.candidate.releaseVersion,
+        }), { status: 200 });
+      }
+      return await fixture.fetch(input, init);
+    }) as typeof globalThis.fetch;
+
+    const result = await updateClosureFromRelease({
+      channel: "beta",
+      fetch,
+      metadataUrl,
+      paths,
+      platform: "darwin-arm64",
+      releaseTarget: "missing-on-purpose",
+      shellType: "electron",
+      shellVersion: "0.19.0",
+    });
+
+    expect(result).toMatchObject({ reason: "no-committed-closure", state: "committed" });
+    expect((await readClosureBindingDescriptor(paths)).committed?.standalone).toMatchObject({
+      digest: fixture.candidate.manifest.identity.digest,
+      target: "darwin-arm64",
+      version: "0.19.0-beta.10",
+    });
+  });
+
   it("downloads only required blobs, extracts the fixed view, and reuses channel CAS", async () => {
     const paths = await createStore();
     const fixture = await downloadableDistribution();

@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 import {
   bindClosureCandidateIdentity,
   validateClosureCandidateManifest,
+  validateClosureDistributionManifest,
   validateClosureFileInventory,
   type ClosureCandidateManifest,
   type ClosureDistributionBlob,
@@ -125,6 +126,10 @@ export type ApplyClosureDistributionUpdateResult =
       state: "busy";
     };
 
+export type ApplyClosureReleaseUpdateResult =
+  | ApplyClosureDistributionUpdateResult
+  | ApplyClosureUpdateResult;
+
 function requireRecord(value: unknown, label: string): Record<string, unknown> {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     throw new ClosureUpdateError(`${label} must be an object`);
@@ -234,6 +239,61 @@ export async function discoverClosureReleaseCandidate(input: {
     input.fetch ?? globalThis.fetch,
   );
   return selectClosureReleaseCandidate(metadata, input);
+}
+
+/** Select the sole version-wide v2 graph without consulting platform subtrees. */
+export function selectClosureDistributionReleaseCandidate(
+  metadata: unknown,
+  input: Readonly<{ channel: string; target: string }>,
+): ClosureDistributionReleaseCandidate | null {
+  if (!isReleaseChannel(input.channel)) {
+    throw new ClosureUpdateError(`unsupported Closure update channel: ${input.channel}`);
+  }
+  const root = requireRecord(metadata, "release metadata");
+  if (root.channel !== input.channel) {
+    throw new ClosureUpdateError(
+      `release metadata channel ${String(root.channel)} does not match ${input.channel}`,
+    );
+  }
+  if (root.releaseState !== "complete") {
+    throw new ClosureUpdateError(`release metadata is not complete: ${String(root.releaseState)}`);
+  }
+  if (root.closure == null) return null;
+  const releaseVersion = requireString(root.releaseVersion, "release metadata version");
+  let manifest: ClosureDistributionManifest;
+  try {
+    manifest = validateClosureDistributionManifest(root.closure, (canonical) => (
+      `sha256:${createHash("sha256").update(canonical).digest("hex")}`
+    ));
+  } catch (error) {
+    throw new ClosureUpdateError(
+      `release metadata Closure distribution is invalid: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  if (manifest.identity.channel !== input.channel) {
+    throw new ClosureUpdateError("Closure distribution channel does not match its release metadata");
+  }
+  if (manifest.required.targets[input.target] == null) {
+    throw new ClosureUpdateError(`Closure distribution does not contain target ${input.target}`);
+  }
+  return { manifest, releaseVersion, target: input.target };
+}
+
+export async function discoverClosureDistributionReleaseCandidate(input: Readonly<{
+  channel: string;
+  fetch?: typeof globalThis.fetch;
+  metadataUrl: string;
+  target: string;
+}>): Promise<ClosureDistributionReleaseCandidate | null> {
+  const metadataUrl = requireHttpUrl(input.metadataUrl, "Closure release metadata URL");
+  const metadata = await fetchJsonDocument(
+    metadataUrl,
+    "Closure release metadata",
+    input.fetch ?? globalThis.fetch,
+  );
+  return selectClosureDistributionReleaseCandidate(metadata, input);
 }
 
 type ComparableVersion = {
@@ -842,11 +902,27 @@ export async function updateClosureFromRelease(input: {
   releaseTarget: string;
   shellType: string;
   shellVersion: string;
-}): Promise<ApplyClosureUpdateResult> {
-  const candidate = await discoverClosureReleaseCandidate(input);
+}): Promise<ApplyClosureReleaseUpdateResult> {
+  const fetchImpl = input.fetch ?? globalThis.fetch;
+  const metadataUrl = requireHttpUrl(input.metadataUrl, "Closure release metadata URL");
+  const metadata = await fetchJsonDocument(metadataUrl, "Closure release metadata", fetchImpl);
+  const distribution = selectClosureDistributionReleaseCandidate(metadata, {
+    channel: input.channel,
+    target: input.platform,
+  });
+  if (distribution != null) {
+    return await applyClosureDistributionUpdate({
+      candidate: distribution,
+      fetch: fetchImpl,
+      paths: input.paths,
+      shellType: input.shellType,
+      shellVersion: input.shellVersion,
+    });
+  }
+  const candidate = selectClosureReleaseCandidate(metadata, input);
   return await applyClosureUpdate({
     candidate,
-    ...(input.fetch == null ? {} : { fetch: input.fetch }),
+    fetch: fetchImpl,
     paths: input.paths,
     shellType: input.shellType,
     shellVersion: input.shellVersion,

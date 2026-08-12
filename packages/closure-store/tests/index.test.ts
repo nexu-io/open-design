@@ -25,6 +25,7 @@ import {
   commitVerifiedClosureDistributionGeneration,
   commitVerifiedStoredClosureCandidate,
   consumeClosureDistributionTarget,
+  hasStoredClosureDistributionGeneration,
   planClosureDistributionGeneration,
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
@@ -335,6 +336,10 @@ describe("layered Closure generation commit", () => {
     expect(stored.plan.required.runtime.resolvedEntryPath).toBe(
       join(staged.plan.generationRoot, "runtime", "bin", "node"),
     );
+    await expect(hasStoredClosureDistributionGeneration(
+      paths,
+      result.committed.standalone,
+    )).resolves.toBe(true);
   });
 
   it("rejects a committed v2 pointer whose immutable generation drifted", async () => {
@@ -385,6 +390,12 @@ describe("stored Closure verification", () => {
   it("verifies archive identity and every materialized payload file", async () => {
     const paths = await createStore();
     const { binding } = await materializeCandidate(paths, "0.18.0-beta.1");
+    const { platform, ...pointerIdentity } = binding;
+    await expect(hasStoredClosureDistributionGeneration(paths, {
+      ...pointerIdentity,
+      generation: 0,
+      target: platform,
+    })).resolves.toBe(false);
 
     const verified = await verifyStoredClosureCandidate(paths, binding);
 

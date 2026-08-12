@@ -5,7 +5,7 @@ import {
 import {
   resolveClosureShellMinimumVersion,
   updateClosureFromRelease,
-  type ApplyClosureUpdateResult,
+  type ApplyClosureReleaseUpdateResult,
 } from "@open-design/closure-update";
 import type { LauncherChannel } from "@open-design/launcher-proto";
 
@@ -15,7 +15,7 @@ export type PackagedClosureEnsureSkipReason =
   | "unsupported-platform";
 
 export type PackagedClosureEnsureResult =
-  | ApplyClosureUpdateResult
+  | ApplyClosureReleaseUpdateResult
   | {
       reason: "already-committed";
       state: "available";

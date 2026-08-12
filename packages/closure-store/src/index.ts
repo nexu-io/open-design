@@ -720,6 +720,20 @@ export async function verifyStoredClosureDistributionGeneration(
   return await verifyClosureDistributionGenerationRoot(paths, plan, generationRoot);
 }
 
+/** Select the migration verifier without exposing generation layout to a Shell. */
+export async function hasStoredClosureDistributionGeneration(
+  paths: ClosureStorePaths,
+  pointerInput: ClosureRuntimePointer,
+): Promise<boolean> {
+  const pointer = normalizePointer(pointerInput, paths);
+  const manifestPath = assertUnderRoot(
+    paths.root,
+    join(paths.generationsRoot, String(pointer.generation), "closure.json"),
+  );
+  const metadata = await lstat(manifestPath).catch(() => null);
+  return metadata?.isFile() === true && !metadata.isSymbolicLink();
+}
+
 /** Publish one verified generation and then advance the sole binding truth. */
 export async function commitVerifiedClosureDistributionGeneration(
   paths: ClosureStorePaths,
