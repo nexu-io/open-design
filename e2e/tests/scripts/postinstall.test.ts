@@ -321,6 +321,14 @@ describe("postinstall script contract", () => {
         dependencies: { "@fixture/release": "workspace:*" },
         name: "@fixture/closure-proto",
       });
+      writeTarget(sandbox, "packages/closure-store", {
+        dependencies: { "@fixture/closure-proto": "workspace:*" },
+        name: "@fixture/closure-store",
+      });
+      writeTarget(sandbox, "packages/closure-update", {
+        dependencies: { "@fixture/closure-store": "workspace:*" },
+        name: "@fixture/closure-update",
+      });
       writeTarget(sandbox, "tools/pack", {
         dependencies: { "@fixture/closure-proto": "workspace:*" },
         name: "@fixture/tools-pack",
@@ -362,6 +370,25 @@ describe("postinstall script contract", () => {
         .map((event) => event.target);
       expect(platformTargets).toEqual([...prepareTargets, "tools/serve"]);
       expect(platformTargets).not.toContain("packages/components");
+
+      writeFileSync(invocationLog, "");
+      const smoke = runFixturePostinstall(sandbox, {
+        OPEN_DESIGN_POSTINSTALL_LEVEL: "release-smoke",
+      });
+      expect(smoke.status, String(smoke.stderr)).toBe(0);
+      const smokeTargets = readStubEvents(invocationLog)
+        .filter((event) => event.event === "start")
+        .map((event) => event.target);
+      expect(smokeTargets).toEqual([
+        "packages/release",
+        "packages/closure-proto",
+        "packages/closure-store",
+        "packages/closure-update",
+        "tools/pack",
+        "tools/release",
+        "tools/serve",
+      ]);
+      expect(smokeTargets).not.toContain("packages/components");
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }
@@ -375,7 +402,7 @@ describe("postinstall script contract", () => {
       });
       expect(result.status).toBe(1);
       expect(result.stderr).toContain(
-        "OPEN_DESIGN_POSTINSTALL_LEVEL must be one of full, release-prepare, release-platform",
+        "OPEN_DESIGN_POSTINSTALL_LEVEL must be one of full, release-prepare, release-platform, release-smoke",
       );
     } finally {
       rmSync(sandbox, { recursive: true, force: true });

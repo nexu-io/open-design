@@ -2805,6 +2805,7 @@ process.stdin.on("end", () => {
     )).not.toContain("continue-on-error");
     expect(publishJob).toContain("tools-release observe-public-feed");
     expect(publicAcceptanceJob).toContain("runs-on: windows-latest");
+    expect(publicAcceptanceJob).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke");
     expect(publicAcceptanceJob).toContain("tools-release prepare-public-acceptance");
     expect(publicAcceptanceJob).toContain("tools-release issue-public-acceptance");
     expect(publicAcceptanceJob).toContain("OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core");

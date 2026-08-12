@@ -47,6 +47,10 @@ const postinstallLevels = {
     roots: ["tools/pack", "tools/release", "tools/serve"],
     verifyNativeAddon: true,
   },
+  "release-smoke": {
+    roots: ["packages/closure-update", "tools/pack", "tools/release", "tools/serve"],
+    verifyNativeAddon: true,
+  },
 };
 
 const jsExtensions = new Set([".js", ".cjs", ".mjs"]);

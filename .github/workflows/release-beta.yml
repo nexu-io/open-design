@@ -2226,7 +2226,7 @@ jobs:
     runs-on: windows-latest
     env:
       GITHUB_SHA: ${{ needs.metadata.outputs.commit }}
-      OPEN_DESIGN_POSTINSTALL_LEVEL: release-platform
+      OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
       RELEASE_NAMESPACE: release-beta-win
       RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
