@@ -1,5 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import {
+  copyFile,
   mkdir,
   readFile,
   rename,
@@ -7,7 +9,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 
 import {
   bindClosureCandidateIdentity,
@@ -83,9 +85,65 @@ export type ClosureUpdateDecision =
     };
 
 export class ClosureUpdateError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
     this.name = "ClosureUpdateError";
+  }
+}
+
+export const CLOSURE_RESOURCE_REPOSITORY_ENV = "OD_CLOSURE_RESOURCE_REPOSITORY_V1" as const;
+export const CLOSURE_RESOURCE_REPOSITORY_SCHEMA_VERSION = 1 as const;
+
+export type ClosureResourceRepositoryConfig = Readonly<{
+  localSeeds: readonly Readonly<{ root: string }>[];
+  remoteOrigins: readonly string[];
+  schemaVersion: typeof CLOSURE_RESOURCE_REPOSITORY_SCHEMA_VERSION;
+}>;
+
+export function validateClosureResourceRepositoryConfig(
+  value: unknown,
+): ClosureResourceRepositoryConfig {
+  const config = requireRecord(value, "Closure resource repository config");
+  const extras = Object.keys(config).filter((key) => !["localSeeds", "remoteOrigins", "schemaVersion"].includes(key));
+  if (extras.length > 0) throw new ClosureUpdateError(`Closure resource repository config contains unsupported fields: ${extras.join(", ")}`);
+  if (config.schemaVersion !== CLOSURE_RESOURCE_REPOSITORY_SCHEMA_VERSION) {
+    throw new ClosureUpdateError("Closure resource repository config schemaVersion is unsupported");
+  }
+  if (!Array.isArray(config.localSeeds) || !Array.isArray(config.remoteOrigins)) {
+    throw new ClosureUpdateError("Closure resource repository config sources must be arrays");
+  }
+  const localSeeds = config.localSeeds.map((entry, index) => {
+    const seed = requireRecord(entry, `Closure local seed ${index}`);
+    if (Object.keys(seed).some((key) => key !== "root")) throw new ClosureUpdateError(`Closure local seed ${index} contains unsupported fields`);
+    const root = requireString(seed.root, `Closure local seed ${index} root`);
+    if (!isAbsolute(root)) throw new ClosureUpdateError(`Closure local seed ${index} root must be absolute`);
+    return Object.freeze({ root });
+  });
+  const remoteOrigins = config.remoteOrigins.map((origin, index) => {
+    const normalized = requireHttpUrl(origin, `Closure remote origin ${index}`);
+    return normalized.replace(/\/+$/u, "");
+  });
+  return Object.freeze({
+    localSeeds: Object.freeze(localSeeds),
+    remoteOrigins: Object.freeze(remoteOrigins),
+    schemaVersion: CLOSURE_RESOURCE_REPOSITORY_SCHEMA_VERSION,
+  });
+}
+
+export async function readClosureResourceRepositoryConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<ClosureResourceRepositoryConfig> {
+  const path = env[CLOSURE_RESOURCE_REPOSITORY_ENV];
+  if (path == null || path.length === 0 || !isAbsolute(path)) {
+    throw new ClosureUpdateError(`${CLOSURE_RESOURCE_REPOSITORY_ENV} must point to an absolute config file`);
+  }
+  const bytes = await readFile(path);
+  if (bytes.byteLength > 1024 * 1024) throw new ClosureUpdateError("Closure resource repository config exceeds 1 MiB");
+  try {
+    return validateClosureResourceRepositoryConfig(JSON.parse(bytes.toString("utf8")) as unknown);
+  } catch (error) {
+    if (error instanceof ClosureUpdateError) throw error;
+    throw new ClosureUpdateError(`Closure resource repository config is invalid: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -687,6 +745,7 @@ async function ensureDistributionBlob(input: {
   artifact: ClosureDistributionBlob;
   fetchImpl: typeof globalThis.fetch;
   paths: ClosureStorePaths;
+  repository?: ClosureResourceRepositoryConfig;
 }): Promise<string> {
   if (input.artifact.mediaType !== "application/zip") {
     throw new ClosureUpdateError(
@@ -698,40 +757,89 @@ async function ensureDistributionBlob(input: {
   } catch {
     const digest = input.artifact.digest.slice("sha256:".length);
     const outputPath = join(input.paths.blobsRoot, digest);
-    const downloadedPath = join(
-      input.paths.stagingRoot,
-      "blob-downloads",
-      `${digest}-${randomUUID()}.zip`,
-    );
-    try {
-      await downloadCopyAndClear({
-        basePath: join(input.paths.stagingRoot, "downloads"),
-        bucket: "closure-blobs",
-        fetch: input.fetchImpl,
-        fileName: `${digest}.zip`,
-        outputPath: downloadedPath,
-        payload: {
-          checksum: { algorithm: "sha256", value: digest },
-          url: input.artifact.url,
-        },
-      });
+    const accept = async (candidatePath: string): Promise<string> => {
+      const metadata = await stat(candidatePath);
+      if (metadata.size !== input.artifact.size) throw new ClosureUpdateError("Closure blob candidate size mismatch");
+      const hash = createHash("sha256");
+      for await (const chunk of createReadStream(candidatePath)) hash.update(chunk as Buffer);
+      if (`sha256:${hash.digest("hex")}` !== input.artifact.digest) {
+        throw new ClosureUpdateError("Closure blob candidate digest mismatch");
+      }
       await mkdir(input.paths.blobsRoot, { recursive: true });
       try {
-        await rename(downloadedPath, outputPath);
+        await rename(candidatePath, outputPath);
       } catch (error) {
         if (!["EEXIST", "ENOTEMPTY", "EPERM"].includes(errorCode(error) ?? "")) throw error;
         try {
           return await verifyClosureDistributionBlob(input.paths, input.artifact);
         } catch {
           await rm(outputPath, { force: true });
-          await rename(downloadedPath, outputPath);
+          await rename(candidatePath, outputPath);
         }
       }
-    } finally {
-      await rm(downloadedPath, { force: true }).catch(() => undefined);
+      return await verifyClosureDistributionBlob(input.paths, input.artifact);
+    };
+    const candidatePath = () => join(
+      input.paths.stagingRoot,
+      "blob-downloads",
+      `${digest}-${randomUUID()}.zip`,
+    );
+
+    for (const seed of input.repository?.localSeeds ?? []) {
+      const temporaryPath = candidatePath();
+      try {
+        await mkdir(dirname(temporaryPath), { recursive: true });
+        await copyFile(join(seed.root, input.paths.channel, "blobs", digest), temporaryPath);
+        return await accept(temporaryPath);
+      } catch {
+        await rm(temporaryPath, { force: true }).catch(() => undefined);
+      }
     }
-    return await verifyClosureDistributionBlob(input.paths, input.artifact);
+
+    const configuredUrls = (input.repository?.remoteOrigins ?? []).map(
+      (origin) => `${origin}/${input.paths.channel}/blobs/${digest}`,
+    );
+    const urls = [...new Set([...configuredUrls, input.artifact.url])];
+    let lastError: unknown = null;
+    for (const url of urls) {
+      const temporaryPath = candidatePath();
+      try {
+        await downloadCopyAndClear({
+          basePath: join(input.paths.stagingRoot, "downloads"),
+          bucket: "closure-blobs",
+          fetch: input.fetchImpl,
+          fileName: `${digest}.zip`,
+          outputPath: temporaryPath,
+          payload: {
+            checksum: { algorithm: "sha256", value: digest },
+            url,
+          },
+        });
+        return await accept(temporaryPath);
+      } catch (error) {
+        lastError = error;
+        await rm(temporaryPath, { force: true }).catch(() => undefined);
+      }
+    }
+    const detail = lastError instanceof Error ? `: ${lastError.message}` : "";
+    throw new ClosureUpdateError(`Closure blob is unavailable from every configured source${detail}`, {
+      cause: lastError,
+    });
   }
+}
+
+export async function ensureClosureDistributionBlob(input: Readonly<{
+  artifact: ClosureDistributionBlob;
+  fetch?: typeof globalThis.fetch;
+  paths: ClosureStorePaths;
+  repository?: ClosureResourceRepositoryConfig;
+}>): Promise<string> {
+  return await ensureDistributionBlob({
+    artifact: input.artifact,
+    fetchImpl: input.fetch ?? globalThis.fetch,
+    paths: input.paths,
+    ...(input.repository == null ? {} : { repository: input.repository }),
+  });
 }
 
 async function stageClosureDistributionGeneration(input: {
@@ -739,6 +847,7 @@ async function stageClosureDistributionGeneration(input: {
   descriptor: ClosureBindingDescriptor;
   fetchImpl: typeof globalThis.fetch;
   paths: ClosureStorePaths;
+  repository?: ClosureResourceRepositoryConfig;
 }) {
   const plan = planClosureDistributionGeneration(
     input.paths,
@@ -754,6 +863,7 @@ async function stageClosureDistributionGeneration(input: {
       artifact: component.artifact,
       fetchImpl: input.fetchImpl,
       paths: input.paths,
+      ...(input.repository == null ? {} : { repository: input.repository }),
     });
     ensured.add(component.artifact.digest);
   }
@@ -790,6 +900,7 @@ export async function applyClosureDistributionUpdate(input: {
   candidate: ClosureDistributionReleaseCandidate;
   fetch?: typeof globalThis.fetch;
   paths: ClosureStorePaths;
+  repository?: ClosureResourceRepositoryConfig;
   shellType: string;
   shellVersion: string;
 }): Promise<ApplyClosureDistributionUpdateResult> {
@@ -813,6 +924,7 @@ export async function applyClosureDistributionUpdate(input: {
       descriptor,
       fetchImpl: input.fetch ?? globalThis.fetch,
       paths: input.paths,
+      ...(input.repository == null ? {} : { repository: input.repository }),
     });
     try {
       const committed = await commitVerifiedClosureDistributionGeneration(
@@ -896,6 +1008,7 @@ export async function updateClosureFromRelease(input: {
   paths: ClosureStorePaths;
   platform: string;
   releaseTarget: string;
+  repository?: ClosureResourceRepositoryConfig;
   shellType: string;
   shellVersion: string;
 }): Promise<ApplyClosureReleaseUpdateResult> {
@@ -911,6 +1024,7 @@ export async function updateClosureFromRelease(input: {
       candidate: distribution,
       fetch: fetchImpl,
       paths: input.paths,
+      ...(input.repository == null ? {} : { repository: input.repository }),
       shellType: input.shellType,
       shellVersion: input.shellVersion,
     });

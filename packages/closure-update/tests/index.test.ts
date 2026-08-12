@@ -37,6 +37,8 @@ import {
   decideClosureUpdate,
   discoverClosureDistributionReleaseCandidate,
   discoverClosureReleaseCandidate,
+  ensureClosureDistributionBlob,
+  readClosureResourceRepositoryConfig,
   selectClosureDistributionReleaseCandidate,
   selectClosureReleaseCandidate,
   updateClosureFromRelease,
@@ -56,6 +58,68 @@ afterEach(async () => {
 function digest(bytes: string | Buffer): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
+
+describe("Closure resource repository", () => {
+  it("loads and freezes source policy without accepting a version map", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-closure-resource-config-"));
+    roots.push(root);
+    const configPath = join(root, "repository.json");
+    await writeFile(configPath, JSON.stringify({
+      localSeeds: [{ root: join(root, "seed") }],
+      remoteOrigins: ["https://mirror.example.test/open-design/"],
+      schemaVersion: 1,
+    }));
+    const config = await readClosureResourceRepositoryConfig({
+      OD_CLOSURE_RESOURCE_REPOSITORY_V1: configPath,
+    });
+    expect(config).toEqual({
+      localSeeds: [{ root: join(root, "seed") }],
+      remoteOrigins: ["https://mirror.example.test/open-design"],
+      schemaVersion: 1,
+    });
+    expect(Object.isFrozen(config)).toBe(true);
+    await writeFile(configPath, JSON.stringify({
+      localSeeds: [],
+      remoteOrigins: [],
+      schemaVersion: 1,
+      versions: {},
+    }));
+    await expect(readClosureResourceRepositoryConfig({
+      OD_CLOSURE_RESOURCE_REPOSITORY_V1: configPath,
+    })).rejects.toThrow(/unsupported fields/u);
+  });
+
+  it("prefers a valid local seed and falls through corrupt seed and remote mirror", async () => {
+    const paths = await createStore();
+    const validRoot = join(paths.root, "valid-seed");
+    const corruptRoot = join(paths.root, "corrupt-seed");
+    const bytes = Buffer.from("closure-resource-blob");
+    const artifact: ClosureDistributionBlob = {
+      digest: digest(bytes),
+      mediaType: "application/zip",
+      size: bytes.byteLength,
+      url: "https://default.example.test/beta/blobs/default",
+    };
+    const name = artifact.digest.slice("sha256:".length);
+    await mkdir(join(validRoot, "beta", "blobs"), { recursive: true });
+    await mkdir(join(corruptRoot, "beta", "blobs"), { recursive: true });
+    await writeFile(join(validRoot, "beta", "blobs", name), bytes);
+    await writeFile(join(corruptRoot, "beta", "blobs", name), "corrupt");
+    const fetch = vi.fn(async () => new Response("network must not run", { status: 500 })) as typeof globalThis.fetch;
+
+    await expect(ensureClosureDistributionBlob({
+      artifact,
+      fetch,
+      paths,
+      repository: {
+        localSeeds: [{ root: corruptRoot }, { root: validRoot }],
+        remoteOrigins: ["https://mirror.example.test"],
+        schemaVersion: 1,
+      },
+    })).resolves.toBe(join(paths.blobsRoot, name));
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
 
 async function createStore(): Promise<ClosureStorePaths> {
   const root = await mkdtemp(join(tmpdir(), "od-closure-update-"));
