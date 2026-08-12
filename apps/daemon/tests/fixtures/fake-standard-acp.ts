@@ -43,8 +43,16 @@ function priorLoadCount(): number {
       .split('\n')
       .filter((line) => line.includes('"method":"load"'))
       .length;
-  } catch {
-    return 0;
+  } catch (error) {
+    if (
+      error !== null
+      && typeof error === 'object'
+      && 'code' in error
+      && error.code === 'ENOENT'
+    ) {
+      return 0;
+    }
+    throw error;
   }
 }
 
