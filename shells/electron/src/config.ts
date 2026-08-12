@@ -3,6 +3,12 @@ import { join, resolve } from "node:path";
 
 import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar-proto";
 
+import {
+  projectPackagedColdLaunchConfig,
+  readPackagedColdLaunchProjection,
+  writePackagedColdLaunchProjection,
+} from "./cold-launch-projection.js";
+
 // `electron` is loaded lazily so this module can also be imported from the
 // standalone entry, which runs in a plain Node process without the electron
 // dependency on disk. Top-level `import { app } from "electron"` would crash
@@ -95,20 +101,26 @@ function resolveDefaultConfigPath(): string {
   return join(process.resourcesPath, "open-design-config.json");
 }
 
-async function readRawPackagedConfig(): Promise<RawPackagedConfig> {
+async function readRawPackagedConfig(electronUserDataRoot: string): Promise<RawPackagedConfig> {
   const explicit = process.env[PACKAGED_CONFIG_PATH_ENV];
   if (explicit != null && explicit.length > 0) {
     const config = await readJsonIfExists(resolve(explicit));
     if (config == null) throw new Error(`packaged config not found at ${explicit}`);
+    const projection = projectPackagedColdLaunchConfig(config);
+    if (projection != null) {
+      await writePackagedColdLaunchProjection(electronUserDataRoot, projection);
+    }
     return config;
   }
 
   const electronApp = await loadElectronApp();
-  return (
+  const embedded = (
     (await readJsonIfExists(resolveDefaultConfigPath())) ??
     (await readJsonIfExists(join(electronApp.getAppPath(), "open-design-config.json"))) ??
     {}
   );
+  const projection = await readPackagedColdLaunchProjection(electronUserDataRoot);
+  return projection == null ? embedded : { ...embedded, ...projection };
 }
 
 function resolveOptionalPath(value: string | undefined): string | undefined {
@@ -173,14 +185,15 @@ async function resolvePackagedRelativeEntry(value: string | undefined): Promise<
 }
 
 export async function readPackagedConfig(): Promise<PackagedConfig> {
-  const raw = await readRawPackagedConfig();
+  const electronApp = await loadElectronApp();
+  const electronUserDataRoot = electronApp.getPath("userData");
+  const raw = await readRawPackagedConfig(electronUserDataRoot);
   const namespace = normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? raw.namespace ?? SIDECAR_DEFAULTS.namespace,
   );
-  const electronApp = await loadElectronApp();
   const namespaceBaseRoot = resolvePackagedNamespaceBaseRoot(
     raw.namespaceBaseRoot,
-    electronApp.getPath("userData"),
+    electronUserDataRoot,
   );
   const resourceRoot = resolveOptionalPath(raw.resourceRoot) ?? join(process.resourcesPath, "open-design");
   const relativeNodeCommand =
