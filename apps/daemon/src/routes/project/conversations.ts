@@ -428,6 +428,12 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       const incomingTextIsStrictlyLonger =
         incomingText !== null &&
         (storedText === null || incomingText.length > storedText.length);
+      const mergedRunStatus =
+        daemonKnown &&
+        stored.runStatus === 'running' &&
+        incoming.runStatus === 'queued'
+          ? stored.runStatus
+          : incoming.runStatus ?? stored.runStatus;
       let mergedContent: string;
       if (daemonKnown) {
         mergedContent = incomingTextIsStrictlyLonger
@@ -456,11 +462,9 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
         role: stored.role,
         runId: stored.runId,
         content: mergedContent,
-        // Preserve the stored run status when the snapshot omits it, so a
-        // stale whole-message PUT cannot null the daemon-owned status column
-        // and open the terminal-arbitration gate (nettee 8/10 on #6418);
-        // an explicitly carried status still flows.
-        runStatus: incoming.runStatus ?? stored.runStatus,
+        // Preserve the stored run status when the snapshot omits it, and keep a
+        // daemon-known running row from moving backward to a delayed queued PUT.
+        runStatus: mergedRunStatus,
         lastRunEventId: mergeLastRunEventId(stored.lastRunEventId, incoming.lastRunEventId),
         startedAt: stored.startedAt ?? incoming.startedAt,
         // endedAt is a monotonic watermark: never regress the daemon's value.

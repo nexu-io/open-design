@@ -310,6 +310,7 @@ export function pinAssistantMessageOnRunCreate(
   opts?: {
     status?: string;
     beforeFreshInsert?: () => void;
+    beforeClaimCommit?: () => void;
     isRunActive?: (runId: string) => boolean;
   },
 ): { ok: boolean; reason?: 'active' | 'scope' } {
@@ -340,6 +341,7 @@ export function pinAssistantMessageOnRunCreate(
     if (!existing) {
       // Fresh id: insert the assistant row bound to this run (we own it).
       opts?.beforeFreshInsert?.();
+      opts?.beforeClaimCommit?.();
       upsertMessage(db, run.conversationId!, {
         id: run.assistantMessageId!,
         role: 'assistant',
@@ -414,9 +416,9 @@ export function pinAssistantMessageOnRunCreate(
       run.id, // same-run gate in WHERE
       allowStaleActiveRebind ? 1 : 0,
     );
-    return result.changes > 0
-      ? { ok: true }
-      : { ok: false, reason: 'active' as const };
+    if (result.changes === 0) return { ok: false, reason: 'active' as const };
+    opts?.beforeClaimCommit?.();
+    return { ok: true };
   });
   return claim.immediate();
 }

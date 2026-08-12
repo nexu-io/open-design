@@ -251,6 +251,49 @@ describe('pinAssistantMessageOnRunCreate generation boundary (#6418)', () => {
     expect(m.startedAt).toBe(100);
   });
 
+  it('rolls back an existing-row claim when commit-time seeding fails', () => {
+    const db = createDb();
+    db.prepare(`INSERT INTO conversations (id) VALUES ('conv-a')`).run();
+    seedMessage(db, {
+      id: 'msg-1',
+      conversationId: 'conv-a',
+      content: 'placeholder',
+      runStatus: 'running',
+      startedAt: 100,
+    });
+
+    expect(() =>
+      pinAssistantMessageOnRunCreate(
+        db,
+        {
+          id: 'run-b',
+          conversationId: 'conv-a',
+          assistantMessageId: 'msg-1',
+          status: 'queued',
+          createdAt: 300,
+        },
+        {
+          beforeClaimCommit: () => {
+            db.prepare(
+              `INSERT INTO messages
+                 (id, conversation_id, role, content, position, created_at)
+               VALUES ('user-seed', 'conv-a', 'user', 'prompt', 1, 0)`,
+            ).run();
+            throw new Error('seed failed');
+          },
+        },
+      ),
+    ).toThrow('seed failed');
+
+    const m = readMessage(db, 'msg-1');
+    expect(m.runId).toBeNull();
+    expect(m.runStatus).toBe('running');
+    expect(m.content).toBe('placeholder');
+    expect(
+      db.prepare(`SELECT COUNT(*) AS count FROM messages WHERE id = 'user-seed'`).get(),
+    ).toMatchObject({ count: 0 });
+  });
+
   it('writes the overridden status when resuming a same run (recharge resume)', () => {
     // A recharge resume claims with an explicit `queued` status override while
     // the run object is still terminal (failed); the message row must take the

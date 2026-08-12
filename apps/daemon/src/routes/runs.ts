@@ -542,6 +542,7 @@ export interface RegisterRunRoutesDeps {
       opts?: {
         status?: string;
         beforeFreshInsert?: () => void;
+        beforeClaimCommit?: () => void;
         isRunActive?: (runId: string) => boolean;
       },
     ) => { ok: boolean; reason?: 'active' | 'scope' };
@@ -1839,13 +1840,11 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     // idempotent run and must survive.
     if (creation.kind === 'created') {
       let claimed: { ok: boolean; reason?: 'active' | 'scope' };
-      let seededDuringFreshClaim = false;
       try {
         const claimOptions = runUserSeed
           ? {
-              beforeFreshInsert: () => {
+              beforeClaimCommit: () => {
                 seedRunUserMessage();
-                seededDuringFreshClaim = true;
               },
               isRunActive: isRunActiveForAssistantClaim,
             }
@@ -1864,14 +1863,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           'RUN_IN_PROGRESS',
           'assistantMessageId is already bound to an active run',
         );
-      }
-      if (seededDuringFreshClaim) runUserSeed = null;
-    }
-    if (creation.kind === 'created' && runUserSeed) {
-      try {
-        seedRunUserMessage();
-      } catch (err) {
-        console.warn('[runs] api client user message pin failed', err);
       }
     }
     const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();

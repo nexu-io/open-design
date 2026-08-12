@@ -221,6 +221,68 @@ setInterval(() => {}, 1000);
     expect(r2.status).toBe(409);
   });
 
+  it('does not move a daemon-owned running message backward to queued', async () => {
+    // nettee on #6418: onRunCreated(queued) and onRunStatus(running) can arrive
+    // as separate whole-message PUTs. A delayed queued snapshot must not regress
+    // a daemon-known row that is already running.
+    const { url, invocationPath } = await startWithHangingClaude();
+    const { projectId, conversationId } = await createProject(url);
+    const assistantMessageId = `assistant_status_order_${randomUUID()}`;
+
+    const created = await postRun(url, {
+      projectId,
+      conversationId,
+      assistantMessageId,
+      agentId: 'claude',
+      message: 'M',
+      currentPrompt: 'M',
+      clientRequestId: `order_${randomUUID()}`,
+    });
+    expect(created.status).toBe(202);
+    await waitForInvocation(invocationPath);
+    const claimed = await fetchAssistantMessage(url, projectId, conversationId, assistantMessageId);
+    expect(claimed?.runId).toBeTypeOf('string');
+
+    const runningPut = await fetch(
+      `${url}/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMessageId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: assistantMessageId,
+          role: 'assistant',
+          content: claimed?.content ?? '',
+          runId: claimed?.runId,
+          runStatus: 'running',
+          events: claimed?.events ?? [],
+        }),
+      },
+    );
+    expect(runningPut.status).toBe(200);
+    const running = await fetchAssistantMessage(url, projectId, conversationId, assistantMessageId);
+    expect(running?.runStatus).toBe('running');
+
+    const staleQueued = await fetch(
+      `${url}/api/projects/${projectId}/conversations/${conversationId}/messages/${assistantMessageId}`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: assistantMessageId,
+          role: 'assistant',
+          content: running?.content ?? '',
+          runId: running?.runId,
+          runStatus: 'queued',
+          events: running?.events ?? [],
+        }),
+      },
+    );
+    expect(staleQueued.status).toBe(200);
+
+    const after = await fetchAssistantMessage(url, projectId, conversationId, assistantMessageId);
+    expect(after?.runStatus).toBe('running');
+  });
+
   it('a rejected concurrent run leaves no orphan user turn', async () => {
     // nettee 8/10 on #6418: the claim must precede user-message seeding, so a
     // rejected (loser) concurrent run never leaves its user row behind.
