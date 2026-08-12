@@ -92,4 +92,43 @@ describe('eventsEndedWithUnfinishedWork', () => {
     expect(eventsEndedWithUnfinishedWork([{ kind: 'text', text: 'done' }])).toBe(false);
     expect(eventsEndedWithUnfinishedWork(undefined)).toBe(false);
   });
+
+  // Observed with the claude runtime: the task list arrives JSON-ENCODED rather
+  // than as an array. An Array.isArray-only read drops the snapshot, and a
+  // dropped snapshot reports a run with open work as Completed — the exact
+  // divergence this predicate exists to prevent.
+  it('reads a JSON-encoded task list', () => {
+    expect(
+      eventsEndedWithUnfinishedWork([
+        {
+          kind: 'tool_use',
+          id: '1',
+          name: 'TodoWrite',
+          input: { todos: JSON.stringify([{ content: 'a', status: 'pending' }]) },
+        },
+      ]),
+    ).toBe(true);
+    expect(
+      eventsEndedWithUnfinishedWork([
+        {
+          kind: 'tool_use',
+          id: '1',
+          name: 'update_plan',
+          input: { plan: JSON.stringify([{ step: 'a', status: 'completed' }]) },
+        },
+      ]),
+    ).toBe(false);
+  });
+
+  it('still drops an encoded payload that is not a task list', () => {
+    // Malformed or non-array strings behave exactly as before the encoded form
+    // was accepted: no snapshot, so the run stays Completed.
+    for (const todos of ['[{"content"', 'not json at all', '{"content":"a"}', '']) {
+      expect(
+        eventsEndedWithUnfinishedWork([
+          { kind: 'tool_use', id: '1', name: 'TodoWrite', input: { todos } },
+        ]),
+      ).toBe(false);
+    }
+  });
 });

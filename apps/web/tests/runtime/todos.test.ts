@@ -121,6 +121,31 @@ describe('todo event helpers', () => {
     ]);
   });
 
+  it('accepts a JSON-encoded task list', () => {
+    // Observed with the claude runtime: `todos` arrives as a JSON string rather
+    // than an array, which an Array.isArray-only read renders as an empty card.
+    expect(parseTodoWriteInput({
+      todos: JSON.stringify([
+        { content: 'Lay the tokens', status: 'completed' },
+        { content: 'Build the hero', status: 'in_progress' },
+      ]),
+    })).toEqual([
+      { content: 'Lay the tokens', status: 'completed', activeForm: undefined },
+      { content: 'Build the hero', status: 'in_progress', activeForm: undefined },
+    ]);
+    expect(parseTodoWriteInput({
+      plan: JSON.stringify([{ step: 'Ship it', status: 'pending' }]),
+    })).toEqual([
+      { content: 'Ship it', status: 'pending', activeForm: undefined },
+    ]);
+  });
+
+  it('returns no items for an encoded payload that is not a task list', () => {
+    for (const todos of ['[{"content"', 'not json at all', '{"content":"a"}', '']) {
+      expect(parseTodoWriteInput({ todos })).toEqual([]);
+    }
+  });
+
   it('accepts native task item text aliases used by different agents', () => {
     expect(parseTodoWriteInput({
       todos: [
