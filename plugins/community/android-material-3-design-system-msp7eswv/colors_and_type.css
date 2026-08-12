@@ -1,0 +1,115 @@
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+  --md-sys-color-primary: #6750a4;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #eaddff;
+  --md-sys-color-on-primary-container: #21005d;
+  --md-sys-color-secondary: #625b71;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: #e8def8;
+  --md-sys-color-on-secondary-container: #1d192b;
+  --md-sys-color-tertiary: #7d5260;
+  --md-sys-color-on-tertiary: #ffffff;
+  --md-sys-color-tertiary-container: #ffd8e4;
+  --md-sys-color-on-tertiary-container: #31111d;
+  --md-sys-color-error: #b3261e;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-error-container: #f9dedc;
+  --md-sys-color-on-error-container: #410e0b;
+  --md-sys-color-surface: #fffbfe;
+  --md-sys-color-on-surface: #1c1b1f;
+  --md-sys-color-surface-variant: #e7e0ec;
+  --md-sys-color-on-surface-variant: #49454f;
+  --md-sys-color-surface-container-low: #f7f2fa;
+  --md-sys-color-surface-container: #f3edf7;
+  --md-sys-color-surface-container-high: #ece6f0;
+  --md-sys-color-outline: #79747e;
+  --md-sys-color-outline-variant: #cac4d0;
+  --md-sys-color-inverse-surface: #313033;
+  --md-sys-color-inverse-on-surface: #f4eff4;
+  --md-sys-color-scrim: #000000;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --md-sys-color-primary: #d0bcff;
+  --md-sys-color-on-primary: #381e72;
+  --md-sys-color-primary-container: #4f378b;
+  --md-sys-color-on-primary-container: #eaddff;
+  --md-sys-color-secondary: #ccc2dc;
+  --md-sys-color-on-secondary: #332d41;
+  --md-sys-color-secondary-container: #4a4458;
+  --md-sys-color-on-secondary-container: #e8def8;
+  --md-sys-color-tertiary: #efb8c8;
+  --md-sys-color-on-tertiary: #492532;
+  --md-sys-color-tertiary-container: #633b48;
+  --md-sys-color-on-tertiary-container: #ffd8e4;
+  --md-sys-color-error: #f2b8b5;
+  --md-sys-color-on-error: #601410;
+  --md-sys-color-error-container: #8c1d18;
+  --md-sys-color-on-error-container: #f9dedc;
+  --md-sys-color-surface: #1c1b1f;
+  --md-sys-color-on-surface: #e6e1e5;
+  --md-sys-color-surface-variant: #49454f;
+  --md-sys-color-on-surface-variant: #cac4d0;
+  --md-sys-color-surface-container-low: #211f26;
+  --md-sys-color-surface-container: #25232a;
+  --md-sys-color-surface-container-high: #2b2930;
+  --md-sys-color-outline: #938f99;
+  --md-sys-color-outline-variant: #49454f;
+  --md-sys-color-inverse-surface: #e6e1e5;
+  --md-sys-color-inverse-on-surface: #313033;
+  --md-sys-color-scrim: #000000;
+}
+
+:root {
+  --md-sys-font-family: Roboto, "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --md-sys-type-display-large: 400 3.5625rem/4rem var(--md-sys-font-family);
+  --md-sys-type-display-medium: 400 2.8125rem/3.25rem var(--md-sys-font-family);
+  --md-sys-type-display-small: 400 2.25rem/2.75rem var(--md-sys-font-family);
+  --md-sys-type-headline-large: 400 2rem/2.5rem var(--md-sys-font-family);
+  --md-sys-type-headline-medium: 400 1.75rem/2.25rem var(--md-sys-font-family);
+  --md-sys-type-headline-small: 400 1.5rem/2rem var(--md-sys-font-family);
+  --md-sys-type-title-large: 400 1.375rem/1.75rem var(--md-sys-font-family);
+  --md-sys-type-title-medium: 500 1rem/1.5rem var(--md-sys-font-family);
+  --md-sys-type-title-small: 500 0.875rem/1.25rem var(--md-sys-font-family);
+  --md-sys-type-body-large: 400 1rem/1.5rem var(--md-sys-font-family);
+  --md-sys-type-body-medium: 400 0.875rem/1.25rem var(--md-sys-font-family);
+  --md-sys-type-body-small: 400 0.75rem/1rem var(--md-sys-font-family);
+  --md-sys-type-label-large: 500 0.875rem/1.25rem var(--md-sys-font-family);
+  --md-sys-type-label-medium: 500 0.75rem/1rem var(--md-sys-font-family);
+  --md-sys-type-label-small: 500 0.6875rem/1rem var(--md-sys-font-family);
+  --md-sys-space-1: 0.25rem;
+  --md-sys-space-2: 0.5rem;
+  --md-sys-space-3: 0.75rem;
+  --md-sys-space-4: 1rem;
+  --md-sys-space-6: 1.5rem;
+  --md-sys-space-8: 2rem;
+  --md-sys-space-12: 3rem;
+  --md-sys-radius-extra-small: 0.25rem;
+  --md-sys-radius-small: 0.5rem;
+  --md-sys-radius-medium: 0.75rem;
+  --md-sys-radius-large: 1rem;
+  --md-sys-radius-extra-large: 1.5rem;
+  --md-sys-radius-full: 999px;
+  --md-sys-state-hover-opacity: 0.08;
+  --md-sys-state-focus-opacity: 0.12;
+  --md-sys-state-pressed-opacity: 0.12;
+  --md-sys-state-disabled-opacity: 0.38;
+  --md-sys-elevation-1: 0 1px 2px rgb(0 0 0 / 0.16), 0 1px 3px 1px rgb(0 0 0 / 0.08);
+  --md-sys-elevation-2: 0 2px 6px 2px rgb(0 0 0 / 0.1), 0 1px 2px rgb(0 0 0 / 0.16);
+  --md-sys-elevation-3: 0 4px 8px 3px rgb(0 0 0 / 0.08), 0 1px 3px rgb(0 0 0 / 0.16);
+  --md-sys-motion-short: 100ms;
+  --md-sys-motion-medium: 250ms;
+  --md-sys-motion-long: 400ms;
+  font-family: var(--md-sys-font-family);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --md-sys-motion-short: 1ms;
+    --md-sys-motion-medium: 1ms;
+    --md-sys-motion-long: 1ms;
+  }
+}
