@@ -73,6 +73,16 @@ export type ClosureNodeRuntimeIdentity = Readonly<{
   release: "node";
 }>;
 
+export type ClosureNodeRuntimeProbe = (
+  executable: string,
+  expected: Readonly<{ arch: string; platform: string; version: string }>,
+) => Promise<ClosureNodeRuntimeIdentity>;
+
+export type ClosurePreparedNodeRuntime = ClosurePreparedTree & Readonly<{
+  entryPath: "bin/node" | "node.exe";
+  identity: ClosureNodeRuntimeIdentity;
+}>;
+
 /** Materialize the two fossil entries that every launcher archive must carry. */
 export async function prepareClosureLauncherComponent(options: Readonly<{
   outputRoot: string;
@@ -308,6 +318,39 @@ export async function probeClosureNodeRuntime(
   return validateClosureNodeRuntimeIdentity(value, expected);
 }
 
+function closureNodeTarget(target: ClosurePlatformTarget): Readonly<{
+  arch: "arm64" | "x64";
+  entryPath: "bin/node" | "node.exe";
+  platform: "darwin" | "win32";
+}> {
+  return target === "darwin-arm64"
+    ? { arch: "arm64", entryPath: "bin/node", platform: "darwin" }
+    : { arch: "x64", entryPath: "node.exe", platform: "win32" };
+}
+
+/** Validate one already-extracted official Node tree before contribution sealing. */
+export async function validateClosureNodeRuntimeComponent(input: Readonly<{
+  nodeVersion: string;
+  probe?: ClosureNodeRuntimeProbe;
+  root: string;
+  target: ClosurePlatformTarget;
+}>): Promise<ClosurePreparedNodeRuntime> {
+  if (!/^\d+\.\d+\.\d+$/u.test(input.nodeVersion)) {
+    throw new Error(`Closure Node version must be exact: ${input.nodeVersion}`);
+  }
+  const target = closureNodeTarget(input.target);
+  const tree = await inspectPreparedTree(input.root);
+  const entry = tree.files.find((file) => file.path === target.entryPath);
+  if (entry == null || entry.size <= 0) {
+    throw new Error(`Closure Node runtime entry is missing: ${target.entryPath}`);
+  }
+  const identity = await (input.probe ?? probeClosureNodeRuntime)(
+    join(tree.root, ...target.entryPath.split("/")),
+    { arch: target.arch, platform: target.platform, version: input.nodeVersion },
+  );
+  return Object.freeze({ ...tree, entryPath: target.entryPath, identity });
+}
+
 /** Prove that the prepared native pack is loadable by the selected Node ABI. */
 export async function probeClosureNativeModules(input: Readonly<{
   executable: string;
@@ -474,17 +517,24 @@ export async function buildClosureDistributionTargetContribution(options: Readon
   blobOrigin: string;
   channel: ReleaseChannel;
   nativeRoot: string;
+  nodeVersion: string;
   outputRoot: string;
+  probeNodeRuntime?: ClosureNodeRuntimeProbe;
   run?: ClosureComponentArchiveRunner;
-  runtimeEntryPath: string;
   runtimeRoot: string;
   target: ClosurePlatformTarget;
   version: string;
 }>): Promise<ClosureDistributionTargetContribution> {
   const outputRoot = resolve(options.outputRoot);
   await validateClosureNativeComponent(options.nativeRoot);
+  const preparedRuntime = await validateClosureNodeRuntimeComponent({
+    nodeVersion: options.nodeVersion,
+    ...(options.probeNodeRuntime == null ? {} : { probe: options.probeNodeRuntime }),
+    root: options.runtimeRoot,
+    target: options.target,
+  });
   const runtime = await archiveClosureComponent({
-    entryPath: options.runtimeEntryPath,
+    entryPath: preparedRuntime.entryPath,
     outputPath: join(outputRoot, "targets", options.target, "runtime.zip"),
     run: options.run,
     sourceRoot: options.runtimeRoot,

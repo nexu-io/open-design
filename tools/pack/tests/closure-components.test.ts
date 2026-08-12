@@ -13,6 +13,7 @@ import {
   probeClosureNativeModules,
   validateClosureBodyComponent,
   validateClosureNativeComponent,
+  validateClosureNodeRuntimeComponent,
   validateClosureNodeRuntimeIdentity,
   type ClosureComponentArchiveRunner,
 } from "../src/closure-components.js";
@@ -200,9 +201,17 @@ describe("tools-pack Closure component archives", () => {
       blobOrigin: "https://releases.open-design.ai/",
       channel: "beta",
       nativeRoot: await componentRoot(root, "native", "node_modules/addon/addon.node"),
+      nodeVersion: "24.18.0",
       outputRoot,
+      probeNodeRuntime: async (_executable, expected) => validateClosureNodeRuntimeIdentity({
+        arch: expected.arch,
+        electron: null,
+        modules: "137",
+        node: expected.version,
+        platform: expected.platform,
+        release: "node",
+      }, expected),
       run: fakeArchive,
-      runtimeEntryPath: target === "win32-x64" ? "node.exe" : "bin/node",
       runtimeRoot: await componentRoot(
         root,
         "runtime",
@@ -239,5 +248,41 @@ describe("tools-pack Closure component archives", () => {
     await expect(readFile(join(launcherRoot, "bootloader.mjs"), "utf8")).resolves.toBe("handoff\n");
     await expect(readFile(join(launcherRoot, "launcher.mjs"), "utf8")).resolves.toBe("launcher\n");
     await expect(readFile(join(launcherRoot, "sidecars.mjs"), "utf8")).rejects.toThrow();
+  });
+
+  it("derives the official Node entry from the target and rejects version drift", async () => {
+    const root = await tempRoot("runtime-target");
+    const runtimeRoot = await componentRoot(root, "runtime-target", "bin/node");
+    const probe = async (_executable: string, expected: Readonly<{
+      arch: string;
+      platform: string;
+      version: string;
+    }>) => validateClosureNodeRuntimeIdentity({
+      arch: expected.arch,
+      electron: null,
+      modules: "137",
+      node: expected.version,
+      platform: expected.platform,
+      release: "node",
+    }, expected);
+
+    await expect(validateClosureNodeRuntimeComponent({
+      nodeVersion: "24.18.0",
+      probe,
+      root: runtimeRoot,
+      target: "darwin-arm64",
+    })).resolves.toMatchObject({ entryPath: "bin/node" });
+    await expect(validateClosureNodeRuntimeComponent({
+      nodeVersion: "24",
+      probe,
+      root: runtimeRoot,
+      target: "darwin-arm64",
+    })).rejects.toThrow(/must be exact/u);
+    await expect(validateClosureNodeRuntimeComponent({
+      nodeVersion: "24.18.0",
+      probe,
+      root: runtimeRoot,
+      target: "win32-x64",
+    })).rejects.toThrow(/node.exe/u);
   });
 });
