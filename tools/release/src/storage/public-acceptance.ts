@@ -22,8 +22,8 @@ export type PublicArtifactBinding = {
 export type PublicClosureBinding = {
   channel: "beta";
   digest: string;
-  platform: "win32-x64";
   protocolVersion: 1;
+  target: "win32-x64";
   version: string;
 };
 
@@ -102,14 +102,14 @@ function publicClosureBinding(value: unknown, label: string): PublicClosureBindi
   assertRecord(value, label);
   const channel = stringField(value, "channel", label);
   const digest = stringField(value, "digest", label);
-  const platform = stringField(value, "platform", label);
   const protocolVersion = numberField(value, "protocolVersion", label);
+  const target = stringField(value, "target", label);
   const version = stringField(value, "version", label);
   assertDigest(digest, `${label}.digest`);
-  if (channel !== "beta" || platform !== "win32-x64" || protocolVersion !== 1) {
+  if (channel !== "beta" || protocolVersion !== 1 || target !== "win32-x64") {
     throw new Error(`${label} identity mismatch`);
   }
-  return { channel, digest, platform, protocolVersion, version };
+  return { channel, digest, protocolVersion, target, version };
 }
 
 function resolvePublicClosureBinding(input: {
@@ -130,8 +130,8 @@ function resolvePublicClosureBinding(input: {
   return {
     channel: "beta",
     digest: closure.identity.digest,
-    platform: "win32-x64",
     protocolVersion: closure.identity.protocolVersion,
+    target: "win32-x64",
     version: closure.identity.version,
   };
 }
@@ -450,8 +450,8 @@ export async function issuePublicWindowsAcceptance(input: {
   for (const [name, expected] of [
     ["channel", plan.closure.channel],
     ["digest", plan.closure.digest],
-    ["platform", plan.closure.platform],
     ["protocolVersion", plan.closure.protocolVersion],
+    ["target", plan.closure.target],
     ["version", plan.closure.version],
     ["namespace", plan.namespace],
   ] as const) {

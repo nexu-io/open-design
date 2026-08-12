@@ -153,7 +153,7 @@ describe("public Windows release acceptance", () => {
             digest: source.closure.identity.digest,
             generation: 0,
             namespace,
-            platform: "win32-x64",
+            target: "win32-x64",
             protocolVersion: 1,
             version: closureVersion,
           },
@@ -174,8 +174,8 @@ describe("public Windows release acceptance", () => {
     expect(credential).toMatchObject({
       closure: {
         digest: source.closure.identity.digest,
-        platform: "win32-x64",
         protocolVersion: CLOSURE_PROTOCOL_VERSION,
+        target: "win32-x64",
         version: closureVersion,
       },
       commit,
@@ -213,8 +213,8 @@ describe("public Windows release acceptance", () => {
             channel: "beta",
             digest: source.closure.identity.digest,
             namespace,
-            platform: "win32-x64",
             protocolVersion: CLOSURE_PROTOCOL_VERSION,
+            target: "win32-x64",
             version: closureVersion,
           },
         },
