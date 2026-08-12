@@ -512,34 +512,18 @@ export async function buildClosureDistributionSharedContribution(options: Readon
   });
 }
 
-/** Build only one platform's runtime/native archives and seal its contribution. */
+/** Build only one platform's native archive and seal its contribution. */
 export async function buildClosureDistributionTargetContribution(options: Readonly<{
   blobOrigin: string;
   channel: ReleaseChannel;
   nativeRoot: string;
-  nodeVersion: string;
   outputRoot: string;
-  probeNodeRuntime?: ClosureNodeRuntimeProbe;
   run?: ClosureComponentArchiveRunner;
-  runtimeRoot: string;
   target: ClosurePlatformTarget;
   version: string;
 }>): Promise<ClosureDistributionTargetContribution> {
   const outputRoot = resolve(options.outputRoot);
   await validateClosureNativeComponent(options.nativeRoot);
-  const preparedRuntime = await validateClosureNodeRuntimeComponent({
-    nodeVersion: options.nodeVersion,
-    ...(options.probeNodeRuntime == null ? {} : { probe: options.probeNodeRuntime }),
-    root: options.runtimeRoot,
-    target: options.target,
-  });
-  const runtime = await archiveClosureComponent({
-    entryPath: preparedRuntime.entryPath,
-    outputPath: join(outputRoot, "targets", options.target, "runtime.zip"),
-    run: options.run,
-    sourceRoot: options.runtimeRoot,
-    target: options.target,
-  }) as ClosureComponentEntrypointArchive;
   const native = await archiveClosureComponent({
     outputPath: join(outputRoot, "targets", options.target, "native.zip"),
     run: options.run,
@@ -550,7 +534,6 @@ export async function buildClosureDistributionTargetContribution(options: Readon
     blobOrigin: options.blobOrigin,
     channel: options.channel,
     native,
-    runtime,
     target: options.target,
     version: options.version,
   });

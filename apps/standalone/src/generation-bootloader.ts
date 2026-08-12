@@ -14,28 +14,23 @@ import {
 export type StandaloneGenerationLaunch = StandaloneBodyProcessLaunchSpec;
 
 /**
- * Resolve the fixed four-component generation layout inside the launcher
- * fossil. Shells only supply installationRoot; platform/runtime/native details
- * remain private to this Closure-owned wrapper.
+ * Resolve the three-component generation layout inside the launcher fossil.
+ * The Shell-owned official Node executes this wrapper; native and launcher
+ * details remain private to the Closure-owned wrapper.
  */
 export function resolveStandaloneGenerationLaunch(
   requestInput: StandaloneHandoffRequest,
-  platform: NodeJS.Platform = process.platform,
+  executable: string = process.execPath,
 ): StandaloneGenerationLaunch {
   const request = validateStandaloneHandoffRequest(requestInput);
   const installationRoot = request.paths.installationRoot;
-  if (platform !== "darwin" && platform !== "win32") {
-    throw new Error(`Standalone generation launcher is unsupported on ${platform}`);
-  }
   return Object.freeze({
     cwd: join(installationRoot, "body"),
     env: {
       ...process.env,
       NODE_PATH: join(installationRoot, "native", "node_modules"),
     },
-    executable: platform === "win32"
-      ? join(installationRoot, "runtime", "node.exe")
-      : join(installationRoot, "runtime", "bin", "node"),
+    executable,
     launcherPath: join(installationRoot, "launcher", "launcher.mjs"),
     output: "inherit",
   });

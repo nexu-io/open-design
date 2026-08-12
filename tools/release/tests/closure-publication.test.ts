@@ -227,7 +227,6 @@ describe("Standalone Closure release publication", () => {
     const distributionPath = join(root, "closure-distribution.json");
     const launcher = digest("launcher");
     const body = digest("body");
-    const runtime = digest("runtime");
     const native = digest("native");
     const artifact = (value: string) => ({
       digest: value as `sha256:${string}`,
@@ -236,7 +235,7 @@ describe("Standalone Closure release publication", () => {
       url: `https://releases.open-design.test/beta/blobs/${value.slice("sha256:".length)}`,
     });
     const distribution = createClosureDistributionManifest({
-      blobs: Object.fromEntries([launcher, body, runtime, native].map((value) => [value, artifact(value)])),
+      blobs: Object.fromEntries([launcher, body, native].map((value) => [value, artifact(value)])),
       compatibility: { shell: { electron: { version: { min: "0.18.0" } } } },
       identity: {
         channel: "beta",
@@ -254,7 +253,6 @@ describe("Standalone Closure release publication", () => {
         targets: {
           "darwin-arm64": {
             native: { blob: native, treeDigest: digest("native-tree") },
-            runtime: { blob: runtime, entryPath: "bin/node", treeDigest: digest("runtime-tree") },
           },
         },
       },

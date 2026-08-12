@@ -66,10 +66,6 @@ async function targetContributionOptions(target: "darwin-arm64" | "win32-x64") {
     blobOrigin: "https://releases.open-design.ai/",
     channel: "beta" as const,
     native: await artifact(root, "native.zip", `native-${target}`),
-    runtime: {
-      ...await artifact(root, "node.zip", `official-node-${target}`),
-      entryPath: target === "darwin-arm64" ? "bin/node" : "node.exe",
-    },
     target,
     version: "0.19.0-beta.10",
   };

@@ -92,7 +92,6 @@ export type ClosureDistributionLauncherComponent = ClosureDistributionEntrypoint
 
 export type ClosureDistributionTarget = {
   native: ClosureDistributionComponent;
-  runtime: ClosureDistributionEntrypointComponent;
 };
 
 export type ClosureDistributionResource = ClosureDistributionComponent & {
@@ -158,11 +157,6 @@ export type ClosureDistributionTargetContribution = {
   channel: ReleaseChannel;
   native: { artifact: ClosureDistributionBlob; treeDigest: ClosureDigest };
   protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
-  runtime: {
-    artifact: ClosureDistributionBlob;
-    entryPath: string;
-    treeDigest: ClosureDigest;
-  };
   schemaVersion: typeof CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION;
   target: string;
   version: string;
@@ -177,7 +171,6 @@ export type ResolvedClosureDistributionTarget = {
     body: ClosureDistributionEntrypointComponent;
     launcher: ClosureDistributionLauncherComponent;
     native: ClosureDistributionComponent;
-    runtime: ClosureDistributionEntrypointComponent;
   };
   requiredBlobs: ClosureDistributionBlob[];
   resources: Array<ClosureDistributionResource & Readonly<{
@@ -706,17 +699,13 @@ function normalizeDistributionTargets(value: unknown): Record<string, ClosureDis
     const components = requireRecord(rawComponents, `closure distribution target ${target}`);
     requireKnownKeys(
       components,
-      ["native", "runtime"],
+      ["native"],
       `closure distribution target ${target}`,
     );
     return [target, {
       native: normalizeDistributionComponent(
         components.native,
         `closure distribution target ${target} native component`,
-      ),
-      runtime: normalizeDistributionEntrypointComponent(
-        components.runtime,
-        `closure distribution target ${target} runtime component`,
       ),
     }];
   }));
@@ -795,10 +784,7 @@ function normalizeClosureDistributionManifestDraft(value: unknown): ClosureDistr
     normalized.required.body.blob,
     normalized.required.launcher.blob,
     ...normalized.resources.map((resource) => resource.blob),
-    ...Object.values(normalized.required.targets).flatMap((target) => [
-      target.native.blob,
-      target.runtime.blob,
-    ]),
+    ...Object.values(normalized.required.targets).map((target) => target.native.blob),
   ]);
   for (const digest of referenced) {
     if (normalized.blobs[digest] == null) {
@@ -964,35 +950,24 @@ export function validateClosureDistributionSharedContribution(
   };
 }
 
-/** Parse one platform-owned runtime/native declaration crossing job boundaries. */
+/** Parse one platform-owned native declaration crossing job boundaries. */
 export function validateClosureDistributionTargetContribution(
   value: unknown,
 ): ClosureDistributionTargetContribution {
   const contribution = requireRecord(value, "closure distribution target contribution");
   requireKnownKeys(
     contribution,
-    ["channel", "native", "protocolVersion", "runtime", "schemaVersion", "target", "version"],
+    ["channel", "native", "protocolVersion", "schemaVersion", "target", "version"],
     "closure distribution target contribution",
   );
   const identity = validateContributionIdentity(contribution);
   const native = requireRecord(contribution.native, "closure distribution target native");
   requireKnownKeys(native, ["artifact", "treeDigest"], "closure distribution target native");
-  const runtime = requireRecord(contribution.runtime, "closure distribution target runtime");
-  requireKnownKeys(
-    runtime,
-    ["artifact", "entryPath", "treeDigest"],
-    "closure distribution target runtime",
-  );
   return {
     ...identity,
     native: {
       artifact: normalizeContributionArtifact(native.artifact, "closure distribution target native"),
       treeDigest: normalizeDigest(native.treeDigest),
-    },
-    runtime: {
-      artifact: normalizeContributionArtifact(runtime.artifact, "closure distribution target runtime"),
-      entryPath: normalizeRelativePath(runtime.entryPath, "closure distribution target runtime entry path"),
-      treeDigest: normalizeDigest(runtime.treeDigest),
     },
     schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
     target: normalizePlatform(contribution.target),
@@ -1044,16 +1019,10 @@ export function mergeClosureDistributionContributions(
       );
     }
     insertContributionBlob(blobs, contribution.native.artifact);
-    insertContributionBlob(blobs, contribution.runtime.artifact);
     targets[contribution.target] = {
       native: {
         blob: contribution.native.artifact.digest,
         treeDigest: contribution.native.treeDigest,
-      },
-      runtime: {
-        blob: contribution.runtime.artifact.digest,
-        entryPath: contribution.runtime.entryPath,
-        treeDigest: contribution.runtime.treeDigest,
       },
     };
   }
@@ -1102,13 +1071,11 @@ export function resolveClosureDistributionTarget(
     body: manifest.required.body,
     launcher: manifest.required.launcher,
     native: targetComponents.native,
-    runtime: targetComponents.runtime,
   };
   const requiredDigests = new Set<ClosureDigest>([
     required.body.blob,
     required.launcher.blob,
     required.native.blob,
-    required.runtime.blob,
   ]);
   return {
     required,

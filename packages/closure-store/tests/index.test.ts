@@ -111,7 +111,6 @@ async function materializeDistributionGeneration(
     launcher: Buffer.from("launcher-archive"),
     native: Buffer.from("native-archive"),
     resource: Buffer.from("resource-archive"),
-    runtime: Buffer.from("runtime-archive"),
   };
   const blob = (bytes: Buffer): ClosureDistributionBlob => {
     const value = digest(bytes);
@@ -143,7 +142,6 @@ async function materializeDistributionGeneration(
     })), digest),
     native: tree("addon.node", "native\n"),
     resource: tree("skills/sample/SKILL.md", "resource\n"),
-    runtime: tree("bin/node", "node\n"),
   };
   const manifest = createClosureDistributionManifest({
     blobs: Object.fromEntries(Object.values(artifacts).map((artifact) => [artifact.digest, artifact])),
@@ -164,11 +162,6 @@ async function materializeDistributionGeneration(
       targets: {
         "darwin-arm64": {
           native: { blob: artifacts.native.digest, treeDigest: trees.native },
-          runtime: {
-            blob: artifacts.runtime.digest,
-            entryPath: "bin/node",
-            treeDigest: trees.runtime,
-          },
         },
       },
     },
@@ -190,12 +183,10 @@ async function materializeDistributionGeneration(
   await mkdir(join(stageRoot, "body"), { recursive: true });
   await mkdir(join(stageRoot, "launcher"), { recursive: true });
   await mkdir(join(stageRoot, "native"), { recursive: true });
-  await mkdir(join(stageRoot, "runtime", "bin"), { recursive: true });
   await writeFile(join(stageRoot, "body", "bootloader.mjs"), "export const body = true;\n");
   await writeFile(join(stageRoot, "launcher", "launcher.mjs"), "export const launcher = true;\n");
   await writeFile(join(stageRoot, "launcher", "bootloader.mjs"), "export const handoff = true;\n");
   await writeFile(join(stageRoot, "native", "addon.node"), "native\n");
-  await writeFile(join(stageRoot, "runtime", "bin", "node"), "node\n");
   await writeFile(join(stageRoot, "closure.json"), `${JSON.stringify(manifest, null, 2)}\n`);
   return { artifacts, manifest, plan, stageRoot };
 }
@@ -227,14 +218,15 @@ describe("layered Closure distribution consumer", () => {
 
     expect(consumed.manifest.identity).toMatchObject({
       channel: "beta",
-      digest: "sha256:6103d15d4bfe640a9d8213169adf24f6e6cf3e439580ced941e39847b1f4d09c",
       version: "0.19.0-beta.10",
     });
-    expect(consumed.target.required.runtime.entryPath).toBe("node.exe");
+    expect(consumed.target.required.native).toEqual(
+      consumed.manifest.required.targets["win32-x64"]?.native,
+    );
     expect(consumed.target.resources).toEqual([
       expect.objectContaining({ id: "design-system-core", title: "Open Design Core" }),
     ]);
-    expect(consumed.target.requiredBlobs).toHaveLength(4);
+    expect(consumed.target.requiredBlobs).toHaveLength(3);
     expect(consumed.target.requiredBlobs.map((blob) => blob.digest)).not.toContain(
       consumed.target.resources[0]?.blob,
     );
@@ -268,11 +260,8 @@ describe("layered Closure distribution consumer", () => {
     expect(leftPlan.required.launcher.resolvedEntryPath).toBe(
       join(leftPlan.installationRoot, "launcher", "launcher.mjs"),
     );
-    expect(leftPlan.required.runtime.resolvedEntryPath).toBe(
-      join(leftPlan.installationRoot, "runtime", "bin", "node"),
-    );
     expect(leftPlan.required.native.componentRoot).toBe(join(leftPlan.installationRoot, "native"));
-    expect(leftPlan.requiredBlobPaths).toHaveLength(4);
+    expect(leftPlan.requiredBlobPaths).toHaveLength(3);
     expect(leftPlan.resources).toEqual([
       expect.objectContaining({ id: "design-system-core", title: "Open Design Core" }),
     ]);
@@ -333,8 +322,8 @@ describe("layered Closure generation commit", () => {
       result.committed.standalone,
     );
     expect(stored.materializedRoot).toBe(staged.plan.generationRoot);
-    expect(stored.plan.required.runtime.resolvedEntryPath).toBe(
-      join(staged.plan.generationRoot, "runtime", "bin", "node"),
+    expect(stored.plan.required.native.componentRoot).toBe(
+      join(staged.plan.generationRoot, "native"),
     );
     await expect(hasStoredClosureDistributionGeneration(
       paths,
@@ -355,27 +344,27 @@ describe("layered Closure generation commit", () => {
       verification,
       "0.19.0-beta.10",
     );
-    await writeFile(staged.plan.required.runtime.resolvedEntryPath, "tampered-node");
+    await writeFile(join(staged.plan.required.native.componentRoot, "addon.node"), "tampered-native");
 
     await expect(verifyStoredClosureDistributionGeneration(
       paths,
       result.committed.standalone,
-    )).rejects.toThrow(/runtime/u);
+    )).rejects.toThrow(/native/u);
   });
 
   it("fails closed before rename when a required CAS blob or view shape drifts", async () => {
     const paths = await createStore();
     const staged = await materializeDistributionGeneration(paths, 0);
-    await writeFile(staged.plan.required.runtime.blobPath, "corrupt-runtime");
+    await writeFile(staged.plan.required.native.blobPath, "corrupt-native");
 
     await expect(verifyMaterializedClosureDistributionGeneration(
       paths,
       staged.plan,
       staged.stageRoot,
-    )).rejects.toThrow(/runtime blob does not match/u);
+    )).rejects.toThrow(/native blob does not match/u);
     expect((await readClosureBindingDescriptor(paths)).committed).toBeNull();
 
-    await writeFile(staged.plan.required.runtime.blobPath, Buffer.from("runtime-archive"));
+    await writeFile(staged.plan.required.native.blobPath, Buffer.from("native-archive"));
     await mkdir(join(staged.stageRoot, "resources"));
     await expect(verifyMaterializedClosureDistributionGeneration(
       paths,

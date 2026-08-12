@@ -138,7 +138,6 @@ async function materializeDistribution(root: string) {
     body: Buffer.from("body-archive"),
     launcher: Buffer.from("launcher-archive"),
     native: Buffer.from("native-archive"),
-    runtime: Buffer.from("runtime-archive"),
   };
   const artifact = (bytes: Buffer): ClosureDistributionBlob => {
     const value = digest(bytes);
@@ -156,7 +155,6 @@ async function materializeDistribution(root: string) {
     body: [["bootloader.mjs", "body\n"]],
     launcher: [["bootloader.mjs", "handoff\n"], ["launcher.mjs", "launcher\n"]],
     native: [["node_modules/addon/addon.node", "native\n"]],
-    runtime: [["bin/node", "node\n"]],
   } as const;
   const treeDigest = (files: readonly (readonly [string, string])[]) => (
     createClosureComponentTreeDigest(files.map(([path, contents]) => ({
@@ -188,11 +186,6 @@ async function materializeDistribution(root: string) {
       targets: {
         "darwin-arm64": {
           native: { blob: artifacts.native.digest, treeDigest: treeDigest(trees.native) },
-          runtime: {
-            blob: artifacts.runtime.digest,
-            entryPath: "bin/node",
-            treeDigest: treeDigest(trees.runtime),
-          },
         },
       },
     },

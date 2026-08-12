@@ -28,10 +28,6 @@ export type ClosureDistributionArtifactSource = Readonly<{
   treeDigest: ClosureDigest;
 }>;
 
-export type ClosureDistributionEntrypointSource = ClosureDistributionArtifactSource & Readonly<{
-  entryPath: string;
-}>;
-
 export type ClosureDistributionResourceSource = ClosureDistributionArtifactSource & Readonly<{
   id: string;
   title: string;
@@ -56,7 +52,6 @@ export type CreateClosureDistributionTargetContributionOptions = Readonly<{
   blobOrigin: string;
   channel: ReleaseChannel;
   native: ClosureDistributionArtifactSource;
-  runtime: ClosureDistributionEntrypointSource;
   target: string;
   version: string;
 }>;
@@ -154,23 +149,15 @@ export async function createClosureDistributionSharedContribution(
   });
 }
 
-/** Inspect only the target-owned runtime/native bytes from one platform job. */
+/** Inspect only the target-owned native bytes from one platform job. */
 export async function createClosureDistributionTargetContribution(
   options: CreateClosureDistributionTargetContributionOptions,
 ): Promise<ClosureDistributionTargetContribution> {
-  const [runtime, native] = await Promise.all([
-    inspectArtifact(options.runtime, options),
-    inspectArtifact(options.native, options),
-  ]);
+  const native = await inspectArtifact(options.native, options);
   return validateClosureDistributionTargetContribution({
     channel: options.channel,
     native: Object.freeze({ artifact: native, treeDigest: options.native.treeDigest }),
     protocolVersion: CLOSURE_PROTOCOL_VERSION,
-    runtime: Object.freeze({
-      artifact: runtime,
-      entryPath: options.runtime.entryPath,
-      treeDigest: options.runtime.treeDigest,
-    }),
     schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
     target: options.target,
     version: options.version,

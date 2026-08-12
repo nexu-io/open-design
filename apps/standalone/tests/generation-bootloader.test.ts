@@ -53,27 +53,17 @@ function request(): StandaloneHandoffRequest {
 }
 
 describe("Standalone generation bootloader", () => {
-  it("derives mac official Node and native resolution from the fixed generation root", () => {
-    expect(resolveStandaloneGenerationLaunch(request(), "darwin")).toMatchObject({
+  it("reuses the Shell-owned official Node and derives native resolution from the generation root", () => {
+    expect(resolveStandaloneGenerationLaunch(request(), "/shell/node")).toMatchObject({
       cwd: "/open-design/generation-3/body",
       env: { NODE_PATH: "/open-design/generation-3/native/node_modules" },
-      executable: "/open-design/generation-3/runtime/bin/node",
+      executable: "/shell/node",
       launcherPath: "/open-design/generation-3/launcher/launcher.mjs",
       output: "inherit",
     });
   });
 
-  it("changes only the official Node entry for a Windows generation", () => {
-    expect(resolveStandaloneGenerationLaunch(request(), "win32")).toMatchObject({
-      cwd: "/open-design/generation-3/body",
-      env: { NODE_PATH: "/open-design/generation-3/native/node_modules" },
-      executable: "/open-design/generation-3/runtime/node.exe",
-      launcherPath: "/open-design/generation-3/launcher/launcher.mjs",
-    });
-  });
-
-  it("fails closed instead of guessing an unshipped Linux layout", () => {
-    expect(() => resolveStandaloneGenerationLaunch(request(), "linux"))
-      .toThrow(/unsupported/u);
+  it("defaults to the Node process executing the fossil bootloader", () => {
+    expect(resolveStandaloneGenerationLaunch(request()).executable).toBe(process.execPath);
   });
 });

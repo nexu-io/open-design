@@ -42,7 +42,6 @@ describe("Closure contribution file aggregation", () => {
     const targetPath = join(root, "darwin-arm64.json");
     const launcher = blob("launcher");
     const body = blob("body");
-    const runtime = blob("runtime");
     const native = blob("native");
     await writeFile(sharedPath, JSON.stringify({
       body: { artifact: body, entryPath: CLOSURE_ARCHIVE_ENTRY_PATH, treeDigest: digest("body-tree") },
@@ -63,7 +62,6 @@ describe("Closure contribution file aggregation", () => {
       channel: "beta",
       native: { artifact: native, treeDigest: digest("native-tree") },
       protocolVersion: CLOSURE_PROTOCOL_VERSION,
-      runtime: { artifact: runtime, entryPath: "bin/node", treeDigest: digest("runtime-tree") },
       schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
       target: "darwin-arm64",
       version: "0.19.0-beta.10",

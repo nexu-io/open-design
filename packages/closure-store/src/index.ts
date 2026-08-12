@@ -88,7 +88,6 @@ export type ClosureDistributionGenerationPlan = Readonly<{
     body: ClosureDistributionEntrypointPlan;
     launcher: ClosureDistributionLauncherPlan;
     native: ClosureDistributionComponentPlan;
-    runtime: ClosureDistributionEntrypointPlan;
   }>;
   requiredBlobPaths: readonly string[];
   resources: readonly ClosureDistributionResourcePlan[];
@@ -188,14 +187,14 @@ function planDistributionComponent(
 function planDistributionComponent(
   paths: ClosureStorePaths,
   generationRoot: string,
-  componentName: "body" | "runtime",
+  componentName: "body",
   component: ClosureDistributionEntrypointComponent,
   manifest: ClosureDistributionManifest,
 ): ClosureDistributionEntrypointPlan;
 function planDistributionComponent(
   paths: ClosureStorePaths,
   generationRoot: string,
-  componentName: "body" | "launcher" | "native" | "runtime",
+  componentName: "body" | "launcher" | "native",
   component: Readonly<{
     blob: ClosureDigest;
     entryPath?: string;
@@ -269,13 +268,6 @@ export function planClosureDistributionGeneration(
       generationRoot,
       "native",
       consumed.target.required.native,
-      consumed.manifest,
-    ),
-    runtime: planDistributionComponent(
-      paths,
-      generationRoot,
-      "runtime",
-      consumed.target.required.runtime,
       consumed.manifest,
     ),
   };
@@ -614,7 +606,7 @@ async function assertMaterializedEntrypoint(path: string, label: string): Promis
 /**
  * Verify a private generation staging tree and every required channel CAS blob.
  * Archive extraction remains the update coordinator's responsibility; this
- * proof only accepts the fixed four-component view and never a resource mount.
+ * proof only accepts the fixed three-component view and never a resource mount.
  */
 export async function verifyMaterializedClosureDistributionGeneration(
   paths: ClosureStorePaths,
@@ -634,7 +626,7 @@ async function verifyClosureDistributionGenerationRoot(
   plan: ClosureDistributionGenerationPlan,
   materializedRoot: string,
 ): Promise<StoredClosureDistributionVerification> {
-  const expectedTopLevel = ["body", "closure.json", "launcher", "native", "runtime"];
+  const expectedTopLevel = ["body", "closure.json", "launcher", "native"];
   const topLevel = (await readdir(materializedRoot, { withFileTypes: true }).catch(() => []))
     .map((entry) => entry.name)
     .sort(compareName);

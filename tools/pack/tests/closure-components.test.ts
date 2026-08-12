@@ -201,22 +201,8 @@ describe("tools-pack Closure component archives", () => {
       blobOrigin: "https://releases.open-design.ai/",
       channel: "beta",
       nativeRoot: await componentRoot(root, "native", "node_modules/addon/addon.node"),
-      nodeVersion: "24.18.0",
       outputRoot,
-      probeNodeRuntime: async (_executable, expected) => validateClosureNodeRuntimeIdentity({
-        arch: expected.arch,
-        electron: null,
-        modules: "137",
-        node: expected.version,
-        platform: expected.platform,
-        release: "node",
-      }, expected),
       run: fakeArchive,
-      runtimeRoot: await componentRoot(
-        root,
-        "runtime",
-        target === "win32-x64" ? "node.exe" : "bin/node",
-      ),
       target,
       version: "0.19.0-beta.10",
     });
@@ -224,9 +210,7 @@ describe("tools-pack Closure component archives", () => {
 
     expect(shared).not.toHaveProperty("target");
     expect(targetContribution).not.toHaveProperty("body");
-    expect(manifest.required.targets[target]?.runtime.entryPath).toBe(
-      target === "win32-x64" ? "node.exe" : "bin/node",
-    );
+    expect(manifest.required.targets[target]?.native.blob).toBe(targetContribution.native.artifact.digest);
     expect(manifest.resources.map(({ id }) => id)).toEqual(["skills"]);
     expect(await readFile(join(outputRoot, "shared", "body.zip"), "utf8")).toMatch(/^PK/u);
     expect(await readFile(join(outputRoot, "targets", target, "native.zip"), "utf8")).toMatch(/^PK/u);

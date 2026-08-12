@@ -73,8 +73,6 @@ const distributionDigests = {
   nativeMac: `sha256:${"d".repeat(64)}`,
   nativeWin: `sha256:${"e".repeat(64)}`,
   resource: `sha256:${"f".repeat(64)}`,
-  runtimeMac: `sha256:${"1".repeat(64)}`,
-  runtimeWin: `sha256:${"2".repeat(64)}`,
 } as const;
 
 function blob(digestValue: ClosureDigest, mediaType = "application/zip") {
@@ -113,19 +111,9 @@ const distributionDraft: ClosureDistributionManifestDraft = {
     targets: {
       "win32-x64": {
         native: { blob: distributionDigests.nativeWin, treeDigest: distributionDigests.nativeWin },
-        runtime: {
-          blob: distributionDigests.runtimeWin,
-          entryPath: "node.exe",
-          treeDigest: distributionDigests.runtimeWin,
-        },
       },
       "darwin-arm64": {
         native: { blob: distributionDigests.nativeMac, treeDigest: distributionDigests.nativeMac },
-        runtime: {
-          blob: distributionDigests.runtimeMac,
-          entryPath: "bin/node",
-          treeDigest: distributionDigests.runtimeMac,
-        },
       },
     },
   },
@@ -368,7 +356,6 @@ describe("layered Closure distribution manifest", () => {
       body: produced.required.body,
       launcher: produced.required.launcher,
       native: produced.required.targets["darwin-arm64"]?.native,
-      runtime: produced.required.targets["darwin-arm64"]?.runtime,
     });
     expect(target.resources).toEqual(produced.resources.map((resource) => ({
       ...resource,
@@ -378,7 +365,6 @@ describe("layered Closure distribution manifest", () => {
       distributionDigests.body,
       distributionDigests.launcher,
       distributionDigests.nativeMac,
-      distributionDigests.runtimeMac,
     ].sort());
     expect(target.requiredBlobs.map((entry) => entry.digest)).not.toContain(distributionDigests.resource);
   });
@@ -478,11 +464,6 @@ describe("layered Closure cross-job contributions", () => {
       treeDigest: distributionDigests.nativeMac,
     },
     protocolVersion: CLOSURE_PROTOCOL_VERSION,
-    runtime: {
-      artifact: artifact(distributionDigests.runtimeMac),
-      entryPath: "bin/node",
-      treeDigest: distributionDigests.runtimeMac,
-    },
     schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
     target: "darwin-arm64",
     version: "0.19.0-beta.10",
@@ -494,7 +475,6 @@ describe("layered Closure cross-job contributions", () => {
     const merged = mergeClosureDistributionContributions(shared, [mac], digestCanonical);
     expect(merged.required.targets["darwin-arm64"]).toEqual({
       native: distributionDraft.required.targets["darwin-arm64"]?.native,
-      runtime: distributionDraft.required.targets["darwin-arm64"]?.runtime,
     });
     expect(merged.resources[0]?.blob).toBe(distributionDigests.resource);
   });
@@ -509,6 +489,10 @@ describe("layered Closure cross-job contributions", () => {
     expect(() => validateClosureDistributionTargetContribution({
       ...mac,
       localArtifactPath: "/tmp/node.zip",
+    })).toThrow(/unsupported fields/u);
+    expect(() => validateClosureDistributionTargetContribution({
+      ...mac,
+      runtime: { entryPath: "bin/node" },
     })).toThrow(/unsupported fields/u);
     expect(() => validateClosureDistributionSharedContribution({
       ...shared,

@@ -1,17 +1,5 @@
 {
   "blobs": {
-    "sha256:1111111111111111111111111111111111111111111111111111111111111111": {
-      "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-      "mediaType": "application/zip",
-      "size": 1024,
-      "url": "https://releases.open-design.ai/beta/blobs/sha256:1111111111111111111111111111111111111111111111111111111111111111"
-    },
-    "sha256:2222222222222222222222222222222222222222222222222222222222222222": {
-      "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-      "mediaType": "application/zip",
-      "size": 1024,
-      "url": "https://releases.open-design.ai/beta/blobs/sha256:2222222222222222222222222222222222222222222222222222222222222222"
-    },
     "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb": {
       "digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "mediaType": "application/zip",
@@ -56,7 +44,7 @@
     "channel": "beta",
     "protocolVersion": 1,
     "version": "0.19.0-beta.10",
-    "digest": "sha256:6103d15d4bfe640a9d8213169adf24f6e6cf3e439580ced941e39847b1f4d09c"
+    "digest": "sha256:1d16ab666d961298ecaf40e4104ec236b51d8471be5026a32e69794bd0eeda1d"
   },
   "required": {
     "body": {
@@ -75,22 +63,12 @@
         "native": {
           "blob": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
           "treeDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-        },
-        "runtime": {
-          "blob": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-          "entryPath": "bin/node",
-          "treeDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
         }
       },
       "win32-x64": {
         "native": {
           "blob": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "treeDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-        },
-        "runtime": {
-          "blob": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-          "entryPath": "node.exe",
-          "treeDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
         }
       }
     }

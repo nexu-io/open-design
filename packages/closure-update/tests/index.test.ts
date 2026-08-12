@@ -229,7 +229,6 @@ async function downloadableDistribution(): Promise<{
     launcher: await zip(...launcherFiles),
     native: await zip(["addon.node", "native\n"]),
     resource: await zip(["skills/SKILL.md", "# Skill\n"]),
-    runtime: await zip(["bin/node", "node\n"]),
   };
   const artifact = (bytes: Buffer): ClosureDistributionBlob => {
     const value = digest(bytes);
@@ -257,7 +256,6 @@ async function downloadableDistribution(): Promise<{
     })), digest),
     native: tree("addon.node", "native\n"),
     resource: tree("skills/SKILL.md", "# Skill\n"),
-    runtime: tree("bin/node", "node\n"),
   };
   const manifest = createClosureDistributionManifest({
     blobs: Object.fromEntries(Object.values(artifacts).map((value) => [value.digest, value])),
@@ -278,11 +276,6 @@ async function downloadableDistribution(): Promise<{
       targets: {
         "darwin-arm64": {
           native: { blob: artifacts.native.digest, treeDigest: trees.native },
-          runtime: {
-            blob: artifacts.runtime.digest,
-            entryPath: "bin/node",
-            treeDigest: trees.runtime,
-          },
         },
       },
     },
@@ -619,15 +612,9 @@ describe("layered Closure distribution application", () => {
       .toContain("body = true");
     expect(await readFile(join(generationRoot, "launcher", "launcher.mjs"), "utf8"))
       .toContain("launcher = true");
-    expect(await readFile(join(generationRoot, "runtime", "bin", "node"), "utf8"))
-      .toContain("node");
-    if (process.platform !== "win32") {
-      expect((await stat(join(generationRoot, "runtime", "bin", "node"))).mode & 0o700)
-        .toBe(0o700);
-    }
     expect(vi.mocked(fixture.fetch).mock.calls.map(([input]) => String(input)))
       .not.toContain(fixture.resourceUrl);
-    expect(vi.mocked(fixture.fetch)).toHaveBeenCalledTimes(4);
+    expect(vi.mocked(fixture.fetch)).toHaveBeenCalledTimes(3);
 
     const retained = await applyClosureDistributionUpdate({
       candidate: fixture.candidate,
@@ -637,7 +624,7 @@ describe("layered Closure distribution application", () => {
       shellVersion: "0.19.0",
     });
     expect(retained).toMatchObject({ reason: "already-committed", state: "retained" });
-    expect(vi.mocked(fixture.fetch)).toHaveBeenCalledTimes(4);
+    expect(vi.mocked(fixture.fetch)).toHaveBeenCalledTimes(3);
   });
 
   it("keeps the binding empty when any required blob fails checksum", async () => {

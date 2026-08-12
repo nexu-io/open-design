@@ -17,7 +17,6 @@ function digest(value: string): `sha256:${string}` {
 function fixture(publicOrigin = "https://releases.open-design.test"): ReturnType<typeof createClosureDistributionManifest> {
   const launcher = digest("launcher");
   const body = digest("body");
-  const runtime = digest("runtime");
   const native = digest("native");
   const artifact = (value: `sha256:${string}`) => ({
     digest: value,
@@ -26,7 +25,7 @@ function fixture(publicOrigin = "https://releases.open-design.test"): ReturnType
     url: `${publicOrigin}/beta/blobs/${value.slice("sha256:".length)}`,
   });
   const draft: ClosureDistributionManifestDraft = {
-    blobs: Object.fromEntries([launcher, body, runtime, native].map((value) => [value, artifact(value)])),
+    blobs: Object.fromEntries([launcher, body, native].map((value) => [value, artifact(value)])),
     compatibility: { shell: { electron: { version: { min: "0.19.0" } } } },
     identity: { channel: "beta", protocolVersion: CLOSURE_PROTOCOL_VERSION, version: "0.19.0-beta.10" },
     required: {
@@ -40,7 +39,6 @@ function fixture(publicOrigin = "https://releases.open-design.test"): ReturnType
       targets: {
         "darwin-arm64": {
           native: { blob: native, treeDigest: digest("native-tree") },
-          runtime: { blob: runtime, entryPath: "bin/node", treeDigest: digest("runtime-tree") },
         },
       },
     },
