@@ -184,6 +184,13 @@ describe("release workflows", () => {
     expect(buildWin).toContain('$buildArgs += "--require-vela-cli"');
     expect(buildWin).toContain('$updateArgs += "--require-vela-cli"');
     expect(win).toContain("tools-pack win validate-payload");
+    expect(countOccurrences(
+      win,
+      'tools-pack win validate-payload --namespace release-beta-win --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.shell_version }}" --json',
+    )).toBe(2);
+    expect(win).not.toContain(
+      'tools-pack win validate-payload --namespace release-beta-win --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.beta_version }}" --json',
+    );
     expect(win).toContain("Resolve win_x64 Shell smoke acceptance identity");
     expect(win).toContain("shell-smoke-acceptance.ts win_x64");
     expect(win).toContain("pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts");

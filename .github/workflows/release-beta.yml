@@ -1656,7 +1656,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win build failed with exit code $LASTEXITCODE" }
           $buildOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\build.json" -Encoding utf8
           $build = $buildOutput | ConvertFrom-Json
-          pnpm.cmd exec tools-pack win validate-payload --namespace release-beta-win --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.beta_version }}" --json
+          pnpm.cmd exec tools-pack win validate-payload --namespace release-beta-win --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.shell_version }}" --json
 
       - name: Retry beta win_x64 without restored cache
         id: win_tools_pack_build_retry
@@ -1675,7 +1675,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win fallback build failed with exit code $LASTEXITCODE" }
           $buildOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\build.json" -Encoding utf8
           $build = $buildOutput | ConvertFrom-Json
-          pnpm.cmd exec tools-pack win validate-payload --namespace release-beta-win --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.beta_version }}" --json
+          pnpm.cmd exec tools-pack win validate-payload --namespace release-beta-win --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.shell_version }}" --json
 
       - name: Register verified immutable win_x64 Electron Shell
         if: ${{ steps.win_x64_shell_resolution.outputs.state == 'miss' }}
