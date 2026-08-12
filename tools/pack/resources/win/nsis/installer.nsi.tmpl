@@ -28,6 +28,7 @@ RequestExecutionLevel user
 !endif
 
 !include "MUI2.nsh"
+!include "FileFunc.nsh"
 !include "LogicLib.nsh"
 !include "nsDialogs.nsh"
 !include "WinMessages.nsh"
@@ -171,6 +172,11 @@ Function un.onInit
   StrCpy $RemoveDesktopShortcutState "${BST_CHECKED}"
   StrCpy $RemoveCacheDataState "${BST_CHECKED}"
   StrCpy $RemoveLocalDataState 0
+  ${GetParameters} $0
+  ${GetOptions} $0 "/ODREMOVELOCALDATA=" $1
+  ${If} $1 == "1"
+    StrCpy $RemoveLocalDataState "${BST_CHECKED}"
+  ${EndIf}
   StrCpy $ExistingInstallLocation "$INSTDIR"
   StrCpy $RunningInstancesInstallRoot "$INSTDIR"
 FunctionEnd
@@ -582,7 +588,6 @@ FunctionEnd
 Function un.UninstallOptionsPageLeave
   StrCpy $RemoveDesktopShortcutState "${BST_CHECKED}"
   StrCpy $RemoveCacheDataState "${BST_CHECKED}"
-  StrCpy $RemoveLocalDataState 0
   IfSilent done
   ${NSD_GetState} $RemoveDesktopShortcutCheckbox $RemoveDesktopShortcutState
   ${NSD_GetState} $RemoveCacheDataCheckbox $RemoveCacheDataState

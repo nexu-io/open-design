@@ -50,6 +50,18 @@ describe("Windows installer resource boundary", () => {
     );
   });
 
+  it("keeps silent product-data deletion explicit while preserving the default", async () => {
+    const template = await readFile(new URL("../resources/win/nsis/installer.nsi.tmpl", import.meta.url), "utf8");
+    const uninstallInit = template.slice(template.indexOf("Function un.onInit"), template.indexOf("Function DetectRunningInstances"));
+
+    expect(uninstallInit).toContain('StrCpy $RemoveLocalDataState 0');
+    expect(uninstallInit).toContain('${GetOptions} $0 "/ODREMOVELOCALDATA=" $1');
+    expect(uninstallInit).toContain('StrCpy $RemoveLocalDataState "${BST_CHECKED}"');
+    expect(uninstallInit.indexOf('StrCpy $RemoveLocalDataState 0')).toBeLessThan(
+      uninstallInit.indexOf('${GetOptions} $0 "/ODREMOVELOCALDATA=" $1'),
+    );
+  });
+
   it("gives production and fault-injection installers distinct cache identities", async () => {
     const production = await hashWinNsisInstallerImplementation(config, {});
     const faults = await hashWinNsisInstallerImplementation(config, { [WIN_NSIS_TEST_HOOKS_ENV]: "faults" });
