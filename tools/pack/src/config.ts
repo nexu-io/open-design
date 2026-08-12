@@ -57,6 +57,7 @@ export type ToolPackCliOptions = {
   skipWorkspaceBuild?: boolean;
   silent?: boolean;
   startSource?: string;
+  standaloneSeedDir?: string;
   statusPollCount?: string | number;
   statusPollIntervalMs?: string | number;
   to?: string;
@@ -100,6 +101,7 @@ export type ToolPackConfig = {
   signed: boolean;
   shell: ToolPackShell;
   shellVersion?: string;
+  standaloneSeedRoot?: string;
   amrProfile?: ToolPackAmrProfile;
   telemetryRelayUrl?: string;
   /**
@@ -407,6 +409,9 @@ export function resolveToolPackConfig(
     signed: options.signed === true,
     shell,
     shellVersion,
+    standaloneSeedRoot: options.standaloneSeedDir == null
+      ? undefined
+      : resolve(options.standaloneSeedDir),
     amrProfile: resolveToolPackAmrProfile(process.env.OPEN_DESIGN_AMR_PROFILE),
     telemetryRelayUrl: resolveToolPackTelemetryRelayUrl(process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL),
     updateMetadataUrl: resolveToolPackUpdateMetadataUrl(process.env.OD_UPDATE_METADATA_URL),

@@ -109,6 +109,16 @@ describe("resolveToolPackConfig cache root", () => {
   });
 });
 
+describe("resolveToolPackConfig Standalone seed", () => {
+  it("resolves the explicit seed repository without inventing a default", () => {
+    expect(resolveToolPackConfig("mac", { namespace: "no-seed" }).standaloneSeedRoot).toBeUndefined();
+    expect(resolveToolPackConfig("mac", {
+      namespace: "with-seed",
+      standaloneSeedDir: "./.tmp/baseline-seed",
+    }).standaloneSeedRoot).toBe(resolve("./.tmp/baseline-seed"));
+  });
+});
+
 describe("resolveToolPackConfig namespace defaults", () => {
   it("keeps release and Shell compatibility versions independently observable", () => {
     const config = resolveToolPackConfig("mac", {

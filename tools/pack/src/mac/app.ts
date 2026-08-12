@@ -25,6 +25,7 @@ import {
 } from "../node-pty-runtime.js";
 import { copyBundledResourceTrees } from "../resources.js";
 import { copyShellNodeRuntime, copyStandaloneBootstrapSeed } from "../shell-node.js";
+import { inspectStandaloneSeed } from "../standalone-seed.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
 import { electronBuilderVersionForShellVersion } from "../versions.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
@@ -71,6 +72,7 @@ async function buildPrebundledStandaloneRuntime(
 }
 
 export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths): Promise<void> {
+  await inspectStandaloneSeed(config);
   await rm(paths.resourceRoot, { force: true, recursive: true });
   await mkdir(paths.resourceRoot, { recursive: true });
   await copyShellNodeRuntime({
@@ -78,6 +80,7 @@ export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths):
   });
   await copyStandaloneBootstrapSeed({
     resourceRoot: paths.resourceRoot,
+    ...(config.standaloneSeedRoot == null ? {} : { seedRoot: config.standaloneSeedRoot }),
     workspaceRoot: config.workspaceRoot,
   });
 

@@ -30,6 +30,7 @@ export async function copyShellNodeRuntime(options: {
 
 export async function copyStandaloneBootstrapSeed(options: Readonly<{
   resourceRoot: string;
+  seedRoot?: string;
   workspaceRoot: string;
 }>): Promise<void> {
   const targetRoot = join(options.resourceRoot, "standalone");
@@ -43,6 +44,12 @@ export async function copyStandaloneBootstrapSeed(options: Readonly<{
     join(options.workspaceRoot, "apps", "standalone", "dist", "bootstrap", "baseline", "launcher.mjs"),
     join(targetRoot, "baseline", "launcher.mjs"),
   );
+  if (options.seedRoot != null) {
+    await cp(options.seedRoot, join(targetRoot, "seed"), {
+      dereference: true,
+      recursive: true,
+    });
+  }
   await writeFile(join(targetRoot, "repository.json"), `${JSON.stringify({
     localSeeds: [{ root: "seed" }],
     remoteOrigins: [],

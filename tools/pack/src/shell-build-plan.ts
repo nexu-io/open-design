@@ -4,6 +4,7 @@ import { resolveMacPaths } from "./mac/paths.js";
 import { resolveWinPaths } from "./win/paths.js";
 import { readRuntimeShellVersion } from "./versions.js";
 import { resolveShellBuildIdentity } from "./workspace-build.js";
+import { inspectStandaloneSeed } from "./standalone-seed.js";
 
 export type ToolPackShellBuildPlan = Readonly<{
   artifacts: Readonly<Record<string, string | null>>;
@@ -24,6 +25,7 @@ export type ToolPackShellBuildPlan = Readonly<{
 }>;
 
 export async function resolveToolPackShellBuildPlan(config: ToolPackConfig): Promise<ToolPackShellBuildPlan> {
+  const standaloneSeedDigest = (await inspectStandaloneSeed(config))?.digest ?? null;
   const shell = {
     ...await resolveShellBuildIdentity(config),
     type: config.shell,
@@ -39,6 +41,7 @@ export async function resolveToolPackShellBuildPlan(config: ToolPackConfig): Pro
     posthogKey: config.posthogKey ?? null,
     schemaVersion: 1,
     signed: config.signed,
+    standaloneSeedDigest,
     telemetryRelayUrl: config.telemetryRelayUrl ?? null,
     updateMetadataUrl: config.updateMetadataUrl ?? null,
     velaWebUrl: config.velaWebUrl ?? null,

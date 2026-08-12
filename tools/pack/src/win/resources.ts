@@ -5,6 +5,7 @@ import { hashJson, hashPath, ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
 import { copyShellNodeRuntime, copyStandaloneBootstrapSeed } from "../shell-node.js";
+import { inspectStandaloneSeed } from "../standalone-seed.js";
 import type { WinPaths, ResourceTreeCacheMetadata } from "./types.js";
 
 const RESOURCE_TREE_CACHE_SCHEMA_VERSION = 9;
@@ -33,6 +34,7 @@ async function createResourceTreeCacheKey(config: ToolPackConfig): Promise<strin
       "baseline",
       "launcher.mjs",
     )),
+    standaloneSeedDigest: (await inspectStandaloneSeed(config))?.digest ?? null,
   });
 }
 
@@ -60,7 +62,11 @@ export async function prepareResourceTree(
       await cp(winResources.sevenZipExe, join(resourceRoot, "bin", "7z.exe"));
       await cp(winResources.sevenZipDll, join(resourceRoot, "bin", "7z.dll"));
       await copyShellNodeRuntime({ target: join(resourceRoot, "bin", "node.exe") });
-      await copyStandaloneBootstrapSeed({ resourceRoot, workspaceRoot: config.workspaceRoot });
+      await copyStandaloneBootstrapSeed({
+        resourceRoot,
+        ...(config.standaloneSeedRoot == null ? {} : { seedRoot: config.standaloneSeedRoot }),
+        workspaceRoot: config.workspaceRoot,
+      });
       return { resourceName: "open-design" };
     },
   };
