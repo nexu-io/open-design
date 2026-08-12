@@ -1,0 +1,26 @@
+{
+  "candidateId": "295aedfd-12cd-43ec-8d94-60891f317c3f",
+  "projectId": "brand-app-31b2af",
+  "runId": "d230657f-0eca-4c19-9509-5ba8f9457d97",
+  "conversationId": "8e65c5e9-1d73-4c63-a973-7d157bbdf981",
+  "provenance": {
+    "summary": "Detected from README.md, SKILL.md after a successful run.",
+    "detectedAt": 1786536713411
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "README.md",
+      "label": "README.md",
+      "size": 2024,
+      "copied": true
+    },
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 1841,
+      "copied": true
+    }
+  ]
+}
