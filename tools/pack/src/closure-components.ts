@@ -308,6 +308,60 @@ export async function probeClosureNodeRuntime(
   return validateClosureNodeRuntimeIdentity(value, expected);
 }
 
+/** Prove that the prepared native pack is loadable by the selected Node ABI. */
+export async function probeClosureNativeModules(input: Readonly<{
+  executable: string;
+  modules: readonly string[];
+  nativeRoot: string;
+}>): Promise<readonly string[]> {
+  if (input.modules.length === 0) throw new Error("Closure native probe requires at least one module");
+  const modules = [...new Set(input.modules)].sort();
+  for (const moduleName of modules) normalizeResourceId(moduleName);
+  const nativeRoot = resolve(input.nativeRoot);
+  await validateClosureNativeComponent(nativeRoot);
+  const script = [
+    'const {createRequire}=require("node:module");',
+    'const {join}=require("node:path");',
+    'const root=process.argv[1];',
+    'const modules=JSON.parse(process.argv[2]);',
+    'const load=createRequire(join(root,"probe.cjs"));',
+    'for(const name of modules)load(name);',
+    'process.stdout.write(JSON.stringify(modules));',
+  ].join("");
+  const output = await new Promise<string>((resolveProbe, rejectProbe) => {
+    const child = spawn(input.executable, ["--eval", script, nativeRoot, JSON.stringify(modules)], {
+      env: { ...process.env, NODE_PATH: join(nativeRoot, "node_modules") },
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr?.on("data", (chunk: string) => { stderr += chunk; });
+    child.once("error", rejectProbe);
+    child.once("close", (code, signal) => {
+      if (code === 0 && signal == null) resolveProbe(stdout);
+      else rejectProbe(new Error(
+        `Closure native module probe failed with ${signal ?? `exit code ${code ?? "unknown"}`}${
+          stderr.trim().length === 0 ? "" : `: ${stderr.trim()}`
+        }`,
+      ));
+    });
+  });
+  let loaded: unknown;
+  try {
+    loaded = JSON.parse(output) as unknown;
+  } catch (error) {
+    throw new Error("Closure native module probe returned invalid JSON", { cause: error });
+  }
+  if (!Array.isArray(loaded) || JSON.stringify(loaded) !== JSON.stringify(modules)) {
+    throw new Error("Closure native module probe returned an unexpected module set");
+  }
+  return Object.freeze(modules);
+}
+
 /** Archive one already-prepared component root without interpreting its body. */
 export async function archiveClosureComponent(options: Readonly<{
   entryPath?: string;

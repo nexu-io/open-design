@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
@@ -10,6 +10,7 @@ import {
   buildClosureDistributionTargetContribution,
   prepareClosureLauncherComponent,
   probeClosureNodeRuntime,
+  probeClosureNativeModules,
   validateClosureBodyComponent,
   validateClosureNativeComponent,
   validateClosureNodeRuntimeIdentity,
@@ -98,6 +99,27 @@ describe("tools-pack Closure component archives", () => {
       platform: process.platform,
       release: "node",
     });
+  });
+
+  it("loads a prepared native pack through the same standalone Node ABI", async () => {
+    const root = await tempRoot("native-probe");
+    const nativeRoot = join(root, "native");
+    const packageRoot = join(nativeRoot, "node_modules", "better-sqlite3");
+    await cp(join(process.cwd(), "..", "..", "apps", "daemon", "node_modules", "better-sqlite3"), packageRoot, {
+      dereference: true,
+      recursive: true,
+    });
+
+    await expect(probeClosureNativeModules({
+      executable: process.execPath,
+      modules: ["better-sqlite3"],
+      nativeRoot,
+    })).resolves.toEqual(["better-sqlite3"]);
+    await expect(probeClosureNativeModules({
+      executable: process.execPath,
+      modules: ["missing-native-module"],
+      nativeRoot,
+    })).rejects.toThrow(/probe failed/u);
   });
 
   it("creates a real host ZIP from an isolated component root", async () => {
