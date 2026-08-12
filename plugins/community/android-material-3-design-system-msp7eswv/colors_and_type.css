@@ -28,6 +28,7 @@
   --md-sys-color-outline-variant: #cac4d0;
   --md-sys-color-inverse-surface: #313033;
   --md-sys-color-inverse-on-surface: #f4eff4;
+  --md-sys-color-inverse-primary: #d0bcff;
   --md-sys-color-scrim: #000000;
 }
 
@@ -60,6 +61,7 @@
   --md-sys-color-outline-variant: #49454f;
   --md-sys-color-inverse-surface: #e6e1e5;
   --md-sys-color-inverse-on-surface: #313033;
+  --md-sys-color-inverse-primary: #6750a4;
   --md-sys-color-scrim: #000000;
 }
 

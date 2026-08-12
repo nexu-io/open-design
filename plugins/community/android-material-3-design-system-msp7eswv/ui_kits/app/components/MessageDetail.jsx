@@ -1,4 +1,4 @@
-function MessageDetail({ message, mobileHidden, onBack, onArchive, onReply }) {
+function MessageDetail({ message, mobileHidden, onBack, onArchive, onReply, onToggleStar }) {
   if (!message) {
     return <section className={`detail-column${mobileHidden ? ' pane-mobile-hidden' : ''}`}><div className="empty-state"><strong>Select a message</strong><p>Choose an item from the list to read it here.</p></div></section>;
   }
@@ -8,9 +8,9 @@ function MessageDetail({ message, mobileHidden, onBack, onArchive, onReply }) {
       <div className="detail-toolbar">
         <button className="icon-button compact-back" type="button" onClick={onBack} aria-label="Back to messages">←</button>
         <div className="detail-actions">
-          <button className="icon-button" type="button" aria-label="Star message">☆</button>
+          <button className="icon-button" type="button" aria-label={message.starred ? 'Unstar message' : 'Star message'} aria-pressed={message.starred} onClick={() => onToggleStar(message.id)}>{message.starred ? '★' : '☆'}</button>
           <button className="icon-button" type="button" onClick={() => onArchive(message.id)} aria-label="Archive message">⌁</button>
-          <button className="icon-button" type="button" aria-label="More actions">⋮</button>
+          <button className="icon-button" type="button" aria-label="More actions unavailable" title="More actions are not included in this focused example" disabled>⋮</button>
         </div>
       </div>
       <article className="message">

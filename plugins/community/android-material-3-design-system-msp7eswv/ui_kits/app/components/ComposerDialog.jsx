@@ -1,12 +1,39 @@
 function ComposerDialog({ draft, onChange, onClose, onSend }) {
   const [errors, setErrors] = React.useState({});
   const subjectRef = React.useRef(null);
+  const dialogRef = React.useRef(null);
 
   React.useEffect(() => {
+    const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     subjectRef.current?.focus();
-    const onKeyDown = (event) => { if (event.key === 'Escape') onClose(); };
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !dialogRef.current) return;
+
+      const focusable = Array.from(dialogRef.current.querySelectorAll('button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'))
+        .filter((element) => element.getClientRects().length > 0);
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+
+      const focusIsOutside = !dialogRef.current.contains(document.activeElement);
+      if (event.shiftKey && (document.activeElement === first || focusIsOutside)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || focusIsOutside)) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      returnFocus?.focus();
+    };
   }, [onClose]);
 
   const submit = (event) => {
@@ -22,7 +49,7 @@ function ComposerDialog({ draft, onChange, onClose, onSend }) {
 
   return (
     <div className="dialog-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <form className="dialog" role="dialog" aria-modal="true" aria-labelledby="composer-title" onSubmit={submit}>
+      <form ref={dialogRef} className="dialog" role="dialog" aria-modal="true" aria-labelledby="composer-title" onSubmit={submit}>
         <h2 id="composer-title">New message</h2>
         <label className="field">To<input value={draft.to} onChange={(event) => onChange('to', event.target.value)} aria-invalid={Boolean(errors.to)} aria-describedby={errors.to ? 'to-error' : undefined} />{errors.to && <span className="error-text" id="to-error">{errors.to}</span>}</label>
         <label className="field">Subject<input ref={subjectRef} value={draft.subject} onChange={(event) => onChange('subject', event.target.value)} aria-invalid={Boolean(errors.subject)} aria-describedby={errors.subject ? 'subject-error' : undefined} />{errors.subject && <span className="error-text" id="subject-error">{errors.subject}</span>}</label>

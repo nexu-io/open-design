@@ -1,12 +1,12 @@
 function NavigationRail({ theme, onToggleTheme }) {
   const destinations = [
     { icon: '⌂', label: 'Inbox', current: true },
-    { icon: '★', label: 'Starred' },
-    { icon: '⌁', label: 'Archive' },
+    { icon: '★', label: 'Starred', disabled: true },
+    { icon: '⌁', label: 'Archive', disabled: true },
   ];
 
   const Destination = ({ item }) => (
-    <button className="nav-action" aria-current={item.current ? 'page' : undefined} type="button">
+    <button className="nav-action" aria-current={item.current ? 'page' : undefined} type="button" disabled={item.disabled} title={item.disabled ? `${item.label} is not included in this focused example` : undefined}>
       <span className="nav-icon" aria-hidden="true">{item.icon}</span>
       <span>{item.label}</span>
     </button>

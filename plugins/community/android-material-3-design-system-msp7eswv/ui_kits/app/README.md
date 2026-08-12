@@ -11,12 +11,13 @@ This browser-reviewable example applies the package's Material 3 semantic roles,
 - `components/MessageDetail.jsx` renders message content and task actions.
 - `components/ComposerDialog.jsx` provides editable fields, required validation, and modal focus behavior.
 - `components/Snackbar.jsx` announces short-lived feedback and supports an optional undo action.
+- `interaction-check.html` runs the browser regression suite for composer focus/value retention, modal focus containment/restoration, replacement snackbar timing, actionable controls, contrast, and target sizes.
 
 Every directly loaded component exposes a browser global so the Babel preview entry can compose the application without a build step.
 
 ## Usage
 
-Open `index.html` in a browser, then review compact, medium, and expanded widths. Exercise search, the unread filter, message selection, archive/undo, reply, and the compose form. When reusing the kit, copy or compose the component roles you need, load `colors_and_type.css` before `app.css`, and replace the sample information architecture and data with real product requirements.
+Open `index.html` in a browser, then review compact, medium, and expanded widths. Exercise search, the unread filter, message selection, archive/undo, reply, and the compose form. Serve the folder over HTTP and open `interaction-check.html`; it reports each interaction contract as PASS or stops on the first regression. When reusing the kit, copy or compose the component roles you need, load `colors_and_type.css` before `app.css`, and replace the sample information architecture and data with real product requirements.
 
 ## Design Notes
 

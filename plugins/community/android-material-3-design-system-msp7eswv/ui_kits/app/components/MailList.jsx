@@ -21,7 +21,7 @@ function MailList({ messages, selectedId, query, unreadOnly, mobileHidden, onQue
         <ul className="mail-list">
           {messages.map((message) => (
             <li key={message.id}>
-              <button className="mail-item" type="button" aria-current={selectedId === message.id ? 'true' : undefined} onClick={() => onSelect(message.id)}>
+              <button className="mail-item" type="button" aria-label={`${message.sender}${message.unread ? ', unread' : ''}. ${message.subject}. ${message.snippet}. ${message.time}`} aria-current={selectedId === message.id ? 'true' : undefined} onClick={() => onSelect(message.id)}>
                 <span className="avatar" aria-hidden="true">{message.sender.split(' ').map((part) => part[0]).join('').slice(0, 2)}</span>
                 <span className="mail-copy">
                   <span className="sender-line"><span className="sender">{message.sender}</span>{message.unread && <span className="unread-dot" aria-label="Unread" />}</span>
