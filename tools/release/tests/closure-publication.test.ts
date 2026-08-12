@@ -25,7 +25,7 @@ function digest(bytes: string | Buffer): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
-async function writeFixture(root: string, options: { closureVersion?: string } = {}): Promise<{
+async function writeFixture(root: string, options: { closureVersion?: string; minShellVersion?: string } = {}): Promise<{
   assetsRoot: string;
   closureVersion: string;
   manifestRoot: string;
@@ -69,7 +69,7 @@ async function writeFixture(root: string, options: { closureVersion?: string } =
         size: archive.byteLength,
         url: archiveUrl,
       },
-      compatibility: { shell: { electron: { version: { min: "0.16.2" } } } },
+      compatibility: { shell: { electron: { version: { min: options.minShellVersion ?? "0.18.0-beta.3" } } } },
       identity: {
         channel: "beta",
         digest: archiveDigest,
@@ -229,6 +229,23 @@ afterEach(async () => {
 });
 
 describe("Standalone Closure release publication", () => {
+  it("rejects a Shell floor that the selected immutable build does not prove", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-shell-floor-proof-"));
+    temporaryRoots.push(root);
+    const fixture = await writeFixture(root, { minShellVersion: "0.18.0-beta.2" });
+
+    await expect(execFileAsync(process.execPath, ["--experimental-strip-types", publishPlatformPath], {
+      cwd: workspaceRoot,
+      env: {
+        ...platformEnv(fixture),
+        RELEASE_SHELL_BUILD_JSON_PATH: fixture.shellBuildJsonPath,
+        RELEASE_SHELL_ENABLED: "true",
+      },
+    })).rejects.toMatchObject({
+      stderr: expect.stringContaining("minVersion 0.18.0-beta.2 is not proven by selected Shell 0.18.0-beta.3"),
+    });
+  });
+
   it("publishes and verifies the sole version-wide Closure graph at release root", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-closure-distribution-release-"));
     temporaryRoots.push(root);

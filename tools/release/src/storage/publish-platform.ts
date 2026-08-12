@@ -20,7 +20,7 @@ import {
 } from "./common.ts";
 import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
 import { getStorageObject, putStorageObject, putStorageObjectWithStatus } from "./s3-upload.ts";
-import { parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
+import { compareReleaseVersions, parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
 
 type AssetEntry = {
   contentType: string;
@@ -258,6 +258,22 @@ function closurePublication(): {
   }
   if (manifest.artifact.inventoryDigest !== inventoryDigest) {
     throw new Error(`Closure inventory digest does not match ${names.inventory}`);
+  }
+
+  if (shellBuild != null) {
+    const shellFloor = manifest.compatibility.shell[shellBuild.shell.type]?.version.min;
+    if (shellFloor == null) {
+      throw new Error(`Closure does not declare a ${shellBuild.shell.type} Shell compatibility floor`);
+    }
+    parseReleaseVersion(shellFloor, releaseChannel);
+    if (compareReleaseVersions(shellFloor, closureVersion, releaseChannel) > 0) {
+      throw new Error(`Closure ${shellBuild.shell.type} minVersion ${shellFloor} exceeds Closure ${closureVersion}`);
+    }
+    if (shellFloor !== shellBuild.shell.version) {
+      throw new Error(
+        `Closure ${shellBuild.shell.type} minVersion ${shellFloor} is not proven by selected Shell ${shellBuild.shell.version}`,
+      );
+    }
   }
 
   const provenance = JSON.parse(
