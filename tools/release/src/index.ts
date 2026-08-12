@@ -106,12 +106,15 @@ cli
 cli
   .command("merge-closure-distribution <shared> <targets...>", "Merge validated Closure job contributions")
   .option("--output <path>", "write the canonical version-wide Closure manifest")
-  .action(async (shared: string, targets: string[], options: { output?: string }) => {
+  .action(async (shared: string, targets: string | string[], options: { output?: string }) => {
     if (options.output == null || options.output.length === 0) {
       throw new Error("merge-closure-distribution requires --output");
     }
     const { mergeClosureDistributionFiles } = await import("./storage/merge-closure-distribution.ts");
-    const manifest = mergeClosureDistributionFiles({ sharedPath: shared, targetPaths: targets });
+    const manifest = mergeClosureDistributionFiles({
+      sharedPath: shared,
+      targetPaths: Array.isArray(targets) ? targets : [targets],
+    });
     writeFileSync(options.output, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   });
 

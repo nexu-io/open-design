@@ -11,10 +11,45 @@ import {
   normalizeDaemonProxyOriginHeader,
   resolveDaemonProxyTarget,
   resolveNextBundlerOptions,
+  resolveStaticWebAsset,
   resolveStandaloneBackendOrigin,
   resolveStandaloneServerEntry,
   startWebSidecar,
 } from '../sidecar/server';
+
+describe('resolveStaticWebAsset', () => {
+  it('serves files, exported routes, and SPA routes from one immutable root', async () => {
+    const staticRoot = await mkdtemp(join(tmpdir(), 'open-design-web-static-'));
+    try {
+      await mkdir(join(staticRoot, '_next', 'static'), { recursive: true });
+      await writeFile(join(staticRoot, 'index.html'), '<main>home</main>', 'utf8');
+      await writeFile(join(staticRoot, 'settings.html'), '<main>settings</main>', 'utf8');
+      await writeFile(join(staticRoot, '_next', 'static', 'app.js'), 'export {};', 'utf8');
+
+      await expect(resolveStaticWebAsset(staticRoot, '/')).resolves.toBe(join(staticRoot, 'index.html'));
+      await expect(resolveStaticWebAsset(staticRoot, '/settings')).resolves.toBe(join(staticRoot, 'settings.html'));
+      await expect(resolveStaticWebAsset(staticRoot, '/workspace/42')).resolves.toBe(join(staticRoot, 'index.html'));
+      await expect(resolveStaticWebAsset(staticRoot, '/_next/static/app.js')).resolves.toBe(
+        join(staticRoot, '_next', 'static', 'app.js'),
+      );
+    } finally {
+      await rm(staticRoot, { force: true, recursive: true });
+    }
+  });
+
+  it('does not turn missing assets or traversal into an index response', async () => {
+    const staticRoot = await mkdtemp(join(tmpdir(), 'open-design-web-static-safe-'));
+    try {
+      await writeFile(join(staticRoot, 'index.html'), '<main>home</main>', 'utf8');
+
+      await expect(resolveStaticWebAsset(staticRoot, '/missing.js')).resolves.toBeNull();
+      await expect(resolveStaticWebAsset(staticRoot, '/%00')).resolves.toBeNull();
+      await expect(resolveStaticWebAsset(staticRoot, '/..%2Fsecret.txt')).resolves.toBeNull();
+    } finally {
+      await rm(staticRoot, { force: true, recursive: true });
+    }
+  });
+});
 
 describe('resolveDaemonProxyTarget', () => {
   it('proxies allowlisted relative paths to the daemon origin', () => {

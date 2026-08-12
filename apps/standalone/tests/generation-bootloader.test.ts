@@ -56,7 +56,11 @@ describe("Standalone generation bootloader", () => {
   it("reuses the Shell-owned official Node and derives native resolution from the generation root", () => {
     expect(resolveStandaloneGenerationLaunch(request(), "/shell/node")).toMatchObject({
       cwd: "/open-design/generation-3/body",
-      env: { NODE_PATH: "/open-design/generation-3/native/node_modules" },
+      env: {
+        NODE_OPTIONS: "--import=file:///open-design/generation-3/launcher/native-loader.mjs",
+        NODE_PATH: "/open-design/generation-3/native/node_modules",
+        OD_STANDALONE_NATIVE_ROOT: "/open-design/generation-3/native",
+      },
       executable: "/shell/node",
       launcherPath: "/open-design/generation-3/launcher/launcher.mjs",
       output: "inherit",

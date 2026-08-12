@@ -3,11 +3,13 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import {
   lstat,
+  chmod,
   mkdir,
   copyFile,
   readdir,
   rm,
   stat,
+  utimes,
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -100,6 +102,10 @@ export async function prepareClosureLauncherComponent(options: Readonly<{
     copyFile(
       join(sourceRoot, CLOSURE_LAUNCHER_ENTRY_PATH),
       join(outputRoot, CLOSURE_LAUNCHER_ENTRY_PATH),
+    ),
+    copyFile(
+      join(sourceRoot, "native-loader.mjs"),
+      join(outputRoot, "native-loader.mjs"),
     ),
   ]).catch((error: unknown) => {
     throw new Error("Standalone launcher build outputs are incomplete", { cause: error });
@@ -202,6 +208,30 @@ async function inspectPreparedTree(rootInput: string): Promise<ClosurePreparedTr
   ));
   if (files.length === 0) throw new Error(`Closure prepared tree is empty: ${root}`);
   return Object.freeze({ fileCount: files.length, files: Object.freeze(files), root });
+}
+
+const CLOSURE_ARCHIVE_MTIME = new Date("2000-01-01T00:00:00.000Z");
+
+async function normalizeArchiveMetadata(root: string, current = root): Promise<void> {
+  const entries = await readdir(current, { withFileTypes: true });
+  for (const entry of entries.sort((left, right) => (
+    left.name < right.name ? -1 : left.name > right.name ? 1 : 0
+  ))) {
+    const path = join(current, entry.name);
+    if (entry.isDirectory()) {
+      await normalizeArchiveMetadata(root, path);
+      await chmod(path, 0o755);
+      await utimes(path, CLOSURE_ARCHIVE_MTIME, CLOSURE_ARCHIVE_MTIME);
+      continue;
+    }
+    if (!entry.isFile()) {
+      throw new Error(`Closure component source contains an unsupported entry: ${relative(root, path)}`);
+    }
+    await chmod(path, 0o644);
+    await utimes(path, CLOSURE_ARCHIVE_MTIME, CLOSURE_ARCHIVE_MTIME);
+  }
+  await chmod(current, 0o755);
+  await utimes(current, CLOSURE_ARCHIVE_MTIME, CLOSURE_ARCHIVE_MTIME);
 }
 
 /** Refuse platform/native bytes in the target-neutral body before archiving. */
@@ -323,9 +353,13 @@ function closureNodeTarget(target: ClosurePlatformTarget): Readonly<{
   entryPath: "bin/node" | "node.exe";
   platform: "darwin" | "win32";
 }> {
-  return target === "darwin-arm64"
-    ? { arch: "arm64", entryPath: "bin/node", platform: "darwin" }
-    : { arch: "x64", entryPath: "node.exe", platform: "win32" };
+  if (target === "darwin-arm64") {
+    return { arch: "arm64", entryPath: "bin/node", platform: "darwin" };
+  }
+  if (target === "darwin-x64") {
+    return { arch: "x64", entryPath: "bin/node", platform: "darwin" };
+  }
+  return { arch: "x64", entryPath: "node.exe", platform: "win32" };
 }
 
 /** Validate one already-extracted official Node tree before contribution sealing. */
@@ -431,6 +465,9 @@ export async function archiveClosureComponent(options: Readonly<{
       throw new Error(`Closure component entry is missing: ${requiredPath}`);
     }
   }
+  // Content-addressed blobs must survive repeated builds byte-for-byte. Build
+  // staging mtimes and install-script modes are not product identity.
+  await normalizeArchiveMetadata(sourceRoot);
   await mkdir(dirname(outputPath), { recursive: true });
   await rm(outputPath, { force: true });
   const invocation = resolveClosureArchiveInvocation({ artifactPath: outputPath, target: options.target });
@@ -482,7 +519,7 @@ export async function buildClosureDistributionSharedContribution(options: Readon
   const launcher = await archiveClosureComponent({
     entryPath: CLOSURE_LAUNCHER_ENTRY_PATH,
     outputPath: join(outputRoot, "shared", "launcher.zip"),
-    requiredPaths: [CLOSURE_LAUNCHER_HANDOFF_PATH],
+    requiredPaths: [CLOSURE_LAUNCHER_HANDOFF_PATH, "native-loader.mjs"],
     run: options.run,
     sourceRoot: options.launcherRoot,
     target: options.archiveTarget,

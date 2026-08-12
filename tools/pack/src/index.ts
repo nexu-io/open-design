@@ -1,7 +1,11 @@
 import { cac } from "cac";
 import type { CAC } from "cac";
 
-import { buildClosureArchive } from "./closure.js";
+import {
+  buildClosureArchive,
+  buildClosureDistributionShared,
+  buildClosureDistributionTarget,
+} from "./closure.js";
 import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config.js";
 import { resolveToolPackShellBuildPlan } from "./shell-build-plan.js";
 import {
@@ -105,17 +109,62 @@ function addWinLifecycleOptions(command: CacCommand) {
 
 const cli = cac("tools-pack");
 
-cli.command("closure <action>", "Standalone Closure commands: build")
+cli.command("closure <action>", "Standalone Closure commands: build-distribution-shared|build-distribution-target")
   .option("--artifact-url <url>", "immutable public URL intended for closure.zip")
+  .option("--blob-origin <url>", "public origin used for content-addressed Closure blobs")
   .option("--cache-dir <path>", "independent Closure build cache root")
   .option("--channel <channel>", "release channel")
   .option("--dir <path>", "tools-pack output/staging root directory")
   .option("--json", "print JSON")
   .option("--min-shell-version <version>", "minimum compatible shell version")
-  .option("--platform <target>", "closure target: darwin-arm64|win32-x64 (default: current host)")
+  .option("--platform <target>", "closure target: darwin-arm64|darwin-x64|win32-x64 (default: current host)")
   .option("--skip-workspace-build", "reuse workspace outputs built earlier in the same release job")
   .option("--version <version>", "Closure release version")
   .action(async (action: string, options: CliOptions) => {
+    if (action === "build-distribution-shared") {
+      if (options.blobOrigin == null || options.blobOrigin.length === 0) {
+        throw new Error("closure build-distribution-shared requires --blob-origin");
+      }
+      if (options.channel == null || options.channel.length === 0) {
+        throw new Error("closure build-distribution-shared requires --channel");
+      }
+      if (options.minShellVersion == null || options.minShellVersion.length === 0) {
+        throw new Error("closure build-distribution-shared requires --min-shell-version");
+      }
+      if (options.version == null || options.version.length === 0) {
+        throw new Error("closure build-distribution-shared requires --version");
+      }
+      printJson(await buildClosureDistributionShared({
+        blobOrigin: options.blobOrigin,
+        channel: options.channel,
+        ...(options.dir == null ? {} : { dir: options.dir }),
+        minShellVersion: options.minShellVersion,
+        ...(options.platform == null ? {} : { platform: options.platform }),
+        skipWorkspaceBuild: options.skipWorkspaceBuild === true,
+        version: options.version,
+      }));
+      return;
+    }
+    if (action === "build-distribution-target") {
+      if (options.blobOrigin == null || options.blobOrigin.length === 0) {
+        throw new Error("closure build-distribution-target requires --blob-origin");
+      }
+      if (options.channel == null || options.channel.length === 0) {
+        throw new Error("closure build-distribution-target requires --channel");
+      }
+      if (options.version == null || options.version.length === 0) {
+        throw new Error("closure build-distribution-target requires --version");
+      }
+      printJson(await buildClosureDistributionTarget({
+        blobOrigin: options.blobOrigin,
+        channel: options.channel,
+        ...(options.dir == null ? {} : { dir: options.dir }),
+        ...(options.platform == null ? {} : { platform: options.platform }),
+        skipWorkspaceBuild: options.skipWorkspaceBuild === true,
+        version: options.version,
+      }));
+      return;
+    }
     if (action !== "build") throw new Error(`unsupported closure action: ${action}`);
     if (options.artifactUrl == null || options.artifactUrl.length === 0) {
       throw new Error("closure build requires --artifact-url");

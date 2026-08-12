@@ -9,10 +9,10 @@ import {
 } from "node:http";
 import { Agent as HttpsAgent, request as createHttpsRequest } from "node:https";
 import { existsSync, readFileSync } from "node:fs";
-import { readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createConnection, createServer as createTcpServer, type AddressInfo, type Server as TcpServer } from "node:net";
-import { dirname, isAbsolute, join, relative } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
@@ -39,6 +39,7 @@ const WEB_DIST_DIR_ENV = SIDECAR_ENV.WEB_DIST_DIR;
 const WEB_PORT_ENV = SIDECAR_ENV.WEB_PORT;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 const WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
+const WEB_STATIC_ROOT_ENV = "OD_WEB_STATIC_ROOT";
 const WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 const STANDALONE_PARENT_PID_ENV = "OD_STANDALONE_PARENT_PID";
 const STANDALONE_STARTUP_TIMEOUT_ENV = "OD_STANDALONE_STARTUP_TIMEOUT_MS";
@@ -180,6 +181,79 @@ function resolveConfiguredStandaloneRoot(): string | null {
   const configured = process.env[WEB_STANDALONE_ROOT_ENV];
   if (configured == null || configured.length === 0) return null;
   return isAbsolute(configured) ? configured : join(process.cwd(), configured);
+}
+
+function resolveConfiguredStaticRoot(): string | null {
+  const configured = process.env[WEB_STATIC_ROOT_ENV];
+  if (configured == null || configured.trim().length === 0) return null;
+  return isAbsolute(configured) ? configured : resolve(process.cwd(), configured);
+}
+
+const STATIC_CONTENT_TYPES = Object.freeze<Record<string, string>>({
+  ".avif": "image/avif",
+  ".css": "text/css; charset=utf-8",
+  ".gif": "image/gif",
+  ".html": "text/html; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
+  ".webp": "image/webp",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".xml": "application/xml; charset=utf-8",
+});
+
+function staticContentType(path: string): string {
+  return STATIC_CONTENT_TYPES[extname(path).toLowerCase()] ?? "application/octet-stream";
+}
+
+function safeStaticPath(root: string, pathname: string): string | null {
+  const candidate = resolve(root, `.${pathname}`);
+  const relation = relative(root, candidate);
+  if (relation === "" || (!relation.startsWith(`..${sep}`) && relation !== ".." && !isAbsolute(relation))) {
+    return candidate;
+  }
+  return null;
+}
+
+async function regularFile(path: string | null): Promise<string | null> {
+  if (path == null) return null;
+  return (await stat(path).catch(() => null))?.isFile() === true ? path : null;
+}
+
+/** Resolve one immutable static export request without allowing path traversal. */
+export async function resolveStaticWebAsset(
+  staticRoot: string,
+  requestUrl: string | undefined,
+): Promise<string | null> {
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(new URL(requestUrl ?? "/", `http://${HOST}`).pathname);
+  } catch {
+    return null;
+  }
+  if (pathname.includes("\0")) return null;
+  const root = resolve(staticRoot);
+  const direct = safeStaticPath(root, pathname);
+  const candidates = [
+    direct,
+    pathname.endsWith("/") ? direct == null ? null : join(direct, "index.html") : safeStaticPath(root, `${pathname}.html`),
+    pathname.endsWith("/") || direct == null ? null : join(direct, "index.html"),
+  ];
+  for (const candidate of candidates) {
+    const file = await regularFile(candidate);
+    if (file != null) return file;
+  }
+  if (extname(pathname).length > 0) return null;
+  return await regularFile(join(root, "index.html"));
 }
 
 export function resolveStandaloneServerEntry(
@@ -1048,6 +1122,41 @@ async function startRegularNextSidecar(
   }, undefined, legacyIpcPath);
 }
 
+async function startStaticWebSidecar(
+  staticRoot: string,
+  legacyIpcPath?: string,
+): Promise<WebSidecarHandle> {
+  const indexPath = await regularFile(join(staticRoot, "index.html"));
+  if (indexPath == null) {
+    throw new Error(`missing static Web entry under ${WEB_STATIC_ROOT_ENV}: ${join(staticRoot, "index.html")}`);
+  }
+  const daemonOrigin = resolveDaemonOrigin();
+  const httpServer = createHttpServer(createDaemonProxyHandler(daemonOrigin, async (request, response) => {
+    const method = (request.method ?? "GET").toUpperCase();
+    if (method !== "GET" && method !== "HEAD") {
+      response.statusCode = 405;
+      response.setHeader("allow", "GET, HEAD");
+      response.end();
+      return;
+    }
+    const assetPath = await resolveStaticWebAsset(staticRoot, request.url);
+    if (assetPath == null) {
+      response.statusCode = 404;
+      response.end("not found");
+      return;
+    }
+    const asset = await readFile(assetPath);
+    response.statusCode = 200;
+    response.setHeader("content-type", staticContentType(assetPath));
+    response.setHeader("content-length", String(asset.byteLength));
+    if (assetPath.includes(`${sep}_next${sep}static${sep}`)) {
+      response.setHeader("cache-control", "public, max-age=31536000, immutable");
+    }
+    response.end(method === "HEAD" ? undefined : asset);
+  }));
+  return await createWebRuntimeHandle(httpServer, async () => undefined, undefined, legacyIpcPath);
+}
+
 async function startStandaloneNextSidecar(
   webRoot: string | null,
   legacyIpcPath?: string,
@@ -1086,6 +1195,10 @@ export async function startWebRuntime(options: Readonly<{
   legacyIpcPath?: string;
   mode: "dev" | "runtime";
 }>): Promise<WebSidecarHandle> {
+  const staticRoot = options.mode === "runtime" ? resolveConfiguredStaticRoot() : null;
+  if (staticRoot != null) {
+    return await startStaticWebSidecar(staticRoot, options.legacyIpcPath);
+  }
   if (shouldUseStandaloneOutput(options.mode)) {
     const webRoot = resolveConfiguredStandaloneRoot() == null ? resolveWebRoot() : null;
     return await startStandaloneNextSidecar(webRoot, options.legacyIpcPath);

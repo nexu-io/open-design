@@ -29,8 +29,9 @@ afterEach(async () => {
 });
 
 describe("tools-pack Closure archive", () => {
-  it("normalizes only the two G2 platform targets", () => {
+  it("normalizes the three supported G2 platform targets", () => {
     expect(normalizeClosurePlatformTarget("darwin-arm64")).toBe(CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64);
+    expect(normalizeClosurePlatformTarget("darwin-x64")).toBe(CLOSURE_PLATFORM_TARGETS.DARWIN_X64);
     expect(normalizeClosurePlatformTarget("win32-x64")).toBe(CLOSURE_PLATFORM_TARGETS.WIN32_X64);
     expect(() => normalizeClosurePlatformTarget("linux-x64")).toThrow(/unsupported Closure platform target/u);
   });
@@ -40,8 +41,8 @@ describe("tools-pack Closure archive", () => {
       artifactPath: "/tmp/closure.zip",
       target: CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64,
     })).toEqual({
-      args: ["-c", "-k", "--sequesterRsrc", "--rsrc", ".", "/tmp/closure.zip"],
-      command: "ditto",
+      args: ["-X", "-q", "-r", "-D", "/tmp/closure.zip", "."],
+      command: "zip",
     });
 
     const windows = resolveClosureArchiveInvocation({
@@ -49,7 +50,9 @@ describe("tools-pack Closure archive", () => {
       target: CLOSURE_PLATFORM_TARGETS.WIN32_X64,
     });
     expect(windows.command).toMatch(/[\\/]resources[\\/]win[\\/]7zip[\\/]7z\.exe$/u);
-    expect(windows.args).toEqual(["a", "-tzip", "-mx=5", "C:\\closure.zip", ".\\*"]);
+    expect(windows.args).toEqual([
+      "a", "-tzip", "-mx=5", "-mta=off", "-mtc=off", "-mtm=off", "C:\\closure.zip", ".\\*",
+    ]);
   });
 
   it("models Closure native modules against the Shell-provided official Node", () => {
@@ -103,7 +106,9 @@ describe("tools-pack Closure archive", () => {
     expect(body).toContain("daemonStandaloneSidecarEntry");
     expect(body).toContain("webStandaloneSidecarEntry");
     expect(body).toContain("OD_DAEMON_CLI_PATH");
-    expect(body).toContain("OD_RESOURCE_TRUST_ROOT: request.paths.installationRoot");
+    expect(body).toContain("OD_RESOURCE_TRUST_ROOT: request.paths.resourceRoot");
+    expect(body).toContain("OD_WEB_STATIC_ROOT: layout.webStaticRoot");
+    expect(body).not.toContain("OD_WEB_STANDALONE_ROOT");
     expect(body).toContain('process.platform === "win32" ? 120_000 : undefined');
     expect(body.match(/readyTimeoutMs: sidecarReadyTimeoutMs/gu)).toHaveLength(2);
     expect(body.match(/output: "inherit"/gu)).toHaveLength(2);

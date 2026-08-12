@@ -139,6 +139,15 @@ describe("tools-pack Closure component archives", () => {
 
     expect(archive.fileCount).toBe(1);
     expect((await readFile(outputPath)).subarray(0, 2).toString("ascii")).toBe("PK");
+
+    const secondOutputPath = join(root, "output", "launcher-again.zip");
+    await archiveClosureComponent({
+      entryPath: "launcher.mjs",
+      outputPath: secondOutputPath,
+      sourceRoot,
+      target,
+    });
+    await expect(readFile(secondOutputPath)).resolves.toEqual(await readFile(outputPath));
   });
 
   it("rejects missing entries, empty roots, and symlinked content before archiving", async () => {
@@ -185,6 +194,7 @@ describe("tools-pack Closure component archives", () => {
       launcherRoot: await (async () => {
         const launcherRoot = await componentRoot(root, "launcher", "launcher.mjs");
         await writeFile(join(launcherRoot, "bootloader.mjs"), "export const handoff = true;\n");
+        await writeFile(join(launcherRoot, "native-loader.mjs"), "export {};\n");
         return launcherRoot;
       })(),
       outputRoot,
@@ -222,6 +232,7 @@ describe("tools-pack Closure component archives", () => {
     await mkdir(distRoot, { recursive: true });
     await writeFile(join(distRoot, "generation-bootloader.mjs"), "handoff\n");
     await writeFile(join(distRoot, "launcher.mjs"), "launcher\n");
+    await writeFile(join(distRoot, "native-loader.mjs"), "loader\n");
     await writeFile(join(distRoot, "sidecars.mjs"), "not part of launcher\n");
 
     const launcherRoot = await prepareClosureLauncherComponent({
@@ -231,6 +242,7 @@ describe("tools-pack Closure component archives", () => {
 
     await expect(readFile(join(launcherRoot, "bootloader.mjs"), "utf8")).resolves.toBe("handoff\n");
     await expect(readFile(join(launcherRoot, "launcher.mjs"), "utf8")).resolves.toBe("launcher\n");
+    await expect(readFile(join(launcherRoot, "native-loader.mjs"), "utf8")).resolves.toBe("loader\n");
     await expect(readFile(join(launcherRoot, "sidecars.mjs"), "utf8")).rejects.toThrow();
   });
 

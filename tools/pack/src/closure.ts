@@ -33,6 +33,21 @@ import { hashPackageSourcePath } from "./package-source-hash.js";
 import { resolveShellDepsDigestFromWorkspace } from "./workspace-build.js";
 import { copyBundledResourceTrees } from "./resources.js";
 import {
+  BUNDLED_RESOURCE_GROUPS,
+  copyBundledResourceGroup,
+} from "./resources.js";
+import {
+  buildClosureDistributionSharedContribution,
+  buildClosureDistributionTargetContribution,
+  prepareClosureLauncherComponent,
+  probeClosureNativeModules,
+  type ClosureSharedResourceRoot,
+} from "./closure-components.js";
+import type {
+  ClosureDistributionSharedContribution,
+  ClosureDistributionTargetContribution,
+} from "./closure-distribution.js";
+import {
   CLOSURE_PLATFORM_TARGETS,
   normalizeClosurePlatformTarget,
   resolveClosureArchiveInvocation,
@@ -150,6 +165,41 @@ export type ClosureBuildReport = {
   outputRoot: string;
   provenance: ClosureBuildProvenanceV1;
   provenancePath: string;
+};
+
+export type ClosureDistributionSharedBuildOptions = {
+  blobOrigin: string;
+  channel: string;
+  dir?: string;
+  minShellVersion: string;
+  platform?: string;
+  skipWorkspaceBuild?: boolean;
+  version: string;
+  workspaceRoot?: string;
+};
+
+export type ClosureDistributionSharedBuildReport = {
+  blobRoot: string;
+  contribution: ClosureDistributionSharedContribution;
+  contributionPath: string;
+  outputRoot: string;
+};
+
+export type ClosureDistributionTargetBuildOptions = {
+  blobOrigin: string;
+  channel: string;
+  dir?: string;
+  platform?: string;
+  skipWorkspaceBuild?: boolean;
+  version: string;
+  workspaceRoot?: string;
+};
+
+export type ClosureDistributionTargetBuildReport = {
+  blobRoot: string;
+  contribution: ClosureDistributionTargetContribution;
+  contributionPath: string;
+  outputRoot: string;
 };
 
 export async function createClosureBuildCacheKey(options: {
@@ -299,6 +349,17 @@ async function buildWorkspace(workspaceRoot: string): Promise<void> {
     workspaceRoot,
     ["--filter", "@open-design/web...", "build"],
     { ...process.env, NODE_ENV: "production", OD_WEB_OUTPUT_MODE: "standalone" },
+  );
+  await runPnpm(workspaceRoot, ["--filter", "@open-design/web", "build:sidecar"]);
+}
+
+async function buildDistributionWorkspace(workspaceRoot: string): Promise<void> {
+  await runPnpm(workspaceRoot, ["--filter", "@open-design/daemon...", "build"]);
+  await runPnpm(workspaceRoot, ["--filter", "@open-design/standalone", "build"]);
+  await runPnpm(
+    workspaceRoot,
+    ["--filter", "@open-design/web...", "build"],
+    { ...process.env, NODE_ENV: "production", OD_WEB_OUTPUT_MODE: "" },
   );
   await runPnpm(workspaceRoot, ["--filter", "@open-design/web", "build:sidecar"]);
 }
@@ -454,22 +515,15 @@ export async function resolveOpenDesignClosureRuntimeRoot(request) {
 }
 
 export function resolveOpenDesignClosureLayout(runtimeRoot = root) {
-  const standaloneRoot = join(runtimeRoot, "web", "standalone");
-  const serverCandidates = [
-    join(standaloneRoot, "apps", "web", "server.js"),
-    join(standaloneRoot, "server.js"),
-  ];
-  const webServerEntry = serverCandidates.find((candidate) => existsSync(candidate));
-  if (webServerEntry == null) throw new Error("Closure Web standalone entry is missing");
+  const webStaticRoot = join(runtimeRoot, "web", "static");
+  if (!existsSync(join(webStaticRoot, "index.html"))) throw new Error("Closure static Web entry is missing");
   return Object.freeze({
     daemonCliEntry: join(runtimeRoot, "daemon", "daemon-cli.mjs"),
     daemonSidecarEntry: join(runtimeRoot, "daemon", "daemon-sidecar.mjs"),
     daemonStandaloneSidecarEntry: join(runtimeRoot, "daemon", "daemon-standalone-sidecar.mjs"),
-    resourceRoot: join(runtimeRoot, "resources", "open-design"),
-    webServerEntry,
     webSidecarEntry: join(runtimeRoot, "web", "web-sidecar.mjs"),
     webStandaloneSidecarEntry: join(runtimeRoot, "web", "web-standalone-sidecar.mjs"),
-    webStandaloneRoot: standaloneRoot,
+    webStaticRoot,
   });
 }
 
@@ -484,7 +538,10 @@ export async function startStandaloneBody(request) {
     ...process.env,
     OD_DAEMON_CLI_PATH: layout.daemonCliEntry,
     OD_NODE_BIN: process.execPath,
-    OD_RESOURCE_TRUST_ROOT: request.paths.installationRoot,
+    // The normalized Standalone control plane supplies this channel-scoped
+    // resource CAS root. Trust exactly that verified boundary; it is a sibling
+    // of namespace generations by design, not part of one body component.
+    OD_RESOURCE_TRUST_ROOT: request.paths.resourceRoot,
     OD_STANDALONE_ATTACHMENT_ID: request.attachment.id,
   };
   return await startSidecarStandalone(request, {
@@ -499,8 +556,7 @@ export async function startStandaloneBody(request) {
       args: [layout.webStandaloneSidecarEntry],
       env: {
         ...childEnv,
-        OD_WEB_OUTPUT_MODE: "standalone",
-        OD_WEB_STANDALONE_ROOT: layout.webStandaloneRoot,
+        OD_WEB_STATIC_ROOT: layout.webStaticRoot,
       },
       executable: process.execPath,
       output: "inherit",
@@ -544,7 +600,8 @@ async function buildClosurePrebundles(
   workspaceRoot: string,
   stageRoot: string,
   appRoot: string,
-  target: ClosurePlatformTarget,
+  _target: ClosurePlatformTarget,
+  minShellVersion: string,
 ): Promise<void> {
   const entryRoot = join(stageRoot, "entries");
   const metadataRoot = join(stageRoot, "metadata");
@@ -567,6 +624,9 @@ async function buildClosurePrebundles(
   );
   const daemonOutputRoot = join(appRoot, "daemon");
   const daemonMetafile = join(metadataRoot, "daemon.json");
+  const bodyEntry = join(entryRoot, "body.mjs");
+  const bootloaderEntry = join(entryRoot, CLOSURE_ARCHIVE_ENTRY_PATH);
+  const bodyMetafile = join(metadataRoot, "body.json");
   const webOutput = join(appRoot, "web", "web-sidecar.mjs");
   const webStandaloneOutput = join(appRoot, "web", "web-standalone-sidecar.mjs");
   const webMetafile = join(metadataRoot, "web.json");
@@ -585,6 +645,12 @@ async function buildClosurePrebundles(
     ].join("\n"),
     "utf8",
   );
+  await writeFile(bodyEntry, standaloneBodySource(), "utf8");
+  await writeFile(
+    bootloaderEntry,
+    standaloneInnerBootloaderSource({ minShellVersion }),
+    "utf8",
+  );
   await runEsbuild(workspaceRoot, [
     daemonEntry,
     daemonSidecarEntry,
@@ -597,13 +663,29 @@ async function buildClosurePrebundles(
     `--banner:js=${CLOSURE_ESBUILD_BANNER}`,
     ...[
       ...CLOSURE_DAEMON_EXTERNALS,
-      ...(target === CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64 ? ["fsevents"] : []),
+      "fsevents",
     ].map((dependency) => `--external:${dependency}`),
     `--outdir=${daemonOutputRoot}`,
     "--entry-names=[name]",
     "--chunk-names=chunks/[name]-[hash]",
     "--out-extension:.js=.mjs",
     `--metafile=${daemonMetafile}`,
+  ]);
+  await runEsbuild(workspaceRoot, [
+    bootloaderEntry,
+    bodyEntry,
+    "--bundle",
+    "--splitting",
+    "--platform=node",
+    "--format=esm",
+    "--target=node24",
+    `--banner:js=${CLOSURE_ESBUILD_BANNER}`,
+    ...[...CLOSURE_DAEMON_EXTERNALS, "fsevents"].map((dependency) => `--external:${dependency}`),
+    `--outdir=${appRoot}`,
+    "--entry-names=[name]",
+    "--chunk-names=chunks/[name]-[hash]",
+    "--out-extension:.js=.mjs",
+    `--metafile=${bodyMetafile}`,
   ]);
   await runEsbuild(workspaceRoot, [
     join(workspaceRoot, "apps", "web", "dist", "sidecar", "index.js"),
@@ -624,6 +706,7 @@ async function buildClosurePrebundles(
     `--metafile=${webStandaloneMetafile}`,
   ]);
   await assertClosureBundleMetafile(daemonMetafile);
+  await assertClosureBundleMetafile(bodyMetafile);
   await assertClosureBundleMetafile(webMetafile);
   await assertClosureBundleMetafile(webStandaloneMetafile);
 }
@@ -758,6 +841,167 @@ function resolveOutputRoot(root: string, channel: ReleaseChannel, target: Closur
   return outputRoot;
 }
 
+function resolveDistributionOutputRoot(
+  root: string,
+  channel: ReleaseChannel,
+  owner: "shared" | ClosurePlatformTarget,
+  version: string,
+): string {
+  const outputRoot = resolve(root, "out", "closure-distribution", channel, owner, "versions", version);
+  const relation = relative(resolve(root), outputRoot);
+  if (relation === ".." || relation.startsWith(`..${sep}`) || isAbsolute(relation)) {
+    throw new Error(`Closure distribution output escapes tools-pack root: ${outputRoot}`);
+  }
+  return outputRoot;
+}
+
+async function materializeContributionBlob(
+  sourcePath: string,
+  digest: `sha256:${string}`,
+  blobRoot: string,
+): Promise<string> {
+  const destination = join(blobRoot, digest.slice("sha256:".length));
+  await mkdir(blobRoot, { recursive: true });
+  await cp(sourcePath, destination);
+  return destination;
+}
+
+/** Build the target-neutral product body, fossil launcher and isolated resources exactly once. */
+export async function buildClosureDistributionShared(
+  options: ClosureDistributionSharedBuildOptions,
+): Promise<ClosureDistributionSharedBuildReport> {
+  const workspaceRoot = resolve(options.workspaceRoot ?? WORKSPACE_ROOT);
+  const archiveTarget = normalizeClosurePlatformTarget(options.platform);
+  const channel = resolveChannel(options.channel, options.version);
+  parseReleaseVersion(options.minShellVersion, channel);
+  const toolRoot = resolve(workspaceRoot, options.dir ?? ".tmp/tools-pack");
+  const outputRoot = resolveDistributionOutputRoot(toolRoot, channel, "shared", options.version);
+  const stageRoot = join(toolRoot, "stage", "closure-distribution", `${channel}-shared-${options.version}`);
+  const bodyRoot = join(stageRoot, "body");
+  const launcherRoot = join(stageRoot, "launcher");
+  const resourcesRoot = join(stageRoot, "resources");
+  const blobRoot = join(outputRoot, "blobs");
+  const contributionPath = join(outputRoot, "shared-contribution.json");
+
+  if (options.skipWorkspaceBuild !== true) await buildDistributionWorkspace(workspaceRoot);
+  await rm(stageRoot, { force: true, recursive: true });
+  await rm(outputRoot, { force: true, recursive: true });
+  await mkdir(bodyRoot, { recursive: true });
+  await buildClosurePrebundles(
+    workspaceRoot,
+    join(stageRoot, "build"),
+    bodyRoot,
+    archiveTarget,
+    options.minShellVersion,
+  );
+  const staticSource = join(workspaceRoot, "apps", "web", "out");
+  if (!(await stat(staticSource).catch(() => null))?.isDirectory()) {
+    throw new Error(`Closure static Web output is missing: ${staticSource}`);
+  }
+  await cp(staticSource, join(bodyRoot, "web", "static"), { dereference: true, recursive: true });
+  await prepareClosureLauncherComponent({
+    outputRoot: launcherRoot,
+    standaloneDistRoot: join(workspaceRoot, "apps", "standalone", "dist"),
+  });
+  const resources: ClosureSharedResourceRoot[] = [];
+  for (const group of BUNDLED_RESOURCE_GROUPS) {
+    const resourceRoot = join(resourcesRoot, group.id);
+    await mkdir(resourceRoot, { recursive: true });
+    await copyBundledResourceGroup({ id: group.id, resourceRoot, workspaceRoot });
+    resources.push({ id: group.id, root: resourceRoot, title: group.title });
+  }
+  const contribution = await buildClosureDistributionSharedContribution({
+    archiveTarget,
+    blobOrigin: options.blobOrigin,
+    bodyRoot,
+    channel,
+    launcherRoot,
+    outputRoot,
+    resources,
+    shellCompatibility: { electron: { version: { min: options.minShellVersion } } },
+    version: options.version,
+  });
+  await Promise.all([
+    materializeContributionBlob(
+      join(outputRoot, "shared", "body.zip"),
+      contribution.body.artifact.digest,
+      blobRoot,
+    ),
+    materializeContributionBlob(
+      join(outputRoot, "shared", "launcher.zip"),
+      contribution.launcher.artifact.digest,
+      blobRoot,
+    ),
+    ...contribution.resources.map(async (resource) => await materializeContributionBlob(
+      join(outputRoot, "shared", "resources", `${resource.id}.zip`),
+      resource.artifact.digest,
+      blobRoot,
+    )),
+  ]);
+  await writeFile(contributionPath, `${JSON.stringify(contribution, null, 2)}\n`, "utf8");
+  await rm(stageRoot, { force: true, recursive: true });
+  return { blobRoot, contribution, contributionPath, outputRoot };
+}
+
+/** Build one host-owned native pack; shared product bytes cannot enter this job. */
+export async function buildClosureDistributionTarget(
+  options: ClosureDistributionTargetBuildOptions,
+): Promise<ClosureDistributionTargetBuildReport> {
+  const workspaceRoot = resolve(options.workspaceRoot ?? WORKSPACE_ROOT);
+  const target = normalizeClosurePlatformTarget(options.platform);
+  assertNativeBuildHost(target);
+  const channel = resolveChannel(options.channel, options.version);
+  const toolRoot = resolve(workspaceRoot, options.dir ?? ".tmp/tools-pack");
+  const outputRoot = resolveDistributionOutputRoot(toolRoot, channel, target, options.version);
+  const stageRoot = join(toolRoot, "stage", "closure-distribution", `${channel}-${target}-${options.version}`);
+  const nativeRoot = join(stageRoot, "native");
+  const blobRoot = join(outputRoot, "blobs");
+  const contributionPath = join(outputRoot, "target-contribution.json");
+
+  await rm(stageRoot, { force: true, recursive: true });
+  await rm(outputRoot, { force: true, recursive: true });
+  await mkdir(nativeRoot, { recursive: true });
+  const dependencies = await resolveClosureRuntimeDependencies(workspaceRoot);
+  await writeFile(join(nativeRoot, "package.json"), `${JSON.stringify({
+    dependencies,
+    name: `open-design-standalone-native-${target}`,
+    private: true,
+    version: options.version,
+    ...(target.startsWith("darwin-") ? { optionalDependencies: { fsevents: "2.3.3" } } : {}),
+  }, null, 2)}\n`, "utf8");
+  await run(process.execPath, [
+    await resolveNodeNpmCliPath(),
+    "install",
+    "--omit=dev",
+    "--no-package-lock",
+  ], { cwd: nativeRoot });
+  await pruneForeignNodePtyPrebuilds(nativeRoot, target);
+  await rm(join(nativeRoot, "node_modules", ".bin"), { force: true, recursive: true });
+  await rm(join(nativeRoot, "node_modules", ".package-lock.json"), { force: true });
+  await rm(join(nativeRoot, "package.json"), { force: true });
+  await probeClosureNativeModules({
+    executable: process.execPath,
+    modules: CLOSURE_NODE_NATIVE_MODULES,
+    nativeRoot,
+  });
+  const contribution = await buildClosureDistributionTargetContribution({
+    blobOrigin: options.blobOrigin,
+    channel,
+    nativeRoot,
+    outputRoot,
+    target,
+    version: options.version,
+  });
+  await materializeContributionBlob(
+    join(outputRoot, "targets", target, "native.zip"),
+    contribution.native.artifact.digest,
+    blobRoot,
+  );
+  await writeFile(contributionPath, `${JSON.stringify(contribution, null, 2)}\n`, "utf8");
+  await rm(stageRoot, { force: true, recursive: true });
+  return { blobRoot, contribution, contributionPath, outputRoot };
+}
+
 async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promise<ClosureBuildReport> {
   const workspaceRoot = resolve(options.workspaceRoot ?? WORKSPACE_ROOT);
   const target = normalizeClosurePlatformTarget(options.platform);
@@ -826,7 +1070,7 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
   );
 
   await copyWebRuntime(workspaceRoot, appRoot);
-  await buildClosurePrebundles(workspaceRoot, stageRoot, appRoot, target);
+  await buildClosurePrebundles(workspaceRoot, stageRoot, appRoot, target, options.minShellVersion);
   await copyBundledResourceTrees({
     resourceRoot: join(appRoot, "resources", "open-design"),
     workspaceRoot,

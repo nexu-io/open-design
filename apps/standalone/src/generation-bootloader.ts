@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   validateStandaloneHandoffRequest,
@@ -24,11 +25,15 @@ export function resolveStandaloneGenerationLaunch(
 ): StandaloneGenerationLaunch {
   const request = validateStandaloneHandoffRequest(requestInput);
   const installationRoot = request.paths.installationRoot;
+  const nativeRoot = join(installationRoot, "native");
+  const nativeLoader = pathToFileURL(join(installationRoot, "launcher", "native-loader.mjs")).href;
   return Object.freeze({
     cwd: join(installationRoot, "body"),
     env: {
       ...process.env,
-      NODE_PATH: join(installationRoot, "native", "node_modules"),
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${nativeLoader}`].filter(Boolean).join(" "),
+      NODE_PATH: join(nativeRoot, "node_modules"),
+      OD_STANDALONE_NATIVE_ROOT: nativeRoot,
     },
     executable,
     launcherPath: join(installationRoot, "launcher", "launcher.mjs"),

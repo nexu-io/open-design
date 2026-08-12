@@ -29,6 +29,7 @@ await build({
   entryPoints: {
     "generation-bootloader": "./src/generation-bootloader.ts",
     launcher: "./src/launcher.ts",
+    "native-loader": "./src/native-loader.ts",
   },
   format: "esm",
   outdir: "./dist",

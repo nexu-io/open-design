@@ -28,6 +28,7 @@ export type ToolPackAmrProfile = "prod" | "test" | "feature-test" | "local";
 
 export type ToolPackCliOptions = {
   artifactUrl?: string;
+  blobOrigin?: string;
   cacheDir?: string;
   channel?: string;
   dir?: string;
