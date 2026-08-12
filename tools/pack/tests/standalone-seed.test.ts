@@ -14,6 +14,7 @@ import type { ToolPackConfig } from "../src/config.js";
 import { inspectStandaloneSeed } from "../src/standalone-seed.js";
 
 const roots: string[] = [];
+const fixtureTarget = process.arch === "arm64" ? "darwin-arm64" : "darwin-x64";
 
 afterEach(async () => {
   await Promise.all(roots.splice(0).map(async (root) => await rm(root, { force: true, recursive: true })));
@@ -46,7 +47,7 @@ async function seedFixture(options: Readonly<{
     required: {
       body: { blob: blobDigest, entryPath: "bootloader.mjs", treeDigest: digest("body") },
       launcher: { blob: blobDigest, entryPath: "launcher.mjs", handoffPath: "bootloader.mjs", treeDigest: digest("launcher") },
-      targets: { "darwin-arm64": { native: { blob: blobDigest, treeDigest: digest("native") } } },
+      targets: { [fixtureTarget]: { native: { blob: blobDigest, treeDigest: digest("native") } } },
     },
     resources: [],
     schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
@@ -81,7 +82,7 @@ describe("Standalone Shell seed", () => {
       channel: "beta",
       presentBlobs: [complete.digest],
       standaloneVersion: "0.19.0-beta.3",
-      target: "darwin-arm64",
+      target: fixtureTarget,
     });
 
     const metadataOnly = await seedFixture({ writeBlob: false });

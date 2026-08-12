@@ -14,11 +14,11 @@ export async function copyShellNodeRuntime(options: {
     throw new Error("tools-pack must run under an official Node runtime before it can seed a Shell");
   }
 
-  await mkdir(dirname(options.target), { recursive: true });
-  await cp(source, options.target);
-  if (process.platform !== "win32") await chmod(options.target, 0o755);
-
-  const { stdout } = await execFileAsync(options.target, ["--version"], {
+  // Probe the source before copying it. A tools-pack test may assemble a macOS
+  // resource tree on Windows, where the extensionless target is not executable;
+  // executing a copied node.exe also leaves the cache staging tree briefly
+  // locked on Windows and prevents its atomic rename.
+  const { stdout } = await execFileAsync(source, ["--version"], {
     windowsHide: true,
   });
   const actualVersion = stdout.trim();
@@ -26,6 +26,10 @@ export async function copyShellNodeRuntime(options: {
   if (options.source == null && actualVersion !== expectedVersion) {
     throw new Error(`seeded Shell Node version mismatch: expected ${expectedVersion}, got ${actualVersion}`);
   }
+
+  await mkdir(dirname(options.target), { recursive: true });
+  await cp(source, options.target);
+  if (process.platform !== "win32") await chmod(options.target, 0o755);
 }
 
 export async function copyStandaloneBootstrapSeed(options: Readonly<{
