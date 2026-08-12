@@ -8,6 +8,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import { putStorageObjectWithStatus, getStorageObject, type StorageConfig } from "./s3-upload.ts";
 import { normalizePublicUrl, writeJson } from "./common.ts";
+import { validateClosureDistributionPublication } from "./closure-distribution-metadata.ts";
 import { publishLatestRelease, sha256Digest } from "./latest-publication.ts";
 
 type JsonRecord = Record<string, unknown>;
@@ -18,19 +19,23 @@ export type PublicArtifactBinding = {
   url: string;
 };
 
+export type PublicClosureBinding = {
+  channel: "beta";
+  digest: string;
+  platform: "win32-x64";
+  protocolVersion: 1;
+  version: string;
+};
+
 export type PublicAcceptancePlan = {
-  closure: PublicArtifactBinding & {
-    channel: "beta";
-    platform: "win32-x64";
-    version: string;
-  };
+  closure: PublicClosureBinding;
   commit: string;
   installer: PublicArtifactBinding & { path: string };
   metadata: PublicArtifactBinding & { path: string };
   namespace: string;
   platformManifest: PublicArtifactBinding & { path: string };
   releaseVersion: string;
-  schemaVersion: 1;
+  schemaVersion: 2;
   target: "win_x64";
 };
 
@@ -43,7 +48,7 @@ export type PublicAcceptanceCredential = {
   namespace: string;
   platformManifest: PublicArtifactBinding;
   releaseVersion: string;
-  schemaVersion: 1;
+  schemaVersion: 2;
   smoke: {
     profile: string;
     selectedLanes: string[];
@@ -91,6 +96,44 @@ function artifactBinding(value: unknown, label: string): PublicArtifactBinding {
   };
   assertDigest(binding.digest, `${label}.digest`);
   return binding;
+}
+
+function publicClosureBinding(value: unknown, label: string): PublicClosureBinding {
+  assertRecord(value, label);
+  const channel = stringField(value, "channel", label);
+  const digest = stringField(value, "digest", label);
+  const platform = stringField(value, "platform", label);
+  const protocolVersion = numberField(value, "protocolVersion", label);
+  const version = stringField(value, "version", label);
+  assertDigest(digest, `${label}.digest`);
+  if (channel !== "beta" || platform !== "win32-x64" || protocolVersion !== 1) {
+    throw new Error(`${label} identity mismatch`);
+  }
+  return { channel, digest, platform, protocolVersion, version };
+}
+
+function resolvePublicClosureBinding(input: {
+  expectedVersion?: string;
+  metadata: JsonRecord;
+  publicOrigin: string;
+}): PublicClosureBinding {
+  const value = childRecord(input.metadata, "closure", "metadata");
+  const identity = childRecord(value, "identity", "metadata.closure");
+  const version = input.expectedVersion ?? stringField(identity, "version", "metadata.closure.identity");
+  const closure = validateClosureDistributionPublication({
+    channel: "beta",
+    expectedTargets: ["win32-x64"],
+    publicOrigin: input.publicOrigin,
+    releaseVersion: version,
+    value,
+  });
+  return {
+    channel: "beta",
+    digest: closure.identity.digest,
+    platform: "win32-x64",
+    protocolVersion: closure.identity.protocolVersion,
+    version: closure.identity.version,
+  };
 }
 
 function childRecord(record: JsonRecord, name: string, label: string): JsonRecord {
@@ -271,31 +314,11 @@ export async function preparePublicWindowsAcceptance(input: {
 
   const artifacts = childRecord(platform, "artifacts", "platform");
   const installer = artifactBinding(artifacts.installer, "platform.artifacts.installer");
-  const closure = childRecord(platform, "closure", "platform");
-  const closureAssets = childRecord(closure, "assets", "platform.closure");
-  const closureArchive = artifactBinding(closureAssets.archive, "platform.closure.assets.archive");
-  const closureManifest = childRecord(closure, "manifest", "platform.closure");
-  const closureIdentity = childRecord(closureManifest, "identity", "platform.closure.manifest");
-  const closureVersion = stringField(closureIdentity, "version", "closure.identity");
-  if (
-    stringField(closureIdentity, "channel", "closure.identity") !== "beta"
-    || stringField(closureIdentity, "platform", "closure.identity") !== "win32-x64"
-  ) {
-    throw new Error("public Windows Closure identity mismatch");
-  }
-  if (stringField(closureIdentity, "digest", "closure.identity") !== closureArchive.digest) {
-    throw new Error("public Windows Closure identity digest mismatch");
-  }
-  const closureArtifact = artifactBinding(closureManifest.artifact, "platform.closure.manifest.artifact");
-  if (!isDeepStrictEqual(closureArchive, closureArtifact)) {
-    throw new Error("public Windows Closure archive differs from its candidate manifest artifact");
-  }
-  for (const [label, binding] of [
-    ["installer URL", installer],
-    ["Closure archive URL", closureArchive],
-  ] as const) {
-    assertPublicImmutableUrl(binding.url, input.publicOrigin, label);
-  }
+  const closure = resolvePublicClosureBinding({
+    metadata,
+    publicOrigin: input.publicOrigin,
+  });
+  assertPublicImmutableUrl(installer.url, input.publicOrigin, "installer URL");
 
   const installerName = decodeURIComponent(basename(new URL(installer.url).pathname));
   const installerPath = join(input.downloadDir, installerName);
@@ -309,12 +332,7 @@ export async function preparePublicWindowsAcceptance(input: {
   ]);
 
   const plan: PublicAcceptancePlan = {
-    closure: {
-      ...closureArchive,
-      channel: "beta",
-      platform: "win32-x64",
-      version: closureVersion,
-    },
+    closure,
     commit: input.commit,
     installer: { ...installer, path: installerPath },
     metadata: {
@@ -331,7 +349,7 @@ export async function preparePublicWindowsAcceptance(input: {
       url: platformUrl,
     },
     releaseVersion: input.releaseVersion,
-    schemaVersion: 1,
+    schemaVersion: 2,
     target: "win_x64",
   };
   writeJson(input.buildJsonPath, { installerPath });
@@ -341,24 +359,19 @@ export async function preparePublicWindowsAcceptance(input: {
 
 function parsePlan(value: unknown): PublicAcceptancePlan {
   assertRecord(value, "public acceptance plan");
-  if (value.schemaVersion !== 1 || value.target !== "win_x64") {
+  if (value.schemaVersion !== 2 || value.target !== "win_x64") {
     throw new Error("unsupported public acceptance plan identity");
   }
+  publicClosureBinding(value.closure, "public acceptance plan.closure");
   return value as PublicAcceptancePlan;
 }
 
 function parseCredential(value: unknown): PublicAcceptanceCredential {
   assertRecord(value, "public acceptance credential");
-  if (value.schemaVersion !== 1 || value.target !== "win_x64" || value.status !== "accepted") {
+  if (value.schemaVersion !== 2 || value.target !== "win_x64" || value.status !== "accepted") {
     throw new Error("unsupported public acceptance credential identity");
   }
-  const closureRecord = childRecord(value, "closure", "public acceptance credential");
-  const closureArtifact = artifactBinding(closureRecord, "public acceptance credential.closure");
-  const closureChannel = stringField(closureRecord, "channel", "credential.closure");
-  const closurePlatform = stringField(closureRecord, "platform", "credential.closure");
-  if (closureChannel !== "beta" || closurePlatform !== "win32-x64") {
-    throw new Error("public acceptance credential Closure identity mismatch");
-  }
+  const closure = publicClosureBinding(value.closure, "public acceptance credential.closure");
   const smoke = childRecord(value, "smoke", "public acceptance credential");
   if (
     smoke.status !== "success"
@@ -376,12 +389,7 @@ function parseCredential(value: unknown): PublicAcceptanceCredential {
   if (!/^[0-9a-f]{40}$/u.test(commit)) throw new Error("public acceptance credential commit must be a full SHA");
   return {
     acceptedAt: stringField(value, "acceptedAt", "credential"),
-    closure: {
-      ...closureArtifact,
-      channel: "beta",
-      platform: "win32-x64",
-      version: stringField(closureRecord, "version", "credential.closure"),
-    },
+    closure,
     commit,
     installer: artifactBinding(value.installer, "public acceptance credential.installer"),
     metadata: artifactBinding(value.metadata, "public acceptance credential.metadata"),
@@ -391,7 +399,7 @@ function parseCredential(value: unknown): PublicAcceptanceCredential {
       "public acceptance credential.platformManifest",
     ),
     releaseVersion,
-    schemaVersion: 1,
+    schemaVersion: 2,
     smoke: {
       profile: "core",
       selectedLanes: ["shell"],
@@ -443,6 +451,7 @@ export async function issuePublicWindowsAcceptance(input: {
     ["channel", plan.closure.channel],
     ["digest", plan.closure.digest],
     ["platform", plan.closure.platform],
+    ["protocolVersion", plan.closure.protocolVersion],
     ["version", plan.closure.version],
     ["namespace", plan.namespace],
   ] as const) {
@@ -481,7 +490,7 @@ export async function issuePublicWindowsAcceptance(input: {
       url: plan.platformManifest.url,
     },
     releaseVersion: plan.releaseVersion,
-    schemaVersion: 1,
+    schemaVersion: 2,
     smoke: {
       profile,
       selectedLanes: ["shell"],
@@ -543,7 +552,6 @@ export async function activateAcceptedPublicRelease(input: {
     ["credential metadata URL", credential.metadata],
     ["credential Windows platform manifest URL", credential.platformManifest],
     ["credential installer URL", credential.installer],
-    ["credential Closure URL", credential.closure],
   ] as const) {
     assertPublicImmutableUrl(binding.url, input.publicOrigin, label);
   }
@@ -592,27 +600,12 @@ export async function activateAcceptedPublicRelease(input: {
   if (!isDeepStrictEqual(publicInstaller, credential.installer)) {
     throw new Error("accepted installer binding no longer matches public Windows metadata");
   }
-  const publicClosure = childRecord(winPlatform, "closure", "platform");
-  const publicClosureArchive = artifactBinding(
-    childRecord(publicClosure, "assets", "platform.closure").archive,
-    "platform.closure.assets.archive",
-  );
-  const publicClosureIdentity = childRecord(
-    childRecord(publicClosure, "manifest", "platform.closure"),
-    "identity",
-    "platform.closure.manifest",
-  );
-  if (
-    !isDeepStrictEqual(publicClosureArchive, {
-      digest: credential.closure.digest,
-      size: credential.closure.size,
-      url: credential.closure.url,
-    })
-    || publicClosureIdentity.channel !== credential.closure.channel
-    || publicClosureIdentity.digest !== credential.closure.digest
-    || publicClosureIdentity.platform !== credential.closure.platform
-    || publicClosureIdentity.version !== credential.closure.version
-  ) {
+  const publicClosure = resolvePublicClosureBinding({
+    expectedVersion: credential.closure.version,
+    metadata,
+    publicOrigin: input.publicOrigin,
+  });
+  if (!isDeepStrictEqual(publicClosure, credential.closure)) {
     throw new Error("accepted Closure binding no longer matches public Windows metadata");
   }
 

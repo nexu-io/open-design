@@ -2,6 +2,11 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import {
+  CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  CLOSURE_PROTOCOL_VERSION,
+  createClosureDistributionManifest,
+} from "@open-design/closure-proto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { compareCountedReleaseVersions, sha256Digest } from "../src/storage/latest-publication.js";
@@ -20,16 +25,57 @@ const temporaryRoots: string[] = [];
 
 function fixture() {
   const installerBytes = Buffer.from("unsigned public NSIS installer");
-  const closureBytes = Buffer.from("public Closure archive");
   const installerUrl = `${publicOrigin}/beta/shells/electron/versions/0.19.0-beta.4/win32-x64/Open%20Design.exe`;
-  const closureUrl = `${publicOrigin}/beta/closure/win32-x64/versions/${closureVersion}/closure.zip`;
   const platformUrl = `${publicOrigin}/beta/versions/${releaseVersion}.unsigned/platforms/win_x64.json`;
   const metadataUrl = `${publicOrigin}/beta/versions/${releaseVersion}/metadata.json`;
-  const closureArtifact = {
-    digest: sha256Digest(closureBytes),
-    size: closureBytes.byteLength,
-    url: closureUrl,
+  const blob = (contents: string) => {
+    const bytes = Buffer.from(contents);
+    const digest = sha256Digest(bytes) as `sha256:${string}`;
+    return {
+      digest,
+      mediaType: "application/zip",
+      size: bytes.byteLength,
+      url: `${publicOrigin}/beta/blobs/${digest.slice("sha256:".length)}`,
+    };
   };
+  const launcher = blob("public Closure launcher");
+  const body = blob("public Closure body");
+  const native = blob("public Windows Closure native layer");
+  const closure = createClosureDistributionManifest(
+    {
+      blobs: Object.fromEntries([launcher, body, native].map((artifact) => [artifact.digest, artifact])),
+      compatibility: { shell: { electron: { version: { min: "0.19.0-beta.4" } } } },
+      identity: {
+        channel: "beta",
+        protocolVersion: CLOSURE_PROTOCOL_VERSION,
+        version: closureVersion,
+      },
+      required: {
+        body: {
+          blob: body.digest,
+          entryPath: "bootloader.mjs",
+          treeDigest: sha256Digest("body tree") as `sha256:${string}`,
+        },
+        launcher: {
+          blob: launcher.digest,
+          entryPath: "launcher.mjs",
+          handoffPath: "bootloader.mjs",
+          treeDigest: sha256Digest("launcher tree") as `sha256:${string}`,
+        },
+        targets: {
+          "win32-x64": {
+            native: {
+              blob: native.digest,
+              treeDigest: sha256Digest("native tree") as `sha256:${string}`,
+            },
+          },
+        },
+      },
+      resources: [],
+      schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+    },
+    (value) => sha256Digest(value) as `sha256:${string}`,
+  );
   const platform = {
     artifacts: {
       installer: {
@@ -39,19 +85,6 @@ function fixture() {
       },
     },
     channel: "beta",
-    closure: {
-      assets: { archive: closureArtifact },
-      manifest: {
-        artifact: closureArtifact,
-        identity: {
-          channel: "beta",
-          digest: closureArtifact.digest,
-          platform: "win32-x64",
-          protocolVersion: 1,
-          version: closureVersion,
-        },
-      },
-    },
     enabled: true,
     github: { commit },
     platformKey: "win_x64",
@@ -63,6 +96,7 @@ function fixture() {
     status: "published",
   };
   const metadata = {
+    closure,
     github: { commit },
     r2: { versionPrefix: `beta/versions/${releaseVersion}` },
     releaseState: "complete",
@@ -80,7 +114,7 @@ function fixture() {
     const bytes = responses.get(String(input));
     return bytes == null ? new Response(null, { status: 404 }) : new Response(Uint8Array.from(bytes));
   });
-  return { closureArtifact, fetchImpl, installerBytes, metadataUrl };
+  return { closure, fetchImpl, installerBytes, metadataUrl };
 }
 
 afterEach(async () => {
@@ -116,7 +150,7 @@ describe("public Windows release acceptance", () => {
           releaseVersion,
           standalone: {
             channel: "beta",
-            digest: source.closureArtifact.digest,
+            digest: source.closure.identity.digest,
             generation: 0,
             namespace,
             platform: "win32-x64",
@@ -139,8 +173,9 @@ describe("public Windows release acceptance", () => {
     });
     expect(credential).toMatchObject({
       closure: {
-        digest: source.closureArtifact.digest,
+        digest: source.closure.identity.digest,
         platform: "win32-x64",
+        protocolVersion: CLOSURE_PROTOCOL_VERSION,
         version: closureVersion,
       },
       commit,
@@ -149,6 +184,7 @@ describe("public Windows release acceptance", () => {
       status: "accepted",
       target: "win_x64",
     });
+    expect(publicAcceptanceInternals.parseCredential(credential)).toEqual(credential);
   });
 
   it("refuses to issue a credential after downloaded installer bytes change", async () => {
@@ -175,9 +211,10 @@ describe("public Windows release acceptance", () => {
           releaseVersion,
           standalone: {
             channel: "beta",
-            digest: source.closureArtifact.digest,
+            digest: source.closure.identity.digest,
             namespace,
             platform: "win32-x64",
+            protocolVersion: CLOSURE_PROTOCOL_VERSION,
             version: closureVersion,
           },
         },
