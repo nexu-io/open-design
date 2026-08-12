@@ -2,12 +2,14 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   createStandaloneBackendEnv,
   createStandaloneParentMonitorImport,
   createStandaloneServerArgs,
+  bindFetchAllowedPort,
+  isFetchAllowedPort,
   normalizeDaemonProxyOriginHeader,
   resolveDaemonProxyTarget,
   resolveNextBundlerOptions,
@@ -161,6 +163,33 @@ describe('createStandaloneServerArgs', () => {
 });
 
 describe('standalone backend binding', () => {
+  it('rejects Fetch-standard bad ports and retries dynamic bindings', async () => {
+    expect(isFetchAllowedPort(1720)).toBe(false);
+    expect(isFetchAllowedPort(4190)).toBe(false);
+    expect(isFetchAllowedPort(6679)).toBe(false);
+    expect(isFetchAllowedPort(1721)).toBe(true);
+
+    const bind = vi.fn()
+      .mockResolvedValueOnce(1720)
+      .mockResolvedValueOnce(1721);
+    const close = vi.fn().mockResolvedValue(undefined);
+
+    await expect(bindFetchAllowedPort({ bind, close, requestedPort: 0 })).resolves.toBe(1721);
+    expect(bind).toHaveBeenNthCalledWith(1, 0);
+    expect(bind).toHaveBeenNthCalledWith(2, 0);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails before binding an explicitly configured Fetch-standard bad port', async () => {
+    const bind = vi.fn();
+    const close = vi.fn();
+
+    await expect(bindFetchAllowedPort({ bind, close, requestedPort: 1720 }))
+      .rejects.toThrow(/configured Web port 1720 is blocked by the Fetch standard/);
+    expect(bind).not.toHaveBeenCalled();
+    expect(close).not.toHaveBeenCalled();
+  });
+
   it('keeps the hidden standalone backend on loopback even when the public sidecar host is wider', () => {
     const env = createStandaloneBackendEnv({
       baseEnv: { ...process.env, OD_HOST: '0.0.0.0' },

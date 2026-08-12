@@ -46,6 +46,17 @@ const STANDALONE_STARTUP_TIMEOUT_ENV = "OD_STANDALONE_STARTUP_TIMEOUT_MS";
 const SHUTDOWN_TIMEOUT_MS = 3000;
 const STANDALONE_READINESS_POLL_MS = 150;
 const STANDALONE_TCP_READINESS_GRACE_MS = STANDALONE_READINESS_POLL_MS;
+// WHATWG Fetch §2.9. Electron/Chromium rejects HTTP(S) requests to these
+// ports before they reach the network stack. Windows can be configured with a
+// low dynamic range, so listen(0) may legitimately return one of them.
+const FETCH_BAD_PORTS = new Set([
+  0, 1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53,
+  69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117,
+  119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514,
+  515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989,
+  990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061,
+  6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+]);
 const require = createRequire(import.meta.url);
 
 type NextApp = {
@@ -65,6 +76,29 @@ type StandaloneBackend = {
   origin: string;
   stop(): Promise<void>;
 };
+
+export function isFetchAllowedPort(port: number): boolean {
+  return Number.isInteger(port) && port > 0 && port <= 65535 && !FETCH_BAD_PORTS.has(port);
+}
+
+export async function bindFetchAllowedPort(input: Readonly<{
+  bind(port: number): Promise<number>;
+  close(): Promise<void>;
+  maxAttempts?: number;
+  requestedPort: number;
+}>): Promise<number> {
+  if (input.requestedPort !== 0 && !isFetchAllowedPort(input.requestedPort)) {
+    throw new Error(`configured Web port ${input.requestedPort} is blocked by the Fetch standard`);
+  }
+
+  const maxAttempts = input.maxAttempts ?? 20;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const port = await input.bind(input.requestedPort);
+    if (isFetchAllowedPort(port)) return port;
+    await input.close();
+  }
+  throw new Error(`failed to bind a Fetch-allowed dynamic Web port after ${maxAttempts} attempts`);
+}
 
 function createNextApp(options: { dev: boolean; dir: string } & NextBundlerOptions): NextApp {
   const createNextServer = require("next") as (nextOptions: { dev: boolean; dir: string } & NextBundlerOptions) => NextApp;
@@ -685,6 +719,18 @@ async function closeServer(server: HttpServer | TcpServer): Promise<void> {
   });
 }
 
+async function listenOnFetchAllowedPort(
+  server: HttpServer,
+  requestedPort: number,
+  host = HOST,
+): Promise<number> {
+  return await bindFetchAllowedPort({
+    bind: async (port) => await listen(server, port, host),
+    close: async () => await closeServer(server),
+    requestedPort,
+  });
+}
+
 async function reserveTcpPort(host = HOST): Promise<number> {
   const server = createTcpServer();
   try {
@@ -1009,7 +1055,7 @@ async function createWebRuntimeHandle(
   isRuntimeRunning?: () => boolean,
   legacyIpcPath?: string,
 ): Promise<WebSidecarHandle> {
-  const port = await listen(httpServer, parsePort(process.env[WEB_PORT_ENV]));
+  const port = await listenOnFetchAllowedPort(httpServer, parsePort(process.env[WEB_PORT_ENV]));
   const state: WebStatusSnapshot = {
     pid: process.pid,
     state: "running",
