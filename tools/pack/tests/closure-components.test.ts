@@ -9,6 +9,10 @@ import {
   buildClosureDistributionSharedContribution,
   buildClosureDistributionTargetContribution,
   prepareClosureLauncherComponent,
+  probeClosureNodeRuntime,
+  validateClosureBodyComponent,
+  validateClosureNativeComponent,
+  validateClosureNodeRuntimeIdentity,
   type ClosureComponentArchiveRunner,
 } from "../src/closure-components.js";
 import { mergeClosureDistributionTargetContributions } from "../src/closure-distribution.js";
@@ -44,6 +48,58 @@ const fakeArchive: ClosureComponentArchiveRunner = async (invocation, cwd) => {
 };
 
 describe("tools-pack Closure component archives", () => {
+  it("keeps body, native and runtime identities in separate layers", async () => {
+    const root = await tempRoot("layer-purity");
+    const bodyRoot = await componentRoot(root, "body-pure", "bootloader.mjs");
+    await mkdir(join(bodyRoot, "web"), { recursive: true });
+    await writeFile(join(bodyRoot, "web", "index.html"), "web");
+    await expect(validateClosureBodyComponent(bodyRoot)).resolves.toMatchObject({ fileCount: 2 });
+    await writeFile(join(bodyRoot, "addon.node"), "native");
+    await expect(validateClosureBodyComponent(bodyRoot)).rejects.toThrow(/platform-neutral/u);
+
+    const nativeRoot = await componentRoot(
+      root,
+      "native-pure",
+      "node_modules/better-sqlite3/build/Release/better_sqlite3.node",
+    );
+    await expect(validateClosureNativeComponent(nativeRoot)).resolves.toMatchObject({ fileCount: 1 });
+    await writeFile(join(nativeRoot, "README.md"), "mixed");
+    await expect(validateClosureNativeComponent(nativeRoot)).rejects.toThrow(/only contain node_modules/u);
+
+    expect(validateClosureNodeRuntimeIdentity({
+      arch: "arm64",
+      electron: null,
+      modules: "137",
+      node: "24.18.0",
+      platform: "darwin",
+      release: "node",
+    }, { arch: "arm64", platform: "darwin", version: "24.18.0" })).toMatchObject({
+      electron: null,
+      release: "node",
+    });
+    expect(() => validateClosureNodeRuntimeIdentity({
+      arch: "arm64",
+      electron: "40.0.0",
+      modules: "143",
+      node: "24.18.0",
+      platform: "darwin",
+      release: "node",
+    }, { arch: "arm64", platform: "darwin", version: "24.18.0" })).toThrow(/standalone Node/u);
+
+    await expect(probeClosureNodeRuntime(process.execPath, {
+      arch: process.arch,
+      platform: process.platform,
+      version: process.versions.node,
+    })).resolves.toMatchObject({
+      arch: process.arch,
+      electron: null,
+      modules: process.versions.modules,
+      node: process.versions.node,
+      platform: process.platform,
+      release: "node",
+    });
+  });
+
   it("creates a real host ZIP from an isolated component root", async () => {
     const target = resolveHostClosurePlatformTarget();
     if (target == null) return;

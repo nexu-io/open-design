@@ -58,6 +58,21 @@ export type ClosureSharedResourceRoot = Readonly<{
   title: string;
 }>;
 
+export type ClosurePreparedTree = Readonly<{
+  fileCount: number;
+  files: readonly ClosureComponentTreeFile[];
+  root: string;
+}>;
+
+export type ClosureNodeRuntimeIdentity = Readonly<{
+  arch: string;
+  electron: null;
+  modules: string;
+  node: string;
+  platform: string;
+  release: "node";
+}>;
+
 /** Materialize the two fossil entries that every launcher archive must carry. */
 export async function prepareClosureLauncherComponent(options: Readonly<{
   outputRoot: string;
@@ -170,6 +185,129 @@ async function inspectComponentTree(
   return files;
 }
 
+async function inspectPreparedTree(rootInput: string): Promise<ClosurePreparedTree> {
+  const root = resolve(rootInput);
+  const files = (await inspectComponentTree(root)).sort((left, right) => (
+    left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+  ));
+  if (files.length === 0) throw new Error(`Closure prepared tree is empty: ${root}`);
+  return Object.freeze({ fileCount: files.length, files: Object.freeze(files), root });
+}
+
+/** Refuse platform/native bytes in the target-neutral body before archiving. */
+export async function validateClosureBodyComponent(root: string): Promise<ClosurePreparedTree> {
+  const tree = await inspectPreparedTree(root);
+  if (!tree.files.some((file) => file.path === CLOSURE_ARCHIVE_ENTRY_PATH)) {
+    throw new Error(`Closure body entry is missing: ${CLOSURE_ARCHIVE_ENTRY_PATH}`);
+  }
+  const forbidden = tree.files.filter((file) => (
+    /(?:^|\/)node_modules\/(?:\.pnpm\/)?(?:electron|electron-[^/]+)(?:\/|$)/u.test(file.path)
+    || /\.(?:dll|dylib|exe|node|so)$/iu.test(file.path)
+    || file.path.startsWith("resources/")
+  ));
+  if (forbidden.length > 0) {
+    throw new Error(
+      `Closure body must remain platform-neutral; found ${forbidden.map((file) => file.path).join(", ")}`,
+    );
+  }
+  return tree;
+}
+
+/** Require native addons to live in their own Node resolution pack. */
+export async function validateClosureNativeComponent(root: string): Promise<ClosurePreparedTree> {
+  const tree = await inspectPreparedTree(root);
+  const outsideNodeModules = tree.files.filter((file) => !file.path.startsWith("node_modules/"));
+  if (outsideNodeModules.length > 0) {
+    throw new Error(
+      `Closure native pack may only contain node_modules; found ${outsideNodeModules[0]?.path ?? "unknown"}`,
+    );
+  }
+  if (!tree.files.some((file) => file.path.endsWith(".node"))) {
+    throw new Error("Closure native pack must contain at least one Node addon");
+  }
+  return tree;
+}
+
+/** Validate an official-Node probe without coupling the protocol to its downloader. */
+export function validateClosureNodeRuntimeIdentity(
+  value: unknown,
+  expected: Readonly<{ arch: string; platform: string; version: string }>,
+): ClosureNodeRuntimeIdentity {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Closure Node runtime probe must be an object");
+  }
+  const probe = value as Record<string, unknown>;
+  const extras = Object.keys(probe).filter((key) => (
+    !["arch", "electron", "modules", "node", "platform", "release"].includes(key)
+  ));
+  if (extras.length > 0) throw new Error(`Closure Node runtime probe has unsupported fields: ${extras.join(", ")}`);
+  if (
+    probe.release !== "node"
+    || probe.electron != null
+    || probe.node !== expected.version
+    || probe.platform !== expected.platform
+    || probe.arch !== expected.arch
+    || typeof probe.modules !== "string"
+    || !/^\d+$/u.test(probe.modules)
+  ) {
+    throw new Error("Closure runtime is not the expected standalone Node target");
+  }
+  return Object.freeze({
+    arch: expected.arch,
+    electron: null,
+    modules: probe.modules,
+    node: expected.version,
+    platform: expected.platform,
+    release: "node",
+  });
+}
+
+/** Execute one prepared runtime to prove its Node/ABI target before archiving. */
+export async function probeClosureNodeRuntime(
+  executable: string,
+  expected: Readonly<{ arch: string; platform: string; version: string }>,
+): Promise<ClosureNodeRuntimeIdentity> {
+  const script = [
+    "JSON.stringify({",
+    "arch:process.arch,",
+    "electron:process.versions.electron??null,",
+    "modules:process.versions.modules,",
+    "node:process.versions.node,",
+    "platform:process.platform,",
+    "release:process.release.name",
+    "})",
+  ].join("");
+  const value = await new Promise<unknown>((resolveProbe, rejectProbe) => {
+    const child = spawn(executable, ["--print", script], {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => { stdout += chunk; });
+    child.stderr?.on("data", (chunk: string) => { stderr += chunk; });
+    child.once("error", rejectProbe);
+    child.once("close", (code, signal) => {
+      if (code !== 0 || signal != null) {
+        rejectProbe(new Error(
+          `Closure Node runtime probe failed with ${signal ?? `exit code ${code ?? "unknown"}`}${
+            stderr.trim().length === 0 ? "" : `: ${stderr.trim()}`
+          }`,
+        ));
+        return;
+      }
+      try {
+        resolveProbe(JSON.parse(stdout.trim()) as unknown);
+      } catch (error) {
+        rejectProbe(new Error("Closure Node runtime probe returned invalid JSON", { cause: error }));
+      }
+    });
+  });
+  return validateClosureNodeRuntimeIdentity(value, expected);
+}
+
 /** Archive one already-prepared component root without interpreting its body. */
 export async function archiveClosureComponent(options: Readonly<{
   entryPath?: string;
@@ -182,9 +320,7 @@ export async function archiveClosureComponent(options: Readonly<{
   const sourceRoot = resolve(options.sourceRoot);
   const outputPath = resolve(options.outputPath);
   assertOutputOutsideSource(sourceRoot, outputPath);
-  const files = (await inspectComponentTree(sourceRoot)).sort((left, right) => (
-    left.path < right.path ? -1 : left.path > right.path ? 1 : 0
-  ));
+  const files = [...(await inspectPreparedTree(sourceRoot)).files];
   const fileCount = files.length;
   if (fileCount === 0) throw new Error(`Closure component source is empty: ${sourceRoot}`);
   const requiredPaths = new Set([
@@ -238,6 +374,7 @@ export async function buildClosureDistributionSharedContribution(options: Readon
   version: string;
 }>): Promise<ClosureDistributionSharedContribution> {
   const outputRoot = resolve(options.outputRoot);
+  await validateClosureBodyComponent(options.bodyRoot);
   const body = await archiveClosureComponent({
     entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
     outputPath: join(outputRoot, "shared", "body.zip"),
@@ -291,6 +428,7 @@ export async function buildClosureDistributionTargetContribution(options: Readon
   version: string;
 }>): Promise<ClosureDistributionTargetContribution> {
   const outputRoot = resolve(options.outputRoot);
+  await validateClosureNativeComponent(options.nativeRoot);
   const runtime = await archiveClosureComponent({
     entryPath: options.runtimeEntryPath,
     outputPath: join(outputRoot, "targets", options.target, "runtime.zip"),
