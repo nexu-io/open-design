@@ -6,6 +6,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   bindClosureCandidateIdentity,
+  createClosureComponentTreeDigest,
   resolveClosureDistributionTarget,
   validateClosureBindingIdentity,
   validateClosureCandidateManifest,
@@ -13,6 +14,7 @@ import {
   validateClosureFileInventory,
   type ClosureBindingIdentity,
   type ClosureCandidateManifest,
+  type ClosureComponentTreeFile,
   type ClosureDigest,
   type ClosureDistributionBlob,
   type ClosureDistributionEntrypointComponent,
@@ -52,6 +54,7 @@ export type ClosureDistributionComponentPlan = Readonly<{
   artifact: ClosureDistributionBlob;
   blobPath: string;
   componentRoot: string;
+  treeDigest: ClosureDigest;
 }>;
 
 export type ClosureDistributionEntrypointPlan = ClosureDistributionComponentPlan & Readonly<{
@@ -166,7 +169,7 @@ function planDistributionComponent(
   paths: ClosureStorePaths,
   generationRoot: string,
   componentName: "native",
-  component: Readonly<{ blob: ClosureDigest }>,
+  component: Readonly<{ blob: ClosureDigest; treeDigest: ClosureDigest }>,
   manifest: ClosureDistributionManifest,
 ): ClosureDistributionComponentPlan;
 function planDistributionComponent(
@@ -180,7 +183,7 @@ function planDistributionComponent(
   paths: ClosureStorePaths,
   generationRoot: string,
   componentName: "body" | "launcher" | "native" | "runtime",
-  component: Readonly<{ blob: ClosureDigest; entryPath?: string }>,
+  component: Readonly<{ blob: ClosureDigest; entryPath?: string; treeDigest: ClosureDigest }>,
   manifest: ClosureDistributionManifest,
 ): ClosureDistributionComponentPlan | ClosureDistributionEntrypointPlan {
   const artifact = manifest.blobs[component.blob];
@@ -192,6 +195,7 @@ function planDistributionComponent(
     artifact,
     blobPath: resolveDistributionBlobPath(paths, component.blob),
     componentRoot,
+    treeDigest: component.treeDigest,
   };
   if (component.entryPath == null) return common;
   return {
@@ -539,9 +543,12 @@ function assertDistributionPlanMatchesStore(
   }
 }
 
-async function assertMaterializedComponentTree(root: string, label: string): Promise<void> {
+async function inspectMaterializedComponentTree(
+  root: string,
+  label: string,
+): Promise<ClosureComponentTreeFile[]> {
   const pending = [root];
-  let fileCount = 0;
+  const files: ClosureComponentTreeFile[] = [];
   while (pending.length > 0) {
     const current = pending.pop()!;
     const metadata = await lstat(current).catch(() => null);
@@ -556,15 +563,21 @@ async function assertMaterializedComponentTree(root: string, label: string): Pro
       if (entry.isDirectory()) {
         pending.push(entryPath);
       } else if (entry.isFile()) {
-        fileCount += 1;
+        const inspected = await digestFile(entryPath);
+        files.push({
+          digest: inspected.digest as ClosureDigest,
+          path: relative(root, entryPath).split(sep).join("/"),
+          size: inspected.size,
+        });
       } else {
         throw new ClosureStoreError(`materialized Closure ${label} component contains an unsupported entry`);
       }
     }
   }
-  if (fileCount === 0) {
+  if (files.length === 0) {
     throw new ClosureStoreError(`materialized Closure ${label} component is empty`);
   }
+  return files.sort((left, right) => compareName(left.path, right.path));
 }
 
 async function assertMaterializedEntrypoint(path: string, label: string): Promise<void> {
@@ -589,6 +602,14 @@ export async function verifyMaterializedClosureDistributionGeneration(
   if (materializedRoot === paths.stagingRoot) {
     throw new ClosureStoreError("materialized Closure generation must use an isolated staging child");
   }
+  return await verifyClosureDistributionGenerationRoot(paths, plan, materializedRoot);
+}
+
+async function verifyClosureDistributionGenerationRoot(
+  paths: ClosureStorePaths,
+  plan: ClosureDistributionGenerationPlan,
+  materializedRoot: string,
+): Promise<StoredClosureDistributionVerification> {
   const expectedTopLevel = ["body", "closure.json", "launcher", "native", "runtime"];
   const topLevel = (await readdir(materializedRoot, { withFileTypes: true }).catch(() => []))
     .map((entry) => entry.name)
@@ -626,7 +647,11 @@ export async function verifyMaterializedClosureDistributionGeneration(
       verifiedDigests.add(component.artifact.digest);
     }
     const componentRoot = join(materializedRoot, name);
-    await assertMaterializedComponentTree(componentRoot, name);
+    const files = await inspectMaterializedComponentTree(componentRoot, name);
+    const treeDigest = createClosureComponentTreeDigest(files, sha256CanonicalDistribution);
+    if (treeDigest !== component.treeDigest) {
+      throw new ClosureStoreError(`materialized Closure ${name} component tree does not match its manifest`);
+    }
     if ("entryPath" in component) {
       await assertMaterializedEntrypoint(join(componentRoot, component.entryPath), name);
     }
@@ -635,6 +660,37 @@ export async function verifyMaterializedClosureDistributionGeneration(
     throw new ClosureStoreError("Closure distribution required blob set does not match its components");
   }
   return Object.freeze({ materializedRoot, plan });
+}
+
+/** Verify the exact immutable v2 generation named by the committed pointer. */
+export async function verifyStoredClosureDistributionGeneration(
+  paths: ClosureStorePaths,
+  pointerInput: ClosureRuntimePointer,
+): Promise<StoredClosureDistributionVerification> {
+  const pointer = normalizePointer(pointerInput, paths);
+  const generationRoot = assertUnderRoot(
+    paths.root,
+    join(paths.generationsRoot, String(pointer.generation)),
+  );
+  const manifest = validateClosureDistributionManifest(
+    await readRequiredJson(join(generationRoot, "closure.json"), "Closure distribution manifest"),
+    sha256CanonicalDistribution,
+  );
+  const plan = planClosureDistributionGeneration(
+    paths,
+    pointer.generation,
+    manifest,
+    pointer.target,
+  );
+  if (
+    plan.identity.channel !== pointer.channel
+    || plan.identity.digest !== pointer.digest
+    || plan.identity.protocolVersion !== pointer.protocolVersion
+    || plan.identity.version !== pointer.version
+  ) {
+    throw new ClosureStoreError("committed Closure distribution identity does not match its generation");
+  }
+  return await verifyClosureDistributionGenerationRoot(paths, plan, generationRoot);
 }
 
 /** Publish one verified generation and then advance the sole binding truth. */

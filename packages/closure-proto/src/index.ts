@@ -77,6 +77,7 @@ export type ClosureDistributionBlob = {
 
 export type ClosureDistributionComponent = {
   blob: ClosureDigest;
+  treeDigest: ClosureDigest;
 };
 
 export type ClosureDistributionEntrypointComponent = ClosureDistributionComponent & {
@@ -123,6 +124,8 @@ export type ClosureDistributionManifest = Omit<ClosureDistributionManifestDraft,
 };
 
 export type ClosureDistributionDigest = (canonicalManifest: string) => ClosureDigest;
+
+export type ClosureComponentTreeFile = ClosureFileInventoryEntry;
 
 export type ResolvedClosureDistributionTarget = {
   required: {
@@ -449,8 +452,20 @@ export function validateClosureFileInventory(value: unknown): ClosureFileInvento
   if (!Array.isArray(inventory.files)) {
     throw new ClosureProtocolError("closure inventory files must be an array");
   }
-  const files = inventory.files.map((entry) => {
+  const files = normalizeClosureComponentTreeFiles(inventory.files);
+  if (!files.some((file) => file.path === CLOSURE_ARCHIVE_ENTRY_PATH)) {
+    throw new ClosureProtocolError(`closure inventory must contain ${CLOSURE_ARCHIVE_ENTRY_PATH}`);
+  }
+  return { files, schemaVersion: CLOSURE_INVENTORY_SCHEMA_VERSION };
+}
+
+function normalizeClosureComponentTreeFiles(value: unknown): ClosureComponentTreeFile[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new ClosureProtocolError("closure component tree files must be a non-empty array");
+  }
+  const files = value.map((entry) => {
     const file = requireRecord(entry, "closure inventory file");
+    requireKnownKeys(file, ["digest", "path", "size"], "closure inventory file");
     return {
       digest: normalizeDigest(file.digest),
       path: normalizeInventoryPath(file.path),
@@ -464,10 +479,18 @@ export function validateClosureFileInventory(value: unknown): ClosureFileInvento
       throw new ClosureProtocolError("closure inventory paths must be strictly sorted and unique");
     }
   }
-  if (!files.some((file) => file.path === CLOSURE_ARCHIVE_ENTRY_PATH)) {
-    throw new ClosureProtocolError(`closure inventory must contain ${CLOSURE_ARCHIVE_ENTRY_PATH}`);
-  }
-  return { files, schemaVersion: CLOSURE_INVENTORY_SCHEMA_VERSION };
+  return files;
+}
+
+export function serializeClosureComponentTreeForDigest(value: unknown): string {
+  return `${JSON.stringify(normalizeClosureComponentTreeFiles(value))}\n`;
+}
+
+export function createClosureComponentTreeDigest(
+  value: unknown,
+  digest: ClosureDistributionDigest,
+): ClosureDigest {
+  return normalizeDigest(digest(serializeClosureComponentTreeForDigest(value)));
 }
 
 export function validateClosureCandidateSignature(value: unknown): ClosureCandidateSignature {
@@ -564,8 +587,11 @@ function normalizeDistributionComponent(
   label: string,
 ): ClosureDistributionComponent {
   const component = requireRecord(value, label);
-  requireKnownKeys(component, ["blob"], label);
-  return { blob: normalizeDigest(component.blob) };
+  requireKnownKeys(component, ["blob", "treeDigest"], label);
+  return {
+    blob: normalizeDigest(component.blob),
+    treeDigest: normalizeDigest(component.treeDigest),
+  };
 }
 
 function normalizeDistributionEntrypointComponent(
@@ -573,10 +599,11 @@ function normalizeDistributionEntrypointComponent(
   label: string,
 ): ClosureDistributionEntrypointComponent {
   const component = requireRecord(value, label);
-  requireKnownKeys(component, ["blob", "entryPath"], label);
+  requireKnownKeys(component, ["blob", "entryPath", "treeDigest"], label);
   return {
     blob: normalizeDigest(component.blob),
     entryPath: normalizeRelativePath(component.entryPath, `${label} entry path`),
+    treeDigest: normalizeDigest(component.treeDigest),
   };
 }
 
@@ -586,11 +613,12 @@ function normalizeDistributionResources(value: unknown): ClosureDistributionReso
   }
   const resources = value.map((rawResource) => {
     const resource = requireRecord(rawResource, "closure distribution resource");
-    requireKnownKeys(resource, ["blob", "id", "title"], "closure distribution resource");
+    requireKnownKeys(resource, ["blob", "id", "title", "treeDigest"], "closure distribution resource");
     return {
       blob: normalizeDigest(resource.blob),
       id: normalizeProtocolToken(resource.id, "closure distribution resource id"),
       title: normalizeDisplayTitle(resource.title, "closure distribution resource title"),
+      treeDigest: normalizeDigest(resource.treeDigest),
     };
   }).sort((left, right) => compareCanonicalStrings(left.id, right.id));
   for (let index = 1; index < resources.length; index += 1) {

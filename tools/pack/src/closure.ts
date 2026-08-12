@@ -31,15 +31,22 @@ import { isReleaseChannel, parseReleaseVersion, type ReleaseChannel } from "@ope
 import { hashJson, hashPath, ToolPackCache, type CacheInvalidation } from "./cache.js";
 import { resolveElectronVersion, WORKSPACE_ROOT } from "./config.js";
 import { hashPackageSourcePath } from "./package-source-hash.js";
-import { copyBundledResourceTrees, winResources } from "./resources.js";
+import { copyBundledResourceTrees } from "./resources.js";
+import {
+  CLOSURE_PLATFORM_TARGETS,
+  normalizeClosurePlatformTarget,
+  resolveClosureArchiveInvocation,
+  resolveHostClosurePlatformTarget,
+  type ClosurePlatformTarget,
+} from "./closure-platform.js";
 
-export const CLOSURE_PLATFORM_TARGETS = Object.freeze({
-  DARWIN_ARM64: "darwin-arm64",
-  WIN32_X64: "win32-x64",
-} as const);
-
-export type ClosurePlatformTarget =
-  (typeof CLOSURE_PLATFORM_TARGETS)[keyof typeof CLOSURE_PLATFORM_TARGETS];
+export {
+  CLOSURE_PLATFORM_TARGETS,
+  normalizeClosurePlatformTarget,
+  resolveClosureArchiveInvocation,
+  type ClosureArchiveInvocation,
+  type ClosurePlatformTarget,
+} from "./closure-platform.js";
 
 export const CLOSURE_INTERNAL_PACKAGES = [
   { directory: "packages/release", name: "@open-design/release" },
@@ -57,11 +64,6 @@ const CLOSURE_FORBIDDEN_BUNDLE_INPUTS = [
 ] as const;
 const CLOSURE_ESBUILD_BANNER =
   'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);';
-
-export type ClosureArchiveInvocation = {
-  args: readonly string[];
-  command: string;
-};
 
 export type ClosureBuildOptions = {
   artifactUrl: string;
@@ -175,38 +177,6 @@ export async function createClosureBuildCacheKey(options: {
   });
 }
 
-function hostTarget(
-  platform: NodeJS.Platform = process.platform,
-  arch: string = process.arch,
-): ClosurePlatformTarget | null {
-  if (platform === "darwin" && arch === "arm64") return CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64;
-  if (platform === "win32" && arch === "x64") return CLOSURE_PLATFORM_TARGETS.WIN32_X64;
-  return null;
-}
-
-export function normalizeClosurePlatformTarget(value: string | undefined): ClosurePlatformTarget {
-  const candidate = value ?? hostTarget();
-  if (candidate === CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64) return candidate;
-  if (candidate === CLOSURE_PLATFORM_TARGETS.WIN32_X64) return candidate;
-  throw new Error(`unsupported Closure platform target: ${String(candidate)}`);
-}
-
-export function resolveClosureArchiveInvocation(options: {
-  artifactPath: string;
-  target: ClosurePlatformTarget;
-}): ClosureArchiveInvocation {
-  if (options.target === CLOSURE_PLATFORM_TARGETS.DARWIN_ARM64) {
-    return {
-      args: ["-c", "-k", "--sequesterRsrc", "--rsrc", ".", options.artifactPath],
-      command: "ditto",
-    };
-  }
-  return {
-    args: ["a", "-tzip", "-mx=5", options.artifactPath, ".\\*"],
-    command: winResources.sevenZipExe,
-  };
-}
-
 export function createClosureElectronRebuildOptions(options: {
   appRoot: string;
   electronVersion: string;
@@ -260,7 +230,7 @@ export async function runClosureElectronRebuild(options: {
 }
 
 function assertNativeBuildHost(target: ClosurePlatformTarget): void {
-  const current = hostTarget();
+  const current = resolveHostClosurePlatformTarget();
   if (current !== target) {
     throw new Error(
       `Closure ${target} artifacts must be built on a ${target} host; current host is ${process.platform}-${process.arch}`,

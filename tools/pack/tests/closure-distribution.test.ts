@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +14,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  createClosureDistributionSharedContribution,
   createClosureDistributionTargetContribution,
   mergeClosureDistributionTargetContributions,
   sealClosureDistributionManifest,
@@ -30,29 +32,43 @@ afterEach(async () => {
 async function artifact(root: string, name: string, content: string) {
   const path = join(root, name);
   await writeFile(path, content);
-  return { mediaType: "application/zip", path };
+  return {
+    mediaType: "application/zip",
+    path,
+    treeDigest: `sha256:${createHash("sha256").update(`tree:${content}`).digest("hex")}` as const,
+  };
 }
 
-async function contributionOptions(target: "darwin-arm64" | "win32-x64") {
-  const root = await mkdtemp(join(tmpdir(), `od-closure-contribution-${target}-`));
+async function sharedContributionOptions(version = "0.19.0-beta.10") {
+  const root = await mkdtemp(join(tmpdir(), "od-closure-contribution-shared-"));
   roots.push(root);
   return {
     blobOrigin: "https://releases.open-design.ai/",
     body: await artifact(root, "body.zip", "shared-body"),
     channel: "beta" as const,
-    launcher: await artifact(root, "launcher.mjs", "shared-launcher"),
-    native: await artifact(root, "native.zip", `native-${target}`),
+    launcher: await artifact(root, "launcher.zip", "shared-launcher"),
     resources: [{
       ...await artifact(root, "design-systems.zip", "shared-design-systems"),
       id: "design-systems",
       title: "Design systems",
     }],
+    shellCompatibility: {
+      electron: { version: { min: "0.19.0-beta.4" } },
+    },
+    version,
+  };
+}
+
+async function targetContributionOptions(target: "darwin-arm64" | "win32-x64") {
+  const root = await mkdtemp(join(tmpdir(), `od-closure-contribution-${target}-`));
+  roots.push(root);
+  return {
+    blobOrigin: "https://releases.open-design.ai/",
+    channel: "beta" as const,
+    native: await artifact(root, "native.zip", `native-${target}`),
     runtime: {
       ...await artifact(root, "node.zip", `official-node-${target}`),
       entryPath: target === "darwin-arm64" ? "bin/node" : "node.exe",
-    },
-    shellCompatibility: {
-      electron: { version: { min: "0.19.0-beta.4" } },
     },
     target,
     version: "0.19.0-beta.10",
@@ -97,50 +113,70 @@ describe("tools-pack layered Closure producer", () => {
   });
 
   it("seals real component bytes per target and merges one version-wide graph", async () => {
+    const shared = await createClosureDistributionSharedContribution(
+      await sharedContributionOptions(),
+    );
     const mac = await createClosureDistributionTargetContribution(
-      await contributionOptions("darwin-arm64"),
+      await targetContributionOptions("darwin-arm64"),
     );
     const win = await createClosureDistributionTargetContribution(
-      await contributionOptions("win32-x64"),
+      await targetContributionOptions("win32-x64"),
     );
-    const merged = mergeClosureDistributionTargetContributions([win, mac]);
+    const merged = mergeClosureDistributionTargetContributions(shared, [win, mac]);
 
     expect(Object.keys(merged.required.targets)).toEqual(["darwin-arm64", "win32-x64"]);
-    expect(merged.required.launcher).toEqual(mac.manifest.required.launcher);
-    expect(merged.required.body).toEqual(mac.manifest.required.body);
-    expect(merged.resources).toEqual(mac.manifest.resources);
-    expect(merged.identity.digest).not.toBe(mac.manifest.identity.digest);
+    expect(merged.required.launcher.blob).toBe(shared.launcher.artifact.digest);
+    expect(merged.required.body.blob).toBe(shared.body.artifact.digest);
+    expect(merged.resources[0]?.blob).toBe(shared.resources[0]?.artifact.digest);
     expect(Object.values(merged.blobs).every((blob) => (
       blob.url === `https://releases.open-design.ai/beta/blobs/${blob.digest.slice("sha256:".length)}`
     ))).toBe(true);
   });
 
   it("reuses resource blobs across versions while changing the release graph", async () => {
-    const firstOptions = await contributionOptions("darwin-arm64");
-    const secondOptions = await contributionOptions("darwin-arm64");
-    const first = await createClosureDistributionTargetContribution(firstOptions);
-    const second = await createClosureDistributionTargetContribution({
-      ...secondOptions,
+    const firstShared = await createClosureDistributionSharedContribution(
+      await sharedContributionOptions(),
+    );
+    const secondShared = await createClosureDistributionSharedContribution(
+      await sharedContributionOptions("0.19.1-beta.1"),
+    );
+    const firstTarget = await createClosureDistributionTargetContribution(
+      await targetContributionOptions("darwin-arm64"),
+    );
+    const secondTarget = await createClosureDistributionTargetContribution({
+      ...await targetContributionOptions("darwin-arm64"),
+      version: "0.19.1-beta.1",
+    });
+    const first = mergeClosureDistributionTargetContributions(firstShared, [firstTarget]);
+    const second = mergeClosureDistributionTargetContributions(secondShared, [secondTarget]);
+
+    expect(first.resources[0]?.blob).toBe(second.resources[0]?.blob);
+    expect(first.identity.digest).not.toBe(second.identity.digest);
+  });
+
+  it("rejects duplicate targets and release identity drift before final sealing", async () => {
+    const shared = await createClosureDistributionSharedContribution(
+      await sharedContributionOptions(),
+    );
+    const mac = await createClosureDistributionTargetContribution(
+      await targetContributionOptions("darwin-arm64"),
+    );
+    const drift = await createClosureDistributionTargetContribution({
+      ...await targetContributionOptions("win32-x64"),
       version: "0.19.1-beta.1",
     });
 
-    expect(first.manifest.resources[0]?.blob).toBe(second.manifest.resources[0]?.blob);
-    expect(first.manifest.identity.digest).not.toBe(second.manifest.identity.digest);
+    expect(() => mergeClosureDistributionTargetContributions(shared, [mac, mac])).toThrow(/duplicate/u);
+    expect(() => mergeClosureDistributionTargetContributions(shared, [mac, drift])).toThrow(/release identity/u);
   });
 
-  it("rejects duplicate targets and shared graph drift before final sealing", async () => {
-    const mac = await createClosureDistributionTargetContribution(
-      await contributionOptions("darwin-arm64"),
+  it("keeps shared bytes out of platform contributions", async () => {
+    const target = await createClosureDistributionTargetContribution(
+      await targetContributionOptions("darwin-arm64"),
     );
-    const driftOptions = await contributionOptions("win32-x64");
-    const driftRoot = await mkdtemp(join(tmpdir(), "od-closure-contribution-drift-"));
-    roots.push(driftRoot);
-    const drift = await createClosureDistributionTargetContribution({
-      ...driftOptions,
-      body: await artifact(driftRoot, "body.zip", "different-shared-body"),
-    });
 
-    expect(() => mergeClosureDistributionTargetContributions([mac, mac])).toThrow(/duplicate/u);
-    expect(() => mergeClosureDistributionTargetContributions([mac, drift])).toThrow(/shared required/u);
+    expect(target).not.toHaveProperty("body");
+    expect(target).not.toHaveProperty("launcher");
+    expect(target).not.toHaveProperty("resources");
   });
 });

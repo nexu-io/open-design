@@ -8,13 +8,10 @@ import {
   CLOSURE_LAUNCHER_ENTRY_PATH,
   CLOSURE_PROTOCOL_VERSION,
   createClosureDistributionManifest,
-  validateClosureDistributionManifest,
   type ClosureDigest,
   type ClosureDistributionBlob,
   type ClosureDistributionManifest,
   type ClosureDistributionManifestDraft,
-  type ClosureDistributionResource,
-  type ClosureDistributionTarget,
   type ClosureShellCompatibility,
 } from "@open-design/closure-proto";
 import type { ReleaseChannel } from "@open-design/release";
@@ -24,6 +21,7 @@ export const CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION = 1 as const;
 export type ClosureDistributionArtifactSource = Readonly<{
   mediaType: string;
   path: string;
+  treeDigest: ClosureDigest;
 }>;
 
 export type ClosureDistributionEntrypointSource = ClosureDistributionArtifactSource & Readonly<{
@@ -35,21 +33,59 @@ export type ClosureDistributionResourceSource = ClosureDistributionArtifactSourc
   title: string;
 }>;
 
-export type ClosureDistributionTargetContribution = Readonly<{
-  manifest: ClosureDistributionManifest;
+export type ClosureDistributionSharedContribution = Readonly<{
+  body: Readonly<{
+    artifact: ClosureDistributionBlob;
+    entryPath: typeof CLOSURE_ARCHIVE_ENTRY_PATH;
+    treeDigest: ClosureDigest;
+  }>;
+  channel: ReleaseChannel;
+  launcher: Readonly<{
+    artifact: ClosureDistributionBlob;
+    entryPath: typeof CLOSURE_LAUNCHER_ENTRY_PATH;
+    treeDigest: ClosureDigest;
+  }>;
+  protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
+  resources: readonly Readonly<{
+    artifact: ClosureDistributionBlob;
+    id: string;
+    title: string;
+    treeDigest: ClosureDigest;
+  }>[];
   schemaVersion: typeof CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION;
-  target: string;
+  shellCompatibility: ClosureShellCompatibility;
+  version: string;
 }>;
 
-export type CreateClosureDistributionContributionOptions = Readonly<{
+export type ClosureDistributionTargetContribution = Readonly<{
+  channel: ReleaseChannel;
+  native: Readonly<{ artifact: ClosureDistributionBlob; treeDigest: ClosureDigest }>;
+  protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
+  runtime: Readonly<{
+    artifact: ClosureDistributionBlob;
+    entryPath: string;
+    treeDigest: ClosureDigest;
+  }>;
+  schemaVersion: typeof CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION;
+  target: string;
+  version: string;
+}>;
+
+export type CreateClosureDistributionSharedContributionOptions = Readonly<{
   blobOrigin: string;
   body: ClosureDistributionArtifactSource;
   channel: ReleaseChannel;
   launcher: ClosureDistributionArtifactSource;
-  native: ClosureDistributionArtifactSource;
   resources: readonly ClosureDistributionResourceSource[];
-  runtime: ClosureDistributionEntrypointSource;
   shellCompatibility: ClosureShellCompatibility;
+  version: string;
+}>;
+
+export type CreateClosureDistributionTargetContributionOptions = Readonly<{
+  blobOrigin: string;
+  channel: ReleaseChannel;
+  native: ClosureDistributionArtifactSource;
+  runtime: ClosureDistributionEntrypointSource;
   target: string;
   version: string;
 }>;
@@ -116,159 +152,155 @@ export function sealClosureDistributionManifest(
   return createClosureDistributionManifest(draft, sha256CanonicalManifest);
 }
 
-/**
- * Inspect one platform job's real component bytes and seal a valid single-target
- * graph. The graph is a build contribution, not a public version manifest; the
- * release aggregation job must merge every target before publication.
- */
-export async function createClosureDistributionTargetContribution(
-  options: CreateClosureDistributionContributionOptions,
-): Promise<ClosureDistributionTargetContribution> {
-  const [launcher, body, runtime, native, ...resources] = await Promise.all([
+/** Inspect the once-built, target-neutral component bytes for one version. */
+export async function createClosureDistributionSharedContribution(
+  options: CreateClosureDistributionSharedContributionOptions,
+): Promise<ClosureDistributionSharedContribution> {
+  const [launcher, body, ...resources] = await Promise.all([
     inspectArtifact(options.launcher, options),
     inspectArtifact(options.body, options),
-    inspectArtifact(options.runtime, options),
-    inspectArtifact(options.native, options),
     ...options.resources.map(async (resource) => await inspectArtifact(resource, options)),
   ]);
-  if (launcher == null || body == null || runtime == null || native == null) {
-    throw new Error("Closure required component inspection returned an incomplete result");
+  if (launcher == null || body == null) {
+    throw new Error("Closure shared component inspection returned an incomplete result");
   }
-  const blobs: Record<string, ClosureDistributionBlob> = {};
-  for (const blob of [launcher, body, runtime, native, ...resources]) insertBlob(blobs, blob);
-  const manifest = sealClosureDistributionManifest({
-    blobs,
-    compatibility: { shell: options.shellCompatibility },
-    identity: {
-      channel: options.channel,
-      protocolVersion: CLOSURE_PROTOCOL_VERSION,
-      version: options.version,
-    },
-    required: {
-      body: { blob: body.digest, entryPath: CLOSURE_ARCHIVE_ENTRY_PATH },
-      launcher: { blob: launcher.digest, entryPath: CLOSURE_LAUNCHER_ENTRY_PATH },
-      targets: {
-        [options.target]: {
-          native: { blob: native.digest },
-          runtime: { blob: runtime.digest, entryPath: options.runtime.entryPath },
-        },
-      },
-    },
-    resources: options.resources.map((resource, index) => {
+  return Object.freeze({
+    body: Object.freeze({
+      artifact: body,
+      entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
+      treeDigest: options.body.treeDigest,
+    }),
+    channel: options.channel,
+    launcher: Object.freeze({
+      artifact: launcher,
+      entryPath: CLOSURE_LAUNCHER_ENTRY_PATH,
+      treeDigest: options.launcher.treeDigest,
+    }),
+    protocolVersion: CLOSURE_PROTOCOL_VERSION,
+    resources: Object.freeze(options.resources.map((resource, index) => {
       const artifact = resources[index];
       if (artifact == null) throw new Error(`Closure resource inspection is missing ${resource.id}`);
-      return { blob: artifact.digest, id: resource.id, title: resource.title };
-    }),
-    schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+      return Object.freeze({
+        artifact,
+        id: resource.id,
+        title: resource.title,
+        treeDigest: resource.treeDigest,
+      });
+    })),
+    schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
+    shellCompatibility: options.shellCompatibility,
+    version: options.version,
   });
-  return {
-    manifest,
+}
+
+/** Inspect only the target-owned runtime/native bytes from one platform job. */
+export async function createClosureDistributionTargetContribution(
+  options: CreateClosureDistributionTargetContributionOptions,
+): Promise<ClosureDistributionTargetContribution> {
+  const [runtime, native] = await Promise.all([
+    inspectArtifact(options.runtime, options),
+    inspectArtifact(options.native, options),
+  ]);
+  return Object.freeze({
+    channel: options.channel,
+    native: Object.freeze({ artifact: native, treeDigest: options.native.treeDigest }),
+    protocolVersion: CLOSURE_PROTOCOL_VERSION,
+    runtime: Object.freeze({
+      artifact: runtime,
+      entryPath: options.runtime.entryPath,
+      treeDigest: options.runtime.treeDigest,
+    }),
     schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
     target: options.target,
-  };
+    version: options.version,
+  });
 }
 
-function sameValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function assertSharedGraph(
-  baseline: ClosureDistributionManifest,
-  candidate: ClosureDistributionManifest,
+function assertContributionIdentity(
+  shared: ClosureDistributionSharedContribution,
+  candidate: ClosureDistributionTargetContribution,
 ): void {
   if (
-    baseline.identity.channel !== candidate.identity.channel
-    || baseline.identity.protocolVersion !== candidate.identity.protocolVersion
-    || baseline.identity.version !== candidate.identity.version
+    shared.channel !== candidate.channel
+    || shared.protocolVersion !== candidate.protocolVersion
+    || shared.version !== candidate.version
   ) {
     throw new Error("Closure target contributions must describe one release identity");
   }
-  if (!sameValue(baseline.compatibility, candidate.compatibility)) {
-    throw new Error("Closure target contributions disagree on Shell compatibility");
-  }
-  if (
-    !sameValue(baseline.required.launcher, candidate.required.launcher)
-    || !sameValue(baseline.required.body, candidate.required.body)
-  ) {
-    throw new Error("Closure target contributions disagree on shared required components");
-  }
-  if (!sameValue(baseline.resources, candidate.resources)) {
-    throw new Error("Closure target contributions disagree on the version resource lock");
-  }
-  for (const digest of [
-    baseline.required.launcher.blob,
-    baseline.required.body.blob,
-    ...baseline.resources.map((resource) => resource.blob),
-  ]) {
-    if (!sameValue(baseline.blobs[digest], candidate.blobs[digest])) {
-      throw new Error(`Closure target contributions disagree on shared blob metadata ${digest}`);
-    }
+}
+
+function assertContributionSchema(value: Readonly<{ schemaVersion: number }>): void {
+  if (value.schemaVersion !== CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION) {
+    throw new Error(`unsupported Closure contribution schema: ${String(value.schemaVersion)}`);
   }
 }
 
-function copyReferencedBlob(
-  result: Record<string, ClosureDistributionBlob>,
-  manifest: ClosureDistributionManifest,
-  digest: ClosureDigest,
-): void {
-  const blob = manifest.blobs[digest];
-  if (blob == null) throw new Error(`Closure contribution references unknown blob ${digest}`);
-  insertBlob(result, blob);
-}
-
-/** Merge sealed platform contributions into the one public version-wide graph. */
+/**
+ * Merge one once-built shared contribution and platform-owned contributions
+ * into the sole public version-wide graph. Shared archives are never rebuilt in
+ * target jobs, so archive-tool metadata cannot create false cross-platform
+ * drift for otherwise identical launcher/body/resource trees.
+ */
 export function mergeClosureDistributionTargetContributions(
+  shared: ClosureDistributionSharedContribution,
   contributions: readonly ClosureDistributionTargetContribution[],
 ): ClosureDistributionManifest {
+  assertContributionSchema(shared);
   if (contributions.length === 0) throw new Error("Closure distribution requires target contributions");
-  const normalized = contributions.map((contribution) => {
-    if (contribution.schemaVersion !== CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION) {
-      throw new Error(`unsupported Closure contribution schema: ${String(contribution.schemaVersion)}`);
-    }
-    const manifest = validateClosureDistributionManifest(contribution.manifest, sha256CanonicalManifest);
-    const targets = Object.keys(manifest.required.targets);
-    if (targets.length !== 1 || targets[0] !== contribution.target) {
-      throw new Error("Closure contribution must contain exactly its declared target");
-    }
-    return { manifest, target: contribution.target };
-  });
-  const baseline = normalized[0]?.manifest;
-  if (baseline == null) throw new Error("Closure distribution contribution normalization failed");
   const blobs: Record<string, ClosureDistributionBlob> = {};
-  const targets: Record<string, ClosureDistributionTarget> = {};
-  for (const contribution of normalized) {
-    assertSharedGraph(baseline, contribution.manifest);
+  const targets: ClosureDistributionManifestDraft["required"]["targets"] = {};
+  for (const artifact of [
+    shared.launcher.artifact,
+    shared.body.artifact,
+    ...shared.resources.map((resource) => resource.artifact),
+  ]) insertBlob(blobs, artifact);
+  for (const contribution of contributions) {
+    assertContributionSchema(contribution);
+    assertContributionIdentity(shared, contribution);
     if (targets[contribution.target] != null) {
       throw new Error(`duplicate Closure target contribution: ${contribution.target}`);
     }
-    const target = contribution.manifest.required.targets[contribution.target];
-    if (target == null) throw new Error(`Closure contribution target is missing: ${contribution.target}`);
-    targets[contribution.target] = target;
-    for (const digest of [target.native.blob, target.runtime.blob]) {
-      copyReferencedBlob(blobs, contribution.manifest, digest);
-    }
-  }
-  for (const digest of [
-    baseline.required.launcher.blob,
-    baseline.required.body.blob,
-    ...baseline.resources.map((resource: ClosureDistributionResource) => resource.blob),
-  ]) {
-    copyReferencedBlob(blobs, baseline, digest);
+    insertBlob(blobs, contribution.native.artifact);
+    insertBlob(blobs, contribution.runtime.artifact);
+    targets[contribution.target] = {
+      native: {
+        blob: contribution.native.artifact.digest,
+        treeDigest: contribution.native.treeDigest,
+      },
+      runtime: {
+        blob: contribution.runtime.artifact.digest,
+        entryPath: contribution.runtime.entryPath,
+        treeDigest: contribution.runtime.treeDigest,
+      },
+    };
   }
   return sealClosureDistributionManifest({
     blobs,
-    compatibility: baseline.compatibility,
+    compatibility: { shell: shared.shellCompatibility },
     identity: {
-      channel: baseline.identity.channel,
-      protocolVersion: baseline.identity.protocolVersion,
-      version: baseline.identity.version,
+      channel: shared.channel,
+      protocolVersion: shared.protocolVersion,
+      version: shared.version,
     },
     required: {
-      body: baseline.required.body,
-      launcher: baseline.required.launcher,
+      body: {
+        blob: shared.body.artifact.digest,
+        entryPath: shared.body.entryPath,
+        treeDigest: shared.body.treeDigest,
+      },
+      launcher: {
+        blob: shared.launcher.artifact.digest,
+        entryPath: shared.launcher.entryPath,
+        treeDigest: shared.launcher.treeDigest,
+      },
       targets,
     },
-    resources: baseline.resources,
+    resources: shared.resources.map((resource) => ({
+      blob: resource.artifact.digest,
+      id: resource.id,
+      title: resource.title,
+      treeDigest: resource.treeDigest,
+    })),
     schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   });
 }

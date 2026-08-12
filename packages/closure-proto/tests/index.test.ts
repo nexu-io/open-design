@@ -14,6 +14,7 @@ import {
   CLOSURE_SIGNATURE_SCHEMA_VERSION,
   ClosureProtocolError,
   bindClosureCandidateIdentity,
+  createClosureComponentTreeDigest,
   createClosureDistributionManifest,
   resolveClosureDistributionTarget,
   serializeClosureCandidateManifestForSigning,
@@ -96,19 +97,29 @@ const distributionDraft: ClosureDistributionManifestDraft = {
     body: {
       blob: distributionDigests.body,
       entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
+      treeDigest: distributionDigests.body,
     },
     launcher: {
       blob: distributionDigests.launcher,
       entryPath: CLOSURE_LAUNCHER_ENTRY_PATH,
+      treeDigest: distributionDigests.launcher,
     },
     targets: {
       "win32-x64": {
-        native: { blob: distributionDigests.nativeWin },
-        runtime: { blob: distributionDigests.runtimeWin, entryPath: "node.exe" },
+        native: { blob: distributionDigests.nativeWin, treeDigest: distributionDigests.nativeWin },
+        runtime: {
+          blob: distributionDigests.runtimeWin,
+          entryPath: "node.exe",
+          treeDigest: distributionDigests.runtimeWin,
+        },
       },
       "darwin-arm64": {
-        native: { blob: distributionDigests.nativeMac },
-        runtime: { blob: distributionDigests.runtimeMac, entryPath: "bin/node" },
+        native: { blob: distributionDigests.nativeMac, treeDigest: distributionDigests.nativeMac },
+        runtime: {
+          blob: distributionDigests.runtimeMac,
+          entryPath: "bin/node",
+          treeDigest: distributionDigests.runtimeMac,
+        },
       },
     },
   },
@@ -116,6 +127,7 @@ const distributionDraft: ClosureDistributionManifestDraft = {
     blob: distributionDigests.resource,
     id: "design-system-core",
     title: "Open Design Core",
+    treeDigest: distributionDigests.resource,
   }],
   schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
 };
@@ -266,6 +278,8 @@ describe("closure file inventory", () => {
 
   it("validates a sorted, namespace-neutral payload inventory", () => {
     expect(validateClosureFileInventory(inventory)).toEqual(inventory);
+    expect(createClosureComponentTreeDigest(inventory.files, digestCanonical))
+      .toMatch(/^sha256:[0-9a-f]{64}$/u);
   });
 
   it.each([
@@ -284,6 +298,7 @@ describe("closure file inventory", () => {
       ...inventory,
       files: [...inventory.files].reverse(),
     })).toThrow(/strictly sorted/u);
+    expect(() => createClosureComponentTreeDigest([], digestCanonical)).toThrow(/non-empty/u);
   });
 });
 

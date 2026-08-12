@@ -12,6 +12,7 @@ import {
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
   bindClosureCandidateIdentity,
+  createClosureComponentTreeDigest,
   createClosureDistributionManifest,
   type ClosureBindingIdentity,
   type ClosureCandidateManifest,
@@ -31,6 +32,7 @@ import {
   verifyMaterializedClosureCandidate,
   verifyMaterializedClosureDistributionGeneration,
   verifyStoredClosureCandidate,
+  verifyStoredClosureDistributionGeneration,
   type ClosureStorePaths,
 } from "../src/index.js";
 
@@ -122,6 +124,18 @@ async function materializeDistributionGeneration(
   const artifacts = Object.fromEntries(
     Object.entries(sources).map(([name, bytes]) => [name, blob(bytes)]),
   ) as Record<keyof typeof sources, ClosureDistributionBlob>;
+  const tree = (path: string, contents: string) => createClosureComponentTreeDigest([{
+    digest: digest(contents),
+    path,
+    size: Buffer.byteLength(contents),
+  }], digest);
+  const trees = {
+    body: tree("bootloader.mjs", "export const body = true;\n"),
+    launcher: tree("launcher.mjs", "export const launcher = true;\n"),
+    native: tree("addon.node", "native\n"),
+    resource: tree("skills/sample/SKILL.md", "resource\n"),
+    runtime: tree("bin/node", "node\n"),
+  };
   const manifest = createClosureDistributionManifest({
     blobs: Object.fromEntries(Object.values(artifacts).map((artifact) => [artifact.digest, artifact])),
     compatibility: { shell: { electron: { version: { min: "0.19.0" } } } },
@@ -131,16 +145,29 @@ async function materializeDistributionGeneration(
       version: "0.19.0-beta.10",
     },
     required: {
-      body: { blob: artifacts.body.digest, entryPath: "bootloader.mjs" },
-      launcher: { blob: artifacts.launcher.digest, entryPath: "launcher.mjs" },
+      body: { blob: artifacts.body.digest, entryPath: "bootloader.mjs", treeDigest: trees.body },
+      launcher: {
+        blob: artifacts.launcher.digest,
+        entryPath: "launcher.mjs",
+        treeDigest: trees.launcher,
+      },
       targets: {
         "darwin-arm64": {
-          native: { blob: artifacts.native.digest },
-          runtime: { blob: artifacts.runtime.digest, entryPath: "bin/node" },
+          native: { blob: artifacts.native.digest, treeDigest: trees.native },
+          runtime: {
+            blob: artifacts.runtime.digest,
+            entryPath: "bin/node",
+            treeDigest: trees.runtime,
+          },
         },
       },
     },
-    resources: [{ blob: artifacts.resource.digest, id: "skills", title: "Skills" }],
+    resources: [{
+      blob: artifacts.resource.digest,
+      id: "skills",
+      title: "Skills",
+      treeDigest: trees.resource,
+    }],
     schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   }, digest);
   const plan = planClosureDistributionGeneration(paths, generation, manifest, "darwin-arm64");
@@ -189,7 +216,7 @@ describe("layered Closure distribution consumer", () => {
 
     expect(consumed.manifest.identity).toMatchObject({
       channel: "beta",
-      digest: "sha256:26da5882716a574c67d2dbcf487488cfcb09ea78a4bc0c3d33c95ead30d132f8",
+      digest: "sha256:340d0a042f17cda52f172c1fcdcba02670e15a022d121fa46d0809542344d81a",
       version: "0.19.0-beta.10",
     });
     expect(consumed.target.required.runtime.entryPath).toBe("node.exe");
@@ -289,6 +316,36 @@ describe("layered Closure generation commit", () => {
     expect(await stat(staged.stageRoot).catch(() => null)).toBeNull();
     expect(await stat(staged.plan.resources[0]!.blobPath).catch(() => null)).toBeNull();
     expect(await readClosureBindingDescriptor(paths)).toEqual(result.descriptor);
+
+    const stored = await verifyStoredClosureDistributionGeneration(
+      paths,
+      result.committed.standalone,
+    );
+    expect(stored.materializedRoot).toBe(staged.plan.generationRoot);
+    expect(stored.plan.required.runtime.resolvedEntryPath).toBe(
+      join(staged.plan.generationRoot, "runtime", "bin", "node"),
+    );
+  });
+
+  it("rejects a committed v2 pointer whose immutable generation drifted", async () => {
+    const paths = await createStore();
+    const staged = await materializeDistributionGeneration(paths, 0);
+    const verification = await verifyMaterializedClosureDistributionGeneration(
+      paths,
+      staged.plan,
+      staged.stageRoot,
+    );
+    const result = await commitVerifiedClosureDistributionGeneration(
+      paths,
+      verification,
+      "0.19.0-beta.10",
+    );
+    await writeFile(staged.plan.required.runtime.resolvedEntryPath, "tampered-node");
+
+    await expect(verifyStoredClosureDistributionGeneration(
+      paths,
+      result.committed.standalone,
+    )).rejects.toThrow(/runtime/u);
   });
 
   it("fails closed before rename when a required CAS blob or view shape drifts", async () => {

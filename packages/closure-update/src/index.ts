@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  chmod,
   mkdir,
   readFile,
   rename,
@@ -709,6 +710,9 @@ async function stageClosureDistributionGeneration(input: {
       await mkdir(componentRoot, { recursive: true });
       await extractZip(component.blobPath, { dir: componentRoot });
     }));
+    if (process.platform !== "win32") {
+      await chmod(join(stageRoot, "runtime", plan.required.runtime.entryPath), 0o700);
+    }
     await writeFile(
       join(stageRoot, "closure.json"),
       `${JSON.stringify(plan.manifest, null, 2)}\n`,

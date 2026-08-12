@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -10,6 +10,7 @@ import {
   CLOSURE_INVENTORY_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
+  createClosureComponentTreeDigest,
   createClosureDistributionManifest,
   type ClosureCandidateManifest,
   type ClosureDistributionBlob,
@@ -235,6 +236,18 @@ async function downloadableDistribution(): Promise<{
   const artifacts = Object.fromEntries(
     Object.entries(archives).map(([name, bytes]) => [name, artifact(bytes)]),
   ) as Record<keyof typeof archives, ClosureDistributionBlob>;
+  const tree = (path: string, contents: string) => createClosureComponentTreeDigest([{
+    digest: digest(contents),
+    path,
+    size: Buffer.byteLength(contents),
+  }], digest);
+  const trees = {
+    body: tree("bootloader.mjs", "export const body = true;\n"),
+    launcher: tree("launcher.mjs", "export const launcher = true;\n"),
+    native: tree("addon.node", "native\n"),
+    resource: tree("skills/SKILL.md", "# Skill\n"),
+    runtime: tree("bin/node", "node\n"),
+  };
   const manifest = createClosureDistributionManifest({
     blobs: Object.fromEntries(Object.values(artifacts).map((value) => [value.digest, value])),
     compatibility: { shell: { electron: { version: { min: "0.19.0" } } } },
@@ -244,16 +257,29 @@ async function downloadableDistribution(): Promise<{
       version: "0.19.0-beta.10",
     },
     required: {
-      body: { blob: artifacts.body.digest, entryPath: "bootloader.mjs" },
-      launcher: { blob: artifacts.launcher.digest, entryPath: "launcher.mjs" },
+      body: { blob: artifacts.body.digest, entryPath: "bootloader.mjs", treeDigest: trees.body },
+      launcher: {
+        blob: artifacts.launcher.digest,
+        entryPath: "launcher.mjs",
+        treeDigest: trees.launcher,
+      },
       targets: {
         "darwin-arm64": {
-          native: { blob: artifacts.native.digest },
-          runtime: { blob: artifacts.runtime.digest, entryPath: "bin/node" },
+          native: { blob: artifacts.native.digest, treeDigest: trees.native },
+          runtime: {
+            blob: artifacts.runtime.digest,
+            entryPath: "bin/node",
+            treeDigest: trees.runtime,
+          },
         },
       },
     },
-    resources: [{ blob: artifacts.resource.digest, id: "skills", title: "Skills" }],
+    resources: [{
+      blob: artifacts.resource.digest,
+      id: "skills",
+      title: "Skills",
+      treeDigest: trees.resource,
+    }],
     schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   }, digest);
   const bytesByUrl = new Map(Object.entries(archives).map(([name, bytes]) => [
@@ -489,6 +515,10 @@ describe("layered Closure distribution application", () => {
       .toContain("launcher = true");
     expect(await readFile(join(generationRoot, "runtime", "bin", "node"), "utf8"))
       .toContain("node");
+    if (process.platform !== "win32") {
+      expect((await stat(join(generationRoot, "runtime", "bin", "node"))).mode & 0o700)
+        .toBe(0o700);
+    }
     expect(vi.mocked(fixture.fetch).mock.calls.map(([input]) => String(input)))
       .not.toContain(fixture.resourceUrl);
     expect(vi.mocked(fixture.fetch)).toHaveBeenCalledTimes(4);

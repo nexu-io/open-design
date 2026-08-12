@@ -56,34 +56,40 @@
     "channel": "beta",
     "protocolVersion": 1,
     "version": "0.19.0-beta.10",
-    "digest": "sha256:26da5882716a574c67d2dbcf487488cfcb09ea78a4bc0c3d33c95ead30d132f8"
+    "digest": "sha256:340d0a042f17cda52f172c1fcdcba02670e15a022d121fa46d0809542344d81a"
   },
   "required": {
     "body": {
       "blob": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "entryPath": "bootloader.mjs"
+      "entryPath": "bootloader.mjs",
+      "treeDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     },
     "launcher": {
       "blob": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      "entryPath": "launcher.mjs"
+      "entryPath": "launcher.mjs",
+      "treeDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
     "targets": {
       "darwin-arm64": {
         "native": {
-          "blob": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+          "blob": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "treeDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         },
         "runtime": {
           "blob": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
-          "entryPath": "bin/node"
+          "entryPath": "bin/node",
+          "treeDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
         }
       },
       "win32-x64": {
         "native": {
-          "blob": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+          "blob": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "treeDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
         },
         "runtime": {
           "blob": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
-          "entryPath": "node.exe"
+          "entryPath": "node.exe",
+          "treeDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
         }
       }
     }
@@ -92,7 +98,8 @@
     {
       "blob": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       "id": "design-system-core",
-      "title": "Open Design Core"
+      "title": "Open Design Core",
+      "treeDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     }
   ],
   "schemaVersion": 2
