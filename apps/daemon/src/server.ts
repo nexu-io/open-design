@@ -11367,12 +11367,30 @@ export async function startServer({
 
     let child;
     let acpSession = null;
-    const acpResumeFailed = () =>
+    const acpSessionResumeFailed = () =>
       typeof acpSession?.resumeFailed === 'function' && acpSession.resumeFailed();
     let writePromptToChildStdin = false;
     let spawnedAgentEnv = null;
     let agentStdoutTail = '';
     let agentStderrTail = '';
+    const agentResumeFailed = () => {
+      if (def.resumesSessionViaAcpLoad === true) {
+        // Standard ACP adapters have an authoritative JSON-RPC session/load
+        // result. Do not let generic stderr phrases fall through to the legacy
+        // Claude detector and clear a valid durable session. AMR predates the
+        // negotiated loadSession contract and can still report its established
+        // structured resume_failed marker on the prompt response.
+        return (
+          acpSessionResumeFailed() ||
+          (def.id === 'amr' &&
+            isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail))
+        );
+      }
+      return (
+        def.resumesSessionViaCli === true &&
+        isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
+      );
+    };
     const agentStderrFilter = createAgentStderrVisibilityFilter(agentId);
     const emitVisibleAgentStderr = (chunk: unknown) => {
       const visibleChunk = agentStderrFilter.write(chunk);
@@ -12230,7 +12248,7 @@ export async function startServer({
             (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
             agentResumeCtx.isResuming &&
             !run.resumeAutoReseeded &&
-            (acpResumeFailed() || isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail))
+            agentResumeFailed()
           ) {
             design.runs.emit(run, 'diagnostic', {
               type: 'agent_resume_failed_suppressed',
@@ -12470,7 +12488,7 @@ export async function startServer({
             agentResumeCtx.isResuming &&
             agentResumeCtx.resumeSessionId &&
             !run.resumeAutoReseeded &&
-            (acpResumeFailed() || isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail))
+            agentResumeFailed()
           ) {
             design.runs.emit(run, 'diagnostic', {
               type: 'agent_resume_failed_suppressed',
@@ -12618,7 +12636,7 @@ export async function startServer({
         (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
         agentResumeCtx.isResuming &&
         run.conversationId &&
-        (acpResumeFailed() || isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail))
+        agentResumeFailed()
       ) {
         // The resumed upstream session is gone (expired / pruned). Clear the dead
         // handle and TRANSPARENTLY re-run this same turn with a fresh session +
