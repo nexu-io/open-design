@@ -58,6 +58,7 @@ const bakePreviewsReleaseWorkflowPath = join(
 const finalizeReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "finalize-release.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
+const packagedMacSpecPath = join(e2eRoot, "specs", "mac.spec.ts");
 const dailyBetaRecoveryScriptPath = join(
   workspaceRoot,
   ".github",
@@ -1752,6 +1753,7 @@ process.stdin.on("end", () => {
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: win_x64");
     expect(releaseBetaWorkflow).toContain("RELEASE_TARGET: mac_x64");
     const betaMacArm64Job = sectionBetween(releaseBetaWorkflow, "  build_mac_arm64:", "  build_mac_x64:");
+    const betaMacX64Job = sectionBetween(releaseBetaWorkflow, "  build_mac_x64:", "  build_win_x64:");
     expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v3");
     expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles(");
     expect(betaMacArm64Job.match(/hashFiles\('\.github\/workflows\/release-beta\.yml'/gu)).toHaveLength(2);
@@ -1774,6 +1776,7 @@ process.stdin.on("end", () => {
     expect(betaMacArm64Job).toContain("Register mac_arm64 Electron Shell full-smoke proof");
     expect(betaMacArm64Job).toContain("run: pnpm exec tools-release register-shell-smoke");
     expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.json");
+    expect(betaMacX64Job).toContain("OD_PACKAGED_E2E_SHELL_VERSION: ${{ needs.metadata.outputs.shell_version }}");
     const betaWinJob = sectionBetween(releaseBetaWorkflow, "  build_win_x64:", "  publish:");
     expect(betaWinJob).not.toContain("tools\\release\\scripts\\build-platform.ps1");
     expect(betaWinJob).toContain("uses: actions/cache/restore@v5");
@@ -2748,7 +2751,8 @@ process.stdin.on("end", () => {
     expect(winJob).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: target");
     expect(winJob).toContain("needs.metadata.outputs.closure_version");
     expect(winJob).toContain("OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH:");
-    expect(winJob).toContain("OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON:");
+    expect(winJob).toContain("$env:OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON = @(");
+    expect(winJob).toContain(") | ConvertTo-Json -Compress");
     expect(winJob).toContain('RELEASE_CLOSURE_ENABLED: "false"');
     expect(winJob).toContain('RELEASE_SHELL_ENABLED: "true"');
     expect(winJob).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
@@ -2790,7 +2794,10 @@ process.stdin.on("end", () => {
   });
 
   it("publishes release-betas mac_x64 payloads while preserving the zip feed", async () => {
-    const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
+    const [workflow, macSpec] = await Promise.all([
+      readFile(releaseBetaWorkflowPath, "utf8"),
+      readFile(packagedMacSpecPath, "utf8"),
+    ]);
     const macX64Job = sectionBetween(workflow, "  build_mac_x64:", "  build_win_x64:");
     const prepareStep = sectionBetween(macX64Job, "      - name: Prepare mac_x64 assets", "      - name: Publish mac_x64 platform");
     const publishStep = sectionBetween(macX64Job, "      - name: Publish mac_x64 platform", "      - name: Upload mac_x64 publish manifest");
@@ -2798,6 +2805,9 @@ process.stdin.on("end", () => {
 
     expect(prepareStep).toContain(artifactMode);
     expect(publishStep).toContain(artifactMode);
+    expect(macSpec).toContain("const packagedMacClosureTarget = process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64';");
+    expect(macSpec).toContain("expectedPlatform: packagedMacClosureTarget");
+    expect(macSpec).not.toContain("expectedPlatform: 'darwin-arm64'");
   });
 
   it("keeps the self-hosted beta lane metadata-driven with reusable platform publish scripts", async () => {

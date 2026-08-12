@@ -1411,6 +1411,7 @@ jobs:
           OD_PACKAGED_E2E_NAMESPACE: release-beta-x64
           OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
           OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
+          OD_PACKAGED_E2E_SHELL_VERSION: ${{ needs.metadata.outputs.shell_version }}
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts

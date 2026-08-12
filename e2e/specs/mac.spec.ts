@@ -54,6 +54,7 @@ const releaseVersion = process.env.OD_PACKAGED_E2E_RELEASE_VERSION;
 const shellVersion = process.env.OD_PACKAGED_E2E_SHELL_VERSION;
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion, shellVersion });
 const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
+const packagedMacClosureTarget = process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64';
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
 const smokeProfile = resolvePackagedSmokeProfile(process.env.OD_PACKAGED_E2E_MAC_SMOKE_PROFILE);
 const smokeLanes = resolvePackagedSmokeLanes(
@@ -414,7 +415,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
             ? await readPackagedClosureBuildFixture({
                 buildJsonPath: closureBuildJsonPath!,
                 channel: updateScenario.channel,
-                expectedPlatform: 'darwin-arm64',
+                expectedPlatform: packagedMacClosureTarget,
                 workspaceRoot,
               })
             : null;
@@ -465,7 +466,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         closureAcceptance = await readCommittedPackagedClosureFixture({
           buildJsonPath: closureBuildJsonPath!,
           channel: updateScenario.channel,
-          expectedPlatform: 'darwin-arm64',
+          expectedPlatform: packagedMacClosureTarget,
           installationRoot: join(toolsPackDir, 'runtime', 'mac'),
           namespace,
           workspaceRoot,
@@ -786,7 +787,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         closureAcceptance = await seedPackagedClosureFixture({
           buildJsonPath: closureBuildJsonPath!,
           channel: updateScenario.channel,
-          expectedPlatform: 'darwin-arm64',
+          expectedPlatform: packagedMacClosureTarget,
           installationRoot: join(toolsPackDir, 'runtime', 'mac'),
           namespace,
           workspaceRoot,
@@ -1157,7 +1158,7 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       const closureBuild = await readPackagedClosureBuildFixture({
         buildJsonPath: closureBuildJsonPath!,
         channel: updateScenario.channel,
-        expectedPlatform: 'darwin-arm64',
+        expectedPlatform: packagedMacClosureTarget,
         workspaceRoot,
       });
       closureFixture = await startToolsServeUpdaterFixture({
@@ -1182,7 +1183,7 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       const fixture = await readCommittedPackagedClosureFixture({
         buildJsonPath: closureBuildJsonPath!,
         channel: updateScenario.channel,
-        expectedPlatform: 'darwin-arm64',
+        expectedPlatform: packagedMacClosureTarget,
         installationRoot,
         namespace,
         workspaceRoot,
@@ -1217,7 +1218,7 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       const recovered = await seedPackagedClosureFixture({
         buildJsonPath: closureBuildJsonPath!,
         channel: updateScenario.channel,
-        expectedPlatform: 'darwin-arm64',
+        expectedPlatform: packagedMacClosureTarget,
         installationRoot,
         namespace,
         workspaceRoot,
@@ -3061,7 +3062,7 @@ async function seedConfiguredPackagedClosure(): Promise<PackagedStandaloneDistri
       releaseVersion: version,
       shellType: 'electron',
       shellVersion: shellVersion ?? version,
-      target: process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64',
+      target: packagedMacClosureTarget,
       workspaceRoot,
     });
   }
@@ -3069,7 +3070,7 @@ async function seedConfiguredPackagedClosure(): Promise<PackagedStandaloneDistri
   await seedPackagedClosureFixture({
     buildJsonPath: closureBuildJsonPath,
     channel: updateScenario.channel,
-    expectedPlatform: 'darwin-arm64',
+    expectedPlatform: packagedMacClosureTarget,
     installationRoot: join(toolsPackDir, 'runtime', 'mac'),
     namespace,
     workspaceRoot,
@@ -3144,7 +3145,7 @@ async function readConfiguredPackagedStandaloneDistribution(): Promise<PackagedS
     manifestPath: closureDistributionManifestPath,
     namespace,
     releaseVersion: version,
-    target: process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64',
+    target: packagedMacClosureTarget,
     workspaceRoot,
   });
 }
