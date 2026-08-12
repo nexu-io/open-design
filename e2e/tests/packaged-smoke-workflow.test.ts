@@ -2818,7 +2818,8 @@ process.stdin.on("end", () => {
     expect(macSpec).toContain("expectedPlatform: packagedMacClosureTarget");
     expect(macSpec).not.toContain("expectedPlatform: 'darwin-arm64'");
     expect(macSpec).toContain("forceNewInstance: true");
-    expect(macSpec).toContain("...(options.forceNewInstance ? ['-n'] : [])");
+    expect(macSpec).toContain("['-n', '-a', installedAppPath]");
+    expect(macSpec).toContain("['-a', installedAppPath, packagedInviteDeeplink]");
   });
 
   it("keeps the self-hosted beta lane metadata-driven with reusable platform publish scripts", async () => {

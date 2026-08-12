@@ -3023,16 +3023,14 @@ async function invokeMacInviteDeeplink(
 ): Promise<void> {
   // `-a` pins delivery to this namespace's installed test bundle instead of a
   // developer's stable Open Design app that may own the same global scheme.
-  // After an explicit lifecycle stop, LaunchServices can retain a terminated
-  // application record and accept the URL without spawning a replacement.
-  // `-n` makes the cold-start contract deterministic while the hot path above
-  // deliberately keeps exercising delivery to the existing process.
-  await execFileAsync('/usr/bin/open', [
-    ...(options.forceNewInstance ? ['-n'] : []),
-    '-a',
-    installedAppPath,
-    packagedInviteDeeplink,
-  ]);
+  // After an explicit lifecycle stop, LaunchServices on CI can accept a URL
+  // for a terminated app record without spawning its temporary test bundle.
+  // Keep the two OS contracts observable: first cold-activate the exact app,
+  // then deliver the URL through the same protocol route used by the hot path.
+  if (options.forceNewInstance) {
+    await execFileAsync('/usr/bin/open', ['-n', '-a', installedAppPath]);
+  }
+  await execFileAsync('/usr/bin/open', ['-a', installedAppPath, packagedInviteDeeplink]);
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
