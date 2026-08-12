@@ -23,6 +23,11 @@ on:
         required: true
         type: boolean
         default: true
+      promote:
+        description: "Promote this build to beta/latest after publishing versioned platform artifacts."
+        required: true
+        type: boolean
+        default: true
       force:
         description: "Allow a beta build whose base version is not greater than the current stable/beta feed."
         required: true

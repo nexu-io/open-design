@@ -2135,6 +2135,9 @@ process.stdin.on("end", () => {
     expect(metadataJob).toContain("branch: ${{ steps.identity.outputs.branch }}");
     expect(metadataJob).toContain("commit: ${{ steps.identity.outputs.commit }}");
     expect(metadataJob).toContain("promote: ${{ inputs.promote }}");
+    const manualDispatch = sectionBetween(betaWorkflow, "  workflow_dispatch:", "  workflow_call:");
+    expect(manualDispatch).toContain("      promote:");
+    expect(manualDispatch).toContain("        default: true");
     expect(betaWorkflow).toContain("value: ${{ jobs.build_mac_arm64.outputs.smoke_result }}");
     expect(betaWorkflow).toContain("value: ${{ jobs.build_win_x64.outputs.smoke_result }}");
     expect(betaWorkflow).toContain(
