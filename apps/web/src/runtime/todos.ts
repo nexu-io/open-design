@@ -9,6 +9,18 @@ export interface TodoItem {
   activeForm?: string;
 }
 
+function jsonArrayFromString(value: unknown): unknown[] | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('[')) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function parseTodoWriteInput(input: unknown): TodoItem[] {
   if (!input || typeof input !== 'object') return [];
   const obj = input as { plan?: unknown; todos?: unknown };
@@ -16,7 +28,9 @@ export function parseTodoWriteInput(input: unknown): TodoItem[] {
     ? obj.todos
     : Array.isArray(obj.plan)
       ? obj.plan
-      : [];
+      // Mirrors todoItemsFromToolInput in packages/contracts: some runs encode
+      // the list as a JSON string, which would otherwise render an empty card.
+      : (jsonArrayFromString(obj.todos) ?? jsonArrayFromString(obj.plan) ?? []);
   return rawItems
     .map((todo): TodoItem | null => {
       if (!todo || typeof todo !== 'object') return null;

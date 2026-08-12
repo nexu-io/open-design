@@ -61,7 +61,23 @@ function todoItemsFromToolInput(input: unknown): unknown {
   const record = input as { todos?: unknown; plan?: unknown };
   if (Array.isArray(record.todos)) return record.todos;
   if (Array.isArray(record.plan)) return record.plan;
-  return undefined;
+  // Some runs emit the list as a JSON *string* rather than an array
+  // (`{"todos":"[{\"content\":…}]"}`). Dropping those silently costs the Todos
+  // card AND makes eventsEndedWithUnfinishedWork() read a run with open work as
+  // Completed, so accept the encoded form too.
+  return jsonArrayFromString(record.todos) ?? jsonArrayFromString(record.plan);
+}
+
+function jsonArrayFromString(value: unknown): unknown[] | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('[')) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(trimmed);
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined; // a partial or malformed payload stays dropped, as before
+  }
 }
 
 /** TodoWrite surfaces under several tool aliases across runtimes. Mirrors
