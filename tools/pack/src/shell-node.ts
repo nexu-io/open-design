@@ -52,6 +52,9 @@ export async function copyStandaloneBootstrapSeed(options: Readonly<{
   }
   await writeFile(join(targetRoot, "repository.json"), `${JSON.stringify({
     localSeeds: [{ root: "seed" }],
+    // Remote discovery is selected from release metadata supplied by the
+    // launcher descriptor. Component bytes remain content-addressed URLs in
+    // that graph; the Shell never owns or interprets an origin.
     remoteOrigins: [],
     schemaVersion: 1,
   }, null, 2)}\n`, "utf8");

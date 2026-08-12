@@ -22,6 +22,12 @@ import {
 } from '@/vitest/packaged-app-shell';
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import {
+  commitPackagedStandaloneDistributionFixture,
+  damagePackagedStandaloneDistributionFixture,
+  readPackagedStandaloneDistributionBinding,
+  type PackagedStandaloneDistributionFixture,
+} from '@/vitest/standalone-distribution-fixture';
+import {
   hasPackagedSmokeLane,
   resolvePackagedSmokeLanes,
   WIN_PACKAGED_SMOKE_SCENARIOS,
@@ -81,6 +87,10 @@ const intermediateUpdateBuildJsonPath = normalizeOptionalEnv(
 );
 const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE);
 const closureBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH);
+const closureDistributionManifestPath = normalizeOptionalEnv(
+  process.env.OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH,
+);
+const closureBlobRoots = parsePathListEnv(process.env.OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON);
 const legacyInstallerPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_LEGACY_INSTALLER_PATH);
 const legacyVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_LEGACY_VERSION);
 const minimumShellVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_WIN_MIN_SHELL_VERSION);
@@ -532,7 +542,7 @@ const shellAbsorbsStandaloneAcceptance = hasPackagedSmokeLane(smokeLanes, 'shell
   && closureBuildJsonPath != null;
 const winClosureDescribe = shouldRunPackagedWinSmoke
   && hasPackagedSmokeLane(smokeLanes, 'standalone')
-  && closureBuildJsonPath != null
+  && (closureDistributionManifestPath != null || closureBuildJsonPath != null)
   && !shellAbsorbsStandaloneAcceptance
   ? describe
   : describe.skip;
@@ -1426,6 +1436,10 @@ winProtocolDebugDescribe('packaged windows invite protocol debug', () => {
 
 winClosureDescribe('packaged Windows Standalone Closure release acceptance', () => {
   test(WIN_PACKAGED_SMOKE_SCENARIOS.standaloneClosure.title, async () => {
+    if (closureDistributionManifestPath != null) {
+      await runWinStandaloneDistributionAcceptance();
+      return;
+    }
     const installationRoot = join(toolsPackDir, 'runtime', 'win');
     let installed = false;
     let started = false;
@@ -1536,10 +1550,6 @@ winLegacyMigrationDescribe('packaged Windows historical outer migration acceptan
       'OD_PACKAGED_E2E_RELEASE_VERSION',
       releaseVersion,
     );
-    const buildJsonPath = requireMigrationInput(
-      'OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH',
-      closureBuildJsonPath,
-    );
     const installationRoot = join(toolsPackDir, 'runtime', 'win');
     const installDir = join(runtimeNamespaceRoot, 'install', 'Open Design');
     let installed = false;
@@ -1562,20 +1572,12 @@ winLegacyMigrationDescribe('packaged Windows historical outer migration acceptan
       await seedPackagedOnboardingComplete();
 
       const currentInstallerPath = await resolveMainBuildInstallerPath();
-      const closureBuild = await readPackagedClosureBuildFixture({
-        buildJsonPath,
-        channel: updateScenario.channel,
-        expectedPlatform: 'win32-x64',
-        workspaceRoot,
-      });
       migrationFixture = await startToolsServeUpdaterFixture({
         artifactPath: currentInstallerPath,
         channel: updateScenario.channel,
-        closureManifestPath: closureBuild.manifestPath,
         controlLauncherVersionMin: requiredShellVersion,
         controlLauncherVersionUrl: 'https://open-design.ai/download',
         platform: 'win',
-        rebaseClosureUrl: true,
         version: targetReleaseVersion,
         workspaceRoot,
       });
@@ -1604,6 +1606,10 @@ winLegacyMigrationDescribe('packaged Windows historical outer migration acceptan
         throw new Error(`legacy Windows project seed eval failed: ${formatUnknown(seedInspect)}`);
       }
       const seeded = assertUpgradePersistenceSeed(seedInspect.eval.value);
+      // The old packaged process only exercises updater/minVersion behavior.
+      // Seed the new v2 Store before the installer launches the new Shell; no
+      // v1 Closure is projected into the transition fixture.
+      const committedDistribution = await seedConfiguredPackagedClosure();
 
       const migration = await runInstallerFallbackAcceptance({
         expectedCurrentVersion: legacyFixtureVersion,
@@ -1622,18 +1628,12 @@ winLegacyMigrationDescribe('packaged Windows historical outer migration acceptan
       expect(migration.coldStart.start.pid).not.toBe(legacyStart.pid);
       await assertWindowsInviteProtocolRegistration(installDir);
 
-      const committedClosure = await readCommittedPackagedClosureFixture({
-        buildJsonPath,
-        channel: updateScenario.channel,
-        expectedPlatform: 'win32-x64',
-        installationRoot,
-        namespace,
-        workspaceRoot,
-      });
-      assertClosureDesktopIdentity(
-        await readDesktopIdentityMarker(),
-        committedClosure.manifest.identity.version,
-      );
+      if (committedDistribution != null) {
+        assertClosureDesktopIdentity(
+          await readDesktopIdentityMarker(),
+          committedDistribution.manifest.identity.version,
+        );
+      }
       const coldPptx = assertPptxExportEvalValue((await runToolsPackJson<WinInspectResult>(
         'inspect',
         ['--expr', existingProjectPptxExportExpression(seeded.projectId)],
@@ -1641,7 +1641,7 @@ winLegacyMigrationDescribe('packaged Windows historical outer migration acceptan
       expect(coldPptx.projectId).toBe(seeded.projectId);
 
       await report.report.json('historical-outer-migration.json', {
-        closure: committedClosure.pointer,
+        closure: committedDistribution?.pointer ?? null,
         coldPptx,
         legacyHealth,
         migration,
@@ -3261,8 +3261,24 @@ async function seedNativePackagedOnboardingComplete(): Promise<void> {
  * the local Store before the first Shell boot; every later restart/update in
  * the scenario must reuse the committed binding without further test help.
  */
-async function seedConfiguredPackagedClosure(): Promise<void> {
-  if (closureBuildJsonPath == null) return;
+async function seedConfiguredPackagedClosure(): Promise<PackagedStandaloneDistributionFixture | null> {
+  if (closureDistributionManifestPath != null) {
+    const version = releaseVersion ?? shellVersion;
+    if (version == null) throw new Error('Standalone distribution fixture requires a release version');
+    return await commitPackagedStandaloneDistributionFixture({
+      blobRoots: closureBlobRoots,
+      channel: updateScenario.channel,
+      installationRoot: join(toolsPackDir, 'runtime', 'win'),
+      manifestPath: closureDistributionManifestPath,
+      namespace,
+      releaseVersion: version,
+      shellType: 'electron',
+      shellVersion: shellVersion ?? version,
+      target: 'win32-x64',
+      workspaceRoot,
+    });
+  }
+  if (closureBuildJsonPath == null) return null;
   await seedPackagedClosureFixture({
     buildJsonPath: closureBuildJsonPath,
     channel: updateScenario.channel,
@@ -3271,6 +3287,69 @@ async function seedConfiguredPackagedClosure(): Promise<void> {
     namespace,
     workspaceRoot,
   });
+  return null;
+}
+
+async function runWinStandaloneDistributionAcceptance(): Promise<void> {
+  const installationRoot = join(toolsPackDir, 'runtime', 'win');
+  let installed = false;
+  let started = false;
+  try {
+    await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => null);
+    await resetPackagedUpdaterNamespaceRoots();
+    await runToolsPackJson<WinInstallResult>('install');
+    installed = true;
+    await seedPackagedOnboardingComplete();
+    const fixture = await seedConfiguredPackagedClosure();
+    if (fixture == null) throw new Error('Standalone distribution fixture was not configured');
+    const first = await runToolsPackJson<WinStartResult>('start');
+    started = true;
+    await waitForHealthyDesktop();
+    assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+
+    await runToolsPackJson<WinStopResult>('stop');
+    started = false;
+    await runToolsPackJson<WinInstallResult>('install');
+    const restarted = await runToolsPackJson<WinStartResult>('start');
+    started = true;
+    expect(restarted.pid).not.toBe(first.pid);
+    await waitForHealthyDesktop();
+    assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+
+    await runToolsPackJson<WinStopResult>('stop');
+    started = false;
+    await damagePackagedStandaloneDistributionFixture(fixture);
+    const broken = await runToolsPackJson<WinStartResult>('start');
+    expect(broken.status).toBeNull();
+    await waitForDesktopGone('damaged Standalone generation never became the desktop');
+    expect((await readPackagedStandaloneDistributionBinding(fixture)).committed?.standalone).toEqual(fixture.pointer);
+
+    await rm(fixture.storePaths.namespaceRoot, { force: true, recursive: true });
+    const recovered = await seedConfiguredPackagedClosure();
+    if (recovered == null) throw new Error('Standalone distribution recovery fixture was not configured');
+    await runToolsPackJson<WinStartResult>('start');
+    started = true;
+    await waitForHealthyDesktop();
+    assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
+  } finally {
+    if (started) await runToolsPackJson<WinStopResult>('stop').catch(() => undefined);
+    if (installed) {
+      await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => undefined);
+    }
+    await rm(join(installationRoot, 'closure', 'channels', updateScenario.channel, 'namespaces', namespace), {
+      force: true,
+      recursive: true,
+    }).catch(() => undefined);
+  }
+}
+
+function parsePathListEnv(value: string | undefined): string[] {
+  if (value == null || value.trim().length === 0) return [];
+  const parsed = JSON.parse(value) as unknown;
+  if (!Array.isArray(parsed) || parsed.some((entry) => typeof entry !== 'string' || entry.length === 0)) {
+    throw new Error('OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON must be a JSON array of paths');
+  }
+  return parsed;
 }
 
 async function readPackagedClosureBinding(): Promise<Record<string, unknown>> {

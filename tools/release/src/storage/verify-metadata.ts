@@ -113,6 +113,9 @@ const expectedClosureDistributionTargets = [
   ...(process.env.ENABLE_MAC_ARM64 === "true" && optional("MAC_ARM64_RESULT", "skipped") === "success"
     ? ["darwin-arm64"]
     : []),
+  ...(process.env.ENABLE_MAC_X64 === "true" && optional("MAC_X64_RESULT", "skipped") === "success"
+    ? ["darwin-x64"]
+    : []),
   ...(process.env.ENABLE_WIN_X64 === "true" && optional("WIN_X64_RESULT", "skipped") === "success"
     ? ["win32-x64"]
     : []),

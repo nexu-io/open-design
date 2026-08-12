@@ -172,7 +172,6 @@ export type ClosureDistributionSharedBuildOptions = {
   channel: string;
   dir?: string;
   minShellVersion: string;
-  platform?: string;
   skipWorkspaceBuild?: boolean;
   version: string;
   workspaceRoot?: string;
@@ -871,7 +870,9 @@ export async function buildClosureDistributionShared(
   options: ClosureDistributionSharedBuildOptions,
 ): Promise<ClosureDistributionSharedBuildReport> {
   const workspaceRoot = resolve(options.workspaceRoot ?? WORKSPACE_ROOT);
-  const archiveTarget = normalizeClosurePlatformTarget(options.platform);
+  // Shared bytes have no product target. The target-shaped value is confined to
+  // selecting the host archive implementation and never enters the protocol.
+  const archiveTarget: ClosurePlatformTarget = process.platform === "win32" ? "win32-x64" : "darwin-arm64";
   const channel = resolveChannel(options.channel, options.version);
   parseReleaseVersion(options.minShellVersion, channel);
   const toolRoot = resolve(workspaceRoot, options.dir ?? ".tmp/tools-pack");

@@ -139,7 +139,6 @@ cli.command("closure <action>", "Standalone Closure commands: build-distribution
         channel: options.channel,
         ...(options.dir == null ? {} : { dir: options.dir }),
         minShellVersion: options.minShellVersion,
-        ...(options.platform == null ? {} : { platform: options.platform }),
         skipWorkspaceBuild: options.skipWorkspaceBuild === true,
         version: options.version,
       }));

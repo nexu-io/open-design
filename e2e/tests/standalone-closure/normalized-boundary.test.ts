@@ -61,7 +61,8 @@ describe("normalized Standalone boundary", () => {
       "utf8",
     );
     expect(entry).toContain("createElectronStandaloneLauncher");
-    expect(entry).toContain("resolveElectronStandaloneBinding");
+    expect(entry).toContain("resolveStandaloneViaOfficialNode");
+    expect(entry).toContain("bootloader.mjs");
     expect(entry).not.toContain("startPackagedSidecars");
     expect(entry).not.toContain("resolvePackagedClosureRuntime");
     expect(entry).not.toContain('from "./sidecars.js"');

@@ -320,7 +320,8 @@ if (assetVersionSuffix === "auto") {
 const versionPrefix = optional("RELEASE_VERSION_PREFIX", `${releaseChannel}/versions/${releaseVersion}${assetVersionSuffix}`);
 const expectedClosureDistributionTargets = readyTargets.flatMap((target) => (
   target === "mac_arm64" ? ["darwin-arm64"]
-    : target === "win_x64" ? ["win32-x64"]
+    : target === "mac_x64" ? ["darwin-x64"]
+      : target === "win_x64" ? ["win32-x64"]
       : []
 ));
 if (closureDistributionRequired && closureDistributionManifestPath.length === 0) {

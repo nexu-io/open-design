@@ -47,6 +47,13 @@ cli
   });
 
 cli
+  .command("publish-closure-contribution", "Publish one verified Closure CAS contribution")
+  .action(async () => {
+    const { publishClosureContribution } = await import("./storage/publish-closure-contribution.ts");
+    await publishClosureContribution();
+  });
+
+cli
   .command("resolve-shell-build", "Resolve and materialize an immutable Shell build")
   .action(async () => {
     const { resolveShellBuild } = await import("./storage/shell-build.ts");

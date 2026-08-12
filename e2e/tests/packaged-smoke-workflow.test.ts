@@ -1896,7 +1896,7 @@ process.stdin.on("end", () => {
     const dogfoodSteps = workflow.split("\n      - name: ").filter((step) =>
       /publish-dogfood|for manual distribution/.test(step)
     );
-    expect(dogfoodSteps).toHaveLength(4);
+    expect(dogfoodSteps).toHaveLength(2);
     for (const step of dogfoodSteps) {
       expect(step, step.split("\n")[0]).toContain("if: ${{ !cancelled() && !inputs.publish }}");
     }
@@ -2090,7 +2090,7 @@ process.stdin.on("end", () => {
     }
   });
 
-  it("[P1] keeps shared beta publication main-owned while feature refs stay dogfood-only", async () => {
+  it("[P1] binds beta publication to the exact requested ref", async () => {
     const [betaWorkflow, dailyWorkflow] = await Promise.all([
       readFile(releaseBetaWorkflowPath, "utf8"),
       readFile(notifyDailyFeishuWorkflowPath, "utf8"),
@@ -2098,7 +2098,7 @@ process.stdin.on("end", () => {
     const metadataJob = sectionBetween(betaWorkflow, "  metadata:", "  build_mac_arm64:");
     const publisherGuard = sectionBetween(
       metadataJob,
-      "- name: Validate shared beta publisher",
+      "- name: Validate exact beta publisher ref",
       "- name: Capture previous beta commit",
     );
 
@@ -2106,12 +2106,12 @@ process.stdin.on("end", () => {
       "RELEASE_BRANCH: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}",
     );
     expect(publisherGuard).toContain("if: ${{ inputs.publish }}");
+    expect(publisherGuard).toContain("REQUESTED_REF:");
     expect(publisherGuard).toContain('built_sha="$(git rev-parse HEAD)"');
-    expect(publisherGuard).toContain(
-      'main_sha="$(git ls-remote origin refs/heads/main | awk \'{print $1}\')"',
-    );
-    expect(publisherGuard).toContain('[ "$built_sha" != "$main_sha" ]');
-    expect(publisherGuard).toContain("publish=false");
+    expect(publisherGuard).toContain('expected_sha="${REQUESTED_REF,,}"');
+    expect(publisherGuard).toContain("git ls-remote origin");
+    expect(publisherGuard).toContain('[ "$built_sha" != "$expected_sha" ]');
+    expect(publisherGuard).not.toContain("refs/heads/main");
     expect(betaWorkflow).not.toContain("recover_foreign_beta");
     expect(betaWorkflow).not.toContain("OPEN_DESIGN_RECOVER_FOREIGN_BETA");
     expect(metadataJob).toContain("branch: ${{ steps.identity.outputs.branch }}");
@@ -2680,8 +2680,9 @@ process.stdin.on("end", () => {
     expect(publishMetadataScript).toContain("outputs[`${target}_${artifactName}_url`] = artifact.url");
   });
 
-  it("builds and publishes shell-neutral Closure assets in the release-beta mac_arm64 and win_x64 lanes", async () => {
+  it("publishes one shared-plus-target Standalone graph in release-beta", async () => {
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
+    const sharedJob = sectionBetween(workflow, "  closure_shared:", "  build_mac_arm64:");
     const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
     const winJob = sectionBetween(workflow, "  build_win_x64:", "  publish:");
     const publishJob = sectionBetween(workflow, "  publish:", "  public_win_x64_acceptance:");
@@ -2706,48 +2707,59 @@ process.stdin.on("end", () => {
     expect(workflow).toContain("shell_version: ${{ inputs.shell_version != ''");
     expect(workflow).toContain("closure_version:");
     expect(workflow).toContain("closure_version: ${{ inputs.closure_version != ''");
-    expect(macJob).toContain("Build beta mac_arm64 Standalone Closure");
+    expect(sharedJob).toContain("Build once-owned shared Closure components");
+    expect(sharedJob).toContain("tools-pack closure build-distribution-shared");
+    expect(sharedJob).toContain("tools-release publish-closure-contribution");
+    expect(sharedJob).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: shared");
+    expect(sharedJob).toContain('cp -R "$blob_root"');
+    expect(macJob).toContain("Build beta mac_arm64 Standalone native contribution");
     expect(macJob).toContain("Resolve immutable mac_arm64 Electron Shell");
     expect(macJob).toContain("tools-pack mac identity");
     expect(macJob).toContain("tools-release resolve-shell-build");
     expect(macJob).toContain("steps.mac_arm64_shell_resolution.outputs.state == 'miss'");
     expect(macJob).toContain("Register verified immutable mac_arm64 Electron Shell");
     expect(macJob).toContain("tools-release register-shell-build");
-    expect(macJob).toContain("tools-pack closure build");
+    expect(macJob).toContain("tools-pack closure build-distribution-target");
     expect(macJob).toContain("--platform darwin-arm64");
-    expect(macJob).toContain('--cache-dir "$RUNNER_TEMP/tools-pack-cache"');
-    expect(macJob).toContain("/beta/closure/darwin-arm64/versions/$version/");
-    expect(macJob).toContain("open-design-$version-mac-arm64-closure.zip");
-    expect(macJob).not.toContain("open-design-$version.signed-mac-arm64-closure.zip");
+    expect(macJob).toContain("Prepare mac_arm64 Standalone smoke graph");
+    expect(macJob).toContain("tools-release merge-closure-distribution");
+    expect(macJob).toContain("Publish verified mac_arm64 Standalone native blob");
+    expect(macJob).toContain("tools-release publish-closure-contribution");
+    expect(macJob).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: target");
     expect(macJob).toContain("needs.metadata.outputs.closure_version");
-    expect(macJob).not.toContain("--skip-workspace-build");
-    expect(macJob).toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH:");
-    expect(macJob).toContain("RELEASE_CLOSURE_DIR:");
-    expect(macJob).toContain('RELEASE_CLOSURE_ENABLED: "true"');
+    expect(macJob).toContain("OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH:");
+    expect(macJob).toContain("OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON:");
+    expect(macJob).toContain('RELEASE_CLOSURE_ENABLED: "false"');
     expect(macJob).toContain('RELEASE_SHELL_ENABLED: "true"');
     expect(macJob).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
-    expect(macJob).toContain("DOGFOOD_BUILD_JSON_KEYS: archivePath,inventoryPath,manifestPath,provenancePath");
-    expect(winJob).toContain("Build beta win_x64 Standalone Closure");
+    expect(macJob).toContain("DOGFOOD_BUILD_JSON_KEYS: dmgPath");
+    expect(winJob).toContain("Build beta win_x64 Standalone native contribution");
     expect(winJob).toContain("Resolve immutable win_x64 Electron Shell");
     expect(winJob).toContain('"tools-pack", "win", "identity"');
     expect(winJob).toContain("tools-release resolve-shell-build");
     expect(winJob).toContain("Register verified immutable win_x64 Electron Shell");
     expect(winJob).toContain("tools-release register-shell-build");
-    expect(winJob).toContain("tools-pack closure build");
+    expect(winJob).toContain("tools-pack closure build-distribution-target");
     expect(winJob).toContain("--platform win32-x64");
-    expect(winJob).toContain('--cache-dir "${{ runner.temp }}\\tools-pack-cache"');
-    expect(winJob).toContain("/beta/closure/win32-x64/versions/$version/");
-    expect(winJob).toContain("open-design-$version-win-x64-closure.zip");
-    expect(winJob).not.toContain("open-design-$version.unsigned-win-x64-closure.zip");
+    expect(winJob).toContain("Prepare win_x64 Standalone smoke graph");
+    expect(winJob).toContain("tools-release merge-closure-distribution");
+    expect(winJob).toContain("Publish verified win_x64 Standalone native blob");
+    expect(winJob).toContain("tools-release publish-closure-contribution");
+    expect(winJob).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: target");
     expect(winJob).toContain("needs.metadata.outputs.closure_version");
-    expect(winJob).not.toContain("--skip-workspace-build");
-    expect(winJob).toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH:");
-    expect(winJob).toContain("-ClosureDir");
-    expect(winJob).toContain('RELEASE_CLOSURE_ENABLED: "true"');
+    expect(winJob).toContain("OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH:");
+    expect(winJob).toContain("OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON:");
+    expect(winJob).toContain('RELEASE_CLOSURE_ENABLED: "false"');
     expect(winJob).toContain('RELEASE_SHELL_ENABLED: "true"');
     expect(winJob).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
-    expect(publishJob).toContain('RELEASE_CLOSURE_REQUIRED: "true"');
+    expect(publishJob).toContain("Merge the sole version-wide Standalone graph");
+    expect(publishJob).toContain("tools-release merge-closure-distribution");
+    expect(publishJob).toContain("RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH:");
+    expect(publishJob).toContain('RELEASE_CLOSURE_DISTRIBUTION_REQUIRED: "true"');
+    expect(publishJob).toContain('RELEASE_CLOSURE_REQUIRED: "false"');
     expect(publishJob).toContain('RELEASE_SHELL_REQUIRED: "true"');
+    expect(workflow).not.toContain("/beta/closure/");
+    expect(workflow).not.toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH:");
     expect(workflow).toContain("Validate checkout ref shape");
     expect(workflow).toContain("full 40-character commit SHA; abbreviated SHA");
     expect(publishJob).toContain("RELEASE_ACTIVATE_LATEST: ${{ inputs.enable_win_x64 && 'false' || 'true' }}");
@@ -2761,8 +2773,6 @@ process.stdin.on("end", () => {
       "      - name: Write beta metadata summary",
     )).not.toContain("continue-on-error");
     expect(publishJob).toContain("tools-release observe-public-feed");
-    expect(publishJob).toContain("mac_arm64_closure_url:");
-    expect(publishJob).toContain("win_x64_closure_url:");
     expect(publicAcceptanceJob).toContain("runs-on: windows-latest");
     expect(publicAcceptanceJob).toContain("tools-release prepare-public-acceptance");
     expect(publicAcceptanceJob).toContain("tools-release issue-public-acceptance");
