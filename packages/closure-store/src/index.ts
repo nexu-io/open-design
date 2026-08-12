@@ -45,6 +45,7 @@ export type ClosureStorePaths = {
   generationsRoot: string;
   namespace: string;
   namespaceRoot: string;
+  resourcesRoot: string;
   root: string;
   stagingRoot: string;
   stateRoot: string;
@@ -72,7 +73,9 @@ export type ClosureDistributionResourcePlan = Readonly<{
   artifact: ClosureDistributionBlob;
   blobPath: string;
   id: string;
+  resourceRoot: string;
   title: string;
+  treeDigest: ClosureDigest;
 }>;
 
 export type ClosureDistributionGenerationPlan = Readonly<{
@@ -168,6 +171,20 @@ export function consumeClosureDistributionTarget(
 
 function resolveDistributionBlobPath(paths: ClosureStorePaths, digest: ClosureDigest): string {
   return assertUnderRoot(paths.root, join(paths.blobsRoot, digest.slice("sha256:".length)));
+}
+
+export function createClosureResourceIndexKey(
+  title: string,
+  treeDigest: ClosureDigest,
+): string {
+  if (title.trim().length === 0 || title !== title.trim()) {
+    throw new ClosureStoreError("Closure resource title must be non-empty and trimmed");
+  }
+  if (!/^sha256:[0-9a-f]{64}$/u.test(treeDigest)) {
+    throw new ClosureStoreError("Closure resource treeDigest must be a lowercase sha256 digest");
+  }
+  const digest = treeDigest;
+  return createHash("sha256").update(JSON.stringify({ title, treeDigest: digest })).digest("hex");
 }
 
 function planDistributionComponent(
@@ -288,7 +305,12 @@ export function planClosureDistributionGeneration(
       artifact: resource.artifact,
       blobPath: resolveDistributionBlobPath(paths, resource.blob),
       id: resource.id,
+      resourceRoot: assertUnderRoot(paths.root, join(
+        paths.resourcesRoot,
+        createClosureResourceIndexKey(resource.title, resource.treeDigest),
+      )),
       title: resource.title,
+      treeDigest: resource.treeDigest,
     }))),
     target: consumed.target.target,
   });
@@ -339,6 +361,7 @@ export function resolveClosureStorePaths(request: ClosureStoreRequest): ClosureS
     generationsRoot: assertUnderRoot(root, join(namespaceRoot, "generations")),
     namespace,
     namespaceRoot,
+    resourcesRoot: assertUnderRoot(root, join(channelRoot, "resources")),
     root,
     stagingRoot: assertUnderRoot(root, join(namespaceRoot, "staging")),
     stateRoot,

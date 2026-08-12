@@ -4,6 +4,7 @@ import {
   copyFile,
   mkdir,
   readFile,
+  readdir,
   rename,
   rm,
   stat,
@@ -13,6 +14,7 @@ import { dirname, isAbsolute, join } from "node:path";
 
 import {
   bindClosureCandidateIdentity,
+  createClosureComponentTreeDigest,
   validateClosureCandidateManifest,
   validateClosureDistributionManifest,
   validateClosureFileInventory,
@@ -840,6 +842,83 @@ export async function ensureClosureDistributionBlob(input: Readonly<{
     paths: input.paths,
     ...(input.repository == null ? {} : { repository: input.repository }),
   });
+}
+
+async function inspectResourceFiles(root: string, current = root): Promise<Array<{
+  digest: `sha256:${string}`;
+  path: string;
+  size: number;
+}>> {
+  const files: Array<{ digest: `sha256:${string}`; path: string; size: number }> = [];
+  for (const entry of await readdir(current, { withFileTypes: true })) {
+    const path = join(current, entry.name);
+    if (entry.isSymbolicLink()) throw new ClosureUpdateError("Closure resource must not contain symlinks");
+    if (entry.isDirectory()) files.push(...await inspectResourceFiles(root, path));
+    else if (entry.isFile()) {
+      const metadata = await stat(path);
+      const hash = createHash("sha256");
+      for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+      files.push({
+        digest: `sha256:${hash.digest("hex")}`,
+        path: path.slice(root.length + 1).split("\\").join("/"),
+        size: metadata.size,
+      });
+    } else throw new ClosureUpdateError("Closure resource contains an unsupported entry");
+  }
+  return files.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
+}
+
+async function verifyResourceRoot(
+  root: string,
+  expected: `sha256:${string}`,
+): Promise<void> {
+  const files = await inspectResourceFiles(root);
+  if (files.length === 0) throw new ClosureUpdateError("Closure resource is empty");
+  const actual = createClosureComponentTreeDigest(files, (canonical) => (
+    `sha256:${createHash("sha256").update(canonical).digest("hex")}`
+  ));
+  if (actual !== expected) throw new ClosureUpdateError("Closure resource tree does not match its manifest");
+}
+
+export async function ensureClosureResource(input: Readonly<{
+  fetch?: typeof globalThis.fetch;
+  id: string;
+  manifest: ClosureDistributionManifest;
+  paths: ClosureStorePaths;
+  repository?: ClosureResourceRepositoryConfig;
+  target: string;
+}>): Promise<Readonly<{ id: string; path: string; reused: boolean; title: string }>> {
+  const plan = planClosureDistributionGeneration(input.paths, 0, input.manifest, input.target);
+  const resource = plan.resources.find((entry) => entry.id === input.id);
+  if (resource == null) throw new ClosureUpdateError(`Closure resource is not locked by this version: ${input.id}`);
+  try {
+    await verifyResourceRoot(resource.resourceRoot, resource.treeDigest);
+    return Object.freeze({ id: resource.id, path: resource.resourceRoot, reused: true, title: resource.title });
+  } catch {
+    // Continue through the same repository resolver as required components.
+  }
+  const blobPath = await ensureClosureDistributionBlob({
+    artifact: resource.artifact,
+    ...(input.fetch == null ? {} : { fetch: input.fetch }),
+    paths: input.paths,
+    ...(input.repository == null ? {} : { repository: input.repository }),
+  });
+  const stageRoot = join(input.paths.stagingRoot, `resource-${resource.id}-${randomUUID()}`);
+  try {
+    await mkdir(stageRoot, { recursive: true });
+    await extractZip(blobPath, { dir: stageRoot });
+    await verifyResourceRoot(stageRoot, resource.treeDigest);
+    await mkdir(dirname(resource.resourceRoot), { recursive: true });
+    try {
+      await rename(stageRoot, resource.resourceRoot);
+    } catch (error) {
+      if (!["EEXIST", "ENOTEMPTY", "EPERM"].includes(errorCode(error) ?? "")) throw error;
+      await verifyResourceRoot(resource.resourceRoot, resource.treeDigest);
+    }
+    return Object.freeze({ id: resource.id, path: resource.resourceRoot, reused: false, title: resource.title });
+  } finally {
+    await rm(stageRoot, { force: true, recursive: true }).catch(() => undefined);
+  }
 }
 
 async function stageClosureDistributionGeneration(input: {

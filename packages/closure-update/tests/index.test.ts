@@ -38,6 +38,7 @@ import {
   discoverClosureDistributionReleaseCandidate,
   discoverClosureReleaseCandidate,
   ensureClosureDistributionBlob,
+  ensureClosureResource,
   readClosureResourceRepositoryConfig,
   selectClosureDistributionReleaseCandidate,
   selectClosureReleaseCandidate,
@@ -118,6 +119,47 @@ describe("Closure resource repository", () => {
       },
     })).resolves.toBe(join(paths.blobsRoot, name));
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("materializes one isolated resource lazily and reuses title plus content across versions", async () => {
+    const paths = await createStore();
+    const fixture = await downloadableDistribution();
+    const first = await ensureClosureResource({
+      fetch: fixture.fetch,
+      id: "skills",
+      manifest: fixture.candidate.manifest,
+      paths,
+      target: "darwin-arm64",
+    });
+    expect(first).toMatchObject({ id: "skills", reused: false, title: "Skills" });
+    await expect(readFile(join(first.path, "skills", "SKILL.md"), "utf8")).resolves.toBe("# Skill\n");
+    const calls = vi.mocked(fixture.fetch).mock.calls.length;
+
+    const nextVersion = createClosureDistributionManifest({
+      ...fixture.candidate.manifest,
+      identity: {
+        channel: "beta",
+        protocolVersion: CLOSURE_PROTOCOL_VERSION,
+        version: "0.19.1-beta.0",
+      },
+      schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+    }, digest);
+    const second = await ensureClosureResource({
+      fetch: fixture.fetch,
+      id: "skills",
+      manifest: nextVersion,
+      paths,
+      target: "darwin-arm64",
+    });
+    expect(second).toEqual({ ...first, reused: true });
+    expect(vi.mocked(fixture.fetch).mock.calls).toHaveLength(calls);
+    await expect(ensureClosureResource({
+      fetch: fixture.fetch,
+      id: "missing",
+      manifest: nextVersion,
+      paths,
+      target: "darwin-arm64",
+    })).rejects.toThrow(/not locked/u);
   });
 });
 
