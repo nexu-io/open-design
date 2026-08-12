@@ -1381,15 +1381,24 @@ test('[P2] zh-CN home smoke exposes the localized creation type, design system, 
   await expect(page.getByTestId('home-hero-submit')).toHaveAccessibleName('运行');
 });
 
-test('[P1] home template picker selects a starter template and can clear it', async ({ page }) => {
+test('[P1] home template picker switches the seeded deck to another type and can clear it', async ({ page }) => {
   await gotoEntryHome(page);
+  // Wait for the fresh-home default binding before opening its menu. Otherwise
+  // the binding's reconciliation legitimately replaces the open menu tree
+  // while Playwright is trying to act on one of its rows.
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(
+    /Slide deck|幻灯片|投影片/i,
+  );
 
   const menu = await openHomeTemplateMenu(page);
   await expect(menu.getByTestId('home-hero-template-wedge-prototype')).toBeVisible();
   await expect(menu.getByTestId('home-hero-template-wedge-deck')).toBeVisible();
 
-  await menu.getByTestId('home-hero-template-wedge-deck').click();
-  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Slide deck|幻灯片|投影片/i);
+  // Deck is already the fresh-Home default. Switch to a different item so the
+  // test exercises a real selection instead of racing the async deck binding
+  // by clicking the active menu row while it is being reconciled.
+  await menu.getByTestId('home-hero-template-wedge-prototype').click();
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Prototype|原型|UI Mockup/i);
 
   await page.getByTestId('home-hero-template-reset').click();
   await expect(page.getByTestId('home-hero-footer-option-speakerNotes')).toHaveCount(0);

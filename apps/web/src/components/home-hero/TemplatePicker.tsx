@@ -1,17 +1,16 @@
 // Composer-footer Template picker — the "template entry point" next to the
 // Design system picker. The trigger shows the currently-selected project-type
-// template (default "None"); clicking it opens a radial (pie) menu centered
-// on the trigger: each template is a wedge on a frosted-glass ring, hovering a
-// wedge previews it in the center disc (icon + name), clicking a wedge
-// confirms it, and the center disc clears the selection (back to None).
+// template (default "None"); clicking it opens a list menu BELOW the trigger:
+// compact icon + name rows (no descriptions, at most 12 kinds — per product),
+// the selected row carries a check, and a leading Clear row resets the
+// selection (back to None).
 //
-// Selection is the existing `activeChipId`: picking a wedge calls `onPick(chip)`
+// Selection is the existing `activeChipId`: picking a row calls `onPick(chip)`
 // (the same handler the rail uses) and the trigger's reset calls `onClear()`.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { HomeHeroChip } from './chips';
 import { Icon } from '../Icon';
-import { ScenarioArt } from './ScenarioArt';
 import { useT } from '../../i18n';
 
 interface Props {
@@ -28,46 +27,19 @@ interface Props {
   // Disables picking a *new* template while an apply is in flight (mirrors the
   // rail's per-card guard); opening + close remain available.
   pickDisabled?: boolean;
-  // Localized label / description for a chip id (reuses HomeHero's chip copy).
+  // Localized label for a chip id (reuses HomeHero's chip copy).
   labelFor: (chipId: string) => string;
-  descriptionFor: (chipId: string) => string;
   onPick: (chip: HomeHeroChip) => void;
   onClear: () => void;
 }
 
-// Radial geometry in viewBox units. The ring is the wedge hit-area between
-// R_IN and R_OUT; the center disc (clear button) fills the hole.
-const RING = 400;
-const R_OUT = 199;
-const R_IN = 72;
-const CENTER = RING / 2;
-const R_ICON = (R_OUT + R_IN) / 2;
-// Rendered diameter (see .home-hero__template-radial) — used to clamp the
-// anchor so the whole ring stays inside the viewport.
-const RADIAL_PX = 240;
+// Rendered menu width (see .home-hero__template-list) — used to clamp the
+// anchor so the whole panel stays inside the viewport.
+const MENU_W = 340;
 
-function polar(radius: number, deg: number): [number, number] {
-  const rad = ((deg - 90) * Math.PI) / 180;
-  return [CENTER + radius * Math.cos(rad), CENTER + radius * Math.sin(rad)];
-}
-
-function wedgePath(index: number, count: number): string {
-  const step = 360 / count;
-  const a0 = index * step;
-  const a1 = a0 + step;
-  const [ox0, oy0] = polar(R_OUT, a0);
-  const [ox1, oy1] = polar(R_OUT, a1);
-  const [ix1, iy1] = polar(R_IN, a1);
-  const [ix0, iy0] = polar(R_IN, a0);
-  const large = step > 180 ? 1 : 0;
-  return [
-    `M ${ox0.toFixed(2)} ${oy0.toFixed(2)}`,
-    `A ${R_OUT} ${R_OUT} 0 ${large} 1 ${ox1.toFixed(2)} ${oy1.toFixed(2)}`,
-    `L ${ix1.toFixed(2)} ${iy1.toFixed(2)}`,
-    `A ${R_IN} ${R_IN} 0 ${large} 0 ${ix0.toFixed(2)} ${iy0.toFixed(2)}`,
-    'Z',
-  ].join(' ');
-}
+// Per product: the menu lists at most this many kinds (rows beyond it are
+// simply not shown — the catalog stays whole for the rail/carousel).
+const MAX_MENU_KINDS = 12;
 
 export function TemplatePicker({
   templates,
@@ -76,32 +48,35 @@ export function TemplatePicker({
   disabled = false,
   pickDisabled = false,
   labelFor,
-  descriptionFor,
   onPick,
   onClear,
 }: Props) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const [hoverId, setHoverId] = useState<string | null>(null);
-  // Viewport anchor captured once at open time, clamped so the whole ring
-  // stays on screen. The radial is portaled to <body> and position:fixed at
+  // Viewport anchor captured once at open time, clamped so the whole panel
+  // stays on screen. The menu is portaled to <body> and position:fixed at
   // these coords instead of tracking the trigger: the composer around the
   // trigger reflows asynchronously (template apply, placeholder animation) and
   // sits inside transformed ancestors that would both drift an anchored menu
-  // mid-gesture and degrade fixed positioning.
-  const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
+  // mid-gesture and degrade fixed positioning. It opens DOWNWARD from the
+  // trigger (per product), so the anchor is a left/top pair.
+  const [anchor, setAnchor] = useState<
+    { left: number; top: number; maxHeight: number } | null
+  >(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
-  const radialRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const toggleOpen = () => {
     setOpen((v) => {
       if (v) return false;
       const rect = wrapRef.current?.getBoundingClientRect();
       if (rect) {
-        const half = RADIAL_PX / 2 + 8;
         setAnchor({
-          x: Math.min(Math.max(rect.x + rect.width / 2, half), window.innerWidth - half),
-          y: Math.min(Math.max(rect.y + rect.height / 2, half), window.innerHeight - half),
+          left: Math.min(Math.max(rect.x, 8), Math.max(8, window.innerWidth - MENU_W - 8)),
+          top: rect.bottom + 8,
+          // Opening downward: the panel may use at most the space between the
+          // trigger and the viewport bottom.
+          maxHeight: Math.max(200, window.innerHeight - rect.bottom - 24),
         });
       } else {
         setAnchor(null);
@@ -115,15 +90,22 @@ export function TemplatePicker({
     [templates, activeChipId],
   );
 
-  useEffect(() => {
-    if (!open) setHoverId(null);
-  }, [open]);
+  // At most MAX_MENU_KINDS rows. A committed selection must stay visible (its
+  // check is the menu's state readout), so an active chip beyond the cap takes
+  // the last slot instead of silently vanishing.
+  const visibleTemplates = useMemo(() => {
+    const visible = templates.slice(0, MAX_MENU_KINDS);
+    if (active && !visible.some((chip) => chip.id === active.id)) {
+      visible[visible.length - 1] = active;
+    }
+    return visible;
+  }, [templates, active]);
 
   useEffect(() => {
     if (!open) return undefined;
     function onPointer(event: MouseEvent) {
       if (wrapRef.current?.contains(event.target as Node)) return;
-      if (radialRef.current?.contains(event.target as Node)) return;
+      if (menuRef.current?.contains(event.target as Node)) return;
       setOpen(false);
     }
     function onKey(event: KeyboardEvent) {
@@ -140,20 +122,32 @@ export function TemplatePicker({
   // Invariant: `anchor` is a one-shot VIEWPORT point captured from the trigger
   // at open time, so the open menu is only meaningful while that point still
   // describes where the trigger is. Anything that moves the trigger under a
-  // fixed-position ring — scrolling any ancestor, resizing the window —
-  // invalidates it, and the ring would otherwise hang in mid-air detached from
-  // its own trigger. Dismiss instead of re-anchoring: chasing the trigger is
-  // exactly what the capture-once design avoids, because the composer around
-  // it reflows asynchronously and lives inside transformed ancestors.
+  // fixed-position panel — scrolling any ancestor, resizing the window —
+  // invalidates it, and the panel would otherwise hang in mid-air detached
+  // from its own trigger. Dismiss instead of re-anchoring: chasing the trigger
+  // is exactly what the capture-once design avoids, because the composer
+  // around it reflows asynchronously and lives inside transformed ancestors.
   useEffect(() => {
     if (!open) return undefined;
     const dismiss = () => setOpen(false);
-    // Capture phase: scroll does not bubble, and the trigger sits inside the
-    // entry shell's own scroll container, not the document scroller.
-    window.addEventListener('scroll', dismiss, { capture: true, passive: true });
+    // Scroll does not bubble, so listen directly to the trigger's ancestors
+    // instead of capturing every scroll through window. The portaled menu is
+    // intentionally outside this chain: scrolling its own long list must not
+    // dismiss it because that does not move the trigger or invalidate anchor.
+    const scrollTargets: EventTarget[] = [window];
+    let ancestor = wrapRef.current?.parentElement ?? null;
+    while (ancestor) {
+      scrollTargets.push(ancestor);
+      ancestor = ancestor.parentElement;
+    }
+    for (const target of scrollTargets) {
+      target.addEventListener('scroll', dismiss, { passive: true });
+    }
     window.addEventListener('resize', dismiss);
     return () => {
-      window.removeEventListener('scroll', dismiss, { capture: true });
+      for (const target of scrollTargets) {
+        target.removeEventListener('scroll', dismiss);
+      }
       window.removeEventListener('resize', dismiss);
     };
   }, [open]);
@@ -167,11 +161,6 @@ export function TemplatePicker({
   const isPreviewing = Boolean(previewChip) && previewChip !== active;
   const hasSelection = Boolean(active);
   const valueLabel = shown ? labelFor(shown.id) : t('common.none');
-
-  // Center disc: hovering a wedge previews that template (icon + name, like a
-  // radial OS menu); at rest it reads as the close control.
-  const hovered = hoverId ? templates.find((chip) => chip.id === hoverId) ?? null : null;
-  const wedgeStep = templates.length > 0 ? 360 / templates.length : 360;
 
   return (
     <div
@@ -235,118 +224,79 @@ export function TemplatePicker({
       ) : null}
       {open ? createPortal(
         <div
-          ref={radialRef}
-          className="home-hero__template-radial"
+          ref={menuRef}
+          className="home-hero__template-list"
           role="listbox"
           aria-label={t('homeHero.templatePicker.label')}
           data-testid="home-hero-template-menu"
-          style={anchor ? { left: anchor.x, top: anchor.y } : undefined}
+          style={
+            anchor
+              ? { left: anchor.left, top: anchor.top, maxHeight: anchor.maxHeight }
+              : undefined
+          }
         >
-          <svg
-            className="home-hero__template-radial-ring"
-            viewBox={`0 0 ${RING} ${RING}`}
-            aria-hidden={templates.length === 0}
-          >
-            {/* Left→right brand wash for the selected wedge; referenced from
-                CSS via fill: url(#od-template-wedge-grad). Default
-                objectBoundingBox units, so the fade runs across each wedge's
-                own width. */}
-            <defs>
-              <linearGradient id="od-template-wedge-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#87ea5c" stopOpacity="0.45" />
-                <stop offset="100%" stopColor="#87ea5c" stopOpacity="0.1" />
-              </linearGradient>
-            </defs>
-            {templates.map((chip, index) => {
-              const isActive = chip.id === activeChipId;
-              const isHover = chip.id === hoverId;
-              return (
-                <path
-                  key={chip.id}
-                  d={wedgePath(index, templates.length)}
-                  className={`home-hero__template-radial-wedge${isActive ? ' is-active' : ''}${isHover ? ' is-hover' : ''}`}
-                  role="option"
-                  aria-selected={isActive}
-                  aria-disabled={pickDisabled || undefined}
-                  aria-label={labelFor(chip.id)}
-                  data-chip-id={chip.id}
-                  data-testid={`home-hero-template-wedge-${chip.id}`}
-                  onMouseEnter={() => setHoverId(chip.id)}
-                  onMouseLeave={() => setHoverId((v) => (v === chip.id ? null : v))}
-                  onClick={() => {
-                    if (pickDisabled) return;
-                    onPick(chip);
-                    setOpen(false);
-                  }}
-                />
-              );
-            })}
-            {/* Angular indicator hugging the center disc: an arc spanning the
-                hovered wedge's angle range, so the disc points back at the
-                wedge being previewed. */}
-            {hovered ? (() => {
-              const index = templates.findIndex((chip) => chip.id === hovered.id);
-              if (index < 0) return null;
-              const a0 = index * wedgeStep;
-              const a1 = a0 + wedgeStep;
-              const arcRadius = 78;
-              const [sx, sy] = polar(arcRadius, a0);
-              const [ex, ey] = polar(arcRadius, a1);
-              const large = wedgeStep > 180 ? 1 : 0;
-              return (
-                <path
-                  className="home-hero__template-radial-center-arc"
-                  d={`M ${sx.toFixed(2)} ${sy.toFixed(2)} A ${arcRadius} ${arcRadius} 0 ${large} 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`}
-                  aria-hidden
-                />
-              );
-            })() : null}
-          </svg>
-          {templates.map((chip, index) => {
-            const [x, y] = polar(R_ICON, (index + 0.5) * wedgeStep);
-            const isActive = chip.id === activeChipId;
-            const isHover = chip.id === hoverId;
-            return (
-              <span
-                key={chip.id}
-                className={`home-hero__template-radial-icon${isActive ? ' is-active' : ''}${isHover ? ' is-hover' : ''}`}
-                style={{ left: `${(x / RING) * 100}%`, top: `${(y / RING) * 100}%` }}
-                aria-hidden
-              >
-                <Icon name={chip.icon} size={20} />
-              </span>
-            );
-          })}
+          {/* Clear row first — the list counterpart of the old radial's
+              center disc; checked while nothing is selected. Its testid keeps
+              the historical "radial-clear" name so the existing unit/e2e
+              coverage keeps driving it unchanged. */}
           <button
             type="button"
-            className={`home-hero__template-radial-center${hovered ? ' is-previewing' : ''}`}
+            className={`home-hero__template-list-item home-hero__template-list-item--clear${hasSelection ? '' : ' is-active'}`}
+            role="option"
+            aria-selected={!hasSelection}
             data-testid="home-hero-template-radial-clear"
-            aria-label={t('common.clear')}
             onClick={() => {
               onClear();
               setOpen(false);
             }}
           >
-            {hovered ? (
-              <>
-                <span className="home-hero__template-radial-center-icon" aria-hidden>
-                  <Icon name={hovered.icon} size={20} />
+            <span className="home-hero__template-list-head">
+              <span className="home-hero__template-list-icon" aria-hidden>
+                <Icon name="close" size={16} />
+              </span>
+              <span className="home-hero__template-list-title">{t('common.clear')}</span>
+              {hasSelection ? null : (
+                <span className="home-hero__template-list-check" aria-hidden>
+                  <Icon name="check" size={14} />
                 </span>
-                <span className="home-hero__template-radial-center-label">
-                  {labelFor(hovered.id)}
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="home-hero__template-radial-center-icon" aria-hidden>
-                  <Icon name="close" size={16} strokeWidth={2} />
-                </span>
-                <span className="home-hero__template-radial-center-label">
-                  {t('common.clear')}
-                </span>
-              </>
-            )}
+              )}
+            </span>
           </button>
+          {visibleTemplates.map((chip) => {
+            const isActive = chip.id === activeChipId;
+            return (
+              <button
+                key={chip.id}
+                type="button"
+                className={`home-hero__template-list-item${isActive ? ' is-active' : ''}`}
+                role="option"
+                aria-selected={isActive}
+                aria-disabled={pickDisabled || undefined}
+                aria-label={labelFor(chip.id)}
+                data-chip-id={chip.id}
+                // Historical testid (the menu used to be a radial of wedges);
+                // kept verbatim so unit/e2e template flows stay untouched.
+                data-testid={`home-hero-template-wedge-${chip.id}`}
+                onClick={() => {
+                  if (pickDisabled) return;
+                  onPick(chip);
+                  setOpen(false);
+                }}
+              >
+                <span className="home-hero__template-list-head">
+                  <span className="home-hero__template-list-icon" aria-hidden>
+                    <Icon name={chip.icon} size={16} />
+                  </span>
+                  <span className="home-hero__template-list-title">{labelFor(chip.id)}</span>
+                  {isActive ? (
+                    <span className="home-hero__template-list-check" aria-hidden>
+                      <Icon name="check" size={14} />
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            );
+          })}
         </div>,
         document.body,
       ) : null}

@@ -1624,6 +1624,60 @@ export function HomeView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingChipRestore, pluginsLoading, plugins, active, pendingPluginUseHandoff]);
 
+  // Default creation type (per product): a fresh Home composer starts on
+  // 幻灯片 (the `deck` chip) instead of typeless. One-shot per mount, decided
+  // from the MOUNT-time draft state — if a persisted chip draft exists, the
+  // restore effect above owns the composer and this seed must never race its
+  // async resolution, so it is skipped outright. Explicitly clearing the chip
+  // (×) also stays cleared: the ref flips on first seed.
+  //
+  // The seed uses the same silent, deferred-apply path as a user pick on a
+  // create chip (no daemon apply until submit, textarea untouched) but skips
+  // `pickChip` itself so no synthetic chat_composer click lands in analytics.
+  const defaultChipSeededRef = useRef(pendingChipRestore !== null);
+  // Keep Send locked during the one effect turn between a cold plugin-catalog
+  // load and the default deck binding. The heavier Home chrome can otherwise
+  // make that turn user-visible: the composer accepts a click while `active`
+  // is still null and routes the prompt through the generic fallback even
+  // though Slide deck becomes selected immediately afterwards.
+  const [defaultChipSeedPending, setDefaultChipSeedPending] = useState(
+    pendingChipRestore === null,
+  );
+  useEffect(() => {
+    if (defaultChipSeededRef.current) return;
+    if (pluginsLoading || pendingPluginUseHandoff || pendingChipRestore) return;
+    // A live hand-off or another explicit intent may have bound a plugin in
+    // the same catalog-resolution turn. It supersedes the default deck and is
+    // just as ready to submit.
+    if (active) {
+      defaultChipSeededRef.current = true;
+      setDefaultChipSeedPending(false);
+      return;
+    }
+    defaultChipSeededRef.current = true;
+    const deckChip = findChip('deck');
+    const deckAction = deckChip?.action;
+    if (!deckChip || !deckAction || deckAction.kind !== 'apply-scenario') {
+      setDefaultChipSeedPending(false);
+      return;
+    }
+    const record = plugins.find((plugin) => plugin.id === deckAction.pluginId);
+    if (!record) {
+      setDefaultChipSeedPending(false);
+      return;
+    }
+    void usePlugin(record, undefined, {
+      projectKind: deckAction.projectKind,
+      chipId: deckChip.id,
+      inputs: deckAction.inputs,
+      projectMetadata: deckAction.projectMetadata ?? null,
+      suppressPromptUpdate: true,
+      deferApply: true,
+    });
+    setDefaultChipSeedPending(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pluginsLoading, active, pendingPluginUseHandoff, pendingChipRestore, plugins]);
+
   function addPluginContext(record: InstalledPluginRecord, nextPrompt: string | null) {
     setSelectedPluginContexts((prev) => {
       if (prev.some((item) => item.record.id === record.id)) return prev;
@@ -2601,6 +2655,10 @@ export function HomeView({
         pendingPluginId={pendingApplyId}
         pendingChipId={pendingChipId}
         submitDisabled={
+          pluginsLoading ||
+          defaultChipSeedPending ||
+          Boolean(pendingChipRestore) ||
+          Boolean(pendingPluginUseHandoff) ||
           Boolean(pendingApplyId) ||
           Boolean(pendingAuthoringChipId) ||
           // Only let missing required inputs disable Send where the user has a

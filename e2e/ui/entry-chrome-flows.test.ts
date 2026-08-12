@@ -1084,7 +1084,7 @@ test('[P1] rail destinations navigate and Home keeps its composer execution pill
   await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
 });
 
-test('[P0] @critical home composer routes free-form prompts through the design router by default', async ({ page }) => {
+test('[P0] @critical home composer routes free-form prompts through the default deck scenario', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
@@ -1103,13 +1103,15 @@ test('[P0] @critical home composer routes free-form prompts through the design r
     pendingPrompt?: string;
     conversationMode?: string;
     pluginId?: string | null;
+    pluginInputs?: Record<string, unknown>;
     metadata?: { kind?: string };
   };
-  expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
+  expect(body.name).toBe('Write an Operating Review like a Disciplined COO');
   expect(body.pendingPrompt).toBe(prompt);
   expect(body.conversationMode).toBe('design');
-  expect(body.pluginId).toBe('od-default');
-  expect(body.metadata?.kind).toBe('other');
+  expect(body.pluginId).toBe('example-simple-deck');
+  expect(body.pluginInputs).toMatchObject({ deckType: 'pitch deck' });
+  expect(body.metadata?.kind).toBe('deck');
 });
 
 test('[P0] @critical home working directory creates the project with linked dirs instead of importing files', async ({ page }) => {

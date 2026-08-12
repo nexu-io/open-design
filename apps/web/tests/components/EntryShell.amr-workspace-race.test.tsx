@@ -271,7 +271,9 @@ describe('EntryShell AMR workspace precheck race', () => {
 
     await waitFor(() => expect(contextReads).toBeGreaterThan(0));
     setHomeHeroPrompt('Build a workspace-scoped landing page');
-    fireEvent.click(await screen.findByTestId('home-hero-submit'));
+    const submit = await screen.findByTestId('home-hero-submit');
+    await waitFor(() => expect(submit).toBeEnabled());
+    fireEvent.click(submit);
     await waitFor(() => {
       expect(mockedCheckAmrBalanceGate).toHaveBeenNthCalledWith(1, {
         workspaceType: 'team',

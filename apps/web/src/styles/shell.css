@@ -37,7 +37,16 @@
   backdrop-filter: none;
   overflow: hidden;
 }
+/* The shell grid owns exactly two children: the tabs chrome and the body.
+   Pin each to its row so a stray extra shell child (e.g. an inline popover
+   anchor mounted at shell level — the floating account cluster renders its
+   MessageCenter anchor there) falls into a zero-height implicit row instead
+   of auto-placing into (and stealing) the 1fr body row. */
+.workspace-shell > .workspace-tabs-chrome {
+  grid-row: 1;
+}
 .workspace-shell__body {
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -490,6 +499,40 @@ html.od-radial-open .workspace-shell {
   border-color: transparent;
   color: var(--text);
   box-shadow: none;
+}
+/* Home glyph riding the chrome's corner buttons (pinned Home pill + the
+   docked-mode stand-in). Plain currentColor icon, sized to match the old
+   14-16px chrome icons. */
+.workspace-chrome-logo {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  user-select: none;
+}
+/* Home view with the rail open: the logo has nothing to do (collapse lives in
+   the rail's search row) — drop the button affordance so it reads as a mark,
+   not a control. */
+.workspace-tab__rail-toggle.is-inert {
+  cursor: default;
+}
+.workspace-tab__rail-toggle.is-inert:hover:not(:disabled) {
+  background: transparent;
+}
+/* Collapsed rail: hovering the corner swaps the logo for the expand-sidebar
+   glyph, so the button telegraphs its one action. The rail-open (.is-inert)
+   button never swaps — it is a mark, not a control. */
+.workspace-chrome-logo-swap {
+  display: none;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+.workspace-tab__rail-toggle:not(.is-inert):hover .workspace-chrome-logo {
+  display: none;
+}
+.workspace-tab__rail-toggle:not(.is-inert):hover .workspace-chrome-logo-swap {
+  display: block;
 }
 .workspace-tab__close {
   width: 18px;

@@ -167,6 +167,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     error,
     projectHeader,
     onCollapse,
+    collapseControlLifted,
   }: {
     messages: ChatMessage[];
     onSend: (
@@ -178,6 +179,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     error?: string | null;
     projectHeader?: ReactNode;
     onCollapse?: () => void;
+    collapseControlLifted?: boolean;
   }) => {
     const lastMessage = messages[messages.length - 1];
     const retryMessage =
@@ -204,9 +206,14 @@ vi.mock('../../src/components/ChatPane', () => ({
       >
         send
       </button>
-      <button type="button" data-testid="chat-collapse-toggle" onClick={onCollapse}>
-        collapse chat
-      </button>
+      {/* Mirrors the real ChatPane: when the collapse control is lifted into
+          the tabs dock, the header slot renders nothing — otherwise two
+          controls would share this testid. */}
+      {collapseControlLifted ? null : (
+        <button type="button" data-testid="chat-collapse-toggle" onClick={onCollapse}>
+          collapse chat
+        </button>
+      )}
       {messages.map((message) => (
         <article key={message.id} data-testid={`message-${message.role}`}>
           <span>{message.content}</span>

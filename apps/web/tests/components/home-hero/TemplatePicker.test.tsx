@@ -25,10 +25,6 @@ function labelFor(chipId: string): string {
   return chipById(chipId).label;
 }
 
-function descriptionFor(chipId: string): string {
-  return chipById(chipId).description ?? '';
-}
-
 function renderPicker(activeChipId: string | null, onClear = vi.fn()) {
   const onPick = vi.fn();
   return {
@@ -39,7 +35,6 @@ function renderPicker(activeChipId: string | null, onClear = vi.fn()) {
         templates={templates}
         activeChipId={activeChipId}
         labelFor={labelFor}
-        descriptionFor={descriptionFor}
         onPick={onPick}
         onClear={onClear}
       />,
@@ -48,6 +43,20 @@ function renderPicker(activeChipId: string | null, onClear = vi.fn()) {
 }
 
 describe('TemplatePicker', () => {
+  it('keeps the menu open for its own scroll but dismisses when a trigger ancestor scrolls', () => {
+    renderPicker('deck');
+    fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
+
+    const menu = screen.getByTestId('home-hero-template-menu');
+    fireEvent.scroll(menu);
+    expect(screen.queryByTestId('home-hero-template-menu')).not.toBeNull();
+
+    const triggerAncestor = screen.getByTestId('home-hero-template-picker').parentElement;
+    expect(triggerAncestor).not.toBeNull();
+    fireEvent.scroll(triggerAncestor!);
+    expect(screen.queryByTestId('home-hero-template-menu')).toBeNull();
+  });
+
   it('highlights a selected template and exposes an inline reset control', () => {
     const onClear = vi.fn();
     const view = renderPicker('wireframe', onClear);
@@ -69,7 +78,6 @@ describe('TemplatePicker', () => {
         templates={templates}
         activeChipId={null}
         labelFor={labelFor}
-        descriptionFor={descriptionFor}
         onPick={vi.fn()}
         onClear={onClear}
       />,

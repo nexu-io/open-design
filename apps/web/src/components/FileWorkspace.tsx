@@ -157,6 +157,7 @@ import { LibraryPicker } from './LibraryPicker';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import { SketchEnginePrewarm } from './SketchEnginePrewarm';
+import { useWorkspaceTabsDockRef } from './workspaceTabsDock';
 import {
   emptySketchScene,
   isSketchJsonFileName,
@@ -1472,6 +1473,8 @@ export function FileWorkspace({
   const launcherBtnRef = useRef<HTMLButtonElement | null>(null);
   const projectShareRef = useRef<HTMLDivElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
+  // Focus-mode dock host for the workspace tab strip (workspaceTabsDock.ts).
+  const focusTabsDockRef = useWorkspaceTabsDockRef();
   const draggedTabNameRef = useRef<string | null>(null);
   const browserTabSequenceRef = useRef(0);
   const openFileRef = useRef<(name: string) => void>(() => {});
@@ -3884,6 +3887,17 @@ export function FileWorkspace({
           >
             <Icon name="chevron-right" size={15} />
           </button>
+        ) : null}
+        {/* Focus mode keeps the project tab strip on this same row (the chat
+            column — its usual dock — is collapsed): the strip portals in here,
+            between the expand-chat control and the file tabs, so the chrome
+            row above stays Home + account only. See workspaceTabsDock.ts. */}
+        {focusMode ? (
+          <div
+            className="ws-tabs-project-dock"
+            data-testid="workspace-tabs-dock-focus"
+            ref={focusTabsDockRef}
+          />
         ) : null}
         <div
           ref={tabsBarRef}

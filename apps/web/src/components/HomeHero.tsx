@@ -95,6 +95,7 @@ import { ContextChipHoverCard } from './ContextChipHoverCard';
 import { workspaceContextDetailLine, workspaceContextKindLabel } from './workspace-context';
 import { FigmaHelpModal } from './FigmaHelpModal';
 import { TemplatePicker } from './home-hero/TemplatePicker';
+import { TypeFanCarousel } from './home-hero/TypeFanCarousel';
 import { LibraryPicker } from './LibraryPicker';
 import { ComposerModePicker } from './ComposerModePicker';
 import { assetTitle } from './LibraryAssetMeta';
@@ -717,6 +718,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         : [],
     [activeChipId, locale, pluginOptions],
   );
+  // Per-type FIRST recommended example, for the fan card's bottom-right
+  // panel: each of the 12 cards mirrors the 示例提示词 rail's first card for
+  // its own type. Preview inference is done here once per plugin-set change,
+  // not per render — the fan re-renders on every keystroke via the composer.
+  const fanFirstPresets = useMemo(() => {
+    const map = new Map<
+      string,
+      { record: InstalledPluginRecord; title: string; preview: ReturnType<typeof inferPluginPreview> }
+    >();
+    for (const chip of templateChips) {
+      const record = homeHeroExamplePluginsForChip(chip.id, pluginOptions, locale)[0];
+      if (!record) continue;
+      map.set(chip.id, {
+        record,
+        title: localizePluginTitle(locale, record),
+        preview: inferPluginPreview(record, { preferBaked: true, workspaceContext }),
+      });
+    }
+    return map;
+  }, [locale, pluginOptions, templateChips, workspaceContext]);
   // Derive sub-category pills from the FULL install set so the rail mirrors the
   // Community section exactly — same sub-category set and same order. (Earlier
   // this read only `activeExamplePlugins` to guarantee non-empty slices, but
@@ -1260,6 +1281,29 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
       <span className="home-hero__logo-wrap">
         <PixelScanLogo className="home-hero__logo home-hero__logo--tiles" />
       </span>
+
+      {/* Fanned type carousel: the 12 create-scenario types arc above the
+          composer; the apex card is the selected type, arrows/click switch. */}
+      <TypeFanCarousel
+        chips={templateChips}
+        activeChipId={activeChipId}
+        disabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
+        labelFor={(id) => homeHeroChipLabel(id, t)}
+        onPick={handlePickTaskChip}
+        presetPanel={(chipId) => {
+          const preset = fanFirstPresets.get(chipId);
+          if (!preset) return null;
+          return (
+            <span className="home-hero__type-fan-card-panel-preview">
+              <PreviewSurface
+                pluginId={preset.record.id}
+                pluginTitle={preset.title}
+                preview={preset.preview}
+              />
+            </span>
+          );
+        }}
+      />
 
       {/* #5517 wraps the input card + workdir row into one visible composer
           card so they read as a single surface. */}
@@ -1958,7 +2002,6 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               disabled={pluginsLoading}
               pickDisabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
               labelFor={(id) => homeHeroChipLabel(id, t)}
-              descriptionFor={(id) => homeHeroChipDescription(id, t)}
               onPick={handlePickTaskChip}
               onClear={() => {
                 // Drop any lingering hover-preview too: when the rail card was
