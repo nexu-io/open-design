@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,17 +7,21 @@ import { fileURLToPath } from "node:url";
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
   CLOSURE_ARCHIVE_MEDIA_TYPE,
+  CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   CLOSURE_INVENTORY_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
   bindClosureCandidateIdentity,
+  createClosureDistributionManifest,
   type ClosureBindingIdentity,
   type ClosureCandidateManifest,
+  type ClosureDistributionBlob,
 } from "@open-design/closure-proto";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   commitStoredClosureCandidate,
+  commitVerifiedClosureDistributionGeneration,
   commitVerifiedStoredClosureCandidate,
   consumeClosureDistributionTarget,
   planClosureDistributionGeneration,
@@ -25,6 +29,7 @@ import {
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
   verifyMaterializedClosureCandidate,
+  verifyMaterializedClosureDistributionGeneration,
   verifyStoredClosureCandidate,
   type ClosureStorePaths,
 } from "../src/index.js";
@@ -92,6 +97,69 @@ async function materializeCandidate(
   await writeFile(join(versionPaths.payloadRoot, "web", "server.js"), web);
   await writeFile(versionPaths.inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
   return { binding, manifest };
+}
+
+async function materializeDistributionGeneration(
+  paths: ClosureStorePaths,
+  generation: number,
+) {
+  const sources = {
+    body: Buffer.from("body-archive"),
+    launcher: Buffer.from("launcher-archive"),
+    native: Buffer.from("native-archive"),
+    resource: Buffer.from("resource-archive"),
+    runtime: Buffer.from("runtime-archive"),
+  };
+  const blob = (bytes: Buffer): ClosureDistributionBlob => {
+    const value = digest(bytes);
+    return {
+      digest: value,
+      mediaType: "application/zip",
+      size: bytes.byteLength,
+      url: `https://releases.open-design.test/beta/blobs/${value.slice("sha256:".length)}`,
+    };
+  };
+  const artifacts = Object.fromEntries(
+    Object.entries(sources).map(([name, bytes]) => [name, blob(bytes)]),
+  ) as Record<keyof typeof sources, ClosureDistributionBlob>;
+  const manifest = createClosureDistributionManifest({
+    blobs: Object.fromEntries(Object.values(artifacts).map((artifact) => [artifact.digest, artifact])),
+    compatibility: { shell: { electron: { version: { min: "0.19.0" } } } },
+    identity: {
+      channel: "beta",
+      protocolVersion: CLOSURE_PROTOCOL_VERSION,
+      version: "0.19.0-beta.10",
+    },
+    required: {
+      body: { blob: artifacts.body.digest, entryPath: "bootloader.mjs" },
+      launcher: { blob: artifacts.launcher.digest, entryPath: "launcher.mjs" },
+      targets: {
+        "darwin-arm64": {
+          native: { blob: artifacts.native.digest },
+          runtime: { blob: artifacts.runtime.digest, entryPath: "bin/node" },
+        },
+      },
+    },
+    resources: [{ blob: artifacts.resource.digest, id: "skills", title: "Skills" }],
+    schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  }, digest);
+  const plan = planClosureDistributionGeneration(paths, generation, manifest, "darwin-arm64");
+  await mkdir(paths.blobsRoot, { recursive: true });
+  for (const [name, bytes] of Object.entries(sources)) {
+    if (name === "resource") continue;
+    await writeFile(join(paths.blobsRoot, artifacts[name as keyof typeof sources].digest.slice("sha256:".length)), bytes);
+  }
+  const stageRoot = join(paths.stagingRoot, `generation-${generation}`);
+  await mkdir(join(stageRoot, "body"), { recursive: true });
+  await mkdir(join(stageRoot, "launcher"), { recursive: true });
+  await mkdir(join(stageRoot, "native"), { recursive: true });
+  await mkdir(join(stageRoot, "runtime", "bin"), { recursive: true });
+  await writeFile(join(stageRoot, "body", "bootloader.mjs"), "export const body = true;\n");
+  await writeFile(join(stageRoot, "launcher", "launcher.mjs"), "export const launcher = true;\n");
+  await writeFile(join(stageRoot, "native", "addon.node"), "native\n");
+  await writeFile(join(stageRoot, "runtime", "bin", "node"), "node\n");
+  await writeFile(join(stageRoot, "closure.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  return { artifacts, manifest, plan, stageRoot };
 }
 
 describe("Closure store paths", () => {
@@ -188,6 +256,61 @@ describe("layered Closure distribution consumer", () => {
       .toThrow(/channel does not match/u);
     expect(() => planClosureDistributionGeneration(paths, -1, fixture, "darwin-arm64"))
       .toThrow(/non-negative safe integer/u);
+  });
+});
+
+describe("layered Closure generation commit", () => {
+  it("publishes exactly one verified generation while lazy resources stay outside the cold view", async () => {
+    const paths = await createStore();
+    const staged = await materializeDistributionGeneration(paths, 0);
+
+    const verification = await verifyMaterializedClosureDistributionGeneration(
+      paths,
+      staged.plan,
+      staged.stageRoot,
+    );
+    const result = await commitVerifiedClosureDistributionGeneration(
+      paths,
+      verification,
+      "0.19.0-beta.10",
+    );
+
+    expect(result.committed.standalone).toEqual({
+      channel: "beta",
+      digest: staged.manifest.identity.digest,
+      generation: 0,
+      namespace: "release-beta",
+      protocolVersion: CLOSURE_PROTOCOL_VERSION,
+      target: "darwin-arm64",
+      version: "0.19.0-beta.10",
+    });
+    expect(result.descriptor.schemaVersion).toBe(2);
+    expect((await stat(staged.plan.required.body.resolvedEntryPath)).isFile()).toBe(true);
+    expect(await stat(staged.stageRoot).catch(() => null)).toBeNull();
+    expect(await stat(staged.plan.resources[0]!.blobPath).catch(() => null)).toBeNull();
+    expect(await readClosureBindingDescriptor(paths)).toEqual(result.descriptor);
+  });
+
+  it("fails closed before rename when a required CAS blob or view shape drifts", async () => {
+    const paths = await createStore();
+    const staged = await materializeDistributionGeneration(paths, 0);
+    await writeFile(staged.plan.required.runtime.blobPath, "corrupt-runtime");
+
+    await expect(verifyMaterializedClosureDistributionGeneration(
+      paths,
+      staged.plan,
+      staged.stageRoot,
+    )).rejects.toThrow(/runtime blob does not match/u);
+    expect((await readClosureBindingDescriptor(paths)).committed).toBeNull();
+
+    await writeFile(staged.plan.required.runtime.blobPath, Buffer.from("runtime-archive"));
+    await mkdir(join(staged.stageRoot, "resources"));
+    await expect(verifyMaterializedClosureDistributionGeneration(
+      paths,
+      staged.plan,
+      staged.stageRoot,
+    )).rejects.toThrow(/top-level shape/u);
+    expect((await readClosureBindingDescriptor(paths)).committed).toBeNull();
   });
 });
 

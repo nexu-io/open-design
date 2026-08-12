@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { lstat, readFile, readdir, stat } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rename, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import {
@@ -67,11 +67,14 @@ export type ClosureDistributionResourcePlan = Readonly<{
 }>;
 
 export type ClosureDistributionGenerationPlan = Readonly<{
+  channel: ReleaseChannel;
   generation: number;
   generationRoot: string;
   identity: ClosureDistributionIdentity;
   installationRoot: string;
+  manifest: ClosureDistributionManifest;
   manifestPath: string;
+  namespace: string;
   required: Readonly<{
     body: ClosureDistributionEntrypointPlan;
     launcher: ClosureDistributionEntrypointPlan;
@@ -81,6 +84,11 @@ export type ClosureDistributionGenerationPlan = Readonly<{
   requiredBlobPaths: readonly string[];
   resources: readonly ClosureDistributionResourcePlan[];
   target: string;
+}>;
+
+export type StoredClosureDistributionVerification = Readonly<{
+  materializedRoot: string;
+  plan: ClosureDistributionGenerationPlan;
 }>;
 
 export type ClosureStoreVersionPaths = ClosureStorePaths & {
@@ -244,11 +252,14 @@ export function planClosureDistributionGeneration(
     ),
   };
   return Object.freeze({
+    channel: paths.channel,
     generation,
     generationRoot,
     identity: consumed.manifest.identity,
     installationRoot: generationRoot,
+    manifest: consumed.manifest,
     manifestPath: assertUnderRoot(paths.root, join(generationRoot, "closure.json")),
+    namespace: paths.namespace,
     required: Object.freeze(required),
     requiredBlobPaths: Object.freeze(
       consumed.target.requiredBlobs.map((blob) => resolveDistributionBlobPath(paths, blob.digest)),
@@ -495,6 +506,165 @@ async function digestFile(path: string): Promise<{ digest: string; size: number 
   const hash = createHash("sha256");
   for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
   return { digest: `sha256:${hash.digest("hex")}`, size: metadata.size };
+}
+
+function assertDistributionPlanMatchesStore(
+  paths: ClosureStorePaths,
+  plan: ClosureDistributionGenerationPlan,
+): void {
+  if (plan.channel !== paths.channel || plan.namespace !== paths.namespace) {
+    throw new ClosureStoreError("Closure distribution plan does not match its channel/namespace Store");
+  }
+  const expectedRoot = assertUnderRoot(
+    paths.root,
+    join(paths.generationsRoot, String(plan.generation)),
+  );
+  if (plan.generationRoot !== expectedRoot || plan.installationRoot !== expectedRoot) {
+    throw new ClosureStoreError("Closure distribution plan does not match its Store generation root");
+  }
+  if (plan.manifestPath !== join(expectedRoot, "closure.json")) {
+    throw new ClosureStoreError("Closure distribution plan manifest path is invalid");
+  }
+}
+
+async function assertMaterializedComponentTree(root: string, label: string): Promise<void> {
+  const pending = [root];
+  let fileCount = 0;
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    const metadata = await lstat(current).catch(() => null);
+    if (metadata == null || !metadata.isDirectory()) {
+      throw new ClosureStoreError(`materialized Closure ${label} component is missing`);
+    }
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      const entryPath = join(current, entry.name);
+      if (entry.isSymbolicLink()) {
+        throw new ClosureStoreError(`materialized Closure ${label} component contains a symlink`);
+      }
+      if (entry.isDirectory()) {
+        pending.push(entryPath);
+      } else if (entry.isFile()) {
+        fileCount += 1;
+      } else {
+        throw new ClosureStoreError(`materialized Closure ${label} component contains an unsupported entry`);
+      }
+    }
+  }
+  if (fileCount === 0) {
+    throw new ClosureStoreError(`materialized Closure ${label} component is empty`);
+  }
+}
+
+async function assertMaterializedEntrypoint(path: string, label: string): Promise<void> {
+  const metadata = await lstat(path).catch(() => null);
+  if (metadata == null || !metadata.isFile() || metadata.isSymbolicLink()) {
+    throw new ClosureStoreError(`materialized Closure ${label} entry is missing`);
+  }
+}
+
+/**
+ * Verify a private generation staging tree and every required channel CAS blob.
+ * Archive extraction remains the update coordinator's responsibility; this
+ * proof only accepts the fixed four-component view and never a resource mount.
+ */
+export async function verifyMaterializedClosureDistributionGeneration(
+  paths: ClosureStorePaths,
+  plan: ClosureDistributionGenerationPlan,
+  materializedRootInput: string,
+): Promise<StoredClosureDistributionVerification> {
+  assertDistributionPlanMatchesStore(paths, plan);
+  const materializedRoot = assertUnderRoot(paths.stagingRoot, materializedRootInput);
+  if (materializedRoot === paths.stagingRoot) {
+    throw new ClosureStoreError("materialized Closure generation must use an isolated staging child");
+  }
+  const expectedTopLevel = ["body", "closure.json", "launcher", "native", "runtime"];
+  const topLevel = (await readdir(materializedRoot, { withFileTypes: true }).catch(() => []))
+    .map((entry) => entry.name)
+    .sort(compareName);
+  if (JSON.stringify(topLevel) !== JSON.stringify(expectedTopLevel)) {
+    throw new ClosureStoreError("materialized Closure generation has an invalid top-level shape");
+  }
+
+  const normalizedManifest = validateClosureDistributionManifest(
+    await readRequiredJson(join(materializedRoot, "closure.json"), "Closure distribution manifest"),
+    sha256CanonicalDistribution,
+  );
+  if (JSON.stringify(normalizedManifest) !== JSON.stringify(plan.manifest)) {
+    throw new ClosureStoreError("materialized Closure distribution manifest does not match its generation plan");
+  }
+
+  const required = Object.entries(plan.required) as Array<[
+    keyof ClosureDistributionGenerationPlan["required"],
+    ClosureDistributionComponentPlan | ClosureDistributionEntrypointPlan,
+  ]>;
+  const verifiedDigests = new Set<string>();
+  for (const [name, component] of required) {
+    const expectedBlobPath = resolveDistributionBlobPath(paths, component.artifact.digest);
+    if (component.blobPath !== expectedBlobPath) {
+      throw new ClosureStoreError(`Closure distribution ${name} blob path is invalid`);
+    }
+    if (!verifiedDigests.has(component.artifact.digest)) {
+      const actual = await digestFile(expectedBlobPath);
+      if (actual.digest !== component.artifact.digest || actual.size !== component.artifact.size) {
+        throw new ClosureStoreError(`Closure distribution ${name} blob does not match its manifest`);
+      }
+      verifiedDigests.add(component.artifact.digest);
+    }
+    const componentRoot = join(materializedRoot, name);
+    await assertMaterializedComponentTree(componentRoot, name);
+    if ("entryPath" in component) {
+      await assertMaterializedEntrypoint(join(componentRoot, component.entryPath), name);
+    }
+  }
+  if (verifiedDigests.size !== new Set(plan.requiredBlobPaths).size) {
+    throw new ClosureStoreError("Closure distribution required blob set does not match its components");
+  }
+  return Object.freeze({ materializedRoot, plan });
+}
+
+/** Publish one verified generation and then advance the sole binding truth. */
+export async function commitVerifiedClosureDistributionGeneration(
+  paths: ClosureStorePaths,
+  verification: StoredClosureDistributionVerification,
+  releaseVersion: string,
+): Promise<{
+  committed: CommittedClosureBinding;
+  descriptor: ClosureBindingDescriptor;
+  verification: StoredClosureDistributionVerification;
+}> {
+  assertDistributionPlanMatchesStore(paths, verification.plan);
+  const materializedRoot = assertUnderRoot(paths.stagingRoot, verification.materializedRoot);
+  const current = await readClosureBindingDescriptor(paths);
+  if (verification.plan.generation !== current.nextGeneration) {
+    throw new ClosureStoreError("verified Closure generation is stale");
+  }
+  if (await lstat(verification.plan.generationRoot).catch(() => null) != null) {
+    throw new ClosureStoreError("Closure generation root already exists");
+  }
+  await mkdir(paths.generationsRoot, { recursive: true });
+  await rename(materializedRoot, verification.plan.generationRoot);
+
+  const pointer: ClosureRuntimePointer = {
+    channel: paths.channel,
+    digest: verification.plan.identity.digest,
+    generation: verification.plan.generation,
+    namespace: paths.namespace,
+    protocolVersion: verification.plan.identity.protocolVersion,
+    target: verification.plan.target,
+    version: verification.plan.identity.version,
+  };
+  const committed: CommittedClosureBinding = {
+    releaseVersion: normalizeReleaseVersion(releaseVersion),
+    standalone: pointer,
+  };
+  const descriptor: ClosureBindingDescriptor = {
+    ...current,
+    committed,
+    nextGeneration: current.nextGeneration + 1,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeJsonFile(paths.bindingPath, descriptor);
+  return { committed, descriptor, verification };
 }
 
 function compareName(left: string, right: string): number {
