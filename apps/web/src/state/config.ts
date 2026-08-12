@@ -523,6 +523,7 @@ const BYOK_PROVIDER_PRESET_SPECS = [
     providerLabel: 'SiliconFlow (Global)',
   },
   { id: 'ppio', title: 'PPIO', providerLabel: 'PPIO' },
+  { id: 'novita', title: 'Novita AI', providerLabel: 'Novita AI' },
   { id: 'nvidia', title: 'NVIDIA', providerLabel: 'NVIDIA' },
   { id: 'stepfun', title: 'StepFun', providerLabel: 'StepFun' },
   { id: 'deepseek', title: 'DeepSeek', providerLabel: 'DeepSeek — OpenAI' },
