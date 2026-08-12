@@ -4184,6 +4184,128 @@ describe('InlineModelSwitcher AMR row', () => {
     vi.useRealTimers();
   });
 
+  it('does not re-arm "Signing in" after a matching login-canceled when the daemon still reports loginInFlight', async () => {
+    // Regression (review thread): moving the follow-up guard capture after the
+    // reason branches let a matching `login-canceled`'s fall-through
+    // `refreshAmrStatus` pass the generation guard (it captured the
+    // post-stopAmrPolling generation) and re-commit `setAmrLoginPending(true)`
+    // when the daemon still reported `loginInFlight: true` during the SIGTERM
+    // window — leaving the account row stuck on "Signing in…" with no poll to
+    // ever resolve it. A matching cancel must be trusted locally (mirroring
+    // AmrLoginPill) and skip the follow-up read.
+    const authAttemptId = '99999999-9999-4999-8999-999999999999';
+    let statusCall = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input.toString();
+      if (url === '/api/integrations/vela/status') {
+        statusCall += 1;
+        // Call 1: panel-open passive read (baseline signed-out).
+        if (statusCall === 1) {
+          return new Response(
+            JSON.stringify({
+              loggedIn: false,
+              loginInFlight: false,
+              profile: 'default',
+              user: null,
+              configPath: '/Users/test/.amr/config.json',
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          );
+        }
+        // Later reads: the daemon STILL reports loginInFlight (the cancel
+        // SIGTERM has not taken effect yet).
+        return new Response(
+          JSON.stringify({
+            loggedIn: false,
+            loginInFlight: true,
+            authAttemptId,
+            profile: 'default',
+            user: null,
+            configPath: '/Users/test/.amr/config.json',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (
+        url.startsWith('/api/integrations/vela/wallet') ||
+        url.startsWith('/api/workspace/')
+      ) {
+        return new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderSwitcher({ agentId: 'amr' }, [amrAgent], {}, { compact: true });
+
+    vi.useFakeTimers();
+    // Open the agent panel so the AMR account row renders live login state.
+    fireEvent.click(screen.getByTestId('inline-model-switcher-chip-agent'));
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(
+      screen.getByRole('radio', { name: /^Open Design\s+Sign in$/i }),
+    ).toBeTruthy();
+
+    // A login starts on another surface; the switcher adopts the attempt id.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, {
+          detail: { reason: 'login-started', authAttemptId },
+        }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(
+      screen.getByRole('radio', { name: /^Open Design\s+Signing in/i }),
+    ).toBeTruthy();
+
+    // A matching login-canceled arrives: same attempt the switcher adopted.
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(AMR_LOGIN_STATUS_EVENT, {
+          detail: { reason: 'login-canceled', authAttemptId },
+        }),
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // The account row must go back to "Sign in" — never a stuck "Signing in…"
+    // with no poll running.
+    expect(
+      screen.queryByRole('radio', { name: /^Open Design\s+Signing in$/i }),
+    ).toBeNull();
+    expect(
+      screen.getByRole('radio', { name: /^Open Design\s+Sign in$/i }),
+    ).toBeTruthy();
+
+    // And no poll may restart after a matching cancel: advancing the interval
+    // must not issue new reads.
+    const callsAfterCancel = statusCall;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AMR_LOGIN_POLL_INTERVAL_MS);
+    });
+    expect(statusCall).toBe(callsAfterCancel);
+
+    vi.useRealTimers();
+  });
+
   it('drops a stale AMR continuation when another CLI is picked before status resolves', async () => {
     // Regression (review thread): `handleAgentButtonClick('amr')` awaits
     // `refreshAmrStatus()` after `onAgentChange('amr')`. A faster pick of

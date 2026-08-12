@@ -1160,6 +1160,17 @@ export function InlineModelSwitcher({
           stopAmrPolling();
           clearPendingCompactAmrPick();
           setAmrLoginPending(false);
+          // A matching `login-canceled` is authoritative for THIS attempt:
+          // trust it locally and skip the follow-up read, mirroring
+          // AmrLoginPill. `cancelVelaLogin()` only sends SIGTERM and keeps
+          // the child in `activeLoginProcs` until it actually exits, so an
+          // immediate `/api/integrations/vela/status` read can legally still
+          // return `loginInFlight: true` — falling through to the guarded
+          // refresh would re-commit `setAmrLoginPending(true)` and leave the
+          // account row stuck on "Signing in…" with no poll to ever resolve
+          // it. The next explicit refresh (mount, panel reopen, focus, or a
+          // `status-changed` event) picks up the daemon's confirmed state.
+          return;
         }
       }
       // Continuity guard for the follow-up read below: captured AFTER the
