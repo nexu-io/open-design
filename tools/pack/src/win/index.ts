@@ -11,6 +11,7 @@ export {
   startPackedWinApp,
   stopPackedWinApp,
   uninstallPackedWinApp,
+  waitForHealthyPackedWinApp,
 } from "./lifecycle.js";
 export type {
   WinCleanupResult,
@@ -27,4 +28,5 @@ export type {
   WinStartResult,
   WinStopResult,
   WinUninstallResult,
+  WinWaitResult,
 } from "./types.js";

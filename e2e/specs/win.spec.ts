@@ -10,6 +10,15 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { describe, expect, test } from 'vitest';
+import { bindClosureCandidateIdentity } from '@open-design/closure-proto';
+import {
+  commitVerifiedStoredClosureCandidate,
+  resolveClosureStorePaths,
+  resolveClosureStoreVersionPaths,
+  verifyStoredClosureCandidate,
+  type StoredClosureVerification,
+} from '@open-design/closure-store';
+import extractZip from 'extract-zip';
 
 import {
   packagedAppShellExpression,
@@ -112,7 +121,11 @@ const nativeProductUserDataRoot = join(
   process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'),
   'Open Design',
 );
-const nativeRuntimeNamespaceRoot = join(nativeProductUserDataRoot, 'namespaces', namespace);
+const nativeRuntimeNamespaceBaseRoot = join(nativeProductUserDataRoot, 'namespaces');
+const nativeRuntimeNamespaceRoot = join(nativeRuntimeNamespaceBaseRoot, namespace);
+const activeRuntimeNamespaceRoot = verifyPublicImmutableArtifacts
+  ? nativeRuntimeNamespaceRoot
+  : runtimeNamespaceRoot;
 const portableNsisLogPath = join(
   tmpdir(),
   'Open Design',
@@ -302,8 +315,11 @@ type WinStartResult = {
   logPath: string;
   namespace: string;
   pid: number;
+  processExitedBeforeStatus?: boolean;
   source: string;
   status: DesktopStatus | null;
+  statusPollCount?: number;
+  statusWaitDurationMs?: number;
 };
 
 type WinStopResult = {
@@ -396,6 +412,11 @@ type WinInspectResult = {
       url?: string;
     };
     state: string;
+  };
+  wait?: {
+    attempts: number;
+    durationMs: number;
+    intervalMs: number;
   };
   webStatus: DesktopStatus | null;
   webStatusError?: string;
@@ -500,6 +521,10 @@ type SmokeTiming = {
   step: string;
 };
 
+type ReusableWinPackagedClosureFixture = PackagedClosureFixture & {
+  verification: StoredClosureVerification;
+};
+
 type DirectInstallerResult = {
   code: number | null;
   nsisLogTail: string[];
@@ -600,6 +625,16 @@ winDescribe('packaged windows runtime smoke', () => {
           installationRoot: join(toolsPackDir, 'runtime', 'win'),
           namespace,
         });
+        if (verifyPublicImmutableArtifacts) {
+          // Public acceptance owns one genuinely cold native first launch. A
+          // stale AppData binding would turn that proof into an offline reuse
+          // and could silently attach bytes from an older public release.
+          await resetPackagedClosureFixture({
+            channel: updateScenario.channel,
+            installationRoot: nativeProductUserDataRoot,
+            namespace,
+          });
+        }
       });
 
       const install = await measureSmokeStep(timings, 'install', async () => runToolsPackJson<WinInstallResult>('install'));
@@ -693,14 +728,16 @@ winDescribe('packaged windows runtime smoke', () => {
         expect(firstRunStop.status).not.toBe('partial');
         expect(firstRunStop.remainingPids).toEqual([]);
         if (verifyPublicImmutableArtifacts) await waitForDesktopStopped();
-        // Clear both the daemon data root and the Electron user-data partition
-        // so phase 2's seed lands on a true clean slate and no localStorage
-        // residue from this phase can ratchet into it.
-        await resetPackagedRuntimeDataRoot();
+        // Phase 2 reuses the exact Closure committed by the genuine native
+        // online first run. Clear only experience state before seeding the
+        // completed-user profile; deleting the product Store here would force
+        // a second download/extract/commit and duplicate the proof above.
+        if (verifyPublicImmutableArtifacts) await resetNativePackagedExperienceState();
+        else await resetPackagedRuntimeDataRoot();
       }
 
-      await seedPackagedOnboardingComplete();
       if (verifyPublicImmutableArtifacts) await seedNativePackagedOnboardingComplete();
+      else await seedPackagedOnboardingComplete();
 
       const startDesktop = async (step: string): Promise<WinStartResult> => {
         const nextStart = await measureSmokeStep(timings, step, async () => runToolsPackJson<WinStartResult>('start'));
@@ -751,7 +788,7 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(start.namespace).toBe(namespace);
       expect(start.source).toBe('installed');
       expectPathInside(start.executablePath, install.installDir);
-      expectPathInside(start.logPath, join(runtimeNamespaceRoot, 'logs', 'desktop'));
+      expectPathInside(start.logPath, join(activeRuntimeNamespaceRoot, 'logs', 'desktop'));
       expect(start.pid).toBeGreaterThan(0);
 
       if (shellAbsorbsStandaloneAcceptance) {
@@ -1106,8 +1143,11 @@ winDescribe('packaged windows runtime smoke', () => {
           executablePath: start.executablePath,
           logPath: start.logPath,
           pid: start.pid,
+          processExitedBeforeStatus: start.processExitedBeforeStatus,
           source: start.source,
           status: start.status,
+          statusPollCount: start.statusPollCount,
+          statusWaitDurationMs: start.statusWaitDurationMs,
         },
         stop,
         timings,
@@ -1441,91 +1481,109 @@ winClosureDescribe('packaged Windows Standalone Closure release acceptance', () 
       return;
     }
     const installationRoot = join(toolsPackDir, 'runtime', 'win');
+    const timings: SmokeTiming[] = [];
     let installed = false;
     let started = false;
     try {
-      await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => null);
-      await resetPackagedUpdaterNamespaceRoots();
-      await resetPackagedClosureFixture({
-        channel: updateScenario.channel,
-        installationRoot,
-        namespace,
+      await measureSmokeStep(timings, 'pre-clean namespace', async () => {
+        await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => null);
+        await resetPackagedUpdaterNamespaceRoots();
+        await resetPackagedClosureFixture({
+          channel: updateScenario.channel,
+          installationRoot,
+          namespace,
+        });
       });
-      await runToolsPackJson<WinInstallResult>('install');
+      const install = await measureSmokeStep(timings, 'install', async () => runToolsPackJson<WinInstallResult>('install'));
       installed = true;
-      await seedPackagedOnboardingComplete();
-      const fixture = await seedPackagedClosureFixture({
+      printLifecycleTimings('standalone install lifecycle timings', install.lifecycleTimings);
+      await measureSmokeStep(timings, 'seed onboarding complete', seedPackagedOnboardingComplete);
+      const fixture = await seedReusableWinPackagedClosureFixture({
         buildJsonPath: closureBuildJsonPath!,
         channel: updateScenario.channel,
         expectedPlatform: 'win32-x64',
         installationRoot,
         namespace,
+        timings,
         workspaceRoot,
       });
 
-      const firstStart = await runToolsPackJson<WinStartResult>('start');
+      const firstStart = await measureSmokeStep(timings, 'first cold start', async () => runToolsPackJson<WinStartResult>('start'));
       started = true;
-      const firstInspect = await waitForHealthyDesktop();
+      const firstInspect = await measureSmokeStep(timings, 'first healthy wait', async () => waitForHealthyDesktop());
       expect(assertHealthEvalValue(firstInspect.eval?.value).health.ok).toBe(true);
       assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
 
-      const reinstallStop = await runToolsPackJson<WinStopResult>('stop');
+      const restartStop = await measureSmokeStep(timings, 'stop before offline restart', async () =>
+        runToolsPackJson<WinStopResult>('stop'),
+      );
       started = false;
-      expect(reinstallStop.remainingPids).toEqual([]);
-      await runToolsPackJson<WinInstallResult>('install');
-      const reinstallStart = await runToolsPackJson<WinStartResult>('start');
+      expect(restartStop.remainingPids).toEqual([]);
+      if (shellSmokeProof !== 'hit') {
+        await measureSmokeStep(timings, 'reinstall without reusable Shell proof', async () =>
+          runToolsPackJson<WinInstallResult>('install'),
+        );
+      } else {
+        timings.push({ durationMs: 0, step: 'reuse exact Shell reinstall proof' });
+      }
+      const restartStart = await measureSmokeStep(timings, 'offline committed restart', async () =>
+        runToolsPackJson<WinStartResult>('start'),
+      );
       started = true;
-      expect(reinstallStart.pid).not.toBe(firstStart.pid);
-      await waitForHealthyDesktop();
+      expect(restartStart.pid).not.toBe(firstStart.pid);
+      await measureSmokeStep(timings, 'offline restart healthy wait', async () => waitForHealthyDesktop());
       assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
 
-      const faultStop = await runToolsPackJson<WinStopResult>('stop');
+      const faultStop = await measureSmokeStep(timings, 'stop before damaged successor', async () =>
+        runToolsPackJson<WinStopResult>('stop'),
+      );
       started = false;
       expect(faultStop.remainingPids).toEqual([]);
-      const broken = await activateBrokenClosureSuccessor(fixture);
-      // Windows `tools-pack start` has a bounded best-effort status probe and
-      // returns `status:null` when the spawned app exits during that window;
-      // unlike the macOS launch command it does not surface the child exit as
-      // a rejected command. Prove the actual fail-closed postconditions: no
-      // healthy desktop, no identity confirmation, an exited process, and the
-      // immutable-verification failure in the Shell log.
-      const brokenStart = await runToolsPackJson<WinStartResult>('start');
+      const broken = await measureSmokeStep(timings, 'materialize damaged successor', async () =>
+        activateBrokenClosureSuccessor(fixture),
+      );
+      const brokenStart = await measureSmokeStep(timings, 'start damaged successor fail-fast', async () =>
+        runToolsPackJson<WinStartResult>('start'),
+      );
       expect(brokenStart.status).toBeNull();
-      await waitForDesktopGone('damaged Closure never became the desktop');
+      expect(brokenStart.processExitedBeforeStatus).toBe(true);
+      await measureSmokeStep(timings, 'assert damaged successor stayed closed', async () =>
+        waitForDesktopGone('damaged Closure never became the desktop'),
+      );
       await expect(readDesktopIdentityMarker()).rejects.toThrow();
       const brokenDesktopLog = await readFile(join(runtimeNamespaceRoot, 'logs', 'desktop', 'latest.log'), 'utf8');
       expect(brokenDesktopLog).toContain('Committed Standalone failed immutable Store verification');
       expect(brokenDesktopLog).toContain('"code":1');
       expect((await readPackagedClosureFixtureRuntime(fixture)).committed?.standalone).toEqual(broken.pointer);
 
-      await resetPackagedClosureFixture({
-        channel: updateScenario.channel,
-        installationRoot,
-        namespace,
-      });
-      const recovered = await seedPackagedClosureFixture({
-        buildJsonPath: closureBuildJsonPath!,
-        channel: updateScenario.channel,
-        expectedPlatform: 'win32-x64',
-        installationRoot,
-        namespace,
-        workspaceRoot,
-      });
-      await runToolsPackJson<WinStartResult>('start');
+      const recovered = await measureSmokeStep(timings, 'restore verified good binding', async () =>
+        restoreReusableWinPackagedClosureFixture(fixture),
+      );
+      await measureSmokeStep(timings, 'start recovered binding', async () => runToolsPackJson<WinStartResult>('start'));
       started = true;
-      await waitForHealthyDesktop();
+      await measureSmokeStep(timings, 'recovered binding healthy wait', async () => waitForHealthyDesktop());
       assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
       expect((await readPackagedClosureFixtureRuntime(recovered)).committed?.standalone).toEqual(recovered.pointer);
     } finally {
-      if (started) await runToolsPackJson<WinStopResult>('stop').catch(() => undefined);
-      if (installed) {
-        await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => undefined);
+      if (started) {
+        await measureSmokeStep(timings, 'cleanup stop', async () =>
+          runToolsPackJson<WinStopResult>('stop').catch(() => undefined),
+        );
       }
-      await resetPackagedClosureFixture({
-        channel: updateScenario.channel,
-        installationRoot,
-        namespace,
-      }).catch(() => undefined);
+      if (installed) {
+        const uninstall = await measureSmokeStep(timings, 'cleanup uninstall', async () =>
+          runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => undefined),
+        );
+        printLifecycleTimings('standalone uninstall lifecycle timings', uninstall?.lifecycleTimings);
+      }
+      await measureSmokeStep(timings, 'cleanup Closure fixture', async () =>
+        resetPackagedClosureFixture({
+          channel: updateScenario.channel,
+          installationRoot,
+          namespace,
+        }).catch(() => undefined),
+      );
+      printSmokeTimings(timings);
     }
   }, 720_000);
 });
@@ -2187,6 +2245,10 @@ async function runToolsPackJsonForVersion<T>(
   appVersion: string | null | undefined,
   extraArgs: string[] = [],
 ): Promise<T> {
+  const runtimeBaseArgs = verifyPublicImmutableArtifacts
+    && ['inspect', 'install', 'logs', 'start', 'stop', 'wait'].includes(action)
+    ? ['--runtime-base-root', nativeRuntimeNamespaceBaseRoot]
+    : [];
   const args = [
     toolsPackBin,
     'win',
@@ -2197,6 +2259,7 @@ async function runToolsPackJsonForVersion<T>(
     namespace,
     ...releaseAppVersionArgs(appVersion),
     '--json',
+    ...runtimeBaseArgs,
     ...extraArgs,
   ];
   const startedAt = Date.now();
@@ -2458,40 +2521,23 @@ function restoreUpdateEnv(previous: Partial<Record<(typeof UPDATE_ENV_KEYS)[numb
 }
 
 async function waitForHealthyDesktop(timeoutMs = 90_000): Promise<WinInspectResult> {
-  const startedAt = Date.now();
-  let lastResult: unknown = null;
-
-  while (Date.now() - startedAt < timeoutMs) {
-    try {
-      const statusInspect = await runToolsPackJson<WinInspectResult>('inspect');
-      lastResult = { inspect: statusInspect, step: 'status' };
-      const fallback = await maybeCoreHealthFallback(statusInspect);
-      if (fallback != null) return fallback;
-      if (statusInspect.status?.state !== 'running') {
-        await delay(1000);
-        continue;
-      }
-
-      const readinessInspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', readinessExpression]);
-      lastResult = { inspect: readinessInspect, step: 'readiness' };
-      if (readinessInspect.eval?.ok !== true) {
-        await delay(1000);
-        continue;
-      }
-
-      const inspect = await runToolsPackJson<WinInspectResult>('inspect', ['--expr', healthExpression]);
-      lastResult = { inspect, step: 'health' };
-      if (inspect.eval?.ok === true) {
-        const value = asHealthEvalValue(inspect.eval.value);
-        if (value?.status === 200 && value.health.ok === true && typeof value.health.version === 'string') return inspect;
-      }
-    } catch (error) {
-      lastResult = error;
-    }
-    await delay(1000);
+  const inspect = await runToolsPackJson<WinInspectResult>('wait', [
+    '--timeout-ms',
+    String(timeoutMs),
+    '--status-poll-interval-ms',
+    '1000',
+    ...(verifyCoreOnly ? ['--allow-daemon-fallback'] : []),
+  ]);
+  if (inspect.wait != null) {
+    console.info(
+      `[windows healthy wait] attempts=${inspect.wait.attempts} durationMs=${inspect.wait.durationMs} intervalMs=${inspect.wait.intervalMs}`,
+    );
   }
-
-  throw new Error(`packaged windows runtime did not become healthy: ${formatUnknown(lastResult)}`);
+  if (inspect.eval?.ok === true) {
+    const value = asHealthEvalValue(inspect.eval.value);
+    if (value?.status === 200 && value.health.ok === true && typeof value.health.version === 'string') return inspect;
+  }
+  throw new Error(`packaged windows runtime wait returned without healthy state: ${formatUnknown(inspect)}`);
 }
 
 async function waitForDesktopStopped(timeoutMs = 15_000): Promise<void> {
@@ -2529,48 +2575,6 @@ async function waitForCommittedPackagedClosureFixture(
   }
 
   throw new Error(`packaged windows runtime did not commit Closure: ${formatUnknown(lastError)}`);
-}
-
-async function maybeCoreHealthFallback(inspect: WinInspectResult): Promise<WinInspectResult | null> {
-  if (!verifyCoreOnly) return null;
-  if (inspect.status != null) return null;
-  if (inspect.statusError == null || !inspect.statusError.includes('IPC request timed out')) return null;
-  if (inspect.daemonStatus?.state !== 'running' || inspect.daemonStatus.url == null) return null;
-  if (inspect.webStatus?.state !== 'running' || inspect.webStatus.url == null) return null;
-
-  const health = await fetchPackagedHealth(inspect.daemonStatus.url);
-  if (health.status !== 200 || health.health.ok !== true) return null;
-  return {
-    ...inspect,
-    desktopIpcUnavailable: true,
-    eval: {
-      ok: true,
-      value: health,
-    },
-    status: {
-      ...(inspect.daemonStatus.pid == null ? {} : { pid: inspect.daemonStatus.pid }),
-      state: 'running',
-      title: null,
-      url: inspect.webStatus.url,
-      windowVisible: false,
-    },
-  };
-}
-
-async function fetchPackagedHealth(daemonUrl: string): Promise<HealthEvalValue> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 4000);
-  try {
-    const response = await fetch(new URL('/api/health', daemonUrl), { signal: controller.signal });
-    return {
-      health: await response.json() as HealthEvalValue['health'],
-      href: daemonUrl,
-      status: response.status,
-      title: 'Open Design Beta',
-    };
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 /**
@@ -2875,7 +2879,7 @@ async function printPackagedLogs(): Promise<void> {
 }
 
 async function printUpdaterHelperLogs(): Promise<void> {
-  const helpersRoot = join(runtimeNamespaceRoot, 'updates', 'helpers');
+  const helpersRoot = join(activeRuntimeNamespaceRoot, 'updates', 'helpers');
   const entries = await readdir(helpersRoot).catch(() => []);
   for (const entry of entries.filter((name) => name.endsWith('.log')).sort()) {
     const logPath = join(helpersRoot, entry);
@@ -2886,14 +2890,16 @@ async function printUpdaterHelperLogs(): Promise<void> {
 }
 
 async function printLauncherRuntimeSnapshot(): Promise<void> {
-  const runtimePath = join(launcherNamespaceRoot, 'runtime.json');
+  const runtimePath = verifyPublicImmutableArtifacts
+    ? join(nativeProductUserDataRoot, 'launcher', 'channels', updateScenario.channel, 'namespaces', namespace, 'runtime.json')
+    : join(launcherNamespaceRoot, 'runtime.json');
   const content = await readFile(runtimePath, 'utf8').catch(() => null);
   console.error(`[launcher-runtime] ${runtimePath}`);
   console.error(content?.trim() ?? '(missing)');
 }
 
 async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
-  const markerPath = join(runtimeNamespaceRoot, 'runtime', 'desktop-root.json');
+  const markerPath = join(activeRuntimeNamespaceRoot, 'runtime', 'desktop-root.json');
   const value = JSON.parse(await readFile(markerPath, 'utf8')) as unknown;
   if (
     !isRecord(value) ||
@@ -3185,7 +3191,7 @@ async function waitForInviteContinuationResult(
 }
 
 async function readInviteContinuationResults(): Promise<InviteContinuationResult[]> {
-  const logPath = join(runtimeNamespaceRoot, 'logs', 'desktop', 'latest.log');
+  const logPath = join(activeRuntimeNamespaceRoot, 'logs', 'desktop', 'latest.log');
   const content = await readFile(logPath, 'utf8').catch(() => '');
   const results: InviteContinuationResult[] = [];
   for (const line of content.split(/\r?\n/u)) {
@@ -3253,6 +3259,75 @@ async function seedNativePackagedOnboardingComplete(): Promise<void> {
   const configPath = join(nativeRuntimeNamespaceRoot, 'data', 'app-config.json');
   await mkdir(dirname(configPath), { recursive: true });
   await writeFile(configPath, `${JSON.stringify({ onboardingCompleted: true }, null, 2)}\n`, 'utf8');
+}
+
+async function resetNativePackagedExperienceState(): Promise<void> {
+  await Promise.all([
+    rm(join(nativeRuntimeNamespaceRoot, 'data'), { force: true, recursive: true }),
+    rm(join(nativeRuntimeNamespaceRoot, 'user-data'), { force: true, recursive: true }),
+  ]);
+}
+
+async function seedReusableWinPackagedClosureFixture(input: {
+  buildJsonPath: string;
+  channel: string;
+  expectedPlatform: string;
+  installationRoot: string;
+  namespace: string;
+  timings: SmokeTiming[];
+  workspaceRoot: string;
+}): Promise<ReusableWinPackagedClosureFixture> {
+  const source = await measureSmokeStep(input.timings, 'closure fixture read build report', async () =>
+    readPackagedClosureBuildFixture(input),
+  );
+  const storePaths = resolveClosureStorePaths({
+    channel: input.channel,
+    namespace: input.namespace,
+    root: input.installationRoot,
+  });
+  const binding = bindClosureCandidateIdentity(source.manifest.identity, input.namespace);
+  const versionPaths = resolveClosureStoreVersionPaths(storePaths, binding);
+  await measureSmokeStep(input.timings, 'closure fixture reset candidate', async () => {
+    await rm(versionPaths.versionRoot, { force: true, recursive: true });
+    await mkdir(versionPaths.versionRoot, { recursive: true });
+  });
+  await measureSmokeStep(input.timings, 'closure fixture copy release artifacts', async () => {
+    await Promise.all([
+      copyFile(source.archivePath, versionPaths.archivePath),
+      copyFile(source.inventoryPath, versionPaths.inventoryPath),
+      copyFile(source.manifestPath, versionPaths.manifestPath),
+    ]);
+  });
+  await measureSmokeStep(input.timings, 'closure fixture extract archive', async () => {
+    await extractZip(versionPaths.archivePath, { dir: versionPaths.payloadRoot });
+  });
+  const verification = await measureSmokeStep(input.timings, 'closure fixture verify immutable bytes', async () =>
+    verifyStoredClosureCandidate(storePaths, binding),
+  );
+  const committed = await measureSmokeStep(input.timings, 'closure fixture commit verified binding', async () =>
+    commitVerifiedStoredClosureCandidate(storePaths, verification, source.manifest.identity.version),
+  );
+  return {
+    manifest: source.manifest,
+    pointer: committed.committed.standalone,
+    storePaths,
+    verification,
+    versionPaths,
+  };
+}
+
+async function restoreReusableWinPackagedClosureFixture(
+  fixture: ReusableWinPackagedClosureFixture,
+): Promise<ReusableWinPackagedClosureFixture> {
+  const committed = await commitVerifiedStoredClosureCandidate(
+    fixture.storePaths,
+    fixture.verification,
+    fixture.manifest.identity.version,
+  );
+  return {
+    ...fixture,
+    pointer: committed.committed.standalone,
+  };
 }
 
 /**
@@ -3354,9 +3429,7 @@ function parsePathListEnv(value: string | undefined): string[] {
 
 async function readPackagedClosureBinding(): Promise<Record<string, unknown>> {
   const bindingPath = join(
-    toolsPackDir,
-    'runtime',
-    'win',
+    verifyPublicImmutableArtifacts ? nativeProductUserDataRoot : join(toolsPackDir, 'runtime', 'win'),
     'closure',
     'channels',
     updateScenario.channel,

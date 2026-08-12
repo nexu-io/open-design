@@ -239,8 +239,11 @@ export type WinStartResult = {
   logPath: string;
   namespace: string;
   pid: number;
+  processExitedBeforeStatus: boolean;
   source: "built" | "installed";
   status: DesktopStatusSnapshot | null;
+  statusPollCount: number;
+  statusWaitDurationMs: number;
 };
 
 export type WinIpcDiagnoseAttempt = {
@@ -370,6 +373,7 @@ export type WinResetResult = {
 export type WinInspectResult = {
   daemonStatus: DaemonStatusSnapshot | null;
   daemonStatusError?: string;
+  desktopIpcUnavailable?: boolean;
   eval?: DesktopEvalResult;
   launcher: ToolPackLauncherRuntimeSnapshot;
   launcherSource: {
@@ -391,6 +395,14 @@ export type WinInspectResult = {
   update?: DesktopUpdateResult;
   webStatus: WebStatusSnapshot | null;
   webStatusError?: string;
+};
+
+export type WinWaitResult = WinInspectResult & {
+  wait: {
+    attempts: number;
+    durationMs: number;
+    intervalMs: number;
+  };
 };
 
 export type WinInspectStatusPollSample = {

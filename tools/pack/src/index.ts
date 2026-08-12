@@ -31,6 +31,7 @@ import {
   stopPackedWinApp,
   uninstallPackedWinApp,
   validateWinLauncherPayloadArchive,
+  waitForHealthyPackedWinApp,
 } from "./win/index.js";
 
 type CliOptions = ToolPackCliOptions;
@@ -97,12 +98,15 @@ function addMacBuildOptions(command: CacCommand) {
 
 function addWinLifecycleOptions(command: CacCommand) {
   return command
+    .option("--allow-daemon-fallback", "wait: accept healthy daemon/web sidecars when packaged Desktop IPC is intentionally unavailable")
     .option("--expected-version <version>", "validate-payload: expected launcher payload version")
     .option("--payload-path <path>", "validate-payload: launcher payload archive path")
     .option("--remove-cache", "remove packaged download/cache data during uninstall/reset/cleanup")
     .option("--remove-data", "remove packaged data during uninstall/reset/cleanup")
     .option("--remove-logs", "remove packaged logs during uninstall/reset/cleanup")
     .option("--remove-product-user-data", "remove the public Electron app userData root during Windows uninstall/reset/cleanup")
+    .option("--runtime-base-root <path>", "install/start/stop/logs/inspect/wait: override only the Windows runtime namespace base root")
+    .option("--timeout-ms <ms>", "wait: maximum time to wait for a healthy packaged runtime")
     .option("--remove-sidecars", "remove packaged sidecar runtime during uninstall/reset/cleanup")
     .option("--silent", "run installer/uninstaller silently", { default: true });
 }
@@ -231,7 +235,7 @@ addWinLifecycleOptions(
     addSharedOptions(
       cli.command(
         "win <action>",
-        "Windows packaging commands: build|install|start|stop|logs|uninstall|cleanup|list|reset|inspect|diagnose-ipc|validate-payload",
+        "Windows packaging commands: build|install|start|stop|logs|uninstall|cleanup|list|reset|inspect|wait|diagnose-ipc|validate-payload",
       ),
     ),
     "win",
@@ -246,16 +250,16 @@ addWinLifecycleOptions(
       printJson(await resolveToolPackShellBuildPlan(config));
       return;
     case "install":
-      printJson(await installPackedWinApp(config));
+      printJson(await installPackedWinApp(config, { runtimeBaseRoot: options.runtimeBaseRoot }));
       return;
     case "start":
-      printJson(await startPackedWinApp(config));
+      printJson(await startPackedWinApp(config, { runtimeBaseRoot: options.runtimeBaseRoot }));
       return;
     case "stop":
-      printJson(await stopPackedWinApp(config));
+      printJson(await stopPackedWinApp(config, { runtimeBaseRoot: options.runtimeBaseRoot }));
       return;
     case "logs":
-      printLogs(await readPackedWinLogs(config), options);
+      printLogs(await readPackedWinLogs(config, { runtimeBaseRoot: options.runtimeBaseRoot }), options);
       return;
     case "uninstall":
       printJson(await uninstallPackedWinApp(config));
@@ -271,6 +275,9 @@ addWinLifecycleOptions(
       return;
     case "inspect":
       printJson(await inspectPackedWinApp(config, options));
+      return;
+    case "wait":
+      printJson(await waitForHealthyPackedWinApp(config, options));
       return;
     case "diagnose-ipc":
       printJson(await diagnosePackedWinIpc(config, options));

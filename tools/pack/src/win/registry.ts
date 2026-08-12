@@ -148,6 +148,19 @@ export async function queryWinNamespaceRegistryEntry(
   return entry;
 }
 
+/**
+ * Use the deterministic per-namespace HKCU key for the hot lifecycle path.
+ * Recursive HKCU/HKLM scans remain the compatibility fallback for an older
+ * or externally-moved install and the authoritative final residue audit.
+ */
+export async function queryPreferredWinRegistryEntries(
+  config: Pick<ToolPackConfig, "namespace">,
+  paths: WinPaths,
+): Promise<WindowsUninstallRegistryEntry[]> {
+  const entry = await queryWinNamespaceRegistryEntry(config, paths);
+  return entry == null ? await queryWinRegistryEntries(paths, config) : [entry];
+}
+
 export async function resolveWinRegisteredPaths(config: ToolPackConfig, paths: WinPaths): Promise<WinPaths> {
   const entry = await queryWinNamespaceRegistryEntry(config, paths);
   if (entry == null) return paths;

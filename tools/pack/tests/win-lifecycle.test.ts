@@ -14,11 +14,22 @@ const listProcessSnapshots = vi.hoisted(() =>
 const matchesStampedProcess = vi.hoisted(() =>
   vi.fn<typeof import("@open-design/platform").matchesStampedProcess>(() => false),
 );
-const spawnBackgroundProcess = vi.hoisted(() => vi.fn(async () => ({ pid: 12345 })));
+const isProcessAlive = vi.hoisted(() =>
+  vi.fn<typeof import("@open-design/platform").isProcessAlive>(() => true),
+);
+const spawnBackgroundProcess = vi.hoisted(() =>
+  vi.fn<typeof import("@open-design/platform").spawnBackgroundProcess>(async () => ({ pid: 12345 })),
+);
 const stopProcesses = vi.hoisted(() => vi.fn(async () => undefined));
 const invokeNsis = vi.hoisted(() => vi.fn<typeof import("../src/win/nsis.js").invokeNsis>());
 const queryWinRegistryEntries = vi.hoisted(() =>
   vi.fn<typeof import("../src/win/registry.js").queryWinRegistryEntries>(async () => []),
+);
+const queryPreferredWinRegistryEntries = vi.hoisted(() =>
+  vi.fn<typeof import("../src/win/registry.js").queryPreferredWinRegistryEntries>(async () => []),
+);
+const queryWinNamespaceRegistryEntry = vi.hoisted(() =>
+  vi.fn<typeof import("../src/win/registry.js").queryWinNamespaceRegistryEntry>(async () => null),
 );
 const resolveWinRegisteredPaths = vi.hoisted(() =>
   vi.fn<typeof import("../src/win/registry.js").resolveWinRegisteredPaths>(async (_config, paths) => paths),
@@ -36,6 +47,7 @@ vi.mock("@open-design/platform", async () => {
   const actual = await vi.importActual<typeof import("@open-design/platform")>("@open-design/platform");
   return {
     ...actual,
+    isProcessAlive,
     listProcessSnapshots,
     matchesStampedProcess,
     spawnBackgroundProcess,
@@ -55,12 +67,22 @@ vi.mock("../src/win/registry.js", async () => {
   const actual = await vi.importActual<typeof import("../src/win/registry.js")>("../src/win/registry.js");
   return {
     ...actual,
+    queryPreferredWinRegistryEntries,
+    queryWinNamespaceRegistryEntry,
     queryWinRegistryEntries,
     resolveWinRegisteredPaths,
   };
 });
 
-const { diagnosePackedWinIpc, inspectPackedWinApp, installPackedWinApp, stopPackedWinApp, uninstallPackedWinApp } = await import(
+const {
+  diagnosePackedWinIpc,
+  inspectPackedWinApp,
+  installPackedWinApp,
+  startPackedWinApp,
+  stopPackedWinApp,
+  uninstallPackedWinApp,
+  waitForHealthyPackedWinApp,
+} = await import(
   "../src/win/lifecycle.js"
 );
 const { resolveWinPaths } = await import("../src/win/paths.js");
@@ -144,6 +166,33 @@ describe("installPackedWinApp", () => {
     }
   });
 
+  it("pins a requested runtime root for native public-acceptance launches", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
+    const config = { ...createConfig(root), portable: true };
+    const paths = resolveWinPaths(config);
+    const runtimeBaseRoot = join(root, "native-product", "namespaces");
+    const installedConfigPath = join(paths.installDir, "resources", "open-design-config.json");
+
+    try {
+      await mkdir(dirname(paths.setupPath), { recursive: true });
+      await writeFile(paths.setupPath, "", "utf8");
+      invokeNsis.mockReset();
+      invokeNsis.mockImplementation(async () => {
+        await mkdir(dirname(installedConfigPath), { recursive: true });
+        await writeFile(paths.installedExePath, "", "utf8");
+        await writeFile(installedConfigPath, "{}\n", "utf8");
+      });
+
+      await installPackedWinApp(config, { runtimeBaseRoot });
+      expect(JSON.parse(await readFile(installedConfigPath, "utf8"))).toMatchObject({
+        namespace: config.namespace,
+        namespaceBaseRoot: runtimeBaseRoot,
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("creates the exact fresh install directory before invoking transactional NSIS", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
     const config = createConfig(root);
@@ -153,6 +202,8 @@ describe("installPackedWinApp", () => {
       await mkdir(dirname(paths.setupPath), { recursive: true });
       await writeFile(paths.setupPath, "", "utf8");
       invokeNsis.mockReset();
+      queryPreferredWinRegistryEntries.mockReset();
+      queryPreferredWinRegistryEntries.mockResolvedValue([]);
       invokeNsis.mockImplementation(async () => {
         await expect(access(paths.installDir)).resolves.toBeUndefined();
         const installedConfigPath = join(paths.installDir, "resources", "open-design-config.json");
@@ -165,6 +216,7 @@ describe("installPackedWinApp", () => {
 
       expect(result.installDir).toBe(paths.installDir);
       expect(result.lifecycleTimings.map(({ step }) => step)).toContain("ensure install directory");
+      expect(queryPreferredWinRegistryEntries).toHaveBeenCalledOnce();
       expect(invokeNsis).toHaveBeenCalledOnce();
     } finally {
       await rm(root, { force: true, recursive: true });
@@ -195,6 +247,8 @@ describe("uninstallPackedWinApp", () => {
       listProcessSnapshots.mockResolvedValue([]);
       queryWinRegistryEntries.mockReset();
       queryWinRegistryEntries.mockResolvedValue([]);
+      queryWinNamespaceRegistryEntry.mockReset();
+      queryWinNamespaceRegistryEntry.mockResolvedValue(null);
       invokeNsis.mockReset();
       invokeNsis.mockImplementation(async () => {
         setTimeout(() => {
@@ -210,8 +264,65 @@ describe("uninstallPackedWinApp", () => {
       expect(result.lifecycleTimings.map(({ step }) => step)).toContain("wait for native uninstall settlement");
       expect(result.residueObservation.startMenuShortcutExists).toBe(false);
       expect(result.residueObservation.userDesktopShortcutExists).toBe(false);
+      expect(queryWinNamespaceRegistryEntry).toHaveBeenCalled();
       expect(invokeNsis).toHaveBeenCalledOnce();
     } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("startPackedWinApp", () => {
+  it("overrides only the installed runtime root while keeping the existing install target", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
+    const config = createConfig(root);
+    const paths = resolveWinPaths(config);
+    const runtimeBaseRoot = join(root, "native-product", "namespaces");
+
+    try {
+      await mkdir(join(dirname(paths.installedExePath), "resources"), { recursive: true });
+      await writeFile(paths.installedExePath, "", "utf8");
+      await writeFile(join(dirname(paths.installedExePath), "resources", "open-design-config.json"), "{}\n", "utf8");
+      requestJsonIpc.mockReset();
+      requestJsonIpc.mockResolvedValue({ state: "running", url: "od://app/" });
+      spawnBackgroundProcess.mockClear();
+
+      const result = await startPackedWinApp(config, { runtimeBaseRoot });
+
+      expect(result.executablePath).toBe(paths.installedExePath);
+      const request = spawnBackgroundProcess.mock.calls[0]?.[0];
+      const launchConfigPath = request?.env?.OD_PACKAGED_CONFIG_PATH;
+      expect(launchConfigPath).toBe(join(runtimeBaseRoot, config.namespace, "runtime", "launch-open-design-config.json"));
+      expect(JSON.parse(await readFile(String(launchConfigPath), "utf8"))).toMatchObject({
+        namespaceBaseRoot: runtimeBaseRoot,
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("returns as soon as the spawned desktop exits before publishing status", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
+    const config = createConfig(root);
+
+    try {
+      await writeFakeUnpackedExe(config);
+      requestJsonIpc.mockReset();
+      requestJsonIpc.mockRejectedValue(new Error("not running"));
+      isProcessAlive.mockReset();
+      isProcessAlive.mockReturnValue(false);
+      spawnBackgroundProcess.mockClear();
+
+      const result = await startPackedWinApp(config);
+
+      expect(result.status).toBeNull();
+      expect(result.processExitedBeforeStatus).toBe(true);
+      expect(result.statusPollCount).toBe(1);
+      expect(result.statusWaitDurationMs).toBeLessThan(1000);
+      expect(spawnBackgroundProcess).toHaveBeenCalledOnce();
+    } finally {
+      isProcessAlive.mockReset();
+      isProcessAlive.mockReturnValue(true);
       await rm(root, { force: true, recursive: true });
     }
   });
@@ -306,6 +417,84 @@ describe("inspectPackedWinApp", () => {
       expect(result.statusPoll?.samples[0]?.daemonStatus).toEqual({ state: "running", url: "http://127.0.0.1:1234" });
       expect(result.statusPoll?.samples[0]?.webStatus).toEqual({ state: "running", url: "http://127.0.0.1:5678" });
     } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("waits for a healthy desktop in one tools-pack process", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
+
+    try {
+      requestJsonIpc.mockReset();
+      requestJsonIpc.mockImplementation(async (ipc: string, payload: { type?: string }) => {
+        if (payload.type === SIDECAR_MESSAGES.STATUS) {
+          if (ipc.includes("daemon")) return { state: "running", url: "http://127.0.0.1:1234" };
+          if (ipc.includes("web")) return { state: "running", url: "http://127.0.0.1:5678" };
+          return { pid: 12345, state: "running", url: "od://app/" };
+        }
+        if (payload.type === SIDECAR_MESSAGES.EVAL) {
+          return {
+            ok: true,
+            value: {
+              health: { ok: true, version: "0.10.0-beta.1" },
+              href: "od://app/",
+              status: 200,
+              title: "Open Design Beta",
+            },
+          };
+        }
+        throw new Error(`unexpected IPC message: ${String(payload.type)}`);
+      });
+
+      const result = await waitForHealthyPackedWinApp(createConfig(root), {
+        statusPollIntervalMs: 1,
+        timeoutMs: 1000,
+      });
+
+      expect(result.status).toEqual({ pid: 12345, state: "running", url: "od://app/" });
+      expect(result.eval?.ok).toBe(true);
+      expect(result.wait.attempts).toBe(1);
+      expect(result.wait.intervalMs).toBe(1);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("accepts a healthy daemon projection when native Desktop IPC is unavailable", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
+    const runtimeBaseRoot = join(root, "native-product", "namespaces");
+
+    try {
+      requestJsonIpc.mockReset();
+      requestJsonIpc.mockImplementation(async (ipc: string, payload: { type?: string }) => {
+        if (payload.type !== SIDECAR_MESSAGES.STATUS) {
+          throw new Error(`unexpected IPC message: ${String(payload.type)}`);
+        }
+        if (ipc.includes("daemon")) return { pid: 23456, state: "running", url: "http://127.0.0.1:1234" };
+        if (ipc.includes("web")) return { state: "running", url: "http://127.0.0.1:5678" };
+        throw new Error("IPC request timed out: native-desktop");
+      });
+      vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
+        ok: true,
+        version: "0.10.0-beta.1",
+      }), {
+        headers: { "content-type": "application/json" },
+        status: 200,
+      })));
+
+      const result = await waitForHealthyPackedWinApp(createConfig(root), {
+        allowDaemonFallback: true,
+        runtimeBaseRoot,
+        statusPollIntervalMs: 1,
+        timeoutMs: 1000,
+      });
+
+      expect(result.desktopIpcUnavailable).toBe(true);
+      expect(result.status).toMatchObject({ pid: 23456, state: "running", url: "http://127.0.0.1:5678" });
+      expect(result.eval?.value).toMatchObject({ health: { ok: true, version: "0.10.0-beta.1" }, status: 200 });
+      expect(result.launcher.root).toBe(join(root, "native-product"));
+    } finally {
+      vi.unstubAllGlobals();
       await rm(root, { force: true, recursive: true });
     }
   });
