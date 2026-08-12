@@ -96,8 +96,9 @@ async function fixture() {
       ? new Response("not found", { status: 404 })
       : new Response(body, { headers: { "content-length": String(body.byteLength) }, status: 200 });
   }) as typeof globalThis.fetch;
+  const seedRoot = join(root, "seed");
   const repositoryConfigPath = join(root, "repository.json");
-  await writeFile(repositoryConfigPath, JSON.stringify({ localSeeds: [], remoteOrigins: [], schemaVersion: 1 }));
+  await writeFile(repositoryConfigPath, JSON.stringify({ localSeeds: [{ root: seedRoot }], remoteOrigins: [], schemaVersion: 1 }));
   const paths = {
     cacheRoot: join(root, "cache"),
     dataRoot: join(root, "data"),
@@ -107,7 +108,7 @@ async function fixture() {
     runtimeRoot: join(root, "runtime"),
   };
   await mkdir(paths.installationRoot, { recursive: true });
-  return { fetch, metadataUrl, paths, repositoryConfigPath, root };
+  return { artifacts, bytes, fetch, manifest, metadataUrl, paths, repositoryConfigPath, root, seedRoot };
 }
 
 describe("Standalone unresolved bootstrap", () => {
@@ -144,5 +145,34 @@ describe("Standalone unresolved bootstrap", () => {
       scope: { channel: "beta", namespace: "release-beta" },
     }, { fetch: value.fetch });
     expect(vi.mocked(value.fetch).mock.calls).toHaveLength(callCount);
+  });
+
+  it("cold-starts offline from a version index and required local blobs", async () => {
+    const value = await fixture();
+    await mkdir(join(value.seedRoot, "beta", "blobs"), { recursive: true });
+    await writeFile(join(value.seedRoot, "beta", "baseline.json"), JSON.stringify({
+      channel: "beta",
+      closure: value.manifest,
+      releaseState: "complete",
+      releaseVersion: "0.19.0-beta.1",
+    }));
+    for (const [name, bytes] of Object.entries(value.bytes)) {
+      const artifact = value.artifacts[name as keyof typeof value.artifacts];
+      await writeFile(join(value.seedRoot, "beta", "blobs", artifact.digest.slice("sha256:".length)), bytes);
+    }
+    const fetch = vi.fn(async () => new Response("offline", { status: 503 })) as typeof globalThis.fetch;
+    const resolution = await resolveStandaloneBootstrap({
+      attachment: {
+        id: "electron-shell",
+        shell: { digest: `sha256:${"f".repeat(64)}`, type: "electron", version: "0.19.0-beta.1" },
+      },
+      discovery: { metadataUrl: value.metadataUrl, target: "darwin-arm64" },
+      paths: value.paths,
+      repositoryConfigPath: value.repositoryConfigPath,
+      schemaVersion: STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
+      scope: { channel: "beta", namespace: "release-beta" },
+    }, { fetch });
+    expect(resolution.handoff.handoff.scope.generation).toBe(0);
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

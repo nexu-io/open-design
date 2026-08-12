@@ -7,7 +7,7 @@ import {
 } from "@open-design/closure-store";
 import {
   applyClosureDistributionUpdate,
-  discoverClosureDistributionReleaseCandidate,
+  discoverClosureDistributionBootstrapCandidate,
   readClosureResourceRepositoryConfig,
 } from "@open-design/closure-update";
 import {
@@ -47,21 +47,19 @@ export async function resolveStandaloneBootstrap(
   });
   let descriptor = await readClosureBindingDescriptor(paths);
   if (descriptor.committed == null) {
-    if (request.discovery.metadataUrl == null) {
-      throw new StandaloneBootstrapError("no-standalone", "Standalone has no committed generation or discovery URL");
-    }
-    const candidate = await discoverClosureDistributionReleaseCandidate({
-      channel: request.scope.channel,
-      ...(options.fetch == null ? {} : { fetch: options.fetch }),
-      metadataUrl: request.discovery.metadataUrl,
-      target: request.discovery.target,
-    });
-    if (candidate == null) {
-      throw new StandaloneBootstrapError("standalone-invalid", "Release does not contain a layered Standalone Closure");
-    }
     const repository = await readClosureResourceRepositoryConfig({
       OD_CLOSURE_RESOURCE_REPOSITORY_V1: request.repositoryConfigPath,
     });
+    const candidate = await discoverClosureDistributionBootstrapCandidate({
+      channel: request.scope.channel,
+      ...(options.fetch == null ? {} : { fetch: options.fetch }),
+      metadataUrl: request.discovery.metadataUrl,
+      repository,
+      target: request.discovery.target,
+    });
+    if (candidate == null) {
+      throw new StandaloneBootstrapError("no-standalone", "Standalone has no committed generation or baseline candidate");
+    }
     const result = await applyClosureDistributionUpdate({
       candidate,
       ...(options.fetch == null ? {} : { fetch: options.fetch }),

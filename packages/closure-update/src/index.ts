@@ -362,6 +362,48 @@ export async function discoverClosureDistributionReleaseCandidate(input: Readonl
   return selectClosureDistributionReleaseCandidate(metadata, input);
 }
 
+/**
+ * Resolve the first-install candidate without granting the Shell any version
+ * selection policy. A seed exposes one conventional baseline index; if it is
+ * absent or invalid, Standalone may consult the caller-provided release feed.
+ */
+export async function discoverClosureDistributionBootstrapCandidate(input: Readonly<{
+  channel: string;
+  fetch?: typeof globalThis.fetch;
+  metadataUrl: string | null;
+  repository: ClosureResourceRepositoryConfig;
+  target: string;
+}>): Promise<ClosureDistributionReleaseCandidate | null> {
+  let localError: unknown = null;
+  for (const seed of input.repository.localSeeds) {
+    const path = join(seed.root, input.channel, "baseline.json");
+    try {
+      const bytes = await readFile(path);
+      if (bytes.byteLength > 4 * 1024 * 1024) {
+        throw new ClosureUpdateError("Closure baseline index exceeds 4 MiB");
+      }
+      return selectClosureDistributionReleaseCandidate(
+        JSON.parse(bytes.toString("utf8")) as unknown,
+        input,
+      );
+    } catch (error) {
+      localError = error;
+    }
+  }
+  if (input.metadataUrl != null) {
+    return await discoverClosureDistributionReleaseCandidate({
+      channel: input.channel,
+      ...(input.fetch == null ? {} : { fetch: input.fetch }),
+      metadataUrl: input.metadataUrl,
+      target: input.target,
+    });
+  }
+  if (localError != null) {
+    throw new ClosureUpdateError("Closure baseline index is unusable", { cause: localError });
+  }
+  return null;
+}
+
 type ComparableVersion = {
   core: readonly [number, number, number];
   prerelease: string[];

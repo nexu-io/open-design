@@ -39,6 +39,7 @@ import {
   discoverClosureReleaseCandidate,
   ensureClosureDistributionBlob,
   ensureClosureResource,
+  discoverClosureDistributionBootstrapCandidate,
   readClosureResourceRepositoryConfig,
   selectClosureDistributionReleaseCandidate,
   selectClosureReleaseCandidate,
@@ -413,6 +414,31 @@ async function downloadableDistribution(): Promise<{
     resourceUrl: artifacts.resource.url,
   };
 }
+
+describe("Closure baseline discovery", () => {
+  it("prefers the conventional local index before release discovery", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-closure-bootstrap-index-"));
+    roots.push(root);
+    const seedRoot = join(root, "seed");
+    await mkdir(join(seedRoot, "beta"), { recursive: true });
+    const { candidate } = await downloadableDistribution();
+    await writeFile(join(seedRoot, "beta", "baseline.json"), JSON.stringify({
+      channel: "beta",
+      closure: candidate.manifest,
+      releaseState: "complete",
+      releaseVersion: candidate.releaseVersion,
+    }));
+    const fetch = vi.fn(async () => new Response("must not fetch", { status: 500 })) as typeof globalThis.fetch;
+    await expect(discoverClosureDistributionBootstrapCandidate({
+      channel: "beta",
+      fetch,
+      metadataUrl: "https://releases.example.test/beta/latest/metadata.json",
+      repository: { localSeeds: [{ root: seedRoot }], remoteOrigins: [], schemaVersion: 1 },
+      target: "darwin-arm64",
+    })).resolves.toMatchObject({ releaseVersion: candidate.releaseVersion });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
 
 describe("Closure release update selection", () => {
   it("selects the platform Closure independently from shell artifacts", () => {
