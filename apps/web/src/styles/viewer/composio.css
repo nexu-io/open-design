@@ -2306,6 +2306,11 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   z-index: 4;
   width: 32px;
   height: 32px;
+  /* Reset the global button primitive's 16px horizontal padding so the
+     flexed SVG glyph keeps its intrinsic 16px width inside the 32px frame.
+     Without this the padding consumed the entire frame and the icon
+     collapsed to 0px width. */
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2319,6 +2324,14 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   transition: opacity 140ms ease, transform 140ms ease, color 140ms ease,
     background 140ms ease;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
+}
+/* The global `button:active:not(:disabled)` rule writes `transform:
+   translateY(1px)` which would both move the fullscreen button out of
+   its top-right anchored position *and* shift it off the pointer mid-
+   press, swallowing the click before it dispatches. The fullscreen
+   toggle does not need a press translate — disable it explicitly. */
+.ds-modal-stage-fullscreen:active:not(:disabled) {
+  transform: translateY(0);
 }
 /* Force the stroke-based icon to paint with the button's color — guards against
    any stray global svg reset that would otherwise leave the button blank. */
