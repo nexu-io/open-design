@@ -777,6 +777,7 @@ import {
   velaWorkspaceDirectoryIdentity,
   workspaceContextFromDirectoryItem,
 } from './collab/vela-workspace-context.js';
+import { selectPersonalWorkspace } from './collab/workspace-directory-selection.js';
 import { verifyWorkspaceRequestContext } from './collab/request-workspace-context.js';
 import {
   createWorkspaceBillingRuntimeCoordinator,
@@ -13727,6 +13728,17 @@ export async function startServer({
         ).loggedIn;
       },
       verifyWorkspaceRequestAuthority,
+      // Adoption is a durable write, so this reads the directory fresh rather
+      // than through the request cache, matching every other mutation path.
+      resolvePersonalWorkspace: async () => {
+        const directory = await fetchFreshMutationWorkspaceDirectory().catch(
+          () => ({ ok: false as const, items: [] }),
+        );
+        if (!directory.ok) return { ok: false, reason: directory.reason };
+        const membership = selectPersonalWorkspace(directory.items);
+        if (!membership) return { ok: false, reason: 'no_personal_workspace' };
+        return { ok: true, context: workspaceContextFromDirectoryItem(membership) };
+      },
     },
     authorizeProjectRequest,
   });

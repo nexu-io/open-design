@@ -26,6 +26,7 @@ import {
   type WorkspaceContextProvider,
   type WorkspaceContextRequest,
 } from './workspace-context.js';
+import { selectDefaultWorkspaceCandidate } from './workspace-directory-selection.js';
 
 // Real B-integration provider (T2). The daemon reuses the SAME vela login session
 // that AMR / the vela CLI use — `readVelaControlApiContext` reads the control key
@@ -256,21 +257,6 @@ export function createVelaWorkspaceContextProvider(
     }
   }
 
-  /** Pick the best default membership out of an already-fetched directory list. */
-  function selectDefaultCandidate(
-    items: WorkspaceDirectoryItem[],
-    preferredId: string | undefined,
-  ): WorkspaceDirectoryItem | undefined {
-    const candidates = items.filter(
-      (item) => item.memberStatus === 'active' && item.lifecycleState === 'active',
-    );
-    return (
-      (preferredId ? candidates.find((item) => item.workspaceId === preferredId) : undefined) ??
-      candidates.find((item) => item.workspaceType === 'personal') ??
-      candidates[0]
-    );
-  }
-
   /**
    * Fresh-account default pick. B's workspace selection is server-side state
    * and a new account has NO current workspace, so every workspace-scoped
@@ -294,7 +280,7 @@ export function createVelaWorkspaceContextProvider(
       prefetched ??
       (await fetchVelaWorkspaceDirectory({ fetch: fetchImpl, readSession: () => session, timeoutMs }));
     const preferredId = options.getActiveWorkspaceId?.()?.trim();
-    const pick = selectDefaultCandidate(result.items, preferredId);
+    const pick = selectDefaultWorkspaceCandidate(result.items, preferredId);
     if (!pick) {
       lastBootstrapFailureAt = Date.now();
       return null;

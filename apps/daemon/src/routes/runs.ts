@@ -31,12 +31,15 @@ import { newInsertId, readAnalyticsContext } from '../analytics.js';
 import type { AnalyticsContext } from '../analytics.js';
 import { spawnEnvForAgent } from '../agents.js';
 import { agentCliEnvForAgent, readAppConfig } from '../app-config.js';
+import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 import {
   workspaceResourceContextFromRequest,
+  workspaceResourceContextFromVerified,
   type BoundWorkspaceResourceMutationGate,
   type VerifyWorkspaceRequestAuthority,
   type WorkspaceResourceAccessInput,
+  type WorkspaceResourceContext,
 } from '../collab/workspace-resource-mutation.js';
 import {
   codexSessionIdFromRunEvents,
@@ -607,6 +610,16 @@ export interface RegisterRunRoutesDeps {
   amrWorkspaceScope?: {
     isSignedIn: () => boolean | Promise<boolean>;
     verifyWorkspaceRequestAuthority: VerifyWorkspaceRequestAuthority;
+    /**
+     * The account's own Workspace, for a caller that holds credentials but has
+     * no UI to have chosen one in — the MCP bridge, an eval runner, any
+     * headless automation. Absent means the daemon cannot resolve one and the
+     * caller must be told rather than guessed for.
+     */
+    resolvePersonalWorkspace?: () => Promise<
+      | { ok: true; context: WorkspaceCollabContext }
+      | { ok: false; reason?: string }
+    >;
   };
 }
 
@@ -1052,14 +1065,56 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return { ok: true, workspaceScope: null };
     }
 
+    // A headerless caller is not necessarily a browser that forgot to send its
+    // context. It may be automation that holds credentials and has no UI in
+    // which a Workspace could ever have been chosen — the MCP bridge, an eval
+    // runner. For those, "signed in but no Workspace named" is not a fixable
+    // state, it is the only state they can be in, so refusing them here made
+    // AMR unreachable to every headless caller. Resolve the account's own
+    // Workspace instead, and refuse only when there genuinely is not one.
     if (requestContext === null) {
-      sendApiError(
+      const resolver = ctx.amrWorkspaceScope.resolvePersonalWorkspace;
+      const resolved = resolver ? await resolver() : { ok: false as const };
+      if (!resolved.ok) {
+        if (resolved.reason === 'unauthorized') {
+          sendApiError(
+            res,
+            401,
+            'AMR_AUTH_REQUIRED',
+            'AMR authorization expired. Sign in again to continue.',
+          );
+          return { ok: false };
+        }
+        // An outage is not the same answer as "you have no Personal
+        // Workspace"; the caller can retry the first and cannot fix it by
+        // opening a project.
+        if (resolved.reason && resolved.reason !== 'no_personal_workspace') {
+          sendApiError(
+            res,
+            503,
+            'WORKSPACE_AUTHORITY_UNAVAILABLE',
+            'workspace membership authority is temporarily unavailable',
+            { retryable: true },
+          );
+          return { ok: false };
+        }
+        sendApiError(
+          res,
+          409,
+          'AMR_WORKSPACE_SCOPE_REQUIRED',
+          'open the project from your Personal Workspace before running AMR Cloud',
+        );
+        return { ok: false };
+      }
+      // Authority came from the directory itself, not from a caller claim, so
+      // it is already verified — re-running the header verifier below would
+      // only re-check headers that do not exist.
+      return await adoptIntoPersonalWorkspace(
         res,
-        409,
-        'AMR_WORKSPACE_SCOPE_REQUIRED',
-        'open the project from your Personal Workspace before running AMR Cloud',
+        projectId,
+        ctx.projectStore,
+        workspaceResourceContextFromVerified(resolved.context),
       );
-      return { ok: false };
     }
     if (requestContext === 'missing') {
       sendApiError(
@@ -1095,7 +1150,33 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       );
       return { ok: false };
     }
-    if (verified.context.workspaceType !== 'personal') {
+    return await adoptIntoPersonalWorkspace(
+      res,
+      projectId,
+      ctx.projectStore,
+      workspaceResourceContextFromVerified(verified.context),
+    );
+  }
+
+  /**
+   * Bind a truly unbound historical project to the caller's Personal Workspace
+   * and pin the run to it. Shared by the two ways a caller can arrive with a
+   * verified Personal identity: explicit `x-od-workspace-*` headers, or a
+   * headless caller whose Workspace the daemon resolved from the account
+   * directory. The identity is already authoritative either way — this only
+   * writes the binding.
+   */
+  async function adoptIntoPersonalWorkspace(
+    res: ApiResponse,
+    projectId: string,
+    // Passed in rather than read off ctx: the caller has already established
+    // it exists, and threading it keeps that fact visible here.
+    projectStore: NonNullable<RegisterRunRoutesDeps['projectStore']>,
+    context: WorkspaceResourceContext,
+  ): Promise<
+    { ok: true; workspaceScope: PinnedRunWorkspaceScope | null } | { ok: false }
+  > {
+    if (context.workspaceType !== 'personal') {
       sendApiError(
         res,
         409,
@@ -1104,7 +1185,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       );
       return { ok: false };
     }
-    const ensureWorkspaceProject = ctx.projectStore.ensureWorkspaceProject;
+    const ensureWorkspaceProject = projectStore.ensureWorkspaceProject;
     if (!ensureWorkspaceProject) {
       sendApiError(
         res,
@@ -1120,17 +1201,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
       return { ok: false };
     }
-    const { getWorkspaceProjectByProjectId } = ctx.projectStore;
+    const { getWorkspaceProjectByProjectId } = projectStore;
     const bindPersonal = db.transaction(() => {
       const existing = getWorkspaceProjectByProjectId(db, projectId);
       if (existing) return existing;
       ensureWorkspaceProject(db, {
         projectId,
-        workspaceId: verified.context.workspaceId,
+        workspaceId: context.workspaceId,
         visibility: 'personal',
         resourceState: 'active',
-        createdByWorkspaceMemberId: verified.context.workspaceMemberId,
-        updatedByWorkspaceMemberId: verified.context.workspaceMemberId,
+        createdByWorkspaceMemberId: context.workspaceMemberId,
+        updatedByWorkspaceMemberId: context.workspaceMemberId,
         syncState: 'local_only',
         resourceHubResourceId: null,
         cloudTombstonedAt: null,
@@ -1140,7 +1221,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return getWorkspaceProjectByProjectId(db, projectId);
     });
     const adopted = bindPersonal();
-    if (adopted?.workspaceId !== verified.context.workspaceId) {
+    if (adopted?.workspaceId !== context.workspaceId) {
       sendApiError(
         res,
         409,
@@ -1150,7 +1231,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return { ok: false };
     }
     const workspaceScope = pinRunWorkspaceScopeForProject(db, projectId);
-    if (!workspaceScope || workspaceScope.workspaceId !== verified.context.workspaceId) {
+    if (!workspaceScope || workspaceScope.workspaceId !== context.workspaceId) {
       sendApiError(
         res,
         409,

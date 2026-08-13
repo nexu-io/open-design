@@ -1,7 +1,6 @@
-import type {
-  WorkspaceDirectoryItem,
-  WorkspaceDirectoryResponse,
-} from '@open-design/contracts';
+import type { WorkspaceDirectoryResponse } from '@open-design/contracts';
+
+import { selectDefaultWorkspaceCandidate } from './collab/workspace-directory-selection.js';
 
 /**
  * Workspace-aware request context for the MCP stdio bridge (#6569).
@@ -34,23 +33,11 @@ export const MCP_WORKSPACE_FAILURE_COOLDOWN_MS = 60_000;
 const DIRECTORY_TIMEOUT_MS = 8_000;
 
 /**
- * Pick the best default membership out of an already-fetched directory list.
- * Verbatim port of `selectDefaultCandidate` in vela-workspace-context.ts so the
- * bridge and the UI pick the same workspace for a multi-workspace user.
+ * The bridge's default membership. Kept as a named export because it is this
+ * module's published surface; the rule itself is shared, so the bridge and the
+ * UI can no longer drift apart.
  */
-export function selectDefaultMcpCandidate(
-  items: WorkspaceDirectoryItem[],
-  preferredId?: string,
-): WorkspaceDirectoryItem | undefined {
-  const candidates = items.filter(
-    (item) => item.memberStatus === 'active' && item.lifecycleState === 'active',
-  );
-  return (
-    (preferredId ? candidates.find((item) => item.workspaceId === preferredId) : undefined) ??
-    candidates.find((item) => item.workspaceType === 'personal') ??
-    candidates[0]
-  );
-}
+export const selectDefaultMcpCandidate = selectDefaultWorkspaceCandidate;
 
 interface CacheEntry {
   context: McpWorkspaceContext;

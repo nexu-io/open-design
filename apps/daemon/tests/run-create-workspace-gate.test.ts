@@ -175,6 +175,7 @@ async function startServer(opts?: {
     capability: any,
   ) => Promise<boolean>;
   isAmrSignedIn?: () => boolean | Promise<boolean>;
+  resolvePersonalWorkspace?: () => Promise<any>;
   verifyWorkspaceRequestAuthority?: (req: any) => Promise<any>;
   authorizePluginRequest?: (req: any, res: any, pluginId: string) => Promise<boolean>;
   authorizePluginWithWorkspaceAuthority?: boolean;
@@ -347,6 +348,9 @@ async function startServer(opts?: {
     amrWorkspaceScope: {
       isSignedIn: opts?.isAmrSignedIn ?? (() => false),
       verifyWorkspaceRequestAuthority,
+      ...(opts?.resolvePersonalWorkspace
+        ? { resolvePersonalWorkspace: opts.resolvePersonalWorkspace }
+        : {}),
     },
     authorizeProjectRequest: createAuthorizeProjectRequest({
       db,
@@ -1446,7 +1450,7 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
   });
 
   it.each(['/api/runs', '/api/chat'])(
-    'refuses a signed-in AMR run through %s when an unbound project has no explicit Personal identity',
+    'refuses a signed-in AMR run through %s when there is no identity and no resolver',
     async (route) => {
     const verifyWorkspaceRequestAuthority = vi.fn();
     const baseUrl = await startServer({
@@ -1474,6 +1478,125 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
       ).toBeUndefined();
     },
   );
+
+  it.each(['/api/runs', '/api/chat'])(
+    'adopts an unbound project through %s for a headless caller the daemon can resolve',
+    async (route) => {
+      // The eval runner and the MCP bridge hold credentials but have no UI in
+      // which a Workspace could ever have been chosen. Before this, they were
+      // refused unconditionally, which made AMR unreachable to every headless
+      // caller rather than prompting anyone to fix anything.
+      const verifyWorkspaceRequestAuthority = vi.fn();
+      const baseUrl = await startServer({
+        isAmrSignedIn: () => true,
+        verifyWorkspaceRequestAuthority,
+        resolvePersonalWorkspace: async () => ({
+          ok: true,
+          context: workspaceContextFromDirectoryItem({
+            workspaceId: 'ws-personal-resolved',
+            workspaceName: 'ws-personal-resolved',
+            workspaceType: 'personal',
+            workspaceMemberId: OWNER_MEMBER_ID,
+            role: 'owner',
+            memberStatus: 'active',
+            lifecycleState: 'active',
+          }),
+        }),
+      });
+
+      const response = await fetch(`${baseUrl}${route}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId: UNBOUND_PROJECT,
+          agentId: 'amr',
+          message: 'headless caller',
+        }),
+      });
+
+      expect(response.status).toBeLessThan(400);
+      // Authority came from the directory, so the header verifier has nothing
+      // to check and must not be consulted.
+      expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
+      expect(
+        getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+      ).toMatchObject({ workspaceId: 'ws-personal-resolved' });
+    },
+  );
+
+  it('still refuses when the account genuinely has no Personal Workspace', async () => {
+    const baseUrl = await startServer({
+      isAmrSignedIn: () => true,
+      resolvePersonalWorkspace: async () => ({
+        ok: false,
+        reason: 'no_personal_workspace',
+      }),
+    });
+
+    const response = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: UNBOUND_PROJECT,
+        agentId: 'amr',
+        message: 'nothing to adopt into',
+      }),
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'AMR_WORKSPACE_SCOPE_REQUIRED' },
+    });
+    expect(
+      getWorkspaceProjectByProjectId(openDatabase(tempDir!), UNBOUND_PROJECT),
+    ).toBeUndefined();
+  });
+
+  it('reports a directory outage as retryable rather than as a missing Workspace', async () => {
+    // A caller can retry an outage. It cannot fix one by opening a project, so
+    // answering 409 would send it to do something that changes nothing.
+    const baseUrl = await startServer({
+      isAmrSignedIn: () => true,
+      resolvePersonalWorkspace: async () => ({ ok: false, reason: 'timeout' }),
+    });
+
+    const response = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: UNBOUND_PROJECT,
+        agentId: 'amr',
+        message: 'authority down',
+      }),
+    });
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'WORKSPACE_AUTHORITY_UNAVAILABLE', retryable: true },
+    });
+  });
+
+  it('asks a caller with expired AMR authorization to sign in again', async () => {
+    const baseUrl = await startServer({
+      isAmrSignedIn: () => true,
+      resolvePersonalWorkspace: async () => ({ ok: false, reason: 'unauthorized' }),
+    });
+
+    const response = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: UNBOUND_PROJECT,
+        agentId: 'amr',
+        message: 'expired',
+      }),
+    });
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'AMR_AUTH_REQUIRED' },
+    });
+  });
 
   it('never adopts an unbound historical project into a Team Workspace', async () => {
     const verifyWorkspaceRequestAuthority = vi.fn(async () => ({
