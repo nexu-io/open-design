@@ -25,6 +25,7 @@ const SHARED_ACCEPTANCE_SOURCES = [
 ] as const;
 
 const MAC_ACCEPTANCE_SOURCES = [
+  ".github/actions/release/platform/mac/exact/action.yml",
   "e2e/lib/desktop/desktop-test-helpers.ts",
   "e2e/lib/vitest/packaged-smoke-plan-mac.ts",
   "e2e/specs/mac.spec.ts",
@@ -34,6 +35,7 @@ const PLATFORM_ACCEPTANCE_SOURCES = {
   mac_arm64: MAC_ACCEPTANCE_SOURCES,
   mac_x64: MAC_ACCEPTANCE_SOURCES,
   win_x64: [
+    ".github/actions/release/platform/win/exact/action.yml",
     "e2e/lib/vitest/packaged-app-shell.ts",
     "e2e/lib/vitest/packaged-smoke-plan-win.ts",
     "e2e/lib/vitest/packaged-win-identity.ts",
@@ -50,19 +52,6 @@ export function shellSmokeAcceptanceSourcePaths(platform: ShellSmokeAcceptancePl
   return [...SHARED_ACCEPTANCE_SOURCES, ...PLATFORM_ACCEPTANCE_SOURCES[platform]].sort();
 }
 
-export function extractWorkflowJob(source: string, jobName: string): string {
-  const normalized = source.replace(/\r\n/gu, "\n");
-  const marker = `  ${jobName}:`;
-  const start = normalized.indexOf(marker);
-  if (start < 0 || (start > 0 && normalized[start - 1] !== "\n")) {
-    throw new Error(`release workflow is missing job ${jobName}`);
-  }
-  const remaining = normalized.slice(start + marker.length);
-  const nextJob = /\n  [a-zA-Z0-9_]+:\n/gu.exec(remaining);
-  const end = nextJob == null ? normalized.length : start + marker.length + nextJob.index + 1;
-  return normalized.slice(start, end);
-}
-
 export function createShellSmokeAcceptanceDigest(parts: readonly Readonly<{ body: Uint8Array | string; label: string }>[]): `sha256:${string}` {
   const hash = createHash("sha256");
   for (const { body, label } of [...parts].sort((left, right) => left.label.localeCompare(right.label))) {
@@ -77,12 +66,7 @@ export async function resolveShellSmokeAcceptanceDigest(
   platform: ShellSmokeAcceptancePlatform,
   workspaceRoot: string,
 ): Promise<`sha256:${string}`> {
-  const workflowPath = resolve(workspaceRoot, ".github/workflows/distribution-exact.yml");
-  const jobName = platform === "win_x64" ? "build_win_x64" : `build_${platform}`;
-  const parts: Array<{ body: Uint8Array | string; label: string }> = [{
-    body: extractWorkflowJob(await readFile(workflowPath, "utf8"), jobName),
-    label: `.github/workflows/distribution-exact.yml#${jobName}`,
-  }];
+  const parts: Array<{ body: Uint8Array | string; label: string }> = [];
   for (const path of shellSmokeAcceptanceSourcePaths(platform)) {
     parts.push({ body: await readFile(resolve(workspaceRoot, path)), label: path });
   }
