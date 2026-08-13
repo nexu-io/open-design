@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { resolveClosureStorePaths } from '@open-design/closure/store';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import {
@@ -3324,7 +3325,11 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
   } finally {
     if (started) await runToolsPackJson<MacStopResult>('stop').catch(() => undefined);
     if (installed) await runToolsPackJson<MacUninstallResult>('uninstall').catch(() => undefined);
-    await rm(join(installationRoot, 'closure', 'channels', updateScenario.channel, 'namespaces', namespace), {
+    await rm(resolveClosureStorePaths({
+      channel: updateScenario.channel,
+      namespace,
+      root: installationRoot,
+    }).namespaceRoot, {
       force: true,
       recursive: true,
     }).catch(() => undefined);

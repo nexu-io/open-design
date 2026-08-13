@@ -3643,10 +3643,20 @@ async function runWinStandaloneDistributionAcceptance(): Promise<void> {
     await runToolsPackJson<WinStopResult>('stop');
     started = false;
     await damagePackagedStandaloneDistributionFixture(fixture);
-    const broken = await runToolsPackJson<WinStartResult>('start');
-    expect(broken.status).toBeNull();
-    await waitForDesktopGone('damaged Standalone generation never became the desktop');
-    expect((await readPackagedStandaloneDistributionBinding(fixture)).committed?.standalone).toEqual(fixture.pointer);
+    await startWindowsDesktopOrThrow('exact-version repair start');
+    started = true;
+    await waitForHealthyDesktop();
+    const repaired = (await readPackagedStandaloneDistributionBinding(fixture)).committed?.standalone;
+    expect(repaired).toMatchObject({
+      digest: fixture.pointer.digest,
+      target: fixture.pointer.target,
+      version: fixture.pointer.version,
+    });
+    expect(repaired?.generation).toBeGreaterThan(fixture.pointer.generation);
+    assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+
+    await runToolsPackJson<WinStopResult>('stop');
+    started = false;
 
     await rm(fixture.storePaths.namespaceRoot, { force: true, recursive: true });
     const recovered = await seedConfiguredPackagedClosure();
@@ -3660,7 +3670,11 @@ async function runWinStandaloneDistributionAcceptance(): Promise<void> {
     if (installed) {
       await runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']).catch(() => undefined);
     }
-    await rm(join(installationRoot, 'closure', 'channels', updateScenario.channel, 'namespaces', namespace), {
+    await rm(resolveClosureStorePaths({
+      channel: updateScenario.channel,
+      namespace,
+      root: installationRoot,
+    }).namespaceRoot, {
       force: true,
       recursive: true,
     }).catch(() => undefined);
@@ -3684,16 +3698,11 @@ function parsePathListEnv(value: string | undefined): string[] {
 }
 
 async function readPackagedClosureBinding(): Promise<Record<string, unknown>> {
-  const bindingPath = join(
-    verifyPublicImmutableArtifacts ? nativeProductUserDataRoot : join(toolsPackDir, 'runtime', 'win'),
-    'closure',
-    'channels',
-    updateScenario.channel,
-    'namespaces',
+  const bindingPath = resolveClosureStorePaths({
+    channel: updateScenario.channel,
     namespace,
-    'state',
-    'binding.json',
-  );
+    root: verifyPublicImmutableArtifacts ? nativeProductUserDataRoot : join(toolsPackDir, 'runtime', 'win'),
+  }).bindingPath;
   const value = JSON.parse(stripUtf8Bom(await readFile(bindingPath, 'utf8'))) as unknown;
   if (value == null || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`packaged Windows Closure binding is invalid: ${bindingPath}`);
