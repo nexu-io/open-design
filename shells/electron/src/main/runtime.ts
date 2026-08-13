@@ -373,6 +373,13 @@ export type DesktopRuntimeOptions = {
   desktopAuthSecret?: Buffer | null;
   discoverUrl(): Promise<string | null>;
   /**
+   * Keep every BrowserWindow renderable for automation while preventing the
+   * runtime from showing or focusing native UI. Packaged saturation smoke uses
+   * this so capturePage/eval still exercise the real renderer without stealing
+   * the developer's desktop focus.
+   */
+  headless?: boolean;
+  /**
    * Round-7 (lefarcen P2 @ runtime.ts:336): packaged desktop loads the
    * renderer from `od://app/`, which only resolves through Electron's
    * registered protocol handler in the renderer context. Main-process
@@ -2162,6 +2169,7 @@ async function showDirectoryPickerForSender(
 
 export async function createDesktopRuntime(options: DesktopRuntimeOptions): Promise<DesktopRuntime> {
   const preloadPath = options.preloadPath ?? join(dirname(fileURLToPath(import.meta.url)), "preload.cjs");
+  const headless = options.headless === true;
   applyDockIcon();
 
   // ipcMain.handle() registers a handler in an internal map that is *not*
@@ -2706,7 +2714,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   ipcMain.removeAllListeners("desktop-pet:set-visible");
   ipcMain.on("desktop-pet:set-visible", (event, visible: unknown) => {
     if (petWindow.isDestroyed() || event.sender !== petWindow.webContents) return;
-    if (visible) petWindow.showInactive();
+    if (visible && !headless) petWindow.showInactive();
     else petWindow.hide();
   });
 
@@ -2888,7 +2896,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   // its handle carries a fresh, correct timestamp.
   let splash: BrowserWindow | null = options.splashWindow ?? null;
   let splashStartedAt = options.splashStartedAt ?? Date.now();
-  if (splash == null) {
+  if (options.splashWindow === undefined && splash == null && !headless) {
     const created = createSplashWindow();
     splash = created.window;
     splashStartedAt = created.startedAt;
@@ -2901,10 +2909,12 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   const revealMainWindow = (): void => {
     if (revealed || window.isDestroyed()) return;
     revealed = true;
-    showWindowButtons(window);
-    window.show();
-    window.focus();
-    ensureWindowVisible(window);
+    if (!headless) {
+      showWindowButtons(window);
+      window.show();
+      window.focus();
+      ensureWindowVisible(window);
+    }
     if (pendingUpdateDialogRequest != null) {
       window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, pendingUpdateDialogRequest);
       pendingUpdateDialogRequest = null;
@@ -2944,7 +2954,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     // final step so the user sees the boot reach completion, not stall at
     // "Opening your workspace".
     setSplashStage(splash, "finishing");
-    const remaining = MIN_SPLASH_MS - (Date.now() - splashStartedAt);
+    const remaining = headless ? 0 : MIN_SPLASH_MS - (Date.now() - splashStartedAt);
     if (remaining > 0) await delay(remaining);
     revealMainWindow();
   };
@@ -3162,8 +3172,10 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
         return;
       }
       window.webContents.send(UPDATER_OPEN_DIALOG_EVENT, request);
-      window.show();
-      window.focus();
+      if (!headless) {
+        window.show();
+        window.focus();
+      }
     },
     renderSlides(input) {
       return renderDeckSlides(input);
@@ -3177,7 +3189,7 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       return { path: outputPath };
     },
     show() {
-      if (window.isDestroyed()) return;
+      if (window.isDestroyed() || headless) return;
       // Before the splash reveal gate has fired (revealWhenReady), the main
       // window is still hidden and surfacing it here would show the half-loaded
       // web shell and bypass the gate — reintroducing the startup flash this is

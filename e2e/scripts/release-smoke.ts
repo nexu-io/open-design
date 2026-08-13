@@ -40,6 +40,10 @@ async function main(): Promise<void> {
   );
 
   process.env.OD_PACKAGED_E2E_REPORT_DIR = report.root;
+  // Saturation smoke validates the real packaged renderer through IPC and
+  // capturePage. Native windows stay hidden by default so local acceptance can
+  // run in the background; set this explicitly to 0 only for manual visual QA.
+  process.env.OD_PACKAGED_E2E_HEADLESS ??= '1';
 
   await report.json('manifest.json', {
     ...(process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL == null
@@ -49,10 +53,12 @@ async function main(): Promise<void> {
       ? {}
       : { releaseVersion: process.env.OD_PACKAGED_E2E_RELEASE_VERSION }),
     commit: process.env.GITHUB_SHA ?? null,
+    evidence: 'evidence/',
     generatedAt: new Date().toISOString(),
     githubRunAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
     githubRunId: process.env.GITHUB_RUN_ID ?? null,
     namespace,
+    headless: process.env.OD_PACKAGED_E2E_HEADLESS === '1',
     platform,
     reportPath: report.root,
     screenshot: `screenshots/open-design-${platform}-smoke.png`,

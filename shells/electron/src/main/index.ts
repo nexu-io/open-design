@@ -188,6 +188,8 @@ export type DesktopMainOptions = {
   /** Protocol-owned runtime status projection; sidecar internals stay private. */
   readStandaloneStatus?: () => Promise<StandaloneRuntimeStatus>;
   standaloneLifecycle?: StandaloneLifecyclePort;
+  /** Keep packaged automation renderable but never surface native windows. */
+  headless?: boolean;
   windowTitle?: string;
   onDesktopReady?: (controls: {
     dispatchInviteDeeplink(url: string | null): void;
@@ -996,6 +998,7 @@ export async function runDesktopMain(
     desktopAuthSecret,
     discoverUrl: options.discoverWebUrl ?? createWebDiscovery(runtime),
     discoverDaemonUrl: options.discoverDaemonUrl,
+    headless: options.headless,
     osLocale,
     preloadPath: options.preloadPath,
     // Round-5 (lefarcen P1, mrcfps): runtime hands this back to itself

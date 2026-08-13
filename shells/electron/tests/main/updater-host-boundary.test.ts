@@ -151,6 +151,19 @@ describe("desktop updater host boundary", () => {
     expect(entry).not.toContain("currentVersion: shellVersion");
   });
 
+  it("keeps packaged saturation smoke renderable without surfacing native windows", () => {
+    const entry = source("src/index.ts");
+    expect(entry).toContain('process.env.OD_PACKAGED_E2E_HEADLESS === "1"');
+    expect(entry).toContain("const splash = headless ? null : createSplashWindow()");
+    expect(entry).toContain("splashWindow: splash?.window ?? null");
+
+    const runtime = source("src/main/runtime.ts");
+    expect(runtime).toContain("const headless = options.headless === true");
+    expect(runtime).toContain("if (visible && !headless) petWindow.showInactive()");
+    expect(runtime).toContain("if (window.isDestroyed() || headless) return");
+    expect(runtime).toContain("const remaining = headless ? 0 : MIN_SPLASH_MS");
+  });
+
   it("has exactly one asynchronous before-quit owner so teardown cannot be bypassed", () => {
     const main = source("src/main/index.ts");
     expect(main.match(/app\.on\("before-quit"/g)).toHaveLength(1);

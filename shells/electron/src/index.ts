@@ -135,6 +135,7 @@ function applyShellUpdateEnv(updateMetadataUrl: string | null): void {
 }
 
 async function main(): Promise<void> {
+  const headless = process.env.OD_PACKAGED_E2E_HEADLESS === "1";
   const packageConfig = await readPackagedConfig();
   const standaloneRequest = parsePackagedStandaloneRequest(process.argv.slice(1));
   if (standaloneRequest.standalone) {
@@ -234,8 +235,11 @@ async function main(): Promise<void> {
   applyLaunchEnv(paths.runtimeRoot, stamp);
   await app.whenReady();
 
-  const splash = createSplashWindow();
-  setSplashStage(splash.window, "engine");
+  if (headless && process.platform === "darwin") {
+    await app.dock?.hide();
+  }
+  const splash = headless ? null : createSplashWindow();
+  setSplashStage(splash?.window ?? null, "engine");
 
   const metadataUrl = resolvePackagedStandaloneMetadataUrl(
     shellConfig.updateMetadataUrl,
@@ -267,7 +271,7 @@ async function main(): Promise<void> {
     },
     nodeCommand,
     onProgress(progress) {
-      setSplashStandaloneProgress(splash.window, progress);
+      setSplashStandaloneProgress(splash?.window ?? null, progress);
     },
   }));
   const desktopControl = bootstrapSidecarRuntime(stamp, process.env, {
@@ -316,13 +320,14 @@ async function main(): Promise<void> {
       logger: packagedLogger,
     });
   }
-  setSplashStage(splash.window, "workspace");
+  setSplashStage(splash?.window ?? null, "workspace");
   registerOdProtocol(() => status.webUrl);
 
   const { runDesktopMain } = await import("./main/index.js");
   await runDesktopMain(desktopControl, {
-    splashWindow: splash.window,
-    splashStartedAt: splash.startedAt,
+    headless,
+    splashWindow: splash?.window ?? null,
+    splashStartedAt: splash?.startedAt,
     async beforeShutdown() {
       try {
         await retireObsoleteInstalledOuter();

@@ -9,7 +9,10 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { resolveClosureStorePaths } from '@open-design/closure/store';
 
-import { createPackagedSmokeReport } from '@/vitest/packaged-report';
+import {
+  createPackagedSmokeReport,
+  type PackagedSmokeReport,
+} from '@/vitest/packaged-report';
 import {
   commitPackagedStandaloneDistributionFixture,
   damagePackagedStandaloneDistributionFixture,
@@ -54,6 +57,7 @@ const releaseVersion = process.env.OD_PACKAGED_E2E_RELEASE_VERSION;
 const shellVersion = process.env.OD_PACKAGED_E2E_SHELL_VERSION;
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion, shellVersion });
 const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
+const packagedHeadless = process.env.OD_PACKAGED_E2E_HEADLESS === '1';
 const packagedMacClosureTarget = process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64';
 const packagedMacUpdaterPlatform = process.arch === 'x64' ? 'macIntel' : 'mac';
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
@@ -469,6 +473,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       const inspect = await waitForHealthyDesktop();
       expect(inspect.status?.state).toBe('running');
       expect(inspect.status?.url).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
+      await capturePackagedCheckpoint(report, 'shell-initial-ready', inspect);
 
       const value = assertHealthEvalValue(inspect.eval?.value);
       expect(value.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
@@ -596,6 +601,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           start.pid,
         );
         started = true;
+        await capturePackagedCheckpoint(report, 'shell-payload-activated', postUpdateInspect);
         const postUpdateHealth = assertHealthEvalValue(postUpdateInspect.eval?.value);
         expect(postUpdateHealth.status).toBe(200);
         expect(postUpdateHealth.health.ok).toBe(true);
@@ -652,6 +658,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           identity.pid,
         );
         const coldHealth = assertHealthEvalValue(coldInspect.eval?.value);
+        await capturePackagedCheckpoint(report, 'shell-payload-cold-start', coldInspect);
         expect(coldHealth.status).toBe(200);
         expect(coldHealth.health.ok).toBe(true);
         expect(coldHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
@@ -815,7 +822,8 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         });
         await runToolsPackJson<MacStartResult>('start');
         started = true;
-        await waitForHealthyDesktop();
+        const repairedInspect = await waitForHealthyDesktop();
+        await capturePackagedCheckpoint(report, 'shell-closure-repaired', repairedInspect);
         assertClosureDesktopIdentity(
           await readDesktopIdentityMarker(),
           closureAcceptance.manifest.identity.version,
@@ -903,6 +911,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
   // without any user-facing updater action.
   const silentUpdateTest = !verifyCoreOnly && updateFixture === 'tools-serve' ? test : test.skip;
   silentUpdateTest(MAC_PACKAGED_SMOKE_SCENARIOS.shellSilentUpdate.title, async () => {
+    const report = await createPackagedSmokeReport('mac');
     const updateEnv = captureUpdateEnv();
     let payloadFixtureLocal: ToolsServeUpdaterFixture | null = null;
     let cleanupStarted = false;
@@ -968,6 +977,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         start.pid,
       );
       const silentHealth = assertHealthEvalValue(silent.eval?.value);
+      await capturePackagedCheckpoint(report, 'silent-update-cold-start', silent);
       expect(silentHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
       const silentGeneration = settledLauncherGeneration(silent.launcher, targetVersion);
       expect(silentGeneration).not.toBeNull();
@@ -1005,6 +1015,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
   // then self-heals to the target version.
   const rollbackTest = !verifyCoreOnly && updateFixture === 'tools-serve' ? test : test.skip;
   rollbackTest(MAC_PACKAGED_SMOKE_SCENARIOS.shellRollback.title, async () => {
+    const report = await createPackagedSmokeReport('mac');
     const updateEnv = captureUpdateEnv();
     let corruptFixture: ToolsServeUpdaterFixture | null = null;
     let goodFixture: ToolsServeUpdaterFixture | null = null;
@@ -1079,6 +1090,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         false,
       );
       const rolledBackHealth = assertHealthEvalValue(rolledBack.eval?.value);
+      await capturePackagedCheckpoint(report, 'rollback-base-recovered', rolledBack);
       expect(rolledBackHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
       expect(rolledBack.launcher.lastSuccessful?.version).toBe(updateScenario.expectedCurrentVersion);
       // Degraded steady state: the broken pointer stays active with its
@@ -1126,6 +1138,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         rollbackStart.pid,
       );
       const healedHealth = assertHealthEvalValue(healed.eval?.value);
+      await capturePackagedCheckpoint(report, 'rollback-healed', healed);
       expect(healedHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
       const healedGeneration = settledLauncherGeneration(healed.launcher, healedVersion);
       expect(healedGeneration).not.toBeNull();
@@ -1162,6 +1175,7 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       return;
     }
     const installationRoot = join(toolsPackDir, 'runtime', 'mac');
+    const report = await createPackagedSmokeReport('mac');
     const updateEnv = captureUpdateEnv();
     let installed = false;
     let started = false;
@@ -1201,6 +1215,7 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       started = true;
       const firstInspect = await waitForHealthyDesktop();
       expect(assertHealthEvalValue(firstInspect.eval?.value).health.ok).toBe(true);
+      await capturePackagedCheckpoint(report, 'closure-first-start', firstInspect);
       const fixture = await readCommittedPackagedClosureFixture({
         buildJsonPath: closureBuildJsonPath!,
         channel: updateScenario.channel,
@@ -1221,7 +1236,8 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       const reinstallStart = await runToolsPackJson<MacStartResult>('start');
       started = true;
       expect(reinstallStart.pid).not.toBe(firstStart.pid);
-      await waitForHealthyDesktop();
+      const reinstallInspect = await waitForHealthyDesktop();
+      await capturePackagedCheckpoint(report, 'closure-reinstall', reinstallInspect);
       assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
 
       const faultStop = await runToolsPackJson<MacStopResult>('stop');
@@ -1246,7 +1262,8 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       });
       await runToolsPackJson<MacStartResult>('start');
       started = true;
-      await waitForHealthyDesktop();
+      const recoveredInspect = await waitForHealthyDesktop();
+      await capturePackagedCheckpoint(report, 'closure-repaired', recoveredInspect);
       assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
       expect((await readPackagedClosureFixtureRuntime(recovered)).committed?.standalone).toEqual(recovered.pointer);
     } finally {
@@ -1313,6 +1330,7 @@ macLegacyMigrationDescribe('packaged mac historical outer migration acceptance',
       expect(legacyStart.source).toBe('installed');
       const legacyInspect = await waitForHealthyDesktop(legacyFixtureVersion);
       const legacyHealth = assertHealthEvalValue(legacyInspect.eval?.value);
+      await capturePackagedCheckpoint(report, 'migration-legacy-running', legacyInspect);
       expect(legacyHealth.health.version).toBe(legacyFixtureVersion);
       const seededInspect = await runToolsPackJson<MacInspectResult>(
         'inspect',
@@ -1357,6 +1375,7 @@ macLegacyMigrationDescribe('packaged mac historical outer migration acceptance',
       expect(currentStart.pid).not.toBe(legacyStart.pid);
       const currentInspect = await waitForHealthyDesktop();
       const currentHealth = assertHealthEvalValue(currentInspect.eval?.value);
+      await capturePackagedCheckpoint(report, 'migration-current-running', currentInspect);
       expect(currentHealth.health.version).toBe(targetReleaseVersion);
       expect(currentInspect.update?.currentVersion).toBe(targetReleaseVersion);
       if (distribution != null) {
@@ -1380,6 +1399,7 @@ macLegacyMigrationDescribe('packaged mac historical outer migration acceptance',
       started = true;
       const coldInspect = await waitForHealthyDesktop();
       expect(assertHealthEvalValue(coldInspect.eval?.value).health.version).toBe(targetReleaseVersion);
+      await capturePackagedCheckpoint(report, 'migration-current-cold-start', coldInspect);
       const coldPptx = assertPptxExportEvalValue((await runToolsPackJson<MacInspectResult>('inspect', [
         '--expr',
         existingProjectPptxExportExpression(seeded.projectId),
@@ -2063,6 +2083,37 @@ async function runToolsPackJson<T>(
   } catch (error) {
     throw new Error(`tools-pack mac ${action} did not print JSON: ${String(error)}\n${result.stdout}`);
   }
+}
+
+async function capturePackagedCheckpoint(
+  report: PackagedSmokeReport,
+  name: string,
+  observed: MacInspectResult,
+): Promise<void> {
+  const checkpointPath = join(
+    toolsPackDir,
+    'screenshots',
+    'checkpoints',
+    `${name.replace(/[^a-zA-Z0-9_-]+/g, '-')}.png`,
+  );
+  await mkdir(dirname(checkpointPath), { recursive: true });
+  const capture = await runToolsPackJson<MacInspectResult>('inspect', ['--path', checkpointPath]);
+  expect(capture.screenshot?.path).toBe(checkpointPath);
+  expect(await fileSizeBytes(checkpointPath)).toBeGreaterThan(0);
+  if (packagedHeadless) {
+    expect(observed.status?.windowVisible, `${name} must remain hidden in headless smoke`).toBe(false);
+    expect(capture.status?.windowVisible, `${name} capture must not reveal the window`).toBe(false);
+  }
+  const logs = await runToolsPackJson<LogsResult>('logs').catch((error: unknown) => ({
+    error: formatUnknown(error),
+  }));
+  const checkpoint = await report.saveCheckpoint({
+    logs,
+    name,
+    screenshotPath: checkpointPath,
+    snapshot: { capture, observed },
+  });
+  console.info(`[packaged evidence] ${checkpoint.name}: ${checkpoint.snapshot}`);
 }
 
 async function resolveLocalPayloadUpdateFixture(): Promise<{ payloadPath: string; targetVersion: string }> {
