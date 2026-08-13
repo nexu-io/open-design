@@ -55,7 +55,7 @@ function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): Tool
       toolPackRoot: join(root, ".tmp", "tools-pack"),
     },
     silent: true,
-    signed: false,
+    signMode: "unsigned",
     shell: "electron",
     to: "app",
     webOutputMode: "standalone",
@@ -354,7 +354,7 @@ describe("runElectronBuilder", () => {
     const config = makeConfig(root, {
       releaseVersion: "1.2.3-prerelease.4",
       electronBuilderCliPath: cliPath,
-      signed: true,
+      signMode: "signed",
       webOutputMode: "server",
       ...overrides,
     });
@@ -396,7 +396,7 @@ describe("runElectronBuilder", () => {
   it("does not explicitly disable electron-builder notarization for notarized mac builds", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
-      const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: true });
+      const builderConfig = await prepareElectronBuilderConfig(root, { signMode: "notarized" });
 
       expect(builderConfig.afterSign).toContain("notarize.cjs");
       expect(builderConfig.mac).not.toHaveProperty("notarize");
@@ -408,7 +408,7 @@ describe("runElectronBuilder", () => {
   it("keeps signed-only mac builds from invoking electron-builder notarization", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
-      const builderConfig = await prepareElectronBuilderConfig(root, { macNotarize: false });
+      const builderConfig = await prepareElectronBuilderConfig(root, { signMode: "signed" });
 
       expect(builderConfig.afterSign).toBeUndefined();
       expect(builderConfig.mac?.notarize).toBe(false);

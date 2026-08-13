@@ -82,7 +82,7 @@ function fakeConfig(workspaceRoot: string): ToolPackConfig {
       cacheRoot: join(workspaceRoot, "cache"),
       toolPackRoot: join(workspaceRoot, "tools-pack"),
     },
-    signed: false,
+    signMode: "unsigned",
     shell: "electron",
     silent: true,
     to: "all",

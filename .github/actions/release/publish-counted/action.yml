@@ -73,7 +73,6 @@ runs:
       env:
         RELEASE_ASSET_SUFFIX: ""
         RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
-        RELEASE_SIGNED: "true"
 
     - name: Cleanup workflow artifacts
       if: ${{ success() }}

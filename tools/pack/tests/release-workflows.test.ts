@@ -52,7 +52,7 @@ describe("release workflows", () => {
 
     for (const inputs of [dispatchInputs, callInputs]) {
       expect(sectionBetween(inputs, "      enable_mac_x64:", "      publish:")).toContain("default: true");
-      expect(sectionBetween(inputs, "      mac_x64_sign_mode:", "      mac_x64_smoke_mode:")).toContain("default: notarize");
+      expect(sectionBetween(inputs, "      mac_x64_sign_mode:", "      mac_x64_smoke_mode:")).toContain("default: notarized");
       expect(sectionBetween(inputs, "      mac_x64_smoke_mode:", "      mac_x64_target:")).toContain("default: core");
     }
   });
@@ -126,7 +126,7 @@ describe("release workflows", () => {
     expect(mac).toContain("tools-pack-mac-v1-beta-${RUNNER_OS}-arm64-");
     expect(mac).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-beta --json");
     expect(mac).toContain("exec tools-pack mac build");
-    expect(mac).toContain("build_args+=(--signed --notarize)");
+    expect(mac).toContain('--sign-mode "${{ inputs.mac_arm64_sign_mode }}"');
     expect(mac).toContain("Build beta mac_arm64 update fixture");
     expect(beta).toContain("CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.4");
     expect(mac).toContain("Materialize legacy mac_arm64 migration fixture");
@@ -375,7 +375,7 @@ describe("release workflows", () => {
     expect(prereleaseMac).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-prerelease --json");
     expect(prereleaseMac).toContain("exec tools-pack mac build");
     expect(prereleaseMac).toContain("--cache-dir \"$RUNNER_TEMP/tools-pack-cache\"");
-    expect(countOccurrences(prereleaseMac, "--notarize")).toBe(2);
+    expect(countOccurrences(prereleaseMac, '--sign-mode "${{ inputs.mac_arm64_sign_mode }}"')).toBe(2);
     // Both the primary build and the cache-miss retry must carry Apple notary
     // env, or notarization fails closed on the retry path.
     expect(
@@ -397,7 +397,7 @@ describe("release workflows", () => {
     expect(prereleaseMacX64).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-prerelease-intel --json");
     expect(prereleaseMacX64).toContain("exec tools-pack mac build");
     expect(prereleaseMacX64).toContain("--cache-dir \"$RUNNER_TEMP/tools-pack-cache\"");
-    expect(countOccurrences(prereleaseMacX64, "--notarize")).toBe(2);
+    expect(countOccurrences(prereleaseMacX64, '--sign-mode "${{ inputs.mac_x64_sign_mode }}"')).toBe(2);
     expect(
       countOccurrences(prereleaseMacX64, "APPLE_ID: ${{ secrets.APPLE_ID }}"),
     ).toBe(2);
@@ -453,8 +453,9 @@ describe("release workflows", () => {
     expect(metadataDistribution).toContain("tools-release summary-metadata");
     expect(stable).toContain("open-design-release-mac-arm64-publish-manifest");
     expect(stable).toContain("open-design-release-win-x64-publish-manifest");
-    expect(stable).toContain("--signed");
-    expect(stable).toContain("--notarize");
+    expect(stable).toContain('--sign-mode "${{ inputs.mac_arm64_sign_mode }}"');
+    expect(stable).toContain('--sign-mode "${{ inputs.mac_x64_sign_mode }}"');
+    expect(stable).toContain('"--sign-mode", "${{ inputs.win_x64_sign_mode }}"');
     expect(stable).toContain("run: pnpm exec tools-release prepare stable");
     expect(stable).toContain("OPEN_DESIGN_RELEASE_CHANNEL: stable");
     expect(stable).not.toContain("OPEN_DESIGN_STABLE_VERSION:");
@@ -476,15 +477,20 @@ describe("release workflows", () => {
       stable.indexOf("uses: ./.github/actions/release/publish-metadata"),
     );
     expect(stable.indexOf("uses: ./.github/actions/release/publish-metadata")).toBeLessThan(
-      stable.indexOf("Promote draft to published latest"),
+      stable.indexOf("Activate stable release"),
     );
-    expect(stable.indexOf("Promote draft to published latest")).toBeLessThan(
+    expect(stable.indexOf("Activate stable release")).toBeLessThan(
       stable.indexOf("Cleanup release + tag on failure"),
     );
+    expect(stable).toContain("RELEASE_ACTIVATE_LATEST: \"false\"");
+    expect(stable).toContain("tools-release activate-stable-release");
+    expect(prerelease).toContain("tools-release issue-stable-qualification");
+    expect(prerelease).toContain("RELEASE_WIN_X64_SIGN_MODE: ${{ inputs.win_x64_sign_mode }}");
     expect(stable).toContain("RELEASE_METADATA_PATH:");
     expect(stable).not.toContain("inputs.channel");
     expect(stable).not.toContain("prepare ${{ inputs.channel }}");
-    expect(stablePrepare).toContain('expectStringFieldIfPresent(github, "workflow", "release-prerelease"');
+    expect(stablePrepare).toContain('expectStringField(github, "workflow", "release-prerelease"');
+    expect(stablePrepare).toContain("validateStableQualification");
     expect(stablePrepare).toContain('parseStableDryRunMode');
     expect(stablePrepare).toContain('setOutput("run_prepublish_jobs"');
     expect(stablePrepare).toContain('setOutput("publish_side_effects_enabled"');

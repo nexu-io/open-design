@@ -6,7 +6,7 @@ Local packaging control plane for Open Design.
 
 - `tools-pack mac build --to all`
 - `tools-pack mac build --to app|dmg|zip`
-- `tools-pack mac build --to all --signed`
+- `tools-pack mac build --to all --sign-mode notarized`
 - `tools-pack mac build --to all --portable` for release artifacts that must not bake local tools-pack runtime paths
 - `tools-pack mac install`
 - `tools-pack mac start`

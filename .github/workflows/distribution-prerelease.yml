@@ -14,10 +14,25 @@ on:
         type: string
         default: ""
       amr_profile:
-        description: "Optional AMR profile baked into the build (test or feature-test enable the workspace-team transport by pointing at that profile's Vela backend). Empty leaves the default (prod)."
+        description: "AMR profile baked into the build. Only prod can receive stable-promotion qualification."
         required: false
         type: string
-        default: ""
+        default: "prod"
+      mac_arm64_sign_mode:
+        description: "macOS arm64 signing mode: unsigned, signed, or notarized."
+        required: false
+        type: string
+        default: "notarized"
+      mac_x64_sign_mode:
+        description: "macOS x64 signing mode: unsigned, signed, or notarized."
+        required: false
+        type: string
+        default: "notarized"
+      win_x64_sign_mode:
+        description: "Windows x64 signing mode: unsigned or signed."
+        required: false
+        type: string
+        default: "unsigned"
       win_x64_smoke_mode:
         description: "Windows x64 smoke coverage: skip, core, or full."
         required: false
@@ -52,12 +67,18 @@ on:
       mac_arm64_smoke_result:
         description: "macOS arm64 packaged smoke outcome; advisory to publication."
         value: ${{ jobs.build_mac.outputs.smoke_result }}
+      mac_x64_smoke_result:
+        description: "macOS x64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_mac_intel.outputs.smoke_result }}
       win_x64_smoke_result:
         description: "Windows x64 packaged smoke outcome; advisory to publication."
         value: ${{ jobs.build_win.outputs.smoke_result }}
       version_metadata_url:
         description: "Public R2 URL of this build's version metadata.json."
         value: ${{ jobs.publish.outputs.version_metadata_url }}
+      stable_qualification_url:
+        description: "Immutable stable-promotion qualification URL; empty when this prerelease is ineligible."
+        value: ${{ jobs.publish.outputs.stable_qualification_url }}
       mac_arm64_url:
         description: "macOS arm64 dmg download URL."
         value: ${{ jobs.publish.outputs.mac_arm64_url }}
@@ -71,6 +92,9 @@ permissions:
   actions: write
   contents: read
 env:
+  RELEASE_MAC_ARM64_SIGN_MODE: ${{ inputs.mac_arm64_sign_mode }}
+  RELEASE_MAC_X64_SIGN_MODE: ${{ inputs.mac_x64_sign_mode }}
+  RELEASE_WIN_X64_SIGN_MODE: ${{ inputs.win_x64_sign_mode }}
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
   # PostHog product-analytics ingest. Defined as repository secret + var
   # so official builds ship with analytics enabled; PR builds and forks
@@ -341,6 +365,7 @@ jobs:
             echo "Continuing into tools-pack because electron-builder is the source of truth for whether packaging actually works."
           fi
       - name: Prepare Apple signing certificate
+        if: ${{ inputs.mac_arm64_sign_mode != 'unsigned' }}
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -375,9 +400,8 @@ jobs:
             --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
+            --sign-mode "${{ inputs.mac_arm64_sign_mode }}"
             --json
-            --signed
-            --notarize
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_arm64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_arm64/build.json"
@@ -407,9 +431,8 @@ jobs:
             --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
+            --sign-mode "${{ inputs.mac_arm64_sign_mode }}"
             --json
-            --signed
-            --notarize
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_arm64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_arm64/build.json"
@@ -438,6 +461,7 @@ jobs:
           echo "deletedFailedCacheKey=$matched_key count=$count"
 
       - name: Verify prerelease mac_arm64 notarization
+        if: ${{ inputs.mac_arm64_sign_mode == 'notarized' }}
         run: |
           set -euo pipefail
           build_json="$RUNNER_TEMP/release-build/mac_arm64/build.json"
@@ -634,7 +658,6 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
           RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_arm64-report.zip
-          RELEASE_SIGNED: "true"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -703,6 +726,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Prepare Apple signing certificate
+        if: ${{ inputs.mac_x64_sign_mode != 'unsigned' }}
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -737,9 +761,8 @@ jobs:
             --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
+            --sign-mode "${{ inputs.mac_x64_sign_mode }}"
             --json
-            --signed
-            --notarize
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_x64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_x64/build.json"
@@ -770,9 +793,8 @@ jobs:
             --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
+            --sign-mode "${{ inputs.mac_x64_sign_mode }}"
             --json
-            --signed
-            --notarize
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_x64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_x64/build.json"
@@ -801,6 +823,7 @@ jobs:
           echo "deletedFailedCacheKey=$matched_key count=$count"
 
       - name: Verify prerelease mac_x64 notarization
+        if: ${{ inputs.mac_x64_sign_mode == 'notarized' }}
         run: |
           set -euo pipefail
           build_json="$RUNNER_TEMP/release-build/mac_x64/build.json"
@@ -919,7 +942,6 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
           RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_x64-report.zip
-          RELEASE_SIGNED: "true"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -1028,6 +1050,7 @@ jobs:
             "--portable",
             "--release-version", "${{ needs.metadata.outputs.release_version }}",
             "--to", "all",
+            "--sign-mode", "${{ inputs.win_x64_sign_mode }}",
             "--json"
           )
           "cache_failed=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
@@ -1041,14 +1064,8 @@ jobs:
             "cache_failed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $cacheDir
             pnpm.cmd exec tools-pack win cleanup --dir $toolsPackDir --namespace release-prerelease-win --json
-            $buildOutput = pnpm exec tools-pack win build `
-              --dir $toolsPackDir `
-              --cache-dir $cacheDir `
-              --namespace release-prerelease-win `
-              --portable `
-              --release-version "${{ needs.metadata.outputs.release_version }}" `
-              --to all `
-              --json
+            $fallbackArgs = @("exec", "tools-pack", "win", "build", "--dir", $toolsPackDir, "--cache-dir", $cacheDir, "--namespace", "release-prerelease-win", "--portable", "--release-version", "${{ needs.metadata.outputs.release_version }}", "--to", "all", "--sign-mode", "${{ inputs.win_x64_sign_mode }}", "--json")
+            $buildOutput = pnpm @fallbackArgs
             if ($LASTEXITCODE -ne 0) {
               throw "Windows tools-pack uncached fallback build exited with code $LASTEXITCODE"
             }
@@ -1079,7 +1096,7 @@ jobs:
           $match = [regex]::Match("${{ needs.metadata.outputs.release_version }}", "^(?<base>\d+\.\d+\.\d+)-prerelease\.(?<number>\d+)$")
           if (-not $match.Success) { throw "full Windows smoke requires a counted prerelease version; got ${{ needs.metadata.outputs.release_version }}" }
           $updateVersion = "{0}-prerelease.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-prerelease-win", "--release-version", $updateVersion, "--to", "nsis", "--json")
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-prerelease-win", "--release-version", $updateVersion, "--to", "nsis", "--sign-mode", "${{ inputs.win_x64_sign_mode }}", "--json")
           $updateOutput = pnpm.cmd @buildArgs
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
           $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8
@@ -1185,7 +1202,6 @@ jobs:
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
-          RELEASE_SIGNED: "false"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -1232,6 +1248,7 @@ jobs:
       mac_arm64_url: ${{ steps.distribute.outputs.mac_arm64_url }}
       mac_intel_url: ${{ steps.distribute.outputs.mac_x64_url }}
       win_url: ${{ steps.distribute.outputs.win_x64_url }}
+      stable_qualification_url: ${{ steps.qualification_outputs.outputs.qualificationUrl }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -1242,10 +1259,8 @@ jobs:
       ENABLE_MAC_INTEL: "true"
       ENABLE_WIN: "true"
       GITHUB_RELEASE_ENABLED: "false"
-      MAC_INTEL_SIGNED: "true"
       RELEASE_CHANNEL: prerelease
       RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
-      RELEASE_SIGNED: "true"
       RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
       REPORT_MODE: zip
       RELEASE_INSTALLATION_VERSION_MIN_PRERELEASE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE }}
@@ -1274,6 +1289,29 @@ jobs:
           mac_arm64_result: ${{ needs.build_mac.result }}
           mac_x64_result: ${{ needs.build_mac_intel.result }}
           win_x64_result: ${{ needs.build_win.result }}
+
+      - name: Issue stable-promotion qualification
+        id: qualify
+        env:
+          RELEASE_MAC_ARM64_SMOKE_RESULT: ${{ needs.build_mac.outputs.smoke_result }}
+          RELEASE_MAC_X64_SMOKE_RESULT: ${{ needs.build_mac_intel.outputs.smoke_result }}
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_METADATA_PATH: ${{ runner.temp }}/release-metadata/metadata.json
+          RELEASE_METADATA_URL: ${{ steps.distribute.outputs.version_metadata_url }}
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-qualification/outputs.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_QUALIFICATION_WORK_DIR: ${{ runner.temp }}/release-qualification
+          RELEASE_WIN_X64_SMOKE_RESULT: ${{ needs.build_win.outputs.smoke_result }}
+        run: pnpm exec tools-release issue-stable-qualification
+
+      - name: Read stable qualification outputs
+        id: qualification_outputs
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require("fs");
+            const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-qualification/outputs.json`, "utf8"));
+            for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
 
   cleanup_partial_release_assets:
     name: Cleanup unpublished prerelease asset artifacts

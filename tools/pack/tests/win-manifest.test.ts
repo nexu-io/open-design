@@ -41,7 +41,7 @@ function makeConfig(overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
       cacheRoot: "/unused/cache",
       toolPackRoot: "/unused/tools-pack",
     },
-    signed: false,
+    signMode: "unsigned",
     shell: "electron",
     silent: true,
     to: "nsis",

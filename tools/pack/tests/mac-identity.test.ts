@@ -34,7 +34,7 @@ function makeConfig(root: string, namespace: string): ToolPackConfig {
       cacheRoot: join(root, ".tmp", "tools-pack", "cache"),
       toolPackRoot: join(root, ".tmp", "tools-pack"),
     },
-    signed: false,
+    signMode: "unsigned",
     shell: "electron",
     silent: true,
     to: "dmg",

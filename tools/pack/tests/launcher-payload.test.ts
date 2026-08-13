@@ -60,7 +60,7 @@ function makeConfig(
       },
       toolPackRoot: join(root, ".tmp", "tools-pack"),
     },
-    signed: false,
+    signMode: "unsigned",
     shell: "electron",
     shellVersion,
     silent: true,

@@ -236,13 +236,13 @@ cache_dir="${TOOLS_PACK_CACHE_DIR:-$RUNNER_TEMP/tools-pack-cache}"
 build_json_path="${BUILD_JSON_PATH:-$RUNNER_TEMP/mac-tools-pack-build.json}"
 build_log_path="${BUILD_LOG_PATH:-$RUNNER_TEMP/mac-tools-pack-build.log}"
 namespace="${TOOLS_PACK_NAMESPACE:-release-beta}"
-sign_mode="${MAC_SIGN_MODE:-sign-only}"
+sign_mode="${MAC_SIGN_MODE:-signed}"
 target="${MAC_BUILD_TARGET:-dmg}"
 compression="${MAC_COMPRESSION:-normal}"
 require_vela_cli="${REQUIRE_VELA_CLI:-true}"
 
 case "$sign_mode" in
-  no | sign-only | notarize) ;;
+  unsigned | signed | notarized) ;;
   *)
     echo "unsupported MAC_SIGN_MODE: $sign_mode" >&2
     exit 1
@@ -271,7 +271,7 @@ mkdir -p "$cache_dir" "$(dirname "$build_json_path")" "$(dirname "$build_log_pat
 measure_step "pnpm install" pnpm install --frozen-lockfile
 measure_step "electron framework symlink inspection" inspect_electron_framework_symlinks
 
-if [ "$sign_mode" != "no" ]; then
+if [ "$sign_mode" != "unsigned" ]; then
   measure_step "prepare mac signing" prepare_mac_signing
   if [ -n "${OPEN_DESIGN_MAC_SIGNING_HELPER:-}" ]; then
     measure_step "install mac signing keychain" install_mac_signing_keychain "$CSC_LINK"
@@ -279,7 +279,7 @@ if [ "$sign_mode" != "no" ]; then
   measure_step "select mac signing identity" select_mac_signing_identity
 fi
 
-if [ "$sign_mode" = "notarize" ]; then
+if [ "$sign_mode" = "notarized" ]; then
   measure_step "prepare mac notarization" prepare_mac_notarization
 fi
 
@@ -293,17 +293,12 @@ build_args=(
   --portable
   --release-version "$RELEASE_VERSION"
   --mac-compression "$compression"
+  --sign-mode "$sign_mode"
   --to "$target"
   --json
 )
 if [ "$require_vela_cli" = "true" ]; then
   build_args+=(--require-vela-cli)
-fi
-if [ "$sign_mode" != "no" ]; then
-  build_args+=(--signed)
-fi
-if [ "$sign_mode" = "notarize" ]; then
-  build_args+=(--notarize)
 fi
 
 if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then

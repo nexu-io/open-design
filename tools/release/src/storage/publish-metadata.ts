@@ -25,8 +25,14 @@ import {
   releaseNoteMetadataFromPublication,
 } from "../release-note/publication.ts";
 import { readClosureDistributionPublication } from "./closure-distribution-metadata.ts";
+import {
+  releaseParameterMatrixFromEnv,
+  signModeForTarget,
+  type PlatformSignMode,
+} from "../channel/parameter-matrix.ts";
 
 type PlatformManifest = {
+  amrProfile?: string;
   artifacts?: Record<string, { digest?: string; url?: string }>;
   channel?: string;
   closure?: {
@@ -56,7 +62,7 @@ type PlatformManifest = {
   reason?: string | null;
   releaseTarget?: string;
   releaseVersion?: string;
-  signed?: boolean;
+  signMode?: PlatformSignMode;
   shell?: {
     artifacts?: Record<string, { digest?: string; url?: string }>;
     buildDigest?: string;
@@ -104,6 +110,7 @@ const closureDistributionRequired = process.env.RELEASE_CLOSURE_DISTRIBUTION_REQ
 const closureDistributionManifestPath = optional("RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH");
 const shellRequired = process.env.RELEASE_SHELL_REQUIRED === "true";
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
+const parameterMatrix = releaseParameterMatrixFromEnv();
 
 const installationVersionFloor = resolveInstallationVersionFloor(releaseChannel);
 if (installationVersionFloor != null) {
@@ -209,6 +216,11 @@ function validateManifest(target: string, manifest: PlatformManifest): string | 
   if (manifest.platformKey !== target) return `platformKey=${String(manifest.platformKey)}`;
   if (manifest.releaseTarget != null && manifest.releaseTarget !== target) return `releaseTarget=${String(manifest.releaseTarget)}`;
   if (manifest.status !== "published") return `status=${String(manifest.status)}`;
+  if (manifest.amrProfile !== optional("OPEN_DESIGN_AMR_PROFILE")) {
+    return `amrProfile=${String(manifest.amrProfile)}`;
+  }
+  const expectedSignMode = signModeForTarget(target as TargetDef["target"], parameterMatrix);
+  if (manifest.signMode !== expectedSignMode) return `signMode=${String(manifest.signMode)}`;
   if (currentRunId > 0 && manifest.github?.runId !== currentRunId) return `github.runId=${String(manifest.github?.runId)}`;
   if (currentCommit.length > 0 && manifest.github?.commit !== currentCommit) return `github.commit=${String(manifest.github?.commit)}`;
   if (manifest.r2?.versionPrefix == null || !manifest.r2.versionPrefix.includes(`/versions/${releaseVersion}`)) {
@@ -325,9 +337,11 @@ const shellCapabilityDigests = new Set(readyManifests.flatMap((manifest) => (
 if (shellRequired && shellCapabilityDigests.size !== 1) {
   throw new Error(`enabled Shell targets must prove one capability digest; got ${[...shellCapabilityDigests].join(", ") || "none"}`);
 }
-const allReadyTargetsSigned = readyManifests.length > 0 && readyManifests.every((manifest) => manifest.signed === true);
 if (assetVersionSuffix === "auto") {
-  assetVersionSuffix = allReadyTargetsSigned ? ".signed" : ".unsigned";
+  const allReadyTargetsUseSigning = readyTargets.length > 0 && readyTargets.every((target) => (
+    signModeForTarget(target as TargetDef["target"], parameterMatrix) !== "unsigned"
+  ));
+  assetVersionSuffix = allReadyTargetsUseSigning ? ".signed" : ".unsigned";
 }
 const versionPrefix = optional("RELEASE_VERSION_PREFIX", `${releaseChannel}/versions/${releaseVersion}${assetVersionSuffix}`);
 const expectedClosureDistributionTargets = readyTargets.flatMap((target) => (
@@ -354,6 +368,7 @@ const releaseNote = readReleaseNoteMetadata();
 const releaseFields = releaseMetadataFields();
 const metadata = {
   ...releaseFields,
+  amrProfile: optional("OPEN_DESIGN_AMR_PROFILE"),
   channel: releaseChannel,
   ...(closureDistribution == null ? {} : { closure: closureDistribution }),
   ...controlBlock,
@@ -366,6 +381,7 @@ const metadata = {
   dryRun: !publishSideEffectsEnabled,
   dryRunMode,
   platforms,
+  parameterMatrix,
   ...(releaseNote == null ? {} : { releaseNote }),
   r2: {
     latestMetadataUrl: publicUrl(publicOrigin, latestPrefix, "metadata.json"),
@@ -385,8 +401,6 @@ const metadata = {
   readyTargets,
   releaseState,
   releaseTargets,
-  signed: process.env.RELEASE_SIGNED === "true",
-  allReadyTargetsSigned,
   stateSource: required("STATE_SOURCE"),
   version: 1,
 };
@@ -420,7 +434,7 @@ if (latestMetadataUpdated && latestActivationEnabled && publishSideEffectsEnable
     });
   }
 } else if (latestMetadataUpdated && !latestActivationEnabled) {
-  console.log(`staged ${metadata.r2.versionMetadataUrl}; left ${metadata.r2.latestMetadataUrl} unchanged pending public acceptance`);
+  console.log(`staged ${metadata.r2.versionMetadataUrl}; left ${metadata.r2.latestMetadataUrl} unchanged pending channel activation`);
 } else if (latestMetadataUpdated) {
   console.log(`[dry-run:${dryRunMode || "plan"}] left ${metadata.r2.latestMetadataUrl} unchanged`);
 } else {

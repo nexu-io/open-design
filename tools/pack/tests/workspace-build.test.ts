@@ -155,7 +155,7 @@ function createConfig(root: string, cacheRoot: string, platform: "mac" | "win" =
       },
       toolPackRoot: join(root, ".tmp", "tools-pack"),
     },
-    signed: false,
+    signMode: "unsigned",
     shell: "electron",
     silent: true,
     to: "dir",

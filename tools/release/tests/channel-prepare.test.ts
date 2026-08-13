@@ -1,4 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createServer as createHttpsServer } from "node:https";
@@ -190,45 +191,63 @@ function stablePrereleaseMetadata(publicOrigin: string, baseVersion: string): Re
   const versionPrefix = `prerelease/versions/${releaseVersion}`;
   const versionUrl = `${publicOrigin}/${versionPrefix}`;
   const artifact = (name: string) => ({
+    digest: `sha256:${createHash("sha256").update(name).digest("hex")}`,
     sha256Url: `${versionUrl}/${name}.sha256`,
     url: `${versionUrl}/${name}`,
   });
 
+  const github = {
+    branch: `release/v${baseVersion}`,
+    commit: "0123456789abcdef0123456789abcdef01234567",
+    repository: "nexu-io/open-design",
+    workflow: "release-prerelease",
+  };
+  const mac = {
+    arch: "arm64",
+    artifacts: {
+      dmg: artifact("Open Design.dmg"),
+      zip: artifact("Open Design-mac-arm64.zip"),
+    },
+    enabled: true,
+    r2: { versionManifestUrl: `${versionUrl}/platforms/mac_arm64.json` },
+    signMode: "notarized",
+  };
+  const macIntel = {
+    arch: "x64",
+    artifacts: {
+      dmg: artifact("Open Design Intel.dmg"),
+      zip: artifact("Open Design-mac-x64.zip"),
+    },
+    enabled: true,
+    r2: { versionManifestUrl: `${versionUrl}/platforms/mac_x64.json` },
+    signMode: "notarized",
+  };
+  const win = {
+    arch: "x64",
+    artifacts: {
+      installer: artifact("Open Design Setup.exe"),
+    },
+    enabled: true,
+    r2: { versionManifestUrl: `${versionUrl}/platforms/win_x64.json` },
+    signMode: "unsigned",
+  };
   return {
     ...countedMetadata("prerelease", releaseVersion, 2, baseVersion),
-    github: {
-      branch: `release/v${baseVersion}`,
-      commit: "0123456789abcdef0123456789abcdef01234567",
-      repository: "nexu-io/open-design",
-      workflow: "release-prerelease",
+    amrProfile: "prod",
+    generatedAt: "2026-08-13T00:00:00.000Z",
+    github,
+    parameterMatrix: {
+      mac_arm64: { signMode: "notarized" },
+      mac_x64: { signMode: "notarized" },
+      win_x64: { signMode: "unsigned" },
     },
     platforms: {
-      mac: {
-        arch: "arm64",
-        artifacts: {
-          dmg: artifact("Open Design.dmg"),
-          zip: artifact("Open Design-mac-arm64.zip"),
-        },
-        enabled: true,
-        signed: true,
-      },
-      macIntel: {
-        arch: "x64",
-        artifacts: {
-          dmg: artifact("Open Design Intel.dmg"),
-          zip: artifact("Open Design-mac-x64.zip"),
-        },
-        enabled: true,
-        signed: true,
-      },
-      win: {
-        arch: "x64",
-        artifacts: {
-          installer: artifact("Open Design Setup.exe"),
-        },
-        enabled: true,
-      },
+      mac,
+      macIntel,
+      win,
     },
+    releaseState: "complete",
+    releaseTargets: { mac_arm64: mac, mac_x64: macIntel, win_x64: win },
     r2: {
       report: {
         type: "zip",
@@ -238,7 +257,48 @@ function stablePrereleaseMetadata(publicOrigin: string, baseVersion: string): Re
       versionMetadataUrl: `${versionUrl}/metadata.json`,
       versionPrefix,
     },
-    signed: true,
+  };
+}
+
+function stableQualification(metadata: Record<string, unknown>, publicOrigin: string): Record<string, unknown> {
+  const releaseVersion = String(metadata.releaseVersion);
+  const metadataUrl = `${publicOrigin}/prerelease/versions/${releaseVersion}/metadata.json`;
+  const releaseTargets = metadata.releaseTargets as Record<string, { artifacts: Record<string, { digest: string }> }>;
+  const target = (name: "mac_arm64" | "mac_x64" | "win_x64") => ({
+    artifacts: Object.fromEntries(Object.entries(releaseTargets[name].artifacts).map(([artifactName, value]) => [artifactName, value.digest])),
+    manifest: {
+      digest: `sha256:${"0".repeat(64)}`,
+      url: `${publicOrigin}/prerelease/versions/${releaseVersion}/platforms/${name}.json`,
+    },
+  });
+  return {
+    amrProfile: "prod",
+    baseVersion: metadata.baseVersion,
+    channel: "prerelease",
+    github: metadata.github,
+    metadata: {
+      digest: `sha256:${createHash("sha256").update(JSON.stringify(metadata)).digest("hex")}`,
+      url: metadataUrl,
+    },
+    parameterMatrix: metadata.parameterMatrix,
+    policy: "stable-promotion-v1",
+    qualifiedAt: metadata.generatedAt,
+    releaseVersion,
+    schemaVersion: 1,
+    smoke: {
+      profile: "core",
+      targets: {
+        mac_arm64: { result: "success" },
+        mac_x64: { result: "success" },
+        win_x64: { result: "success" },
+      },
+    },
+    status: "qualified",
+    targets: {
+      mac_arm64: target("mac_arm64"),
+      mac_x64: target("mac_x64"),
+      win_x64: target("win_x64"),
+    },
   };
 }
 
@@ -389,7 +449,9 @@ describe("tools-release local channel prepare validation", () => {
     const objects: Record<string, unknown> = {};
     const server = await startMetadataServer(objects);
     const ghRoot = await mkdtemp(join(tmpdir(), "od-tools-release-gh-"));
-    objects[`prerelease/versions/${prereleaseVersion}/metadata.json`] = stablePrereleaseMetadata(server.origin, packagedVersion);
+    const metadata = stablePrereleaseMetadata(server.origin, packagedVersion);
+    objects[`prerelease/versions/${prereleaseVersion}/metadata.json`] = metadata;
+    objects[`prerelease/versions/${prereleaseVersion}/qualification.json`] = stableQualification(metadata, server.origin);
 
     try {
       const fakeGh = await writeFakeGhScript(ghRoot);
@@ -424,7 +486,9 @@ describe("tools-release local channel prepare validation", () => {
     const objects: Record<string, unknown> = {};
     const server = await startMetadataServer(objects);
     const ghRoot = await mkdtemp(join(tmpdir(), "od-tools-release-gh-"));
-    objects[`prerelease/versions/${prereleaseVersion}/metadata.json`] = stablePrereleaseMetadata(server.origin, packagedVersion);
+    const metadata = stablePrereleaseMetadata(server.origin, packagedVersion);
+    objects[`prerelease/versions/${prereleaseVersion}/metadata.json`] = metadata;
+    objects[`prerelease/versions/${prereleaseVersion}/qualification.json`] = stableQualification(metadata, server.origin);
 
     try {
       const fakeGh = await writeFakeGhScript(ghRoot);
@@ -456,7 +520,9 @@ describe("tools-release local channel prepare validation", () => {
     const objects: Record<string, unknown> = {};
     const server = await startMetadataServer(objects);
     const ghRoot = await mkdtemp(join(tmpdir(), "od-tools-release-gh-"));
-    objects[`prerelease/versions/${prereleaseVersion}/metadata.json`] = stablePrereleaseMetadata(server.origin, packagedVersion);
+    const metadata = stablePrereleaseMetadata(server.origin, packagedVersion);
+    objects[`prerelease/versions/${prereleaseVersion}/metadata.json`] = metadata;
+    objects[`prerelease/versions/${prereleaseVersion}/qualification.json`] = stableQualification(metadata, server.origin);
 
     try {
       const fakeGh = await writeFakeGhScript(ghRoot);

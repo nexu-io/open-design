@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
@@ -19,6 +21,10 @@ import {
 } from "../lib/playwright/suites.ts";
 
 const execFileAsync = promisify(execFile);
+const launchEnv = { ...process.env };
+const launchPath = launchEnv.PATH ?? launchEnv.Path ?? "";
+const nodeBinDir = dirname(process.execPath);
+const jqBin = process.platform !== "win32" && existsSync("/usr/bin/jq") ? "/usr/bin/jq" : "jq";
 const e2eRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const workspaceRoot = dirname(e2eRoot);
 const ciWorkflowPath = join(workspaceRoot, ".github", "workflows", "ci.yml");
@@ -35,6 +41,13 @@ const playwrightConfigPath = join(e2eRoot, "playwright.config.ts");
 const commentWorkflowPath = join(workspaceRoot, ".github", "workflows", "comment.atom.yml");
 const autofixWorkflowPath = join(workspaceRoot, ".github", "workflows", "autofix.atom.yml");
 const reportWorkflowPath = join(workspaceRoot, ".github", "workflows", "report.atom.yml");
+const contributorMaintainerCheckWorkflowPath = join(
+  workspaceRoot,
+  ".github",
+  "workflows",
+  "contributor-maintainer-check.yml",
+);
+const prAuthorInactivityWorkflowPath = join(workspaceRoot, ".github", "workflows", "pr-author-inactivity.yml");
 const rerunWorkflowPath = join(workspaceRoot, ".github", "workflows", "rerun.atom.yml");
 const rerunInfraCancelScriptPath = join(workspaceRoot, ".github", "scripts", "rerun_infra_cancel.py");
 const bakePluginPreviewsWorkflowPath = join(workspaceRoot, ".github", "workflows", "bake-plugin-previews.yml");
@@ -207,7 +220,7 @@ function extractValidateGateJqPrograms(workflow: string): { failures: string; re
   const needsCheck = sectionBetween(
     validate,
     "      - name: Check workspace validation jobs",
-    "      - name: Block merge while the needs-validation label is present",
+    "      - name: Block merge while a merge-blocking label is present",
   );
   const programs = [...needsCheck.matchAll(/jq -r '([\s\S]*?)'/g)].map((match) => match[1] ?? "");
   expect(programs).toHaveLength(2);
@@ -216,7 +229,7 @@ function extractValidateGateJqPrograms(workflow: string): { failures: string; re
 
 function runValidateGateJq(program: string, needs: unknown): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = execFile("jq", ["-r", program], { encoding: "utf8" }, (error, stdout, stderr) => {
+    const child = execFile(jqBin, ["-r", program], { encoding: "utf8" }, (error, stdout, stderr) => {
       if (error) {
         reject(Object.assign(error, { stdout, stderr }));
         return;
@@ -293,19 +306,15 @@ if (process.argv.includes("--jq")) {
   await writeFile(ghCmdPath, `@echo off\r\n"${process.execPath}" "${ghPath}" %*\r\n`);
 
   try {
-    const fakePath = `${tempDir}${delimiter}${process.env.PATH ?? ""}`;
     const { stdout } = await execFileAsync(process.execPath, ["--experimental-strip-types", scopesScriptPath, "print"], {
       cwd: workspaceRoot,
-      env: {
-        ...process.env,
+      env: workflowFixtureEnv({
         GITHUB_EVENT_NAME: eventName,
         GITHUB_EVENT_PATH: eventPath,
         GITHUB_REPOSITORY: "nexu-io/open-design",
         GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
         OPEN_DESIGN_GH_NODE_SCRIPT: ghPath,
-        Path: fakePath,
-        PATH: fakePath,
-      },
+      }, tempDir),
     });
     return JSON.parse(stdout) as Record<string, unknown>;
   } finally {
@@ -570,7 +579,7 @@ describe("packaged smoke workflow", () => {
     expect(ciWorkflow).toContain("<!-- merge-queue-needs-validation -->");
     expect(ciWorkflow).toContain("emit_ejection_notice");
     expect(ciWorkflow).toContain(
-      "if: ${{ failure() && steps.needs_validation_gate.outputs.comment_created == 'true' }}",
+      "if: ${{ failure() && steps.merge_blocking_label_gate.outputs.comment_created == 'true' }}",
     );
 
     // Consumer: a merge_group run's head_sha is the queue's synthetic merge commit, so the atom
@@ -579,6 +588,35 @@ describe("packaged smoke workflow", () => {
     expect(commentWorkflow).toContain('"$RUN_EVENT" = "merge_group"');
     expect(commentWorkflow).toContain('"$artifact_run_id" != "$RUN_ID"');
     expect(commentWorkflow).toContain('[ "$RUN_EVENT" != "merge_group" ] && [ "$current_base" != "$base_sha" ]');
+  });
+
+  it("[P1] routes configured contributors into an independent maintainer merge block", async () => {
+    const [routingWorkflow, ciWorkflow, inactivityWorkflow] = await Promise.all([
+      readFile(contributorMaintainerCheckWorkflowPath, "utf8"),
+      readFile(ciWorkflowPath, "utf8"),
+      readFile(prAuthorInactivityWorkflowPath, "utf8"),
+    ]);
+    const trigger = sectionBetween(routingWorkflow, "on:", "\npermissions:");
+
+    expect(trigger).toContain("pull_request_target:");
+    expect(trigger).toContain("types: [opened, reopened, synchronize]");
+    expect(trigger).not.toContain("unlabeled");
+    expect(routingWorkflow).toContain("permissions:\n  issues: write");
+    expect(routingWorkflow).toContain("actions/github-script@v8");
+    expect(routingWorkflow).toContain("secrets.NEEDS_MAINTAINER_CHECK_USER_IDS");
+    expect(routingWorkflow).toContain("rawIds ? JSON.parse(rawIds) : []");
+    expect(routingWorkflow).toContain("Number.isSafeInteger(id) && id > 0");
+    expect(routingWorkflow).toContain("context.payload.pull_request?.user?.id");
+    expect(routingWorkflow).toContain("configuredIds.includes(authorId)");
+    expect(routingWorkflow).toContain("github.rest.issues.addLabels");
+    expect(routingWorkflow).toContain("labels: ['needs-maintainer-check']");
+    expect(routingWorkflow).not.toContain("actions/checkout");
+
+    expect(ciWorkflow).toContain("Block merge while a merge-blocking label is present");
+    expect(ciWorkflow).toContain("grep -qx 'needs-maintainer-check'");
+    expect(ciWorkflow).toContain("<!-- merge-queue-needs-maintainer-check -->");
+    expect(ciWorkflow).toContain("needs-maintainer-check-pr-$pr");
+    expect(inactivityWorkflow).toContain("'needs-maintainer-check'");
   });
 
   it("[P2] gates the backport auto-merge follow-up as a trusted workflow_run consumer", async () => {
@@ -752,16 +790,14 @@ process.stdin.on("end", () => {
       try {
         await execFileAsync("bash", ["-c", script], {
           cwd: dir,
-          env: {
-            ...process.env,
+          env: workflowFixtureEnv({
             EVENT: args.event,
             INPUT_TAG: args.inputTag ?? "",
             GITHUB_OUTPUT: outputPath,
-            PATH: `${dir}${delimiter}${process.env.PATH ?? ""}`,
             FAKE_GH_LOG: ghLogPath,
             FAKE_GH_STATE: args.state ?? "",
             FAKE_GH_EXIT: args.ghExit ? "1" : "0",
-          },
+          }, dir),
         });
         const [rawOutput, rawGhArgs] = await Promise.all([
           readFile(outputPath, "utf8").catch(() => ""),
@@ -845,7 +881,7 @@ process.stdin.on("end", () => {
 
       await execFileAsync("bash", ["-c", script], {
         cwd: dir,
-        env: { ...process.env, NEXT: "0.12.1", GITHUB_OUTPUT: outputPath },
+        env: workflowFixtureEnv({ NEXT: "0.12.1", GITHUB_OUTPUT: outputPath }),
       });
 
       await expect(readFile(outputPath, "utf8")).resolves.toContain("changed=true");
@@ -884,7 +920,7 @@ process.stdin.on("end", () => {
 
       await execFileAsync("bash", ["-c", script], {
         cwd: dir,
-        env: { ...process.env, NEXT: "0.12.1", GITHUB_OUTPUT: outputPath },
+        env: workflowFixtureEnv({ NEXT: "0.12.1", GITHUB_OUTPUT: outputPath }),
       });
 
       await expect(readFile(outputPath, "utf8")).resolves.toContain("changed=false");
@@ -1420,7 +1456,7 @@ process.stdin.on("end", () => {
       name: "Functional E2E commit pin",
       workflowPath: distributionPrereleaseWorkflowPath,
       jobStart: "  functional_e2e:",
-      jobEnd: "  daemon_unit_tests:",
+      jobEnd: "  e2e_vitest:",
       marker: "ref: ${{ needs.metadata.outputs.commit }}",
     },
   ])("[P1] keeps $name bounded to its owning job", async ({
@@ -1528,17 +1564,23 @@ process.stdin.on("end", () => {
     expect(uiFull).toContain("needs: [validate_inputs, p0_runners]");
   });
 
-  it("[P1] gates prerelease packaging on full Functional E2E at the resolved build commit", async () => {
+  it("[P1] gates prerelease packaging on P0 Functional E2E at the resolved build commit", async () => {
     const [prerelease, functionalE2e] = await Promise.all([
       readReleaseWorkflow(releasePrereleaseWorkflowPath, distributionPrereleaseWorkflowPath),
       readFile(uiExtendedMainWorkflowPath, "utf8"),
     ]);
 
-    const gate = sectionBetween(prerelease, "  functional_e2e:", "  daemon_unit_tests:");
+    const gate = sectionBetween(prerelease, "  functional_e2e:", "  e2e_vitest:");
     expect(gate).toContain("needs: metadata");
     expect(gate).toContain("uses: ./.github/workflows/ui-extended-main.yml");
     expect(gate).toContain("ref: ${{ needs.metadata.outputs.commit }}");
-    expect(gate).toContain("suite: full");
+    expect(gate).toContain("suite: p0");
+
+    const e2eVitestGate = sectionBetween(prerelease, "  e2e_vitest:", "  daemon_unit_tests:");
+    expect(e2eVitestGate).toContain("needs: metadata");
+    expect(e2eVitestGate).toContain("ref: ${{ needs.metadata.outputs.commit }}");
+    expect(e2eVitestGate).toContain("playwright install --with-deps chromium");
+    expect(e2eVitestGate).toContain("pnpm --filter @open-design/e2e test");
 
     const daemonGate = sectionBetween(prerelease, "  daemon_unit_tests:", "  verify:");
     expect(daemonGate).toContain("shard: [1, 2, 3, 4]");
@@ -1555,14 +1597,16 @@ process.stdin.on("end", () => {
       ["  build_win:", "  publish:"],
     ] as const) {
       const buildJob = sectionBetween(prerelease, start, end);
-      expect(buildJob).toContain("needs: [metadata, functional_e2e, daemon_unit_tests, verify]");
+      expect(buildJob).toContain("needs: [metadata, functional_e2e, e2e_vitest, daemon_unit_tests, verify]");
       expect(buildJob).toContain("ref: ${{ needs.metadata.outputs.commit }}");
     }
 
     const publish = sectionBetween(prerelease, "  publish:", "  cleanup_partial_release_assets:");
     expect(publish).toContain("- functional_e2e");
+    expect(publish).toContain("- e2e_vitest");
     expect(publish).toContain("- daemon_unit_tests");
     expect(publish).toContain("needs.functional_e2e.result == 'success'");
+    expect(publish).toContain("needs.e2e_vitest.result == 'success'");
     expect(publish).toContain("needs.daemon_unit_tests.result == 'success'");
     expect(publish).toContain("ref: ${{ needs.metadata.outputs.commit }}");
   });
@@ -2352,6 +2396,18 @@ process.stdin.on("end", () => {
     expect(macSmoke).toContain("id: mac_smoke");
     expect(macSmoke).toContain("continue-on-error: true");
 
+    const macX64Job = sectionBetween(prerelease, "  build_mac_intel:", "  build_win:");
+    const macX64Smoke = sectionBetween(
+      macX64Job,
+      "      - name: Smoke prerelease mac_x64 packaged runtime",
+      "      - name: Write mac_x64 release report",
+    );
+    expect(macX64Job).toContain("outputs:\n      smoke_result: ${{ steps.mac_x64_smoke.outcome }}");
+    expect(macX64Smoke).toContain("id: mac_x64_smoke");
+    expect(macX64Smoke).toContain("continue-on-error: true");
+    expect(macX64Smoke).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
+    expect(macX64Job).toContain("RELEASE_SMOKE_MODE: core");
+
     const winJob = sectionBetween(prerelease, "  build_win:", "  publish:");
     const winSmokeFixture = sectionBetween(
       winJob,
@@ -2648,8 +2704,7 @@ process.stdin.on("end", () => {
       try {
         await execFileAsync("bash", [releaseStableNotesScriptPath], {
           cwd: workspaceRoot,
-          env: {
-            ...process.env,
+          env: workflowFixtureEnv({
             BRANCH_NAME: "release/v0.13.0",
             CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: envName === "CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN" ? origin : "",
             GITHUB_OUTPUT: outputPath,
@@ -2657,11 +2712,13 @@ process.stdin.on("end", () => {
             GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
             RELEASE_CHANNEL: "stable",
             RELEASE_PUBLIC_ORIGIN: envName === "RELEASE_PUBLIC_ORIGIN" ? origin : "",
-            RELEASE_SIGNED: "true",
+            RELEASE_MAC_ARM64_SIGN_MODE: "notarized",
+            RELEASE_MAC_X64_SIGN_MODE: "notarized",
+            RELEASE_WIN_X64_SIGN_MODE: "unsigned",
             RELEASE_VERSION: "0.13.0",
             RUNNER_TEMP: runnerTemp,
             VERSION_TAG: "open-design-v0.13.0",
-          },
+          }),
         });
 
         const outputs = parseGithubOutput(await readFile(outputPath, "utf8"));
@@ -2679,22 +2736,21 @@ process.stdin.on("end", () => {
     const prereleaseVersion = `${baseVersion}-prerelease.12`;
     const objects: Record<string, unknown> = {};
     const fixture = await startStablePrereleaseMetadataServer(objects);
-    objects[`prerelease/versions/${prereleaseVersion}/metadata.json`] = stablePrereleaseMetadataFixture(
+    const metadata = stablePrereleaseMetadataFixture(
       baseVersion,
       prereleaseVersion,
       fixture.origin,
     );
+    objects[`prerelease/versions/${prereleaseVersion}/metadata.json`] = metadata;
+    objects[`prerelease/versions/${prereleaseVersion}/qualification.json`] = stableQualificationFixture(metadata, fixture.origin);
     const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-stable-dry-run-"));
 
     try {
       await mkdir(join(runnerTemp, "bin"), { recursive: true });
       await writeFakeGhBin(join(runnerTemp, "bin"), []);
-      const fakePath = `${join(runnerTemp, "bin")}${delimiter}${process.env.PATH ?? ""}`;
-
       const result = await execFileAsync(process.execPath, ["--experimental-strip-types", releaseStableScriptPath], {
         cwd: workspaceRoot,
-        env: {
-          ...process.env,
+        env: workflowFixtureEnv({
           GITHUB_REF_NAME: `release/v${baseVersion}`,
           GITHUB_REPOSITORY: "nexu-io/open-design",
           GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
@@ -2704,9 +2760,7 @@ process.stdin.on("end", () => {
           OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: fixture.origin,
           OPEN_DESIGN_GH_NODE_SCRIPT: join(runnerTemp, "bin", "gh"),
           OPEN_DESIGN_STABLE_PRERELEASE_VERSION: prereleaseVersion,
-          Path: fakePath,
-          PATH: fakePath,
-        },
+        }, join(runnerTemp, "bin")),
       });
 
       expect(result.stdout).toContain(`[release-stable] validated prerelease: ${prereleaseVersion}`);
@@ -2867,7 +2921,7 @@ process.stdin.on("end", () => {
     expect(workflow).toContain("full 40-character commit SHA; abbreviated SHA");
     expect(publishJob).toContain("RELEASE_ACTIVATE_LATEST: ${{ inputs.enable_win_x64 && 'false' || 'true' }}");
     expect(publishJob).toContain('RELEASE_LATEST_CAS_REQUIRED: "true"');
-    expect(publishJob).toContain("RELEASE_SIGNED: ${{ !inputs.enable_win_x64 && 'true' || 'false' }}");
+    expect(publishJob).toContain("RELEASE_WIN_X64_SIGN_MODE: ${{ inputs.win_x64_sign_mode }}");
     expect(publishJob).toContain("Observe directly activated beta public feed");
     expect(publishJob).toContain("if: ${{ !inputs.enable_win_x64 }}");
     expect(sectionBetween(
@@ -2929,6 +2983,7 @@ process.stdin.on("end", () => {
         join(platformManifestRoot, "mac_arm64.json"),
         `${JSON.stringify(
           {
+        amrProfile: "",
         artifacts: {
           dmg: {
             url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.3.unsigned/Open Design Beta.dmg",
@@ -2947,7 +3002,7 @@ process.stdin.on("end", () => {
           versionPrefix: "beta/versions/1.2.3-beta.3.unsigned",
         },
         releaseVersion: "1.2.3-beta.3",
-        signed: false,
+        signMode: "notarized",
         status: "published",
       },
           null,
@@ -2974,7 +3029,6 @@ process.stdin.on("end", () => {
             RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
             RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
             RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
-            RELEASE_SIGNED: "false",
             RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
             RELEASE_STORAGE_BUCKET: fixture.bucket,
             RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
@@ -3012,6 +3066,7 @@ process.stdin.on("end", () => {
         join(platformManifestRoot, "mac_arm64.json"),
         `${JSON.stringify(
           {
+        amrProfile: "",
         artifacts: {
           dmg: {
             url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
@@ -3030,7 +3085,7 @@ process.stdin.on("end", () => {
           versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
         },
         releaseVersion: "1.2.3-beta.4",
-        signed: false,
+        signMode: "notarized",
         status: "published",
       },
           null,
@@ -3057,7 +3112,6 @@ process.stdin.on("end", () => {
             RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
             RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
             RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
-            RELEASE_SIGNED: "false",
             RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
             RELEASE_STORAGE_BUCKET: fixture.bucket,
             RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
@@ -3095,6 +3149,7 @@ process.stdin.on("end", () => {
         join(platformManifestRoot, "mac_arm64.json"),
         `${JSON.stringify(
           {
+        amrProfile: "",
         artifacts: {
           dmg: {
             url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
@@ -3113,7 +3168,7 @@ process.stdin.on("end", () => {
           versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
         },
         releaseVersion: "1.2.3-beta.4",
-        signed: false,
+        signMode: "notarized",
         status: "published",
       },
           null,
@@ -3137,7 +3192,6 @@ process.stdin.on("end", () => {
           RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
           RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
           RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
-          RELEASE_SIGNED: "false",
           RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
           RELEASE_STORAGE_BUCKET: fixture.bucket,
           RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
@@ -3173,6 +3227,7 @@ process.stdin.on("end", () => {
         join(platformManifestRoot, "win_x64.json"),
         `${JSON.stringify(
           {
+            amrProfile: "",
             artifacts: {
               installer: {
                 url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
@@ -3196,7 +3251,7 @@ process.stdin.on("end", () => {
             r2: {
               versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
             },
-            signed: false,
+            signMode: "unsigned",
             status: "published",
           },
           null,
@@ -3221,7 +3276,6 @@ process.stdin.on("end", () => {
           RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
           RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
           RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
-          RELEASE_SIGNED: "false",
           RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
           RELEASE_STORAGE_BUCKET: fixture.bucket,
           RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
@@ -3264,6 +3318,7 @@ process.stdin.on("end", () => {
         join(platformManifestRoot, "mac_arm64.json"),
         `${JSON.stringify(
           {
+            amrProfile: "",
             artifacts: {
               dmg: {
                 url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64.dmg",
@@ -3287,7 +3342,7 @@ process.stdin.on("end", () => {
             r2: {
               versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
             },
-            signed: false,
+            signMode: "notarized",
             status: "published",
           },
           null,
@@ -3298,6 +3353,7 @@ process.stdin.on("end", () => {
         join(platformManifestRoot, "win_x64.json"),
         `${JSON.stringify(
           {
+            amrProfile: "",
             artifacts: {
               installer: {
                 url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
@@ -3325,7 +3381,7 @@ process.stdin.on("end", () => {
             r2: {
               versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
             },
-            signed: false,
+            signMode: "unsigned",
             status: "published",
           },
           null,
@@ -3350,7 +3406,6 @@ process.stdin.on("end", () => {
           RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
           RELEASE_OUTPUTS_PATH: join(runnerTemp, "release-metadata", "outputs.json"),
           RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.ai",
-          RELEASE_SIGNED: "false",
           RELEASE_STORAGE_ACCESS_KEY_ID: "test-access-key",
           RELEASE_STORAGE_BUCKET: fixture.bucket,
           RELEASE_STORAGE_ENDPOINT: fixture.endpointUrl,
@@ -3433,7 +3488,7 @@ function expectWindowsUpdaterSmokeContract(workflow: string, channel: "beta" | "
     expect(workflow).toContain("Build stable win_x64 update fixture");
     expect(workflow).toContain('full Windows stable smoke requires stable version x.y.z');
     expect(workflow).toContain('pnpm.cmd exec tools-pack win cleanup --dir $toolsPackDir --namespace "${{ needs.metadata.outputs.win_namespace }}" --json');
-    expect(workflow).toContain("--cache-dir $cacheDir `");
+    expect(workflow).toContain('"--cache-dir", $cacheDir,');
     expect(workflow).toContain('pnpm.cmd exec tools-pack win validate-payload --namespace "${{ needs.metadata.outputs.win_namespace }}" --payload-path $build.payloadPath --expected-version "${{ needs.metadata.outputs.release_version }}" --json');
   } else {
     expect(workflow).toContain(`Build ${channel} win_x64 update fixture`);
@@ -3517,47 +3572,61 @@ function stablePrereleaseMetadataFixture(baseVersion: string, prereleaseVersion:
   const versionPrefix = `prerelease/versions/${prereleaseVersion}`;
   const versionUrl = `${publicOrigin}/${versionPrefix}`;
   const artifact = (name: string) => ({
+    digest: `sha256:${createHash("sha256").update(name).digest("hex")}`,
     sha256Url: `${versionUrl}/${name}.sha256`,
     url: `${versionUrl}/${name}`,
   });
 
+  const github = {
+    branch: `release/v${baseVersion}`,
+    commit: "0123456789abcdef0123456789abcdef01234567",
+    repository: "nexu-io/open-design",
+    workflow: "release-prerelease",
+  };
+  const mac = {
+    arch: "arm64",
+    artifacts: {
+      dmg: artifact("Open Design.dmg"),
+      zip: artifact("Open Design-mac-arm64.zip"),
+    },
+    enabled: true,
+    r2: { versionManifestUrl: `${versionUrl}/platforms/mac_arm64.json` },
+    signMode: "notarized",
+  };
+  const macIntel = {
+    arch: "x64",
+    artifacts: {
+      dmg: artifact("Open Design Intel.dmg"),
+      zip: artifact("Open Design-mac-x64.zip"),
+    },
+    enabled: true,
+    r2: { versionManifestUrl: `${versionUrl}/platforms/mac_x64.json` },
+    signMode: "notarized",
+  };
+  const win = {
+    arch: "x64",
+    artifacts: { installer: artifact("Open Design Setup.exe") },
+    enabled: true,
+    r2: { versionManifestUrl: `${versionUrl}/platforms/win_x64.json` },
+    signMode: "unsigned",
+  };
   return {
+    amrProfile: "prod",
     baseVersion,
     channel: "prerelease",
-    github: {
-      branch: `release/v${baseVersion}`,
-      commit: "0123456789abcdef0123456789abcdef01234567",
-      repository: "nexu-io/open-design",
-      workflow: "release-prerelease",
+    generatedAt: "2026-08-13T00:00:00.000Z",
+    github,
+    parameterMatrix: {
+      mac_arm64: { signMode: "notarized" },
+      mac_x64: { signMode: "notarized" },
+      win_x64: { signMode: "unsigned" },
     },
     prereleaseNumber: 12,
     prereleaseVersion,
     platforms: {
-      mac: {
-        arch: "arm64",
-        artifacts: {
-          dmg: artifact("Open Design.dmg"),
-          zip: artifact("Open Design-mac-arm64.zip"),
-        },
-        enabled: true,
-        signed: true,
-      },
-      macIntel: {
-        arch: "x64",
-        artifacts: {
-          dmg: artifact("Open Design Intel.dmg"),
-          zip: artifact("Open Design-mac-x64.zip"),
-        },
-        enabled: true,
-        signed: true,
-      },
-      win: {
-        arch: "x64",
-        artifacts: {
-          installer: artifact("Open Design Setup.exe"),
-        },
-        enabled: true,
-      },
+      mac,
+      macIntel,
+      win,
     },
     r2: {
       report: {
@@ -3568,8 +3637,50 @@ function stablePrereleaseMetadataFixture(baseVersion: string, prereleaseVersion:
       versionMetadataUrl: `${versionUrl}/metadata.json`,
       versionPrefix,
     },
+    releaseState: "complete",
+    releaseTargets: { mac_arm64: mac, mac_x64: macIntel, win_x64: win },
     releaseVersion: prereleaseVersion,
-    signed: true,
+  };
+}
+
+function stableQualificationFixture(metadata: Record<string, unknown>, publicOrigin: string): Record<string, unknown> {
+  const releaseVersion = String(metadata.releaseVersion);
+  const releaseTargets = metadata.releaseTargets as Record<string, { artifacts: Record<string, { digest: string }> }>;
+  const target = (name: string) => ({
+    artifacts: Object.fromEntries(Object.entries(releaseTargets[name].artifacts).map(([artifactName, value]) => [artifactName, value.digest])),
+    manifest: {
+      digest: `sha256:${"0".repeat(64)}`,
+      url: `${publicOrigin}/prerelease/versions/${releaseVersion}/platforms/${name}.json`,
+    },
+  });
+  return {
+    amrProfile: "prod",
+    baseVersion: metadata.baseVersion,
+    channel: "prerelease",
+    github: metadata.github,
+    metadata: {
+      digest: `sha256:${createHash("sha256").update(JSON.stringify(metadata)).digest("hex")}`,
+      url: `${publicOrigin}/prerelease/versions/${releaseVersion}/metadata.json`,
+    },
+    parameterMatrix: metadata.parameterMatrix,
+    policy: "stable-promotion-v1",
+    qualifiedAt: metadata.generatedAt,
+    releaseVersion,
+    schemaVersion: 1,
+    smoke: {
+      profile: "core",
+      targets: {
+        mac_arm64: { result: "success" },
+        mac_x64: { result: "success" },
+        win_x64: { result: "success" },
+      },
+    },
+    status: "qualified",
+    targets: {
+      mac_arm64: target("mac_arm64"),
+      mac_x64: target("mac_x64"),
+      win_x64: target("win_x64"),
+    },
   };
 }
 

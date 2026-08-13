@@ -2,6 +2,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { resolveReportTimings } from "./timings.ts";
+import { releaseParameterMatrixFromEnv, signModeForTarget } from "../channel/parameter-matrix.ts";
+import { requiredTarget } from "../storage/common.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -105,7 +107,8 @@ function seconds(value: unknown): string {
   return `${(Number(value) / 1000).toFixed(1)}s`;
 }
 
-const releaseTarget = required("RELEASE_TARGET");
+const releaseTarget = requiredTarget();
+const signMode = signModeForTarget(releaseTarget, releaseParameterMatrixFromEnv());
 const reportRoot = resolvePath(required("RELEASE_REPORT_DIR"));
 const reportJsonPath = resolvePath(required("RELEASE_REPORT_JSON_PATH"));
 const reportSummaryPath = resolvePath(required("RELEASE_REPORT_SUMMARY_PATH"));
@@ -143,7 +146,7 @@ const report = {
   },
   inputs: {
     namespace: optional("RELEASE_NAMESPACE", String(index?.namespace ?? manifest?.namespace ?? "")),
-    signed: index?.signed ?? optional("RELEASE_SIGNED"),
+    signMode,
     smokeMode: optional("RELEASE_SMOKE_MODE", String(index?.smokeMode ?? "")),
     target: optional("RELEASE_BUILD_TARGET", String(index?.target ?? "")),
   },

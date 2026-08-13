@@ -813,7 +813,7 @@ export async function runElectronBuilder(
     });
     let signedUnpacked = false;
     const ensureSignedUnpacked = async (): Promise<void> => {
-      if (!config.signed || signedUnpacked) return;
+      if (config.signMode === "unsigned" || signedUnpacked) return;
       const signingDetails: Record<string, unknown> = {};
       await runSegment("windows-sign:unpacked-exe", async () => {
         // The final installer still gets a full sign+verify pass; skip the

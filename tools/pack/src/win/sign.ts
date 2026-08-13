@@ -7,6 +7,7 @@ import type { ToolPackConfig } from "../config.js";
 const execFileAsync = promisify(execFile);
 
 const DEFAULT_TIMESTAMP_URL = "http://timestamp.digicert.com";
+const DEFAULT_CERTIFICATE_SHA1 = "8617C437D6CCE5A61758C27E684BF5CADC5AC0A7";
 const DEFAULT_SIGNTOOL_CANDIDATES = [
   "signtool.exe",
   "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\signtool.exe",
@@ -49,7 +50,7 @@ export type WinSigningOptions = {
 };
 
 export function resolveWinSigningCacheKey(config: ToolPackConfig): WinSigningCacheKey {
-  if (!config.signed) return { enabled: false };
+  if (config.signMode === "unsigned") return { enabled: false };
   const signing = resolveWinSigningConfig();
   return {
     certificateSha1: signing.certificateSha1,
@@ -61,10 +62,10 @@ export function resolveWinSigningCacheKey(config: ToolPackConfig): WinSigningCac
 }
 
 export function resolveWinSigningConfig(): WinSigningConfig {
-  const certificateSha1 = normalizeSha1(process.env.OD_WIN_SIGN_CERT_SHA1 ?? process.env.WIN_SIGN_CERT_SHA1);
-  if (certificateSha1 == null) {
-    throw new Error("signed Windows builds require OD_WIN_SIGN_CERT_SHA1");
-  }
+  const certificateSha1 = normalizeSha1(
+    process.env.OD_WIN_SIGN_CERT_SHA1 ?? process.env.WIN_SIGN_CERT_SHA1 ?? DEFAULT_CERTIFICATE_SHA1,
+  );
+  if (certificateSha1 == null) throw new Error("Windows signing certificate identity is empty");
   return {
     certificateSha1,
     digestAlgorithm: "sha256",

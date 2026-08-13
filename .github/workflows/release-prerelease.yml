@@ -13,10 +13,29 @@ on:
         type: string
         default: ""
       amr_profile:
-        description: "Optional AMR profile baked into the build (test or feature-test point the packaged app at that profile's Vela backend and enable the workspace-team transport). Empty leaves the default (prod)."
-        required: false
-        type: string
-        default: ""
+        description: "AMR profile baked into the build. Only prod builds can receive stable-promotion qualification."
+        required: true
+        type: choice
+        options: [prod, test, feature-test]
+        default: prod
+      mac_arm64_sign_mode:
+        description: "macOS arm64 signing mode."
+        required: true
+        type: choice
+        options: [unsigned, signed, notarized]
+        default: notarized
+      mac_x64_sign_mode:
+        description: "macOS x64 signing mode."
+        required: true
+        type: choice
+        options: [unsigned, signed, notarized]
+        default: notarized
+      win_x64_sign_mode:
+        description: "Windows x64 signing mode."
+        required: true
+        type: choice
+        options: [unsigned, signed]
+        default: unsigned
       win_x64_smoke_mode:
         description: "Windows x64 smoke coverage."
         required: true
@@ -49,10 +68,22 @@ on:
         type: string
         default: ""
       amr_profile:
-        description: "Optional AMR profile baked into the build (test or feature-test enable the workspace-team transport by pointing at that profile's Vela backend). Empty leaves the default (prod)."
+        description: "AMR profile baked into the build."
         required: false
         type: string
-        default: ""
+        default: prod
+      mac_arm64_sign_mode:
+        required: false
+        type: string
+        default: notarized
+      mac_x64_sign_mode:
+        required: false
+        type: string
+        default: notarized
+      win_x64_sign_mode:
+        required: false
+        type: string
+        default: unsigned
       win_x64_smoke_mode:
         description: "Windows x64 smoke coverage: skip, core, or full."
         required: false
@@ -87,12 +118,18 @@ on:
       mac_arm64_smoke_result:
         description: "macOS arm64 packaged smoke outcome; advisory to publication."
         value: ${{ jobs.distribute.outputs.mac_arm64_smoke_result }}
+      mac_x64_smoke_result:
+        description: "macOS x64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.distribute.outputs.mac_x64_smoke_result }}
       win_x64_smoke_result:
         description: "Windows x64 packaged smoke outcome; advisory to publication."
         value: ${{ jobs.distribute.outputs.win_x64_smoke_result }}
       version_metadata_url:
         description: "Public R2 URL of this build's version metadata.json."
         value: ${{ jobs.distribute.outputs.version_metadata_url }}
+      stable_qualification_url:
+        description: "Immutable stable-promotion qualification URL; empty when ineligible."
+        value: ${{ jobs.distribute.outputs.stable_qualification_url }}
       mac_arm64_url:
         description: "macOS arm64 dmg download URL."
         value: ${{ jobs.distribute.outputs.mac_arm64_url }}
@@ -117,6 +154,9 @@ jobs:
       ref: ${{ inputs.ref }}
       release_version: ${{ inputs.release_version }}
       amr_profile: ${{ inputs.amr_profile }}
+      mac_arm64_sign_mode: ${{ inputs.mac_arm64_sign_mode }}
+      mac_x64_sign_mode: ${{ inputs.mac_x64_sign_mode }}
+      win_x64_sign_mode: ${{ inputs.win_x64_sign_mode }}
       win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode }}
       win_x64_update_metadata_url: ${{ inputs.win_x64_update_metadata_url }}
       win_x64_update_target_version: ${{ inputs.win_x64_update_target_version }}

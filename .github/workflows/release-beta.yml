@@ -68,10 +68,10 @@ on:
         required: true
         type: choice
         options:
-          - "no"
-          - "sign-only"
-          - "notarize"
-        default: "notarize"
+          - "unsigned"
+          - "signed"
+          - "notarized"
+        default: "notarized"
       mac_arm64_smoke_mode:
         description: "macOS arm64 smoke coverage."
         required: true
@@ -104,10 +104,10 @@ on:
         required: true
         type: choice
         options:
-          - "no"
-          - "sign-only"
-          - "notarize"
-        default: notarize
+          - "unsigned"
+          - "signed"
+          - "notarized"
+        default: notarized
       mac_x64_smoke_mode:
         description: "macOS x64 smoke coverage."
         required: true
@@ -130,9 +130,9 @@ on:
         required: true
         type: choice
         options:
-          - "off"
-          - "on"
-        default: "off"
+          - "unsigned"
+          - "signed"
+        default: "unsigned"
       win_x64_smoke_mode:
         description: "Windows x64 smoke coverage."
         required: true
@@ -220,7 +220,7 @@ on:
       mac_arm64_sign_mode:
         required: false
         type: string
-        default: notarize
+        default: notarized
       mac_arm64_smoke_mode:
         required: false
         type: string
@@ -240,7 +240,7 @@ on:
       mac_x64_sign_mode:
         required: false
         type: string
-        default: notarize
+        default: notarized
       mac_x64_smoke_mode:
         required: false
         type: string
@@ -252,7 +252,7 @@ on:
       win_x64_sign_mode:
         required: false
         type: string
-        default: "off"
+        default: "unsigned"
       win_x64_smoke_mode:
         required: false
         type: string

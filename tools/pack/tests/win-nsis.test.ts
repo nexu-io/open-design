@@ -36,7 +36,7 @@ function makeConfig(namespaceRoot: string): ToolPackConfig {
       cacheRoot: "/unused/cache",
       toolPackRoot: "/unused/tools-pack",
     },
-    signed: false,
+    signMode: "unsigned",
     shell: "electron",
     silent: true,
     to: "nsis",

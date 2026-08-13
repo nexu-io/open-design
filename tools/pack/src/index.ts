@@ -86,8 +86,12 @@ function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
     .option("--standalone-seed-dir <path>", "validated baseline index/blob repository carried as a Shell resource")
     .option("--portable", "do not bake local tools-pack runtime roots into the packaged config")
     .option("--require-vela-cli", "fail packaging when the bundled Vela CLI cannot be resolved")
-    .option("--signed", "build a signed mac artifact")
-    .option("--notarize", "notarize a signed mac artifact")
+    .option(
+      "--sign-mode <mode>",
+      platform === "mac"
+        ? "artifact signing: unsigned|signed|notarized (default: unsigned)"
+        : "artifact signing: unsigned|signed (default: unsigned)",
+    )
     .option("--to <target>", TO_HELP_BY_PLATFORM[platform]);
 }
 

@@ -21,6 +21,24 @@ on:
         required: false
         type: string
         default: ""
+      mac_arm64_sign_mode:
+        description: "macOS arm64 signing mode."
+        required: true
+        type: choice
+        options: [unsigned, signed, notarized]
+        default: notarized
+      mac_x64_sign_mode:
+        description: "macOS x64 signing mode."
+        required: true
+        type: choice
+        options: [unsigned, signed, notarized]
+        default: notarized
+      win_x64_sign_mode:
+        description: "Windows x64 signing mode."
+        required: true
+        type: choice
+        options: [unsigned, signed]
+        default: unsigned
       win_x64_smoke_mode:
         description: "Windows x64 smoke coverage."
         required: true
@@ -56,6 +74,18 @@ on:
         required: false
         type: string
         default: ""
+      mac_arm64_sign_mode:
+        required: false
+        type: string
+        default: notarized
+      mac_x64_sign_mode:
+        required: false
+        type: string
+        default: notarized
+      win_x64_sign_mode:
+        required: false
+        type: string
+        default: unsigned
       win_x64_smoke_mode:
         description: "Windows x64 smoke coverage: skip, core, or full."
         required: false
@@ -124,6 +154,9 @@ jobs:
       prerelease_version: ${{ inputs.prerelease_version }}
       dry_run: ${{ inputs.dry_run }}
       ref: ${{ inputs.ref }}
+      mac_arm64_sign_mode: ${{ inputs.mac_arm64_sign_mode }}
+      mac_x64_sign_mode: ${{ inputs.mac_x64_sign_mode }}
+      win_x64_sign_mode: ${{ inputs.win_x64_sign_mode }}
       win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode }}
       win_x64_update_metadata_url: ${{ inputs.win_x64_update_metadata_url }}
       win_x64_update_target_version: ${{ inputs.win_x64_update_target_version }}

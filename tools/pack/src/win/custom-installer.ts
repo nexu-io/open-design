@@ -805,7 +805,7 @@ export async function buildCustomWinNsisInstaller(
       { cwd: dirname(paths.installerScriptPath), outputPath: paths.setupPath },
     );
   });
-  if (config.signed) {
+  if (config.signMode !== "unsigned") {
     const signingDetails: Record<string, unknown> = {};
     await runSegment("windows-sign:setup-exe", async () => {
       Object.assign(signingDetails, await signAndVerifyWinFile(paths.setupPath));

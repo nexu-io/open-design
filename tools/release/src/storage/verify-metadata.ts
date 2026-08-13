@@ -7,6 +7,7 @@ import { parseReleaseVersion, releaseChannelDescriptor } from "@open-design/rele
 import { readFile } from "node:fs/promises";
 import { parseReleaseNotePublication, releaseNoteMetadataFromPublication } from "../release-note/publication.ts";
 import { validateClosureDistributionPublication } from "./closure-distribution-metadata.ts";
+import { releaseParameterMatrixFromEnv, signModeForTarget } from "../channel/parameter-matrix.ts";
 
 const releaseDescriptor = releaseChannelDescriptor(required("RELEASE_CHANNEL"));
 const releaseChannel = releaseDescriptor.channel;
@@ -28,6 +29,7 @@ const metadata = (metadataPath.length > 0
       return response.json();
     })()) as {
   channel?: string;
+  parameterMatrix?: unknown;
   closure?: unknown;
   control?: {
     launcher?: { version?: { min?: string; url?: string } };
@@ -54,6 +56,7 @@ const metadata = (metadataPath.length > 0
       type?: string;
       version?: string;
     };
+    signMode?: string;
     status?: string;
   }>;
   [key: string]: unknown;
@@ -62,6 +65,11 @@ const metadata = (metadataPath.length > 0
 const closureRequired = process.env.RELEASE_CLOSURE_REQUIRED === "true";
 const closureDistributionRequired = process.env.RELEASE_CLOSURE_DISTRIBUTION_REQUIRED === "true";
 const shellRequired = process.env.RELEASE_SHELL_REQUIRED === "true";
+const parameterMatrix = releaseParameterMatrixFromEnv();
+
+if (JSON.stringify(metadata.parameterMatrix) !== JSON.stringify(parameterMatrix)) {
+  throw new Error("metadata parameterMatrix does not match the requested release parameters");
+}
 
 if (metadata.channel !== releaseChannel) {
   throw new Error(`metadata channel mismatch: expected ${releaseChannel}, got ${String(metadata.channel)}`);
@@ -155,6 +163,10 @@ for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {
     throw new Error(`metadata target ${target} is not published: ${String(status)}`);
   }
   if (result !== "success" || targetMetadata == null) continue;
+  const expectedSignMode = signModeForTarget(target as "mac_arm64" | "mac_x64" | "win_x64", parameterMatrix);
+  if (targetMetadata.signMode !== expectedSignMode) {
+    throw new Error(`metadata target ${target} signMode mismatch: expected ${expectedSignMode}, got ${String(targetMetadata.signMode)}`);
+  }
   if ((target === "mac_arm64" || target === "win_x64") && targetMetadata.artifacts?.payload?.url == null) {
     throw new Error(`metadata target ${target} is missing launcher payload artifact`);
   }

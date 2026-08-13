@@ -76,6 +76,15 @@ describe("resolveToolPackConfig win build target", () => {
   });
 });
 
+describe("resolveToolPackConfig sign mode", () => {
+  it("owns the platform-specific sign-mode mapping", () => {
+    expect(resolveToolPackConfig("mac").signMode).toBe("unsigned");
+    expect(resolveToolPackConfig("mac", { signMode: "notarized" }).signMode).toBe("notarized");
+    expect(resolveToolPackConfig("win", { signMode: "signed" }).signMode).toBe("signed");
+    expect(() => resolveToolPackConfig("win", { signMode: "notarized" })).toThrow(/expected unsigned or signed/u);
+  });
+});
+
 describe("resolveToolPackConfig shell", () => {
   it("defaults to the Electron shell and rejects unregistered shells", () => {
     expect(resolveToolPackConfig("mac").shell).toBe("electron");

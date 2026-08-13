@@ -17,6 +17,21 @@ on:
         required: false
         type: string
         default: ""
+      mac_arm64_sign_mode:
+        description: "macOS arm64 signing mode: unsigned, signed, or notarized."
+        required: false
+        type: string
+        default: "notarized"
+      mac_x64_sign_mode:
+        description: "macOS x64 signing mode: unsigned, signed, or notarized."
+        required: false
+        type: string
+        default: "notarized"
+      win_x64_sign_mode:
+        description: "Windows x64 signing mode: unsigned or signed."
+        required: false
+        type: string
+        default: "unsigned"
       win_x64_smoke_mode:
         description: "Windows x64 smoke coverage: skip, core, or full."
         required: false
@@ -74,6 +89,9 @@ permissions:
 
 
 env:
+  RELEASE_MAC_ARM64_SIGN_MODE: ${{ inputs.mac_arm64_sign_mode }}
+  RELEASE_MAC_X64_SIGN_MODE: ${{ inputs.mac_x64_sign_mode }}
+  RELEASE_WIN_X64_SIGN_MODE: ${{ inputs.win_x64_sign_mode }}
   # Workspace Team's four vela transports are gated in the packaged runtime on
   # BOTH a known AMR profile and a non-empty vela web origin
   # (workspaceTeamTransportEnv in shells/electron/src/workspace-team.ts). Neither
@@ -129,6 +147,7 @@ jobs:
       OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run == 'publish' && 'false' || inputs.dry_run }}
       OPEN_DESIGN_RELEASE_CHANNEL: stable
       OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      OPEN_DESIGN_STABLE_WIN_X64_SMOKE_MODE: ${{ inputs.win_x64_smoke_mode }}
       OPEN_DESIGN_STABLE_PRERELEASE_VERSION: ${{ inputs.prerelease_version }}
     outputs:
       base_version: ${{ steps.stable.outputs.base_version }}
@@ -355,10 +374,9 @@ jobs:
             --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
+            --sign-mode "${{ inputs.mac_arm64_sign_mode }}"
             --require-vela-cli
             --json
-            --signed
-            --notarize
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
             printf '%s\n' "$build_output" | tee "$build_json_path"
@@ -502,7 +520,6 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac
           RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac-report.zip
-          RELEASE_SIGNED: "true"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -583,10 +600,9 @@ jobs:
             --release-version "${{ needs.metadata.outputs.release_version }}" \
             --mac-compression normal \
             --to all \
+            --sign-mode "${{ inputs.mac_x64_sign_mode }}" \
             --require-vela-cli \
-            --json \
-            --signed \
-            --notarize
+            --json
 
       - name: Prepare mac intel release assets
         id: assets
@@ -616,7 +632,6 @@ jobs:
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/mac_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-          RELEASE_SIGNED: "true"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -719,6 +734,7 @@ jobs:
             "--portable",
             "--release-version", "${{ needs.metadata.outputs.release_version }}",
             "--to", "all",
+            "--sign-mode", "${{ inputs.win_x64_sign_mode }}",
             "--require-vela-cli",
             "--json"
           )
@@ -733,15 +749,8 @@ jobs:
             "cache_failed=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $cacheDir
             pnpm.cmd exec tools-pack win cleanup --dir $toolsPackDir --namespace "${{ needs.metadata.outputs.win_namespace }}" --json
-            $buildOutput = pnpm exec tools-pack win build `
-              --dir $toolsPackDir `
-              --cache-dir $cacheDir `
-              --namespace "${{ needs.metadata.outputs.win_namespace }}" `
-              --portable `
-              --release-version "${{ needs.metadata.outputs.release_version }}" `
-              --to all `
-              --require-vela-cli `
-              --json
+            $fallbackArgs = @("exec", "tools-pack", "win", "build", "--dir", $toolsPackDir, "--cache-dir", $cacheDir, "--namespace", "${{ needs.metadata.outputs.win_namespace }}", "--portable", "--release-version", "${{ needs.metadata.outputs.release_version }}", "--to", "all", "--sign-mode", "${{ inputs.win_x64_sign_mode }}", "--require-vela-cli", "--json")
+            $buildOutput = pnpm @fallbackArgs
             if ($LASTEXITCODE -ne 0) {
               throw "Windows tools-pack uncached fallback build exited with code $LASTEXITCODE"
             }
@@ -773,7 +782,7 @@ jobs:
           $match = [regex]::Match("${{ needs.metadata.outputs.release_version }}", "^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$")
           if (-not $match.Success) { throw "full Windows stable smoke requires stable version x.y.z; got ${{ needs.metadata.outputs.release_version }}" }
           $updateVersion = "{0}.{1}.{2}" -f $match.Groups["major"].Value, $match.Groups["minor"].Value, ([int]$match.Groups["patch"].Value + 1)
-          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "${{ needs.metadata.outputs.win_namespace }}", "--release-version", $updateVersion, "--to", "nsis", "--require-vela-cli", "--json")
+          $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "${{ needs.metadata.outputs.win_namespace }}", "--release-version", $updateVersion, "--to", "nsis", "--sign-mode", "${{ inputs.win_x64_sign_mode }}", "--require-vela-cli", "--json")
           $updateOutput = pnpm.cmd @buildArgs
           if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
           $updateOutput | Set-Content -Path "${{ runner.temp }}\windows-tools-pack-update-build.json" -Encoding utf8
@@ -868,7 +877,6 @@ jobs:
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win
-          RELEASE_SIGNED: "false"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -956,11 +964,9 @@ jobs:
       ENABLE_MAC_INTEL: "true"
       ENABLE_WIN: "true"
       GITHUB_RELEASE_ENABLED: ${{ needs.metadata.outputs.github_release_enabled }}
-      MAC_INTEL_SIGNED: "true"
       PRERELEASE_NUMBER: ${{ needs.metadata.outputs.prerelease_number }}
       RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
       RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
-      RELEASE_SIGNED: "true"
       RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
       REPORT_MODE: zip
       STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
@@ -1104,6 +1110,7 @@ jobs:
           win_x64_result: ${{ needs.build_win.result }}
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
+          RELEASE_ACTIVATE_LATEST: "false"
           RELEASE_ASSET_SUFFIX: ""
           RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
@@ -1118,7 +1125,6 @@ jobs:
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
           RELEASE_RUN_ID: ${{ github.run_id }}
-          RELEASE_SIGNED: "true"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -1130,13 +1136,19 @@ jobs:
           STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
           VERSION_TAG: ${{ needs.metadata.outputs.version_tag }}
 
-      - name: Promote draft to published latest
+      - name: Activate stable release
         if: ${{ needs.metadata.outputs.github_release_enabled == 'true' }}
-        run: |
-          set -euo pipefail
-          gh release edit "$VERSION_TAG" \
-            --draft=false \
-            --latest
+        env:
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_METADATA_PATH: ${{ runner.temp }}/release-metadata/metadata.json
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-activation/outputs.json
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+        run: pnpm exec tools-release activate-stable-release
 
       - name: Cleanup release + tag on failure
         if: ${{ failure() && needs.metadata.outputs.github_release_enabled == 'true' && steps.create_release.outcome == 'success' }}

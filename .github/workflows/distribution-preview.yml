@@ -63,6 +63,9 @@ permissions:
 
 
 env:
+  RELEASE_MAC_ARM64_SIGN_MODE: notarized
+  RELEASE_MAC_X64_SIGN_MODE: notarized
+  RELEASE_WIN_X64_SIGN_MODE: unsigned
   # Workspace Team's four vela transports are gated in the packaged runtime on
   # BOTH a known AMR profile and a non-empty vela web origin
   # (workspaceTeamTransportEnv in shells/electron/src/workspace-team.ts). Neither
@@ -313,8 +316,8 @@ jobs:
             --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
+            --sign-mode notarized
             --json
-            --signed
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_arm64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_arm64/build.json"
@@ -341,8 +344,8 @@ jobs:
             --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
+            --sign-mode notarized
             --json
-            --signed
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_arm64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_arm64/build.json"
@@ -545,7 +548,6 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
           RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_arm64-report.zip
-          RELEASE_SIGNED: "true"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -652,8 +654,8 @@ jobs:
             --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
+            --sign-mode notarized
             --json
-            --signed
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_x64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_x64/build.json"
@@ -680,8 +682,8 @@ jobs:
             --release-version "${{ needs.metadata.outputs.release_version }}"
             --mac-compression normal
             --to all
+            --sign-mode notarized
             --json
-            --signed
           )
           if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/mac_x64/build.log" >&2))"; then
             printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/mac_x64/build.json"
@@ -785,7 +787,6 @@ jobs:
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
           RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/mac_x64-report.zip
-          RELEASE_SIGNED: "true"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -1044,7 +1045,6 @@ jobs:
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
-          RELEASE_SIGNED: "false"
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -1096,10 +1096,8 @@ jobs:
       ENABLE_MAC_INTEL: "true"
       ENABLE_WIN: "true"
       GITHUB_RELEASE_ENABLED: "false"
-      MAC_INTEL_SIGNED: "true"
       RELEASE_CHANNEL: preview
       RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
-      RELEASE_SIGNED: "true"
       RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
       REPORT_MODE: zip
       RELEASE_INSTALLATION_VERSION_MIN_PREVIEW: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_PREVIEW }}

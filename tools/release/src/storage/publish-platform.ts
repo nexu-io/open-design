@@ -21,6 +21,11 @@ import {
 import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
 import { getStorageObject, putStorageObject, putStorageObjectWithStatus } from "./s3-upload.ts";
 import { compareReleaseVersions, parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
+import {
+  releaseParameterMatrixFromEnv,
+  signModeForTarget,
+  type PlatformSignMode,
+} from "../channel/parameter-matrix.ts";
 
 type AssetEntry = {
   contentType: string;
@@ -68,7 +73,7 @@ type TargetConfig = {
   legacyPlatformKey: "mac" | "macIntel" | "win";
   platform: "mac" | "win";
   reportDirectory: string | null;
-  signed: boolean;
+  signMode: PlatformSignMode;
 };
 
 type ClosurePublication = {
@@ -106,6 +111,7 @@ const versionLockKey = optional(
   countedReleaseChannel == null ? "" : versionLockObjectKey(releaseVersion, countedReleaseChannel),
 );
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
+const parameterMatrix = releaseParameterMatrixFromEnv();
 
 function shellPlatformTarget(): string {
   if (target === "mac_arm64") return "darwin-arm64";
@@ -422,6 +428,7 @@ async function uploadReport(reportDirectory: string): Promise<Record<string, unk
 }
 
 function targetConfig(): TargetConfig {
+  const signMode = signModeForTarget(target, parameterMatrix);
   if (target === "mac_arm64" || target === "mac_x64") {
     const arch = target === "mac_arm64" ? "arm64" : "x64";
     const dmg = `open-design-${releaseVersion}${assetSuffix}-mac-${arch}.dmg`;
@@ -453,7 +460,7 @@ function targetConfig(): TargetConfig {
       legacyPlatformKey: target === "mac_arm64" ? "mac" : "macIntel",
       platform: "mac",
       reportDirectory: target,
-      signed: bool("RELEASE_SIGNED"),
+      signMode,
     };
   }
   if (target === "win_x64") {
@@ -480,7 +487,7 @@ function targetConfig(): TargetConfig {
       legacyPlatformKey: "win",
       platform: "win",
       reportDirectory: target,
-      signed: bool("RELEASE_SIGNED"),
+      signMode,
     };
   }
 
@@ -568,6 +575,7 @@ const report = config.reportDirectory == null ? null : await uploadReport(config
 const versionManifestUrl = publicUrl(publicOrigin, versionPrefix, `platforms/${target}.json`);
 const latestManifestUrl = publicUrl(publicOrigin, latestPrefix, `platforms/${target}.json`);
 const manifest = {
+  amrProfile: optional("OPEN_DESIGN_AMR_PROFILE"),
   arch: config.arch,
   artifacts: config.artifacts,
   channel: releaseChannel,
@@ -609,7 +617,7 @@ const manifest = {
       version: shellBuild.shell.version,
     },
   }),
-  signed: config.signed,
+  signMode: config.signMode,
   status: "published",
   version: 1,
 };
@@ -655,7 +663,7 @@ writeFileSync(
     "",
     `- target: \`${target}\``,
     `- version: \`${releaseVersion}\``,
-    `- signed: \`${config.signed}\``,
+    `- sign mode: \`${config.signMode}\``,
     `- manifest: ${versionManifestUrl}`,
   ].join("\n") + "\n",
   "utf8",

@@ -53,7 +53,7 @@ function objectUrl(config: StorageConfig, objectKey: string): { canonicalUri: st
   return { canonicalUri, url };
 }
 
-function authorizationHeader(config: StorageConfig, method: "GET" | "PUT", canonicalUri: string, headers: Record<string, string>, payloadHash: string, dateStamp: string): string {
+function authorizationHeader(config: StorageConfig, method: "DELETE" | "GET" | "PUT", canonicalUri: string, headers: Record<string, string>, payloadHash: string, dateStamp: string): string {
   const signedHeaders = Object.keys(headers).sort().join(";");
   const canonicalHeaders = Object.keys(headers)
     .sort()
@@ -210,4 +210,40 @@ export async function getStorageObject(options: GetObjectOptions): Promise<{ byt
 export async function getStorageObjectText(options: GetObjectOptions): Promise<string | null> {
   const object = await getStorageObject(options);
   return object?.text ?? null;
+}
+
+export async function deleteStorageObjectWithStatus(
+  options: GetObjectOptions & { headers?: Record<string, string> },
+): Promise<{ body: string; ok: boolean; status: number; url: string }> {
+  const payloadHash = hash("");
+  const { canonicalUri, url } = objectUrl(options, options.objectKey);
+  const headers: Record<string, string> = {
+    host: url.host,
+    "x-amz-content-sha256": payloadHash,
+    "x-amz-date": "",
+    ...(options.headers ?? {}),
+  };
+  if (options.sessionToken != null && options.sessionToken.length > 0) {
+    headers["x-amz-security-token"] = options.sessionToken;
+  }
+  const response = await signedFetchWithRetry(`DELETE ${url.toString()}`, () => {
+    const { amzDate, dateStamp } = amzTimestamp(new Date());
+    const signedHeaders = { ...headers, "x-amz-date": amzDate };
+    return {
+      init: {
+        headers: {
+          ...signedHeaders,
+          Authorization: authorizationHeader(options, "DELETE", canonicalUri, signedHeaders, payloadHash, dateStamp),
+        },
+        method: "DELETE",
+      },
+      url,
+    };
+  });
+  return {
+    body: await response.text().catch(() => ""),
+    ok: response.ok,
+    status: response.status,
+    url: url.toString(),
+  };
 }

@@ -36,7 +36,7 @@ function createConfig(root: string, removeCache: boolean): ToolPackConfig {
       },
       toolPackRoot: join(root, ".tmp", "tools-pack"),
     },
-    signed: false,
+    signMode: "unsigned",
     shell: "electron",
     silent: true,
     to: "dir",

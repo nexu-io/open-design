@@ -1,5 +1,6 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
+import { Buffer } from "node:buffer";
 
 import {
   compareReleaseBaseVersions,
@@ -13,6 +14,8 @@ import {
 } from "@open-design/release";
 import { parseCountedReleaseMetadata } from "../channel/counted-version.ts";
 import { countedReleaseChannelProfile } from "../channel/profiles.ts";
+import { releaseParameterMatrixFromEnv } from "../channel/parameter-matrix.ts";
+import { validateStableQualification } from "../storage/stable-qualification.ts";
 import {
   fetchOptionalHttpsText as fetchOptionalHttpsTextRequest,
   readShellVersion,
@@ -52,6 +55,7 @@ type ParsedPrereleaseMetadata = ParsedPrereleaseVersion & {
 type StablePrereleaseValidation = {
   metadataUrl: string;
   prereleaseVersion: string;
+  qualificationUrl: string;
 };
 
 type ReleaseNamespaces = {
@@ -250,22 +254,6 @@ function expectStringField(record: Record<string, unknown>, field: string, expec
   }
 }
 
-function expectStringFieldIfPresent(
-  record: Record<string, unknown>,
-  field: string,
-  expected: string,
-  sourceName: string,
-): void {
-  const value = readStringField(record, field);
-  if (value == null) {
-    log(`${sourceName}.${field}: missing; accepted for prerelease metadata generated before attribution hardening`);
-    return;
-  }
-  if (value !== expected) {
-    fail(`${sourceName}.${field} must be ${expected}; got ${value}`);
-  }
-}
-
 function expectBooleanField(record: Record<string, unknown>, field: string, expected: boolean, sourceName: string): void {
   const value = readBooleanField(record, field);
   if (value !== expected) {
@@ -339,13 +327,29 @@ async function validateStablePrereleaseMetadata(options: {
   expectStringField(metadata, "channel", "prerelease", sourceName);
   expectStringField(metadata, "releaseVersion", prerelease.prereleaseVersion, sourceName);
   expectStringField(metadata, "baseVersion", options.packagedVersion, sourceName);
-  expectBooleanField(metadata, "signed", true, sourceName);
+  expectStringField(metadata, "releaseState", "complete", sourceName);
+  expectStringField(metadata, "amrProfile", "prod", sourceName);
+
+  const parameterMatrix = requireObjectField(metadata, "parameterMatrix", sourceName);
+  const requestedMatrix = releaseParameterMatrixFromEnv();
+  if (
+    requestedMatrix.mac_arm64.signMode !== "notarized"
+    || requestedMatrix.mac_x64.signMode !== "notarized"
+  ) {
+    fail("stable release requires notarized mac_arm64 and mac_x64 parameters");
+  }
+  const macArm64Parameters = requireObjectField(parameterMatrix, "mac_arm64", `${sourceName}.parameterMatrix`);
+  const macX64Parameters = requireObjectField(parameterMatrix, "mac_x64", `${sourceName}.parameterMatrix`);
+  const winX64Parameters = requireObjectField(parameterMatrix, "win_x64", `${sourceName}.parameterMatrix`);
+  expectStringField(macArm64Parameters, "signMode", requestedMatrix.mac_arm64.signMode, `${sourceName}.parameterMatrix.mac_arm64`);
+  expectStringField(macX64Parameters, "signMode", requestedMatrix.mac_x64.signMode, `${sourceName}.parameterMatrix.mac_x64`);
+  expectStringField(winX64Parameters, "signMode", requestedMatrix.win_x64.signMode, `${sourceName}.parameterMatrix.win_x64`);
 
   const github = requireObjectField(metadata, "github", sourceName);
-  expectStringFieldIfPresent(github, "branch", options.branch, `${sourceName}.github`);
-  expectStringFieldIfPresent(github, "commit", options.commit, `${sourceName}.github`);
-  expectStringFieldIfPresent(github, "repository", options.repository, `${sourceName}.github`);
-  expectStringFieldIfPresent(github, "workflow", "release-prerelease", `${sourceName}.github`);
+  expectStringField(github, "branch", options.branch, `${sourceName}.github`);
+  expectStringField(github, "commit", options.commit, `${sourceName}.github`);
+  expectStringField(github, "repository", options.repository, `${sourceName}.github`);
+  expectStringField(github, "workflow", "release-prerelease", `${sourceName}.github`);
 
   const r2 = requireObjectField(metadata, "r2", sourceName);
   expectStringField(r2, "versionPrefix", expectedVersionPrefix, `${sourceName}.r2`);
@@ -368,7 +372,7 @@ async function validateStablePrereleaseMetadata(options: {
   const mac = requireObjectField(platforms, "mac", `${sourceName}.platforms`);
   expectBooleanField(mac, "enabled", true, `${sourceName}.platforms.mac`);
   expectStringField(mac, "arch", "arm64", `${sourceName}.platforms.mac`);
-  expectBooleanField(mac, "signed", true, `${sourceName}.platforms.mac`);
+  expectStringField(mac, "signMode", requestedMatrix.mac_arm64.signMode, `${sourceName}.platforms.mac`);
   const macArtifacts = requireObjectField(mac, "artifacts", `${sourceName}.platforms.mac`);
   const macDmg = requireObjectField(macArtifacts, "dmg", `${sourceName}.platforms.mac.artifacts`);
   requireVersionedUrlField(macDmg, "url", expectedVersionUrl, `${sourceName}.platforms.mac.artifacts.dmg`);
@@ -380,7 +384,7 @@ async function validateStablePrereleaseMetadata(options: {
   const macIntel = requireObjectField(platforms, "macIntel", `${sourceName}.platforms`);
   expectBooleanField(macIntel, "enabled", true, `${sourceName}.platforms.macIntel`);
   expectStringField(macIntel, "arch", "x64", `${sourceName}.platforms.macIntel`);
-  expectBooleanField(macIntel, "signed", true, `${sourceName}.platforms.macIntel`);
+  expectStringField(macIntel, "signMode", requestedMatrix.mac_x64.signMode, `${sourceName}.platforms.macIntel`);
   const macIntelArtifacts = requireObjectField(macIntel, "artifacts", `${sourceName}.platforms.macIntel`);
   const macIntelDmg = requireObjectField(macIntelArtifacts, "dmg", `${sourceName}.platforms.macIntel.artifacts`);
   requireVersionedUrlField(macIntelDmg, "url", expectedVersionUrl, `${sourceName}.platforms.macIntel.artifacts.dmg`);
@@ -392,14 +396,31 @@ async function validateStablePrereleaseMetadata(options: {
   const win = requireObjectField(platforms, "win", `${sourceName}.platforms`);
   expectBooleanField(win, "enabled", true, `${sourceName}.platforms.win`);
   expectStringField(win, "arch", "x64", `${sourceName}.platforms.win`);
+  expectStringField(win, "signMode", requestedMatrix.win_x64.signMode, `${sourceName}.platforms.win`);
   const winArtifacts = requireObjectField(win, "artifacts", `${sourceName}.platforms.win`);
   const winInstaller = requireObjectField(winArtifacts, "installer", `${sourceName}.platforms.win.artifacts`);
   requireVersionedUrlField(winInstaller, "url", expectedVersionUrl, `${sourceName}.platforms.win.artifacts.installer`);
   requireVersionedUrlField(winInstaller, "sha256Url", expectedVersionUrl, `${sourceName}.platforms.win.artifacts.installer`);
 
+  const qualificationUrl = `${expectedVersionUrl}/qualification.json`;
+  const qualificationJson = await fetchOptionalHttpsText(qualificationUrl);
+  if (qualificationJson == null) {
+    fail(`required stable qualification was not found: ${qualificationUrl}`);
+  }
+  try {
+    validateStableQualification({
+      metadataBytes: Buffer.from(metadataJson, "utf8"),
+      metadataUrl,
+      qualification: parseJsonRecord(qualificationJson, "R2 stable qualification"),
+    });
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+
   return {
     metadataUrl,
     prereleaseVersion: prerelease.prereleaseVersion,
+    qualificationUrl,
   };
 }
 
@@ -424,6 +445,13 @@ const stableDryRunMode = channel === "stable" ? parseStableDryRunMode(process.en
 const dryRun = stableDryRunMode.length > 0;
 const runPrepublishJobs = channel !== "stable" || stableDryRunMode === "prepublish" || stableDryRunMode === "";
 const publishSideEffectsEnabled = channel !== "stable" || stableDryRunMode === "";
+if (
+  channel === "stable"
+  && publishSideEffectsEnabled
+  && process.env.OPEN_DESIGN_STABLE_WIN_X64_SMOKE_MODE === "skip"
+) {
+  fail("stable publish requires win_x64_smoke_mode core or full");
+}
 const namespaces = releaseNamespaces(channel);
 const packagedVersion = await readShellVersion(fail);
 const commit = process.env.GITHUB_SHA ?? "";
@@ -519,6 +547,7 @@ if (channel === "prerelease") {
   stateSource = `R2 prerelease metadata ${stablePrerelease.prereleaseVersion}`;
   log(`validated prerelease: ${stablePrerelease.prereleaseVersion}`);
   log(`validated prerelease metadata: ${stablePrerelease.metadataUrl}`);
+  log(`validated stable qualification: ${stablePrerelease.qualificationUrl}`);
 }
 
 log(`channel: ${channel}`);

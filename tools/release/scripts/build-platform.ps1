@@ -13,7 +13,7 @@ param(
   [ValidateSet("all", "dir", "nsis", "zip")]
   [string]$BuildTarget,
   [Parameter(Mandatory = $true)]
-  [ValidateSet("off", "on")]
+  [ValidateSet("unsigned", "signed")]
   [string]$SignMode,
   [Parameter(Mandatory = $true)]
   [string]$WorkRoot,
@@ -116,7 +116,7 @@ function Write-Index([string]$Status) {
     releaseTarget = $ReleaseTarget
     releaseVersion = $ReleaseVersion
     reportDir = $ReportRoot
-    signed = $SignMode -eq "on"
+    signMode = $SignMode
     smoke = Get-SmokeSummary
     smokeMode = $SmokeMode
     status = $Status
@@ -248,9 +248,7 @@ try {
     "--to", $BuildTarget,
     "--json"
   )
-  if ($SignMode -eq "on") {
-    $buildArgs += "--signed"
-  }
+  $buildArgs += @("--sign-mode", $SignMode)
   if ($RequireVelaCli) {
     $buildArgs += "--require-vela-cli"
   }
@@ -293,9 +291,7 @@ try {
       "--to", "nsis",
       "--json"
     )
-    if ($SignMode -eq "on") {
-      $updateArgs += "--signed"
-    }
+    $updateArgs += @("--sign-mode", $SignMode)
     if ($RequireVelaCli) {
       $updateArgs += "--require-vela-cli"
     }

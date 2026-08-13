@@ -23,6 +23,7 @@ export const WORKSPACE_ROOT = resolve(__dirname, "../../..");
 export type ToolPackPlatform = "mac" | "win";
 export type ToolPackBuildOutput = "all" | "app" | "dir" | "dmg" | "nsis" | "zip";
 export type ToolPackMacCompression = "store" | "normal" | "maximum";
+export type ToolPackSignMode = "unsigned" | "signed" | "notarized";
 export type ToolPackWebOutputMode = "server" | "standalone";
 export type ToolPackAmrProfile = "prod" | "test" | "feature-test" | "local";
 
@@ -41,7 +42,6 @@ export type ToolPackCliOptions = {
   launcherVersion?: string;
   macCompression?: string;
   minShellVersion?: string;
-  notarize?: boolean;
   namespace?: string;
   path?: string;
   platform?: string;
@@ -55,7 +55,7 @@ export type ToolPackCliOptions = {
   requireVelaCli?: boolean;
   releaseVersion?: string;
   runtimeBaseRoot?: string;
-  signed?: boolean;
+  signMode?: string;
   shell?: string;
   shellVersion?: string;
   skipWorkspaceBuild?: boolean;
@@ -90,7 +90,6 @@ export type ToolPackConfig = {
   electronDistPath: string;
   electronVersion: string;
   macCompression: ToolPackMacCompression;
-  macNotarize?: boolean;
   namespace: string;
   platform: ToolPackPlatform;
   portable: boolean;
@@ -105,7 +104,7 @@ export type ToolPackConfig = {
   releaseVersion?: string;
   roots: ToolPackRoots;
   silent: boolean;
-  signed: boolean;
+  signMode: ToolPackSignMode;
   shell: ToolPackShell;
   shellVersion?: string;
   standaloneSeedRoot?: string;
@@ -180,6 +179,20 @@ function resolveToolPackMacCompression(value: string | undefined): ToolPackMacCo
   if (value == null || value.length === 0) return "normal";
   if (value === "store" || value === "normal" || value === "maximum") return value;
   throw new Error(`unsupported mac --mac-compression value: ${value}`);
+}
+
+export function resolveToolPackSignMode(
+  platform: ToolPackPlatform,
+  value: string | undefined,
+): ToolPackSignMode {
+  const mode = value == null || value.length === 0 ? "unsigned" : value;
+  if (mode === "unsigned" || mode === "signed") return mode;
+  if (platform === "mac" && mode === "notarized") return mode;
+  throw new Error(
+    platform === "mac"
+      ? `unsupported mac --sign-mode: ${mode}; expected unsigned, signed, or notarized`
+      : `unsupported win --sign-mode: ${mode}; expected unsigned or signed`,
+  );
 }
 
 function resolveToolPackVersion(
@@ -394,7 +407,6 @@ export function resolveToolPackConfig(
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT, shell),
     electronVersion: resolveElectronVersion(WORKSPACE_ROOT, shell),
     macCompression: resolveToolPackMacCompression(options.macCompression),
-    macNotarize: options.notarize === true,
     namespace,
     platform,
     portable: options.portable === true,
@@ -421,7 +433,7 @@ export function resolveToolPackConfig(
     launcherVersion,
     releaseVersion,
     silent: options.silent !== false,
-    signed: options.signed === true,
+    signMode: resolveToolPackSignMode(platform, options.signMode),
     shell,
     shellVersion,
     standaloneSeedRoot: options.standaloneSeedDir == null

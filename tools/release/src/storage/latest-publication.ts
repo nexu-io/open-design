@@ -43,6 +43,29 @@ function parseCountedVersion(
   return { base: [...base], releaseNumber: parsed.number };
 }
 
+function compareStableReleaseVersions(left: string, right: string): number {
+  const parsedLeft = parseReleaseBaseVersion(left);
+  const parsedRight = parseReleaseBaseVersion(right);
+  if (parsedLeft == null || parsedRight == null) {
+    throw new Error(`invalid stable version comparison: ${left} vs ${right}`);
+  }
+  for (let index = 0; index < parsedLeft.length; index += 1) {
+    if (parsedLeft[index] > parsedRight[index]) return 1;
+    if (parsedLeft[index] < parsedRight[index]) return -1;
+  }
+  return 0;
+}
+
+export function compareLatestReleaseVersions(
+  left: string,
+  right: string,
+  channel: ReleaseChannel,
+): number {
+  return channel === "stable"
+    ? compareStableReleaseVersions(left, right)
+    : compareCountedReleaseVersions(left, right, channel);
+}
+
 export function compareCountedReleaseVersions(
   left: string,
   right: string,
@@ -63,7 +86,7 @@ export function compareCountedReleaseVersions(
 }
 
 async function latestReleaseVersion(input: {
-  channel: CountedReleaseChannel;
+  channel: ReleaseChannel;
   storage: StorageConfig;
 }): Promise<string | null> {
   const latest = await getStorageObject({
@@ -83,14 +106,14 @@ async function latestReleaseVersion(input: {
 }
 
 export async function assertLatestReleaseCanAdvance(input: {
-  channel: CountedReleaseChannel;
+  channel: ReleaseChannel;
   releaseVersion: string;
   storage: StorageConfig;
 }): Promise<void> {
   const current = await latestReleaseVersion(input);
   if (
     current != null
-    && compareCountedReleaseVersions(current, input.releaseVersion, input.channel) > 0
+    && compareLatestReleaseVersions(current, input.releaseVersion, input.channel) > 0
   ) {
     throw new Error(
       `refusing to move ${input.channel} latest backward from ${current} to ${input.releaseVersion}`,
@@ -115,13 +138,17 @@ async function upload(
 }
 
 export async function publishLatestMetadataWithCas(input: {
-  channel: CountedReleaseChannel;
+  channel: ReleaseChannel;
   metadataPath: string;
   releaseVersion: string;
   storage: StorageConfig;
 }): Promise<void> {
   const objectKey = `${input.channel}/latest/metadata.json`;
-  if (parseCountedVersion(input.releaseVersion, input.channel) == null) {
+  if (
+    input.channel === "stable"
+      ? parseReleaseBaseVersion(input.releaseVersion) == null
+      : parseCountedVersion(input.releaseVersion, input.channel) == null
+  ) {
     throw new Error(`invalid ${input.channel} version for latest CAS: ${input.releaseVersion}`);
   }
   const targetBytes = readFileSync(input.metadataPath);
@@ -155,7 +182,7 @@ export async function publishLatestMetadataWithCas(input: {
       }
       if (
         latestReleaseVersion.length > 0
-        && compareCountedReleaseVersions(latestReleaseVersion, input.releaseVersion, input.channel) > 0
+        && compareLatestReleaseVersions(latestReleaseVersion, input.releaseVersion, input.channel) > 0
       ) {
         throw new Error(
           `refusing to move ${input.channel} latest backward from ${latestReleaseVersion} to ${input.releaseVersion}`,
@@ -253,7 +280,7 @@ export async function publishLatestPlatformObjects(input: {
 }
 
 export async function publishLatestRelease(input: {
-  channel: CountedReleaseChannel;
+  channel: ReleaseChannel;
   metadataDir: string;
   metadataPath: string;
   platforms: Record<string, LatestPlatformInput>;

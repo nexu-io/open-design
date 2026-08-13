@@ -80,7 +80,7 @@ function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): Tool
       toolPackRoot: join(root, ".tmp", "tools-pack"),
     },
     silent: true,
-    signed: false,
+    signMode: "unsigned",
     shell: "electron",
     to: "app",
     webOutputMode: "standalone",

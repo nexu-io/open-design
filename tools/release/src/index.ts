@@ -116,6 +116,12 @@ cli
   });
 
 cli
+  .command("issue-stable-qualification", "Issue an immutable stable-promotion qualification for a prerelease")
+  .action(async () => {
+    await import("./storage/issue-stable-qualification.ts");
+  });
+
+cli
   .command("merge-closure-distribution <shared> <...targets>", "Merge validated Closure job contributions")
   .option("--output <path>", "write the canonical version-wide Closure manifest")
   .action(async (shared: string, targets: string | string[], options: { output?: string }) => {
@@ -210,6 +216,12 @@ cli
   .command("activate-public-release", "Activate an accepted public release with a latest metadata CAS")
   .action(async () => {
     await import("./storage/activate-public-release.ts");
+  });
+
+cli
+  .command("activate-stable-release", "Atomically activate stable latest and synchronize its GitHub projection")
+  .action(async () => {
+    await import("./storage/activate-stable-release.ts");
   });
 
 cli

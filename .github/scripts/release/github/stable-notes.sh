@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-for name in BRANCH_NAME GITHUB_OUTPUT GITHUB_REPOSITORY GITHUB_SHA RELEASE_CHANNEL RELEASE_SIGNED RELEASE_VERSION RUNNER_TEMP VERSION_TAG; do
+for name in BRANCH_NAME GITHUB_OUTPUT GITHUB_REPOSITORY GITHUB_SHA RELEASE_CHANNEL RELEASE_VERSION RUNNER_TEMP VERSION_TAG RELEASE_MAC_ARM64_SIGN_MODE RELEASE_MAC_X64_SIGN_MODE RELEASE_WIN_X64_SIGN_MODE; do
   if [ -z "${!name:-}" ]; then
     echo "$name is required" >&2
     exit 1
@@ -22,9 +22,9 @@ cat > "$notes_file" <<EOF
 - version: $RELEASE_VERSION
 - R2 metadata: $public_origin/$RELEASE_CHANNEL/latest/metadata.json
 - E2E report: $public_origin/$RELEASE_CHANNEL/versions/$RELEASE_VERSION/report.zip
-- mac signed/notarized: $RELEASE_SIGNED
-- mac x64 signed/notarized: ${MAC_INTEL_SIGNED:-false}
-- windows signed: false
+- mac arm64 sign mode: $RELEASE_MAC_ARM64_SIGN_MODE
+- mac x64 sign mode: $RELEASE_MAC_X64_SIGN_MODE
+- windows x64 sign mode: $RELEASE_WIN_X64_SIGN_MODE
 - branch: $BRANCH_NAME
 - commit: $GITHUB_SHA
 
