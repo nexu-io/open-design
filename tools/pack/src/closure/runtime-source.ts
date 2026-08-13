@@ -90,9 +90,15 @@ export async function startStandaloneBody(request) {
   const layout = resolveOpenDesignClosureLayout(await resolveOpenDesignClosureRuntimeRoot(request));
   // Windows can spend more than the control plane's generic five-second
   // default loading a freshly materialized Electron-as-Node sidecar while
-  // Defender scans its Closure tree. Keep readiness event-driven, but give the
-  // child a bounded platform allowance before declaring it unavailable.
-  const sidecarReadyTimeoutMs = process.platform === "win32" ? 120_000 : undefined;
+  // Defender scans its Closure tree. Hosted and older Intel Macs can likewise
+  // cross that default on the first exact-version repair. Keep readiness
+  // event-driven, but give those slower cold-start paths a bounded allowance
+  // before declaring the child unavailable.
+  const sidecarReadyTimeoutMs = process.platform === "win32"
+    ? 120_000
+    : process.platform === "darwin" && process.arch === "x64"
+      ? 30_000
+      : undefined;
   const childEnv = {
     ...process.env,
     OD_DAEMON_CLI_PATH: layout.daemonCliEntry,

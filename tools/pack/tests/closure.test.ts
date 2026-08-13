@@ -110,7 +110,9 @@ describe("tools-pack Closure archive", () => {
     expect(body).toContain("OD_RESOURCE_TRUST_ROOT: request.paths.resourceRoot");
     expect(body).toContain("OD_WEB_STATIC_ROOT: layout.webStaticRoot");
     expect(body).not.toContain("OD_WEB_STANDALONE_ROOT");
-    expect(body).toContain('process.platform === "win32" ? 120_000 : undefined');
+    expect(body).toContain('process.platform === "darwin" && process.arch === "x64"');
+    expect(body).toContain("? 120_000");
+    expect(body).toContain("? 30_000");
     expect(body.match(/readyTimeoutMs: sidecarReadyTimeoutMs/gu)).toHaveLength(2);
     expect(body.match(/output: "inherit"/gu)).toHaveLength(2);
     for (const source of [root, inner, body]) {
