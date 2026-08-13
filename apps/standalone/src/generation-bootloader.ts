@@ -49,6 +49,7 @@ export const handoff: StandaloneHandoff = async (value) => {
       attachment: request.attachment,
       handoff: request.handoff,
       paths: request.paths,
+      transition: request.transition,
     },
     launch: resolveStandaloneGenerationLaunch(request),
   });

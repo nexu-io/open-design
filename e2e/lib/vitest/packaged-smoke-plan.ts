@@ -35,7 +35,7 @@ export const MAC_PACKAGED_SMOKE_SCENARIOS = {
     domains: ['standalone', 'contract'],
     id: 'mac-standalone-closure',
     lane: 'standalone',
-    title: '[P0] attaches a release Closure across cold start and reinstall, then fails a damaged successor closed',
+    title: '[P0] attaches a release Closure across cold start and reinstall, then repairs exact-version damage',
   },
   legacyMigration: {
     domains: ['migration', 'distribution', 'contract'],

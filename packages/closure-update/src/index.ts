@@ -67,7 +67,10 @@ export type ClosureDistributionReleaseCandidate = Readonly<{
   target: string;
 }>;
 
-export type ClosureUpdateCommitReason = "newer-release-binding" | "no-committed-closure";
+export type ClosureUpdateCommitReason =
+  | "newer-release-binding"
+  | "no-committed-closure"
+  | "repair-committed-closure";
 
 export type ClosureUpdateRetainReason =
   | "already-committed"
@@ -397,6 +400,79 @@ export async function discoverClosureDistributionBootstrapCandidate(input: Reado
       metadataUrl: input.metadataUrl,
       target: input.target,
     });
+  }
+  if (localError != null) {
+    throw new ClosureUpdateError("Closure baseline index is unusable", { cause: localError });
+  }
+  return null;
+}
+
+function versionMetadataUrl(latestMetadataUrl: string, version: string): string {
+  const latest = new URL(requireHttpUrl(latestMetadataUrl, "Closure release metadata URL"));
+  const suffix = "/latest/metadata.json";
+  if (!latest.pathname.endsWith(suffix)) {
+    throw new ClosureUpdateError(
+      "Closure release metadata URL cannot resolve an immutable version endpoint",
+    );
+  }
+  latest.pathname = `${latest.pathname.slice(0, -suffix.length)}/versions/${encodeURIComponent(version)}/metadata.json`;
+  latest.search = "";
+  latest.hash = "";
+  return latest.toString();
+}
+
+function isExactDistributionCandidate(
+  candidate: ClosureDistributionReleaseCandidate,
+  version: string,
+): boolean {
+  return candidate.releaseVersion === version && candidate.manifest.identity.version === version;
+}
+
+/**
+ * Resolve one exact product version for cold-start alignment or repair. Local
+ * Shell resources remain candidates rather than launch authority; a mismatched
+ * baseline is skipped before consulting the immutable version feed.
+ */
+export async function discoverClosureDistributionVersionCandidate(input: Readonly<{
+  channel: string;
+  fetch?: typeof globalThis.fetch;
+  metadataUrl: string | null;
+  repository: ClosureResourceRepositoryConfig;
+  target: string;
+  version: string;
+}>): Promise<ClosureDistributionReleaseCandidate | null> {
+  let localError: unknown = null;
+  for (const seed of input.repository.localSeeds) {
+    const path = join(seed.root, input.channel, "baseline.json");
+    try {
+      const bytes = await readFile(path);
+      if (bytes.byteLength > 4 * 1024 * 1024) {
+        throw new ClosureUpdateError("Closure baseline index exceeds 4 MiB");
+      }
+      const candidate = selectClosureDistributionReleaseCandidate(
+        JSON.parse(bytes.toString("utf8")) as unknown,
+        input,
+      );
+      if (candidate != null && isExactDistributionCandidate(candidate, input.version)) {
+        return candidate;
+      }
+    } catch (error) {
+      localError = error;
+    }
+  }
+  if (input.metadataUrl != null) {
+    const candidate = await discoverClosureDistributionReleaseCandidate({
+      channel: input.channel,
+      ...(input.fetch == null ? {} : { fetch: input.fetch }),
+      metadataUrl: versionMetadataUrl(input.metadataUrl, input.version),
+      target: input.target,
+    });
+    if (candidate == null || !isExactDistributionCandidate(candidate, input.version)) {
+      throw new ClosureUpdateError(
+        `Closure immutable version metadata does not describe exact version ${input.version}`,
+      );
+    }
+    return candidate;
   }
   if (localError != null) {
     throw new ClosureUpdateError("Closure baseline index is unusable", { cause: localError });
@@ -1064,6 +1140,67 @@ export async function applyClosureDistributionUpdate(input: {
         candidate: input.candidate,
         pointer: committed.committed.standalone,
         reason: decision.reason,
+        state: "committed",
+      };
+    } finally {
+      await rm(verification.materializedRoot, { force: true, recursive: true }).catch(() => undefined);
+    }
+  } finally {
+    await releaseUpdateLock(lock);
+  }
+}
+
+/**
+ * Re-materialize the exact committed immutable binding into a fresh generation.
+ * This is repair, never candidate selection or downgrade policy.
+ */
+export async function repairCommittedClosureDistribution(input: {
+  candidate: ClosureDistributionReleaseCandidate;
+  fetch?: typeof globalThis.fetch;
+  paths: ClosureStorePaths;
+  repository?: ClosureResourceRepositoryConfig;
+  shellType: string;
+  shellVersion: string;
+}): Promise<ApplyClosureDistributionUpdateResult> {
+  const lock = await acquireUpdateLock(input.paths);
+  if (lock == null) {
+    return { candidate: input.candidate, reason: "another-updater-active", state: "busy" };
+  }
+  try {
+    const descriptor = await readClosureBindingDescriptor(input.paths);
+    const committed = descriptor.committed;
+    if (committed == null) {
+      throw new ClosureUpdateError("Closure repair requires a committed binding");
+    }
+    const minimum = resolveClosureShellMinimumVersion(input.candidate.manifest, input.shellType);
+    if (minimum == null || compareClosureShellVersions(input.shellVersion, minimum) < 0) {
+      return { candidate: input.candidate, reason: "shell-incompatible", state: "retained" };
+    }
+    if (
+      input.candidate.releaseVersion !== committed.releaseVersion
+      || input.candidate.manifest.identity.version !== committed.standalone.version
+      || input.candidate.manifest.identity.digest !== committed.standalone.digest
+      || input.candidate.target !== committed.standalone.target
+    ) {
+      throw new ClosureUpdateError("Closure repair candidate does not match the committed immutable binding");
+    }
+    const verification = await stageClosureDistributionGeneration({
+      candidate: input.candidate,
+      descriptor,
+      fetchImpl: input.fetch ?? globalThis.fetch,
+      paths: input.paths,
+      ...(input.repository == null ? {} : { repository: input.repository }),
+    });
+    try {
+      const repaired = await commitVerifiedClosureDistributionGeneration(
+        input.paths,
+        verification,
+        input.candidate.releaseVersion,
+      );
+      return {
+        candidate: input.candidate,
+        pointer: repaired.committed.standalone,
+        reason: "repair-committed-closure",
         state: "committed",
       };
     } finally {

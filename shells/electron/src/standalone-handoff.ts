@@ -8,6 +8,7 @@ import {
   validateStandaloneHandoffRequest,
   validateStandaloneBootstrapResolution,
   type StandaloneBootstrapResolution,
+  type StandaloneHandoffDescriptor,
   type StandaloneHandle,
   type StandaloneHandoff,
   type StandaloneHandoffRequest,
@@ -24,11 +25,13 @@ export type ElectronStandaloneBinding = Readonly<{
   descriptor: StandaloneRuntimeDescriptor;
   paths: StandalonePaths;
   scope: StandaloneHandoffScope;
+  transition?: StandaloneHandoffDescriptor["transition"];
 }>;
 
 export type ElectronStandaloneLaunchErrorCode =
   | "binding-conflict"
   | "installer-required"
+  | "standalone-occupied"
   | "standalone-start-failed";
 
 export class ElectronStandaloneLaunchError extends Error {
@@ -53,6 +56,7 @@ export function electronBindingFromBootstrapResolution(
     descriptor: resolution.handoff.handoff.descriptor,
     paths: resolution.handoff.paths,
     scope: resolution.handoff.handoff.scope,
+    transition: resolution.handoff.transition,
   });
 }
 
@@ -81,6 +85,7 @@ function requestFromBinding(
       scope: binding.scope,
     }),
     paths: binding.paths,
+    ...(binding.transition == null ? {} : { transition: binding.transition }),
   });
 }
 

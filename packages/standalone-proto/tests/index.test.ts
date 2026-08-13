@@ -76,6 +76,7 @@ function request(): StandaloneHandoffRequest {
       resourceRoot: "/open-design/resources",
       runtimeRoot: "/open-design/runtime",
     },
+    transition: null,
   };
 }
 
@@ -108,6 +109,7 @@ describe("Standalone bootloader protocol", () => {
         attachment: full.attachment,
         handoff: full.handoff,
         paths: full.paths,
+        transition: null,
       },
     })).toMatchObject({ handoff: { handoff: { scope: { generation: 7 } } } });
     expect(validateStandaloneBootstrapResult({

@@ -12,7 +12,6 @@ import { createPackagedSmokeReport } from '@/vitest/packaged-report';
 import {
   commitPackagedStandaloneDistributionFixture,
   damagePackagedStandaloneDistributionFixture,
-  readPackagedStandaloneDistributionBinding,
   readPackagedStandaloneDistributionFixture,
   type PackagedStandaloneDistributionFixture,
 } from '@/vitest/standalone-distribution-fixture';
@@ -3296,8 +3295,20 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
     await runToolsPackJson<MacStopResult>('stop');
     started = false;
     await damagePackagedStandaloneDistributionFixture(fixture);
-    await expect(runToolsPackJson<MacStartResult>('start')).rejects.toThrow(/Standalone|standalone/u);
-    expect((await readPackagedStandaloneDistributionBinding(fixture)).committed?.standalone).toEqual(fixture.pointer);
+    await runToolsPackJson<MacStartResult>('start');
+    started = true;
+    await waitForHealthyDesktop();
+    const repaired = await readConfiguredPackagedStandaloneDistribution();
+    expect(repaired.pointer).toMatchObject({
+      digest: fixture.pointer.digest,
+      target: fixture.pointer.target,
+      version: fixture.pointer.version,
+    });
+    expect(repaired.pointer.generation).toBeGreaterThan(fixture.pointer.generation);
+    assertClosureDesktopIdentity(await readDesktopIdentityMarker(), repaired.manifest.identity.version);
+
+    await runToolsPackJson<MacStopResult>('stop');
+    started = false;
 
     await rm(fixture.storePaths.namespaceRoot, { force: true, recursive: true });
     const recoveredFixture = standaloneSeedEmbedded ? null : await seedConfiguredPackagedClosure();

@@ -83,9 +83,17 @@ export type StandaloneBootstrapResolution = Readonly<{
   handoff: StandaloneHandoffDescriptor;
 }>;
 
+/** Opaque sidecar-owned handoff-once capability. Product code never decodes it. */
+export type StandaloneLifecycleTransitionCredential = Readonly<{
+  fence: number;
+  id: string;
+  token: string;
+}>;
+
 export const STANDALONE_BOOTSTRAP_ERROR_CODES = Object.freeze([
   "installer-required",
   "no-standalone",
+  "standalone-occupied",
   "standalone-invalid",
 ] as const);
 
@@ -276,6 +284,7 @@ export type StandaloneHandoffDescriptor = Readonly<{
   attachment: StandaloneAttachmentDescriptor;
   handoff: StandaloneHandoffEnvelope;
   paths: StandalonePaths;
+  transition?: StandaloneLifecycleTransitionCredential | null;
 }>;
 
 export type StandaloneHandoffRequest = StandaloneHandoffDescriptor & Readonly<{
@@ -877,6 +886,21 @@ export function validateStandaloneBootstrapResolution(
   });
 }
 
+export function validateStandaloneLifecycleTransitionCredential(
+  value: unknown,
+): StandaloneLifecycleTransitionCredential {
+  const credential = requireRecord(value, "standalone lifecycle transition credential");
+  requireKnownKeys(credential, ["fence", "id", "token"], "standalone lifecycle transition credential");
+  if (!Number.isSafeInteger(credential.fence) || Number(credential.fence) < 1) {
+    throw new StandaloneProtocolError("standalone lifecycle transition fence must be a positive integer");
+  }
+  return Object.freeze({
+    fence: credential.fence as number,
+    id: normalizeToken(credential.id, "standalone lifecycle transition id"),
+    token: normalizeToken(credential.token, "standalone lifecycle transition token"),
+  });
+}
+
 export function validateStandaloneBootstrapResult(
   value: unknown,
 ): StandaloneBootstrapResult {
@@ -1013,13 +1037,16 @@ export function validateStandaloneHandoffDescriptor(value: unknown): StandaloneH
   const request = requireRecord(value, "standalone handoff descriptor");
   requireKnownKeys(
     request,
-    ["attachment", "handoff", "paths"],
+    ["attachment", "handoff", "paths", "transition"],
     "standalone handoff descriptor",
   );
   return {
     attachment: validateStandaloneAttachmentDescriptor(request.attachment),
     handoff: validateStandaloneHandoffEnvelope(request.handoff),
     paths: validateStandalonePaths(request.paths),
+    transition: request.transition == null
+      ? null
+      : validateStandaloneLifecycleTransitionCredential(request.transition),
   };
 }
 
@@ -1027,13 +1054,14 @@ export function validateStandaloneHandoffRequest(value: unknown): StandaloneHand
   const request = requireRecord(value, "standalone handoff request");
   requireKnownKeys(
     request,
-    ["attachment", "capabilities", "handoff", "paths"],
+    ["attachment", "capabilities", "handoff", "paths", "transition"],
     "standalone handoff request",
   );
   const descriptor = validateStandaloneHandoffDescriptor({
     attachment: request.attachment,
     handoff: request.handoff,
     paths: request.paths,
+    transition: request.transition,
   });
   const capabilities = requireRecord(request.capabilities, "standalone shell capability port");
   if (typeof capabilities.invoke !== "function") {

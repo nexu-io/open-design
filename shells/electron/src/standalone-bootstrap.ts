@@ -44,7 +44,11 @@ export async function resolveStandaloneViaOfficialNode(input: Readonly<{
     );
     if (result.outcome === "rejected") {
       throw new ElectronStandaloneLaunchError(
-        result.error.code === "installer-required" ? "installer-required" : "standalone-start-failed",
+        result.error.code === "installer-required"
+          ? "installer-required"
+          : result.error.code === "standalone-occupied"
+            ? "standalone-occupied"
+            : "standalone-start-failed",
         result.error.message,
       );
     }

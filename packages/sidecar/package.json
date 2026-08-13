@@ -16,6 +16,10 @@
     "./control": {
       "types": "./dist/control/index.d.ts",
       "default": "./dist/control/index.mjs"
+    },
+    "./lifecycle": {
+      "types": "./dist/lifecycle/index.d.ts",
+      "default": "./dist/lifecycle/index.mjs"
     }
   },
   "scripts": {

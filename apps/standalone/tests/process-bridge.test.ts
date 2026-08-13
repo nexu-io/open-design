@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -12,6 +12,7 @@ import {
   type StandaloneRuntimeTerminalStatus,
   type StandaloneShellCapabilityRequest,
 } from "@open-design/standalone-proto";
+import { bootstrapSidecarLifecycle } from "@open-design/sidecar/lifecycle";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -123,7 +124,7 @@ describe("Standalone process bridge", () => {
     });
 
     expect(readStandaloneLauncherBootstrap(env)).toEqual({
-      descriptor: binding,
+      descriptor: { ...binding, transition: null },
       schemaVersion: 1,
     });
     expect(resolveStandaloneBodyBootloaderPath(binding)).toBe(
@@ -215,6 +216,157 @@ describe("Standalone process bridge", () => {
 
       await expect(handle.readStatus()).resolves.toMatchObject({ state: "running" });
       await expect(handle.close()).resolves.toMatchObject({ state: "stopped" });
+    } finally {
+      await body.close();
+    }
+  });
+
+  it("keeps transition ownership in the Shell until the body reports running", async () => {
+    const baseline = await descriptor();
+    const lifecycle = bootstrapSidecarLifecycle({
+      controlRoot: baseline.paths.dataRoot,
+      scope: {
+        channel: baseline.handoff.scope.channel,
+        namespace: baseline.handoff.scope.namespace,
+      },
+    });
+    const transition = await lifecycle.beginTransition({
+      kind: "align-standalone-to-shell",
+      leaseMs: 60_000,
+      owner: {
+        generation: baseline.handoff.scope.generation,
+        incarnation: baseline.attachment.id,
+        key: `electron:${baseline.attachment.id}`,
+      },
+    });
+    if (transition.state !== "acquired") throw new Error("transition unexpectedly blocked");
+    const binding = { ...baseline, transition: transition.credential };
+    let releaseBody!: () => void;
+    const bodyReady = new Promise<void>((resolve) => {
+      releaseBody = resolve;
+    });
+    const body = await exposeStandaloneBodyBridge({
+      descriptor: binding,
+      async handoff() {
+        await bodyReady;
+        return fakeHandle(binding);
+      },
+    });
+    try {
+      const connecting = connectStandaloneBodyBridge({
+        descriptor: binding,
+        capabilities: {
+          async invoke(request) {
+            return {
+              attachmentId: request.attachmentId,
+              handoff: request.handoff,
+              outcome: "unsupported" as const,
+              requestId: request.requestId,
+              schemaVersion: request.schemaVersion,
+            };
+          },
+        },
+      });
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await expect(lifecycle.snapshot()).resolves.toMatchObject({
+        leases: [{ owner: { incarnation: binding.attachment.id } }],
+        transition: { id: transition.credential.id },
+      });
+
+      releaseBody();
+      const handle = await connecting;
+      await expect(lifecycle.snapshot()).resolves.toMatchObject({
+        leases: [{ owner: { incarnation: binding.attachment.id } }],
+        transition: null,
+      });
+      await handle.close();
+    } finally {
+      releaseBody();
+      await body.close();
+    }
+  });
+
+  it("aborts a transition and detaches the Shell lease when body startup fails", async () => {
+    const baseline = await descriptor();
+    const lifecycle = bootstrapSidecarLifecycle({
+      controlRoot: baseline.paths.dataRoot,
+      scope: {
+        channel: baseline.handoff.scope.channel,
+        namespace: baseline.handoff.scope.namespace,
+      },
+    });
+    const transition = await lifecycle.beginTransition({
+      kind: "repair-standalone",
+      leaseMs: 60_000,
+      owner: {
+        generation: baseline.handoff.scope.generation,
+        incarnation: baseline.attachment.id,
+        key: `electron:${baseline.attachment.id}`,
+      },
+    });
+    if (transition.state !== "acquired") throw new Error("transition unexpectedly blocked");
+    const binding = { ...baseline, transition: transition.credential };
+    const body = await exposeStandaloneBodyBridge({
+      descriptor: binding,
+      async handoff() {
+        throw new Error("body failed before running");
+      },
+    });
+    try {
+      await expect(connectStandaloneBodyBridge({
+        descriptor: binding,
+        capabilities: {
+          async invoke(request) {
+            return {
+              attachmentId: request.attachmentId,
+              handoff: request.handoff,
+              outcome: "unsupported" as const,
+              requestId: request.requestId,
+              schemaVersion: request.schemaVersion,
+            };
+          },
+        },
+      })).rejects.toThrow(/body failed before running/u);
+      await expect(lifecycle.snapshot()).resolves.toMatchObject({ leases: [], transition: null });
+    } finally {
+      await body.close();
+    }
+  });
+
+  it("stops an unowned body attachment after its Shell lease disappears", async () => {
+    const binding = await descriptor();
+    const body = await exposeStandaloneBodyBridge({
+      descriptor: binding,
+      async handoff() {
+        return fakeHandle(binding);
+      },
+    });
+    try {
+      const handle = await connectStandaloneBodyBridge({
+        descriptor: binding,
+        capabilities: {
+          async invoke(request) {
+            return {
+              attachmentId: request.attachmentId,
+              handoff: request.handoff,
+              outcome: "unsupported" as const,
+              requestId: request.requestId,
+              schemaVersion: request.schemaVersion,
+            };
+          },
+        },
+      });
+      const terminal = handle.waitForTerminal();
+      const lifecycleRoot = join(binding.paths.dataRoot, "sidecar-lifecycle");
+      const [stateName] = (await readdir(lifecycleRoot)).filter((name) => name.endsWith(".json"));
+      const statePath = join(lifecycleRoot, stateName!);
+      const state = JSON.parse(await readFile(statePath, "utf8")) as {
+        leases: Array<{ expiresAtMs: number }>;
+      };
+      for (const lease of state.leases) lease.expiresAtMs = 0;
+      await writeFile(statePath, `${JSON.stringify(state)}\n`, "utf8");
+
+      await expect(terminal).resolves.toMatchObject({ state: "stopped" });
     } finally {
       await body.close();
     }

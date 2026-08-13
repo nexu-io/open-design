@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,6 +11,7 @@ import {
   type ClosureDistributionBlob,
 } from "@open-design/closure-proto";
 import { readClosureBindingDescriptor, resolveClosureStorePaths } from "@open-design/closure-store";
+import { bootstrapSidecarLifecycle } from "@open-design/sidecar/lifecycle";
 import { STANDALONE_BOOTSTRAP_SCHEMA_VERSION } from "@open-design/standalone-proto";
 import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -64,33 +65,46 @@ async function fixture() {
     files.map(([path, contents]) => ({ digest: digest(contents), path, size: Buffer.byteLength(contents) })),
     digest,
   );
-  const manifest = createClosureDistributionManifest({
-    blobs: Object.fromEntries(Object.values(artifacts).map((entry) => [entry.digest, entry])),
-    compatibility: { shell: { electron: { version: { min: "0.19.0-beta.1" } } } },
-    identity: { channel: "beta", protocolVersion: CLOSURE_PROTOCOL_VERSION, version: "0.19.0-beta.1" },
-    required: {
-      body: { blob: artifacts.body.digest, entryPath: "bootloader.mjs", treeDigest: tree(source.body) },
-      launcher: {
-        blob: artifacts.launcher.digest,
-        entryPath: "launcher.mjs",
-        handoffPath: "bootloader.mjs",
-        treeDigest: tree(source.launcher),
+  const manifestFor = (version: string, minimumShellVersion = "0.19.0-beta.1") => (
+    createClosureDistributionManifest({
+      blobs: Object.fromEntries(Object.values(artifacts).map((entry) => [entry.digest, entry])),
+      compatibility: { shell: { electron: { version: { min: minimumShellVersion } } } },
+      identity: { channel: "beta", protocolVersion: CLOSURE_PROTOCOL_VERSION, version },
+      required: {
+        body: { blob: artifacts.body.digest, entryPath: "bootloader.mjs", treeDigest: tree(source.body) },
+        launcher: {
+          blob: artifacts.launcher.digest,
+          entryPath: "launcher.mjs",
+          handoffPath: "bootloader.mjs",
+          treeDigest: tree(source.launcher),
+        },
+        targets: { "darwin-arm64": { native: { blob: artifacts.native.digest, treeDigest: tree(source.native) } } },
       },
-      targets: { "darwin-arm64": { native: { blob: artifacts.native.digest, treeDigest: tree(source.native) } } },
-    },
-    resources: [],
-    schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
-  }, digest);
+      resources: [],
+      schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+    }, digest)
+  );
+  const manifests = {
+    "0.19.0-beta.1": manifestFor("0.19.0-beta.1"),
+    "0.19.0-beta.2": manifestFor("0.19.0-beta.2"),
+    "0.19.0-beta.3": manifestFor("0.19.0-beta.3", "0.19.0-beta.3"),
+  };
+  const manifest = manifests["0.19.0-beta.1"];
   const metadataUrl = "https://releases.example.test/beta/latest/metadata.json";
   const byUrl = new Map(Object.entries(bytes).map(([name, value]) => [artifacts[name as keyof typeof artifacts].url, value]));
   const fetch = vi.fn(async (input: string | URL | Request) => {
     const url = input instanceof Request ? input.url : String(input);
-    if (url === metadataUrl) return new Response(JSON.stringify({
-      channel: "beta",
-      closure: manifest,
-      releaseState: "complete",
-      releaseVersion: "0.19.0-beta.1",
-    }), { status: 200 });
+    const versionMatch = /\/beta\/versions\/(0\.19\.0-beta\.[123])\/metadata\.json$/u.exec(url);
+    const selectedVersion = versionMatch?.[1] as keyof typeof manifests | undefined;
+    if (url === metadataUrl || selectedVersion != null) {
+      const version = selectedVersion ?? "0.19.0-beta.1";
+      return new Response(JSON.stringify({
+        channel: "beta",
+        closure: manifests[version],
+        releaseState: "complete",
+        releaseVersion: version,
+      }), { status: 200 });
+    }
     const body = byUrl.get(url);
     return body == null
       ? new Response("not found", { status: 404 })
@@ -108,23 +122,60 @@ async function fixture() {
     runtimeRoot: join(root, "runtime"),
   };
   await mkdir(paths.installationRoot, { recursive: true });
-  return { artifacts, bytes, fetch, manifest, metadataUrl, paths, repositoryConfigPath, root, seedRoot };
+  return { artifacts, bytes, fetch, manifest, manifests, metadataUrl, paths, repositoryConfigPath, root, seedRoot };
+}
+
+function request(
+  value: Awaited<ReturnType<typeof fixture>>,
+  shellVersion: string,
+  metadataUrl: string | null = value.metadataUrl,
+) {
+  return {
+    attachment: {
+      id: "electron-shell",
+      shell: { digest: `sha256:${"f".repeat(64)}` as const, type: "electron", version: shellVersion },
+    },
+    discovery: { metadataUrl, target: "darwin-arm64" },
+    paths: value.paths,
+    repositoryConfigPath: value.repositoryConfigPath,
+    schemaVersion: STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
+    scope: { channel: "beta" as const, namespace: "release-beta" },
+  };
+}
+
+async function consumeTransition(
+  value: Awaited<ReturnType<typeof fixture>>,
+  resolution: Awaited<ReturnType<typeof resolveStandaloneBootstrap>>,
+): Promise<void> {
+  const transition = resolution.handoff.transition;
+  if (transition == null) return;
+  const lifecycle = bootstrapSidecarLifecycle({
+    controlRoot: value.paths.dataRoot,
+    scope: { channel: "beta", namespace: "release-beta" },
+  });
+  const attached = await lifecycle.attach({
+    leaseMs: 60_000,
+    owner: {
+      generation: resolution.handoff.handoff.scope.generation,
+      incarnation: resolution.handoff.attachment.id,
+      key: `electron:${resolution.handoff.attachment.id}`,
+    },
+    transition,
+  });
+  if (attached.state !== "attached") throw new Error("fixture transition attachment was blocked");
+  const completed = await lifecycle.completeTransition({
+    lease: attached.credential,
+    transition,
+  });
+  if (completed.state !== "completed") throw new Error("fixture transition completion was rejected");
+  await lifecycle.detach(attached.credential);
 }
 
 describe("Standalone unresolved bootstrap", () => {
   it("discovers, commits, and resolves one immutable generation before handoff", async () => {
     const value = await fixture();
-    const resolution = await resolveStandaloneBootstrap({
-      attachment: {
-        id: "electron-shell",
-        shell: { digest: `sha256:${"f".repeat(64)}`, type: "electron", version: "0.19.0-beta.1" },
-      },
-      discovery: { metadataUrl: value.metadataUrl, target: "darwin-arm64" },
-      paths: value.paths,
-      repositoryConfigPath: value.repositoryConfigPath,
-      schemaVersion: STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
-      scope: { channel: "beta", namespace: "release-beta" },
-    }, { fetch: value.fetch });
+    const resolution = await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), { fetch: value.fetch });
+    await consumeTransition(value, resolution);
 
     expect(resolution.bootloaderPath).toMatch(/generations\/0\/launcher\/bootloader\.mjs$/u);
     expect(resolution.handoff.handoff.scope).toEqual({ channel: "beta", generation: 0, namespace: "release-beta" });
@@ -133,17 +184,7 @@ describe("Standalone unresolved bootstrap", () => {
     expect((await readClosureBindingDescriptor(store)).committed?.standalone.generation).toBe(0);
 
     const callCount = vi.mocked(value.fetch).mock.calls.length;
-    await resolveStandaloneBootstrap({
-      attachment: {
-        id: "electron-shell",
-        shell: { digest: `sha256:${"f".repeat(64)}`, type: "electron", version: "0.19.0-beta.1" },
-      },
-      discovery: { metadataUrl: null, target: "darwin-arm64" },
-      paths: value.paths,
-      repositoryConfigPath: value.repositoryConfigPath,
-      schemaVersion: STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
-      scope: { channel: "beta", namespace: "release-beta" },
-    }, { fetch: value.fetch });
+    await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1", null), { fetch: value.fetch });
     expect(vi.mocked(value.fetch).mock.calls).toHaveLength(callCount);
   });
 
@@ -161,18 +202,94 @@ describe("Standalone unresolved bootstrap", () => {
       await writeFile(join(value.seedRoot, "beta", "blobs", artifact.digest.slice("sha256:".length)), bytes);
     }
     const fetch = vi.fn(async () => new Response("offline", { status: 503 })) as typeof globalThis.fetch;
-    const resolution = await resolveStandaloneBootstrap({
-      attachment: {
-        id: "electron-shell",
-        shell: { digest: `sha256:${"f".repeat(64)}`, type: "electron", version: "0.19.0-beta.1" },
-      },
-      discovery: { metadataUrl: value.metadataUrl, target: "darwin-arm64" },
-      paths: value.paths,
-      repositoryConfigPath: value.repositoryConfigPath,
-      schemaVersion: STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
-      scope: { channel: "beta", namespace: "release-beta" },
-    }, { fetch });
+    const resolution = await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), { fetch });
     expect(resolution.handoff.handoff.scope.generation).toBe(0);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("aligns an older committed Standalone to the newer Shell version", async () => {
+    const value = await fixture();
+    await consumeTransition(
+      value,
+      await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), { fetch: value.fetch }),
+    );
+    const resolution = await resolveStandaloneBootstrap(request(value, "0.19.0-beta.2"), { fetch: value.fetch });
+    await consumeTransition(value, resolution);
+
+    expect(resolution.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.2");
+    expect(resolution.handoff.handoff.scope.generation).toBe(1);
+  });
+
+  it("keeps a newer compatible Standalone when an older Shell attaches", async () => {
+    const value = await fixture();
+    await consumeTransition(
+      value,
+      await resolveStandaloneBootstrap(request(value, "0.19.0-beta.2"), { fetch: value.fetch }),
+    );
+    const fetchCount = vi.mocked(value.fetch).mock.calls.length;
+    const resolution = await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1", null), { fetch: value.fetch });
+
+    expect(resolution.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.2");
+    expect(resolution.handoff.handoff.scope.generation).toBe(0);
+    expect(vi.mocked(value.fetch).mock.calls).toHaveLength(fetchCount);
+  });
+
+  it("quick-fails when a newer Standalone raises the Shell minimum", async () => {
+    const value = await fixture();
+    await consumeTransition(
+      value,
+      await resolveStandaloneBootstrap(request(value, "0.19.0-beta.3"), { fetch: value.fetch }),
+    );
+
+    await expect(resolveStandaloneBootstrap(
+      request(value, "0.19.0-beta.2", null),
+      { fetch: value.fetch },
+    )).rejects.toMatchObject({ code: "installer-required" });
+  });
+
+  it("quick-fails an alignment while another Shell lease owns the namespace", async () => {
+    const value = await fixture();
+    await consumeTransition(
+      value,
+      await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), { fetch: value.fetch }),
+    );
+    const lifecycle = bootstrapSidecarLifecycle({
+      controlRoot: value.paths.dataRoot,
+      scope: { channel: "beta", namespace: "release-beta" },
+    });
+    const occupant = await lifecycle.attach({
+      leaseMs: 60_000,
+      owner: {
+        generation: 0,
+        incarnation: "codex-plugin-a",
+        key: "codex-plugin:codex-plugin-a",
+      },
+    });
+    if (occupant.state !== "attached") throw new Error("occupant fixture was blocked");
+
+    await expect(resolveStandaloneBootstrap(
+      request(value, "0.19.0-beta.2"),
+      { fetch: value.fetch },
+    )).rejects.toMatchObject({
+      code: "standalone-occupied",
+      message: expect.stringContaining("codex-plugin:codex-plugin-a"),
+    });
+    await expect(lifecycle.snapshot()).resolves.toMatchObject({
+      leases: [{ owner: { key: "codex-plugin:codex-plugin-a" } }],
+      transition: null,
+    });
+  });
+
+  it("repairs the exact committed version into a fresh generation without downgrade", async () => {
+    const value = await fixture();
+    const first = await resolveStandaloneBootstrap(request(value, "0.19.0-beta.2"), { fetch: value.fetch });
+    await consumeTransition(value, first);
+    await writeFile(first.bootloaderPath, "corrupt\n", "utf8");
+
+    const repaired = await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), { fetch: value.fetch });
+    await consumeTransition(value, repaired);
+    expect(repaired.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.2");
+    expect(repaired.handoff.handoff.scope.generation).toBe(1);
+    expect(await readFile(repaired.bootloaderPath, "utf8")).toContain("handoff = true");
   });
 });

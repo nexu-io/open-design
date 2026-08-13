@@ -5,6 +5,7 @@ await build({
   entryPoints: {
     index: "./src/index.ts",
     "control/index": "./src/control/index.ts",
+    "lifecycle/index": "./src/lifecycle/index.ts",
   },
   format: "esm",
   outdir: "./dist",
