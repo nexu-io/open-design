@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
 import { applyStandardMocks } from '@/playwright/mock-factory';
+import { AMR_PERSONAL_WORKSPACE_CONTEXT, mockAmrPersonalWorkspace } from '@/playwright/amr';
 
 const DESIGN_SYSTEMS = [
   {
@@ -39,6 +40,33 @@ test.beforeEach(async ({ page }) => {
   // first-run privacy-consent surface doesn't render over the composer and
   // interfere with the hover/geometry assertions below.
   await applyStandardMocks(page);
+
+  // Establish write authority deterministically instead of racing the real
+  // GET /api/projects/:id/workspace-scope round trip: useProjectWorkspaceScope
+  // starts `loading: true`, and while it's loading (with no session-local
+  // creation witness, since this project was created via a raw API POST
+  // rather than the UI create flow) useProjectCollab.viewerOnly fails closed.
+  // DesignSystemPicker closes its popover whenever `disabled` (viewerOnly)
+  // flips, so a slow/late-resolving real request could shut the popover mid
+  // assertion. Same fixture project-management-flows.test.ts's
+  // "write authority" coverage uses.
+  await mockAmrPersonalWorkspace(page);
+  await page.route('**/api/projects/*/workspace-scope', async (route) => {
+    const [, projectId] = new URL(route.request().url()).pathname.match(
+      /\/api\/projects\/([^/]+)/,
+    ) ?? [];
+    await route.fulfill({
+      json: {
+        scope: {
+          kind: 'personal',
+          projectId,
+          workspaceId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceId,
+          visibility: 'personal',
+          context: AMR_PERSONAL_WORKSPACE_CONTEXT,
+        },
+      },
+    });
+  });
 
   await page.route('**/api/design-systems', async (route) => {
     await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
