@@ -46,6 +46,43 @@ export const CACHE_NO_STORE  = 'no-cache, no-store, must-revalidate';
 //    Scoped to static web assets only; API routes are skipped.
 // ---------------------------------------------------------------------------
 
+/**
+ * Parse Accept-Encoding header and return the best supported encoding,
+ * respecting quality weights (q=0 means explicitly rejected).
+ * Returns 'br', 'gzip', or null.
+ */
+export function negotiateEncoding(acceptEncoding: string): 'br' | 'gzip' | null {
+  if (!acceptEncoding) return null;
+
+  let brQ = -1;
+  let gzipQ = -1;
+
+  for (const part of acceptEncoding.split(',')) {
+    const segments = part.trim().split(';');
+    const token = segments[0];
+    const params = segments.slice(1);
+    if (!token) continue;
+    const enc = token.trim().toLowerCase();
+    let q = 1; // default quality when not specified
+    for (const p of params) {
+      const m = p.trim().match(/^q=([0-9.]+)$/i);
+      if (m) { q = parseFloat(m[1] ?? '1'); break; }
+    }
+    if (enc === 'br')   brQ   = q;
+    if (enc === 'gzip') gzipQ = q;
+    // '*' means any encoding is acceptable
+    if (enc === '*') {
+      if (brQ   < 0) brQ   = q;
+      if (gzipQ < 0) gzipQ = q;
+    }
+  }
+
+  // q=0 means explicitly rejected
+  if (brQ > 0 && brQ >= gzipQ) return 'br';
+  if (gzipQ > 0) return 'gzip';
+  return null;
+}
+
 export function createCompressionMiddleware(): RequestHandler {
   return function compressionMiddleware(
     req: Request,
@@ -57,9 +94,10 @@ export function createCompressionMiddleware(): RequestHandler {
     if (req.path === '/api' || req.path.startsWith('/api/')) { next(); return; }
 
     const ae = (req.headers['accept-encoding'] as string) ?? '';
-    const wantsBr   = /\bbr\b/.test(ae);
-    const wantsGzip = /\bgzip\b/.test(ae);
-    if (!wantsBr && !wantsGzip) { next(); return; }
+    const encoding = negotiateEncoding(ae);
+    if (!encoding) { next(); return; }
+    const wantsBr   = encoding === 'br';
+    const wantsGzip = encoding === 'gzip';
 
     const origWrite = res.write.bind(res) as typeof res.write;
     const origEnd   = res.end.bind(res)   as typeof res.end;

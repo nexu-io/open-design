@@ -246,3 +246,34 @@ describe('API routes bypass compression', () => {
     expect(headers['content-encoding']).toBeUndefined();
   }, 10_000);
 });
+
+// --- Unit tests: Accept-Encoding quality negotiation ---
+
+import { negotiateEncoding } from '../src/static-serving.js';
+
+describe('negotiateEncoding()', () => {
+  it('prefers br over gzip when both have default quality', () => {
+    expect(negotiateEncoding('gzip, br')).toBe('br');
+  });
+  it('returns gzip when br;q=0 (explicitly rejected)', () => {
+    expect(negotiateEncoding('br;q=0, gzip;q=1')).toBe('gzip');
+  });
+  it('returns null when br;q=0 and gzip;q=0', () => {
+    expect(negotiateEncoding('br;q=0, gzip;q=0')).toBeNull();
+  });
+  it('returns null when Accept-Encoding is empty', () => {
+    expect(negotiateEncoding('')).toBeNull();
+  });
+  it('returns gzip when only gzip advertised', () => {
+    expect(negotiateEncoding('gzip')).toBe('gzip');
+  });
+  it('returns br when only br advertised', () => {
+    expect(negotiateEncoding('br')).toBe('br');
+  });
+  it('respects quality values — picks higher q', () => {
+    expect(negotiateEncoding('br;q=0.5, gzip;q=0.9')).toBe('gzip');
+  });
+  it('handles * wildcard', () => {
+    expect(negotiateEncoding('*')).toBe('br');
+  });
+});
