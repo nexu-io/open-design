@@ -381,6 +381,10 @@ const macClosureDescribe = shouldRunPackagedMacSmoke
 const macLegacyMigrationDescribe = shouldRunPackagedMacSmoke
   && hasPackagedSmokeLane(smokeLanes, 'migration')
   && !verifyCoreOnly
+  // The immutable 0.16.x fixture predates OD_PACKAGED_E2E_HEADLESS and shows
+  // its BrowserWindow unconditionally. Keep that byte-exact artifact covered
+  // on isolated release-beta runners instead of interrupting a local desktop.
+  && !packagedHeadless
   ? describe
   : describe.skip;
 const shouldRunPackagedMacOnboardingSmoke =

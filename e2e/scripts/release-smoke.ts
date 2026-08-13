@@ -40,10 +40,11 @@ async function main(): Promise<void> {
   );
 
   process.env.OD_PACKAGED_E2E_REPORT_DIR = report.root;
-  // Saturation smoke validates the real packaged renderer through IPC and
-  // capturePage. Native windows stay hidden by default so local acceptance can
-  // run in the background; set this explicitly to 0 only for manual visual QA.
-  process.env.OD_PACKAGED_E2E_HEADLESS ??= '1';
+  // Local saturation validates the real renderer through IPC/capturePage while
+  // staying out of the developer's desktop. An isolated CI runner retains the
+  // headed default because its immutable historical fixture predates this
+  // contract and must still receive full release-beta migration coverage.
+  process.env.OD_PACKAGED_E2E_HEADLESS ??= process.env.CI === 'true' ? '0' : '1';
 
   await report.json('manifest.json', {
     ...(process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL == null
@@ -59,6 +60,9 @@ async function main(): Promise<void> {
     githubRunId: process.env.GITHUB_RUN_ID ?? null,
     namespace,
     headless: process.env.OD_PACKAGED_E2E_HEADLESS === '1',
+    headlessDelegations: process.env.OD_PACKAGED_E2E_HEADLESS === '1'
+      ? ['historical-outer-migration:release-beta']
+      : [],
     platform,
     reportPath: report.root,
     screenshot: `screenshots/open-design-${platform}-smoke.png`,

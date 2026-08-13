@@ -154,6 +154,7 @@ describe("desktop updater host boundary", () => {
   it("keeps packaged saturation smoke renderable without surfacing native windows", () => {
     const entry = source("src/index.ts");
     expect(entry).toContain('process.env.OD_PACKAGED_E2E_HEADLESS === "1"');
+    expect(entry).toContain('app.setActivationPolicy("prohibited")');
     expect(entry).toContain("const splash = headless ? null : createSplashWindow()");
     expect(entry).toContain("splashWindow: splash?.window ?? null");
 

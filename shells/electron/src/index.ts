@@ -145,6 +145,13 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Hiding BrowserWindows alone does not stop macOS from activating Electron
+  // as a foreground application during process launch. Saturation smoke must
+  // set this before ready so the OS cannot hand it menu-bar or keyboard focus.
+  if (headless && process.platform === "darwin") {
+    app.setActivationPolicy("prohibited");
+  }
+
   applyOsLocaleSwitch(app);
   applyLoopbackConnectionLimitSwitch(app);
   app.commandLine.appendSwitch("ignore-connections-limit", "127.0.0.1,localhost");
@@ -235,9 +242,6 @@ async function main(): Promise<void> {
   applyLaunchEnv(paths.runtimeRoot, stamp);
   await app.whenReady();
 
-  if (headless && process.platform === "darwin") {
-    await app.dock?.hide();
-  }
   const splash = headless ? null : createSplashWindow();
   setSplashStage(splash?.window ?? null, "engine");
 
