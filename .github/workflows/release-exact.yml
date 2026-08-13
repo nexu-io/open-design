@@ -292,9 +292,7 @@ on:
 
 permissions:
   actions: write
-  contents: write
-  id-token: write
-  packages: write
+  contents: read
 
 concurrency:
   group: open-design-release-exact-${{ inputs.exact_name }}

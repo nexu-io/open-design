@@ -1817,15 +1817,21 @@ process.stdin.on("end", () => {
     expect(postMergeWorkflow).not.toContain("PREVIEW_BAKE_TOKEN");
   });
 
-  it("[P0] preserves the permission ceiling required by the shared release dispatcher", async () => {
-    const entryWorkflows = await Promise.all([
+  it("[P0] keeps each release entry within its caller permission ceiling", async () => {
+    const [exactWorkflow, ...writeCapableWorkflows] = await Promise.all([
       releaseBetaWorkflowPath,
       releasePrereleaseWorkflowPath,
       releaseStableWorkflowPath,
     ].map(async (path) => await readFile(path, "utf8")));
     const stableDistribution = await readFile(distributionStableWorkflowPath, "utf8");
 
-    for (const workflow of entryWorkflows) {
+    const exactPermissions = sectionBetween(exactWorkflow!, "permissions:", "concurrency:");
+    expect(exactPermissions).toContain("actions: write");
+    expect(exactPermissions).toContain("contents: read");
+    expect(exactPermissions).not.toContain("id-token: write");
+    expect(exactPermissions).not.toContain("packages: write");
+
+    for (const workflow of writeCapableWorkflows) {
       const permissions = sectionBetween(workflow, "permissions:", "concurrency:");
       expect(permissions).toContain("actions: write");
       expect(permissions).toContain("contents: write");
