@@ -88,6 +88,7 @@ export interface Dict {
   'workspaceInvite.confirm': string;
   'workspaceInvite.submitFailed': string;
   'workspaceInvite.errorAlreadyMember': string;
+  'workspaceInvite.errorPendingInvite': string;
   'workspaceInvite.errorNoSession': string;
   'workspaceInvite.errorNoWorkspace': string;
   'workspaceInvite.errorUnreachable': string;
