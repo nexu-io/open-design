@@ -34,7 +34,7 @@ inside the project. The adapter sends that image with the H3 V2
 ## Supported inputs
 
 - Wire model: `MiniMax-H3` (fixed)
-- Duration: any integer from 4 through 15 seconds
+- `--length`: any integer from 4 through 15 seconds (default: `5`)
 - Resolution: `768P` (default) or `2K`
 - Text-to-video ratios: `21:9`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16`
 - Image-to-video: one first-frame PNG, JPEG, or WEBP supported by the
