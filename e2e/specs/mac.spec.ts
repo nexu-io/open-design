@@ -43,6 +43,7 @@ import {
   seedPackagedClosureFixture,
   type PackagedClosureFixture,
 } from '@/vitest/packaged-closure-fixture';
+import { readPackagedClosureBinding } from '@/vitest/packaged-closure-binding';
 import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
 import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
 import { createDesktopHarness, STORAGE_KEY, waitFor } from '../lib/desktop/desktop-test-helpers.ts';
@@ -77,6 +78,8 @@ const closureDistributionManifestPath = normalizeOptionalEnv(
 );
 const closureBlobRoots = parsePathListEnv(process.env.OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON);
 const standaloneSeedEmbedded = process.env.OD_PACKAGED_E2E_STANDALONE_SEED_EMBEDDED === '1';
+const verifyPublicImmutableArtifacts =
+  normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_SHELL_SMOKE_PROOF) === 'public-immutable-artifacts';
 const legacyDmgPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH);
 const legacyVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_VERSION);
 const minimumShellVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION);
@@ -834,6 +837,15 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         );
       }
 
+      const closureBinding = verifyPublicImmutableArtifacts
+        ? await readPackagedClosureBinding({
+            channel: updateScenario.channel,
+            label: 'packaged macOS',
+            namespace,
+            root: join(toolsPackDir, 'runtime', 'mac'),
+          })
+        : null;
+
       const stop = await runToolsPackJson<MacStopResult>('stop');
       started = false;
       expect(stop.namespace).toBe(namespace);
@@ -847,6 +859,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       expect(uninstall.removed).toBe(true);
       expect(await pathExists(install.installedAppPath)).toBe(false);
       await report.saveSummary({
+        ...(closureBinding == null ? {} : { closureBinding }),
         health: value,
         install: {
           detached: install.detached,

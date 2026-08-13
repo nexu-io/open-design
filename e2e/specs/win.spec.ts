@@ -36,6 +36,7 @@ import {
   readPackagedStandaloneDistributionBinding,
   type PackagedStandaloneDistributionFixture,
 } from '@/vitest/standalone-distribution-fixture';
+import { readPackagedClosureBinding } from '@/vitest/packaged-closure-binding';
 import {
   hasPackagedSmokeLane,
   resolvePackagedSmokeLanes,
@@ -1090,7 +1091,12 @@ winDescribe('packaged windows runtime smoke', () => {
       // the installed Shell before uninstall removes the namespace state.
       // Local release smoke records the same fact, so this is evidence rather
       // than a workflow-only behavior branch.
-      const closureBinding = await readPackagedClosureBinding();
+      const closureBinding = await readPackagedClosureBinding({
+        channel: updateScenario.channel,
+        label: 'packaged Windows',
+        namespace,
+        root: verifyPublicImmutableArtifacts ? nativeProductUserDataRoot : join(toolsPackDir, 'runtime', 'win'),
+      });
 
       const uninstall = await measureSmokeStep(timings, 'uninstall remove data', async () =>
         runToolsPackJson<WinUninstallResult>('uninstall', ['--remove-product-user-data']),
@@ -3695,19 +3701,6 @@ function parsePathListEnv(value: string | undefined): string[] {
     throw new Error('OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON must be a JSON array of paths');
   }
   return parsed;
-}
-
-async function readPackagedClosureBinding(): Promise<Record<string, unknown>> {
-  const bindingPath = resolveClosureStorePaths({
-    channel: updateScenario.channel,
-    namespace,
-    root: verifyPublicImmutableArtifacts ? nativeProductUserDataRoot : join(toolsPackDir, 'runtime', 'win'),
-  }).bindingPath;
-  const value = JSON.parse(stripUtf8Bom(await readFile(bindingPath, 'utf8'))) as unknown;
-  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error(`packaged Windows Closure binding is invalid: ${bindingPath}`);
-  }
-  return value as Record<string, unknown>;
 }
 
 function isPathInside(filePath: string, expectedRoot: string): boolean {
