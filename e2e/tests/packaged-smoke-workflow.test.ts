@@ -2782,7 +2782,7 @@ process.stdin.on("end", () => {
     expect(releaseBetaWorkflow).toContain("uses: ./.github/actions/release/publish-metadata");
     expect(metadataDistribution).toContain("tools-release publish-metadata");
     expect(releaseBetaWorkflow).toContain("RELEASE_MANIFEST_DIR:");
-    expect(releaseBetaWorkflow).toContain("RELEASE_ASSET_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}");
+    expect(releaseBetaWorkflow).not.toContain("RELEASE_ASSET_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}");
     expect(platformPublishScript).toContain("artifacts.payload");
     expect(platformPublishScript).toContain("open-design-${releaseVersion}${assetSuffix}-mac-${arch}-payload.zip");
     expect(platformPublishScript).toContain("open-design-${releaseVersion}${assetSuffix}-win-x64-payload.7z");
@@ -2801,10 +2801,10 @@ process.stdin.on("end", () => {
     const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
     const macX64Job = sectionBetween(workflow, "  build_mac_x64:", "  build_win_x64:");
     const winJob = sectionBetween(workflow, "  build_win_x64:", "  publish:");
-    const publishJob = sectionBetween(workflow, "  publish:", "  public_win_x64_acceptance:");
+    const publishJob = sectionBetween(workflow, "  publish:", "  public_acceptance:");
     const publicAcceptanceJob = sectionBetween(
       workflow,
-      "  public_win_x64_acceptance:",
+      "  public_acceptance:",
       "  activate:",
     );
     const activationJob = workflow.slice(workflow.indexOf("\n  activate:"));
@@ -2827,9 +2827,9 @@ process.stdin.on("end", () => {
     expect(workflow).toContain("POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}");
     expect(workflow).not.toContain("POSTHOG_KEY: ${{ inputs.publish");
     expect(workflow).toContain("shell_version:");
-    expect(workflow).toContain("shell_version: ${{ inputs.shell_version != ''");
+    expect(workflow).toContain("shell_version: ${{ steps.reservation.outputs.release_version");
     expect(workflow).toContain("closure_version:");
-    expect(workflow).toContain("closure_version: ${{ inputs.closure_version != ''");
+    expect(workflow).toContain("closure_version: ${{ steps.reservation.outputs.release_version");
     expect(sharedJob).toContain("Build shared Standalone Closure");
     expect(sharedJob).toContain("uses: ./.github/actions/release/closure/shared");
     expect(sharedClosureAction).toContain("Build shared Closure components");
@@ -2899,24 +2899,20 @@ process.stdin.on("end", () => {
     expect(publishJob).toContain("tools-release merge-closure-distribution");
     expect(publishJob).toContain("RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH:");
     expect(publishJob).toContain('RELEASE_CLOSURE_DISTRIBUTION_REQUIRED: "true"');
-    expect(publishJob).toContain('RELEASE_CLOSURE_REQUIRED: "false"');
+    expect(publishJob).not.toContain("RELEASE_CLOSURE_REQUIRED:");
     expect(publishJob).toContain('RELEASE_SHELL_REQUIRED: "true"');
     expect(workflow).not.toContain("/beta/closure/");
     expect(workflow).not.toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH:");
     expect(workflow).toContain("Validate checkout ref shape");
     expect(workflow).toContain("full 40-character commit SHA; abbreviated SHA");
-    expect(publishJob).toContain("RELEASE_ACTIVATE_LATEST: ${{ inputs.enable_win_x64 && 'false' || 'true' }}");
+    expect(publishJob).toContain('RELEASE_ACTIVATE_LATEST: "false"');
     expect(publishJob).toContain('RELEASE_LATEST_CAS_REQUIRED: "true"');
     expect(publishJob).toContain("RELEASE_WIN_X64_SIGN_MODE: ${{ inputs.win_x64_sign_mode }}");
-    expect(publishJob).toContain("Observe directly activated beta public feed");
-    expect(publishJob).toContain("if: ${{ !inputs.enable_win_x64 }}");
-    expect(sectionBetween(
-      publishJob,
-      "      - name: Observe directly activated beta public feed",
-      "      - name: Cleanup workflow artifacts",
-    )).not.toContain("continue-on-error");
-    expect(publishJob).toContain("tools-release observe-public-feed");
-    expect(publicAcceptanceJob).toContain("runs-on: windows-latest");
+    expect(publishJob).not.toContain("Observe directly activated beta public feed");
+    expect(publicAcceptanceJob).toContain("runs-on: ${{ matrix.runner }}");
+    expect(publicAcceptanceJob).toContain("target: mac_arm64");
+    expect(publicAcceptanceJob).toContain("target: mac_x64");
+    expect(publicAcceptanceJob).toContain("target: win_x64");
     expect(publicAcceptanceJob).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke");
     expect(publicAcceptanceJob).toContain("tools-release prepare-public-acceptance");
     expect(publicAcceptanceJob).toContain("tools-release issue-public-acceptance");
@@ -2926,7 +2922,7 @@ process.stdin.on("end", () => {
     expect(publicAcceptanceJob).toContain("OD_STANDALONE_METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}");
     expect(publicAcceptanceJob).not.toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH");
     expect(publicAcceptanceJob).not.toContain("RELEASE_STORAGE_SECRET_ACCESS_KEY");
-    expect(activationJob).toContain("needs.public_win_x64_acceptance.result == 'success'");
+    expect(activationJob).toContain("needs.public_acceptance.result == 'success'");
     expect(activationJob).toContain("tools-release activate-public-release");
     expect(activationJob).toContain("Activate accepted immutable beta metadata with CAS");
     expect(activationJob).toContain("Read back activated beta public feed");
@@ -3057,7 +3053,7 @@ process.stdin.on("end", () => {
         amrProfile: "",
         artifacts: {
           dmg: {
-            url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
+            url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4/shells/electron/mac_arm64/Open Design Beta.dmg",
           },
         },
         channel: "beta",
@@ -3070,7 +3066,7 @@ process.stdin.on("end", () => {
         platformKey: "mac_arm64",
         releaseTarget: "mac_arm64",
         r2: {
-          versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
+          versionPrefix: "beta/versions/1.2.3-beta.4",
         },
         releaseVersion: "1.2.3-beta.4",
         signMode: "notarized",
@@ -3140,7 +3136,7 @@ process.stdin.on("end", () => {
         amrProfile: "",
         artifacts: {
           dmg: {
-            url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/Open Design Beta.dmg",
+            url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4/shells/electron/mac_arm64/Open Design Beta.dmg",
           },
         },
         channel: "beta",
@@ -3153,7 +3149,7 @@ process.stdin.on("end", () => {
         platformKey: "mac_arm64",
         releaseTarget: "mac_arm64",
         r2: {
-          versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
+          versionPrefix: "beta/versions/1.2.3-beta.4",
         },
         releaseVersion: "1.2.3-beta.4",
         signMode: "notarized",
@@ -3202,10 +3198,8 @@ process.stdin.on("end", () => {
     }
   });
 
-  it("resolves auto asset suffix from target-first win_x64 platform manifests in beta metadata publish", async () => {
-    const fixture = await startReleaseMetadataObjectStore({
-      "beta/versions/1.2.3-beta.4.unsigned/latest.yml": "versioned updater feed",
-    });
+  it("keeps sign suffixes in filenames while metadata owns one unsuffixed version root", async () => {
+    const fixture = await startReleaseMetadataObjectStore({});
     const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-beta-win-metadata-"));
     const platformManifestRoot = join(runnerTemp, "release-platform-manifests");
 
@@ -3218,7 +3212,7 @@ process.stdin.on("end", () => {
             amrProfile: "",
             artifacts: {
               installer: {
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
+                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4/shells/electron/win_x64/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
               },
             },
             channel: "beta",
@@ -3230,14 +3224,14 @@ process.stdin.on("end", () => {
             legacyPlatformKey: "win",
             feed: {
               name: "latest.yml",
-              url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/latest.yml",
+              url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4/shells/electron/win_x64/latest.yml",
             },
             platform: "win",
             platformKey: "win_x64",
             releaseTarget: "win_x64",
             releaseVersion: "1.2.3-beta.4",
             r2: {
-              versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
+              versionPrefix: "beta/versions/1.2.3-beta.4",
             },
             signMode: "unsigned",
             status: "published",
@@ -3258,7 +3252,6 @@ process.stdin.on("end", () => {
           RELEASE_RUN_ATTEMPT: "2",
           RELEASE_RUN_ID: "222222222",
           RELEASE_COMMIT: "current-sha",
-          RELEASE_ASSET_SUFFIX: "auto",
           RELEASE_CHANNEL: "beta",
           RELEASE_MANIFEST_DIR: platformManifestRoot,
           RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
@@ -3277,14 +3270,13 @@ process.stdin.on("end", () => {
       });
 
       const metadata = JSON.parse(await readFile(join(runnerTemp, "release-metadata", "metadata.json"), "utf8"));
-      expect(metadata.assetVersionSuffix).toBe(".unsigned");
+      expect(metadata.assetVersionSuffix).toBeUndefined();
       expect(metadata.readyTargets).toEqual(["win_x64"]);
-      expect(metadata.platforms.win.r2.versionPrefix).toBe("beta/versions/1.2.3-beta.4.unsigned");
-      expect(metadata.releaseTargets.win_x64.r2.versionPrefix).toBe("beta/versions/1.2.3-beta.4.unsigned");
+      expect(metadata.platforms.win.r2.versionPrefix).toBe("beta/versions/1.2.3-beta.4");
+      expect(metadata.releaseTargets.win_x64.r2.versionPrefix).toBe("beta/versions/1.2.3-beta.4");
       expect(fixture.uploadedObjectKeys()).toEqual([
-        "beta/versions/1.2.3-beta.4.unsigned/metadata.json",
+        "beta/versions/1.2.3-beta.4/metadata.json",
         "beta/latest/platforms/win_x64.json",
-        "beta/latest/latest.yml",
         "beta/latest/metadata.json",
       ]);
     } finally {
@@ -3294,9 +3286,7 @@ process.stdin.on("end", () => {
   });
 
   it("preserves launcher payload artifacts in beta latest metadata and action outputs", async () => {
-    const fixture = await startReleaseMetadataObjectStore({
-      "beta/versions/1.2.3-beta.4.unsigned/latest.yml": "versioned updater feed",
-    });
+    const fixture = await startReleaseMetadataObjectStore({});
     const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-beta-payload-metadata-"));
     const platformManifestRoot = join(runnerTemp, "release-platform-manifests");
 
@@ -3309,11 +3299,11 @@ process.stdin.on("end", () => {
             amrProfile: "",
             artifacts: {
               dmg: {
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64.dmg",
+                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4/shells/electron/mac_arm64/open-design-1.2.3-beta.4.unsigned-mac-arm64.dmg",
               },
               payload: {
-                sha256Url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip.sha256",
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip",
+                sha256Url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4/shells/electron/mac_arm64/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip.sha256",
+                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4/shells/electron/mac_arm64/open-design-1.2.3-beta.4.unsigned-mac-arm64-payload.zip",
               },
             },
             channel: "beta",
@@ -3328,7 +3318,7 @@ process.stdin.on("end", () => {
             releaseTarget: "mac_arm64",
             releaseVersion: "1.2.3-beta.4",
             r2: {
-              versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
+              versionPrefix: "beta/versions/1.2.3-beta.4",
             },
             signMode: "notarized",
             status: "published",
@@ -3344,17 +3334,17 @@ process.stdin.on("end", () => {
             amrProfile: "",
             artifacts: {
               installer: {
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
+                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4/shells/electron/win_x64/open-design-1.2.3-beta.4.unsigned-win-x64-setup.exe",
               },
               payload: {
-                sha256Url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z.sha256",
-                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z",
+                sha256Url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4/shells/electron/win_x64/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z.sha256",
+                url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4/shells/electron/win_x64/open-design-1.2.3-beta.4.unsigned-win-x64-payload.7z",
               },
             },
             channel: "beta",
             feed: {
               name: "latest.yml",
-              url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4.unsigned/latest.yml",
+              url: "https://releases.open-design.ai/beta/versions/1.2.3-beta.4/shells/electron/win_x64/latest.yml",
             },
             github: {
               commit: "current-sha",
@@ -3367,7 +3357,7 @@ process.stdin.on("end", () => {
             releaseTarget: "win_x64",
             releaseVersion: "1.2.3-beta.4",
             r2: {
-              versionPrefix: "beta/versions/1.2.3-beta.4.unsigned",
+              versionPrefix: "beta/versions/1.2.3-beta.4",
             },
             signMode: "unsigned",
             status: "published",
@@ -3388,7 +3378,6 @@ process.stdin.on("end", () => {
           RELEASE_RUN_ATTEMPT: "2",
           RELEASE_RUN_ID: "222222222",
           RELEASE_COMMIT: "current-sha",
-          RELEASE_ASSET_SUFFIX: "auto",
           RELEASE_CHANNEL: "beta",
           RELEASE_MANIFEST_DIR: platformManifestRoot,
           RELEASE_METADATA_DIR: join(runnerTemp, "release-metadata"),
@@ -3428,10 +3417,9 @@ process.stdin.on("end", () => {
       expect(outputs.mac_arm64_payload_url).toBe(metadata.platforms.mac.artifacts?.payload?.url);
       expect(outputs.win_x64_payload_url).toBe(metadata.platforms.win.artifacts?.payload?.url);
       expect(fixture.uploadedObjectKeys()).toEqual([
-        "beta/versions/1.2.3-beta.4.unsigned/metadata.json",
+        "beta/versions/1.2.3-beta.4/metadata.json",
         "beta/latest/platforms/mac_arm64.json",
         "beta/latest/platforms/win_x64.json",
-        "beta/latest/latest.yml",
         "beta/latest/metadata.json",
       ]);
     } finally {

@@ -1,7 +1,7 @@
-import { required } from "./common.ts";
-import { preparePublicWindowsAcceptance } from "./public-acceptance.ts";
+import { required, requiredTarget } from "./common.ts";
+import { preparePublicAcceptance } from "./public-acceptance.ts";
 
-const result = await preparePublicWindowsAcceptance({
+const result = await preparePublicAcceptance({
   buildJsonPath: required("RELEASE_PUBLIC_ACCEPTANCE_BUILD_JSON_PATH"),
   commit: required("RELEASE_COMMIT"),
   downloadDir: required("RELEASE_PUBLIC_ACCEPTANCE_DOWNLOAD_DIR"),
@@ -10,6 +10,7 @@ const result = await preparePublicWindowsAcceptance({
   planPath: required("RELEASE_PUBLIC_ACCEPTANCE_PLAN_PATH"),
   publicOrigin: required("RELEASE_PUBLIC_ORIGIN"),
   releaseVersion: required("RELEASE_VERSION"),
+  target: requiredTarget(),
 });
 
 console.log(JSON.stringify(result, null, 2));

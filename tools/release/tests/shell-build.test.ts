@@ -56,7 +56,7 @@ describe("immutable Shell build storage", () => {
       `beta/shells/electron/builds/${"c".repeat(64)}/profiles/${"d".repeat(64)}/artifacts/darwin-arm64.json`,
     );
     expect(shellBuildVersionPrefix("beta", "electron", "0.19.0-beta.2", "darwin-arm64")).toBe(
-      "beta/shells/electron/versions/0.19.0-beta.2/darwin-arm64",
+      "beta/versions/0.19.0-beta.2/shells/electron/mac_arm64",
     );
     expect(shellSmokeProofObjectKey(
       "beta",
@@ -253,7 +253,7 @@ describe("immutable Shell build storage", () => {
         expect(registered.resolution.state).toBe("registered");
         expect(Date.parse(registered.resolution.createdAt)).not.toBeNaN();
         expect(registered.resolution.artifacts.dmg.url).toBe(
-          "https://releases.example/beta/shells/electron/versions/0.19.0-beta.2/darwin-arm64/Open%20Design-release-beta.dmg",
+          "https://releases.example/beta/versions/0.19.0-beta.2/shells/electron/mac_arm64/Open%20Design-release-beta.dmg",
         );
         const reusedDmgPath = join(outputRoot, "Open Design-release-beta.dmg");
         const reusedPayloadPath = join(outputRoot, "Open Design-release-beta-payload.zip");

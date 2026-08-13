@@ -2,7 +2,13 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
-import { parseReleaseVersion, releaseChannelDescriptor, type ReleaseChannel } from "@open-design/release";
+import {
+  parseReleaseVersion,
+  releaseChannelDescriptor,
+  releaseShellPrefix,
+  type ReleaseChannel,
+  type ReleaseTarget,
+} from "@open-design/release";
 
 import { contentType, githubInfo, normalizePublicUrl, optional, publicUrl, required, storageConfigFromEnv, writeJson } from "./common.ts";
 import { getStorageObject, putStorageObjectWithStatus, type StorageConfig } from "./s3-upload.ts";
@@ -112,7 +118,13 @@ export function shellBuildIndexObjectKey(
 
 export function shellBuildVersionPrefix(channel: string, shellType: string, version: string, target: ShellTarget): string {
   if (!tokenPattern.test(shellType)) throw new Error(`invalid Shell type: ${shellType}`);
-  return `${channel}/shells/${shellType}/versions/${version}/${target}`;
+  const releaseChannel = releaseChannelDescriptor(channel).channel;
+  const releaseTarget: ReleaseTarget = target === "darwin-arm64"
+    ? "mac_arm64"
+    : target === "darwin-x64"
+      ? "mac_x64"
+      : "win_x64";
+  return releaseShellPrefix(releaseChannel, version, releaseTarget, shellType);
 }
 
 export function shellSmokeProofObjectKey(
@@ -426,9 +438,31 @@ export async function resolveShellBuild(): Promise<void> {
     const targetPath = plan.artifacts[kind];
     if (targetPath == null) continue;
     const remote = await getStorageObject({ ...storage, objectKey: artifact.objectKey });
-    if (remote == null) throw new Error(`Shell ${kind} artifact is missing: ${artifact.objectKey}`);
+    if (remote == null) {
+      writeJson(outputPath, {
+        indexKey,
+        reason: `cached Shell ${kind} artifact is missing: ${artifact.objectKey}`,
+        shell: plan.shell,
+        state: "miss",
+        target: plan.target,
+      });
+      writeGithubOutput("state", "miss");
+      if (smokeMatrix.length > 0) writeGithubOutput("smoke_proof", "miss");
+      console.log(`Shell build cache is incomplete; rebuilding: ${artifact.objectKey}`);
+      return;
+    }
     if (remote.bytes.byteLength !== artifact.size || sha256(remote.bytes) !== artifact.digest) {
-      throw new Error(`Shell ${kind} artifact failed immutable digest verification`);
+      writeJson(outputPath, {
+        indexKey,
+        reason: `cached Shell ${kind} artifact failed digest verification`,
+        shell: plan.shell,
+        state: "miss",
+        target: plan.target,
+      });
+      writeGithubOutput("state", "miss");
+      if (smokeMatrix.length > 0) writeGithubOutput("smoke_proof", "miss");
+      console.log(`Shell build cache failed verification; rebuilding: ${artifact.objectKey}`);
+      return;
     }
     mkdirSync(dirname(targetPath), { recursive: true });
     writeFileSync(targetPath, remote.bytes);
@@ -611,7 +645,10 @@ export async function registerShellBuild(): Promise<void> {
   ) throw new Error("built Shell report does not match the resolved Shell source identity");
   parseReleaseVersion(build.shell.version, channel);
   const storage = storageConfigFromEnv();
-  const prefix = shellBuildVersionPrefix(channel, build.shell.type, build.shell.version, plan.target);
+  if (plan.releaseVersion == null) {
+    throw new Error("public Shell registration requires a release version");
+  }
+  const prefix = shellBuildVersionPrefix(channel, build.shell.type, plan.releaseVersion, plan.target);
   const artifacts: Record<string, ShellBuildArtifactRecord> = {};
   for (const [kind, raw] of Object.entries(build.artifacts ?? {})) {
     if (raw == null) continue;

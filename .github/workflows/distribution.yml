@@ -216,10 +216,6 @@ jobs:
       enable_win_x64: ${{ inputs.enable_win_x64 }}
       publish: ${{ inputs.publish }}
       promote: ${{ inputs.promote }}
-      force: ${{ inputs.force }}
-      release_version: ${{ inputs.release_version }}
-      shell_version: ${{ inputs.shell_version }}
-      closure_version: ${{ inputs.closure_version }}
       release_origin: ${{ inputs.release_origin }}
       release_public_origin: ${{ inputs.release_public_origin }}
       ref: ${{ inputs.ref }}

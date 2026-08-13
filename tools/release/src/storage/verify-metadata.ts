@@ -4,7 +4,13 @@ import {
   requireInstallationVersionFloor,
   resolveInstallationVersionFloor,
 } from "./installation-version-floor.ts";
-import { parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
+import {
+  parseReleaseVersion,
+  releaseChannelDescriptor,
+  releaseClosureManifestObjectKey,
+  releaseShellPrefix,
+  releaseVersionPrefix,
+} from "@open-design/release";
 import { readFile } from "node:fs/promises";
 import { parseReleaseNotePublication, releaseNoteMetadataFromPublication } from "../release-note/publication.ts";
 import { validateClosureDistributionPublication } from "./closure-distribution-metadata.ts";
@@ -17,6 +23,7 @@ const metadataUrl = metadataPath.length > 0 ? optional("RELEASE_METADATA_URL", `
 const releaseVersion = required("RELEASE_VERSION");
 const cacheBuster = optional("RELEASE_CACHE_BUSTER", "local");
 const releaseNoteManifestPath = optional("RELEASE_NOTE_MANIFEST_PATH");
+const closureDistributionManifestPath = optional("RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH");
 
 const metadata = (metadataPath.length > 0
   ? JSON.parse(await readFile(metadataPath, "utf8"))
@@ -37,7 +44,11 @@ const metadata = (metadataPath.length > 0
     shell?: { installation?: { version?: { min?: string; url?: string } } };
   };
   releaseState?: string;
-  r2?: { publicOrigin?: string };
+  r2?: {
+    closureManifestUrl?: string;
+    publicOrigin?: string;
+    versionPrefix?: string;
+  };
   releaseTargets?: Record<string, {
     artifacts?: Record<string, { digest?: string; url?: string }>;
     closure?: {
@@ -63,7 +74,6 @@ const metadata = (metadataPath.length > 0
   [key: string]: unknown;
 };
 
-const closureRequired = process.env.RELEASE_CLOSURE_REQUIRED === "true";
 const closureDistributionRequired = process.env.RELEASE_CLOSURE_DISTRIBUTION_REQUIRED === "true";
 const shellRequired = process.env.RELEASE_SHELL_REQUIRED === "true";
 const parameterMatrix = releaseParameterMatrixFromEnv();
@@ -79,6 +89,12 @@ if (metadata.channel !== releaseChannel) {
 const versionField = releaseDescriptor.releaseVersionField;
 if (metadata[versionField] !== releaseVersion) {
   throw new Error(`metadata ${versionField} mismatch: expected ${releaseVersion}, got ${String(metadata[versionField])}`);
+}
+const expectedVersionPrefix = releaseVersionPrefix(releaseChannel, releaseVersion);
+if (metadata.r2?.versionPrefix !== expectedVersionPrefix) {
+  throw new Error(
+    `metadata versionPrefix mismatch: expected ${expectedVersionPrefix}, got ${String(metadata.r2?.versionPrefix)}`,
+  );
 }
 
 // The published control.shell.installation.version block must match the channel policy
@@ -161,6 +177,28 @@ if (metadata.closure != null) {
     )),
     value: metadata.closure,
   });
+  const expectedClosureManifestUrl = new URL(
+    releaseClosureManifestObjectKey(releaseChannel, releaseVersion),
+    `${metadata.r2.publicOrigin.replace(/\/+$/, "")}/`,
+  ).toString();
+  if (metadata.r2.closureManifestUrl !== expectedClosureManifestUrl) {
+    throw new Error(
+      `metadata Closure manifest URL must be ${expectedClosureManifestUrl}; got ${String(metadata.r2.closureManifestUrl)}`,
+    );
+  }
+  const standaloneClosure = closureDistributionManifestPath.length > 0
+    ? JSON.parse(await readFile(closureDistributionManifestPath, "utf8")) as unknown
+    : await (async () => {
+        const response = await fetch(
+          `${expectedClosureManifestUrl}?run=${cacheBuster}`,
+          { headers: { "Cache-Control": "no-cache" } },
+        );
+        if (!response.ok) throw new Error(`Closure manifest fetch failed with HTTP ${response.status}`);
+        return response.json() as Promise<unknown>;
+      })();
+  if (JSON.stringify(standaloneClosure) !== JSON.stringify(metadata.closure)) {
+    throw new Error("standalone Closure manifest does not match metadata.closure");
+  }
 }
 
 for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {
@@ -179,15 +217,11 @@ for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {
   if ((target === "mac_arm64" || target === "win_x64") && targetMetadata.artifacts?.payload?.url == null) {
     throw new Error(`metadata target ${target} is missing launcher payload artifact`);
   }
-  if (closureRequired && (target === "mac_arm64" || target === "win_x64") && targetMetadata.closure == null) {
-    throw new Error(`metadata target ${target} is missing Closure publication`);
-  }
   if (shellRequired && targetMetadata.shell == null) {
     throw new Error(`metadata target ${target} is missing Shell publication`);
   }
   if (targetMetadata.shell != null) {
     const shell = targetMetadata.shell;
-    const expectedPlatform = target === "mac_arm64" ? "darwin-arm64" : target === "mac_x64" ? "darwin-x64" : "win32-x64";
     if (
       shell.type !== "electron"
       || !/^sha256:[0-9a-f]{64}$/.test(String(shell.buildDigest))
@@ -203,7 +237,12 @@ for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {
     } catch {
       throw new Error(`metadata target ${target} has an invalid Shell version`);
     }
-    const shellPrefix = `${releaseDescriptor.storagePrefix}/shells/electron/versions/${shell.version}/${expectedPlatform}/`;
+    const shellPrefix = releaseShellPrefix(
+      releaseChannel,
+      releaseVersion,
+      target as "mac_arm64" | "mac_x64" | "win_x64",
+      shell.type,
+    );
     for (const [name, artifact] of Object.entries(targetMetadata.artifacts ?? {})) {
       const artifactUrl = new URL(String(artifact.url));
       if (!artifactUrl.pathname.includes(`/${shellPrefix}`) || !/^sha256:[0-9a-f]{64}$/.test(String(artifact.digest))) {
@@ -212,37 +251,6 @@ for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {
       if (shell.artifacts?.[name]?.url !== artifact.url || shell.artifacts?.[name]?.digest !== artifact.digest) {
         throw new Error(`metadata target ${target} Shell ${name} artifact does not match its publication`);
       }
-    }
-  }
-  if (targetMetadata.closure != null) {
-    if (target !== "mac_arm64" && target !== "win_x64") {
-      throw new Error(`metadata target ${target} must not publish a Closure`);
-    }
-    const closure = targetMetadata.closure;
-    const expectedPlatform = target === "mac_arm64" ? "darwin-arm64" : "win32-x64";
-    if (
-      closure?.manifest?.identity?.channel !== releaseChannel
-      || closure.manifest.identity.platform !== expectedPlatform
-    ) {
-      throw new Error(`metadata target ${target} has an invalid Closure identity`);
-    }
-    try {
-      parseReleaseVersion(String(closure.manifest.identity.version), releaseChannel);
-    } catch {
-      throw new Error(`metadata target ${target} has an invalid Closure version`);
-    }
-    const closurePrefix = `${releaseDescriptor.storagePrefix}/closure/${expectedPlatform}/versions/${closure.manifest.identity.version}/`;
-    for (const asset of ["archive", "inventory", "manifest", "provenance"] as const) {
-      if (closure.assets?.[asset]?.url == null) {
-        throw new Error(`metadata target ${target} is missing Closure ${asset} artifact`);
-      }
-      const assetUrl = new URL(closure.assets[asset].url);
-      if (!assetUrl.pathname.includes(`/${closurePrefix}`)) {
-        throw new Error(`metadata target ${target} Closure ${asset} artifact is outside its version prefix`);
-      }
-    }
-    if (closure.manifest?.artifact?.url !== closure.assets?.archive?.url) {
-      throw new Error(`metadata target ${target} Closure archive URL does not match its manifest`);
     }
   }
 }

@@ -10,8 +10,16 @@ import {
   releaseChannelFromNamespace,
   releaseChannelFromVersion,
   releaseInstallIdentity,
+  releaseAcceptanceObjectKey,
+  releaseClosureBlobObjectKey,
+  releaseClosureManifestObjectKey,
+  releaseInventoryObjectKey,
   releaseMetadataVersionFields,
   releaseNamespace,
+  releasePlatformManifestObjectKey,
+  releaseShellPrefix,
+  releaseVersionLockObjectKey,
+  releaseVersionPrefix,
 } from "../src/index.js";
 
 describe("@open-design/release", () => {
@@ -71,5 +79,39 @@ describe("@open-design/release", () => {
     expect(releaseChannelFromNamespace("release-preview-linux")).toBe("preview");
     expect(releaseChannelFromNamespace("open-design")).toBe("stable");
     expect(releaseChannelFromNamespace("beta-local-flow")).toBeNull();
+  });
+
+  it("keeps one release's public distribution below its version root", () => {
+    const version = "0.19.1-beta.1";
+    const root = "beta/versions/0.19.1-beta.1";
+    const digest = `sha256:${"a".repeat(64)}` as const;
+    expect(releaseVersionPrefix("beta", version)).toBe(root);
+    expect(releaseVersionLockObjectKey("beta", version)).toBe(`${root}/version.lock.json`);
+    expect(releaseInventoryObjectKey("beta", version)).toBe(`${root}/inventory.json`);
+    expect(releasePlatformManifestObjectKey("beta", version, "mac_x64")).toBe(
+      `${root}/platforms/mac_x64.json`,
+    );
+    expect(releaseShellPrefix("beta", version, "mac_x64")).toBe(
+      `${root}/shells/electron/mac_x64`,
+    );
+    expect(releaseClosureManifestObjectKey("beta", version)).toBe(`${root}/closure/manifest.json`);
+    expect(releaseClosureBlobObjectKey("beta", version, digest)).toBe(
+      `${root}/closure/blobs/${"a".repeat(64)}`,
+    );
+    expect(releaseAcceptanceObjectKey("beta", version, "win_x64")).toBe(
+      `${root}/acceptance/win_x64.json`,
+    );
+  });
+
+  it("rejects invalid release layout identities", () => {
+    expect(() => releaseVersionPrefix("beta", "0.19.1-beta.0")).toThrow(/beta release version/);
+    expect(() => releaseShellPrefix("beta", "0.19.1-beta.1", "mac_arm64", "Electron Shell")).toThrow(
+      /path token/,
+    );
+    expect(() => releaseClosureBlobObjectKey(
+      "beta",
+      "0.19.1-beta.1",
+      "sha256:not-a-digest" as `sha256:${string}`,
+    )).toThrow(/lowercase sha256/);
   });
 });

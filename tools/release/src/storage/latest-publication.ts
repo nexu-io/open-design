@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
 
 import {
   parseCountedReleaseVersion,
@@ -9,7 +8,6 @@ import {
   type ReleaseChannel,
 } from "@open-design/release";
 
-import { contentType } from "./common.ts";
 import {
   getStorageObject,
   putStorageObject,
@@ -251,30 +249,6 @@ export async function publishLatestPlatformObjects(input: {
       platform.path,
       `${latestPrefix}/platforms/${target}.json`,
       "public, max-age=60, must-revalidate",
-    );
-
-    const feedName = platform.manifest.feed?.name;
-    if (feedName == null || feedName.length === 0) continue;
-    const feedVersionPrefix = platform.manifest.r2?.artifactPrefix ?? platform.manifest.r2?.versionPrefix;
-    if (feedVersionPrefix == null || feedVersionPrefix.length === 0) {
-      throw new Error(`published ${target} platform manifest is missing r2.versionPrefix for ${feedName}`);
-    }
-    const versionFeed = await getStorageObject({
-      ...input.storage,
-      objectKey: `${feedVersionPrefix}/${feedName}`,
-    });
-    if (versionFeed == null) {
-      throw new Error(`expected versioned feed object not found: ${feedVersionPrefix}/${feedName}`);
-    }
-    const feedPath = join(input.metadataDir, "latest-feeds", feedName);
-    mkdirSync(join(input.metadataDir, "latest-feeds"), { recursive: true });
-    writeFileSync(feedPath, versionFeed.bytes);
-    await upload(
-      input.storage,
-      feedPath,
-      `${latestPrefix}/${feedName}`,
-      "public, max-age=60, must-revalidate",
-      contentType(feedName),
     );
   }
 }

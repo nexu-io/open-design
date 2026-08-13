@@ -168,6 +168,23 @@ export async function putStorageObjectWithStatus(options: PutObjectOptions): Pro
   };
 }
 
+export async function putImmutableStorageObject(options: PutObjectOptions): Promise<"created" | "reused"> {
+  const expected = options.body == null ? readFileSync(options.bodyPath ?? "") : Buffer.from(options.body);
+  const result = await putStorageObjectWithStatus({
+    ...options,
+    headers: { ...(options.headers ?? {}), "if-none-match": "*" },
+  });
+  if (result.ok) return "created";
+  if (result.status !== 412) {
+    throw new Error(`immutable PUT ${result.url} failed with HTTP ${result.status}: ${result.body}`);
+  }
+  const existing = await getStorageObject({ ...options, objectKey: options.objectKey });
+  if (existing == null || !existing.bytes.equals(expected)) {
+    throw new Error(`immutable storage object conflicts: ${options.objectKey}`);
+  }
+  return "reused";
+}
+
 export async function getStorageObject(options: GetObjectOptions): Promise<{ bytes: Buffer; etag: string; text: string } | null> {
   const payloadHash = hash("");
   const { canonicalUri, url } = objectUrl(options, options.objectKey);

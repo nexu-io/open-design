@@ -28,26 +28,6 @@ on:
         required: true
         type: boolean
         default: true
-      force:
-        description: "Allow a beta build whose base version is not greater than the current stable/beta feed."
-        required: true
-        type: boolean
-        default: false
-      release_version:
-        description: "Optional beta version override. Empty resolves the next beta version from metadata."
-        required: false
-        type: string
-        default: ""
-      shell_version:
-        description: "Optional Electron Shell compatibility version. Empty assigns this release version to new Shell source."
-        required: false
-        type: string
-        default: ""
-      closure_version:
-        description: "Optional Standalone Closure beta version. Empty uses the shell release version."
-        required: false
-        type: string
-        default: ""
       release_public_origin:
         description: "Optional public release origin override."
         required: false
@@ -180,27 +160,11 @@ on:
         required: false
         type: boolean
         default: true
-      force:
-        required: false
-        type: boolean
-        default: false
       promote:
         description: "Promote this build to beta/latest after publishing versioned platform artifacts."
         required: false
         type: boolean
         default: true
-      release_version:
-        required: false
-        type: string
-        default: ""
-      shell_version:
-        required: false
-        type: string
-        default: ""
-      closure_version:
-        required: false
-        type: string
-        default: ""
       release_origin:
         required: false
         type: string
@@ -331,11 +295,7 @@ jobs:
       enable_win_x64: ${{ inputs.enable_win_x64 }}
       enable_mac_x64: ${{ inputs.enable_mac_x64 }}
       publish: ${{ inputs.publish }}
-      force: ${{ inputs.force }}
       promote: ${{ inputs.promote }}
-      release_version: ${{ inputs.release_version }}
-      shell_version: ${{ inputs.shell_version }}
-      closure_version: ${{ inputs.closure_version }}
       release_origin: ${{ inputs.release_origin }}
       release_public_origin: ${{ inputs.release_public_origin }}
       ref: ${{ inputs.ref }}

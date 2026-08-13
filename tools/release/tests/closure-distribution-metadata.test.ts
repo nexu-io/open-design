@@ -22,7 +22,7 @@ function fixture(publicOrigin = "https://releases.open-design.test"): ReturnType
     digest: value,
     mediaType: "application/zip",
     size: 1,
-    url: `${publicOrigin}/beta/blobs/${value.slice("sha256:".length)}`,
+    url: `${publicOrigin}/beta/versions/0.19.0-beta.10/closure/blobs/${value.slice("sha256:".length)}`,
   });
   const draft: ClosureDistributionManifestDraft = {
     blobs: Object.fromEntries([launcher, body, native].map((value) => [value, artifact(value)])),

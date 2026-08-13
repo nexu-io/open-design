@@ -3,11 +3,6 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, relative, sep } from "node:path";
 import {
-  validateClosureCandidateManifest,
-  validateClosureFileInventory,
-  type ClosureCandidateManifest,
-} from "@open-design/closure/protocol";
-import {
   bool,
   contentType,
   githubInfo,
@@ -19,8 +14,14 @@ import {
   writeJson,
 } from "./common.ts";
 import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
-import { getStorageObject, putStorageObject, putStorageObjectWithStatus } from "./s3-upload.ts";
-import { compareReleaseVersions, parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
+import { putImmutableStorageObject } from "./s3-upload.ts";
+import {
+  parseReleaseVersion,
+  releaseChannelDescriptor,
+  releasePlatformManifestObjectKey,
+  releaseShellPrefix,
+  releaseVersionPrefix,
+} from "@open-design/release";
 import {
   releaseParameterMatrixFromEnv,
   signModeForTarget,
@@ -38,6 +39,7 @@ type AssetEntry = {
 
 type ShellBuildArtifact = {
   digest: `sha256:${string}`;
+  path: string;
   size: number;
 };
 
@@ -76,16 +78,6 @@ type TargetConfig = {
   signMode: PlatformSignMode;
 };
 
-type ClosurePublication = {
-  assets: {
-    archive: AssetEntry;
-    inventory: AssetEntry;
-    manifest: AssetEntry;
-    provenance: AssetEntry;
-  };
-  manifest: ClosureCandidateManifest;
-};
-
 const target = requiredTarget();
 const releaseChannel = releaseChannelDescriptor(required("RELEASE_CHANNEL")).channel;
 const countedReleaseChannel = releaseChannel === "stable" ? null : releaseChannel;
@@ -97,28 +89,23 @@ const outputsPath = required("RELEASE_OUTPUTS_PATH");
 const assetSuffix = optional("RELEASE_ASSET_SUFFIX");
 const dryRunMode = optional("RELEASE_DRY_RUN_MODE");
 const publishSideEffectsEnabled = optional("RELEASE_PUBLISH_SIDE_EFFECTS", "true") !== "false";
-const versionPrefix = optional("RELEASE_VERSION_PREFIX", `${releaseChannel}/versions/${releaseVersion}${assetSuffix}`);
+const versionPrefix = releaseVersionPrefix(releaseChannel, releaseVersion);
+const requestedVersionPrefix = optional("RELEASE_VERSION_PREFIX");
+if (requestedVersionPrefix.length > 0 && requestedVersionPrefix !== versionPrefix) {
+  throw new Error(`RELEASE_VERSION_PREFIX must be ${versionPrefix}; got ${requestedVersionPrefix}`);
+}
 const shellEnabled = bool("RELEASE_SHELL_ENABLED");
 const shellBuildJsonPath = optional("RELEASE_SHELL_BUILD_JSON_PATH");
 const latestPrefix = `${releaseChannel}/latest`;
 const reportRoot = optional("RELEASE_REPORT_DIR");
 const reportZipPath = optional("RELEASE_REPORT_ZIP_PATH");
 const versionLockRequired = bool("RELEASE_VERSION_LOCK_REQUIRED");
-const closureEnabled = bool("RELEASE_CLOSURE_ENABLED");
-const closureVersion = optional("RELEASE_CLOSURE_VERSION", releaseVersion);
 const versionLockKey = optional(
   "RELEASE_VERSION_LOCK_KEY",
   countedReleaseChannel == null ? "" : versionLockObjectKey(releaseVersion, countedReleaseChannel),
 );
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
 const parameterMatrix = releaseParameterMatrixFromEnv();
-
-function shellPlatformTarget(): string {
-  if (target === "mac_arm64") return "darwin-arm64";
-  if (target === "mac_x64") return "darwin-x64";
-  if (target === "win_x64") return "win32-x64";
-  throw new Error(`Shell publication is not supported for ${target}`);
-}
 
 function readShellBuildReport(): ShellBuildReport | null {
   if (!shellEnabled) return null;
@@ -165,10 +152,15 @@ function readShellBuildReport(): ShellBuildReport | null {
 const shellBuild = readShellBuildReport();
 const shellVersionPrefix = shellBuild == null
   ? null
-  : optional(
-      "RELEASE_SHELL_VERSION_PREFIX",
-      `${releaseChannel}/shells/${shellBuild.shell.type}/versions/${shellBuild.shell.version}/${shellPlatformTarget()}`,
-    );
+  : releaseShellPrefix(releaseChannel, releaseVersion, target, shellBuild.shell.type);
+const requestedShellVersionPrefix = optional("RELEASE_SHELL_VERSION_PREFIX");
+if (
+  shellVersionPrefix != null
+  && requestedShellVersionPrefix.length > 0
+  && requestedShellVersionPrefix !== shellVersionPrefix
+) {
+  throw new Error(`RELEASE_SHELL_VERSION_PREFIX must be ${shellVersionPrefix}; got ${requestedShellVersionPrefix}`);
+}
 const artifactPrefix = shellVersionPrefix ?? versionPrefix;
 
 if (versionLockRequired) {
@@ -202,121 +194,6 @@ function sha256Digest(path: string): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(readFileSync(path)).digest("hex")}`;
 }
 
-function closureTarget(): "darwin-arm64" | "win32-x64" | null {
-  if (target === "mac_arm64") return "darwin-arm64";
-  if (target === "win_x64") return "win32-x64";
-  return null;
-}
-
-function closureAssetBase(): string {
-  if (target === "mac_arm64") return `open-design-${closureVersion}-mac-arm64-closure`;
-  if (target === "win_x64") return `open-design-${closureVersion}-win-x64-closure`;
-  throw new Error(`Closure publication is not supported for ${target}`);
-}
-
-function closurePublication(): {
-  assetNames: string[];
-  publication: ClosurePublication;
-  versionPrefix: string;
-} | null {
-  if (!closureEnabled) return null;
-  const expectedPlatform = closureTarget();
-  if (expectedPlatform == null) {
-    throw new Error(`RELEASE_CLOSURE_ENABLED is not supported for ${target}`);
-  }
-  parseReleaseVersion(closureVersion, releaseChannel);
-  const closureVersionPrefix = optional(
-    "RELEASE_CLOSURE_VERSION_PREFIX",
-    `${releaseChannel}/closure/${expectedPlatform}/versions/${closureVersion}`,
-  );
-
-  const base = closureAssetBase();
-  const names = {
-    archive: `${base}.zip`,
-    inventory: `${base}-inventory.json`,
-    manifest: `${base}-manifest.json`,
-    provenance: `${base}-provenance.json`,
-  } as const;
-  const assets = {
-    archive: assetEntry(names.archive, closureVersionPrefix),
-    inventory: assetEntry(names.inventory, closureVersionPrefix),
-    manifest: assetEntry(names.manifest, closureVersionPrefix),
-    provenance: assetEntry(names.provenance, closureVersionPrefix),
-  };
-  const manifest = validateClosureCandidateManifest(
-    JSON.parse(readFileSync(join(releaseAssetsDir, names.manifest), "utf8")) as unknown,
-  );
-  const inventory = validateClosureFileInventory(
-    JSON.parse(readFileSync(join(releaseAssetsDir, names.inventory), "utf8")) as unknown,
-  );
-  const inventoryDigest = `sha256:${createHash("sha256").update(JSON.stringify(inventory.files)).digest("hex")}`;
-  const archiveDigest = sha256Digest(join(releaseAssetsDir, names.archive));
-  if (manifest.identity.channel !== releaseChannel) {
-    throw new Error(`Closure channel ${manifest.identity.channel} does not match release channel ${releaseChannel}`);
-  }
-  if (manifest.identity.version !== closureVersion) {
-    throw new Error(`Closure version ${manifest.identity.version} does not match requested Closure version ${closureVersion}`);
-  }
-  if (manifest.identity.platform !== expectedPlatform) {
-    throw new Error(`Closure platform ${manifest.identity.platform} does not match release target ${target}`);
-  }
-  if (manifest.artifact.url !== assets.archive.url) {
-    throw new Error(`Closure archive URL ${manifest.artifact.url} does not match published URL ${assets.archive.url}`);
-  }
-  if (manifest.artifact.size !== assets.archive.size) {
-    throw new Error(`Closure archive size ${manifest.artifact.size} does not match published size ${assets.archive.size}`);
-  }
-  if (manifest.artifact.digest !== archiveDigest || manifest.identity.digest !== archiveDigest) {
-    throw new Error(`Closure archive digest does not match ${names.archive}`);
-  }
-  if (manifest.artifact.inventoryDigest !== inventoryDigest) {
-    throw new Error(`Closure inventory digest does not match ${names.inventory}`);
-  }
-
-  if (shellBuild != null) {
-    const shellFloor = manifest.compatibility.shell[shellBuild.shell.type]?.version.min;
-    if (shellFloor == null) {
-      throw new Error(`Closure does not declare a ${shellBuild.shell.type} Shell compatibility floor`);
-    }
-    parseReleaseVersion(shellFloor, releaseChannel);
-    if (compareReleaseVersions(shellFloor, shellBuild.shell.version, releaseChannel) > 0) {
-      throw new Error(
-        `Closure ${shellBuild.shell.type} minVersion ${shellFloor} exceeds selected Shell ${shellBuild.shell.version}`,
-      );
-    }
-  }
-
-  const provenance = JSON.parse(
-    readFileSync(join(releaseAssetsDir, names.provenance), "utf8"),
-  ) as Record<string, unknown>;
-  const provenanceArtifact = provenance.artifact as Record<string, unknown> | null | undefined;
-  const provenanceBuild = provenance.build as Record<string, unknown> | null | undefined;
-  if (
-    provenance.schemaVersion !== 1
-    || provenance.channel !== releaseChannel
-    || provenance.version !== closureVersion
-    || provenance.platform !== expectedPlatform
-    || provenanceArtifact?.digest !== archiveDigest
-    || provenanceArtifact?.inventoryDigest !== inventoryDigest
-    || provenanceArtifact?.size !== assets.archive.size
-    || (shellBuild != null && provenanceBuild?.shellDepsDigest !== shellBuild.shell.depsDigest)
-  ) {
-    throw new Error(`Closure provenance does not match ${target} release identity`);
-  }
-
-  return {
-    assetNames: [
-      names.archive,
-      `${names.archive}.sha256`,
-      names.inventory,
-      names.manifest,
-      names.provenance,
-    ],
-    publication: { assets, manifest },
-    versionPrefix: closureVersionPrefix,
-  };
-}
-
 function normalizePath(value: string): string {
   return value.split(sep).join("/");
 }
@@ -347,42 +224,19 @@ function createReportZip(root: string, zipPath: string): void {
   if (result.status !== 0) throw new Error(`zip failed with exit code ${result.status}`);
 }
 
-async function upload(path: string, objectKey: string, cacheControl: string): Promise<void> {
-  if (!publishSideEffectsEnabled) {
-    console.log(`[dry-run:${dryRunMode || "plan"}] would upload ${path} to ${objectKey}`);
-    return;
-  }
-  if (storage == null) throw new Error("storage config is required to upload release assets");
-  await putStorageObject({
-    ...storage,
-    bodyPath: path,
-    cacheControl,
-    contentType: contentType(path),
-    objectKey,
-  });
-}
-
 async function uploadImmutable(path: string, objectKey: string): Promise<void> {
   if (!publishSideEffectsEnabled) {
     console.log(`[dry-run:${dryRunMode || "plan"}] would upload immutable ${path} to ${objectKey}`);
     return;
   }
   if (storage == null) throw new Error("storage config is required to upload immutable release assets");
-  const result = await putStorageObjectWithStatus({
+  await putImmutableStorageObject({
     ...storage,
     bodyPath: path,
     cacheControl: "public, max-age=31536000, immutable",
     contentType: contentType(path),
-    headers: { "if-none-match": "*" },
     objectKey,
   });
-  if (result.ok) return;
-  if (result.status !== 412) throw new Error(`immutable release PUT failed with HTTP ${result.status}: ${result.body}`);
-  const existing = await getStorageObject({ ...storage, objectKey });
-  if (existing == null) throw new Error(`immutable release object disappeared after conflict: ${objectKey}`);
-  if (sha256Digest(path) !== `sha256:${createHash("sha256").update(existing.bytes).digest("hex")}`) {
-    throw new Error(`immutable release object conflicts: ${objectKey}`);
-  }
 }
 
 async function uploadReport(reportDirectory: string): Promise<Record<string, unknown> | null> {
@@ -393,11 +247,11 @@ async function uploadReport(reportDirectory: string): Promise<Record<string, unk
   const reportPrefix = `${versionPrefix}/report/${reportDirectory}`;
   for (const file of files) {
     const relativePath = normalizePath(relative(reportRoot, file));
-    await upload(file, `${reportPrefix}/${relativePath}`, "public, max-age=31536000, immutable");
+    await uploadImmutable(file, `${reportPrefix}/${relativePath}`);
   }
   if (reportZipPath.length > 0) {
     createReportZip(reportRoot, reportZipPath);
-    await upload(reportZipPath, `${reportPrefix}/report.zip`, "public, max-age=31536000, immutable");
+    await uploadImmutable(reportZipPath, `${reportPrefix}/report.zip`);
   }
   const reportJsonPath = join(reportRoot, "report.json");
   const reportJson = existsSync(reportJsonPath) && statSync(reportJsonPath).isFile()
@@ -495,7 +349,6 @@ function targetConfig(): TargetConfig {
 }
 
 const config = targetConfig();
-const closure = closurePublication();
 const preparedShellArtifacts = { ...config.artifacts };
 if (shellBuild != null) {
   for (const [name, artifact] of Object.entries(config.artifacts)) {
@@ -517,14 +370,15 @@ if (shellBuild != null) {
         || typeof remote.objectKey !== "string"
         || typeof remote.url !== "string"
       ) throw new Error(`Shell build resolution ${name} does not match prepared release asset`);
-      config.artifacts[name] = {
-        contentType: remote.contentType,
-        digest: remote.digest,
-        name: remote.name,
-        size: remote.size,
-        url: remote.url,
-      };
     }
+    const publishedName = basename(built.path);
+    config.artifacts[name] = {
+      contentType: contentType(publishedName),
+      digest: built.digest,
+      name: publishedName,
+      size: built.size,
+      url: publicUrl(publicOrigin, artifactPrefix, publishedName),
+    };
   }
 }
 
@@ -551,35 +405,32 @@ function prepareResolvedShellFeed(): void {
 }
 
 prepareResolvedShellFeed();
-if (shellBuild?.resolution == null) {
+if (shellBuild == null) {
   for (const name of config.assetNames) {
-    await upload(join(releaseAssetsDir, name), `${artifactPrefix}/${name}`, "public, max-age=31536000, immutable");
+    await uploadImmutable(join(releaseAssetsDir, name), `${artifactPrefix}/${name}`);
   }
-} else if (config.feed != null) {
-  await uploadImmutable(
-    join(releaseAssetsDir, config.feed.name),
-    `${artifactPrefix}/${config.feed.name}`,
-  );
-}
-if (closure != null) {
-  for (const name of closure.assetNames) {
-    await upload(
-      join(releaseAssetsDir, name),
-      `${closure.versionPrefix}/${name}`,
-      "public, max-age=31536000, immutable",
+} else {
+  for (const [kind, artifact] of Object.entries(config.artifacts)) {
+    const built = shellBuild.artifacts[kind];
+    if (built == null) throw new Error(`Shell build report is missing ${kind}`);
+    await uploadImmutable(built.path, `${artifactPrefix}/${artifact.name}`);
+  }
+  if (config.feed != null) {
+    await uploadImmutable(
+      join(releaseAssetsDir, config.feed.name),
+      `${artifactPrefix}/${config.feed.name}`,
     );
   }
 }
-
 const report = config.reportDirectory == null ? null : await uploadReport(config.reportDirectory);
-const versionManifestUrl = publicUrl(publicOrigin, versionPrefix, `platforms/${target}.json`);
+const versionManifestKey = releasePlatformManifestObjectKey(releaseChannel, releaseVersion, target);
+const versionManifestUrl = publicUrl(publicOrigin, "", versionManifestKey);
 const latestManifestUrl = publicUrl(publicOrigin, latestPrefix, `platforms/${target}.json`);
 const manifest = {
   amrProfile: optional("OPEN_DESIGN_AMR_PROFILE"),
   arch: config.arch,
   artifacts: config.artifacts,
   channel: releaseChannel,
-  ...(closure == null ? {} : { closure: closure.publication }),
   enabled: true,
   feed: config.feed,
   generatedAt: new Date().toISOString(),
@@ -625,7 +476,7 @@ const manifest = {
 mkdirSync(manifestDir, { recursive: true });
 const manifestPath = join(manifestDir, `${target}.json`);
 writeJson(manifestPath, manifest);
-await upload(manifestPath, `${versionPrefix}/platforms/${target}.json`, "public, max-age=31536000, immutable");
+await uploadImmutable(manifestPath, versionManifestKey);
 
 const outputs: Record<string, string> = {
   platform_latest_manifest_url: latestManifestUrl,
@@ -635,13 +486,6 @@ const outputs: Record<string, string> = {
 };
 for (const [artifactName, artifact] of Object.entries(config.artifacts)) {
   outputs[`${artifactName}_url`] = artifact.url;
-}
-if (closure != null) {
-  for (const [artifactName, artifact] of Object.entries(closure.publication.assets)) {
-    outputs[`closure_${artifactName}_url`] = artifact.url;
-  }
-  outputs.closure_version = closureVersion;
-  outputs.closure_version_prefix = closure.versionPrefix;
 }
 if (shellBuild != null && shellVersionPrefix != null) {
   outputs.shell_build_digest = shellBuild.shell.buildDigest;

@@ -18,15 +18,15 @@ import {
 
 const publicOrigin = "https://releases.example";
 const releaseVersion = "0.19.0-beta.27";
-const closureVersion = "0.19.0-beta.31";
+const closureVersion = releaseVersion;
 const commit = "0123456789abcdef0123456789abcdef01234567";
 const namespace = "release-beta-win";
 const temporaryRoots: string[] = [];
 
 function fixture() {
   const installerBytes = Buffer.from("unsigned public NSIS installer");
-  const installerUrl = `${publicOrigin}/beta/shells/electron/versions/0.19.0-beta.4/win32-x64/Open%20Design.exe`;
-  const platformUrl = `${publicOrigin}/beta/versions/${releaseVersion}.unsigned/platforms/win_x64.json`;
+  const installerUrl = `${publicOrigin}/beta/versions/${releaseVersion}/shells/electron/win_x64/Open%20Design.exe`;
+  const platformUrl = `${publicOrigin}/beta/versions/${releaseVersion}/platforms/win_x64.json`;
   const metadataUrl = `${publicOrigin}/beta/versions/${releaseVersion}/metadata.json`;
   const blob = (contents: string) => {
     const bytes = Buffer.from(contents);
@@ -35,7 +35,7 @@ function fixture() {
       digest,
       mediaType: "application/zip",
       size: bytes.byteLength,
-      url: `${publicOrigin}/beta/blobs/${digest.slice("sha256:".length)}`,
+      url: `${publicOrigin}/beta/versions/${closureVersion}/closure/blobs/${digest.slice("sha256:".length)}`,
     };
   };
   const launcher = blob("public Closure launcher");
@@ -90,13 +90,14 @@ function fixture() {
     platformKey: "win_x64",
     r2: {
       versionManifestUrl: platformUrl,
-      versionPrefix: `beta/versions/${releaseVersion}.unsigned`,
+      versionPrefix: `beta/versions/${releaseVersion}`,
     },
     releaseVersion,
     status: "published",
   };
   const metadata = {
     closure,
+    generatedAt: "2026-08-14T00:00:00.000Z",
     github: { commit },
     r2: { versionPrefix: `beta/versions/${releaseVersion}` },
     releaseState: "complete",
@@ -139,8 +140,8 @@ describe("public Windows release acceptance", () => {
       publicOrigin,
       releaseVersion,
     });
-    expect(await readFile(plan.installer.path)).toEqual(source.installerBytes);
-    expect(JSON.parse(await readFile(buildJsonPath, "utf8"))).toEqual({ installerPath: plan.installer.path });
+    expect(await readFile(plan.artifact.path)).toEqual(source.installerBytes);
+    expect(JSON.parse(await readFile(buildJsonPath, "utf8"))).toEqual({ installerPath: plan.artifact.path });
 
     const summaryPath = join(root, "summary.json");
     const suiteResultPath = join(root, "suite-result.json");
@@ -203,7 +204,7 @@ describe("public Windows release acceptance", () => {
       publicOrigin,
       releaseVersion,
     });
-    await writeFile(plan.installer.path, "tampered");
+    await writeFile(plan.artifact.path, "tampered");
     const summaryPath = join(root, "summary.json");
     await writeFile(summaryPath, `${JSON.stringify({
       closureBinding: {

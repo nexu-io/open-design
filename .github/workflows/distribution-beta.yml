@@ -19,27 +19,11 @@ on:
         required: false
         type: boolean
         default: true
-      force:
-        required: false
-        type: boolean
-        default: false
       promote:
         description: "Promote this build to beta/latest after publishing versioned platform artifacts."
         required: false
         type: boolean
         default: true
-      release_version:
-        required: false
-        type: string
-        default: ""
-      shell_version:
-        required: false
-        type: string
-        default: ""
-      closure_version:
-        required: false
-        type: string
-        default: ""
       release_origin:
         required: false
         type: string
@@ -212,17 +196,17 @@ jobs:
       OPEN_DESIGN_BETA_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
       OPEN_DESIGN_STABLE_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/stable/latest/metadata.json
     outputs:
-      asset_version_suffix: ${{ steps.beta.outputs.asset_version_suffix }}
       base_version: ${{ steps.beta.outputs.base_version }}
-      beta_version: ${{ inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
-      shell_version: ${{ inputs.shell_version != '' && inputs.shell_version || inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
-      closure_version: ${{ inputs.closure_version != '' && inputs.closure_version || inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
+      beta_version: ${{ steps.reservation.outputs.release_version || steps.beta.outputs.beta_version }}
+      shell_version: ${{ steps.reservation.outputs.release_version || steps.beta.outputs.beta_version }}
+      closure_version: ${{ steps.reservation.outputs.release_version || steps.beta.outputs.beta_version }}
       branch: ${{ steps.identity.outputs.branch }}
       commit: ${{ steps.identity.outputs.commit }}
       previous_commit: ${{ steps.prev.outputs.previous_commit }}
       promote: ${{ inputs.promote }}
       release_name: ${{ steps.beta.outputs.release_name }}
-      state_source: ${{ steps.beta.outputs.state_source }}
+      state_source: ${{ steps.reservation.outputs.state_source || steps.beta.outputs.state_source }}
+      version_lock_key: ${{ steps.reservation.outputs.version_lock_key }}
     steps:
       - name: Validate checkout ref shape
         env:
@@ -329,6 +313,10 @@ jobs:
             echo "release-beta publish requires mac_x64_sign_mode=notarized" >&2
             exit 1
           fi
+          if [ "${{ inputs.publish }}" = "true" ] && [ "${{ inputs.promote }}" = "true" ] && { [ "${{ inputs.enable_mac_arm64 }}" != "true" ] || [ "${{ inputs.enable_mac_x64 }}" != "true" ] || [ "${{ inputs.enable_win_x64 }}" != "true" ]; }; then
+            echo "release-beta promotion requires mac_arm64, mac_x64, and win_x64" >&2
+            exit 1
+          fi
 
       - name: Validate R2 release access
         if: ${{ inputs.publish }}
@@ -349,34 +337,45 @@ jobs:
         env:
           GITHUB_SHA: ${{ env.BUILT_SHA }}
           GITHUB_REF_NAME: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
-          OPEN_DESIGN_RELEASE_FORCE: ${{ inputs.force && '1' || '' }}
         run: pnpm exec tools-release prepare beta
 
-      - name: Require synchronized Standalone release identity
+      - name: Reserve immutable beta version
+        id: reservation
+        if: ${{ inputs.publish }}
         env:
-          RESOLVED_CLOSURE_VERSION: ${{ inputs.closure_version != '' && inputs.closure_version || inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
-          RESOLVED_RELEASE_VERSION: ${{ inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
-        run: |
-          set -euo pipefail
-          if [ "$RESOLVED_CLOSURE_VERSION" != "$RESOLVED_RELEASE_VERSION" ]; then
-            echo "The 0.19 Shell + Standalone epoch requires one synchronized release version; got release=$RESOLVED_RELEASE_VERSION standalone=$RESOLVED_CLOSURE_VERSION" >&2
-            exit 1
-          fi
+          BASE_VERSION: ${{ steps.beta.outputs.base_version }}
+          GITHUB_SHA: ${{ env.BUILT_SHA }}
+          RELEASE_CHANNEL: beta
+          RELEASE_LANE: beta
+          RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
+          RELEASE_COMMIT: ${{ env.BUILT_SHA }}
+          RELEASE_PUBLIC_ORIGIN: ${{ env.RELEASE_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_VERSION_CANDIDATE: ${{ steps.beta.outputs.beta_version }}
+          RELEASE_VERSION_MANUAL_OVERRIDE: "false"
+        run: pnpm exec tools-release reserve-version beta
 
       - name: Build shared Standalone Closure
         uses: ./.github/actions/release/closure/shared
         env:
+          RELEASE_COMMIT: ${{ env.BUILT_SHA }}
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
           RELEASE_STORAGE_REGION: auto
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_VERSION_LOCK_KEY: ${{ steps.reservation.outputs.version_lock_key }}
+          RELEASE_VERSION_LOCK_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
         with:
           channel: beta
           min-shell-version: ${{ env.CLOSURE_MIN_SHELL_VERSION }}
           publish-enabled: ${{ inputs.publish }}
-          release-version: ${{ inputs.closure_version != '' && inputs.closure_version || inputs.release_version != '' && inputs.release_version || steps.beta.outputs.beta_version }}
+          release-version: ${{ steps.reservation.outputs.release_version || steps.beta.outputs.beta_version }}
 
   build_mac_arm64:
     name: Build beta mac_arm64
@@ -400,6 +399,8 @@ jobs:
       CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
       OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+      RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
+      RELEASE_VERSION_LOCK_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -448,6 +449,8 @@ jobs:
       CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
       OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+      RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
+      RELEASE_VERSION_LOCK_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -492,6 +495,8 @@ jobs:
       OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
       OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+      RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
+      RELEASE_VERSION_LOCK_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -643,12 +648,10 @@ jobs:
           win_x64_result: ${{ needs.build_win_x64.result }}
         env:
           BASE_VERSION: ${{ needs.metadata.outputs.base_version }}
-          RELEASE_ASSET_SUFFIX: ${{ needs.metadata.outputs.asset_version_suffix }}
-          RELEASE_ACTIVATE_LATEST: ${{ inputs.enable_win_x64 && 'false' || 'true' }}
+          RELEASE_ACTIVATE_LATEST: "false"
           RELEASE_CHANNEL: beta
           RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH: ${{ runner.temp }}/release-closure/closure-distribution.json
           RELEASE_CLOSURE_DISTRIBUTION_REQUIRED: "true"
-          RELEASE_CLOSURE_REQUIRED: "false"
           RELEASE_SHELL_REQUIRED: "true"
           RELEASE_INSTALLATION_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}
           RELEASE_INSTALLATION_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
@@ -656,6 +659,8 @@ jobs:
           RELEASE_INSTALLATION_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_LEGACY_INSTALLATION_MIGRATION_REQUIRED: "true"
           RELEASE_LATEST_CAS_REQUIRED: "true"
+          RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
+          RELEASE_VERSION_LOCK_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
@@ -666,24 +671,8 @@ jobs:
           RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
 
-      - name: Observe directly activated beta public feed
-        if: ${{ !inputs.enable_win_x64 }}
-        env:
-          RELEASE_LATEST_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
-          RELEASE_METADATA_URL: ${{ steps.distribute.outputs.version_metadata_url }}
-          RELEASE_PUBLIC_FEED_REPORT_PATH: ${{ runner.temp }}/release-metadata/public-feed-observation.json
-          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-          RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
-        run: pnpm exec tools-release observe-public-feed
-
-      - name: Cleanup workflow artifacts
-        if: ${{ success() && !inputs.enable_win_x64 && steps.distribute.outputs.release_state == 'complete' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/release/github/cleanup-artifacts.sh
-
-  public_win_x64_acceptance:
-    name: Accept public win_x64 beta artifacts
+  public_acceptance:
+    name: Accept public ${{ matrix.target }} beta artifacts
     needs:
       - metadata
       - publish
@@ -691,18 +680,37 @@ jobs:
       ${{
         !cancelled() &&
         inputs.publish &&
-        inputs.enable_win_x64 &&
         needs.metadata.result == 'success' &&
         needs.publish.result == 'success' &&
         needs.publish.outputs.release_state == 'complete'
       }}
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact_dir: dmg
+            namespace: release-beta
+            os: mac
+            runner: macos-14
+            target: mac_arm64
+          - artifact_dir: dmg
+            namespace: release-beta-x64
+            os: mac
+            runner: macos-15-intel
+            target: mac_x64
+          - artifact_dir: builder
+            namespace: release-beta-win
+            os: win
+            runner: windows-latest
+            target: win_x64
+    runs-on: ${{ matrix.runner }}
     env:
       GITHUB_SHA: ${{ needs.metadata.outputs.commit }}
       OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
-      RELEASE_NAMESPACE: release-beta-win
+      RELEASE_NAMESPACE: ${{ matrix.namespace }}
       RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      RELEASE_TARGET: ${{ matrix.target }}
       RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
     steps:
       - name: Checkout accepted commit
@@ -725,55 +733,58 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Re-download immutable public win_x64 artifacts
+      - name: Re-download immutable public ${{ matrix.target }} artifacts
         env:
           RELEASE_METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}
-          RELEASE_PUBLIC_ACCEPTANCE_BUILD_JSON_PATH: ${{ runner.temp }}\public-feedback\build.json
-          RELEASE_PUBLIC_ACCEPTANCE_DOWNLOAD_DIR: ${{ runner.temp }}\public-feedback\tools-pack\out\win\namespaces\release-beta-win\builder
-          RELEASE_PUBLIC_ACCEPTANCE_PLAN_PATH: ${{ runner.temp }}\public-feedback\plan.json
+          RELEASE_PUBLIC_ACCEPTANCE_BUILD_JSON_PATH: ${{ runner.temp }}/public-feedback/build.json
+          RELEASE_PUBLIC_ACCEPTANCE_DOWNLOAD_DIR: ${{ runner.temp }}/public-feedback/tools-pack/out/${{ matrix.os }}/namespaces/${{ matrix.namespace }}/${{ matrix.artifact_dir }}
+          RELEASE_PUBLIC_ACCEPTANCE_PLAN_PATH: ${{ runner.temp }}/public-feedback/plan.json
         run: pnpm exec tools-release prepare-public-acceptance
 
-      - name: Smoke immutable public win_x64 install and online Closure cold start
+      - name: Smoke immutable public ${{ matrix.target }} install and online Closure cold start
         working-directory: e2e
         env:
-          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\public-feedback\build.json
-          OD_PACKAGED_E2E_NAMESPACE: release-beta-win
+          OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/public-feedback/build.json
+          OD_PACKAGED_E2E_MAC: ${{ matrix.os == 'mac' && '1' || '' }}
+          OD_PACKAGED_E2E_MAC_SMOKE_LANES: shell
+          OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: core
+          OD_PACKAGED_E2E_NAMESPACE: ${{ matrix.namespace }}
           OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
           OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
-          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}\public-feedback\report
+          OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/public-feedback/report
           OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: public-immutable-artifacts
-          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}\public-feedback\tools-pack
-          OD_PACKAGED_E2E_WIN: "1"
+          OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/public-feedback/tools-pack
+          OD_PACKAGED_E2E_WIN: ${{ matrix.os == 'win' && '1' || '' }}
           OD_PACKAGED_E2E_WIN_SMOKE_LANES: shell
           OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core
           OD_STANDALONE_METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}
           OD_UPDATE_METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}
-        run: pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
+        run: pnpm exec tsx scripts/release-smoke.ts ${{ matrix.os }} specs/${{ matrix.os }}.spec.ts
 
-      - name: Issue public win_x64 acceptance credential
+      - name: Issue public ${{ matrix.target }} acceptance credential
         env:
-          RELEASE_PUBLIC_ACCEPTANCE_CREDENTIAL_PATH: ${{ runner.temp }}\public-feedback\win_x64.json
-          RELEASE_PUBLIC_ACCEPTANCE_PLAN_PATH: ${{ runner.temp }}\public-feedback\plan.json
-          RELEASE_PUBLIC_ACCEPTANCE_SMOKE_SUMMARY_PATH: ${{ runner.temp }}\public-feedback\report\summary.json
-          RELEASE_PUBLIC_ACCEPTANCE_SUITE_RESULT_PATH: ${{ runner.temp }}\public-feedback\report\suite-result.json
+          RELEASE_PUBLIC_ACCEPTANCE_CREDENTIAL_PATH: ${{ runner.temp }}/public-feedback/${{ matrix.target }}.json
+          RELEASE_PUBLIC_ACCEPTANCE_PLAN_PATH: ${{ runner.temp }}/public-feedback/plan.json
+          RELEASE_PUBLIC_ACCEPTANCE_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/public-feedback/report/summary.json
+          RELEASE_PUBLIC_ACCEPTANCE_SUITE_RESULT_PATH: ${{ runner.temp }}/public-feedback/report/suite-result.json
         run: pnpm exec tools-release issue-public-acceptance
 
-      - name: Upload public win_x64 acceptance credential
+      - name: Upload public ${{ matrix.target }} acceptance credential
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-beta-win-x64-public-acceptance
-          path: ${{ runner.temp }}\public-feedback\win_x64.json
+          name: open-design-beta-${{ matrix.target }}-public-acceptance
+          path: ${{ runner.temp }}/public-feedback/${{ matrix.target }}.json
           if-no-files-found: error
 
-      - name: Upload public win_x64 acceptance evidence
+      - name: Upload public ${{ matrix.target }} acceptance evidence
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: open-design-beta-win-x64-public-acceptance-evidence
+          name: open-design-beta-${{ matrix.target }}-public-acceptance-evidence
           path: |
-            ${{ runner.temp }}\public-feedback\build.json
-            ${{ runner.temp }}\public-feedback\plan.json
-            ${{ runner.temp }}\public-feedback\report
+            ${{ runner.temp }}/public-feedback/build.json
+            ${{ runner.temp }}/public-feedback/plan.json
+            ${{ runner.temp }}/public-feedback/report
           if-no-files-found: warn
 
   activate:
@@ -781,15 +792,14 @@ jobs:
     needs:
       - metadata
       - publish
-      - public_win_x64_acceptance
+      - public_acceptance
     if: >-
       ${{
         !cancelled() &&
         inputs.publish &&
-        inputs.enable_win_x64 &&
         needs.metadata.result == 'success' &&
         needs.publish.result == 'success' &&
-        needs.public_win_x64_acceptance.result == 'success'
+        needs.public_acceptance.result == 'success'
       }}
     runs-on: ubuntu-latest
     env:
@@ -817,17 +827,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download public win_x64 acceptance credential
+      - name: Download all public acceptance credentials
         uses: actions/download-artifact@v8
         with:
-          name: open-design-beta-win-x64-public-acceptance
+          pattern: open-design-beta-*-public-acceptance
+          merge-multiple: true
           path: ${{ runner.temp }}/public-acceptance
 
       - name: Activate accepted immutable beta metadata with CAS
         env:
           RELEASE_ACTIVATION_WORK_DIR: ${{ runner.temp }}/release-activation
           RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-activation/outputs.json
-          RELEASE_PUBLIC_ACCEPTANCE_CREDENTIAL_PATH: ${{ runner.temp }}/public-acceptance/win_x64.json
+          RELEASE_PUBLIC_ACCEPTANCE_CREDENTIAL_DIR: ${{ runner.temp }}/public-acceptance
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
           RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
           RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -849,7 +860,7 @@ jobs:
             echo ""
             echo "- version: \`${{ needs.metadata.outputs.beta_version }}\`"
             echo "- commit: \`${{ needs.metadata.outputs.commit }}\`"
-            echo "- Windows artifact smoke: \`success\`"
+            echo "- mac_arm64/mac_x64/win_x64 public artifact smoke: \`success\`"
             echo "- latest CAS and public readback: \`success\`"
           } >> "$GITHUB_STEP_SUMMARY"
 

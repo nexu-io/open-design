@@ -1,7 +1,7 @@
 import { required } from "./common.ts";
-import { issuePublicWindowsAcceptance } from "./public-acceptance.ts";
+import { issuePublicAcceptance } from "./public-acceptance.ts";
 
-const result = await issuePublicWindowsAcceptance({
+const result = await issuePublicAcceptance({
   credentialPath: required("RELEASE_PUBLIC_ACCEPTANCE_CREDENTIAL_PATH"),
   planPath: required("RELEASE_PUBLIC_ACCEPTANCE_PLAN_PATH"),
   smokeSummaryPath: required("RELEASE_PUBLIC_ACCEPTANCE_SMOKE_SUMMARY_PATH"),

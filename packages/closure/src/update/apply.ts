@@ -351,9 +351,12 @@ async function ensureDistributionBlob(input: {
       }
     }
 
-    const configuredUrls = (input.repository?.remoteOrigins ?? []).map(
-      (origin) => `${origin}/${input.paths.channel}/blobs/${digest}`,
-    );
+    const artifactPath = new URL(input.artifact.url).pathname.replace(/^\/+/, "");
+    const configuredUrls = (input.repository?.remoteOrigins ?? []).map((origin) => {
+      const base = new URL(origin);
+      if (!base.pathname.endsWith("/")) base.pathname += "/";
+      return new URL(artifactPath, base).toString();
+    });
     const urls = [...new Set([...configuredUrls, input.artifact.url])];
     let lastError: unknown = null;
     for (const url of urls) {

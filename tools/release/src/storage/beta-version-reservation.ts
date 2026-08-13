@@ -2,7 +2,11 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { githubInfo, optional, publicUrl, required, storageConfigFromEnv, writeJson } from "./common.ts";
 import { getStorageObjectText, putStorageObjectWithStatus, type StorageConfig } from "./s3-upload.ts";
-import { parseCountedReleaseVersion, type CountedReleaseChannel } from "@open-design/release";
+import {
+  parseCountedReleaseVersion,
+  releaseVersionLockObjectKey,
+  type CountedReleaseChannel,
+} from "@open-design/release";
 
 export type CountedVersionReservation = {
   baseVersion: string;
@@ -46,13 +50,14 @@ export function parseBetaVersion(value: string): { baseVersion: string; betaNumb
 }
 
 export function versionLockObjectKey(releaseVersion: string, channel: CountedReleaseChannel = "beta"): string {
-  return `${channel}/versions/${releaseVersion}/version.lock.json`;
+  return releaseVersionLockObjectKey(channel, releaseVersion);
 }
 
 function sameOwner(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
   return left.repository === right.repository &&
     left.workflow === right.workflow &&
     left.runId === right.runId &&
+    left.runAttempt === right.runAttempt &&
     left.commit === right.commit;
 }
 

@@ -125,7 +125,7 @@ describe("tools-pack layered Closure producer", () => {
     expect(merged.required.body.blob).toBe(shared.body.artifact.digest);
     expect(merged.resources[0]?.blob).toBe(shared.resources[0]?.artifact.digest);
     expect(Object.values(merged.blobs).every((blob) => (
-      blob.url === `https://releases.open-design.ai/beta/blobs/${blob.digest.slice("sha256:".length)}`
+      blob.url === `https://releases.open-design.ai/beta/versions/0.19.0-beta.10/closure/blobs/${blob.digest.slice("sha256:".length)}`
     ))).toBe(true);
   });
 

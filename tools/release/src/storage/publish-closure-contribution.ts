@@ -7,10 +7,16 @@ import {
   validateClosureDistributionTargetContribution,
   type ClosureDistributionBlob,
 } from "@open-design/closure/protocol";
-import { parseReleaseVersion, releaseChannelDescriptor, type ReleaseChannel } from "@open-design/release";
+import {
+  parseReleaseVersion,
+  releaseChannelDescriptor,
+  releaseClosureBlobObjectKey,
+  type ReleaseChannel,
+} from "@open-design/release";
 
-import { normalizePublicUrl, publicUrl, required, storageConfigFromEnv, writeJson } from "./common.ts";
+import { normalizePublicUrl, optional, publicUrl, required, storageConfigFromEnv, writeJson } from "./common.ts";
 import { getStorageObject, putStorageObjectWithStatus, type StorageConfig } from "./s3-upload.ts";
+import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
 
 type Digest = `sha256:${string}`;
 type ContributionKind = "shared" | "target";
@@ -26,8 +32,13 @@ function sha256(bytes: Buffer): Digest {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
-function expectedBlobUrl(publicOrigin: string, channel: ReleaseChannel, digest: Digest): string {
-  return publicUrl(publicOrigin, `${channel}/blobs`, digest.slice("sha256:".length));
+function expectedBlobUrl(
+  publicOrigin: string,
+  channel: ReleaseChannel,
+  version: string,
+  digest: Digest,
+): string {
+  return publicUrl(publicOrigin, "", releaseClosureBlobObjectKey(channel, version, digest));
 }
 
 function contributionArtifacts(kind: ContributionKind, value: unknown): {
@@ -85,13 +96,18 @@ export function createClosureContributionPublicationPlan(input: Readonly<{
     if (bytes.byteLength !== artifact.size || sha256(bytes) !== artifact.digest) {
       throw new Error(`Closure contribution blob failed local digest verification: ${artifact.digest}`);
     }
-    const expectedUrl = expectedBlobUrl(input.publicOrigin, input.channel, artifact.digest);
+    const expectedUrl = expectedBlobUrl(
+      input.publicOrigin,
+      input.channel,
+      input.version,
+      artifact.digest,
+    );
     if (normalizePublicUrl(artifact.url) !== expectedUrl) {
       throw new Error(`Closure contribution blob URL must be ${expectedUrl}; got ${artifact.url}`);
     }
     return {
       ...artifact,
-      objectKey: `${input.channel}/blobs/${artifact.digest.slice("sha256:".length)}`,
+      objectKey: releaseClosureBlobObjectKey(input.channel, input.version, artifact.digest),
       path,
       url: expectedUrl,
     };
@@ -138,6 +154,11 @@ export async function publishClosureContribution(): Promise<void> {
     version,
   });
   const storage = storageConfigFromEnv();
+  if (process.env.RELEASE_VERSION_LOCK_REQUIRED === "true") {
+    if (channel === "stable") throw new Error("stable releases do not use counted version reservations");
+    const lockKey = optional("RELEASE_VERSION_LOCK_KEY", versionLockObjectKey(version, channel));
+    await assertCurrentVersionReservation(storage, version, lockKey, channel);
+  }
   const published = [];
   for (const blob of plan.blobs) {
     published.push({

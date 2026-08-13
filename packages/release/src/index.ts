@@ -1,6 +1,7 @@
 export type CountedReleaseChannel = "beta" | "prerelease" | "preview";
 export type ReleaseChannel = CountedReleaseChannel | "stable";
 export type ReleasePlatform = "mac" | "macIntel" | "win" | "linux";
+export type ReleaseTarget = "mac_arm64" | "mac_x64" | "win_x64";
 
 export type ParsedReleaseVersion =
   | {
@@ -239,4 +240,70 @@ export function releaseMetadataVersionFields(channel: ReleaseChannel, releaseVer
     [descriptor.counterField]: parsed.number,
     releaseVersion,
   };
+}
+
+function requireReleasePathToken(value: string, label: string): string {
+  if (!/^[a-z][a-z0-9-]*$/.test(value)) {
+    throw new Error(`${label} must be a lowercase release path token; got ${value}`);
+  }
+  return value;
+}
+
+/** Canonical owner of every public byte belonging to one release. */
+export function releaseVersionPrefix(channel: ReleaseChannel, releaseVersion: string): string {
+  parseReleaseVersion(releaseVersion, channel);
+  return `${releaseChannelDescriptor(channel).storagePrefix}/versions/${releaseVersion}`;
+}
+
+export function releasePlatformManifestObjectKey(
+  channel: ReleaseChannel,
+  releaseVersion: string,
+  target: ReleaseTarget,
+): string {
+  return `${releaseVersionPrefix(channel, releaseVersion)}/platforms/${target}.json`;
+}
+
+export function releaseShellPrefix(
+  channel: ReleaseChannel,
+  releaseVersion: string,
+  target: ReleaseTarget,
+  shellType = "electron",
+): string {
+  return `${releaseVersionPrefix(channel, releaseVersion)}/shells/${requireReleasePathToken(shellType, "Shell type")}/${target}`;
+}
+
+export function releaseClosurePrefix(channel: ReleaseChannel, releaseVersion: string): string {
+  return `${releaseVersionPrefix(channel, releaseVersion)}/closure`;
+}
+
+export function releaseClosureBlobObjectKey(
+  channel: ReleaseChannel,
+  releaseVersion: string,
+  digest: `sha256:${string}`,
+): string {
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest)) {
+    throw new Error(`Closure blob digest must be a lowercase sha256 digest; got ${digest}`);
+  }
+  return `${releaseClosurePrefix(channel, releaseVersion)}/blobs/${digest.slice("sha256:".length)}`;
+}
+
+export function releaseClosureManifestObjectKey(channel: ReleaseChannel, releaseVersion: string): string {
+  return `${releaseClosurePrefix(channel, releaseVersion)}/manifest.json`;
+}
+
+export function releaseAcceptanceObjectKey(
+  channel: ReleaseChannel,
+  releaseVersion: string,
+  target: ReleaseTarget,
+): string {
+  return `${releaseVersionPrefix(channel, releaseVersion)}/acceptance/${target}.json`;
+}
+
+export function releaseVersionLockObjectKey(channel: CountedReleaseChannel, releaseVersion: string): string {
+  parseReleaseVersion(releaseVersion, channel);
+  return `${releaseVersionPrefix(channel, releaseVersion)}/version.lock.json`;
+}
+
+export function releaseInventoryObjectKey(channel: ReleaseChannel, releaseVersion: string): string {
+  return `${releaseVersionPrefix(channel, releaseVersion)}/inventory.json`;
 }

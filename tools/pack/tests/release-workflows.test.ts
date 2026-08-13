@@ -72,6 +72,28 @@ describe("release workflows", () => {
     }
   });
 
+  it("keeps beta version ownership automatic and gates activation on three public credentials", async () => {
+    const [ritual, beta, metadataPublication] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/distribution-beta.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../tools/release/src/storage/latest-publication.ts", import.meta.url), "utf8"),
+    ]);
+    const dispatchInputs = sectionBetween(ritual, "  workflow_dispatch:", "  workflow_call:");
+    const callInputs = sectionBetween(ritual, "  workflow_call:", "    outputs:");
+    for (const inputs of [dispatchInputs, callInputs]) {
+      expect(inputs).not.toMatch(/^\s{6}(force|release_version|shell_version|closure_version):/mu);
+    }
+    expect(beta).toContain("pnpm exec tools-release reserve-version beta");
+    expect(beta).toContain('RELEASE_VERSION_MANUAL_OVERRIDE: "false"');
+    expect(beta).toContain("release-beta promotion requires mac_arm64, mac_x64, and win_x64");
+    expect(beta).toContain("name: Accept public ${{ matrix.target }} beta artifacts");
+    for (const target of ["mac_arm64", "mac_x64", "win_x64"]) {
+      expect(beta).toContain(`target: ${target}`);
+    }
+    expect(beta).toContain("RELEASE_PUBLIC_ACCEPTANCE_CREDENTIAL_DIR:");
+    expect(metadataPublication).not.toContain("`${latestPrefix}/${feedName}`");
+  });
+
   it("retains only the newest outer tools-pack cache for each release lane", async () => {
     const [cache, mac, betaMac, win, betaWin] = await Promise.all([
       readFile(new URL("../../../.github/actions/release/platform/cache/save/action.yml", import.meta.url), "utf8"),
@@ -217,7 +239,7 @@ describe("release workflows", () => {
     expect(metadataDistribution).toContain("tools-release verify-metadata");
     expect(beta).toContain("Validate checkout ref shape");
     expect(beta).toContain("full 40-character commit SHA; abbreviated SHA");
-    expect(betaPublish).toContain("Observe directly activated beta public feed");
+    expect(betaPublish).not.toContain("Observe directly activated beta public feed");
     expect(betaPublish).toContain("Read back activated beta public feed");
     expect(betaPublish).toContain("tools-release prepare-public-acceptance");
     expect(betaPublish).toContain("tools-release issue-public-acceptance");

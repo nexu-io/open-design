@@ -8,6 +8,7 @@ import {
 import {
   compareReleaseVersions,
   parseReleaseVersion,
+  releaseClosureBlobObjectKey,
   type ReleaseChannel,
 } from "@open-design/release";
 
@@ -18,11 +19,12 @@ function digestCanonical(value: string): `sha256:${string}` {
 function expectedBlobUrl(
   publicOrigin: string,
   channel: ReleaseChannel,
+  releaseVersion: string,
   digest: `sha256:${string}`,
 ): string {
   const base = new URL(publicOrigin);
   if (!base.pathname.endsWith("/")) base.pathname += "/";
-  return new URL(`${channel}/blobs/${digest.slice("sha256:".length)}`, base).toString();
+  return new URL(releaseClosureBlobObjectKey(channel, releaseVersion, digest), base).toString();
 }
 
 /** Validate the sole version-wide graph before it becomes release truth. */
@@ -73,7 +75,12 @@ export function validateClosureDistributionPublication(input: Readonly<{
     }
   }
   for (const artifact of Object.values(manifest.blobs)) {
-    const expected = expectedBlobUrl(input.publicOrigin, input.channel, artifact.digest);
+    const expected = expectedBlobUrl(
+      input.publicOrigin,
+      input.channel,
+      input.releaseVersion,
+      artifact.digest,
+    );
     if (artifact.url !== expected) {
       throw new Error(
         `Closure distribution blob ${artifact.digest} URL must be ${expected}; got ${artifact.url}`,

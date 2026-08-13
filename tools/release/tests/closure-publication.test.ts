@@ -263,7 +263,7 @@ describe("Standalone Closure release publication", () => {
       digest: value as `sha256:${string}`,
       mediaType: "application/zip",
       size: 1,
-      url: `https://releases.open-design.test/beta/blobs/${value.slice("sha256:".length)}`,
+      url: `https://releases.open-design.test/beta/versions/0.18.0-beta.4/closure/blobs/${value.slice("sha256:".length)}`,
     });
     const distribution = createClosureDistributionManifest({
       blobs: Object.fromEntries([launcher, body, native].map((value) => [value, artifact(value)])),
@@ -301,7 +301,6 @@ describe("Standalone Closure release publication", () => {
       MAC_ARM64_RESULT: "success",
       RELEASE_CHANNEL: "beta",
       RELEASE_CLOSURE_DISTRIBUTION_REQUIRED: "true",
-      RELEASE_CLOSURE_REQUIRED: "true",
       RELEASE_MANIFEST_DIR: fixture.manifestRoot,
       RELEASE_METADATA_DIR: fixture.metadataRoot,
       RELEASE_OUTPUTS_PATH: join(fixture.metadataRoot, "outputs.json"),
@@ -317,11 +316,17 @@ describe("Standalone Closure release publication", () => {
     const metadataPath = join(fixture.metadataRoot, "metadata.json");
     const metadata = JSON.parse(await readFile(metadataPath, "utf8"));
     expect(metadata.closure).toEqual(distribution);
-    expect(metadata.releaseTargets.mac_arm64.closure.manifest.identity.platform).toBe("darwin-arm64");
+    expect(metadata.r2.closureManifestUrl).toBe(
+      "https://releases.open-design.test/beta/versions/0.18.0-beta.4/closure/manifest.json",
+    );
 
     await expect(execFileAsync(process.execPath, ["--experimental-strip-types", verifyMetadataPath], {
       cwd: workspaceRoot,
-      env: { ...common, RELEASE_METADATA_PATH: metadataPath },
+      env: {
+        ...common,
+        RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH: distributionPath,
+        RELEASE_METADATA_PATH: metadataPath,
+      },
     })).resolves.toMatchObject({ stdout: expect.stringContaining("verified beta metadata") });
   });
 
@@ -355,16 +360,15 @@ describe("Standalone Closure release publication", () => {
     expect(publication.stdout).not.toContain("open-design-0.18.0-beta.4.unsigned-win-x64-setup.exe to");
     const feed = await readFile(join(fixture.assetsRoot, "latest.yml"), "utf8");
     expect(feed).toContain('version: "0.18.0-beta.3"');
-    expect(feed).toContain("/beta/shells/electron/versions/0.18.0-beta.3/win32-x64/Open Design-release-beta-win-setup.exe");
+    expect(feed).toContain("/beta/versions/0.18.0-beta.4/shells/electron/win_x64/setup.exe");
     expect(feed).toContain('releaseDate: "2026-08-01T02:03:04.000Z"');
-    expect(feed).not.toContain("0.18.0-beta.4");
 
     const platform = JSON.parse(await readFile(join(fixture.manifestRoot, "win_x64.json"), "utf8"));
     expect(platform.releaseVersion).toBe("0.18.0-beta.4");
     expect(platform.shell.version).toBe("0.18.0-beta.3");
-    expect(platform.artifacts.installer.url).toContain("/beta/shells/electron/versions/0.18.0-beta.3/");
+    expect(platform.artifacts.installer.url).toContain("/beta/versions/0.18.0-beta.4/shells/electron/win_x64/");
     expect(platform.feed.url).toBe(
-      "https://releases.open-design.test/beta/shells/electron/versions/0.18.0-beta.3/win32-x64/latest.yml",
+      "https://releases.open-design.test/beta/versions/0.18.0-beta.4/shells/electron/win_x64/latest.yml",
     );
   });
 
@@ -393,9 +397,9 @@ describe("Standalone Closure release publication", () => {
     });
     expect(platform.artifacts.dmg.digest).toBe(digest("dmg"));
     expect(platform.artifacts.dmg.url).toContain(
-      "/beta/shells/electron/versions/0.18.0-beta.3/darwin-arm64/",
+      "/beta/versions/0.18.0-beta.4/shells/electron/mac_arm64/",
     );
-    expect(platform.artifacts.dmg.name).toBe("Open Design-release-beta.dmg");
+    expect(platform.artifacts.dmg.name).toBe("Open Design.dmg");
     expect(platform.shell.artifacts).toEqual(platform.artifacts);
     expect(platform.shell).toMatchObject({
       buildRecordUrl: "https://releases.open-design.test/beta/shells/electron/builds/source/artifacts/darwin-arm64.json",
@@ -445,140 +449,4 @@ describe("Standalone Closure release publication", () => {
     });
   });
 
-  it("publishes Closure and legacy payload identities on the same platform metadata surface", async () => {
-    const root = await mkdtemp(join(tmpdir(), "od-closure-release-"));
-    temporaryRoots.push(root);
-    const fixture = await writeFixture(root);
-
-    await execFileAsync(process.execPath, ["--experimental-strip-types", publishPlatformPath], {
-      cwd: workspaceRoot,
-      env: platformEnv(fixture),
-    });
-    const platform = JSON.parse(await readFile(join(fixture.manifestRoot, "mac_arm64.json"), "utf8"));
-    expect(platform.artifacts.payload.url).toContain("mac-arm64-payload.zip");
-    expect(platform.closure.manifest.identity).toMatchObject({
-      channel: "beta",
-      platform: "darwin-arm64",
-      version: "0.18.0-beta.4",
-    });
-    expect(Object.keys(platform.closure.assets).sort()).toEqual(["archive", "inventory", "manifest", "provenance"]);
-
-    await execFileAsync(process.execPath, ["--experimental-strip-types", publishMetadataPath], {
-      cwd: workspaceRoot,
-      env: {
-        ...process.env,
-        BASE_VERSION: "0.18.0",
-        ENABLE_MAC_ARM64: "true",
-        ENABLE_MAC_X64: "false",
-        ENABLE_WIN_X64: "false",
-        MAC_ARM64_RESULT: "success",
-        RELEASE_CHANNEL: "beta",
-        RELEASE_CLOSURE_REQUIRED: "true",
-        RELEASE_MANIFEST_DIR: fixture.manifestRoot,
-        RELEASE_METADATA_DIR: fixture.metadataRoot,
-        RELEASE_OUTPUTS_PATH: join(fixture.metadataRoot, "outputs.json"),
-        RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.test",
-        RELEASE_PUBLISH_SIDE_EFFECTS: "false",
-        RELEASE_VERSION: "0.18.0-beta.4",
-        STATE_SOURCE: "test",
-      },
-    });
-    const metadata = JSON.parse(await readFile(join(fixture.metadataRoot, "metadata.json"), "utf8"));
-    const outputs = JSON.parse(await readFile(join(fixture.metadataRoot, "outputs.json"), "utf8"));
-    expect(metadata.releaseTargets.mac_arm64.artifacts.payload.url).toBe(platform.artifacts.payload.url);
-    expect(metadata.releaseTargets.mac_arm64.closure).toEqual(platform.closure);
-    expect(outputs.mac_arm64_closure_archive_url).toBe(platform.closure.assets.archive.url);
-    expect(outputs.mac_arm64_payload_url).toBe(platform.artifacts.payload.url);
-  });
-
-  it("publishes a Closure version independently from the shell release version", async () => {
-    const root = await mkdtemp(join(tmpdir(), "od-closure-release-independent-"));
-    temporaryRoots.push(root);
-    const fixture = await writeFixture(root, { closureVersion: "0.18.0-beta.5" });
-
-    await execFileAsync(process.execPath, ["--experimental-strip-types", publishPlatformPath], {
-      cwd: workspaceRoot,
-      env: platformEnv(fixture),
-    });
-    const platform = JSON.parse(await readFile(join(fixture.manifestRoot, "mac_arm64.json"), "utf8"));
-    expect(platform.releaseVersion).toBe("0.18.0-beta.4");
-    expect(platform.closure.manifest.identity.version).toBe("0.18.0-beta.5");
-    expect(platform.closure.assets.archive.url).toContain(
-      "/beta/closure/darwin-arm64/versions/0.18.0-beta.5/",
-    );
-
-    await execFileAsync(process.execPath, ["--experimental-strip-types", publishMetadataPath], {
-      cwd: workspaceRoot,
-      env: {
-        ...process.env,
-        BASE_VERSION: "0.18.0",
-        ENABLE_MAC_ARM64: "true",
-        ENABLE_MAC_X64: "false",
-        ENABLE_WIN_X64: "false",
-        MAC_ARM64_RESULT: "success",
-        RELEASE_CHANNEL: "beta",
-        RELEASE_CLOSURE_REQUIRED: "true",
-        RELEASE_MANIFEST_DIR: fixture.manifestRoot,
-        RELEASE_METADATA_DIR: fixture.metadataRoot,
-        RELEASE_OUTPUTS_PATH: join(fixture.metadataRoot, "outputs.json"),
-        RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.test",
-        RELEASE_PUBLISH_SIDE_EFFECTS: "false",
-        RELEASE_VERSION: "0.18.0-beta.4",
-        STATE_SOURCE: "test",
-      },
-    });
-    const metadata = JSON.parse(await readFile(join(fixture.metadataRoot, "metadata.json"), "utf8"));
-    expect(metadata.releaseVersion).toBe("0.18.0-beta.4");
-    expect(metadata.releaseTargets.mac_arm64.closure.manifest.identity.version).toBe("0.18.0-beta.5");
-  });
-
-  it("rejects a Closure archive that does not match its candidate manifest", async () => {
-    const root = await mkdtemp(join(tmpdir(), "od-closure-release-tamper-"));
-    temporaryRoots.push(root);
-    const fixture = await writeFixture(root);
-    await writeFile(
-      join(fixture.assetsRoot, "open-design-0.18.0-beta.4-mac-arm64-closure.zip"),
-      "tampered closure archive",
-    );
-
-    await expect(execFileAsync(process.execPath, ["--experimental-strip-types", publishPlatformPath], {
-      cwd: workspaceRoot,
-      env: platformEnv(fixture),
-    })).rejects.toMatchObject({
-      stderr: expect.stringContaining("Closure archive size"),
-    });
-  });
-
-  it("rejects a successful G2 platform manifest when Closure publication is missing", async () => {
-    const root = await mkdtemp(join(tmpdir(), "od-closure-release-missing-"));
-    temporaryRoots.push(root);
-    const fixture = await writeFixture(root);
-    await execFileAsync(process.execPath, ["--experimental-strip-types", publishPlatformPath], {
-      cwd: workspaceRoot,
-      env: { ...platformEnv(fixture), RELEASE_CLOSURE_ENABLED: "false" },
-    });
-
-    await expect(execFileAsync(process.execPath, ["--experimental-strip-types", publishMetadataPath], {
-      cwd: workspaceRoot,
-      env: {
-        ...process.env,
-        BASE_VERSION: "0.18.0",
-        ENABLE_MAC_ARM64: "true",
-        ENABLE_MAC_X64: "false",
-        ENABLE_WIN_X64: "false",
-        MAC_ARM64_RESULT: "success",
-        RELEASE_CHANNEL: "beta",
-        RELEASE_CLOSURE_REQUIRED: "true",
-        RELEASE_MANIFEST_DIR: fixture.manifestRoot,
-        RELEASE_METADATA_DIR: fixture.metadataRoot,
-        RELEASE_OUTPUTS_PATH: join(fixture.metadataRoot, "outputs.json"),
-        RELEASE_PUBLIC_ORIGIN: "https://releases.open-design.test",
-        RELEASE_PUBLISH_SIDE_EFFECTS: "false",
-        RELEASE_VERSION: "0.18.0-beta.4",
-        STATE_SOURCE: "test",
-      },
-    })).rejects.toMatchObject({
-      stderr: expect.stringContaining("closure=missing"),
-    });
-  });
 });

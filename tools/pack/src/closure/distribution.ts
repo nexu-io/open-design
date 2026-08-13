@@ -20,7 +20,10 @@ import {
   type ClosureDistributionSharedContribution,
   type ClosureDistributionTargetContribution,
 } from "@open-design/closure/protocol";
-import type { ReleaseChannel } from "@open-design/release";
+import {
+  releaseClosureBlobObjectKey,
+  type ReleaseChannel,
+} from "@open-design/release";
 
 export type ClosureDistributionArtifactSource = Readonly<{
   mediaType: string;
@@ -63,6 +66,7 @@ function sha256CanonicalManifest(value: string): ClosureDigest {
 function contentAddressedBlobUrl(
   origin: string,
   channel: ReleaseChannel,
+  version: string,
   digest: ClosureDigest,
 ): string {
   const base = new URL(origin);
@@ -70,12 +74,12 @@ function contentAddressedBlobUrl(
     throw new Error("Closure blob origin must use http(s)");
   }
   if (!base.pathname.endsWith("/")) base.pathname += "/";
-  return new URL(`${channel}/blobs/${digest.slice("sha256:".length)}`, base).toString();
+  return new URL(releaseClosureBlobObjectKey(channel, version, digest), base).toString();
 }
 
 async function inspectArtifact(
   source: ClosureDistributionArtifactSource,
-  options: Readonly<{ blobOrigin: string; channel: ReleaseChannel }>,
+  options: Readonly<{ blobOrigin: string; channel: ReleaseChannel; version: string }>,
 ): Promise<ClosureDistributionBlob> {
   const file = await stat(source.path);
   if (!file.isFile() || file.size <= 0) {
@@ -96,7 +100,7 @@ async function inspectArtifact(
     digest,
     mediaType: source.mediaType,
     size,
-    url: contentAddressedBlobUrl(options.blobOrigin, options.channel, digest),
+    url: contentAddressedBlobUrl(options.blobOrigin, options.channel, options.version, digest),
   };
 }
 

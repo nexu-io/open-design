@@ -9,7 +9,7 @@ import {
   writeJson,
 } from "./common.ts";
 import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
-import { putStorageObject } from "./s3-upload.ts";
+import { putImmutableStorageObject, putStorageObject } from "./s3-upload.ts";
 import { publishLatestPlatformObjects, publishLatestRelease } from "./latest-publication.ts";
 import {
   assertInstallationVersionFloorSatisfiable,
@@ -19,7 +19,11 @@ import {
 import {
   parseReleaseVersion,
   releaseChannelDescriptor,
+  releaseClosureManifestObjectKey,
+  releaseInventoryObjectKey,
   releaseMetadataVersionFields,
+  releaseShellPrefix,
+  releaseVersionPrefix,
 } from "@open-design/release";
 import {
   parseReleaseNotePublication,
@@ -93,7 +97,6 @@ const metadataDir = required("RELEASE_METADATA_DIR");
 const manifestDir = required("RELEASE_MANIFEST_DIR");
 const releaseNoteManifestPath = optional("RELEASE_NOTE_MANIFEST_PATH");
 const outputsPath = required("RELEASE_OUTPUTS_PATH");
-const requestedAssetVersionSuffix = optional("RELEASE_ASSET_SUFFIX");
 const dryRunMode = optional("RELEASE_DRY_RUN_MODE");
 const publishSideEffectsEnabled = optional("RELEASE_PUBLISH_SIDE_EFFECTS", "true") !== "false";
 const latestPrefix = `${releaseChannel}/latest`;
@@ -106,7 +109,6 @@ const versionLockKey = optional(
 );
 const latestCasRequired = process.env.RELEASE_LATEST_CAS_REQUIRED === "true";
 const latestActivationEnabled = optional("RELEASE_ACTIVATE_LATEST", "true") !== "false";
-const closureRequired = process.env.RELEASE_CLOSURE_REQUIRED === "true";
 const closureDistributionRequired = process.env.RELEASE_CLOSURE_DISTRIBUTION_REQUIRED === "true";
 const closureDistributionManifestPath = optional("RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH");
 const shellRequired = process.env.RELEASE_SHELL_REQUIRED === "true";
@@ -181,7 +183,6 @@ function releaseMetadataFields(): Record<string, unknown> {
   return {
     ...fields,
     baseVersion: optional("BASE_VERSION", baseVersion),
-    ...(releaseChannel === "beta" || releaseChannel === "preview" ? { assetVersionSuffix } : {}),
     ...(releaseChannel === "stable" ? {
       stableVersion: optional("STABLE_VERSION", baseVersion),
       versionTag: optional("VERSION_TAG"),
@@ -200,6 +201,21 @@ async function upload(path: string, objectKey: string, cacheControl: string, typ
     bodyPath: path,
     cacheControl,
     contentType: type,
+    objectKey,
+  });
+}
+
+async function uploadImmutable(path: string, objectKey: string): Promise<void> {
+  if (!publishSideEffectsEnabled) {
+    console.log(`[dry-run:${dryRunMode || "plan"}] would upload immutable ${path} to ${objectKey}`);
+    return;
+  }
+  if (storage == null) throw new Error("storage config is required to upload immutable release metadata");
+  await putImmutableStorageObject({
+    ...storage,
+    bodyPath: path,
+    cacheControl: "public, max-age=31536000, immutable",
+    contentType: "application/json; charset=utf-8",
     objectKey,
   });
 }
@@ -227,15 +243,12 @@ function validateManifest(target: string, manifest: PlatformManifest): string | 
   if (manifest.signMode !== expectedSignMode) return `signMode=${String(manifest.signMode)}`;
   if (currentRunId > 0 && manifest.github?.runId !== currentRunId) return `github.runId=${String(manifest.github?.runId)}`;
   if (currentCommit.length > 0 && manifest.github?.commit !== currentCommit) return `github.commit=${String(manifest.github?.commit)}`;
-  if (manifest.r2?.versionPrefix == null || !manifest.r2.versionPrefix.includes(`/versions/${releaseVersion}`)) {
+  const expectedVersionPrefix = releaseVersionPrefix(releaseChannel, releaseVersion);
+  if (manifest.r2?.versionPrefix !== expectedVersionPrefix) {
     return `versionPrefix=${String(manifest.r2?.versionPrefix)}`;
-  }
-  if (closureRequired && (target === "mac_arm64" || target === "win_x64") && manifest.closure == null) {
-    return "closure=missing";
   }
   if (shellRequired && manifest.shell == null) return "shell=missing";
   if (manifest.shell != null) {
-    const expectedPlatform = target === "mac_arm64" ? "darwin-arm64" : target === "mac_x64" ? "darwin-x64" : "win32-x64";
     if (manifest.shell.type !== "electron") return `shell.type=${String(manifest.shell.type)}`;
     try {
       parseReleaseVersion(String(manifest.shell.version), releaseChannel);
@@ -257,34 +270,18 @@ function validateManifest(target: string, manifest: PlatformManifest): string | 
     if (!/^sha256:[0-9a-f]{64}$/.test(String(manifest.shell.depsDigest))) {
       return `shell.depsDigest=${String(manifest.shell.depsDigest)}`;
     }
-    const shellPrefix = `${publicOrigin}/${releaseChannel}/shells/electron/versions/${manifest.shell.version}/${expectedPlatform}/`;
+    const shellPrefix = `${publicOrigin}/${releaseShellPrefix(
+      releaseChannel,
+      releaseVersion,
+      target as TargetDef["target"],
+      manifest.shell.type,
+    )}/`;
     for (const [name, artifact] of Object.entries(manifest.artifacts ?? {})) {
       if (artifact.url == null || !artifact.url.startsWith(shellPrefix)) return `shell.artifacts.${name}.url=${String(artifact.url)}`;
       if (!/^sha256:[0-9a-f]{64}$/.test(String(artifact.digest))) return `shell.artifacts.${name}.digest=${String(artifact.digest)}`;
       if (manifest.shell.artifacts?.[name]?.url !== artifact.url || manifest.shell.artifacts?.[name]?.digest !== artifact.digest) {
         return `shell.artifacts.${name}=mismatch`;
       }
-    }
-  }
-  if (manifest.closure != null) {
-    if (target !== "mac_arm64" && target !== "win_x64") return "closure=unsupported-target";
-    const expectedPlatform = target === "mac_arm64" ? "darwin-arm64" : "win32-x64";
-    const identity = manifest.closure?.manifest?.identity;
-    if (identity?.channel !== releaseChannel) return `closure.channel=${String(identity?.channel)}`;
-    try {
-      parseReleaseVersion(String(identity.version), releaseChannel);
-    } catch {
-      return `closure.version=${String(identity.version)}`;
-    }
-    if (identity.platform !== expectedPlatform) return `closure.platform=${String(identity.platform)}`;
-    const closurePrefix = `${publicOrigin}/${releaseChannel}/closure/${expectedPlatform}/versions/${identity.version}/`;
-    for (const asset of ["archive", "inventory", "manifest", "provenance"] as const) {
-      const url = manifest.closure.assets?.[asset]?.url;
-      if (url == null) return `closure.assets.${asset}.url=missing`;
-      if (!url.startsWith(closurePrefix)) return `closure.assets.${asset}.url=${url}`;
-    }
-    if (manifest.closure.manifest?.artifact?.url !== manifest.closure.assets?.archive?.url) {
-      return "closure.manifest.artifact.url=mismatch";
     }
   }
   return null;
@@ -333,7 +330,6 @@ let releaseState = "failed";
 if (expectedTargets.length > 0 && readyTargets.length === expectedTargets.length) releaseState = "complete";
 else if (readyTargets.length > 0) releaseState = "partial";
 
-let assetVersionSuffix = requestedAssetVersionSuffix;
 const readyManifests = readyTargets.map((target) => releaseTargets[target]).filter((manifest) => manifest != null);
 const shellCapabilityDigests = new Set(readyManifests.flatMap((manifest) => (
   manifest.shell?.capabilityDigest == null ? [] : [manifest.shell.capabilityDigest]
@@ -341,13 +337,11 @@ const shellCapabilityDigests = new Set(readyManifests.flatMap((manifest) => (
 if (shellRequired && shellCapabilityDigests.size !== 1) {
   throw new Error(`enabled Shell targets must prove one capability digest; got ${[...shellCapabilityDigests].join(", ") || "none"}`);
 }
-if (assetVersionSuffix === "auto") {
-  const allReadyTargetsUseSigning = readyTargets.length > 0 && readyTargets.every((target) => (
-    signModeForTarget(target as TargetDef["target"], parameterMatrix) !== "unsigned"
-  ));
-  assetVersionSuffix = allReadyTargetsUseSigning ? ".signed" : ".unsigned";
+const versionPrefix = releaseVersionPrefix(releaseChannel, releaseVersion);
+const requestedVersionPrefix = optional("RELEASE_VERSION_PREFIX");
+if (requestedVersionPrefix.length > 0 && requestedVersionPrefix !== versionPrefix) {
+  throw new Error(`RELEASE_VERSION_PREFIX must be ${versionPrefix}; got ${requestedVersionPrefix}`);
 }
-const versionPrefix = optional("RELEASE_VERSION_PREFIX", `${releaseChannel}/versions/${releaseVersion}${assetVersionSuffix}`);
 const expectedClosureDistributionTargets = readyTargets.flatMap((target) => (
   target === "mac_arm64" ? ["darwin-arm64"]
     : target === "mac_x64" ? ["darwin-x64"]
@@ -372,6 +366,8 @@ const closureDistribution = closureDistributionManifestPath.length === 0
           : [{ type: shell.type, version: shell.version }];
       }),
     });
+const closureManifestKey = releaseClosureManifestObjectKey(releaseChannel, releaseVersion);
+const closureManifestUrl = publicUrl(publicOrigin, "", closureManifestKey);
 
 const latestMetadataUpdated = releaseState === "complete";
 const releaseNote = readReleaseNoteMetadata();
@@ -398,6 +394,12 @@ const metadata = {
     latestMetadataUpdated,
     latestPrefix,
     publicOrigin,
+    ...(closureDistribution == null ? {} : { closureManifestUrl }),
+    inventoryUrl: publicUrl(
+      publicOrigin,
+      "",
+      releaseInventoryObjectKey(releaseChannel, releaseVersion),
+    ),
     report: {
       type: "directory",
       url: publicUrl(publicOrigin, versionPrefix, "report/"),
@@ -418,7 +420,10 @@ const metadata = {
 mkdirSync(metadataDir, { recursive: true });
 const metadataPath = join(metadataDir, "metadata.json");
 writeJson(metadataPath, metadata);
-await upload(metadataPath, `${versionPrefix}/metadata.json`, "public, max-age=31536000, immutable");
+if (closureDistribution != null) {
+  await uploadImmutable(closureDistributionManifestPath, closureManifestKey);
+}
+await uploadImmutable(metadataPath, `${versionPrefix}/metadata.json`);
 if (latestMetadataUpdated && latestActivationEnabled && publishSideEffectsEnabled) {
   if (storage == null) throw new Error("storage config is required to publish latest metadata");
   const latestPlatforms = Object.fromEntries(readyTargets.map((target) => [target, {

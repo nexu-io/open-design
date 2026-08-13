@@ -34,7 +34,7 @@ async function fixture() {
     digest: value,
     mediaType: "application/zip",
     size,
-    url: `https://releases.open-design.test/beta/blobs/${value.slice("sha256:".length)}`,
+    url: `https://releases.open-design.test/beta/versions/0.19.0-beta.9/closure/blobs/${value.slice("sha256:".length)}`,
   });
   const contribution = {
     body: { artifact: artifact(body, bodyBytes.byteLength), entryPath: "bootloader.mjs", treeDigest: digest("body tree") },
@@ -70,7 +70,9 @@ describe("Closure contribution publication boundary", () => {
       version: "0.19.0-beta.9",
     });
     expect(plan.blobs.map(({ digest: value }) => value)).toEqual([value.launcher, value.body]);
-    expect(plan.blobs[0]?.objectKey).toBe(`beta/blobs/${value.launcher.slice("sha256:".length)}`);
+    expect(plan.blobs[0]?.objectKey).toBe(
+      `beta/versions/0.19.0-beta.9/closure/blobs/${value.launcher.slice("sha256:".length)}`,
+    );
   });
 
   it("rejects cross-release contributions before storage access", async () => {
