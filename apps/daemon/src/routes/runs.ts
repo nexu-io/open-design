@@ -1281,6 +1281,35 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return true;
     }
 
+    // Same reason creation resolves rather than refuses: a headless AMR caller
+    // has no headers to assert with, so exact-authority-only locks it out of
+    // the lifecycle of the very run it just created. Authorize it against the
+    // Workspace the daemon resolves, and only for a project actually bound
+    // there. A team project stays exact-authority-only — it is a single-writer
+    // resource and a resolved Personal identity is not a claim on it.
+    if (
+      run.agentId === 'amr'
+      && requestContext === null
+      && !carriesNavigationScope
+      && ctx.projectStore
+      && ctx.amrWorkspaceScope?.resolvePersonalWorkspace
+    ) {
+      const resolved = await ctx.amrWorkspaceScope.resolvePersonalWorkspace();
+      if (resolved.ok) {
+        const binding = ctx.projectStore.getWorkspaceProjectByProjectId(
+          db,
+          run.projectId,
+        );
+        if (
+          binding
+          && binding.visibility !== 'team'
+          && binding.workspaceId === resolved.context.workspaceId
+        ) {
+          return true;
+        }
+      }
+    }
+
     return ctx.authorizeProjectRequest(req, res, run.projectId, options);
   }
 

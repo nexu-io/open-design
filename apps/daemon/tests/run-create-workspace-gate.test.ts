@@ -1524,6 +1524,46 @@ describe('POST /api/runs — one-time Personal adoption for signed-in AMR', () =
     },
   );
 
+  it('lets a headless caller read back the lifecycle of the AMR run it created', async () => {
+    // Creating the run and then being locked out of its event stream is not a
+    // usable outcome: the acceptance run got 400 on GET /api/runs/:id/events
+    // seconds after adoption had succeeded.
+    const baseUrl = await startServer({
+      isAmrSignedIn: () => true,
+      resolvePersonalWorkspace: async () => ({
+        ok: true,
+        context: workspaceContextFromDirectoryItem({
+          workspaceId: 'ws-personal-resolved',
+          workspaceName: 'ws-personal-resolved',
+          workspaceType: 'personal',
+          workspaceMemberId: OWNER_MEMBER_ID,
+          role: 'owner',
+          memberStatus: 'active',
+          lifecycleState: 'active',
+        }),
+      }),
+    });
+
+    const created = await fetch(`${baseUrl}/api/runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        projectId: UNBOUND_PROJECT,
+        agentId: 'amr',
+        message: 'headless lifecycle',
+      }),
+    });
+    expect(created.status).toBeLessThan(400);
+    const body = await created.json() as Record<string, any>;
+    const runId = body.id ?? body.run?.id ?? body.runId;
+    expect(typeof runId).toBe('string');
+
+    const events = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+      headers: { accept: 'text/event-stream' },
+    });
+    expect(events.status).toBeLessThan(400);
+  });
+
   it('still refuses when the account genuinely has no Personal Workspace', async () => {
     const baseUrl = await startServer({
       isAmrSignedIn: () => true,
