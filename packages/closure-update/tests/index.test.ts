@@ -728,10 +728,12 @@ describe("layered Closure distribution application", () => {
   it("downloads only required blobs, extracts the fixed view, and reuses channel CAS", async () => {
     const paths = await createStore();
     const fixture = await downloadableDistribution();
+    const progress: Array<Record<string, unknown>> = [];
 
     const result = await applyClosureDistributionUpdate({
       candidate: fixture.candidate,
       fetch: fixture.fetch,
+      onProgress: (entry) => progress.push(entry),
       paths,
       shellType: "electron",
       shellVersion: "0.19.0",
@@ -747,6 +749,19 @@ describe("layered Closure distribution application", () => {
     expect(vi.mocked(fixture.fetch).mock.calls.map(([input]) => String(input)))
       .not.toContain(fixture.resourceUrl);
     expect(vi.mocked(fixture.fetch)).toHaveBeenCalledTimes(3);
+    const downloads = progress.filter((entry) => entry.phase === "download");
+    const materializations = progress.filter((entry) => entry.phase === "materialize");
+    expect(downloads.at(0)).toMatchObject({ completedBytes: 0, phase: "download" });
+    expect(downloads.at(-1)).toMatchObject({
+      completedBytes: downloads.at(-1)?.totalBytes,
+      phase: "download",
+    });
+    expect(materializations).toEqual([
+      { completedComponents: 0, phase: "materialize", totalComponents: 3 },
+      expect.objectContaining({ completedComponents: 1, totalComponents: 3 }),
+      expect.objectContaining({ completedComponents: 2, totalComponents: 3 }),
+      { completedComponents: 3, phase: "materialize", totalComponents: 3 },
+    ]);
 
     const retained = await applyClosureDistributionUpdate({
       candidate: fixture.candidate,

@@ -19,6 +19,7 @@ import {
   type DesktopRenderSlidesResult,
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar-proto";
+import type { StandaloneBootstrapProgress } from "@open-design/standalone-proto";
 import type {
   OpenDesignHostActionResult,
   OpenDesignHostCaptureResult,
@@ -966,6 +967,49 @@ function createPendingHtml(): string {
         height: 100%;
         transition: width 320ms cubic-bezier(0.23, 1, 0.32, 1);
       }
+      .standalone-progress {
+        bottom: 104px;
+        color: #7a838a;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        font-size: 11px;
+        left: 50%;
+        opacity: 0;
+        pointer-events: none;
+        position: fixed;
+        transform: translateX(-50%);
+        transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+        width: 260px;
+      }
+      .standalone-progress-visible { opacity: 1; }
+      .standalone-progress-copy {
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 7px;
+      }
+      .standalone-progress-detail {
+        color: #9aa2a8;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      .standalone-progress-track {
+        background: rgba(122, 131, 138, 0.14);
+        border-radius: 999px;
+        height: 3px;
+        overflow: hidden;
+        position: relative;
+      }
+      .standalone-progress-fill {
+        background: #7a838a;
+        border-radius: 999px;
+        height: 100%;
+        transition: width 240ms cubic-bezier(0.23, 1, 0.32, 1);
+      }
+      .standalone-progress-fill-indeterminate {
+        animation: standalone-progress-slide 1.15s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+        position: absolute;
+        width: 38%;
+      }
       .boot-dots .dot {
         animation: boot-dot 1.4s cubic-bezier(0.23, 1, 0.32, 1) infinite;
         display: inline-block;
@@ -975,6 +1019,10 @@ function createPendingHtml(): string {
       @keyframes boot-dot {
         0%, 60%, 100% { opacity: 0.25; }
         30% { opacity: 1; }
+      }
+      @keyframes standalone-progress-slide {
+        from { transform: translateX(-110%); }
+        to { transform: translateX(290%); }
       }
     </style>
   </head>
@@ -987,6 +1035,15 @@ function createPendingHtml(): string {
       disablepictureinpicture
       src="${SPLASH_VIDEO_DATA_URL}"
     ></video>
+    <div class="standalone-progress" id="standalone-progress" aria-live="polite">
+      <div class="standalone-progress-copy">
+        <span id="standalone-progress-label"></span>
+        <span class="standalone-progress-detail" id="standalone-progress-detail"></span>
+      </div>
+      <div class="standalone-progress-track" aria-hidden="true">
+        <div class="standalone-progress-fill" id="standalone-progress-fill"></div>
+      </div>
+    </div>
     <div class="boot-progress" aria-hidden="true">
       <div class="boot-progress-fill" id="boot-progress-fill" data-pct="${initialPct}" style="width: ${initialPct}%;"></div>
     </div>
@@ -1037,6 +1094,26 @@ function createPendingHtml(): string {
           if (stepEl && stepText != null) stepEl.textContent = stepText;
           wrap.classList.remove("boot-stage-swapping");
         }, 140);
+      };
+      window.__odSplashSetStandaloneProgress = function (info) {
+        var data = info || {};
+        var wrap = document.getElementById("standalone-progress");
+        var label = document.getElementById("standalone-progress-label");
+        var detail = document.getElementById("standalone-progress-detail");
+        var fill = document.getElementById("standalone-progress-fill");
+        if (!wrap || !label || !detail || !fill) return;
+        wrap.classList.toggle("standalone-progress-visible", data.visible === true);
+        if (data.visible !== true) return;
+        label.textContent = (typeof data.label === "string") ? data.label : "Preparing Standalone";
+        detail.textContent = (typeof data.detail === "string") ? data.detail : "";
+        if (typeof data.percent === "number") {
+          fill.classList.remove("standalone-progress-fill-indeterminate");
+          fill.style.transform = "none";
+          fill.style.width = Math.max(0, Math.min(100, data.percent)) + "%";
+        } else {
+          fill.style.width = "38%";
+          fill.classList.add("standalone-progress-fill-indeterminate");
+        }
       };
     </script>
   </body>
@@ -1387,6 +1464,50 @@ function splashStagePayload(stage: SplashBootStage): { step: number; total: numb
   };
 }
 
+type SplashStandaloneProgressPayload = Readonly<{
+  detail: string;
+  label: string;
+  percent: number | null;
+  visible: boolean;
+}>;
+
+const SPLASH_STANDALONE_LABELS: Record<StandaloneBootstrapProgress["stage"], string> = {
+  checking: "Checking Standalone",
+  discovering: "Finding Standalone",
+  downloading: "Downloading Standalone",
+  materializing: "Installing Standalone",
+  verifying: "Verifying Standalone",
+  ready: "Standalone ready",
+};
+
+function formatSplashBytes(value: number): string {
+  const mebibytes = value / (1024 * 1024);
+  return `${mebibytes < 10 ? mebibytes.toFixed(1) : Math.round(mebibytes)} MB`;
+}
+
+function splashStandaloneProgressPayload(
+  progress: StandaloneBootstrapProgress,
+): SplashStandaloneProgressPayload {
+  const quantitative = progress.progress;
+  const visible = progress.initialLoad
+    || progress.stage === "downloading"
+    || progress.stage === "materializing";
+  let detail = "";
+  let percent: number | null = progress.stage === "ready" ? 100 : null;
+  if (quantitative != null) {
+    percent = Math.round((quantitative.completed / quantitative.total) * 100);
+    detail = quantitative.unit === "bytes"
+      ? `${formatSplashBytes(quantitative.completed)} / ${formatSplashBytes(quantitative.total)}`
+      : `${quantitative.completed} / ${quantitative.total} components`;
+  }
+  return Object.freeze({
+    detail,
+    label: `${progress.initialLoad ? "First launch · " : ""}${SPLASH_STANDALONE_LABELS[progress.stage]}`,
+    percent,
+    visible,
+  });
+}
+
 /**
  * Narrow view of the splash window that the stage updater needs. A real
  * `BrowserWindow` satisfies this structurally; tests pass a mock so the
@@ -1400,7 +1521,11 @@ export type SplashStageSurface = {
   };
 };
 
-type SplashStageState = { ready: boolean; pending: SplashBootStage | null };
+type SplashStageState = {
+  pending: SplashBootStage | null;
+  pendingStandaloneProgress: StandaloneBootstrapProgress | null;
+  ready: boolean;
+};
 
 // Per-splash readiness + the latest stage requested before the page finished
 // loading. Keyed weakly so a closed splash is collected without bookkeeping.
@@ -1410,6 +1535,18 @@ function applySplashStage(splash: SplashStageSurface, stage: SplashBootStage): v
   void splash.webContents
     .executeJavaScript(
       `window.__odSplashSetStage && window.__odSplashSetStage(${JSON.stringify(splashStagePayload(stage))});`,
+      true,
+    )
+    .catch(() => undefined);
+}
+
+function applySplashStandaloneProgress(
+  splash: SplashStageSurface,
+  progress: StandaloneBootstrapProgress,
+): void {
+  void splash.webContents
+    .executeJavaScript(
+      `window.__odSplashSetStandaloneProgress && window.__odSplashSetStandaloneProgress(${JSON.stringify(splashStandaloneProgressPayload(progress))});`,
       true,
     )
     .catch(() => undefined);
@@ -1425,7 +1562,11 @@ function applySplashStage(splash: SplashStageSurface, stage: SplashBootStage): v
  * stage is replayed once the page reports it has loaded.
  */
 export function registerSplashStageTracking(splash: SplashStageSurface): void {
-  const state: SplashStageState = { ready: false, pending: null };
+  const state: SplashStageState = {
+    pending: null,
+    pendingStandaloneProgress: null,
+    ready: false,
+  };
   splashStageState.set(splash, state);
   splash.webContents.once("did-finish-load", () => {
     state.ready = true;
@@ -1433,6 +1574,11 @@ export function registerSplashStageTracking(splash: SplashStageSurface): void {
       const stage = state.pending;
       state.pending = null;
       applySplashStage(splash, stage);
+    }
+    if (state.pendingStandaloneProgress != null) {
+      const progress = state.pendingStandaloneProgress;
+      state.pendingStandaloneProgress = null;
+      applySplashStandaloneProgress(splash, progress);
     }
   });
 }
@@ -1453,6 +1599,24 @@ export function setSplashStage(splash: SplashStageSurface | null, stage: SplashB
     return;
   }
   state.pending = stage;
+}
+
+/**
+ * Update the independent Standalone bootstrap progress surface. Cold installs
+ * stay visible across every phase; warm starts only reveal it when an actual
+ * update or repair downloads/materializes components.
+ */
+export function setSplashStandaloneProgress(
+  splash: SplashStageSurface | null,
+  progress: StandaloneBootstrapProgress,
+): void {
+  if (splash == null || splash.isDestroyed()) return;
+  const state = splashStageState.get(splash);
+  if (state == null || state.ready) {
+    applySplashStandaloneProgress(splash, progress);
+    return;
+  }
+  state.pendingStandaloneProgress = progress;
 }
 
 export type SplashWindowHandle = {

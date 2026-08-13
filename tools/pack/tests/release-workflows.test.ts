@@ -81,9 +81,12 @@ describe("release workflows", () => {
     expect(mac).not.toContain("bash tools/release/scripts/build-platform.sh");
     expect(macX64).not.toContain("bash tools/release/scripts/build-platform.sh");
     expect(selfHostedMac).toContain("fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh");
-    expect(countOccurrences(mac, "--require-vela-cli")).toBe(3);
-    expect(countOccurrences(macX64, "--require-vela-cli")).toBe(3);
-    expect(countOccurrences(win, "--require-vela-cli")).toBe(3);
+    expect(countOccurrences(mac, "--require-vela-cli")).toBe(4);
+    expect(countOccurrences(macX64, "--require-vela-cli")).toBe(4);
+    expect(countOccurrences(win, "--require-vela-cli")).toBe(4);
+    for (const lane of [mac, macX64, win]) {
+      expect(lane).toMatch(/closure build-distribution-target[\s\S]*?--require-vela-cli/u);
+    }
     expect(selfHostedMac).toContain("REQUIRE_VELA_CLI: \"true\"");
     expect(selfHostedWin).toContain("-RequireVelaCli");
     expect(mac.match(/RELEASE_ARTIFACT_MODE: dmg-and-payload/g)?.length ?? 0).toBe(2);

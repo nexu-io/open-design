@@ -6,8 +6,11 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { basename, dirname, join } from "node:path";
 
 import {
+  createClosureDistributionManifest,
   validateClosureCandidateManifest,
+  validateClosureDistributionManifest,
   type ClosureCandidateManifest,
+  type ClosureDistributionManifest,
 } from "@open-design/closure-proto";
 
 import {
@@ -232,6 +235,10 @@ function channelMetadata(channel: UpdaterFixtureChannel, version: string): Recor
   return releaseMetadataVersionFields(channel, version);
 }
 
+function closureDigest(canonical: string): `sha256:${string}` {
+  return `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
+}
+
 function closureReleaseMetadata(
   manifest: ClosureCandidateManifest,
   files: ClosureFixtureFiles,
@@ -297,9 +304,18 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     ? createHash("sha256").update(payloadBody).digest("hex")
     : await sha256File(options.payloadPath);
   const closureRoot = options.closureManifestPath == null ? null : dirname(options.closureManifestPath);
-  let closureManifest = options.closureManifestPath == null
+  const rawClosureManifest = options.closureManifestPath == null
     ? null
-    : validateClosureCandidateManifest(JSON.parse(await readFile(options.closureManifestPath, "utf8")) as unknown);
+    : JSON.parse(await readFile(options.closureManifestPath, "utf8")) as unknown;
+  let closureManifest: ClosureCandidateManifest | null = rawClosureManifest == null
+    ? null
+    : (rawClosureManifest as { schemaVersion?: unknown }).schemaVersion === 2
+      ? null
+      : validateClosureCandidateManifest(rawClosureManifest);
+  let closureDistribution: ClosureDistributionManifest | null = rawClosureManifest == null
+    || closureManifest != null
+    ? null
+    : validateClosureDistributionManifest(rawClosureManifest, closureDigest);
   const closureFilePaths = closureRoot == null
     ? null
     : {
@@ -330,6 +346,39 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     }));
     closureFiles = Object.fromEntries(fileEntries) as ClosureFixtureFiles;
   }
+  const expectedClosureTarget = platform === "mac"
+    ? "darwin-arm64"
+    : platform === "macIntel"
+      ? "darwin-x64"
+      : "win32-x64";
+  let distributionBlobFiles = new Map<string, ClosureFixtureFile>();
+  if (closureDistribution != null) {
+    if (closureDistribution.identity.channel !== channel) {
+      throw new Error(
+        `Closure channel ${closureDistribution.identity.channel} does not match updater channel ${channel}`,
+      );
+    }
+    if (closureDistribution.required.targets[expectedClosureTarget] == null) {
+      throw new Error(
+        `Closure distribution does not contain updater target ${expectedClosureTarget}`,
+      );
+    }
+    if (closureRoot == null) throw new Error("Closure distribution fixture root is unavailable");
+    distributionBlobFiles = new Map(await Promise.all(
+      Object.entries(closureDistribution.blobs).map(async ([digest, artifact]) => {
+        const filePath = join(closureRoot, "blobs", digest.slice("sha256:".length));
+        const metadata = await stat(filePath).catch(() => null);
+        if (metadata == null || !metadata.isFile() || metadata.size !== artifact.size) {
+          throw new Error(`Closure distribution blob fixture is missing or has the wrong size: ${filePath}`);
+        }
+        return [digest, {
+          contentType: artifact.mediaType,
+          path: filePath,
+          size: metadata.size,
+        }] as const;
+      }),
+    ));
+  }
 
   let info: UpdaterFixtureInfo | null = null;
   const server = createServer((request, response) => {
@@ -339,13 +388,18 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
       return;
     }
     const path = new URL(request.url ?? "/", info.origin).pathname;
-    if (path === `/${channel}/latest/metadata.json`) {
+    if (
+      path === `/${channel}/latest/metadata.json`
+      || path === `/${channel}/versions/${encodeURIComponent(version)}/metadata.json`
+    ) {
       response.setHeader("content-type", "application/json; charset=utf-8");
       response.end(JSON.stringify({
         channel,
         generatedAt: new Date().toISOString(),
         ...channelMetadata(channel, version),
-        ...(closureManifest == null
+        ...(closureDistribution != null
+          ? { closure: closureDistribution, releaseState: "complete" }
+          : closureManifest == null
           ? {}
           : {
               releaseState: "complete",
@@ -406,6 +460,16 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
       }));
       return;
     }
+    if (closureDistribution != null) {
+      const blobMatch = new RegExp(`^/${channel}/blobs/([0-9a-f]{64})$`, "u").exec(path);
+      const blob = blobMatch?.[1] == null
+        ? null
+        : distributionBlobFiles.get(`sha256:${blobMatch[1]}`);
+      if (blob != null) {
+        sendFileArtifact(request, response, blob.path, blob.size, blob.contentType);
+        return;
+      }
+    }
     if (closureFiles != null && info.closureArchiveUrl != null) {
       const closureBaseUrl = info.closureArchiveUrl.slice(0, -"closure.zip".length);
       const closureAssets = [
@@ -456,6 +520,20 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
 
   await listen(server, port, host);
   const origin = serverOrigin(server);
+  if (closureDistribution != null && options.rebaseClosureUrl === true) {
+    closureDistribution = createClosureDistributionManifest({
+      ...closureDistribution,
+      blobs: Object.fromEntries(Object.entries(closureDistribution.blobs).map(([digest, artifact]) => [
+        digest,
+        { ...artifact, url: `${origin}/${channel}/blobs/${digest.slice("sha256:".length)}` },
+      ])),
+      identity: {
+        channel: closureDistribution.identity.channel,
+        protocolVersion: closureDistribution.identity.protocolVersion,
+        version: closureDistribution.identity.version,
+      },
+    }, closureDigest);
+  }
   if (closureManifest != null && options.rebaseClosureUrl === true) {
     const closureArchiveUrl = `${origin}/${channel}/closure/${closureManifest.identity.platform}/versions/${closureManifest.identity.version}/closure.zip`;
     closureManifest = validateClosureCandidateManifest({
@@ -475,6 +553,17 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     }
   }
   const closureArchiveUrl = closureManifest?.artifact.url ?? null;
+  if (closureDistribution != null) {
+    const foreignBlob = Object.values(closureDistribution.blobs).find(
+      (artifact) => new URL(artifact.url).origin !== origin,
+    );
+    if (foreignBlob != null) {
+      await close(server);
+      throw new Error(
+        `Closure blob URL origin ${new URL(foreignBlob.url).origin} does not match fixture origin ${origin}`,
+      );
+    }
+  }
   if (closureArchiveUrl != null && new URL(closureArchiveUrl).origin !== origin) {
     await close(server);
     throw new Error(

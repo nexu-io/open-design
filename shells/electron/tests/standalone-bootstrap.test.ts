@@ -11,7 +11,10 @@ import {
   createClosureDistributionManifest,
   type ClosureDistributionBlob,
 } from "@open-design/closure-proto";
-import { createStandaloneHandoffEnvelope } from "@open-design/standalone-proto";
+import {
+  createStandaloneHandoffEnvelope,
+  type StandaloneBootstrapProgress,
+} from "@open-design/standalone-proto";
 import JSZip from "jszip";
 
 import {
@@ -82,6 +85,7 @@ describe("Electron thin Standalone bootstrap", () => {
     }
     const repositoryConfigPath = join(shellRoot, "repository.json");
     await writeFile(repositoryConfigPath, JSON.stringify({ localSeeds: [{ root: "seed" }], remoteOrigins: [], schemaVersion: 1 }));
+    const progress: StandaloneBootstrapProgress[] = [];
     const resolution = await resolveStandaloneViaOfficialNode({
       bootloaderPath: join(shellRoot, "bootloader.mjs"),
       descriptor: {
@@ -96,10 +100,14 @@ describe("Electron thin Standalone bootstrap", () => {
         scope: { channel: "beta", namespace: "release-beta" },
       },
       nodeCommand: process.execPath,
+      onProgress: (entry) => progress.push(entry),
     });
-    expect(resolution.bootloaderPath).toMatch(/generations\/0\/launcher\/bootloader\.mjs$/u);
+    expect(resolution.bootloaderPath).toMatch(/generations[\\/]0[\\/]launcher[\\/]bootloader\.mjs$/u);
     expect(JSON.parse(await readFile(join(root, "install", "closure", "channels", "beta", "namespaces", "release-beta", "state", "binding.json"), "utf8")))
       .toMatchObject({ committed: { standalone: { generation: 0 } } });
+    expect(progress.map((entry) => entry.stage)).toEqual(expect.arrayContaining([
+      "checking", "discovering", "downloading", "materializing", "verifying", "ready",
+    ]));
   });
 
   it("accepts an exact committed result produced by official Node", async () => {

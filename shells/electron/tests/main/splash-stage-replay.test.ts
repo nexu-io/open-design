@@ -14,6 +14,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   registerSplashStageTracking,
+  setSplashStandaloneProgress,
   setSplashStage,
   type SplashStageSurface,
 } from '../../src/main/runtime.js';
@@ -88,6 +89,52 @@ describe('splash boot-stage replay guard', () => {
     setSplashStage(splash.surface, 'workspace');
     expect(splash.executed).toHaveLength(1);
     expect(splash.executed[0]).toContain('Opening your workspace');
+  });
+
+  test('replays the latest independent Standalone progress after the splash loads', () => {
+    const splash = createMockSplash();
+    registerSplashStageTracking(splash.surface);
+
+    setSplashStandaloneProgress(splash.surface, {
+      initialLoad: true,
+      schemaVersion: 1,
+      stage: 'discovering',
+    });
+    setSplashStandaloneProgress(splash.surface, {
+      initialLoad: true,
+      progress: { completed: 8, total: 16, unit: 'bytes' },
+      schemaVersion: 1,
+      stage: 'downloading',
+    });
+    expect(splash.executed).toEqual([]);
+
+    splash.emitDidFinishLoad();
+    expect(splash.executed).toHaveLength(1);
+    expect(splash.executed[0]).toContain('__odSplashSetStandaloneProgress');
+    expect(splash.executed[0]).toContain('First launch · Downloading Standalone');
+    expect(splash.executed[0]).toContain('"percent":50');
+  });
+
+  test('keeps warm verification hidden while exposing a real warm update', () => {
+    const splash = createMockSplash();
+    registerSplashStageTracking(splash.surface);
+    splash.emitDidFinishLoad();
+
+    setSplashStandaloneProgress(splash.surface, {
+      initialLoad: false,
+      schemaVersion: 1,
+      stage: 'verifying',
+    });
+    setSplashStandaloneProgress(splash.surface, {
+      initialLoad: false,
+      progress: { completed: 1, total: 3, unit: 'components' },
+      schemaVersion: 1,
+      stage: 'materializing',
+    });
+
+    expect(splash.executed[0]).toContain('"visible":false');
+    expect(splash.executed[1]).toContain('"visible":true');
+    expect(splash.executed[1]).toContain('1 / 3 components');
   });
 
   test('is a no-op on a destroyed splash window', () => {

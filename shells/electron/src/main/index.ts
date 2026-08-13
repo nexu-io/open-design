@@ -80,6 +80,7 @@ export {
   isHttpUrl,
   registerSplashStageTracking,
   resolveDesktopStatusUrl,
+  setSplashStandaloneProgress,
   setSplashStage,
   type SplashBootStage,
   type SplashStageSurface,

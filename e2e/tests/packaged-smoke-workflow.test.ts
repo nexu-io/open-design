@@ -2766,6 +2766,26 @@ process.stdin.on("end", () => {
     for (const platformJob of [macJob, macX64Job, winJob]) {
       expect(platformJob).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke");
     }
+    for (const targetContributionStep of [
+      sectionBetween(
+        macJob,
+        "      - name: Build beta mac_arm64 Standalone native contribution",
+        "      - name: Prepare mac_arm64 Standalone smoke graph",
+      ),
+      sectionBetween(
+        macX64Job,
+        "      - name: Build beta mac_x64 Standalone native contribution",
+        "      - name: Prepare mac_x64 Standalone smoke graph",
+      ),
+      sectionBetween(
+        winJob,
+        "      - name: Build beta win_x64 Standalone native contribution",
+        "      - name: Prepare win_x64 Standalone smoke graph",
+      ),
+    ]) {
+      expect(targetContributionStep).toContain("tools-pack closure build-distribution-target");
+      expect(targetContributionStep).toContain("--require-vela-cli");
+    }
     expect(macJob).toContain("cache: pnpm");
     expect(macJob).toContain("Build beta mac_arm64 Standalone native contribution");
     expect(macJob).toContain("Resolve immutable mac_arm64 Electron Shell");

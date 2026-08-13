@@ -122,6 +122,7 @@ cli.command("closure <action>", "Standalone Closure commands: build-distribution
   .option("--json", "print JSON")
   .option("--min-shell-version <version>", "minimum compatible shell version")
   .option("--platform <target>", "closure target: darwin-arm64|darwin-x64|win32-x64 (default: current host)")
+  .option("--require-vela-cli", "fail when the target-native Vela and OpenCode runtime cannot be bundled")
   .option("--skip-workspace-build", "reuse workspace outputs built earlier in the same release job")
   .option("--version <version>", "Closure release version")
   .action(async (action: string, options: CliOptions) => {
@@ -163,6 +164,7 @@ cli.command("closure <action>", "Standalone Closure commands: build-distribution
         channel: options.channel,
         ...(options.dir == null ? {} : { dir: options.dir }),
         ...(options.platform == null ? {} : { platform: options.platform }),
+        requireVelaCli: options.requireVelaCli === true,
         skipWorkspaceBuild: options.skipWorkspaceBuild === true,
         version: options.version,
       }));

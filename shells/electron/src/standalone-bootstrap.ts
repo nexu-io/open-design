@@ -1,24 +1,64 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 
 import {
   validateStandaloneBootstrapDescriptor,
+  validateStandaloneBootstrapProgress,
   validateStandaloneBootstrapResult,
   type StandaloneBootstrapDescriptor,
+  type StandaloneBootstrapProgress,
   type StandaloneBootstrapResolution,
 } from "@open-design/standalone-proto";
 
 import { ElectronStandaloneLaunchError } from "./standalone-handoff.js";
 
-const execFileAsync = promisify(execFile);
+async function runBootstrapChild(input: Readonly<{
+  bootloaderPath: string;
+  env: NodeJS.ProcessEnv;
+  nodeCommand: string;
+  onProgress?: (progress: StandaloneBootstrapProgress) => void;
+}>): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(input.nodeCommand, [input.bootloaderPath], {
+      env: input.env,
+      stdio: ["ignore", "ignore", "pipe", "ipc"],
+      windowsHide: true,
+    });
+    let stderr = "";
+    child.stderr?.setEncoding("utf8");
+    child.stderr?.on("data", (chunk: string) => {
+      stderr = `${stderr}${chunk}`.slice(-32 * 1024);
+    });
+    child.on("message", (message: unknown) => {
+      try {
+        const progress = validateStandaloneBootstrapProgress(message);
+        input.onProgress?.(progress);
+      } catch {
+        // Progress IPC is optional; the result file remains the bootstrap authority.
+      }
+    });
+    child.once("error", reject);
+    child.once("close", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      const detail = stderr.trim();
+      reject(new Error(
+        `Standalone bootstrap exited ${code == null ? `after signal ${signal ?? "unknown"}` : `with code ${code}`}`
+        + (detail.length === 0 ? "" : `: ${detail}`),
+      ));
+    });
+  });
+}
 
 export async function resolveStandaloneViaOfficialNode(input: Readonly<{
   bootloaderPath: string;
   descriptor: StandaloneBootstrapDescriptor;
   nodeCommand: string;
+  onProgress?: (progress: StandaloneBootstrapProgress) => void;
 }>): Promise<StandaloneBootstrapResolution> {
   const descriptor = validateStandaloneBootstrapDescriptor(input.descriptor);
   const exchangeRoot = join(
@@ -31,13 +71,15 @@ export async function resolveStandaloneViaOfficialNode(input: Readonly<{
   await mkdir(exchangeRoot, { recursive: true });
   try {
     await writeFile(inputPath, `${JSON.stringify(descriptor, null, 2)}\n`, "utf8");
-    await execFileAsync(input.nodeCommand, [input.bootloaderPath], {
+    await runBootstrapChild({
+      bootloaderPath: input.bootloaderPath,
       env: {
         ...process.env,
         OD_STANDALONE_BOOTSTRAP_INPUT_V1: inputPath,
         OD_STANDALONE_BOOTSTRAP_RESULT_V1: resultPath,
       },
-      windowsHide: true,
+      nodeCommand: input.nodeCommand,
+      ...(input.onProgress == null ? {} : { onProgress: input.onProgress }),
     });
     const result = validateStandaloneBootstrapResult(
       JSON.parse(await readFile(resultPath, "utf8")) as unknown,

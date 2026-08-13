@@ -212,14 +212,18 @@ async function inspectPreparedTree(rootInput: string): Promise<ClosurePreparedTr
 
 const CLOSURE_ARCHIVE_MTIME = new Date("2000-01-01T00:00:00.000Z");
 
-async function normalizeArchiveMetadata(root: string, current = root): Promise<void> {
+async function normalizeArchiveMetadata(
+  root: string,
+  current = root,
+  executablePaths: ReadonlySet<string> = new Set(),
+): Promise<void> {
   const entries = await readdir(current, { withFileTypes: true });
   for (const entry of entries.sort((left, right) => (
     left.name < right.name ? -1 : left.name > right.name ? 1 : 0
   ))) {
     const path = join(current, entry.name);
     if (entry.isDirectory()) {
-      await normalizeArchiveMetadata(root, path);
+      await normalizeArchiveMetadata(root, path, executablePaths);
       await chmod(path, 0o755);
       await utimes(path, CLOSURE_ARCHIVE_MTIME, CLOSURE_ARCHIVE_MTIME);
       continue;
@@ -227,7 +231,7 @@ async function normalizeArchiveMetadata(root: string, current = root): Promise<v
     if (!entry.isFile()) {
       throw new Error(`Closure component source contains an unsupported entry: ${relative(root, path)}`);
     }
-    await chmod(path, 0o644);
+    await chmod(path, executablePaths.has(toPosixPath(relative(root, path))) ? 0o755 : 0o644);
     await utimes(path, CLOSURE_ARCHIVE_MTIME, CLOSURE_ARCHIVE_MTIME);
   }
   await chmod(current, 0o755);
@@ -253,13 +257,35 @@ export async function validateClosureBodyComponent(root: string): Promise<Closur
   return tree;
 }
 
-/** Require native addons to live in their own Node resolution pack. */
-export async function validateClosureNativeComponent(root: string): Promise<ClosurePreparedTree> {
+const CLOSURE_NATIVE_RUNTIME_FILES = new Set([
+  "bin/vela",
+  "bin/vela.exe",
+  "bin/libexec/opencode/opencode",
+  "bin/libexec/opencode/opencode.exe",
+]);
+
+function closureNativeRuntimeFiles(target: ClosurePlatformTarget): ReadonlySet<string> {
+  return target === "win32-x64"
+    ? new Set(["bin/vela.exe", "bin/libexec/opencode/opencode.exe"])
+    : new Set(["bin/vela", "bin/libexec/opencode/opencode"]);
+}
+
+/** Require native addons and approved target-native tools to stay isolated. */
+export async function validateClosureNativeComponent(
+  root: string,
+  target?: ClosurePlatformTarget,
+): Promise<ClosurePreparedTree> {
   const tree = await inspectPreparedTree(root);
-  const outsideNodeModules = tree.files.filter((file) => !file.path.startsWith("node_modules/"));
+  const approvedRuntimeFiles = target == null
+    ? CLOSURE_NATIVE_RUNTIME_FILES
+    : closureNativeRuntimeFiles(target);
+  const outsideNodeModules = tree.files.filter((file) => (
+    !file.path.startsWith("node_modules/")
+    && !approvedRuntimeFiles.has(file.path)
+  ));
   if (outsideNodeModules.length > 0) {
     throw new Error(
-      `Closure native pack may only contain node_modules; found ${outsideNodeModules[0]?.path ?? "unknown"}`,
+      `Closure native pack may only contain node_modules and approved bin runtimes; found ${outsideNodeModules[0]?.path ?? "unknown"}`,
     );
   }
   if (!tree.files.some((file) => file.path.endsWith(".node"))) {
@@ -442,6 +468,7 @@ export async function probeClosureNativeModules(input: Readonly<{
 /** Archive one already-prepared component root without interpreting its body. */
 export async function archiveClosureComponent(options: Readonly<{
   entryPath?: string;
+  executablePaths?: readonly string[];
   outputPath: string;
   requiredPaths?: readonly string[];
   run?: ClosureComponentArchiveRunner;
@@ -467,7 +494,11 @@ export async function archiveClosureComponent(options: Readonly<{
   }
   // Content-addressed blobs must survive repeated builds byte-for-byte. Build
   // staging mtimes and install-script modes are not product identity.
-  await normalizeArchiveMetadata(sourceRoot);
+  const executablePaths = new Set((options.executablePaths ?? []).map((path) => {
+    safeEntrySegments(path);
+    return path;
+  }));
+  await normalizeArchiveMetadata(sourceRoot, sourceRoot, executablePaths);
   await mkdir(dirname(outputPath), { recursive: true });
   await rm(outputPath, { force: true });
   const invocation = resolveClosureArchiveInvocation({ artifactPath: outputPath, target: options.target });
@@ -560,8 +591,9 @@ export async function buildClosureDistributionTargetContribution(options: Readon
   version: string;
 }>): Promise<ClosureDistributionTargetContribution> {
   const outputRoot = resolve(options.outputRoot);
-  await validateClosureNativeComponent(options.nativeRoot);
+  await validateClosureNativeComponent(options.nativeRoot, options.target);
   const native = await archiveClosureComponent({
+    executablePaths: [...closureNativeRuntimeFiles(options.target)],
     outputPath: join(outputRoot, "targets", options.target, "native.zip"),
     run: options.run,
     sourceRoot: options.nativeRoot,

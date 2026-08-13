@@ -1,3 +1,8 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -54,17 +59,54 @@ function request(): StandaloneHandoffRequest {
 
 describe("Standalone generation bootloader", () => {
   it("reuses the Shell-owned official Node and derives native resolution from the generation root", () => {
+    const generationRoot = request().paths.installationRoot;
     expect(resolveStandaloneGenerationLaunch(request(), "/shell/node")).toMatchObject({
-      cwd: "/open-design/generation-3/body",
+      cwd: join(generationRoot, "body"),
       env: {
-        NODE_OPTIONS: "--import=file:///open-design/generation-3/launcher/native-loader.mjs",
-        NODE_PATH: "/open-design/generation-3/native/node_modules",
-        OD_STANDALONE_NATIVE_ROOT: "/open-design/generation-3/native",
+        NODE_OPTIONS: `--import=${pathToFileURL(join(generationRoot, "launcher", "native-loader.mjs")).href}`,
+        NODE_PATH: join(generationRoot, "native", "node_modules"),
+        OD_STANDALONE_NATIVE_ROOT: join(generationRoot, "native"),
       },
       executable: "/shell/node",
-      launcherPath: "/open-design/generation-3/launcher/launcher.mjs",
+      launcherPath: join(generationRoot, "launcher", "launcher.mjs"),
       output: "inherit",
     });
+  });
+
+  it("projects target-native Vela and OpenCode binaries without replacing explicit overrides", async () => {
+    const generationRoot = await mkdtemp(join(tmpdir(), "od-generation-tools-"));
+    const nativeRoot = join(generationRoot, "native");
+    const velaPath = join(nativeRoot, "bin", process.platform === "win32" ? "vela.exe" : "vela");
+    const openCodePath = join(
+      nativeRoot,
+      "bin",
+      "libexec",
+      "opencode",
+      process.platform === "win32" ? "opencode.exe" : "opencode",
+    );
+    await mkdir(join(nativeRoot, "bin", "libexec", "opencode"), { recursive: true });
+    await writeFile(velaPath, "vela");
+    await writeFile(openCodePath, "opencode");
+    const input = {
+      ...request(),
+      paths: { ...request().paths, installationRoot: generationRoot },
+    };
+    try {
+      expect(resolveStandaloneGenerationLaunch(input).env).toMatchObject({
+        VELA_BIN: velaPath,
+        VELA_OPENCODE_BIN: openCodePath,
+      });
+      const previous = process.env.VELA_BIN;
+      process.env.VELA_BIN = "/user/vela";
+      try {
+        expect(resolveStandaloneGenerationLaunch(input).env?.VELA_BIN).toBe("/user/vela");
+      } finally {
+        if (previous == null) delete process.env.VELA_BIN;
+        else process.env.VELA_BIN = previous;
+      }
+    } finally {
+      await rm(generationRoot, { force: true, recursive: true });
+    }
   });
 
   it("defaults to the Node process executing the fossil bootloader", () => {

@@ -12,7 +12,10 @@ import {
 } from "@open-design/closure-proto";
 import { readClosureBindingDescriptor, resolveClosureStorePaths } from "@open-design/closure-store";
 import { bootstrapSidecarLifecycle } from "@open-design/sidecar/lifecycle";
-import { STANDALONE_BOOTSTRAP_SCHEMA_VERSION } from "@open-design/standalone-proto";
+import {
+  STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
+  type StandaloneBootstrapProgress,
+} from "@open-design/standalone-proto";
 import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -174,18 +177,37 @@ async function consumeTransition(
 describe("Standalone unresolved bootstrap", () => {
   it("discovers, commits, and resolves one immutable generation before handoff", async () => {
     const value = await fixture();
-    const resolution = await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), { fetch: value.fetch });
+    const progress: StandaloneBootstrapProgress[] = [];
+    const resolution = await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), {
+      fetch: value.fetch,
+      onProgress: (entry) => progress.push(entry),
+    });
     await consumeTransition(value, resolution);
 
-    expect(resolution.bootloaderPath).toMatch(/generations\/0\/launcher\/bootloader\.mjs$/u);
+    expect(resolution.bootloaderPath).toMatch(/generations[\\/]0[\\/]launcher[\\/]bootloader\.mjs$/u);
     expect(resolution.handoff.handoff.scope).toEqual({ channel: "beta", generation: 0, namespace: "release-beta" });
-    expect(resolution.handoff.paths.resourceRoot).toMatch(/channels\/beta\/resources$/u);
+    expect(resolution.handoff.paths.resourceRoot).toMatch(/channels[\\/]beta[\\/]resources$/u);
     const store = resolveClosureStorePaths({ channel: "beta", namespace: "release-beta", root: value.paths.installationRoot });
     expect((await readClosureBindingDescriptor(store)).committed?.standalone.generation).toBe(0);
+    expect(progress.map((entry) => entry.stage)).toEqual(expect.arrayContaining([
+      "checking", "discovering", "downloading", "materializing", "verifying", "ready",
+    ]));
+    expect(progress.every((entry) => entry.initialLoad)).toBe(true);
+    expect(progress.filter((entry) => entry.stage === "downloading").at(-1)?.progress)
+      .toMatchObject({ completed: expect.any(Number), unit: "bytes" });
 
     const callCount = vi.mocked(value.fetch).mock.calls.length;
-    await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1", null), { fetch: value.fetch });
+    const warmProgress: StandaloneBootstrapProgress[] = [];
+    await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1", null), {
+      fetch: value.fetch,
+      onProgress: (entry) => warmProgress.push(entry),
+    });
     expect(vi.mocked(value.fetch).mock.calls).toHaveLength(callCount);
+    expect(warmProgress).toMatchObject([
+      { initialLoad: false, stage: "checking" },
+      { initialLoad: false, stage: "verifying" },
+      { initialLoad: false, stage: "ready" },
+    ]);
   });
 
   it("cold-starts offline from a version index and required local blobs", async () => {

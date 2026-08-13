@@ -9,6 +9,7 @@ import {
   compareStandaloneVersions,
   createStandaloneHandoffEnvelope,
   validateStandaloneBootstrapDescriptor,
+  validateStandaloneBootstrapProgress,
   validateStandaloneBootstrapResult,
   validateStandaloneBootstrapRequest,
   validateStandaloneBootstrapResolution,
@@ -81,6 +82,36 @@ function request(): StandaloneHandoffRequest {
 }
 
 describe("Standalone bootloader protocol", () => {
+  it("validates optional quantitative bootstrap progress without inventing percentages", () => {
+    expect(validateStandaloneBootstrapProgress({
+      initialLoad: true,
+      progress: { completed: 8, total: 16, unit: "bytes" },
+      schemaVersion: 1,
+      stage: "downloading",
+    })).toEqual({
+      initialLoad: true,
+      progress: { completed: 8, total: 16, unit: "bytes" },
+      schemaVersion: 1,
+      stage: "downloading",
+    });
+    expect(validateStandaloneBootstrapProgress({
+      initialLoad: false,
+      schemaVersion: 1,
+      stage: "verifying",
+    })).not.toHaveProperty("progress");
+    expect(() => validateStandaloneBootstrapProgress({
+      initialLoad: true,
+      progress: { completed: 17, total: 16, unit: "bytes" },
+      schemaVersion: 1,
+      stage: "downloading",
+    })).toThrow(/completed <= total/u);
+    expect(() => validateStandaloneBootstrapProgress({
+      initialLoad: true,
+      schemaVersion: 1,
+      stage: "guessing",
+    })).toThrow(/stage/u);
+  });
+
   it("separates unresolved discovery scope from the committed generation handoff", () => {
     const full = request();
     const bootstrap = {

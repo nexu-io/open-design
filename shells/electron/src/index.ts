@@ -58,6 +58,7 @@ import {
   applyLoopbackConnectionLimitSwitch,
   applyOsLocaleSwitch,
   createSplashWindow,
+  setSplashStandaloneProgress,
   setSplashStage,
 } from "./main/index.js";
 import { createObsoleteInstalledOuterRetirement } from "./obsolete-installed-outer.js";
@@ -256,6 +257,9 @@ async function main(): Promise<void> {
       scope: { channel: shellRuntime.launcherPaths.channel, namespace },
     },
     nodeCommand,
+    onProgress(progress) {
+      setSplashStandaloneProgress(splash.window, progress);
+    },
   }));
   const desktopControl = bootstrapSidecarRuntime(stamp, process.env, {
     app: APP_KEYS.DESKTOP,

@@ -12,15 +12,18 @@ import {
   repairCommittedClosureDistribution,
   resolveClosureShellMinimumVersion,
   type ClosureDistributionReleaseCandidate,
+  type ClosureDistributionUpdateProgress,
   type ClosureResourceRepositoryConfig,
 } from "@open-design/closure-update";
 import {
   STANDALONE_PROTOCOL_VERSION,
+  STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION,
   compareStandaloneVersions,
   createStandaloneHandoffEnvelope,
   validateStandaloneBootstrapDescriptor,
   type StandaloneBootstrapDescriptor,
   type StandaloneBootstrapErrorCode,
+  type StandaloneBootstrapProgress,
   type StandaloneBootstrapResolution,
 } from "@open-design/standalone-proto";
 import {
@@ -45,7 +48,10 @@ export class StandaloneBootstrapError extends Error {
  */
 export async function resolveStandaloneBootstrap(
   requestInput: StandaloneBootstrapDescriptor,
-  options: Readonly<{ fetch?: typeof globalThis.fetch }> = {},
+  options: Readonly<{
+    fetch?: typeof globalThis.fetch;
+    onProgress?: (progress: StandaloneBootstrapProgress) => void;
+  }> = {},
 ): Promise<StandaloneBootstrapResolution> {
   const request = validateStandaloneBootstrapDescriptor(requestInput);
   const paths = resolveClosureStorePaths({
@@ -57,6 +63,38 @@ export async function resolveStandaloneBootstrap(
     OD_CLOSURE_RESOURCE_REPOSITORY_V1: request.repositoryConfigPath,
   });
   let descriptor = await readClosureBindingDescriptor(paths);
+  const initialLoad = descriptor.committed == null;
+  const emitProgress = (
+    stage: StandaloneBootstrapProgress["stage"],
+    progress?: StandaloneBootstrapProgress["progress"],
+  ): void => {
+    try {
+      options.onProgress?.(Object.freeze({
+        initialLoad,
+        ...(progress == null ? {} : { progress: Object.freeze(progress) }),
+        schemaVersion: STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION,
+        stage,
+      }));
+    } catch {
+      // Presentation telemetry cannot change bootstrap policy or authority.
+    }
+  };
+  const forwardDistributionProgress = (progress: ClosureDistributionUpdateProgress): void => {
+    if (progress.phase === "download") {
+      emitProgress("downloading", {
+        completed: progress.completedBytes,
+        total: progress.totalBytes,
+        unit: "bytes",
+      });
+      return;
+    }
+    emitProgress("materializing", {
+      completed: progress.completedComponents,
+      total: progress.totalComponents,
+      unit: "components",
+    });
+  };
+  emitProgress("checking");
   const lifecycle = bootstrapSidecarLifecycle({
     controlRoot: request.paths.dataRoot,
     scope: { channel: request.scope.channel, namespace: request.scope.namespace },
@@ -118,6 +156,7 @@ export async function resolveStandaloneBootstrap(
   };
 
   const discoverExact = async (version: string): Promise<ClosureDistributionReleaseCandidate> => {
+    emitProgress("discovering");
     const candidate = await discoverClosureDistributionVersionCandidate({
       channel: request.scope.channel,
       ...(options.fetch == null ? {} : { fetch: options.fetch }),
@@ -156,6 +195,7 @@ export async function resolveStandaloneBootstrap(
     const result = await applyClosureDistributionUpdate({
       candidate,
       ...(options.fetch == null ? {} : { fetch: options.fetch }),
+      onProgress: forwardDistributionProgress,
       paths,
       repository,
       shellType: request.attachment.shell.type,
@@ -193,6 +233,7 @@ export async function resolveStandaloneBootstrap(
     }
     let verification: Awaited<ReturnType<typeof verifyStoredClosureDistributionGeneration>>;
     try {
+      emitProgress("verifying");
       verification = await verifyStoredClosureDistributionGeneration(paths, committed.standalone);
     } catch (error) {
       const candidate = await discoverExact(committed.standalone.version).catch((discoveryError) => {
@@ -207,6 +248,7 @@ export async function resolveStandaloneBootstrap(
         return await repairCommittedClosureDistribution({
           candidate,
           ...(options.fetch == null ? {} : { fetch: options.fetch }),
+          onProgress: forwardDistributionProgress,
           paths,
           repository,
           shellType: request.attachment.shell.type,
@@ -231,6 +273,7 @@ export async function resolveStandaloneBootstrap(
         throw new StandaloneBootstrapError("standalone-invalid", "Standalone repair did not publish a binding");
       }
       try {
+        emitProgress("verifying");
         verification = await verifyStoredClosureDistributionGeneration(paths, committed.standalone);
       } catch (repairError) {
         throw new StandaloneBootstrapError(
@@ -276,6 +319,7 @@ export async function resolveStandaloneBootstrap(
       }),
       transition,
     });
+    emitProgress("ready");
     stopTransitionRenewal();
     return Object.freeze({
       bootloaderPath: verification.plan.required.launcher.resolvedHandoffPath,

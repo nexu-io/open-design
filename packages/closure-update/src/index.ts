@@ -195,6 +195,29 @@ export type ApplyClosureDistributionUpdateResult =
       state: "busy";
     };
 
+export type ClosureDistributionUpdateProgress =
+  | Readonly<{
+      completedBytes: number;
+      phase: "download";
+      totalBytes: number;
+    }>
+  | Readonly<{
+      completedComponents: number;
+      phase: "materialize";
+      totalComponents: number;
+    }>;
+
+function reportDistributionProgress(
+  observer: ((progress: ClosureDistributionUpdateProgress) => void) | undefined,
+  progress: ClosureDistributionUpdateProgress,
+): void {
+  try {
+    observer?.(Object.freeze(progress));
+  } catch {
+    // Progress is optional presentation telemetry and must never change update authority.
+  }
+}
+
 export type ApplyClosureReleaseUpdateResult =
   | ApplyClosureDistributionUpdateResult
   | ApplyClosureUpdateResult;
@@ -871,6 +894,7 @@ async function ensureCandidateMaterialized(input: {
 async function ensureDistributionBlob(input: {
   artifact: ClosureDistributionBlob;
   fetchImpl: typeof globalThis.fetch;
+  onProgress?: (completedBytes: number) => void;
   paths: ClosureStorePaths;
   repository?: ClosureResourceRepositoryConfig;
 }): Promise<string> {
@@ -880,7 +904,9 @@ async function ensureDistributionBlob(input: {
     );
   }
   try {
-    return await verifyClosureDistributionBlob(input.paths, input.artifact);
+    const verified = await verifyClosureDistributionBlob(input.paths, input.artifact);
+    input.onProgress?.(input.artifact.size);
+    return verified;
   } catch {
     const digest = input.artifact.digest.slice("sha256:".length);
     const outputPath = join(input.paths.blobsRoot, digest);
@@ -898,13 +924,17 @@ async function ensureDistributionBlob(input: {
       } catch (error) {
         if (!["EEXIST", "ENOTEMPTY", "EPERM"].includes(errorCode(error) ?? "")) throw error;
         try {
-          return await verifyClosureDistributionBlob(input.paths, input.artifact);
+          const verified = await verifyClosureDistributionBlob(input.paths, input.artifact);
+          input.onProgress?.(input.artifact.size);
+          return verified;
         } catch {
           await rm(outputPath, { force: true });
           await rename(candidatePath, outputPath);
         }
       }
-      return await verifyClosureDistributionBlob(input.paths, input.artifact);
+      const verified = await verifyClosureDistributionBlob(input.paths, input.artifact);
+      input.onProgress?.(input.artifact.size);
+      return verified;
     };
     const candidatePath = () => join(
       input.paths.stagingRoot,
@@ -937,6 +967,9 @@ async function ensureDistributionBlob(input: {
           fetch: input.fetchImpl,
           fileName: `${digest}.zip`,
           outputPath: temporaryPath,
+          onProgress(progress) {
+            input.onProgress?.(Math.min(progress.receivedBytes, input.artifact.size));
+          },
           payload: {
             checksum: { algorithm: "sha256", value: digest },
             url,
@@ -1050,6 +1083,7 @@ async function stageClosureDistributionGeneration(input: {
   candidate: ClosureDistributionReleaseCandidate;
   descriptor: ClosureBindingDescriptor;
   fetchImpl: typeof globalThis.fetch;
+  onProgress?: (progress: ClosureDistributionUpdateProgress) => void;
   paths: ClosureStorePaths;
   repository?: ClosureResourceRepositoryConfig;
 }) {
@@ -1060,16 +1094,36 @@ async function stageClosureDistributionGeneration(input: {
     input.candidate.target,
   );
   const components = Object.entries(plan.required);
-  const ensured = new Set<string>();
-  for (const [, component] of components) {
-    if (ensured.has(component.artifact.digest)) continue;
+  const uniqueComponents = [...new Map(
+    components.map(([, component]) => [component.artifact.digest, component] as const),
+  ).values()];
+  const totalBytes = uniqueComponents.reduce(
+    (total, component) => total + component.artifact.size,
+    0,
+  );
+  let completedBytes = 0;
+  reportDistributionProgress(input.onProgress, { completedBytes, phase: "download", totalBytes });
+  for (const component of uniqueComponents) {
+    let reportedArtifactBytes = 0;
     await ensureDistributionBlob({
       artifact: component.artifact,
       fetchImpl: input.fetchImpl,
+      onProgress(artifactBytes) {
+        reportedArtifactBytes = Math.max(
+          reportedArtifactBytes,
+          Math.min(artifactBytes, component.artifact.size),
+        );
+        reportDistributionProgress(input.onProgress, {
+          completedBytes: completedBytes + reportedArtifactBytes,
+          phase: "download",
+          totalBytes,
+        });
+      },
       paths: input.paths,
       ...(input.repository == null ? {} : { repository: input.repository }),
     });
-    ensured.add(component.artifact.digest);
+    completedBytes += component.artifact.size;
+    reportDistributionProgress(input.onProgress, { completedBytes, phase: "download", totalBytes });
   }
 
   const stageRoot = join(
@@ -1078,10 +1132,22 @@ async function stageClosureDistributionGeneration(input: {
   );
   await mkdir(stageRoot, { recursive: true });
   try {
+    let completedComponents = 0;
+    reportDistributionProgress(input.onProgress, {
+      completedComponents,
+      phase: "materialize",
+      totalComponents: components.length,
+    });
     await Promise.all(components.map(async ([name, component]) => {
       const componentRoot = join(stageRoot, name);
       await mkdir(componentRoot, { recursive: true });
       await extractZip(component.blobPath, { dir: componentRoot });
+      completedComponents += 1;
+      reportDistributionProgress(input.onProgress, {
+        completedComponents,
+        phase: "materialize",
+        totalComponents: components.length,
+      });
     }));
     await writeFile(
       join(stageRoot, "closure.json"),
@@ -1103,6 +1169,7 @@ async function stageClosureDistributionGeneration(input: {
 export async function applyClosureDistributionUpdate(input: {
   candidate: ClosureDistributionReleaseCandidate;
   fetch?: typeof globalThis.fetch;
+  onProgress?: (progress: ClosureDistributionUpdateProgress) => void;
   paths: ClosureStorePaths;
   repository?: ClosureResourceRepositoryConfig;
   shellType: string;
@@ -1127,6 +1194,7 @@ export async function applyClosureDistributionUpdate(input: {
       candidate: input.candidate,
       descriptor,
       fetchImpl: input.fetch ?? globalThis.fetch,
+      ...(input.onProgress == null ? {} : { onProgress: input.onProgress }),
       paths: input.paths,
       ...(input.repository == null ? {} : { repository: input.repository }),
     });
@@ -1157,6 +1225,7 @@ export async function applyClosureDistributionUpdate(input: {
 export async function repairCommittedClosureDistribution(input: {
   candidate: ClosureDistributionReleaseCandidate;
   fetch?: typeof globalThis.fetch;
+  onProgress?: (progress: ClosureDistributionUpdateProgress) => void;
   paths: ClosureStorePaths;
   repository?: ClosureResourceRepositoryConfig;
   shellType: string;
@@ -1188,6 +1257,7 @@ export async function repairCommittedClosureDistribution(input: {
       candidate: input.candidate,
       descriptor,
       fetchImpl: input.fetch ?? globalThis.fetch,
+      ...(input.onProgress == null ? {} : { onProgress: input.onProgress }),
       paths: input.paths,
       ...(input.repository == null ? {} : { repository: input.repository }),
     });

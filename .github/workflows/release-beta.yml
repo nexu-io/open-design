@@ -801,6 +801,7 @@ jobs:
             --channel beta \
             --dir "$RUNNER_TEMP/tools-pack" \
             --platform darwin-arm64 \
+            --require-vela-cli \
             --version "$version" \
             --json > "$RUNNER_TEMP/release-build/mac_arm64/closure-target.json"
           contribution_path="$(jq -er '.contributionPath' "$RUNNER_TEMP/release-build/mac_arm64/closure-target.json")"
@@ -1269,6 +1270,7 @@ jobs:
             --channel beta \
             --dir "$RUNNER_TEMP/tools-pack" \
             --platform darwin-x64 \
+            --require-vela-cli \
             --version "${{ needs.metadata.outputs.closure_version }}" \
             --json > "$RUNNER_TEMP/release-build/mac_x64/closure-target.json"
           contribution_path="$(jq -er '.contributionPath' "$RUNNER_TEMP/release-build/mac_x64/closure-target.json")"
@@ -1845,6 +1847,7 @@ jobs:
             --channel beta `
             --dir "${{ runner.temp }}\tools-pack" `
             --platform win32-x64 `
+            --require-vela-cli `
             --version $version `
             --json
           if ($LASTEXITCODE -ne 0) { throw "Standalone Closure build failed with exit code $LASTEXITCODE" }

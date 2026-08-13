@@ -266,6 +266,10 @@ export function bootstrapControlPlane({
       cwd: options.cwd,
       env: createPrivateLaunchEnv(descriptor, options.env),
       stdio: options.output ?? "ignore",
+      // Sidecars are background services. Without this, a packaged Windows
+      // Shell that inherits stdio from the generation bootloader receives a
+      // visible conhost window for the lifetime of the daemon/web child.
+      windowsHide: true,
     });
     const exited = childExit(child).then(async (exit) => {
       await convergeExitedLaunch(descriptor);

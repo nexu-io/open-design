@@ -1,9 +1,15 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
+import {
+  CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  CLOSURE_PROTOCOL_VERSION,
+  createClosureDistributionManifest,
+} from "@open-design/closure-proto";
 
 import { startUpdaterFixtureServer } from "../src/updater-fixture.js";
 
@@ -20,6 +26,89 @@ async function reserveLoopbackPort(): Promise<number> {
 }
 
 describe("updater fixture server", () => {
+  it("serves a rebased v2 Closure graph from latest and immutable version metadata", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-closure-v2-fixture-"));
+    const version = "2.0.0-beta.5";
+    const digest = (value: string): `sha256:${string}` => (
+      `sha256:${createHash("sha256").update(value).digest("hex")}`
+    );
+    const bodies = {
+      body: "body zip",
+      launcher: "launcher zip",
+      native: "native zip",
+    };
+    const blobs = Object.fromEntries(Object.values(bodies).map((body) => {
+      const id = digest(body);
+      return [id, {
+        digest: id,
+        mediaType: "application/zip",
+        size: Buffer.byteLength(body),
+        url: `https://releases.example/beta/blobs/${id.slice("sha256:".length)}`,
+      }];
+    }));
+    const bodyBlob = digest(bodies.body);
+    const launcherBlob = digest(bodies.launcher);
+    const nativeBlob = digest(bodies.native);
+    const manifest = createClosureDistributionManifest({
+      blobs,
+      compatibility: { shell: { electron: { version: { min: version } } } },
+      identity: { channel: "beta", protocolVersion: CLOSURE_PROTOCOL_VERSION, version },
+      required: {
+        body: { blob: bodyBlob, entryPath: "bootloader.mjs", treeDigest: digest("body tree") },
+        launcher: {
+          blob: launcherBlob,
+          entryPath: "launcher.mjs",
+          handoffPath: "bootloader.mjs",
+          treeDigest: digest("launcher tree"),
+        },
+        targets: {
+          "win32-x64": { native: { blob: nativeBlob, treeDigest: digest("native tree") } },
+        },
+      },
+      resources: [],
+      schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+    }, digest);
+    await Promise.all([
+      writeFile(join(root, "manifest.json"), `${JSON.stringify(manifest)}\n`),
+      ...Object.values(bodies).map(async (body) => {
+        const id = digest(body);
+        const blobRoot = join(root, "blobs");
+        await mkdir(blobRoot, { recursive: true });
+        await writeFile(join(blobRoot, id.slice("sha256:".length)), body);
+      }),
+    ]);
+    const server = await startUpdaterFixtureServer({
+      channel: "beta",
+      closureManifestPath: join(root, "manifest.json"),
+      platform: "win",
+      rebaseClosureUrl: true,
+      version,
+    });
+    try {
+      for (const metadataUrl of [
+        server.info.metadataUrl,
+        server.info.metadataUrl.replace("/latest/", `/versions/${version}/`),
+      ]) {
+        const metadata = await (await fetch(metadataUrl)).json() as {
+          closure?: typeof manifest;
+          releaseState?: string;
+        };
+        expect(metadata.releaseState).toBe("complete");
+        expect(metadata.closure?.identity.version).toBe(version);
+        expect(metadata.closure?.required.targets["win32-x64"]).toBeDefined();
+        for (const artifact of Object.values(metadata.closure?.blobs ?? {})) {
+          expect(new URL(artifact.url).origin).toBe(server.info.origin);
+          expect(await (await fetch(artifact.url)).text()).toBe(
+            bodies[artifact.digest === bodyBlob ? "body" : artifact.digest === launcherBlob ? "launcher" : "native"],
+          );
+        }
+      }
+    } finally {
+      await server.close();
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("serves metadata, artifact bytes, and checksum for the updater flow", async () => {
     const server = await startUpdaterFixtureServer({
       artifactBody: "fixture artifact",

@@ -8,9 +8,16 @@ proof, packaged platform proof, and proof made from public immutable bytes.
 
 - A first launch requires network access. The installer must not contain an
   initial Closure archive or extracted Closure payload.
+- The first online launch exposes its real Closure discovery, byte download,
+  component materialization, verification, and ready state independently from
+  the Shell boot-stage indicator. Indeterminate phases must not invent a
+  percentage.
 - Windows artifacts are unsigned for this phase. `signed=false` is expected in
   both the `win_x64` platform manifest and combined metadata when Windows is an
   enabled target.
+- Every published target contribution must require and carry its target-native
+  Vela and OpenCode binaries. The generation bootloader projects their exact
+  committed paths without replacing an explicit operator override.
 - `opendesign://` is the stable OS registration and wake-up boundary. Electron
   owns the internal `od://` proxy, which remains channel, namespace, and
   generation isolated.
@@ -35,10 +42,12 @@ proof, packaged platform proof, and proof made from public immutable bytes.
 | WIN-ARC-02 | Closure-only iteration | Same Shell version/source digest/build bytes and registered Shell proof are reused; selected smoke lane is only `standalone` | tools-release shell-build tests; release workflow topology tests | local + release-beta |
 | WIN-ARC-03 | sidecar contract | Daemon and Web sidecars start through the committed Closure and expose the expected health/IPC contract | Closure/store unit tests; packaged shell and standalone lanes | local |
 | WIN-ARC-04 | long Windows paths | A deeply nested Store generation launches Daemon and in-process Next through a verified generation/digest-bound junction | tools-pack Closure test; packaged historical migration | local + release-beta full |
+| WIN-ARC-05 | target-native agent tools | Strict `win32-x64` Closure construction contains only the approved native-addon tree plus Vela/OpenCode executables; the packaged daemon detects both from the committed generation | tools-pack component tests; strict target build; packaged `/api/agents` probe | local + release-beta |
 | WIN-COLD-01 | first online boot | A clean install downloads, verifies, commits, and starts the public Closure without a seeded fixture | public `core + shell` acceptance job | release-beta publish=true |
 | WIN-COLD-02 | first offline boot | With no committed Closure and no network, startup fails closed and does not synthesize a payload | Closure update/store tests; standalone packaged lane | local |
 | WIN-COLD-03 | integrity | Wrong archive digest, size, inventory, identity, platform, channel, or Shell floor never becomes committed | closure-proto/store/update/tools-pack tests | local |
 | WIN-COLD-04 | restart | Cold protocol launch reuses the exact committed generation, reaches a healthy renderer or Cloud identity gate, and preserves the persisted onboarding state | packaged shell lane | local + public smoke |
+| WIN-COLD-05 | first-load feedback | A clean Store reports checking/discovery, aggregate real download bytes, component materialization, verification, and ready; the splash replays progress received before it loads | standalone/protocol/Electron tests; local v2 online cold start | local + public smoke |
 | WIN-INS-01 | unsigned NSIS | Installer builds and installs successfully with no signing step; manifests truthfully report unsigned | tools-pack identity/builder tests; workflow topology | local + release-beta |
 | WIN-INS-02 | install identity | Install directory, display name, uninstall entry, namespace token, and executable identity agree | tools-pack identity tests; packaged shell lane | local |
 | WIN-INS-03 | shortcuts | Fresh silent install creates desktop and Start Menu shortcuts; update/repair preserves the prior desktop shortcut presence/absence | custom NSIS tests; `win-native-install-boundaries` | local + release-beta full |
@@ -52,6 +61,7 @@ proof, packaged platform proof, and proof made from public immutable bytes.
 | WIN-RUN-02 | protocol delivery | Hot delivery keeps the process; cold delivery starts a new process; continuation reaches the daemon | packaged shell lane | local + public smoke |
 | WIN-RUN-03 | `od://` isolation | Electron proxy resolves only the selected channel/namespace/generation runtime | Electron boundary tests; packaged lanes | local |
 | WIN-RUN-04 | data ownership | Product data persists across update/repair; remove-data uninstall clears only exact Open Design product state | packaged migration/shell lanes | local + release-beta full |
+| WIN-RUN-05 | background process UX | Standalone bootstrap, generation launcher, daemon, and Web children never expose a visible `cmd`/console window; a hidden console host is acceptable only with no visible window handle | sidecar/Electron tests; installed process/window observation | local + public smoke |
 | WIN-UPD-01 | Closure successor | Valid successor commits without rebuilding Shell; damaged successor rolls back/fails closed | standalone packaged lane | local + release-beta |
 | WIN-UPD-02 | silent payload | Shell IPC downloads the payload independently of renderer sign-in state; the payload applies on next cold start when allowed | packaged full shell lane | local + release-beta full |
 | WIN-UPD-03 | Shell/outer floor | An outer below the published minimum routes through installer reinstall, including running-process and same-version repair | updater unit tests; packaged full/migration lanes | local + release-beta full |
@@ -73,16 +83,20 @@ proof, packaged platform proof, and proof made from public immutable bytes.
 
 1. Run typechecks and unit/integration suites for closure-store,
    closure-update, tools-pack, tools-release, Electron and e2e topology.
-2. Build the Windows Shell/NSIS once with `tools-pack`; run the full shell,
-   standalone, rollback, migration, protocol, data and uninstall lanes against
-   local fixtures. `win-shell-v2` additionally requires
+2. Build the Windows Shell/NSIS once with `tools-pack`. Assemble a strict v2
+   Closure target, serve its real manifest and CAS blobs through `tools-serve`,
+   then prove one unseeded online install/start against that local feed. Record
+   the committed digest, packaged Vela/OpenCode detection, and process/window
+   observation before cleaning the Store.
+3. Reuse those artifacts for the full shell, standalone, rollback, migration,
+   protocol, data and uninstall lanes. `win-shell-v2` additionally requires
    `win-native-install-boundaries`. Preserve the Shell build and its full-smoke
    proof.
-3. Rebuild only Closure and prove the Shell build and every Shell smoke lane are
+4. Rebuild only Closure and prove the Shell build and every Shell smoke lane are
    skipped. Run the standalone-bound proof against the new Closure.
-4. Dispatch `release-beta` with `publish=true`, `enable_win_x64=true`,
+5. Dispatch `release-beta` with `publish=true`, `enable_win_x64=true`,
    `win_x64_sign_mode=off`, `win_x64_target=all`, and full local build smoke.
-5. The workflow stages immutable objects, re-downloads the public installer,
+6. The workflow stages immutable objects, re-downloads the public installer,
    runs the online cold-start smoke, issues the acceptance credential, performs
    CAS activation, and blocks on public readback.
 

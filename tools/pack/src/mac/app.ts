@@ -26,7 +26,6 @@ import {
 import { copyBundledResourceTrees } from "../resources.js";
 import { copyShellNodeRuntime, copyStandaloneBootstrapSeed } from "../shell-node.js";
 import { inspectStandaloneSeed } from "../standalone-seed.js";
-import { copyOptionalVelaCliBinary } from "../vela-cli.js";
 import { electronBuilderVersionForShellVersion } from "../versions.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
 import {

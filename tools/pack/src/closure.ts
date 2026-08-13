@@ -54,6 +54,7 @@ import {
   resolveHostClosurePlatformTarget,
   type ClosurePlatformTarget,
 } from "./closure-platform.js";
+import { copyOptionalVelaCliBinary } from "./vela-cli.js";
 
 export {
   CLOSURE_PLATFORM_TARGETS,
@@ -189,6 +190,7 @@ export type ClosureDistributionTargetBuildOptions = {
   channel: string;
   dir?: string;
   platform?: string;
+  requireVelaCli?: boolean;
   skipWorkspaceBuild?: boolean;
   version: string;
   workspaceRoot?: string;
@@ -984,6 +986,11 @@ export async function buildClosureDistributionTarget(
     executable: process.execPath,
     modules: CLOSURE_NODE_NATIVE_MODULES,
     nativeRoot,
+  });
+  await copyOptionalVelaCliBinary({
+    platform: target === CLOSURE_PLATFORM_TARGETS.WIN32_X64 ? "win" : "mac",
+    requireBundled: options.requireVelaCli === true,
+    resourceRoot: nativeRoot,
   });
   const contribution = await buildClosureDistributionTargetContribution({
     blobOrigin: options.blobOrigin,

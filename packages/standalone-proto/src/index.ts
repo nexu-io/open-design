@@ -5,6 +5,7 @@ import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
 
 export const STANDALONE_PROTOCOL_VERSION = 1 as const;
 export const STANDALONE_BOOTSTRAP_SCHEMA_VERSION = 1 as const;
+export const STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_BOOTSTRAP_RESULT_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_HANDOFF_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_UPDATER_SCHEMA_VERSION = 1 as const;
@@ -81,6 +82,29 @@ export type StandaloneBootstrapRequest = StandaloneBootstrapDescriptor & Readonl
 export type StandaloneBootstrapResolution = Readonly<{
   bootloaderPath: string;
   handoff: StandaloneHandoffDescriptor;
+}>;
+
+export const STANDALONE_BOOTSTRAP_PROGRESS_STAGES = Object.freeze([
+  "checking",
+  "discovering",
+  "downloading",
+  "materializing",
+  "verifying",
+  "ready",
+] as const);
+
+export type StandaloneBootstrapProgressStage =
+  (typeof STANDALONE_BOOTSTRAP_PROGRESS_STAGES)[number];
+
+export type StandaloneBootstrapProgress = Readonly<{
+  initialLoad: boolean;
+  progress?: Readonly<{
+    completed: number;
+    total: number;
+    unit: "bytes" | "components";
+  }>;
+  schemaVersion: typeof STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION;
+  stage: StandaloneBootstrapProgressStage;
 }>;
 
 /** Opaque sidecar-owned handoff-once capability. Product code never decodes it. */
@@ -883,6 +907,60 @@ export function validateStandaloneBootstrapResolution(
   return Object.freeze({
     bootloaderPath,
     handoff: validateStandaloneHandoffDescriptor(resolution.handoff),
+  });
+}
+
+export function validateStandaloneBootstrapProgress(
+  value: unknown,
+): StandaloneBootstrapProgress {
+  const progress = requireRecord(value, "standalone bootstrap progress");
+  requireKnownKeys(
+    progress,
+    ["initialLoad", "progress", "schemaVersion", "stage"],
+    "standalone bootstrap progress",
+  );
+  if (progress.schemaVersion !== STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION) {
+    throw new StandaloneProtocolError("standalone bootstrap progress schemaVersion is unsupported");
+  }
+  if (!STANDALONE_BOOTSTRAP_PROGRESS_STAGES.includes(
+    progress.stage as StandaloneBootstrapProgressStage,
+  )) {
+    throw new StandaloneProtocolError("standalone bootstrap progress stage is unsupported");
+  }
+  let normalizedProgress: StandaloneBootstrapProgress["progress"];
+  if (progress.progress != null) {
+    const quantitative = requireRecord(
+      progress.progress,
+      "standalone bootstrap quantitative progress",
+    );
+    requireKnownKeys(
+      quantitative,
+      ["completed", "total", "unit"],
+      "standalone bootstrap quantitative progress",
+    );
+    const completed = optionalNonNegativeInteger(
+      quantitative.completed,
+      "standalone bootstrap completed progress",
+    );
+    const total = optionalNonNegativeInteger(
+      quantitative.total,
+      "standalone bootstrap total progress",
+    );
+    if (completed == null || total == null || total === 0 || completed > total) {
+      throw new StandaloneProtocolError(
+        "standalone bootstrap quantitative progress must satisfy 0 <= completed <= total",
+      );
+    }
+    if (quantitative.unit !== "bytes" && quantitative.unit !== "components") {
+      throw new StandaloneProtocolError("standalone bootstrap progress unit is unsupported");
+    }
+    normalizedProgress = Object.freeze({ completed, total, unit: quantitative.unit });
+  }
+  return Object.freeze({
+    initialLoad: requireBoolean(progress.initialLoad, "standalone bootstrap initialLoad"),
+    ...(normalizedProgress == null ? {} : { progress: normalizedProgress }),
+    schemaVersion: STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION,
+    stage: progress.stage as StandaloneBootstrapProgressStage,
   });
 }
 

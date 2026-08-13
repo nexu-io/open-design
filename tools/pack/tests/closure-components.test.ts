@@ -65,8 +65,14 @@ describe("tools-pack Closure component archives", () => {
       "node_modules/better-sqlite3/build/Release/better_sqlite3.node",
     );
     await expect(validateClosureNativeComponent(nativeRoot)).resolves.toMatchObject({ fileCount: 1 });
+    await mkdir(join(nativeRoot, "bin", "libexec", "opencode"), { recursive: true });
+    await writeFile(join(nativeRoot, "bin", "vela"), "vela");
+    await writeFile(join(nativeRoot, "bin", "libexec", "opencode", "opencode"), "opencode");
+    await expect(validateClosureNativeComponent(nativeRoot)).resolves.toMatchObject({ fileCount: 3 });
+    await expect(validateClosureNativeComponent(nativeRoot, "darwin-arm64")).resolves.toMatchObject({ fileCount: 3 });
+    await expect(validateClosureNativeComponent(nativeRoot, "win32-x64")).rejects.toThrow(/approved bin runtimes/u);
     await writeFile(join(nativeRoot, "README.md"), "mixed");
-    await expect(validateClosureNativeComponent(nativeRoot)).rejects.toThrow(/only contain node_modules/u);
+    await expect(validateClosureNativeComponent(nativeRoot)).rejects.toThrow(/approved bin runtimes/u);
 
     expect(validateClosureNodeRuntimeIdentity({
       arch: "arm64",
