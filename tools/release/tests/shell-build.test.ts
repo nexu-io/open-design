@@ -62,13 +62,33 @@ describe("immutable Shell build storage", () => {
       "beta",
       "electron",
       buildDigest,
+      plan.profileDigest,
       "darwin-arm64",
       "mac-shell-v3",
       acceptanceDigest,
       1,
     )).toBe(
-      `beta/shells/electron/builds/${"c".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
+      `beta/shells/electron/builds/${"c".repeat(64)}/profiles/${"d".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
     );
+    expect(shellSmokeProofObjectKey(
+      "beta",
+      "electron",
+      buildDigest,
+      `sha256:${"2".repeat(64)}`,
+      "darwin-arm64",
+      "mac-shell-v3",
+      acceptanceDigest,
+      1,
+    )).not.toBe(shellSmokeProofObjectKey(
+      "beta",
+      "electron",
+      buildDigest,
+      plan.profileDigest,
+      "darwin-arm64",
+      "mac-shell-v3",
+      acceptanceDigest,
+      1,
+    ));
   });
 
   it("accepts a canonical older Shell version for identical source bytes", () => {
@@ -292,12 +312,13 @@ describe("immutable Shell build storage", () => {
           matrix: "mac-shell-v3",
           standaloneProtocolVersion: 1,
           state: "hit",
-          url: `https://releases.example/beta/shells/electron/builds/${"c".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
+          url: `https://releases.example/beta/shells/electron/builds/${"c".repeat(64)}/profiles/${"d".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
         });
         const proofKey = shellSmokeProofObjectKey(
           "beta",
           "electron",
           buildDigest,
+          plan.profileDigest,
           "darwin-arm64",
           "mac-shell-v3",
           acceptanceDigest,

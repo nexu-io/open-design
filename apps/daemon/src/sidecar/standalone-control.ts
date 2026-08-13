@@ -39,6 +39,7 @@ type ShellCapabilityBridgeMethods = {
 };
 
 const STANDALONE_SHELL_CAPABILITY_SERVICE = "shell";
+const SHELL_CAPABILITY_TIMEOUT_MS = 600_000;
 
 export interface DaemonStandaloneRuntime {
   registerDesktopAuth?(secret: string): Promise<void> | void;
@@ -77,11 +78,15 @@ async function startDefaultRuntime(
     if (attachmentId == null || attachmentId.length === 0) {
       throw new Error("Standalone Shell attachment identity is unavailable");
     }
-    const result = await shellCapabilities.call("invoke", {
-      attachmentId,
-      capability,
-      input: validatedInput as StandaloneProtocolJsonValue,
-    });
+    const result = await shellCapabilities.call(
+      "invoke",
+      {
+        attachmentId,
+        capability,
+        input: validatedInput as StandaloneProtocolJsonValue,
+      },
+      { timeoutMs: SHELL_CAPABILITY_TIMEOUT_MS },
+    );
     if (result.outcome === "completed") {
       return validateStandaloneShellCapabilityOutput(capability, result.output);
     }

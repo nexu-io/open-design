@@ -119,19 +119,21 @@ export function shellSmokeProofObjectKey(
   channel: string,
   shellType: string,
   buildDigest: Digest,
+  profileDigest: Digest,
   target: ShellTarget,
   matrix: string,
   acceptanceDigest: Digest,
   standaloneProtocolVersion: number,
 ): string {
   validateDigest(buildDigest, "Shell build digest");
+  validateDigest(profileDigest, "Shell profile digest");
   validateDigest(acceptanceDigest, "Shell smoke acceptance digest");
   if (!tokenPattern.test(shellType)) throw new Error(`invalid Shell type: ${shellType}`);
   if (!tokenPattern.test(matrix)) throw new Error(`invalid Shell smoke matrix: ${matrix}`);
   if (!Number.isSafeInteger(standaloneProtocolVersion) || standaloneProtocolVersion < 1) {
     throw new Error("Shell smoke Standalone protocol version must be a positive integer");
   }
-  return `${channel}/shells/${shellType}/builds/${buildDigest.slice("sha256:".length)}/acceptance/${target}/${matrix}/standalone-v${standaloneProtocolVersion}/${acceptanceDigest.slice("sha256:".length)}.json`;
+  return `${channel}/shells/${shellType}/builds/${buildDigest.slice("sha256:".length)}/profiles/${profileDigest.slice("sha256:".length)}/acceptance/${target}/${matrix}/standalone-v${standaloneProtocolVersion}/${acceptanceDigest.slice("sha256:".length)}.json`;
 }
 
 function requiredShellSmokeScenarioEntries(matrix: string): Array<{ lane: "migration" | "shell"; step: string }> {
@@ -445,6 +447,7 @@ export async function resolveShellBuild(): Promise<void> {
       channel,
       plan.shell.type,
       plan.shell.buildDigest,
+      plan.profileDigest,
       plan.target,
       smokeMatrix,
       acceptanceDigest,
@@ -558,6 +561,7 @@ export async function registerShellSmokeProof(): Promise<void> {
     channel,
     build.shell.type,
     build.shell.buildDigest,
+    plan.profileDigest,
     plan.target,
     matrix,
     acceptanceDigest,
