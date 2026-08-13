@@ -96,25 +96,12 @@ import { DesignsTab } from './DesignsTab';
 import { DesignSystemsTab } from './DesignSystemsTab';
 import { BrandsTab } from './BrandsTab';
 import { EntryNavRail, type EntryView as EntryViewKind } from './EntryNavRail';
-<<<<<<< HEAD
-import { ProjectSearchModal } from './ProjectSearchModal';
-import { CloudSignInTip, RailAccountSyncTip } from './CloudSignInTip';
-import { resolveEntryRailAccountFooterState } from './entry-rail-account-state';
-=======
 import {
   buildProjectSearchCatalog,
   ProjectSearchModal,
 } from './ProjectSearchModal';
-import {
-  CloudSignInTip,
-  RailAccountRecoveryTip,
-  RailAccountSyncTip,
-} from './CloudSignInTip';
-import {
-  resolveEntryRailAccountFooterState,
-  requiresAmrReauthentication,
-} from './entry-rail-account-state';
->>>>>>> e0b2b099e (fix(web): include personal projects in search (#6838))
+import { CloudSignInTip, RailAccountSyncTip } from './CloudSignInTip';
+import { resolveEntryRailAccountFooterState } from './entry-rail-account-state';
 import { LibrarySection } from './LibrarySection';
 import { UpdaterPopup } from './UpdaterPopup';
 import { WhatsNewPopup } from './WhatsNewPopup';
