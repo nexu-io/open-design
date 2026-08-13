@@ -4,9 +4,11 @@ import { describe, expect, it } from 'vitest';
 
 import {
   PACKAGED_NAMESPACE_BASE_ROOT_ENV,
+  PACKAGED_STANDALONE_METADATA_URL_ENV,
   resolveDefaultPackagedNodeCommandRelative,
   resolvePackagedAmrProfile,
   resolvePackagedNamespaceBaseRoot,
+  resolvePackagedStandaloneMetadataUrl,
 } from '../src/config.js';
 
 describe('resolveDefaultPackagedNodeCommandRelative', () => {
@@ -51,5 +53,19 @@ describe('resolvePackagedAmrProfile', () => {
     expect(() => resolvePackagedAmrProfile('staging')).toThrow(
       'unsupported packaged AMR profile; expected prod, test, feature-test, or local: staging',
     );
+  });
+});
+
+describe('resolvePackagedStandaloneMetadataUrl', () => {
+  it('keeps an outer Shell updater override from replacing the configured Closure feed', () => {
+    expect(resolvePackagedStandaloneMetadataUrl('https://releases.example/beta/latest/metadata.json', {
+      OD_UPDATE_METADATA_URL: 'http://127.0.0.1:43199/metadata.json',
+    })).toBe('https://releases.example/beta/latest/metadata.json');
+  });
+
+  it('allows public immutable acceptance to override the Closure feed explicitly', () => {
+    expect(resolvePackagedStandaloneMetadataUrl('https://releases.example/beta/latest/metadata.json', {
+      [PACKAGED_STANDALONE_METADATA_URL_ENV]: ' https://releases.example/beta/versions/0.19.0-beta.32/metadata.json ',
+    })).toBe('https://releases.example/beta/versions/0.19.0-beta.32/metadata.json');
   });
 });

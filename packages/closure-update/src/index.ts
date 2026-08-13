@@ -770,7 +770,13 @@ async function fetchJsonDocument(
   fetchImpl: typeof globalThis.fetch,
 ): Promise<unknown> {
   const response = await fetchImpl(url, { headers: { accept: "application/json" } });
-  if (!response.ok) throw new ClosureUpdateError(`${label} request returned HTTP ${response.status}`);
+  if (!response.ok) {
+    const requestUrl = new URL(url);
+    const requestLocation = `${requestUrl.origin}${requestUrl.pathname}`;
+    throw new ClosureUpdateError(
+      `${label} request to ${requestLocation} returned HTTP ${response.status}`,
+    );
+  }
   const text = await response.text();
   if (Buffer.byteLength(text) > 16 * 1024 * 1024) {
     throw new ClosureUpdateError(`${label} exceeds the 16 MiB metadata limit`);

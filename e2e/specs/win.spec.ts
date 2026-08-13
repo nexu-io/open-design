@@ -2656,6 +2656,7 @@ const UPDATE_ENV_KEYS = [
   'OD_UPDATE_AUTO_CHECK',
   'OD_UPDATE_ENABLED',
   'OD_UPDATE_METADATA_URL',
+  'OD_STANDALONE_METADATA_URL',
   'OD_UPDATE_CURRENT_VERSION',
   'OD_UPDATE_OPEN_DRY_RUN',
 ] as const;
@@ -3333,8 +3334,10 @@ type WindowsProtocolLaunchObservation = {
 };
 
 async function launchNativeWindowsAcceptance(installDir: string): Promise<WindowsProtocolLaunchObservation> {
+  const metadataUrl = resolveNativeAcceptanceMetadataUrl();
   return await invokeWindowsProtocolProcess(join(installDir, 'Open Design.exe'), undefined, {
-    OD_UPDATE_METADATA_URL: resolveNativeAcceptanceMetadataUrl(),
+    OD_STANDALONE_METADATA_URL: metadataUrl,
+    OD_UPDATE_METADATA_URL: metadataUrl,
   });
 }
 
@@ -3343,7 +3346,8 @@ function resolveNativeAcceptanceMetadataUrl(): string {
   if (version == null) throw new Error('native Windows acceptance requires OD_PACKAGED_E2E_RELEASE_VERSION');
   const channel = updateScenario.channel;
   const expectedPath = `/${channel}/versions/${encodeURIComponent(version)}/metadata.json`;
-  const candidate = normalizeOptionalEnv(process.env.OD_UPDATE_METADATA_URL)
+  const candidate = normalizeOptionalEnv(process.env.OD_STANDALONE_METADATA_URL)
+    ?? normalizeOptionalEnv(process.env.OD_UPDATE_METADATA_URL)
     ?? `https://releases.open-design.ai${expectedPath}`;
   const parsed = new URL(candidate);
   if (!parsed.pathname.endsWith(expectedPath)) {

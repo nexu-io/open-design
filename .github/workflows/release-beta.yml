@@ -2413,6 +2413,7 @@ jobs:
           OD_PACKAGED_E2E_WIN: "1"
           OD_PACKAGED_E2E_WIN_SMOKE_LANES: shell
           OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core
+          OD_STANDALONE_METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}
           OD_UPDATE_METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}
         run: pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
 

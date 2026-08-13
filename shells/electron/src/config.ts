@@ -21,6 +21,7 @@ async function loadElectronApp() {
 export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
 export const PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
 export const PACKAGED_NAMESPACE_BASE_ROOT_ENV = "OD_PACKAGED_NAMESPACE_BASE_ROOT";
+export const PACKAGED_STANDALONE_METADATA_URL_ENV = "OD_STANDALONE_METADATA_URL";
 export const PACKAGED_WEB_OUTPUT_MODE_OVERRIDE_ENV = "OD_PACKAGED_ALLOW_WEB_OUTPUT_MODE_OVERRIDE";
 export const PACKAGED_WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
 export const PACKAGED_WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
@@ -164,6 +165,22 @@ export function resolvePackagedAmrProfile(value: string | undefined): PackagedAm
     return cleaned;
   }
   throw new Error(`unsupported packaged AMR profile; expected prod, test, feature-test, or local: ${value}`);
+}
+
+/**
+ * Resolve the Closure feed independently from the outer Shell updater feed.
+ *
+ * Release metadata can describe both layers, but local payload-update fixtures
+ * intentionally describe only the outer Shell. Keeping their runtime override
+ * out of Standalone discovery prevents a relaunched payload from treating an
+ * updater-only document as a Closure v2 manifest.
+ */
+export function resolvePackagedStandaloneMetadataUrl(
+  configuredUrl: string | null | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): string | null {
+  return cleanOptionalString(env[PACKAGED_STANDALONE_METADATA_URL_ENV])
+    ?? cleanOptionalString(configuredUrl ?? undefined);
 }
 
 function isTruthyEnv(value: string | undefined): boolean {

@@ -10,6 +10,7 @@ import {
 import {
   PACKAGED_NAMESPACE_ENV,
   resolvePackagedAmrProfile,
+  resolvePackagedStandaloneMetadataUrl,
   type PackagedConfig,
 } from "./config.js";
 import {
@@ -61,7 +62,9 @@ function resolveStandaloneConfig(): PackagedConfig {
     resourceRoot,
     telemetryRelayUrl:
       process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim() || null,
-    updateMetadataUrl: process.env.OD_UPDATE_METADATA_URL?.trim() || null,
+    updateMetadataUrl: resolvePackagedStandaloneMetadataUrl(
+      process.env.OD_UPDATE_METADATA_URL,
+    ),
     posthogKey: process.env.POSTHOG_KEY?.trim() || null,
     posthogHost: process.env.POSTHOG_HOST?.trim() || null,
     velaWebUrl: process.env.OD_VELA_WEB_URL?.trim() || null,

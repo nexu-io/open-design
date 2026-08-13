@@ -21,7 +21,10 @@ import {
 } from "@open-design/sidecar";
 import { readProcessStamp } from "@open-design/platform";
 
-import { readPackagedConfig } from "./config.js";
+import {
+  readPackagedConfig,
+  resolvePackagedStandaloneMetadataUrl,
+} from "./config.js";
 import { createDesktopCapabilityAdapter } from "./desktop-capability-adapter.js";
 import {
   claimPackagedDownloadAttribution,
@@ -230,8 +233,9 @@ async function main(): Promise<void> {
   const splash = createSplashWindow();
   setSplashStage(splash.window, "engine");
 
-  const metadataUrl = process.env.OD_UPDATE_METADATA_URL?.trim()
-    || shellConfig.updateMetadataUrl;
+  const metadataUrl = resolvePackagedStandaloneMetadataUrl(
+    shellConfig.updateMetadataUrl,
+  );
   const target = resolveElectronStandaloneTarget();
   if (target == null) throw new Error(`Standalone is unsupported on ${process.platform}-${process.arch}`);
   const nodeCommand = resolveShellNodeCommand(shellConfig.nodeCommand);
