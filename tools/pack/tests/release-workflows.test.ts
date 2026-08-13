@@ -21,6 +21,18 @@ function countOccurrences(content: string, needle: string): number {
 }
 
 describe("release workflows", () => {
+  it("enables the complete release-beta platform cohort by default", async () => {
+    const beta = await readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8");
+    const dispatchInputs = sectionBetween(beta, "  workflow_dispatch:", "  workflow_call:");
+    const callInputs = sectionBetween(beta, "  workflow_call:", "    outputs:");
+
+    for (const inputs of [dispatchInputs, callInputs]) {
+      expect(sectionBetween(inputs, "      enable_mac_x64:", "      publish:")).toContain("default: true");
+      expect(sectionBetween(inputs, "      mac_x64_sign_mode:", "      mac_x64_smoke_mode:")).toContain("default: notarize");
+      expect(sectionBetween(inputs, "      mac_x64_smoke_mode:", "      mac_x64_target:")).toContain("default: core");
+    }
+  });
+
   it("retains only the newest outer tools-pack cache for each release lane", async () => {
     const workflows = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),

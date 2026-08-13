@@ -17,7 +17,7 @@ on:
         description: "Build and publish macOS x64 beta artifacts."
         required: true
         type: boolean
-        default: false
+        default: true
       publish:
         description: "Publish beta assets and metadata."
         required: true
@@ -107,7 +107,7 @@ on:
           - "no"
           - "sign-only"
           - "notarize"
-        default: "no"
+        default: notarize
       mac_x64_smoke_mode:
         description: "macOS x64 smoke coverage."
         required: true
@@ -116,7 +116,7 @@ on:
           - skip
           - core
           - full
-        default: skip
+        default: core
       mac_x64_target:
         description: "macOS x64 build target."
         required: true
@@ -175,7 +175,7 @@ on:
       enable_mac_x64:
         required: false
         type: boolean
-        default: false
+        default: true
       publish:
         required: false
         type: boolean
@@ -240,11 +240,11 @@ on:
       mac_x64_sign_mode:
         required: false
         type: string
-        default: "no"
+        default: notarize
       mac_x64_smoke_mode:
         required: false
         type: string
-        default: skip
+        default: core
       mac_x64_target:
         required: false
         type: string
