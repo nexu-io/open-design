@@ -2079,14 +2079,15 @@ process.stdin.on("end", () => {
   });
 
   it.skip("[P1] lets the daily main build recover a shared beta advanced by a feature branch", async () => {
-    const packagedVersion = await readPackagedVersion();
+    const packagedVersion = "1.2.3";
+    const foreignAheadBaseVersion = "1.3.0";
     const objects: Record<string, unknown> = {
       "beta/latest/metadata.json": {
-        baseVersion: "0.19.0",
+        baseVersion: foreignAheadBaseVersion,
         channel: "beta",
         github: { branch: "feat/standalone-closure" },
         releaseNumber: 9,
-        releaseVersion: "0.19.0-beta.9",
+        releaseVersion: `${foreignAheadBaseVersion}-beta.9`,
       },
     };
     const fixture = await startStablePrereleaseMetadataServer(objects);
