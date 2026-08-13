@@ -576,7 +576,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         expect(updateInspect.update?.state).toBe('downloaded');
         expect(updateInspect.update?.artifact?.type).toBe('payload');
         expect(updateInspect.update?.channel).toBe(updateScenario.channel);
-        expect(updateInspect.update?.currentVersion).toBe(updateScenario.expectedInstalledShellVersion);
+        expect(updateInspect.update?.currentVersion).toBe(updateScenario.expectedCurrentVersion);
         expect(updateInspect.update?.availableVersion).toBe(updaterVersion);
         expectPathInside(updateInspect.update?.downloadPath ?? '', join(runtimeNamespaceRoot, 'updates'));
         if (updateInspect.update == null) throw new Error('mac update status is missing');
@@ -1073,7 +1073,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       cleanupStarted = true;
       expect(rollbackStart.source).toBe('installed');
       const rolledBack = await waitForHealthyDesktopShellVersion(
-        updateScenario.expectedInstalledShellVersion,
+        updateScenario.expectedCurrentVersion,
         updateScenario.expectedCurrentVersion,
         start.pid,
         false,
@@ -1358,7 +1358,7 @@ macLegacyMigrationDescribe('packaged mac historical outer migration acceptance',
       const currentInspect = await waitForHealthyDesktop();
       const currentHealth = assertHealthEvalValue(currentInspect.eval?.value);
       expect(currentHealth.health.version).toBe(targetReleaseVersion);
-      expect(currentInspect.update?.currentVersion).toBe(shellVersion ?? targetReleaseVersion);
+      expect(currentInspect.update?.currentVersion).toBe(targetReleaseVersion);
       if (distribution != null) {
         assertClosureDesktopIdentity(await readDesktopIdentityMarker(), distribution.manifest.identity.version);
       }

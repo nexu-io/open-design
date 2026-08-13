@@ -30,15 +30,17 @@ describe('packaged updater release scenario', () => {
   });
 
   test('keeps the immutable installed Shell version separate from the release binding', () => {
-    expect(resolvePackagedUpdateScenario({
+    const scenario = resolvePackagedUpdateScenario({
       releaseChannel: 'beta',
       releaseVersion: '0.19.0-beta.5',
       shellVersion: '0.19.0-beta.4',
-    })).toMatchObject({
+    });
+    expect(scenario).toMatchObject({
       expectedCurrentVersion: '0.19.0-beta.5',
       expectedInstalledShellVersion: '0.19.0-beta.4',
       fixtureVersion: '0.19.0-beta.6',
     });
+    expect(scenario.expectedCurrentVersion).not.toBe(scenario.expectedInstalledShellVersion);
   });
 
   test('derives stable, prerelease, preview, beta, and betas next-version fixtures', () => {

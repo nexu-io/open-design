@@ -1001,10 +1001,9 @@ jobs:
           OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
           OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_arm64_shell_resolution.outputs.smoke_proof }}
-          # A content-addressed Shell hit may have been first registered by an
-          # older release. Smoke must validate this release's projected Shell
-          # version, not the origin version recorded on the reusable bytes.
-          OD_PACKAGED_E2E_SHELL_VERSION: ${{ needs.metadata.outputs.shell_version }}
+          # Preserve the immutable outer's origin version separately from the
+          # current release projection. Reinstall acceptance needs both facts.
+          OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.mac_arm64_shell_resolution.outputs.shell_version != '' && steps.mac_arm64_shell_resolution.outputs.shell_version || needs.metadata.outputs.shell_version }}
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_arm64
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
@@ -1509,9 +1508,9 @@ jobs:
           OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
           OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
           OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_x64_shell_resolution.outputs.smoke_proof }}
-          # A content-addressed Shell hit may have been first registered by an
-          # older release. Validate the current projection rather than origin.
-          OD_PACKAGED_E2E_SHELL_VERSION: ${{ needs.metadata.outputs.shell_version }}
+          # Preserve the immutable outer's origin version separately from the
+          # current release projection. Reinstall acceptance needs both facts.
+          OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.mac_x64_shell_resolution.outputs.shell_version != '' && steps.mac_x64_shell_resolution.outputs.shell_version || needs.metadata.outputs.shell_version }}
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
@@ -1978,9 +1977,9 @@ jobs:
           OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}
           OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
           OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.win_x64_shell_resolution.outputs.smoke_proof }}
-          # A content-addressed Shell hit may have been first registered by an
-          # older release. Validate the current projection rather than origin.
-          OD_PACKAGED_E2E_SHELL_VERSION: ${{ needs.metadata.outputs.shell_version }}
+          # Preserve the immutable outer's origin version separately from the
+          # current release projection. Reinstall acceptance needs both facts.
+          OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.win_x64_shell_resolution.outputs.shell_version != '' && steps.win_x64_shell_resolution.outputs.shell_version || needs.metadata.outputs.shell_version }}
         shell: pwsh
         run: |
           # Native runner paths contain backslashes. Let PowerShell serialize

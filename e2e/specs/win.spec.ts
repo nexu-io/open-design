@@ -1361,7 +1361,7 @@ winDescribe('packaged windows runtime smoke', () => {
       cleanupStarted = true;
       expect(rollbackStart.source).toBe('installed');
       const rolledBack = await waitForHealthyDesktopShellVersion(
-        updateScenario.expectedInstalledShellVersion,
+        updateScenario.expectedCurrentVersion,
         updateScenario.expectedCurrentVersion,
         start.pid,
         false,
@@ -1399,7 +1399,7 @@ winDescribe('packaged windows runtime smoke', () => {
       const healStart = await runToolsPackJson<WinStartResult>('start');
       cleanupStarted = true;
       expect(healStart.source).toBe('installed');
-      await waitForDownloadedUpdater(healedVersion, 'payload', 120_000, updateScenario.expectedInstalledShellVersion);
+      await waitForDownloadedUpdater(healedVersion, 'payload', 120_000, updateScenario.expectedCurrentVersion);
       const healControl = await runToolsPackJson<WinInspectResult>('inspect', ['--update-action', 'install']);
       expect(healControl.update?.state).toBe('downloaded');
       expect(healControl.update?.installResult?.dryRun).toBe(false);
@@ -2560,7 +2560,7 @@ async function waitForDownloadedUpdater(
   expectedVersion: string | null,
   expectedArtifactType: UpdateFixtureMode,
   timeoutMs = 120_000,
-  expectedCurrentVersion = updateScenario.expectedInstalledShellVersion,
+  expectedCurrentVersion = updateScenario.expectedCurrentVersion,
 ): Promise<WinInspectResult> {
   const startedAt = Date.now();
   let lastResult: unknown = null;
