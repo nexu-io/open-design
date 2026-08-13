@@ -140,7 +140,7 @@ const cli = cac("tools-serve");
 cli
   .command("start <service>", "Start a local fixture service")
   .option("--artifact-path <path>", "Serve a local update artifact file")
-  .option("--channel <channel>", "Updater channel: stable|beta|betas|prerelease|preview", { default: "stable" })
+  .option("--channel <channel>", "Updater channel: stable|beta|prerelease|preview", { default: "stable" })
   .option("--closure-blob-dir <path>", "Serve content-addressed blobs for a Closure distribution graph")
   .option("--closure-distribution-manifest-path <path>", "Serve a version-wide Closure distribution graph beside updater metadata")
   .option("--closure-manifest-path <path>", "Serve a real Standalone Closure build beside updater metadata")

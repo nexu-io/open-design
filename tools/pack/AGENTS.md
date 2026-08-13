@@ -101,18 +101,12 @@ This harness is appropriate for asserting IPC, popup rendering, progress, checks
 
 ### High-confidence local user-flow acceptance
 
-Use this when validating release-channel behavior before handing a Windows beta build to a human tester. This path intentionally avoids mock services and exercises the selected real beta feed. For the self-hosted `release-beta-s` lane, the real feed is the Nexu S3 origin configured by `release_public_origin`, currently `https://s3.nexu.space/od-releases`.
+Use this when validating release-channel behavior before handing a Windows beta build to a human tester. This path intentionally avoids mock services and exercises the selected real beta feed.
 
 1. Confirm the latest beta metadata first:
 
 ```bash
 curl.exe --ssl-no-revoke -fsSL https://releases.open-design.ai/beta/latest/metadata.json
-```
-
-For `release-beta-s`, check the internal feed instead:
-
-```bash
-curl.exe --ssl-no-revoke -fsSL https://s3.nexu.space/od-releases/betas/latest/metadata.json
 ```
 
 2. Build a non-portable Windows beta package with the real beta namespace and a version lower than latest:

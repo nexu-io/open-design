@@ -51,16 +51,10 @@ describe("@open-design/release", () => {
       releaseNumber: 5,
       releaseVersion: "1.2.3-preview.5",
     });
-    expect(releaseMetadataVersionFields("betas", "1.2.3-betas.6")).toMatchObject({
-      baseVersion: "1.2.3",
-      releaseNumber: 6,
-      releaseVersion: "1.2.3-betas.6",
-    });
   });
 
   it("centralizes release identity and namespace derivation", () => {
     expect(releaseChannelDescriptor("prerelease").productName).toBe("Open Design Prerelease");
-    expect(releaseChannelDescriptor("betas").productName).toBe("Open Design Betas");
     expect(releaseInstallIdentity("prerelease")).toEqual({
       appId: "io.open-design.desktop.prerelease",
       executableName: "Open Design Prerelease",
@@ -69,15 +63,12 @@ describe("@open-design/release", () => {
     expect(releaseNamespace("prerelease")).toBe("release-prerelease");
     expect(releaseNamespace("prerelease", "win")).toBe("release-prerelease-win");
     expect(releaseNamespace("prerelease", "macIntel")).toBe("release-prerelease-intel");
-    expect(releaseNamespace("betas", "win")).toBe("release-betas-win");
   });
 
   it("infers release channels from versions and namespaces", () => {
     expect(releaseChannelFromVersion("1.2.3-beta.1")).toBe("beta");
-    expect(releaseChannelFromVersion("1.2.3-betas.1")).toBe("betas");
     expect(releaseChannelFromVersion("1.2.3-prerelease.1")).toBe("prerelease");
     expect(releaseChannelFromNamespace("release-preview-linux")).toBe("preview");
-    expect(releaseChannelFromNamespace("release-betas-win")).toBe("betas");
     expect(releaseChannelFromNamespace("open-design")).toBe("stable");
     expect(releaseChannelFromNamespace("beta-local-flow")).toBeNull();
   });

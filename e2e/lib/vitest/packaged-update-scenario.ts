@@ -88,7 +88,7 @@ function nextStablePatch(version: string): string {
 }
 
 function nextHyphenPrerelease(version: string, label: string): string {
-  if (label !== 'beta' && label !== 'betas' && label !== 'prerelease' && label !== 'preview') {
+  if (label !== 'beta' && label !== 'prerelease' && label !== 'preview') {
     throw new Error(`unsupported counted release channel: ${label}`);
   }
   const parsed = parseReleaseVersion(version, label);

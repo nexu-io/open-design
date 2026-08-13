@@ -40,13 +40,6 @@ describe("launcher protocol paths", () => {
     expect(paths.releasesRoot).toBe(join(paths.namespaceRoot, "updates", "releases"));
   });
 
-  it("resolves the self-hosted betas launcher channel", () => {
-    const paths = resolveLauncherPaths({ channel: "betas", namespace: "release-betas-win", root });
-
-    expect(paths.namespaceRoot).toBe(join(root, "launcher", "channels", "betas", "namespaces", "release-betas-win"));
-    expect(paths.runtimePath).toBe(join(paths.namespaceRoot, "runtime.json"));
-  });
-
   it("resolves payload version paths without allowing path traversal", () => {
     const paths = resolveLauncherVersionPaths({
       channel: "beta",

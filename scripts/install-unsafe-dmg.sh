@@ -6,7 +6,7 @@ usage() {
 Usage:
   scripts/install-unsafe-dmg.sh [--force] [--name <file.dmg>] <dmg-url>
 
-Internal helper for installing non-notarized macOS DMGs during beta-s validation.
+Internal helper for installing non-notarized macOS DMGs during beta validation.
 It downloads with curl, mounts the DMG, copies the single app bundle to
 /Applications, and removes quarantine/provenance xattrs from the installed app.
 

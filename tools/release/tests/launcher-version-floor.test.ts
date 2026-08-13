@@ -47,7 +47,7 @@ describe("installation version floor channel policy", () => {
   });
 
   it("returns null when neither the channel nor stable defines a floor", () => {
-    expect(resolveInstallationVersionFloor("betas", {})).toBeNull();
+    expect(resolveInstallationVersionFloor("preview", {})).toBeNull();
     expect(resolveInstallationVersionFloor("stable", {})).toBeNull();
   });
 

@@ -5,12 +5,6 @@
       "storagePrefix": "beta",
       "productName": "Open Design Beta"
     },
-    "betas": {
-      "channel": "betas",
-      "storagePrefix": "betas",
-      "productName": "Open Design Betas",
-      "publicOrigin": "https://s3.nexu.space/od-releases"
-    },
     "prerelease": {
       "channel": "prerelease",
       "storagePrefix": "prerelease",

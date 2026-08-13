@@ -651,11 +651,7 @@ describe("updater fixture server", () => {
     }
   });
 
-  it("serves betas, prerelease, and preview generic release versions", async () => {
-    const betas = await startUpdaterFixtureServer({
-      channel: "betas",
-      version: "2.0.0-betas.2",
-    });
+  it("serves prerelease and preview generic release versions", async () => {
     const prerelease = await startUpdaterFixtureServer({
       channel: "prerelease",
       version: "2.0.0-prerelease.3",
@@ -665,15 +661,6 @@ describe("updater fixture server", () => {
       version: "2.0.0-preview.4",
     });
     try {
-      const betasMetadata = await (await fetch(betas.info.metadataUrl)).json() as {
-        channel?: string;
-        releaseNumber?: number;
-        releaseVersion?: string;
-      };
-      expect(betasMetadata.channel).toBe("betas");
-      expect(betasMetadata.releaseNumber).toBe(2);
-      expect(betasMetadata.releaseVersion).toBe("2.0.0-betas.2");
-
       const prereleaseMetadata = await (await fetch(prerelease.info.metadataUrl)).json() as {
         channel?: string;
         releaseNumber?: number;
@@ -692,7 +679,6 @@ describe("updater fixture server", () => {
       expect(previewMetadata.releaseNumber).toBe(4);
       expect(previewMetadata.releaseVersion).toBe("2.0.0-preview.4");
     } finally {
-      await betas.close();
       await prerelease.close();
       await preview.close();
     }

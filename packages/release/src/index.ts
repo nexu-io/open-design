@@ -1,4 +1,4 @@
-export type CountedReleaseChannel = "beta" | "betas" | "prerelease" | "preview";
+export type CountedReleaseChannel = "beta" | "prerelease" | "preview";
 export type ReleaseChannel = CountedReleaseChannel | "stable";
 export type ReleasePlatform = "mac" | "macIntel" | "win" | "linux";
 
@@ -38,7 +38,6 @@ export type ReleaseInstallIdentity = {
 
 export const RELEASE_CHANNELS = Object.freeze({
   BETA: "beta",
-  BETAS: "betas",
   PRERELEASE: "prerelease",
   PREVIEW: "preview",
   STABLE: "stable",
@@ -66,18 +65,6 @@ const descriptors: Record<ReleaseChannel, ReleaseChannelDescriptor> = {
     counterField: "releaseNumber",
     releaseVersionField: "releaseVersion",
     storagePrefix: "beta",
-  },
-  betas: {
-    appId: "io.open-design.desktop.betas",
-    baseVersionField: "baseVersion",
-    channel: "betas",
-    counterField: "releaseNumber",
-    displayLabel: "Betas",
-    githubReleaseEnabled: false,
-    internal: true,
-    productName: `${PRODUCT_NAME} Betas`,
-    releaseVersionField: "releaseVersion",
-    storagePrefix: "betas",
   },
   prerelease: {
     appId: "io.open-design.desktop.prerelease",
@@ -123,7 +110,7 @@ export function isReleaseChannel(value: unknown): value is ReleaseChannel {
 
 export function releaseChannelDescriptor(channel: string): ReleaseChannelDescriptor {
   if (!isReleaseChannel(channel)) {
-    throw new Error(`RELEASE_CHANNEL must be beta, betas, prerelease, preview, or stable; got ${channel}`);
+    throw new Error(`RELEASE_CHANNEL must be beta, prerelease, preview, or stable; got ${channel}`);
   }
   return descriptors[channel];
 }
@@ -131,7 +118,6 @@ export function releaseChannelDescriptor(channel: string): ReleaseChannelDescrip
 export function releaseChannelFromVersion(version: string | null | undefined): ReleaseChannel | null {
   if (version == null || version.length === 0) return null;
   if (/(?:^|[-.])beta(?:[-.]|$)/i.test(version)) return "beta";
-  if (/(?:^|[-.])betas(?:[-.]|$)/i.test(version)) return "betas";
   if (/(?:^|[-.])preview(?:[-.]|$)/i.test(version)) return "preview";
   if (/(?:^|[-.])prerelease(?:[-.]|$)/i.test(version)) return "prerelease";
   return null;
@@ -140,7 +126,6 @@ export function releaseChannelFromVersion(version: string | null | undefined): R
 export function releaseChannelFromNamespace(namespace: string, defaultNamespace = DEFAULT_NAMESPACE): ReleaseChannel | null {
   if (namespace === defaultNamespace || isReleaseChannelNamespace(namespace, "stable")) return "stable";
   if (isReleaseChannelNamespace(namespace, "beta")) return "beta";
-  if (isReleaseChannelNamespace(namespace, "betas")) return "betas";
   if (isReleaseChannelNamespace(namespace, "prerelease")) return "prerelease";
   if (isReleaseChannelNamespace(namespace, "preview")) return "preview";
   return null;

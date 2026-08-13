@@ -33,7 +33,7 @@ const { objectKey, reservation, url } = await reserveVersion({
 
 writeGithubOutputs({
   ...(releaseChannel === "beta" ? { beta_number: String(reservation.releaseNumber), beta_version: reservation.releaseVersion } : {}),
-  release_name: `Open Design ${releaseChannel === "betas" ? "Betas" : releaseChannel[0]?.toUpperCase() ?? ""}${releaseChannel === "betas" ? "" : releaseChannel.slice(1)} ${reservation.releaseVersion}`,
+  release_name: `Open Design ${releaseChannel[0]?.toUpperCase() ?? ""}${releaseChannel.slice(1)} ${reservation.releaseVersion}`,
   release_number: String(reservation.releaseNumber),
   release_version: reservation.releaseVersion,
   state_source: `reserved ${objectKey}`,

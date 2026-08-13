@@ -2940,7 +2940,7 @@ async function buildVersionBumpedWinPayloadFixture(
 }
 
 function bumpCountedVersion(version: string): string {
-  const match = /^(.*[.-](?:beta|betas|prerelease|preview))\.(\d+)$/.exec(version);
+  const match = /^(.*[.-](?:beta|prerelease|preview))\.(\d+)$/.exec(version);
   if (match?.[1] == null || match[2] == null) {
     throw new Error(`rollback acceptance requires a counted version to bump: ${version}`);
   }

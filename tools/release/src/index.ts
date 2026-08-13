@@ -11,10 +11,6 @@ cli
       await import("./metadata/prepare-beta.ts");
       return;
     }
-    if (channel === "betas") {
-      await import("./metadata/prepare-betas.ts");
-      return;
-    }
     if (channel === "preview") {
       await import("./metadata/prepare-preview.ts");
       return;
