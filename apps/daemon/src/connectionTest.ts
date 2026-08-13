@@ -21,7 +21,7 @@ import { promises as dnsPromises } from 'node:dns';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Agent, EnvHttpProxyAgent, Socks5ProxyAgent } from 'undici';
+import { Agent, EnvHttpProxyAgent, Socks5ProxyAgent, fetch as undiciFetch } from 'undici';
 import type { Dispatcher, Pool } from 'undici';
 import {
   applyAgentLaunchEnv,
@@ -180,7 +180,11 @@ export async function validateBaseUrlResolved(
     }
   }
 
-  return sync;
+  // Attach validated addresses so the caller can pin the actual fetch to them.
+  // This prevents DNS rebinding: without pinning, the attacker's DNS can return
+  // a public IP here and then 127.0.0.1 at fetch time, so the daemon connects
+  // to loopback despite the validation having passed (issue #5478).
+  return { ...sync, resolvedAddresses: addresses };
 }
 
 /**
@@ -221,10 +225,17 @@ export function validateUserProviderBaseUrl(
  * Both hand the URL straight to `fetch(...)` next, so pair this
  * guard with `redirect: 'error'` on the fetch to also block a
  * 3xx hop into private space.
+ *
+ * Returns the DNS-resolved addresses that passed validation on the `ok` branch
+ * so callers (e.g. {@link assertAndFetchExternalAsset}) can pin the actual
+ * connection to those addresses and prevent DNS rebinding (issue #5478).
  */
 export async function assertExternalAssetUrl(
   rawUrl: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; resolvedAddresses?: ReadonlyArray<{ address: string; family: number }> }
+  | { ok: false; error: string }
+> {
   if (typeof rawUrl !== 'string' || !rawUrl) {
     return { ok: false, error: 'empty download url' };
   }
@@ -242,18 +253,30 @@ export async function assertExternalAssetUrl(
         : `invalid download url: ${validated.error ?? 'unknown reason'}`,
     };
   }
+  // Only include resolvedAddresses when present — exactOptionalPropertyTypes
+  // forbids assigning `undefined` to an optional property.
+  if (validated.resolvedAddresses) {
+    return { ok: true, resolvedAddresses: validated.resolvedAddresses };
+  }
   return { ok: true };
 }
 
 /**
  * Validate an upstream-controlled asset URL and fetch it with the SSRF guard
- * pinned through redirects. Runs `assertExternalAssetUrl` on the literal URL
- * and forces `redirect: 'error'`, so a validated public URL that 302s into
- * loopback / RFC1918 / metadata space is rejected before any bytes are read.
+ * pinned through redirects **and DNS resolution**. Runs `assertExternalAssetUrl`
+ * on the literal URL, forces `redirect: 'error'` (blocking a 3xx hop into
+ * private space), and — when DNS resolution was used during validation — pins
+ * the Undici dispatcher to the validated IP addresses so that a DNS-rebinding
+ * domain cannot return `127.0.0.1` / `::1` at fetch time (issue #5478).
  *
- * Throws on a blocked host — so the redirect bypass is impossible to forget at
- * call sites — and the platform fetch additionally throws when `redirect:
- * 'error'` encounters a 3xx. Callers keep their own `!resp.ok` HTTP-status
+ * The pinned dispatcher overrides the DNS lookup used by `net.connect` /
+ * `tls.connect`, returning only the addresses from the validation step. The
+ * original hostname is preserved for the `Host` header and TLS SNI, so the
+ * request is identical to a normal fetch except that the TCP connection goes
+ * to the vetted IP.
+ *
+ * Throws on a blocked host — so the redirect/DNS-rebind bypass is impossible
+ * to forget at call sites. Callers keep their own `!resp.ok` HTTP-status
  * handling. The forced `redirect` is spread last so it overrides any value the
  * caller passed in `init`.
  */
@@ -263,6 +286,39 @@ export async function assertAndFetchExternalAsset(
 ): Promise<Response> {
   const check = await assertExternalAssetUrl(url);
   if (!check.ok) throw new Error(check.error);
+
+  // Pin the DNS lookup to the addresses validated above so a DNS-rebinding
+  // domain cannot return a loopback/internal address at fetch time (issue #5478).
+  // When no DNS lookup was performed (IP literal, loopback carve-out for
+  // provider endpoints, or lookup failure), fall back to a normal fetch — the
+  // literal hostname was already validated synchronously.
+  if (check.resolvedAddresses && check.resolvedAddresses.length > 0) {
+    const validatedAddrs = check.resolvedAddresses;
+    const pinnedAgent = new Agent({
+      connect: {
+        // Custom lookup that always returns the DNS-resolved addresses from
+        // the validation step, ignoring any re-resolution attempt. This is
+        // the crux of the DNS-rebinding fix (issue #5478): even if the
+        // attacker's DNS returns 127.0.0.1 at fetch time, the pinned lookup
+        // ignores the hostname and returns only the vetted IPs.
+        lookup: ((_hostname: string, options: unknown, callback: (...args: unknown[]) => void) => {
+          const opts = options as { all?: boolean };
+          if (opts?.all) {
+            callback(null, validatedAddrs.map((a) => ({ address: a.address, family: a.family })));
+          } else {
+            const first = validatedAddrs[0]!;
+            callback(null, first.address, first.family);
+          }
+        }) as never,
+      },
+    });
+    return undiciFetch(url, {
+      ...init,
+      redirect: 'error',
+      dispatcher: pinnedAgent,
+    } as Parameters<typeof undiciFetch>[1]);
+  }
+
   return fetch(url, { ...init, redirect: 'error' });
 }
 

@@ -102,3 +102,78 @@ describe('validateBaseUrlResolved — DNS-resolved loopback (issue #5478)', () =
     expect(result.error).toContain('loopback');
   });
 });
+
+describe('DNS rebinding — resolved-address pinning (issue #5478)', () => {
+  it('validateBaseUrlResolved attaches validated addresses to the result', async () => {
+    const dns: DnsLookupFn = async () => [{ address: '93.184.216.34', family: 4 }];
+    const result = await validateBaseUrlResolved(
+      'http://cdn.example.com/image.png',
+      dns,
+      { forbidLoopback: true },
+    );
+    expect(result.parsed).toBeDefined();
+    expect(result.resolvedAddresses).toBeDefined();
+    expect(result.resolvedAddresses).toHaveLength(1);
+    expect(result.resolvedAddresses![0]!.address).toBe('93.184.216.34');
+  });
+
+  it('resolved addresses capture the public IP from the first lookup only', async () => {
+    // Simulate DNS rebinding: first lookup returns a public IP, subsequent
+    // lookups return loopback. The validation step must capture only the
+    // public address so the pinned fetch cannot be rebind-attacked.
+    let callCount = 0;
+    const rebindDns: DnsLookupFn = async () => {
+      callCount++;
+      if (callCount <= 1) return [{ address: '93.184.216.34', family: 4 }];
+      return [{ address: '127.0.0.1', family: 4 }];
+    };
+
+    const result = await validateBaseUrlResolved(
+      'http://rebind.attacker.com/image.png',
+      rebindDns,
+      { forbidLoopback: true },
+    );
+
+    // Validation passed (first lookup returned a public IP)
+    expect(result.parsed).toBeDefined();
+    expect(result.error).toBeUndefined();
+
+    // Resolved addresses contain only the public IP, NOT the rebind loopback
+    const addresses = result.resolvedAddresses!;
+    expect(addresses).toHaveLength(1);
+    expect(addresses[0]!.address).toBe('93.184.216.34');
+    expect(addresses[0]!.address).not.toBe('127.0.0.1');
+
+    // DNS was resolved exactly once during validation — the pinned dispatcher
+    // will reuse these addresses and never trigger the rebind lookup.
+    expect(callCount).toBe(1);
+  });
+
+  it('multiple validated addresses are all attached (round-robin DNS)', async () => {
+    const dns: DnsLookupFn = async () => [
+      { address: '93.184.216.34', family: 4 },
+      { address: '93.184.216.35', family: 4 },
+    ];
+    const result = await validateBaseUrlResolved(
+      'http://cdn.example.com/image.png',
+      dns,
+      { forbidLoopback: true },
+    );
+    expect(result.resolvedAddresses).toBeDefined();
+    expect(result.resolvedAddresses).toHaveLength(2);
+    expect(result.resolvedAddresses!.map((a) => a.address)).toEqual(
+      expect.arrayContaining(['93.184.216.34', '93.184.216.35']),
+    );
+  });
+
+  it('IP-literal URLs do not get resolvedAddresses (no DNS lookup needed)', async () => {
+    const result = await validateBaseUrlResolved(
+      'http://93.184.216.34/image.png',
+      async () => [{ address: '127.0.0.1', family: 4 }], // would fail if called
+      { forbidLoopback: true },
+    );
+    expect(result.parsed).toBeDefined();
+    // No DNS lookup was performed for an IP literal, so no resolvedAddresses
+    expect(result.resolvedAddresses).toBeUndefined();
+  });
+});

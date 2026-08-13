@@ -9,6 +9,13 @@ export interface BaseUrlValidationResult {
   parsed?: ParsedBaseUrl;
   error?: string;
   forbidden?: boolean;
+  // Addresses resolved by DNS lookup that passed validation. Present when
+  // `validateBaseUrlResolved` performed a DNS lookup and every resolved address
+  // was safe (public, or allowlisted). Callers that fetch the URL (e.g.
+  // `assertAndFetchExternalAsset`) pin the connection to these addresses so
+  // that a DNS-rebinding domain cannot return a different (loopback/internal)
+  // address at fetch time (issue #5478).
+  resolvedAddresses?: ReadonlyArray<{ address: string; family: number }>;
 }
 
 export interface ParsedBaseUrl {
