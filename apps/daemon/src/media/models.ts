@@ -152,7 +152,7 @@ export const IMAGE_MODELS: MediaModel[] = [
   { id: 'leonardo-anime-pastel', label: 'Anime Pastel Dream', hint: 'Leonardo · anime', provider: 'leonardo', caps: ['t2i'] },
 
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },
-  { id: 'comfyui-sdxl', label: 'comfyui-sdxl', hint: 'Local ComfyUI · SDXL', provider: 'comfyui', caps: ['t2i'], default: true },
+  { id: 'comfyui-sdxl', label: 'comfyui-sdxl', hint: 'Local ComfyUI · SDXL', provider: 'comfyui', caps: ['t2i'] },
 ];
 
 export const VIDEO_MODELS: MediaModel[] = [

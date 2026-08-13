@@ -533,7 +533,7 @@ export const IMAGE_MODELS: MediaModel[] = [
 
   // Midjourney via community proxies.
   { id: 'midjourney-v7', label: 'midjourney-v7', hint: 'Midjourney · via proxy', provider: 'midjourney', caps: ['t2i'] },
-  { id: 'comfyui-sdxl', label: 'comfyui-sdxl', hint: 'Local ComfyUI · SDXL', provider: 'comfyui', caps: ['t2i'], default: true },
+  { id: 'comfyui-sdxl', label: 'comfyui-sdxl', hint: 'Local ComfyUI · SDXL', provider: 'comfyui', caps: ['t2i'] },
 ];
 
 /**
