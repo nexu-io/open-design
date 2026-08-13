@@ -1121,7 +1121,7 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
 async function renderComfyUIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   const baseUrl = (credentials.baseUrl || '').trim();
   if (!baseUrl) {
-    throw new Error('ComfyUI base URL required — configure in Settings (default: http://127.0.0.1:8188)');
+    throw new Error(`ComfyUI base URL required — configure in ${SETTINGS_MEDIA_PROVIDERS_PATH} (default: http://127.0.0.1:8188)`);
   }
   const wireModel = (
     credentials.model
