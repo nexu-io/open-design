@@ -1854,9 +1854,10 @@ Common options:
                             (gpt-image-2 accepts low|medium|high). Omit to let the
                             model's own default tier decide — tiers are priced
                             differently, so this is a billing choice.
-  --resolution <res>        Published output resolution. SiftQ MiniMax-H3 accepts
-                            768P or 2K; Open Design Cloud accepts model-specific values.
-                            Omit to use the provider's default profile.
+  --resolution <res>        Open Design Cloud images: published output resolution
+                            (e.g. 1K, 2K). Must name a resolution the model publishes
+                            for --aspect. Omit to use the model's default profile.
+                            SiftQ MiniMax-H3 video: 768P (default) or 2K.
   --length <seconds>        Video length.
   --duration <seconds>      Audio duration.
   --prompt-influence <0-1>  ElevenLabs SFX prompt adherence. Higher values follow the prompt more closely.

@@ -137,7 +137,7 @@ type MediaContext = {
    * the model id, which is a different vocabulary ('hd' / 'standard').
    */
   quality: string | undefined;
-  /** Published output resolution the caller asked for. Vela renderer only. */
+  /** Published output resolution the caller asked for. Used by Vela images and SiftQ video. */
   resolution: string | undefined;
   length: number | undefined;
   duration: number | undefined;
