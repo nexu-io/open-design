@@ -6,6 +6,10 @@ const source = readFileSync(
   new URL('../app/pages/index.astro', import.meta.url),
   'utf8',
 );
+const campaign = readFileSync(
+  new URL('../app/_lib/deepseek-v4-flash-campaign.ts', import.meta.url),
+  'utf8',
+);
 
 test('home campaign banner keeps only the arrow visible while preserving an accessible link label', () => {
   assert.doesNotMatch(source, /限时抢购/);
@@ -44,14 +48,17 @@ test('home campaign banner has no URL preview backdoor left', () => {
   assert.doesNotMatch(source, /get\('campaign'\)/);
 });
 
-test('home campaign banner uses the fixed seven-day activity window', () => {
+test('home campaign banner uses the fixed two-week activity window', () => {
   assert.match(source, /DEEPSEEK_V4_FLASH_CAMPAIGN\.startAt/);
   assert.match(source, /DEEPSEEK_V4_FLASH_CAMPAIGN\.endAtExclusive/);
   assert.match(source, /now >= startAt && now < endAt/);
   assert.match(source, /data-home-campaign-banner[^>]*hidden/);
   assert.match(source, /home-campaign-banner-active/);
-  assert.match(source, /8 月 6 日—8 月 13 日，一周免费用/);
-  assert.match(source, /FREE all week/);
+  assert.match(source, /这次，顶级智能放开用。/);
+  assert.match(source, /DeepSeek V4 Pro 与 V4 Flash · 两周免费用/);
+  assert.match(source, /This time, top-tier intelligence is wide open\./);
+  assert.match(source, /DeepSeek V4 Pro and V4 Flash · two weeks free/);
+  assert.match(campaign, /endAtExclusive: '2026-08-27T20:00:00\+08:00'/);
   assert.doesNotMatch(source, /home-campaign-banner__disclaimer/);
   assert.doesNotMatch(source, /套餐内的<strong>无限制模型额度<\/strong>与<strong>免费生成次数<\/strong>/);
   assert.doesNotMatch(source, /2026-08-22T00:00:00\+08:00/);

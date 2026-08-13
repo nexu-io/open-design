@@ -87,18 +87,18 @@ describe("pricing contract", () => {
   it("renders the final DeepSeek campaign promise on personal and team pricing", async () => {
     const page = await readFile(PRICING_PAGE_PATH, "utf8");
 
-    assert.match(page, /DeepSeek V4 Flash 无限使用/);
+    assert.match(page, /DeepSeek V4 Pro 与 V4 Flash 两周免费/);
     assert.match(page, /badge: '无限使用'/);
     assert.match(page, /windowLabel: '活动倒计时'/);
-    assert.match(page, /windowValue: '7天 00:00:00'/);
+    assert.match(page, /windowValue: '14天 00:00:00'/);
     assert.match(page, /data-pricing-campaign-countdown/);
     assert.doesNotMatch(page, /距开始/);
-    assert.match(page, /FREE all week/);
-    assert.match(page, /body: '8月6日—8月13日，一周免费用'/);
-    assert.match(page, /body: 'FREE all week, Aug 6—Aug 13'/);
+    assert.match(page, /two weeks free/);
+    assert.match(page, /body: 'DeepSeek V4 Pro 与 V4 Flash · 两周免费用'/);
+    assert.match(page, /body: 'DeepSeek V4 Pro and V4 Flash · two weeks free'/);
     assert.doesNotMatch(page, /body: ['\"][^'\"]*20:00/);
-    assert.match(page, /paidBenefitNote: '8月6日—8月13日 · 一周免费用'/);
-    assert.match(page, /teamBenefitNote: '8月6日—8月13日 · 一周免费用'/);
+    assert.match(page, /paidBenefitNote: 'DeepSeek V4 Pro 与 V4 Flash · 两周免费用'/);
+    assert.match(page, /teamBenefitNote: 'DeepSeek V4 Pro 与 V4 Flash · 两周免费用'/);
     assert.match(page, /DEEPSEEK_V4_FLASH_CAMPAIGN\.startAt/);
     assert.match(page, /DEEPSEEK_V4_FLASH_CAMPAIGN\.endAtExclusive/);
     assert.match(page, /now >= campaignStartAt && now < campaignEndAt/);
