@@ -2210,7 +2210,7 @@ process.stdin.on("end", () => {
       readFile(notifyReleaseFeishuWorkflowPath, "utf8"),
     ]);
     const entries = [
-      ["exact", exact, "RELEASE_FEISHU_EXACT"],
+      ["exact", exact, "RELEASE_FEISHU_BETA"],
       ["prerelease", prerelease, "RELEASE_FEISHU_PRERELEASE"],
       ["stable", stable, "RELEASE_FEISHU_STABLE"],
     ] as const;

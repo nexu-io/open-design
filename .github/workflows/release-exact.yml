@@ -353,4 +353,4 @@ jobs:
       win_x64_smoke: ${{ needs.distribute.outputs.win_x64_smoke_result }}
       win_x64_url: ${{ needs.distribute.outputs.win_x64_url }}
     secrets:
-      bot: ${{ secrets.RELEASE_FEISHU_EXACT || secrets.RELEASE_FEISHU_BETA }}
+      bot: ${{ secrets.RELEASE_FEISHU_BETA }}
