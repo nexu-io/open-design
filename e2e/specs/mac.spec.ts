@@ -961,10 +961,16 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
             body: JSON.stringify({ ...(current.config ?? {}), allowSilentUpdates: true }),
           });
           const written = await response.json();
-          return { ok: response.ok, allowSilentUpdates: written.config?.allowSilentUpdates };
+          return {
+            allowSilentUpdates: written.config?.allowSilentUpdates,
+            currentError: current.error ?? null,
+            ok: response.ok,
+            responseError: written.error ?? null,
+            status: response.status,
+          };
         })()
       `]);
-      expect(enableSilent.eval?.value).toEqual({ allowSilentUpdates: true, ok: true });
+      expect(enableSilent.eval?.value).toMatchObject({ allowSilentUpdates: true, ok: true, status: 200 });
 
       const stop = await runToolsPackJson<MacStopResult>('stop');
       cleanupStarted = false;
@@ -2945,7 +2951,9 @@ function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {
   ) {
     throw new Error(`unexpected PPTX export eval value: ${formatUnknown(value)}`);
   }
-  expect(value.status).toBe(200);
+  if (value.status !== 200) {
+    throw new Error(`PPTX export returned a non-success response: ${formatUnknown(value)}`);
+  }
   expect(value.contentType).toContain(
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   );

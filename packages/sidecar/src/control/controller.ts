@@ -39,6 +39,8 @@ import type {
   SidecarStopResult,
 } from "./public-types.js";
 
+const SEMANTIC_CALL_TIMEOUT_MS = 600_000;
+
 function peerUnavailable(identity: SidecarControlIdentity): SidecarControlError {
   return new SidecarControlError(
     "peer-unavailable",
@@ -108,7 +110,10 @@ function createClient<TMethods>(descriptor: PrivateReadyDescriptor): SidecarCont
 
   return Object.freeze({
     async call(method, input, options) {
-      return (await invoke({ kind: "call", input, method }, options?.timeoutMs)) as never;
+      const timeoutMs = options?.timeoutMs === undefined
+        ? SEMANTIC_CALL_TIMEOUT_MS
+        : options.timeoutMs;
+      return (await invoke({ kind: "call", input, method }, timeoutMs)) as never;
     },
     identity: descriptor.identity,
     async probe() {
