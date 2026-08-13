@@ -239,10 +239,44 @@ const AGENT_AUTH_FAILURE_RE = new RegExp(
 );
 
 // Quota / rate limit / billing balance — the wall the hosted gateway avoids.
+// A bare `quota` alternative used to live in this alternation. It made the
+// matcher fire on the daemon's *own* generic empty-output fallback (server.ts:
+// "...then try re-authenticating the agent, checking quota, or switching
+// models."), so an output-less run — for any reason — was reported as a
+// provider rate limit. That is the misclassification behind #6143, and dropping
+// the bare alternative from `run-failure-classification`'s local matcher alone
+// was not enough: `classifyRunFailure` also reaches its rate-limit branch
+// through this shared classifier. Quota now goes through
+// `isCorroboratedQuotaText` below.
 const AGENT_RATE_FAILURE_RE = new RegExp(
-  `(\\b(rate[ _-]?limit|too many requests|quota|insufficient[ _-]?(?:quota|balance|credit|funds)|credit balance is too low|exceeded your current quota|usage limit|session limit|limit reached|billing (?:hard )?limit)\\b|${STATUS_CTX}429\\b)`,
+  `(\\b(rate[ _-]?limit|too many requests|insufficient[ _-]?(?:quota|balance|credit|funds)|credit balance is too low|exceeded your current quota|usage limit|session limit|limit reached|billing (?:hard )?limit)\\b|${STATUS_CTX}429\\b)`,
   'i',
 );
+
+// `quota` on its own is not a signal; it counts when the message either phrases
+// it as exhaustion, or carries a money/plan word corroborating it. This mirrors
+// `isHardQuotaFragment` in run-failure-classification.ts, which applies the same
+// rule to the daemon's own failure text; both are covered by tests so the two
+// cannot silently drift apart again.
+//
+// This is a per-message predicate. Corroboration evaluated across concatenated,
+// unrelated messages is precisely how a bare `quota` gets vouched for by a
+// `plan` or `payment` that has nothing to do with it.
+const QUOTA_RE = /\bquota\b/i;
+// Unambiguous on its own — no wallet or balance needed. `quota exhausted` is a
+// real upstream payload in this repo (tests/byok-tools.test.ts:
+// `status_msg: 'quota exhausted'`); requiring corroboration for it would turn a
+// terminal quota failure into a retry candidate.
+const QUOTA_EXHAUSTION_RE =
+  /\bquota\s+(?:exceeded|exhausted|depleted|reached|used\s+up)\b|\b(?:exceeded|exhausted|out\s+of|ran\s+out\s+of|no\s+remaining)\s+(?:\w+\s+){0,3}quota\b/i;
+const QUOTA_CORROBORATION_RE =
+  /\b(wallet|balance|credits?|billing|funds?|payment|plan)\b/i;
+
+function isCorroboratedQuotaText(text: string): boolean {
+  const value = String(text || '');
+  if (QUOTA_EXHAUSTION_RE.test(value)) return true;
+  return QUOTA_RE.test(value) && QUOTA_CORROBORATION_RE.test(value);
+}
 
 // Upstream model/provider problems: overloaded, 5xx, temporarily unavailable.
 const AGENT_UPSTREAM_FAILURE_RE = new RegExp(
@@ -261,7 +295,9 @@ export function classifyAgentServiceFailure(
   const value = String(text || '');
   if (!value.trim()) return null;
   if (AGENT_AUTH_FAILURE_RE.test(value)) return 'AGENT_AUTH_REQUIRED';
-  if (AGENT_RATE_FAILURE_RE.test(value)) return 'RATE_LIMITED';
+  if (AGENT_RATE_FAILURE_RE.test(value) || isCorroboratedQuotaText(value)) {
+    return 'RATE_LIMITED';
+  }
   if (AGENT_UPSTREAM_FAILURE_RE.test(value)) return 'UPSTREAM_UNAVAILABLE';
   return null;
 }

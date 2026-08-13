@@ -25,6 +25,37 @@ describe('classifyAgentServiceFailure', () => {
     }
   });
 
+  // Refs #6143. A bare `quota` alternative used to sit in the rate matcher, so
+  // this classifier reported the daemon's own generic empty-output fallback as
+  // a provider rate limit — on every surface that consumes it (chat error text,
+  // connection test, opencode log parsing, and `classifyRunFailure`).
+  it('does not treat a bare, uncorroborated `quota` mention as a rate limit', () => {
+    for (const text of [
+      // The daemon's fallback, verbatim (apps/daemon/src/server.ts).
+      'Agent completed without producing any output. The model or provider may ' +
+        'have returned an empty response. Check the agent logs for upstream ' +
+        'errors, then try re-authenticating the agent, checking quota, or ' +
+        'switching models.',
+      'Run `agent quota` to see current usage.',
+      'quota.ts:42 TypeError: cannot read properties of undefined',
+    ]) {
+      expect(classifyAgentServiceFailure(text), text).toBeNull();
+    }
+  });
+
+  it('still classifies quota mentions that are exhaustion phrases or corroborated', () => {
+    for (const text of [
+      'quota exhausted',
+      'quota exceeded',
+      'Quota depleted for this account.',
+      'You have exceeded your monthly quota.',
+      'Your plan has no quota left for this model.',
+      'Wallet quota unavailable — top up to continue.',
+    ]) {
+      expect(classifyAgentServiceFailure(text), text).toBe('RATE_LIMITED');
+    }
+  });
+
   it('classifies upstream/provider failures', () => {
     for (const text of [
       'Error: 529 {"type":"overloaded_error"}',

@@ -9,7 +9,10 @@ import type {
 
 import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
 import { summarizeRunToolProgress } from './run-diagnostics.js';
-import { classifyAgentServiceFailure } from './runtimes/auth.js';
+import {
+  classifyAgentServiceFailure,
+  type AgentServiceFailureCode,
+} from './runtimes/auth.js';
 import type { RunResult, RunStatusForAnalytics } from './run-result.js';
 
 export interface RunEventForFailureClassification {
@@ -216,6 +219,46 @@ function isHardQuotaFragment(text: string): boolean {
 
 function isHardQuotaText(parts: string[]): boolean {
   return parts.some(isHardQuotaFragment);
+}
+
+// Same fragment scoping for the shared agent-service classifier. It is a
+// whole-text matcher, but the text handed to it here is up to 24 unrelated
+// messages joined with '\n', so running it on the join lets one message vouch
+// for a signal sitting in another — a `payment` in an unrelated event turning
+// the empty-output fallback's `quota` into a rate limit. Classify each fragment
+// on its own and fold with the precedence `classifyAgentServiceFailure` itself
+// uses, so a `401` in any message still outranks a `429` in another.
+const SERVICE_FAILURE_PRECEDENCE = [
+  'AGENT_AUTH_REQUIRED',
+  'RATE_LIMITED',
+  'UPSTREAM_UNAVAILABLE',
+] as const satisfies readonly AgentServiceFailureCode[];
+
+function classifyServiceFailureParts(
+  parts: string[],
+): AgentServiceFailureCode | null {
+  const found = new Set<AgentServiceFailureCode>();
+  for (const part of parts) {
+    const code = classifyAgentServiceFailure(part);
+    if (code) found.add(code);
+  }
+  return SERVICE_FAILURE_PRECEDENCE.find((code) => found.has(code)) ?? null;
+}
+
+// The vela detector already applies the corroboration rule this fix is built
+// on (`quota` plus wallet/balance/credit/billing/funds), but it too was handed
+// the joined text — so an unrelated fragment mentioning a billing period could
+// corroborate the fallback's `quota` and report the account as out of balance.
+// Same scoping, same reason. The status error is the first fragment, so
+// first-match order keeps the most authoritative message in front.
+function classifyAmrAccountParts(
+  parts: string[],
+): ReturnType<typeof classifyAmrAccountFailure> {
+  for (const part of parts) {
+    const failure = classifyAmrAccountFailure(part);
+    if (failure) return failure;
+  }
+  return null;
 }
 
 // A transient, retryable rate limit (distinct from a hard quota). vela/upstream
@@ -717,7 +760,7 @@ function classifyRunFailureBase(
   const parts = collectFailureParts({ ...input, events });
   const text = parts.join('\n');
   const retryableHint = latestRetryable(events);
-  const amrFailure = classifyAmrAccountFailure(text);
+  const amrFailure = classifyAmrAccountParts(parts);
   const byokOpenCodeProviderNotFound = isByokOpenCodeProviderNotFoundText(
     input.agentId,
     text,
@@ -878,7 +921,7 @@ function classifyRunFailureBase(
     );
   }
 
-  const serviceFailure = classifyAgentServiceFailure(text);
+  const serviceFailure = classifyServiceFailureParts(parts);
   if (serviceFailure === 'AGENT_AUTH_REQUIRED' || isAuthDetailText(text)) {
     return classification(
       'auth',
