@@ -10,7 +10,8 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 - `packages/closure`: one package with strict `./protocol`, `./store`, and `./update` subpaths. Protocol owns namespace/target-neutral identity, canonical digests, required `launcher/native/body`, lazy resources, integrity, and compatibility. Store owns immutable materialization plus one active binding. Update composes Store and managed download without updating the Shell or creating a second activation authority.
 - `packages/diagnostics`: shared diagnostics export primitives for log collection, redaction, manifests, crash-report discovery, and zip packaging used by daemon and desktop.
 - `packages/download`: managed-download runtime. Owns resumable and checksum-verified transfers, concurrent-request deduplication, target locking, inspection/removal, copy-and-clear, and pruning; callers supply the download identity and storage base.
-- `packages/host`: web/desktop host bridge contract plus the `./shell-update` subpath shared by Electron and its pack/release tooling. It models renderer-facing host capabilities and Shell payload update records while keeping `window.__od__` access out of app UI code.
+- `packages/host`: renderer-facing web/desktop host bridge contract. Its `./protocol`, `./client`, and `./testing` surfaces model host capabilities and UI-facing updater projection while keeping `window.__od__` access out of app UI code. It must not own Shell payload persistence or depend on Sidecar mechanics.
+- `packages/shell`: Shell-owned contracts shared across build-time producers and runtime consumers. Its `./update` subpath owns persisted payload pointer/attempt/handoff/cleanup descriptors, validation, and deterministic layout—not Electron argv, selection, fallback execution, IPC, or UI policy.
 - `apps/standalone/runtime`: reusable shell-neutral lifecycle primitives for the Standalone product. It coordinates injected daemon/Web adapters, product health/diagnostics, explicit paths, and reverse shutdown; deployable composition remains in the package root.
 - `packages/metatool`: internal metadata helpers for repo-local tool build outputs. Keep reusable hash/check/write mechanics here; each concrete tool owns its own `meta.json`.
 - `packages/plugin-runtime`: pure TypeScript plugin manifest/marketplace parsers, source adapters, merge/ref resolution, validation, digesting, and pipeline-fallback selection. Daemon, web, and CI inject I/O rather than adding filesystem access here.
@@ -22,8 +23,8 @@ Follow the root `AGENTS.md` first. This file only records module-level boundarie
 ## Removed directories
 
 - `packages/shared` has been removed; do not restore it.
-- For new shared types, choose the boundary first: web/daemon product DTOs go in `contracts`; Desktop host/updater DTOs go in `host`; Shell/Closure semantics go in `closure-proto`; business-neutral sidecar mechanics go in `sidecar`; generic OS primitives go in `platform`.
-- Standalone release candidate identity belongs in `closure-proto`; live Shell↔Standalone identity belongs in `standalone-proto`; Desktop payload and installed-outer state remains in `launcher-proto`.
+- For new shared types, choose the boundary first: web/daemon product DTOs go in `contracts`; renderer-facing Desktop host/updater DTOs go in `host`; Shell payload persistence goes in `shell/update`; Shell/Closure semantics go in `closure/protocol`; business-neutral sidecar mechanics go in `sidecar`; generic OS primitives go in `platform`.
+- Standalone release candidate identity belongs in `closure/protocol`; live Shell↔Standalone identity belongs in `standalone/protocol`; Electron-private launcher policy remains in `shells/electron`.
 
 ## Boundary checklist
 
@@ -47,8 +48,8 @@ pnpm --filter @open-design/download typecheck
 pnpm --filter @open-design/download test
 pnpm --filter @open-design/host typecheck
 pnpm --filter @open-design/host test
-pnpm --filter @open-design/host typecheck
-pnpm --filter @open-design/host test
+pnpm --filter @open-design/shell typecheck
+pnpm --filter @open-design/shell test
 pnpm --filter @open-design/metatool typecheck
 pnpm --filter @open-design/metatool test
 pnpm --filter @open-design/plugin-runtime typecheck

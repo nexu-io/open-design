@@ -157,6 +157,8 @@ const CERTAIN_EXEMPT_SURFACE: RuleMatch = {
 };
 
 export const CERTAIN_PACKAGED_LEAF_PREFIXES = [
+  "packages/shell/src/",
+  "packages/shell/tests/",
   "shells/electron/src/",
   "shells/electron/tests/",
   "tools/pack/src/",
@@ -343,6 +345,7 @@ export const scopeRules: readonly ScopeRule[] = [
         "packages/components/",
         "packages/host/",
         "packages/platform/",
+        "packages/shell/",
         "packages/sidecar/",
       ],
       excludeWhen: CERTAIN_PACKAGED_LEAF_SURFACE,
@@ -453,6 +456,7 @@ export const scopeRules: readonly ScopeRule[] = [
           ...CERTAIN_EXEMPT_PREFIXES,
           ...MEDIUM_EXEMPT_PREFIXES,
           ...CERTAIN_DAEMON_CORE_PREFIXES,
+          "packages/shell/",
           "shells/electron/",
           "tools/pack/",
         ],

@@ -32,6 +32,7 @@ export type ToolPackShellBuildIdentity = Readonly<{
 type ShellBuildPackage = Readonly<{
   directory: string;
   name: string;
+  requiredDistPaths?: readonly string[];
   sourcePaths?: readonly string[];
 }>;
 
@@ -77,6 +78,7 @@ const STANDALONE_CARRIER_SOURCE_PATHS = [
   "apps/standalone/src/native-loader.ts",
   "packages/closure/src/store",
   "packages/closure/src/update",
+  "packages/shell/src/update",
   "tools/pack/src/closure/components.ts",
   "tools/pack/src/closure/platform.ts",
 ] as const;
@@ -240,16 +242,16 @@ export async function resolveShellBuildIdentity(config: ToolPackConfig): Promise
 }
 
 function workspaceBuildOutputFiles(): string[] {
-  return [...toolPackShellDefinition("electron").buildPackages.flatMap((entry) => entry.directory === "shells/electron"
+  return [...toolPackShellDefinition("electron").buildPackages.flatMap((entry: ShellBuildPackage) => entry.directory === "shells/electron"
     ? [
         `${entry.directory}/dist/index.mjs`,
         `${entry.directory}/dist/index.d.ts`,
         `${entry.directory}/dist/main/preload.cjs`,
       ]
-    : [
-        `${entry.directory}/dist/index.mjs`,
-        `${entry.directory}/dist/index.d.ts`,
-      ]),
+    : (entry.requiredDistPaths ?? [
+        "index.mjs",
+        "index.d.ts",
+      ]).map((output) => `${entry.directory}/dist/${output}`)),
     "apps/standalone/dist/bootstrap/bootloader.mjs",
     "apps/standalone/dist/bootstrap/baseline/launcher.mjs",
   ];

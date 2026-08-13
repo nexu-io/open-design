@@ -8,5 +8,6 @@
 /apps/standalone/ @nexu-io/core-maintainers
 /packages/closure/ @nexu-io/core-maintainers
 /packages/host/ @nexu-io/core-maintainers
+/packages/shell/ @nexu-io/core-maintainers
 /packages/platform/ @nexu-io/core-maintainers
 /packages/sidecar/ @nexu-io/core-maintainers

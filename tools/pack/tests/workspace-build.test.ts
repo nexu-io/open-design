@@ -16,6 +16,7 @@ const SHELL_PACKAGE_DIRS = [
   "packages/release",
   "packages/contracts",
   "packages/sidecar",
+  "packages/shell",
   "packages/platform",
   "packages/download",
   "packages/host",
@@ -82,6 +83,8 @@ async function writeWorkspace(root: string): Promise<void> {
   await writeFile(join(root, "packages/closure/src/update/index.ts"), "export const value = 1;\n");
   await mkdir(join(root, "packages/closure/src/store"), { recursive: true });
   await writeFile(join(root, "packages/closure/src/store/index.ts"), "export const value = 1;\n");
+  await mkdir(join(root, "packages/shell/src/update"), { recursive: true });
+  await writeFile(join(root, "packages/shell/src/update/index.ts"), "export const value = 1;\n");
   await mkdir(join(root, "tools/pack/resources/mac"), { recursive: true });
   await mkdir(join(root, "tools/pack/resources/win"), { recursive: true });
   await mkdir(join(root, "tools/pack/src/mac"), { recursive: true });
@@ -108,8 +111,12 @@ async function writeWorkspace(root: string): Promise<void> {
 async function writeOutputs(root: string, value: string): Promise<void> {
   for (const directory of SHELL_PACKAGE_DIRS) {
     await mkdir(join(root, directory, "dist"), { recursive: true });
-    await writeFile(join(root, directory, "dist", "index.mjs"), `${value}\n`);
-    await writeFile(join(root, directory, "dist", "index.d.ts"), `${value}\n`);
+    const outputRoot = directory === "packages/shell"
+      ? join(root, directory, "dist", "update")
+      : join(root, directory, "dist");
+    await mkdir(outputRoot, { recursive: true });
+    await writeFile(join(outputRoot, "index.mjs"), `${value}\n`);
+    await writeFile(join(outputRoot, "index.d.ts"), `${value}\n`);
   }
   await mkdir(join(root, "shells/electron/dist/main"), { recursive: true });
   await writeFile(join(root, "shells/electron/dist/main/preload.cjs"), `${value}\n`);
@@ -196,9 +203,11 @@ describe("Electron Shell workspace build cache", () => {
       await ensureWorkspaceBuildArtifacts(config, cache, build);
       await writeFile(join(root, "apps/standalone/src/protocol/index.ts"), "export const value = 2;\n");
       await ensureWorkspaceBuildArtifacts(config, cache, build);
+      await writeFile(join(root, "packages/shell/src/update/index.ts"), "export const value = 2;\n");
+      await ensureWorkspaceBuildArtifacts(config, cache, build);
 
-      expect(builds).toBe(4);
-      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit", "miss", "miss", "miss"]);
+      expect(builds).toBe(5);
+      expect(cache.report().entries.map((entry) => entry.status)).toEqual(["miss", "hit", "miss", "miss", "miss", "miss"]);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

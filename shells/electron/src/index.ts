@@ -13,7 +13,7 @@ import {
   parseLauncherAfterQuitArgs,
   parseLauncherDelegatedArgs,
   parseLauncherHandoffResumeArgs,
-} from "@open-design/host/shell-update";
+} from "./launcher-policy.js";
 import {
   bootstrapSidecarRuntime,
   createSidecarLaunchEnv,

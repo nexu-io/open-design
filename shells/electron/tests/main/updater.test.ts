@@ -11,9 +11,11 @@ import {
   LAUNCHER_AFTER_QUIT_FLAG,
   LAUNCHER_AFTER_QUIT_TARGET_PID_ARG,
   LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG,
+} from "../../src/launcher-policy.js";
+import {
   LAUNCHER_SCHEMA_VERSION,
   resolveLauncherPaths,
-} from "@open-design/host/shell-update";
+} from "@open-design/shell/update";
 import { readProcessStamp } from "@open-design/platform";
 import { resolveAppIpcPath } from "@open-design/sidecar";
 import {

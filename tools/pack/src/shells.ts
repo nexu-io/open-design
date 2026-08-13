@@ -5,6 +5,11 @@ export const TOOL_PACK_SHELLS = Object.freeze({
       { directory: "packages/release", name: "@open-design/release" },
       { directory: "packages/contracts", name: "@open-design/contracts" },
       { directory: "packages/sidecar", name: "@open-design/sidecar" },
+      {
+        directory: "packages/shell",
+        name: "@open-design/shell",
+        requiredDistPaths: Object.freeze(["update/index.mjs", "update/index.d.ts"]),
+      },
       { directory: "packages/platform", name: "@open-design/platform" },
       { directory: "packages/download", name: "@open-design/download" },
       { directory: "packages/host", name: "@open-design/host" },

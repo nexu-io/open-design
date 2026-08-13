@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { dirname } from "node:path";
 
-import { buildLauncherAfterQuitArgs, buildLauncherDelegatedArgs } from "@open-design/host/shell-update";
+import { buildLauncherAfterQuitArgs, buildLauncherDelegatedArgs } from "./launcher-policy.js";
 import { createProcessStampArgs } from "@open-design/platform";
 import { OPEN_DESIGN_SIDECAR_CONTRACT, type SidecarStamp } from "@open-design/sidecar/protocol";
 

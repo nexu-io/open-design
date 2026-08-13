@@ -5,7 +5,6 @@ import { promisify } from "node:util";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
-  compareLauncherVersions,
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
   validateLauncherAttemptDescriptor,
@@ -15,7 +14,7 @@ import {
   type LauncherCleanupDescriptor,
   type LauncherCleanupEntry,
   type LauncherRuntimeDescriptor,
-} from "@open-design/host/shell-update";
+} from "@open-design/shell/update";
 import type { DesktopUpdateChannel } from "@open-design/sidecar/protocol";
 
 import type { DesktopUpdaterConfig } from "./config.js";
@@ -29,6 +28,7 @@ import {
   writeJson,
 } from "./support.js";
 import type { DesktopUpdaterLogger, LoadedRelease } from "../updater.js";
+import { compareLauncherVersions } from "../../launcher-policy.js";
 
 /**
  * @module updater/payload

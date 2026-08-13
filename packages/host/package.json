@@ -16,17 +16,23 @@
       "require": "./dist/index.cjs",
       "default": "./dist/index.mjs"
     },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "import": "./dist/protocol.mjs",
+      "require": "./dist/protocol.cjs",
+      "default": "./dist/protocol.mjs"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "import": "./dist/client.mjs",
+      "require": "./dist/client.cjs",
+      "default": "./dist/client.mjs"
+    },
     "./testing": {
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.mjs",
       "require": "./dist/testing.cjs",
       "default": "./dist/testing.mjs"
-    },
-    "./shell-update": {
-      "types": "./dist/shell-update.d.ts",
-      "import": "./dist/shell-update.mjs",
-      "require": "./dist/shell-update.cjs",
-      "default": "./dist/shell-update.mjs"
     }
   },
   "scripts": {
@@ -35,8 +41,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/release": "workspace:*",
-    "@open-design/sidecar": "workspace:*"
+    "@open-design/release": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

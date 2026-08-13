@@ -4,10 +4,8 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
-  compareLauncherVersions,
   type LauncherChannel,
   type LauncherDesktopHandoffDescriptor,
-  type LauncherHandoffResumeRequest,
   type LauncherPaths,
   type LauncherRuntimeDescriptor,
   type LauncherVersionPaths,
@@ -16,12 +14,16 @@ import {
   normalizeLauncherVersion,
   resolveLauncherPaths,
   resolveLauncherVersionPaths,
-  selectLauncherRuntimeTarget,
   validateLauncherDesktopHandoffDescriptor,
   validateLauncherRuntimeDescriptor,
   type LauncherAttemptDescriptor,
+} from "@open-design/shell/update";
+import {
+  compareLauncherVersions,
+  selectLauncherRuntimeTarget,
+  type LauncherHandoffResumeRequest,
   type LauncherTargetSelection,
-} from "@open-design/host/shell-update";
+} from "./launcher-policy.js";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 
 import {

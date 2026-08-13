@@ -48,7 +48,7 @@ Read this section before changing packaged auto-update behavior. The updater cro
 - `shells/electron/src/main/index.ts` wires the scheduler and the packaged macOS app-menu update item. The native item mirrors updater state and opens the renderer-owned update dialog; it must not create a second updater or a native result dialog. Windows menus do not expose update actions.
 - `apps/web/src/lib/updater.ts` normalizes host updater snapshots into UI-ready state.
 - `apps/web/src/components/UpdaterPopup.tsx` remains the ready-update surface in the left rail. `apps/web/src/components/UpdateDialog.tsx` owns the explicit macOS app-menu check flow. All visible copy and native menu labels must go through `apps/web/src/i18n`.
-- `@open-design/host/shell-update` owns the Electron Shell payload pointer, attempt, cleanup, after-quit, and selected-payload record shapes. These are Shell update mechanics, not the Closure launcher protocol.
+- `@open-design/shell/update` owns the persisted Electron Shell payload pointer, attempt, handoff, cleanup, and deterministic layout contract shared by the Shell runtime and tools-pack. Electron-private argv and target-selection policy remain in `shells/electron`.
 - `shells/electron/src/index.ts` owns the Electron Shell entry. New Standalone attachment must cross the protocol-fixed `bootloader.mjs` handoff rather than importing Web or daemon bodies into the Shell contract.
 - `install.json` continues to identify the physically installed outer executable for recovery. Payload activation or handoff must not rewrite it to a versioned payload executable.
 - `tools/serve` owns deterministic local updater fixtures only. It must not contain product updater runtime logic.

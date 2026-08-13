@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   buildLauncherAfterQuitArgs,
   buildLauncherDelegatedArgs,
-} from "@open-design/host/shell-update";
+} from "../../launcher-policy.js";
 
 import { HELPERS_DIR, ensureOwnedSubdir } from "./store.js";
 

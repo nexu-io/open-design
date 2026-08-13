@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { parseLauncherAfterQuitArgs, parseLauncherDelegatedArgs } from "@open-design/host/shell-update";
+import { parseLauncherAfterQuitArgs, parseLauncherDelegatedArgs } from "../src/launcher-policy.js";
 import { readProcessStamp } from "@open-design/platform";
 import {
   APP_KEYS,

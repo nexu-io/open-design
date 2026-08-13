@@ -50,7 +50,6 @@
         "packages/registry-protocol"
         "packages/agui-adapter"
         "packages/plugin-runtime"
-        "packages/host"
         "packages/sidecar"
         "packages/platform"
         "packages/diagnostics"

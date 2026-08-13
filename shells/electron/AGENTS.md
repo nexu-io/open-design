@@ -13,6 +13,8 @@ product body.
   validated committed-generation resolution it returns.
 - Projection of Electron identity and capabilities into the Standalone handoff
   and generic sidecar control plane.
+- Launcher argv, payload target selection, fallback execution and updater
+  lifecycle around the shared `@open-design/shell/update` persistence contract.
 - macOS and Windows Shell entrypoints consumed by `tools-pack`.
 
 ## Does not own

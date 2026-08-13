@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -253,7 +253,7 @@ describe("postinstall script contract", () => {
     expect(targets.indexOf("packages/release")).toBeLessThan(targets.indexOf("packages/contracts"));
   });
 
-  it("[P2] skips absent tsconfig targets in partial install contexts on the default path", () => {
+  it("[P2] skips absent targets and preserves dependency ordering in serial builds", () => {
     const sandbox = createSandbox();
     try {
       writeTarget(sandbox, "packages/release", { name: "@open-design/release" });
@@ -265,6 +265,11 @@ describe("postinstall script contract", () => {
         dependencies: { "@open-design/contracts": "workspace:*" },
         name: "@open-design/components",
       });
+      writeTarget(sandbox, "packages/host", {
+        dependencies: { "@open-design/sidecar": "workspace:*" },
+        name: "@open-design/host",
+      });
+      writeTarget(sandbox, "packages/sidecar", { name: "@open-design/sidecar" });
       writeTarget(sandbox, "apps/daemon", { name: "@open-design/daemon", tsconfig: false });
       const invocationLog = writePnpmStub(sandbox);
 
@@ -279,11 +284,37 @@ describe("postinstall script contract", () => {
         "packages/release",
         "packages/contracts",
         "packages/components",
+        "packages/sidecar",
+        "packages/host",
       ]);
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }
   });
+
+  it.runIf(process.platform === "win32")(
+    "[P2] invokes pnpm through cmd when a direct Windows script has no lifecycle execpath",
+    () => {
+      const sandbox = createSandbox();
+      try {
+        writeTarget(sandbox, "packages/release", { name: "@open-design/release" });
+        const invocationLog = writePnpmStub(sandbox);
+        writeFileSync(
+          join(sandbox, "pnpm.cmd"),
+          `@echo off\r\n"${process.execPath}" "${join(sandbox, "pnpm-stub.mjs")}" %*\r\n`,
+        );
+
+        const result = runFixturePostinstall(sandbox, {
+          npm_execpath: "",
+          Path: `${sandbox}${delimiter}${process.env.Path ?? ""}`,
+        });
+        expect(result.status, String(result.stderr)).toBe(0);
+        expect(readStubEvents(invocationLog).filter((event) => event.event === "start")).toHaveLength(1);
+      } finally {
+        rmSync(sandbox, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("[P2] preserves workspace dependency ordering when postinstall builds in parallel", () => {
     const sandbox = createSandbox();

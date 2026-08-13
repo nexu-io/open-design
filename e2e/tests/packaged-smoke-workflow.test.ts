@@ -1261,14 +1261,12 @@ process.stdin.on("end", () => {
     await expect(validateGatePasses(workflow, needsWithFailedWeb)).resolves.toBe(false);
   });
 
-  it("[P1] includes Shell update host protocol in the Nix daemon workspace build", async () => {
+  it("[P1] keeps the renderer host contract out of the Nix daemon workspace build", async () => {
     const flake = await readFile(flakePath, "utf8");
     const daemonWorkspaces = sectionBetween(flake, "      daemonWorkspacePaths = [", "      ];");
 
-    expect(daemonWorkspaces).toContain('"packages/host"');
-    expect(daemonWorkspaces.indexOf('"packages/host"')).toBeLessThan(
-      daemonWorkspaces.indexOf('"apps/daemon"'),
-    );
+    expect(daemonWorkspaces).not.toContain('"packages/host"');
+    expect(daemonWorkspaces).toContain('"packages/sidecar"');
   });
 
   it("[P2] routes trusted Linux CI through the Nexu runner fleet", async () => {

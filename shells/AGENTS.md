@@ -7,6 +7,9 @@ around the Standalone product closure.
   selection, lazy loading, Shell updates and user-facing version projection.
 - Shells consume `@open-design/standalone/protocol`; they do not import private
   implementation from `apps/standalone`, `apps/web` or `apps/daemon`.
+- Shared persisted Shell update records and deterministic layout come from
+  `@open-design/shell/update`; argv, target selection, fallback execution and
+  user-facing update policy remain owned by the concrete Shell.
 - A Shell may carry a fossil `bootloader.mjs`, but Web + daemon remain the
   Standalone body and are versioned independently inside the release descriptor.
 - Tests live under each Shell package's `tests/` directory.

@@ -37,7 +37,7 @@ export const WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
   "@open-design/closure/update",
   "@open-design/daemon",
   "@open-design/shell-electron",
-  "@open-design/host/shell-update",
+  "@open-design/shell/update",
   "@open-design/sidecar",
   "@open-design/sidecar/protocol",
   "@open-design/web",

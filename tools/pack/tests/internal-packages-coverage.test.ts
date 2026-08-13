@@ -40,6 +40,13 @@ const PACK_LANES = [
 ];
 
 describe("INTERNAL_PACKAGES covers all workspace runtime deps", () => {
+  it("depends on the shared Shell contract without depending on the Electron implementation", () => {
+    const manifest = readPackageJson("tools/pack");
+    expect(manifest.dependencies).toHaveProperty("@open-design/shell", "workspace:*");
+    expect(manifest.dependencies).not.toHaveProperty("@open-design/shell-electron");
+    expect(manifest.dependencies).not.toHaveProperty("@open-design/host");
+  });
+
   for (const { lane, file, roots } of PACK_LANES) {
     it(`${lane} lane includes all required workspace packages`, () => {
       const requiredPackages = new Set<string>();

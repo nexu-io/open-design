@@ -8,7 +8,7 @@ import {
   type LauncherPaths,
   type LauncherRuntimeDescriptor,
   type LauncherVersionPaths,
-} from "@open-design/host/shell-update";
+} from "@open-design/shell/update";
 import { SIDECAR_DEFAULTS } from "@open-design/sidecar/protocol";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 

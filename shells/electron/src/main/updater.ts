@@ -22,7 +22,7 @@ import {
 } from "@open-design/download";
 import {
   LAUNCHER_SCHEMA_VERSION,
-} from "@open-design/host/shell-update";
+} from "@open-design/shell/update";
 import { createProcessStampArgs } from "@open-design/platform";
 import { resolveAppIpcPath } from "@open-design/sidecar";
 import {

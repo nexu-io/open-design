@@ -2,7 +2,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { stopProcesses, waitForProcessExit, type StopProcessesResult } from "@open-design/platform";
-import { compareLauncherVersions, type LauncherAfterQuitRequest } from "@open-design/host/shell-update";
+import { compareLauncherVersions, type LauncherAfterQuitRequest } from "./launcher-policy.js";
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,

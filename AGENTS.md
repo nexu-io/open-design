@@ -360,7 +360,7 @@ Desktop queries runtime status through sidecar IPC. The web URL comes from `tool
 
 ## How are sidecar, product contracts, and platform split?
 
-`@open-design/sidecar` owns the business-neutral mechanical control plane and hides endpoint, launch metadata, fencing incarnation, transport, and process matching. Callers own executable choice, timing, restart/update/UX policy, roots, and business handlers. Shared product DTOs belong in `@open-design/contracts`, Desktop host/updater DTOs in `@open-design/host`, and Shell/Closure meaning in `@open-design/closure/protocol`. `@open-design/platform` may provide generic OS primitives internally but is not a second sidecar protocol.
+`@open-design/sidecar` owns the business-neutral mechanical control plane and hides endpoint, launch metadata, fencing incarnation, transport, and process matching. Callers own executable choice, timing, restart/update/UX policy, roots, and business handlers. Shared product DTOs belong in `@open-design/contracts`; renderer-facing Desktop bridge and updater DTOs belong in `@open-design/host`; persisted Shell update records and deterministic layout belong in `@open-design/shell/update`; Closure meaning belongs in `@open-design/closure/protocol`. Electron-only argv, version selection, fallback, and updater policy stay in `shells/electron`. `@open-design/platform` may provide generic OS primitives internally but is not a second sidecar protocol.
 
 ## When is `pnpm install` required?
 

@@ -5,6 +5,16 @@ import { describe, expect, it } from "vitest";
 import {
   LAUNCHER_SCHEMA_VERSION,
   LauncherProtocolError,
+  resolveLauncherPaths,
+  resolveLauncherVersionPaths,
+  validateLauncherCleanupDescriptor,
+  validateLauncherDesktopHandoffDescriptor,
+  validateLauncherRuntimeDescriptor,
+  type LauncherCleanupDescriptor,
+  type LauncherDesktopHandoffDescriptor,
+  type LauncherRuntimeDescriptor,
+} from "@open-design/shell/update";
+import {
   buildLauncherAfterQuitArgs,
   buildLauncherDelegatedArgs,
   buildLauncherHandoffResumeArgs,
@@ -12,16 +22,8 @@ import {
   parseLauncherAfterQuitArgs,
   parseLauncherDelegatedArgs,
   parseLauncherHandoffResumeArgs,
-  resolveLauncherPaths,
-  resolveLauncherVersionPaths,
   selectLauncherRuntimeTarget,
-  validateLauncherCleanupDescriptor,
-  validateLauncherDesktopHandoffDescriptor,
-  validateLauncherRuntimeDescriptor,
-  type LauncherCleanupDescriptor,
-  type LauncherDesktopHandoffDescriptor,
-  type LauncherRuntimeDescriptor,
-} from "../src/shell-update.js";
+} from "../src/launcher-policy.js";
 
 const root = process.platform === "win32" ? "C:\\od-data" : "/tmp/od-data";
 

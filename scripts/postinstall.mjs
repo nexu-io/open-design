@@ -19,6 +19,7 @@ const buildTargets = [
   "packages/agui-adapter",
   "packages/plugin-runtime",
   "packages/sidecar",
+  "packages/shell",
   "packages/closure",
   "apps/standalone",
   "packages/diagnostics",
@@ -60,7 +61,14 @@ function resolvePackageManagerInvocation() {
     return { argsPrefix: [], command: pnpmExecPath };
   }
 
-  return { argsPrefix: [], command: process.platform === "win32" ? "pnpm.cmd" : "pnpm" };
+  if (process.platform === "win32") {
+    return {
+      argsPrefix: ["/d", "/s", "/c", "pnpm"],
+      command: process.env.ComSpec ?? "cmd.exe",
+    };
+  }
+
+  return { argsPrefix: [], command: "pnpm" };
 }
 
 const packageManager = resolvePackageManagerInvocation();
@@ -222,6 +230,34 @@ function postinstallConcurrency() {
   return value;
 }
 
+function dependencyOrderedBuildTargets(targets) {
+  const dependenciesByTarget = buildDependencyMap(targets);
+  const remaining = new Set(targets);
+  const completed = new Set();
+  const ordered = [];
+
+  while (remaining.size > 0) {
+    const ready = targets.filter(
+      (target) =>
+        remaining.has(target) &&
+        dependenciesByTarget.get(target).every((dependency) => completed.has(dependency)),
+    );
+    if (ready.length === 0) {
+      throw new Error(
+        `postinstall: could not find a dependency-ready build target; remaining=${[
+          ...remaining,
+        ].join(", ")}`,
+      );
+    }
+    const target = ready[0];
+    remaining.delete(target);
+    completed.add(target);
+    ordered.push(target);
+  }
+
+  return ordered;
+}
+
 async function runBuildTargetsInParallel(targets, concurrency) {
   const dependenciesByTarget = buildDependencyMap(targets);
   const remaining = new Set(targets);
@@ -263,7 +299,7 @@ async function runBuildTargets(level) {
   const concurrency = postinstallConcurrency();
   process.stdout.write(`postinstall: level=${level}; targets=${targets.join(", ")}\n`);
   if (concurrency <= 1) {
-    for (const target of targets) {
+    for (const target of dependencyOrderedBuildTargets(targets)) {
       runBuildTargetSync(target);
     }
     return;

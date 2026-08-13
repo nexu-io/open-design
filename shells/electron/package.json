@@ -34,6 +34,7 @@
     "@open-design/host": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/release": "workspace:*",
+    "@open-design/shell": "workspace:*",
     "@open-design/sidecar": "workspace:*",
     "@open-design/standalone": "workspace:*"
   },

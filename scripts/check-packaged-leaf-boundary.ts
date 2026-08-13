@@ -23,6 +23,7 @@ const skippedDirectories = new Set([
   "vendor",
 ]);
 const leafPackages = [
+  "@open-design/shell",
   "@open-design/shell-electron",
   "@open-design/tools-pack",
 ] as const;
@@ -35,6 +36,10 @@ const allowedConsumerPrefixes = new Map([
 ]);
 
 const allowedConsumers = new Map([
+  [
+    "packages/shell/esbuild.config.ts",
+    "the shared Shell contract build owns its guarded entrypoint; the config itself remains medium-tier",
+  ],
   [
     "shells/electron/esbuild.config.mjs",
     "the Electron Shell build owns these entrypoints; the config itself remains medium-tier",
@@ -62,6 +67,14 @@ const allowedConsumers = new Map([
   [
     "e2e/tests/scripts/scopes.test.ts",
     "scope planner fixtures; packaged paths are classification inputs",
+  ],
+  [
+    "packages/host/tests/index.test.ts",
+    "the host boundary test names forbidden dependencies as fixture data",
+  ],
+  [
+    "e2e/tests/scripts/web-import-isolation.test.ts",
+    "the web boundary test names forbidden Shell imports as fixture data",
   ],
   [
     "packages/platform/tests/index.test.ts",
@@ -213,6 +226,8 @@ function scopeBoundaryErrors(): string[] {
   const errors: string[] = [];
 
   for (const filePath of [
+    "packages/shell/src/update/index.ts",
+    "packages/shell/tests/update.test.ts",
     "shells/electron/src/index.ts",
     "shells/electron/tests/main/updater.test.ts",
     "tools/pack/src/index.ts",

@@ -7,6 +7,7 @@ export const INTERNAL_PACKAGES = [
   { directory: "packages/contracts", name: "@open-design/contracts" },
   { directory: "packages/registry-protocol", name: "@open-design/registry-protocol" },
   { directory: "packages/sidecar", name: "@open-design/sidecar" },
+  { directory: "packages/shell", name: "@open-design/shell" },
   { directory: "packages/platform", name: "@open-design/platform" },
   { directory: "packages/download", name: "@open-design/download" },
   { directory: "packages/host", name: "@open-design/host" },

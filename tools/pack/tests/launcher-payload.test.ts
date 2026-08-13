@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { LAUNCHER_SCHEMA_VERSION } from "@open-design/host/shell-update";
+import { LAUNCHER_SCHEMA_VERSION } from "@open-design/shell/update";
 import { describe, expect, it } from "vitest";
 
 import type { ToolPackConfig, ToolPackPlatform } from "../src/config.js";

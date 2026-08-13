@@ -816,6 +816,7 @@ const webImportIsolationSkippedDirectories = new Set([
 ]);
 const webImportIsolationForbiddenPackages = [
   "@open-design/platform",
+  "@open-design/shell",
   "@open-design/sidecar",
   "@open-design/sidecar/protocol",
 ];
@@ -825,6 +826,7 @@ const webImportIsolationForbiddenDaemonRoots = [
 ];
 const webImportIsolationForbiddenPackageRoots = [
   "packages/platform",
+  "packages/shell",
   "packages/sidecar",
 ];
 
@@ -913,7 +915,7 @@ function resolveWebImportRepositoryPath(fromRepositoryPath: string, specifier: s
 
 function webImportIsolationViolationReason(fromRepositoryPath: string, specifier: string): string | null {
   if (webImportIsolationForbiddenPackages.some((packageName) => isPackageOrSubpath(specifier, packageName))) {
-    return "apps/web must not import sidecar or platform control-plane packages directly";
+    return "apps/web must not import Shell, sidecar, or platform control-plane packages directly";
   }
 
   const resolvedPath = resolveWebImportRepositoryPath(fromRepositoryPath, specifier);
@@ -924,7 +926,7 @@ function webImportIsolationViolationReason(fromRepositoryPath: string, specifier
   }
 
   if (webImportIsolationForbiddenPackageRoots.some((root) => isPathOrDescendant(resolvedPath, root))) {
-    return "apps/web must not import sidecar or platform control-plane source directly";
+    return "apps/web must not import Shell, sidecar, or platform control-plane source directly";
   }
 
   return null;

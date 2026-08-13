@@ -4,10 +4,9 @@ import { dirname, extname, join } from "node:path";
 
 import {
   LAUNCHER_SCHEMA_VERSION,
-  compareLauncherVersions,
   validateLauncherRuntimeDescriptor,
   type LauncherRuntimeDescriptor,
-} from "@open-design/host/shell-update";
+} from "@open-design/shell/update";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -30,6 +29,7 @@ import {
   readJsonStrict,
   stringField,
 } from "./support.js";
+import { compareLauncherVersions } from "../../launcher-policy.js";
 
 /**
  * @module updater/feed

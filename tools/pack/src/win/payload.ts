@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import {
   LAUNCHER_SCHEMA_VERSION,
   resolveLauncherVersionPaths,
-} from "@open-design/host/shell-update";
+} from "@open-design/shell/update";
 
 import { hashJson, hashPath, type ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";

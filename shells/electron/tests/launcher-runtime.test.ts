@@ -6,7 +6,7 @@ import {
   LAUNCHER_SCHEMA_VERSION,
   resolveLauncherVersionPaths,
   type LauncherDesktopHandoffDescriptor,
-} from "@open-design/host/shell-update";
+} from "@open-design/shell/update";
 import { describe, expect, it } from "vitest";
 
 import type { PackagedConfig } from "../src/config.js";

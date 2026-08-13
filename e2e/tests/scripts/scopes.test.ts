@@ -650,8 +650,15 @@ test("certain rules must name a guard that resolves to a real guard check", asyn
   const { scopeRules } = await import("../../../scripts/scopes.ts");
   // guard.ts must run through tsx (its check modules use .js-suffixed TS-ESM
   // specifiers), so go through the root guard script exactly like CI does.
+  const pnpmCommand = process.platform === "win32" ? process.env.ComSpec ?? "cmd.exe" : "pnpm";
+  const pnpmArgs = process.platform === "win32"
+    ? ["/d", "/s", "/c", "pnpm --silent guard --list-checks"]
+    : ["--silent", "guard", "--list-checks"];
   const guardCheckNames = new Set(
-    execFileSync("pnpm", ["--silent", "guard", "--list-checks"], { cwd: repoRoot, encoding: "utf8" })
+    execFileSync(pnpmCommand, pnpmArgs, {
+      cwd: repoRoot,
+      encoding: "utf8",
+    })
       .split("\n")
       .filter(Boolean),
   );
@@ -692,6 +699,7 @@ test("merge-queue threshold trusts the certain-exempt core without escalation", 
 test("packaged-leaf core matches only its certain rule with the guarded effects", async () => {
   const { evaluateScopeOutputs, matchesRuleMatch, scopeRules } = await import("../../../scripts/scopes.ts");
   const files = [
+    "packages/shell/src/update/index.ts",
     "shells/electron/src/index.ts",
     "shells/electron/tests/launcher-runtime.test.ts",
     "tools/pack/resources/win/icon.ico",
@@ -703,7 +711,7 @@ test("packaged-leaf core matches only its certain rule with the guarded effects"
   const evaluation = evaluateScopeOutputs(files, "certain", {
     deriveWorkspaceValidationFromTestScopes: true,
   });
-  assert.deepEqual(evaluation.decisions.map((decision) => decision.escalated), [false, false, false]);
+  assert.deepEqual(evaluation.decisions.map((decision) => decision.escalated), files.map(() => false));
   assert.deepEqual(
     Object.entries(evaluation.outputs)
       .filter(([, enabled]) => enabled)

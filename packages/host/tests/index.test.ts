@@ -40,7 +40,7 @@ function filesUnder(dir: string): string[] {
 }
 
 describe("open-design host contract", () => {
-  it("stays independent from daemon/web contracts", () => {
+  it("stays independent from product, Shell update, and sidecar contracts", () => {
     const pkg = JSON.parse(readFileSync(join(hostRoot, "package.json"), "utf8")) as {
       dependencies?: Record<string, string>;
       devDependencies?: Record<string, string>;
@@ -53,11 +53,27 @@ describe("open-design host contract", () => {
       ...pkg.optionalDependencies,
       ...pkg.peerDependencies,
     }).not.toHaveProperty("@open-design/contracts");
+    expect({
+      ...pkg.dependencies,
+      ...pkg.devDependencies,
+      ...pkg.optionalDependencies,
+      ...pkg.peerDependencies,
+    }).not.toHaveProperty("@open-design/shell");
+    expect({
+      ...pkg.dependencies,
+      ...pkg.devDependencies,
+      ...pkg.optionalDependencies,
+      ...pkg.peerDependencies,
+    }).not.toHaveProperty("@open-design/sidecar");
 
     const offenders = filesUnder(join(hostRoot, "src")).filter((path) =>
       readFileSync(path, "utf8").includes("@open-design/contracts"),
     );
     expect(offenders).toEqual([]);
+    const boundaryOffenders = filesUnder(join(hostRoot, "src")).filter((path) =>
+      /@open-design\/(?:shell|sidecar)/u.test(readFileSync(path, "utf8")),
+    );
+    expect(boundaryOffenders).toEqual([]);
   });
 
   it("recognizes the canonical bridge shape", () => {
