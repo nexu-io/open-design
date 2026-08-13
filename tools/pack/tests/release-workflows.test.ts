@@ -150,7 +150,6 @@ describe("release workflows", () => {
     expect(betaSelfHosted).toContain("sparse-checkout disable");
     expect(betaSelfHosted).toContain("metadata checkout is missing packages/");
     expect(beta).toContain("mac_arm64_update_metadata_url:");
-    expect(beta).toContain("mac_x64_update_metadata_url:");
     expect(beta).toContain("win_x64_update_metadata_url:");
     expect(beta).toContain("Verify mac_arm64 signed and notarized artifacts");
     expect(beta).toContain("Verify mac_x64 signed and notarized artifacts");
@@ -160,7 +159,7 @@ describe("release workflows", () => {
     expect(countOccurrences(beta, '/usr/sbin/spctl --assess --type execute --verbose=4 "$candidate_app"')).toBe(2);
     expect(beta).not.toContain('/usr/bin/xcrun stapler validate "$dmg_path"');
     expect(beta).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}");
-    expect(beta).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_x64_update_metadata_url }}");
+    expect(macX64).toContain("OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_x64_smoke_mode == 'full' && 'tools-serve' || '' }}");
     expect(beta).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
     expect(beta).toContain("POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}");
     expect(beta).toContain("POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}");

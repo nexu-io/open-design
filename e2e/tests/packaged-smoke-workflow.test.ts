@@ -1746,6 +1746,9 @@ process.stdin.on("end", () => {
 
     expectChannelWorkflowNamespaces(releasePreviewWorkflow, "preview");
     expectChannelWorkflowNamespaces(releasePrereleaseWorkflow, "prerelease");
+    const betaDispatch = sectionBetween(releaseBetaWorkflow, "  workflow_dispatch:", "  workflow_call:");
+    const betaDispatchInputs = [...betaDispatch.matchAll(/^      [a-z0-9_]+:$/gmu)];
+    expect(betaDispatchInputs.length).toBeLessThanOrEqual(25);
     expect(releaseBetaWorkflow).toContain("RELEASE_NAMESPACE: release-beta");
     expect(releaseBetaWorkflow).toContain("RELEASE_NAMESPACE: release-beta-win");
     expect(releaseBetaWorkflow).toContain("RELEASE_NAMESPACE: release-beta-x64");

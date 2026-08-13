@@ -125,16 +125,6 @@ on:
           - dmg
           - all
         default: all
-      mac_x64_update_metadata_url:
-        description: "Optional external updater metadata URL for full macOS x64 payload smoke."
-        required: false
-        type: string
-        default: ""
-      mac_x64_update_target_version:
-        description: "Optional external updater target version expected by full macOS x64 payload smoke."
-        required: false
-        type: string
-        default: ""
       win_x64_sign_mode:
         description: "Windows x64 signing mode."
         required: true
@@ -259,14 +249,6 @@ on:
         required: false
         type: string
         default: all
-      mac_x64_update_metadata_url:
-        required: false
-        type: string
-        default: ""
-      mac_x64_update_target_version:
-        required: false
-        type: string
-        default: ""
       win_x64_sign_mode:
         required: false
         type: string
@@ -1477,7 +1459,7 @@ jobs:
 
       - name: Build beta mac_x64 update fixture
         id: mac_x64_update_fixture
-        if: ${{ inputs.mac_x64_smoke_mode == 'full' && steps.mac_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.mac_x64_update_metadata_url == '' && inputs.mac_x64_update_target_version == '' }}
+        if: ${{ inputs.mac_x64_smoke_mode == 'full' && steps.mac_x64_shell_resolution.outputs.smoke_proof != 'hit' }}
         run: |
           set -euo pipefail
           version="${{ needs.metadata.outputs.beta_version }}"
@@ -1517,9 +1499,8 @@ jobs:
           OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH: ${{ runner.temp }}/release-build/mac_x64/closure-distribution.json
           OD_PACKAGED_E2E_MAC: "1"
           OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_x64_update_fixture.outputs.update_build_json_path }}
-          OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_x64_smoke_mode == 'full' && inputs.mac_x64_update_metadata_url == '' && inputs.mac_x64_update_target_version == '' && 'tools-serve' || '' }}
-          OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_x64_update_metadata_url }}
-          OD_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.mac_x64_update_target_version != '' && inputs.mac_x64_update_target_version || steps.mac_x64_update_fixture.outputs.update_version }}
+          OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_x64_smoke_mode == 'full' && 'tools-serve' || '' }}
+          OD_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ steps.mac_x64_update_fixture.outputs.update_version }}
           # No pre-Standalone Intel DMG was ever published. The first public
           # mac_x64 cohort therefore proves Shell + Standalone without
           # fabricating a cross-architecture historical migration fixture.
@@ -1535,7 +1516,7 @@ jobs:
         run: pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
 
       - name: Register mac_x64 Electron Shell full-smoke proof
-        if: ${{ inputs.mac_x64_smoke_mode == 'full' && steps.mac_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.mac_x64_update_metadata_url == '' && inputs.mac_x64_update_target_version == '' }}
+        if: ${{ inputs.mac_x64_smoke_mode == 'full' && steps.mac_x64_shell_resolution.outputs.smoke_proof != 'hit' }}
         env:
           RELEASE_CHANNEL: beta
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
