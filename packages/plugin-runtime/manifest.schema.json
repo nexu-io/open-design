@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-design.ai/schemas/plugin-loader.manifest.schema.json",
+  "title": "Plugin Loader Manifest",
+  "type": "object",
+  "required": ["id", "name", "version", "entry_point", "permissions", "dependencies"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "minLength": 1, "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$" },
+    "entry_point": { "type": "string", "minLength": 1 },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "filesystem",
+          "network",
+          "ui",
+          "assets",
+          "design-system",
+          "skills",
+          "integrations",
+          "automations",
+          "background-service"
+        ]
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "propertyNames": {
+        "anyOf": [
+          { "const": "core" },
+          { "type": "string", "minLength": 1 }
+        ]
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "^(?:\\^|~|>=|<=|>|<)?\\s*[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\\s*(?:\\|\\||\\s)\\s*(?:\\^|~|>=|<=|>|<)?\\s*[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?)*$"
+      }
+    }
+  },
+  "additionalProperties": false
+}

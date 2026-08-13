@@ -1,0 +1,10 @@
+{
+  "id": "plugin-architecture-builder-demo",
+  "name": "Plugin Architecture Builder Demo",
+  "version": "1.0.0",
+  "entry_point": "./index.ts",
+  "permissions": [],
+  "dependencies": {
+    "core": "^1.0.0"
+  }
+}

@@ -157,7 +157,7 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
         { timeoutMs: 600_000 },
       );
     },
-    port: parsePort(process.env[DAEMON_PORT_ENV]),
+    port: parsePort(process.env[DAEMON_PORT_ENV]) || 7456,
     runtime,
   });
 

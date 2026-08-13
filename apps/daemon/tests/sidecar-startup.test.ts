@@ -51,7 +51,7 @@ describe('daemon sidecar startup', () => {
 
     try {
       expect(startDaemonRuntime).toHaveBeenCalledWith(
-        expect.objectContaining({ port: 0 }),
+        expect.objectContaining({ port: 7456 }),
       );
       const initial = await handle.status();
       expect(initial.state).toBe('running');

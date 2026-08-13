@@ -935,7 +935,7 @@ async function createWebSidecarHandle(
   closeRuntime: () => Promise<void> | void,
   isRuntimeRunning?: () => boolean,
 ): Promise<WebSidecarHandle> {
-  const port = await listen(httpServer, parsePort(process.env[WEB_PORT_ENV]));
+  const port = await listen(httpServer, parsePort(process.env[WEB_PORT_ENV]) || 7457);
   const state: WebStatusSnapshot = {
     pid: process.pid,
     state: "running",
