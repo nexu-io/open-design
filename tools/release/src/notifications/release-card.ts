@@ -295,9 +295,9 @@ export function buildReleaseFeishuCard(
     },
   });
   const downloads = [
-    ["Apple 芯片", input.macArm64Url],
-    ["Intel", input.macX64Url],
-    ["Windows", input.winX64Url],
+    ["Mac Arm", input.macArm64Url],
+    ["Mac x64", input.macX64Url],
+    ["Win x64", input.winX64Url],
   ].filter(([, url]) => url.length > 0);
   if (downloads.length > 0 && state !== "failed") elements.push({
     tag: "action",

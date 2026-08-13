@@ -125,7 +125,9 @@ describe("release Feishu notification", () => {
       expect(serialized).not.toContain("触发");
       expect(serialized).not.toContain("Closure 冷启动");
       expect(serialized).not.toContain("hidden sixth change");
-      expect(serialized).toContain("Apple 芯片");
+      expect(serialized).toContain("Mac Arm");
+      expect(serialized).toContain("Mac x64");
+      expect(serialized).toContain("Win x64");
       expect(serialized).toContain("发布详情");
       expect(serialized).toContain("GitHub Actions");
     } finally {
