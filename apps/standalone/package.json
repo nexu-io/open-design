@@ -1,6 +1,6 @@
 {
   "name": "@open-design/standalone",
-  "version": "0.20.0",
+  "version": "0.19.1",
   "private": true,
   "type": "module",
   "description": "Shell-neutral Open Design Web and daemon product lifecycle.",
