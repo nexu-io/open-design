@@ -3069,6 +3069,8 @@ export const de: Dict = {
   'fileViewer.versions.restoreFailed': 'Wechsel zu dieser Version fehlgeschlagen.',
   'fileViewer.versions.restoreSuccess': 'Zu dieser Version gewechselt.',
   'fileViewer.editScreenshotToChat': 'Screenshot in den Chat',
+  'fileViewer.quoteSlide': 'Diese Folie zitieren',
+  'fileViewer.presentFullscreenOption': "Vollbild",
   'manualEdit.layers': 'Ebenen',
   'manualEdit.editableCount': '{count} bearbeitbar',
   'manualEdit.hiddenBadge': 'Ausgeblendet',

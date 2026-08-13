@@ -3069,6 +3069,8 @@ export const uk: Dict = {
   'fileViewer.versions.restoreFailed': 'Не вдалося перемкнутися на цю версію.',
   'fileViewer.versions.restoreSuccess': 'Перемкнено на цю версію.',
   'fileViewer.editScreenshotToChat': 'Знімок екрана в чат',
+  'fileViewer.quoteSlide': 'Процитувати слайд',
+  'fileViewer.presentFullscreenOption': "Повний екран",
   'manualEdit.layers': 'Шари',
   'manualEdit.editableCount': '{count} редагованих',
   'manualEdit.hiddenBadge': 'Приховано',

@@ -3069,6 +3069,8 @@ export const fa: Dict = {
   'fileViewer.versions.restoreFailed': 'تغییر به این نسخه ممکن نشد.',
   'fileViewer.versions.restoreSuccess': 'به این نسخه تغییر یافت.',
   'fileViewer.editScreenshotToChat': 'ارسال اسکرین‌شات به گفتگو',
+  'fileViewer.quoteSlide': 'نقل‌قول این اسلاید',
+  'fileViewer.presentFullscreenOption': "تمام‌صفحه",
   'manualEdit.layers': 'لایه‌ها',
   'manualEdit.editableCount': '{count} قابل ویرایش',
   'manualEdit.hiddenBadge': 'پنهان',

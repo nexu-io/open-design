@@ -3083,6 +3083,8 @@ export const en: Dict = {
   'fileViewer.versions.restoreFailed': 'Could not switch to this version.',
   'fileViewer.versions.restoreSuccess': 'Switched to this version.',
   'fileViewer.editScreenshotToChat': 'Screenshot to chat',
+  'fileViewer.quoteSlide': 'Quote this slide',
+  'fileViewer.presentFullscreenOption': "Full screen",
   'manualEdit.layers': 'Layers',
   'manualEdit.editableCount': '{count} editable',
   'manualEdit.hiddenBadge': 'Hidden',

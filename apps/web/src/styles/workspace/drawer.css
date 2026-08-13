@@ -1570,6 +1570,38 @@
   background: var(--bg-muted);
   border-color: transparent;
 }
+/* Labelled header actions (decks). Same button, same states as the icon-only
+   variant next to it — it just keeps its name visible, because 演示 / 分享 /
+   导出 are the three things a reviewer reaches for and none of them is worth a
+   guess at a glyph. */
+.app .ws-tabs-actions .chrome-action-labelled {
+  width: auto;
+  height: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border-color: transparent;
+  background: transparent;
+}
+.app .ws-tabs-actions .chrome-action-labelled:hover:not(:disabled),
+.app .ws-tabs-actions .chrome-action-labelled.is-active,
+.app .ws-tabs-actions .chrome-action-labelled[aria-expanded='true'] {
+  background: var(--bg-muted);
+  border-color: transparent;
+}
+/* Export keeps its dark fill in the labelled shape too. */
+.app .ws-tabs-actions .chrome-action-labelled.chrome-action-dark,
+.app .ws-tabs-actions .chrome-action-labelled.chrome-action-dark:hover:not(:disabled) {
+  background: var(--text-strong);
+  color: var(--bg);
+}
+.chrome-action-label {
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
 .app .ws-tabs-actions .handoff-trigger {
   height: 28px;
   min-height: 28px;

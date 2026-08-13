@@ -3069,6 +3069,8 @@ export const hu: Dict = {
   'fileViewer.versions.restoreFailed': 'Nem sikerült erre a verzióra váltani.',
   'fileViewer.versions.restoreSuccess': 'Átváltva erre a verzióra.',
   'fileViewer.editScreenshotToChat': 'Képernyőkép a csevegésbe',
+  'fileViewer.quoteSlide': 'Idézd ezt a diát',
+  'fileViewer.presentFullscreenOption': "Teljes képernyő",
   'manualEdit.layers': 'Rétegek',
   'manualEdit.editableCount': '{count} szerkeszthető',
   'manualEdit.hiddenBadge': 'Rejtett',

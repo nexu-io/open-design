@@ -3918,6 +3918,8 @@ export interface Dict {
   'fileViewer.versions.restoreFailed': string;
   'fileViewer.versions.restoreSuccess': string;
   'fileViewer.editScreenshotToChat': string;
+  'fileViewer.quoteSlide': string;
+  'fileViewer.presentFullscreenOption': string;
   'manualEdit.layers': string;
   'manualEdit.editableCount': string;
   'manualEdit.hiddenBadge': string;

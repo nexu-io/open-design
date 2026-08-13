@@ -223,7 +223,23 @@ export function buildSpeakerNotesPresenterHtml(options: {
     /* Preview decks are non-interactive so keyboard nav always reaches THIS
        presenter window (not a focused child iframe) and clicks bubble up to the
        frame's own click-to-navigate handler. */
-    iframe { display: block; width: 100%; height: 100%; border: 0; background: white; pointer-events: none; }
+    /* Preview frames render the deck at its authored 16:9 stage and are then
+       scaled to fit their box (see fitFrames below). Letting a 100vw/100vh
+       deck render straight into a 3:1 thumbnail box instead - which is what a
+       full-width iframe does - reflows every slide to that box and shows a
+       cropped top-left corner rather than the page. */
+    iframe {
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 1280px;
+      height: 720px;
+      border: 0;
+      background: white;
+      pointer-events: none;
+      transform-origin: top left;
+    }
     .filmstrip { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; min-height: 168px; }
     .filmstrip section { min-width: 0; cursor: pointer; }
     /* Pin each cell to its own column so "Previous" always sits on the left and
@@ -234,7 +250,7 @@ export function buildSpeakerNotesPresenterHtml(options: {
     #next-section { grid-column: 2; }
     .filmstrip section[hidden] { display: none; }
     .thumb-label { color: #8f8f8f; font-size: 13px; font-weight: 700; margin-bottom: 6px; }
-    .thumb-frame { height: 160px; border: 1px solid #2f2f2f; border-radius: 8px; overflow: hidden; background: #101010; transition: border-color 140ms cubic-bezier(0.23, 1, 0.32, 1); }
+    .thumb-frame { position: relative; height: 160px; border: 1px solid #2f2f2f; border-radius: 8px; overflow: hidden; background: #101010; transition: border-color 140ms cubic-bezier(0.23, 1, 0.32, 1); }
     .filmstrip section:hover .thumb-frame { border-color: #4a4a4a; }
     .notes { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: #1b1b1b; }
     .notes-head { height: 58px; display: flex; align-items: center; gap: 14px; padding: 0 22px; border-bottom: 1px solid #303030; }
@@ -483,6 +499,21 @@ export function buildSpeakerNotesPresenterHtml(options: {
           els.notesBody.appendChild(div);
         }
       }
+      // Each preview iframe renders a fixed 1280x720 stage; scale it down to
+      // whatever box it sits in so the whole slide shows instead of a crop.
+      function fitFrames(){
+        var frames = [els.current, els.previous, els.next];
+        for (var i = 0; i < frames.length; i += 1) {
+          var frame = frames[i];
+          if (!frame || !frame.parentElement) continue;
+          var box = frame.parentElement.getBoundingClientRect();
+          if (!box.width || !box.height) continue;
+          var scale = Math.min(box.width / 1280, box.height / 720);
+          frame.style.transform =
+            'translate(' + ((box.width - 1280 * scale) / 2) + 'px,'
+            + ((box.height - 720 * scale) / 2) + 'px) scale(' + scale + ')';
+        }
+      }
       function render(){
         els.counter.textContent = (index + 1) + ' / ' + count;
         setFrame(els.current, index);
@@ -491,6 +522,7 @@ export function buildSpeakerNotesPresenterHtml(options: {
         if (els.previousSection) els.previousSection.hidden = !hasPrevious;
         if (els.nextSection) els.nextSection.hidden = !hasNext;
         renderNotes();
+        fitFrames();
       }
       function go(next, fromHost){
         var target = Math.max(0, Math.min(count - 1, next));
@@ -568,6 +600,7 @@ export function buildSpeakerNotesPresenterHtml(options: {
       });
       timerId = window.setInterval(tick, 250);
       window.addEventListener('resize', scheduleMinimumWindowSize);
+      window.addEventListener('resize', fitFrames);
       window.addEventListener('beforeunload', function(){
         window.clearInterval(timerId);
         window.clearTimeout(resizeEnforceTimer);

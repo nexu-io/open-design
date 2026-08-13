@@ -55,6 +55,42 @@
      events so the canvas underneath stays fully usable. */
   pointer-events: none;
 }
+/* With the film strip along the bottom, the dock rides above it instead of
+   floating over the thumbnails — the strip is a navigation surface you click,
+   so the dock must not cover any of it. */
+.canvas-dock--above-filmstrip {
+  bottom: calc(var(--deck-strip-height, 118px) + 14px);
+}
+/* Speaker-notes popover: a card that rises out of the dock, sized to a
+   comfortable reading column rather than the full stage width. `.canvas-dock`
+   is a centred flex row, so the card centres itself over the pill; the dock's
+   own `pointer-events: none` is lifted here because this card is interactive
+   (it holds the notes textarea). */
+.canvas-dock-note-pop {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  width: min(560px, calc(100% - 32px));
+  max-height: 40vh;
+  overflow: auto;
+  border: var(--stroke-thin) solid var(--border);
+  border-radius: var(--radius-lg, 14px);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-lg, var(--shadow-md));
+  pointer-events: auto;
+  animation: od-fade-slide-up 200ms cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .canvas-dock-note-pop {
+    animation: none;
+  }
+}
+/* Inside the popover the panel is the card, so it drops the strip chrome it
+   needed as a permanently docked band. */
+.canvas-dock-note-pop .speaker-notes-panel {
+  border-top: 0;
+  background: transparent;
+  animation: none;
+}
 .canvas-dock-inner {
   display: inline-flex;
   align-items: center;
@@ -79,6 +115,29 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
+}
+
+/* Labelled dock buttons (decks). A deck's dock carries six controls a reader
+   meets once and has to recognise instantly — "quote this slide" is not a
+   thing anyone guesses from a camera glyph — so each one says its name next to
+   its icon instead of hiding it in a tooltip. */
+.canvas-dock .canvas-dock-labelled,
+.canvas-dock .viewer-action:has(> .canvas-dock-label) {
+  width: auto;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+}
+.canvas-dock-label {
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+/* The Edit toggle keeps its pill-in-a-trough shell; it only gains a glyph. */
+.canvas-dock .canvas-dock-mode-seg .viewer-tab {
+  gap: 6px;
 }
 
 .canvas-dock-divider {

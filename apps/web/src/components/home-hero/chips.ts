@@ -271,24 +271,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
     },
   },
   {
-    id: 'live-artifact',
-    label: 'Live artifact',
-    icon: 'bar-chart-box',
-    group: 'create',
-    description: 'Data-backed live dashboards',
-    hint: 'Build a refreshable artifact backed by connector or local data.',
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'example-live-artifact',
-      projectKind: 'prototype',
-      projectMetadata: {
-        kind: 'prototype',
-        intent: 'live-artifact',
-        fidelity: 'high-fidelity',
-      },
-    },
-  },
-  {
     id: 'image',
     label: 'Image',
     icon: 'image',
@@ -320,24 +302,6 @@ export const HOME_HERO_CHIPS: ReadonlyArray<HomeHeroChip> = [
         mediaKind: 'video',
         subject: 'a short product reveal',
         style: 'cinematic, high-quality, on-brand',
-        aspect: '16:9',
-      },
-    },
-  },
-  {
-    id: 'audio',
-    label: 'Audio',
-    icon: 'mic',
-    group: 'create',
-    description: 'Voiceovers, music & SFX',
-    action: {
-      kind: 'apply-scenario',
-      pluginId: 'od-media-generation',
-      projectKind: 'audio',
-      inputs: {
-        mediaKind: 'audio',
-        subject: 'a concise audio identity for a product',
-        style: 'clear, polished, modern',
         aspect: '16:9',
       },
     },
@@ -399,10 +363,8 @@ export const CREATE_RAIL_ORDER = [
   'document',
   'hyperframes',
   'webgl',
-  'live-artifact',
   'image',
   'video',
-  'audio',
   'web-clone',
 ] as const;
 

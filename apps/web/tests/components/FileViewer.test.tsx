@@ -977,30 +977,26 @@ describe('FileViewer preview scale', () => {
     expect(rule).toContain('overflow: hidden;');
   });
 
-  it('uses a centered compact deck rail on mobile and tablet preview frames', () => {
+  it('lays the deck film strip along the bottom at every preview size', () => {
     const css = readExpandedIndexCss();
 
-    expect(css).toContain(
-      '.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail',
-    );
-    expect(css).toContain('--deck-device-frame-radius: 18px;');
-    expect(css).toContain('--deck-compact-rail-width: 56px;');
-    expect(css).toContain('.preview-viewport-mobile.comment-preview-layer-with-deck-rail');
+    // One shape at every viewport: the strip is a row under the stage, not a
+    // column beside it, and phones no longer swap it for bare page numbers.
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-rail\s*\{[\s\S]*width: var\(--deck-compact-rail-width\);[\s\S]*height: calc\(var\(--preview-viewport-height\) \* var\(--preview-scale, 1\)\);[\s\S]*border-radius: var\(--deck-device-frame-radius\) 0 0 var\(--deck-device-frame-radius\);/,
+      /\.comment-preview-layer-with-deck-rail\s*\{[\s\S]*grid-template-rows: minmax\(0, 1fr\) auto;/,
     );
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-frame\s*\{[\s\S]*display: none;/,
+      /\.comment-preview-layer-with-deck-rail > \.deck-thumbnail-rail\s*\{[\s\S]*grid-row: 2;/,
     );
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-number\s*\{[\s\S]*width: 28px;[\s\S]*height: 28px;[\s\S]*align-items: center;[\s\S]*justify-content: center;/,
+      /\.deck-thumbnail-rail\s*\{[\s\S]*height: var\(--deck-strip-height, 118px\);/,
     );
+    // Thumbnails run horizontally, and the row stretches so each frame gets
+    // real height instead of collapsing onto its page number.
     expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail \.deck-thumbnail-button\.active \.deck-thumbnail-number\s*\{[\s\S]*box-shadow: 0 0 0 2px/,
+      /\.deck-thumbnail-list\s*\{[\s\S]*grid-auto-flow: column;[\s\S]*grid-auto-rows: 1fr;/,
     );
-    expect(css).toMatch(
-      /\.preview-viewport:not\(\.preview-viewport-desktop\)\.comment-preview-layer-with-deck-rail\.comment-preview-layer-deck-rail-collapsed \.comment-preview-canvas\s*\{[\s\S]*border-left: 1px solid var\(--border-strong\);[\s\S]*border-radius: var\(--deck-device-frame-radius\);/,
-    );
+    expect(css).not.toContain('--deck-compact-rail-width');
   });
 
   it('keeps the draw toolbar floating without reserving preview space', () => {
@@ -3923,9 +3919,8 @@ describe('FileViewer SVG artifacts', () => {
       { container: workspaceBody },
     );
 
-    // The header's Present dropdown is gone and the Edit / Present segment no
-    // longer leaves the canvas, so the fullscreen stage (which is what still
-    // renders `.present-overlay`) is reached from the dock.
+    // A plain HTML page keeps the dock's fullscreen button; only decks move
+    // that entry to the header.
     fireEvent.click(screen.getByTestId('canvas-dock-fullscreen'));
 
     await waitFor(() => {
@@ -3976,10 +3971,9 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
-    // The header's Present dropdown is gone and the Edit / Present segment no
-    // longer leaves the canvas, so the fullscreen stage (which is what still
-    // renders `.present-overlay`) is reached from the dock.
-    fireEvent.click(screen.getByTestId('canvas-dock-fullscreen'));
+    // On a deck the fullscreen stage is reached from the header's Present
+    // button, beside version history — the dock carries per-slide actions only.
+    fireEvent.click(screen.getByTestId('chrome-deck-present'));
 
     const frame = await waitFor(() => {
       const nextFrame = document.body.querySelector<HTMLIFrameElement>('.present-overlay iframe');
@@ -4213,14 +4207,20 @@ describe('FileViewer SVG artifacts', () => {
     );
 
     expect(screen.getByRole('tab', { name: 'Edit' })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Present' })).toBeTruthy();
+    // Edit stays in the dock as a plain toggle; Present moved to the header.
+    expect(screen.queryByRole('tab', { name: 'Present' })).toBeNull();
+    expect(screen.getByTestId('chrome-deck-present')).toBeTruthy();
     openSourceView();
     expect(container.querySelector('.viewer-source')?.textContent).toContain('section class="slide"');
     openPreviewView();
+    // The film strip is the only slide navigator: no toolbar arrows, no
+    // floating puck over the artboard, and no control for folding the strip
+    // itself away. The viewport picker sits out too — a deck is a fixed stage.
     expect(container.querySelector('.deck-nav')).toBeNull();
-    expect(container.querySelector('.deck-thumbnail-toolbar-toggle')).toBeTruthy();
-    expect(container.querySelector('.deck-thumbnail-rail .deck-thumbnail-toggle')).toBeNull();
-    expect(container.querySelector('.deck-floating-nav')).toBeTruthy();
+    expect(container.querySelector('.deck-thumbnail-toolbar-toggle')).toBeNull();
+    expect(container.querySelector('.deck-floating-nav')).toBeNull();
+    expect(container.querySelector('.viewer-viewport-switcher')).toBeNull();
+    expect(container.querySelector('.deck-thumbnail-rail')).toBeTruthy();
     const thumbnailFrames = Array.from(
       container.querySelectorAll('.deck-thumbnail-frame iframe'),
     ) as HTMLIFrameElement[];
@@ -4230,13 +4230,11 @@ describe('FileViewer SVG artifacts', () => {
       expect(frame.srcdoc).toContain('.deck-floating-nav');
       expect(frame.srcdoc).toContain('[role="navigation"][aria-label*="Deck"]');
     }
+    expect(screen.queryByTestId('speaker-notes-panel')).toBeNull();
+    openSpeakerNotes();
     expect(screen.getByTestId('speaker-notes-panel')).toBeTruthy();
     expect(screen.getByText('No speaker notes for this slide.')).toBeTruthy();
-    fireEvent.click(container.querySelector('.deck-thumbnail-toolbar-toggle')!);
-    expect(container.querySelector('.comment-preview-layer-deck-rail-collapsed')).toBeTruthy();
-    expect(container.querySelector('.deck-thumbnail-toolbar-toggle')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Manual' })).toBeNull();
-    expect(container.querySelector('.viewer-viewport-switcher')).toBeTruthy();
     expect(screen.queryByTestId('palette-tweaks-toggle')).toBeNull();
     expect(screen.getByTestId('artifact-preview-frame')).toBeTruthy();
   });
@@ -4331,6 +4329,7 @@ describe('FileViewer SVG artifacts', () => {
       />,
     );
 
+    openSpeakerNotes();
     const panel = screen.getByTestId('speaker-notes-panel');
     expect(panel).toBeTruthy();
     expect(screen.getByText('Intro note')).toBeTruthy();
@@ -4389,6 +4388,7 @@ describe('FileViewer SVG artifacts', () => {
     expect(thumbnailFrame).toBeTruthy();
     const thumbnailSrcDocBefore = thumbnailFrame!.srcdoc;
 
+    openSpeakerNotes();
     const notesPreview = screen.getByTestId('speaker-notes-panel').querySelector('.speaker-notes-preview') as HTMLElement;
     fireEvent.click(notesPreview);
     const editor = screen.getByTestId('speaker-notes-panel').querySelector('.speaker-notes-editor textarea') as HTMLTextAreaElement;
@@ -4468,33 +4468,6 @@ describe('FileViewer SVG artifacts', () => {
       expect(typeof views[0].artifact_id).toBe('string');
     });
 
-    it('tracks thumbnail rail toggle with expand/collapse action', () => {
-      const { container } = render(
-        <FileViewer
-          projectId="project-1"
-          projectKind="prototype"
-          file={deckFile()}
-          isDeck
-          liveHtml={twoSlideDeck}
-        />,
-      );
-
-      fireEvent.click(container.querySelector('.deck-thumbnail-toolbar-toggle')!);
-      fireEvent.click(container.querySelector('.deck-thumbnail-toolbar-toggle')!);
-
-      const toggles = trackedEvents('ui_click').filter(
-        (props) => props?.element === 'thumbnail_rail_toggle',
-      );
-      expect(toggles).toHaveLength(2);
-      expect(toggles[0]).toMatchObject({
-        page_name: 'artifact',
-        area: 'deck_viewer',
-        element: 'thumbnail_rail_toggle',
-        action: 'collapse',
-      });
-      expect(toggles[1]).toMatchObject({ action: 'expand' });
-    });
-
     it('tracks slide navigation once per move via the shared handler', () => {
       render(
         <FileViewer
@@ -4534,6 +4507,7 @@ describe('FileViewer SVG artifacts', () => {
         />,
       );
 
+      openSpeakerNotes();
       const notesPreview = screen
         .getByTestId('speaker-notes-panel')
         .querySelector('.speaker-notes-preview') as HTMLElement;
@@ -4571,6 +4545,7 @@ describe('FileViewer SVG artifacts', () => {
         />,
       );
 
+      openSpeakerNotes();
       const notesPreview = screen
         .getByTestId('speaker-notes-panel')
         .querySelector('.speaker-notes-preview') as HTMLElement;
@@ -10933,6 +10908,11 @@ function openSourceView() {
 function openPreviewView() {
   fireEvent.click(screen.getByRole('button', { name: 'More' }));
   fireEvent.click(screen.getByTestId('viewer-more-source'));
+}
+
+/** Speaker notes live in a dock popover, so a test that reads them opens it first. */
+function openSpeakerNotes() {
+  fireEvent.click(screen.getByTestId('canvas-dock-speaker-notes'));
 }
 
 describe('applyInspectOverridesToSource', () => {

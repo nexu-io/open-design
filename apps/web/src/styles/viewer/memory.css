@@ -1161,6 +1161,14 @@
   overflow: hidden;
   background: var(--bg-panel);
 }
+/* With a film strip below it the workspace is a two-row grid, and an
+   `inset: 0` canvas would paint straight over the strip's row. Put the canvas
+   back in flow so it takes the first row and leaves the second to the strip. */
+.manual-edit-workspace.comment-preview-layer-with-deck-rail .manual-edit-canvas {
+  position: relative;
+  inset: auto;
+  height: 100%;
+}
 
 .manual-edit-canvas iframe {
   width: 100%;

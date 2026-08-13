@@ -3069,6 +3069,8 @@ export const ar: Dict = {
   'fileViewer.versions.restoreFailed': 'تعذر التبديل إلى هذا الإصدار.',
   'fileViewer.versions.restoreSuccess': 'تم التبديل إلى هذا الإصدار.',
   'fileViewer.editScreenshotToChat': 'إرسال لقطة الشاشة إلى المحادثة',
+  'fileViewer.quoteSlide': 'اقتباس هذه الشريحة',
+  'fileViewer.presentFullscreenOption': "ملء الشاشة",
   'manualEdit.layers': 'الطبقات',
   'manualEdit.editableCount': '{count} قابلة للتحرير',
   'manualEdit.hiddenBadge': 'مخفية',

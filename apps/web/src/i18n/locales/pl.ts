@@ -3069,6 +3069,8 @@ export const pl: Dict = {
   'fileViewer.versions.restoreFailed': 'Nie udało się przełączyć na tę wersję.',
   'fileViewer.versions.restoreSuccess': 'Przełączono na tę wersję.',
   'fileViewer.editScreenshotToChat': 'Zrzut ekranu do czatu',
+  'fileViewer.quoteSlide': 'Zacytuj ten slajd',
+  'fileViewer.presentFullscreenOption': "Pełny ekran",
   'manualEdit.layers': 'Warstwy',
   'manualEdit.editableCount': '{count} edytowalnych',
   'manualEdit.hiddenBadge': 'Ukryte',

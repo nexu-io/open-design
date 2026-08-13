@@ -3069,6 +3069,8 @@ export const ja: Dict = {
   'fileViewer.versions.restoreFailed': 'このバージョンに切り替えられませんでした。',
   'fileViewer.versions.restoreSuccess': 'このバージョンに切り替えました。',
   'fileViewer.editScreenshotToChat': 'スクリーンショットをチャットへ',
+  'fileViewer.quoteSlide': 'このスライドを引用',
+  'fileViewer.presentFullscreenOption': "全画面で再生",
   'manualEdit.layers': 'レイヤー',
   'manualEdit.editableCount': '{count} 件編集可能',
   'manualEdit.hiddenBadge': '非表示',

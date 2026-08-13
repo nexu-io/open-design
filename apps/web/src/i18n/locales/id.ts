@@ -3069,6 +3069,8 @@ export const id: Dict = {
   'fileViewer.versions.restoreFailed': 'Tidak dapat beralih ke versi ini.',
   'fileViewer.versions.restoreSuccess': 'Beralih ke versi ini.',
   'fileViewer.editScreenshotToChat': 'Screenshot ke chat',
+  'fileViewer.quoteSlide': 'Kutip slide ini',
+  'fileViewer.presentFullscreenOption': "Layar penuh",
   'manualEdit.layers': 'Lapisan',
   'manualEdit.editableCount': '{count} dapat diedit',
   'manualEdit.hiddenBadge': 'Tersembunyi',

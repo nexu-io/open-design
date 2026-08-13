@@ -3069,6 +3069,8 @@ export const th: Dict = {
   'fileViewer.versions.restoreFailed': 'ไม่สามารถสลับไปเวอร์ชันนี้ได้',
   'fileViewer.versions.restoreSuccess': 'สลับไปเวอร์ชันนี้แล้ว',
   'fileViewer.editScreenshotToChat': 'ส่งภาพหน้าจอไปยังแชท',
+  'fileViewer.quoteSlide': 'อ้างอิงสไลด์นี้',
+  'fileViewer.presentFullscreenOption': "เต็มหน้าจอ",
   'manualEdit.layers': 'เลเยอร์',
   'manualEdit.editableCount': 'ใช้แก้ได้ {count} รูปแบบ',
   'manualEdit.hiddenBadge': 'ซ่อน',

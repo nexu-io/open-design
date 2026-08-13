@@ -236,8 +236,39 @@ interface DesignSize {
 // Design canvas size (viewport-unit decks are already excluded upstream):
 // explicit `<deck-stage width height>`, then an explicit px `width`+`height` on
 // a stage/slide rule, else the 1920×1080 default.
-const STAGE_SIZE_SELECTOR_RE =
-  /(?:\bdeck-stage\b|\.deck-stage\b|\.canvas\b|#deck\b|\.deck\b|\.slide\b|\.ppt-slide\b|\.deck-slide\b|\[data-screen-label\])/i;
+//
+// The stage token has to be the WHOLE compound selector, not merely present in
+// it. `.slide-1 .deco-pink-rect { width:100px; height:100px }` — an ordinary
+// 100px decoration inside slide 1 — otherwise reads as "this deck's stage is
+// 100×100", and every thumbnail renders a 100px crop of the slide's top-left
+// corner blown up to fill the frame. So: split on commas, reject any group
+// carrying a descendant/child/sibling combinator, and match the token against
+// the group's own class list (`.slide`, `.slide.active`, `.deck-slide` — but
+// never `.slide-1`, which is a different class).
+const STAGE_SIZE_TOKEN_RE =
+  /^(?:deck-stage|\.deck-stage|\.canvas|#deck|\.deck|\.slide|\.ppt-slide|\.deck-slide|\[data-screen-label\])$/i;
+
+function isStageSelector(selector: string): boolean {
+  return selector.split(',').some((group) => {
+    const compound = group.trim();
+    if (!compound) return false;
+    // Any combinator means the sized element is a descendant of the stage, not
+    // the stage: `.slide .thing`, `.slide > .thing`, `.slide + .slide`.
+    if (/[\s>+~]/.test(compound)) return false;
+    // Drop pseudo-classes/elements (`.slide.active:not(.x)` → `.slide.active`)
+    // then check each simple selector in the compound.
+    const withoutPseudo = compound.replace(/::?[a-z-]+(?:\([^)]*\))?/gi, '');
+    const simple = withoutPseudo.match(/(?:^|[.#[])[^.#[]+\]?/g) ?? [];
+    return simple.some((part) => STAGE_SIZE_TOKEN_RE.test(part.trim()));
+  });
+}
+
+// A stage smaller than this is a decoration that happened to sit on a stage
+// selector, not a slide canvas. Belt to the selector rule's braces: even a
+// perfectly-formed `.slide { width: 120px; height: 90px }` would produce
+// unreadable thumbnails, so fall through to the default instead.
+const MIN_STAGE_WIDTH = 480;
+const MIN_STAGE_HEIGHT = 270;
 
 function resolveDesignSize(doc: Document, css: string): DesignSize {
   const stage = doc.querySelector('deck-stage[width][height]');
@@ -250,10 +281,12 @@ function resolveDesignSize(doc: Document, css: string): DesignSize {
   }
 
   for (const block of iterateRuleBlocks(css)) {
-    if (!STAGE_SIZE_SELECTOR_RE.test(block.selector)) continue;
+    if (!isStageSelector(block.selector)) continue;
     const width = matchPxLength(block.body, 'width');
     const height = matchPxLength(block.body, 'height');
-    if (width && height) return { width, height };
+    if (width && height && width >= MIN_STAGE_WIDTH && height >= MIN_STAGE_HEIGHT) {
+      return { width, height };
+    }
   }
 
   return { width: DEFAULT_DESIGN_WIDTH, height: DEFAULT_DESIGN_HEIGHT };

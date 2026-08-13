@@ -956,6 +956,28 @@ html.od-radial-open .workspace-shell {
   right: 0;
   left: auto;
 }
+/* The deck's two-way Present menu: one row per mode, named and nothing else. */
+.deck-present-menu {
+  min-width: 180px;
+}
+.deck-present-menu [role='menuitem'] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  text-align: left;
+}
+.deck-present-menu .present-icon {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+.present-menu-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
 .comment-side-composer {
   flex: 0 0 auto;
   padding: 12px;

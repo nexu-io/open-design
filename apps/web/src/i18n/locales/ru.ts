@@ -3069,6 +3069,8 @@ export const ru: Dict = {
   'fileViewer.versions.restoreFailed': 'Не удалось переключиться на эту версию.',
   'fileViewer.versions.restoreSuccess': 'Переключено на эту версию.',
   'fileViewer.editScreenshotToChat': 'Скриншот в чат',
+  'fileViewer.quoteSlide': 'Процитировать слайд',
+  'fileViewer.presentFullscreenOption': "Полный экран",
   'manualEdit.layers': 'Слои',
   'manualEdit.editableCount': 'редактируемых: {count}',
   'manualEdit.hiddenBadge': 'Скрыто',

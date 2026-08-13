@@ -3069,6 +3069,8 @@ export const tr: Dict = {
   'fileViewer.versions.restoreFailed': 'Bu sürüme geçilemedi.',
   'fileViewer.versions.restoreSuccess': 'Bu sürüme geçildi.',
   'fileViewer.editScreenshotToChat': 'Ekran görüntüsünü sohbete gönder',
+  'fileViewer.quoteSlide': 'Bu slaytı alıntıla',
+  'fileViewer.presentFullscreenOption': "Tam ekran",
   'manualEdit.layers': 'Katmanlar',
   'manualEdit.editableCount': '{count} düzenlenebilir',
   'manualEdit.hiddenBadge': 'Gizli',

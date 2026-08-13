@@ -3069,6 +3069,8 @@ export const it: Dict = {
   'fileViewer.versions.restoreFailed': 'Impossibile passare a questa versione.',
   'fileViewer.versions.restoreSuccess': 'Passato a questa versione.',
   'fileViewer.editScreenshotToChat': 'Screenshot in chat',
+  'fileViewer.quoteSlide': 'Cita questa slide',
+  'fileViewer.presentFullscreenOption': "Schermo intero",
   'manualEdit.layers': 'Livelli',
   'manualEdit.editableCount': '{count} modificabile',
   'manualEdit.hiddenBadge': 'Nascosto',

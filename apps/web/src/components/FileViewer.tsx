@@ -297,6 +297,11 @@ const STRUCTURE_RAIL_NO_SELECTION: ReadonlySet<string> = new Set();
    of the same nodes one pane over. Module-scope so the array identity is
    stable — it feeds a `tabs` effect in the panel. */
 const VIEWER_STRUCTURE_RAIL_TABS = ['structure', 'edit', 'assets'] as const;
+/* A deck's structure tab listed the pages — which is what the film strip under
+   the stage now shows, in pictures rather than in a list. Two navigators for
+   ten slides is one too many, so the deck rail opens straight on Edit and keeps
+   only the two tabs that describe something the strip cannot. */
+const DECK_STRUCTURE_RAIL_TABS = ['edit', 'assets'] as const;
 /* Over the flow map the rail is an index of the screens on the board, not an
    authoring surface: Edit and Assets both describe an artboard the map does
    not have, so only Structure rides along. */
@@ -7887,7 +7892,7 @@ function HtmlViewer({
     });
   };
   const firePresentPopoverClick = (
-    element: 'in_this_tab' | 'fullscreen' | 'new_tab',
+    element: 'in_this_tab' | 'fullscreen' | 'new_tab' | 'presenter_mode',
   ) => {
     if (!workspaceActive) return;
     trackPresentPopoverClick(analytics.track, {
@@ -9340,6 +9345,12 @@ function HtmlViewer({
   // presentation (fullscreen stage + presenter popup) starts.
   const [presentEscHint, setPresentEscHint] = useState(false);
   const [deckThumbnailsCollapsed, setDeckThumbnailsCollapsed] = useState(false);
+  const [deckPresentMenuOpen, setDeckPresentMenuOpen] = useState(false);
+  const deckPresentWrapRef = useRef<HTMLDivElement | null>(null);
+  // Notes now live in a dock popover rather than a permanent strip, so their
+  // visibility is state the viewer owns. Closed on arrival: a deck opens as
+  // something to look at, not something to annotate.
+  const [speakerNotesOpen, setSpeakerNotesOpen] = useState(false);
   const [speakerNotesEditMode, setSpeakerNotesEditMode] = useState(false);
   const [speakerNotesDraft, setSpeakerNotesDraft] = useState('');
   const [speakerNotesSaving, setSpeakerNotesSaving] = useState(false);
@@ -13390,6 +13401,30 @@ function HtmlViewer({
     if (!noToolActive) setCanvasPresentMode(false);
   }, [noToolActive]);
 
+  /* Present folds the authoring row away, and with it the button that owns the
+     speaker-notes popover — so the card comes down too rather than floating
+     over the slide with no visible way to dismiss it. */
+  useEffect(() => {
+    if (canvasPresentMode) setSpeakerNotesOpen(false);
+  }, [canvasPresentMode]);
+
+  useEffect(() => {
+    if (!deckPresentMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (deckPresentWrapRef.current?.contains(event.target as Node)) return;
+      setDeckPresentMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDeckPresentMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [deckPresentMenuOpen]);
+
   function enterCanvasPresentMode() {
     // Flag set from inside `clearCanvasTools`' success path: an unsaved manual
     // edit can refuse the flush, and folding the dock shut around an inspector
@@ -14124,7 +14159,14 @@ function HtmlViewer({
       }
       const blob = await fetch(snap.dataUrl).then((response) => response.blob());
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      const shot = new File([blob], `screenshot-${ts}.png`, { type: 'image/png' });
+      // On a deck the capture IS one slide (the stage shows a single slide at
+      // a time), so the name says which one — otherwise a chat full of
+      // `screenshot-…png` attachments gives the agent no way to tell page 3
+      // from page 9.
+      const shotName = effectiveDeck
+        ? `slide-${String(activeDeckSlideIndex + 1).padStart(2, '0')}-${ts}.png`
+        : `screenshot-${ts}.png`;
+      const shot = new File([blob], shotName, { type: 'image/png' });
       const detail: AnnotationEventDetail = {
         file: shot,
         note: '',
@@ -14150,7 +14192,7 @@ function HtmlViewer({
     } finally {
       screenshotInFlightRef.current = false;
     }
-  }, [captureExportImageSnapshot, file.name, t]);
+  }, [captureExportImageSnapshot, file.name, t, effectiveDeck, activeDeckSlideIndex]);
 
   const openImageExportModal = async (context?: HtmlVersionExportContext) => {
     // Don't reopen while an export is still running: reopening resets the shared
@@ -14592,8 +14634,16 @@ function HtmlViewer({
   const showPreviewToolbarControls = mode === 'preview';
   // Independent of the rail's lazy per-slide documents so a collapsed rail
   // (which unmounts DeckThumbnailRail entirely) still renders its toggle.
-  const showDeckThumbnailRail = effectiveDeck && source !== null && deckSlideTotal > 0 && !manualEditMode;
-  const showDeckFloatingNav = effectiveDeck && deckSlideTotal > 0 && !manualEditMode && !inTabPresent;
+  // The strip stays up in Edit too. Every per-slide action in the dock (quote,
+  // comment, note) is aimed at whichever slide is on the stage, so taking the
+  // way to change slides away the moment you arm editing would leave those
+  // three buttons pointing at a page you can no longer choose.
+  const showDeckThumbnailRail = effectiveDeck && source !== null && deckSlideTotal > 0;
+  // The film strip IS the slide navigator. A floating ‹ 4 / 10 › puck over the
+  // artboard (and its twin in the toolbar) said the same thing a second and a
+  // third time, so both stand down whenever the strip is up.
+  const showDeckFloatingNav = effectiveDeck && deckSlideTotal > 0 && !manualEditMode && !inTabPresent
+    && !showDeckThumbnailRail;
   const deckNavTotal = Math.max(deckSlideTotal, activeDeckSlideIndex + 1, 1);
   const versioningAvailable = isHtmlVersionableFile(file);
   const commentPreviewLayoutClass = [
@@ -14741,7 +14791,7 @@ function HtmlViewer({
            on the canvas. Still a rising edge inside the panel, so a deliberate
            move to Structure / Assets mid-edit survives. */
         editSlotActive={manualEditMode}
-        tabs={VIEWER_STRUCTURE_RAIL_TABS}
+        tabs={effectiveDeck ? DECK_STRUCTURE_RAIL_TABS : VIEWER_STRUCTURE_RAIL_TABS}
         categoryLabel={(category: FileCategory) => t(sectionLabelKey(category) as keyof Dict)}
         t={t}
       />
@@ -15167,26 +15217,89 @@ function HtmlViewer({
      The folded half stays MOUNTED and is hidden by class, not by unmounting:
      the width transition needs both ends to exist, and a React unmount skips
      the exit half of it entirely. */
-  const canvasDockAuthoringVisible = !canvasPresentMode;
+  /* The fold exists because Present used to mean "put the authoring tools
+     away". A deck's dock is four per-slide actions and nothing else — quoting
+     a slide or writing its note is not something you should have to leave a
+     mode to do — so on decks the row simply stays up. */
+  const canvasDockAuthoringVisible = effectiveDeck || !canvasPresentMode;
+  const screenshotToChatLabel = effectiveDeck
+    ? t('fileViewer.quoteSlide')
+    : t('fileViewer.editScreenshotToChat');
   const canvasDock = showPreviewToolbarControls && mode === 'preview' && !inTabPresent ? (
-    <div className="canvas-dock" data-testid="canvas-dock">
+    <div
+      className={`canvas-dock${showDeckThumbnailRail && !deckThumbnailsCollapsed ? ' canvas-dock--above-filmstrip' : ''}`}
+      data-testid="canvas-dock"
+    >
+      {/* Sits OUTSIDE `.canvas-dock-inner` on purpose: that strip scrolls
+          sideways when it outgrows the stage, and a scroll container clips
+          both axes — a popover anchored inside it would be cut off exactly
+          the way the zoom menu was. */}
+      {speakerNotesOpen && speakerNotesPanel ? (
+        <div className="canvas-dock-note-pop" data-testid="canvas-dock-note-pop">
+          {speakerNotesPanel}
+        </div>
+      ) : null}
       <div className="canvas-dock-inner">
-        <button
-          type="button"
-          className={`viewer-action viewer-action-icon od-tooltip${pointerToolSelected ? ' active' : ''}`}
-          data-testid="canvas-dock-select"
-          aria-pressed={pointerToolSelected}
-          title={t('fileViewer.selectTool')}
-          data-tooltip={t('fileViewer.selectTool')}
-          aria-label={t('fileViewer.selectTool')}
-          onClick={() => {
-            clearCanvasTools();
-            setPointerToolSelected(true);
-          }}
-        >
-          <RemixIcon name="drag-move-line" size={15} />
-        </button>
-        <span className="canvas-dock-divider" aria-hidden />
+        {/* Slide stepping leads the dock: the film strip is for jumping to a
+            slide you can see, these are for walking the deck in order without
+            taking your eyes off the stage. */}
+        {effectiveDeck && deckSlideTotal > 0 ? (
+          <>
+            <button
+              type="button"
+              className="viewer-action canvas-dock-labelled od-tooltip"
+              data-testid="canvas-dock-prev-slide"
+              title={t('fileViewer.previousSlide')}
+              data-tooltip={t('fileViewer.previousSlide')}
+              data-tooltip-placement="bottom"
+              aria-label={t('fileViewer.previousSlide')}
+              disabled={activeDeckSlideIndex <= 0}
+              onClick={() => postSlide('prev')}
+            >
+              <RemixIcon name="arrow-left-s-line" size={15} />
+              <span className="canvas-dock-label">{t('fileViewer.previousSlide')}</span>
+            </button>
+            <button
+              type="button"
+              className="viewer-action canvas-dock-labelled od-tooltip"
+              data-testid="canvas-dock-next-slide"
+              title={t('fileViewer.nextSlide')}
+              data-tooltip={t('fileViewer.nextSlide')}
+              data-tooltip-placement="bottom"
+              aria-label={t('fileViewer.nextSlide')}
+              disabled={activeDeckSlideIndex >= deckNavTotal - 1}
+              onClick={() => postSlide('next')}
+            >
+              {/* Glyph trails the label here (and leads it on Previous) so the
+                  pair points the way it travels: ‹ 上一页 … 下一页 › */}
+              <span className="canvas-dock-label">{t('fileViewer.nextSlide')}</span>
+              <RemixIcon name="arrow-right-s-line" size={15} />
+            </button>
+            <span className="canvas-dock-divider" aria-hidden />
+          </>
+        ) : null}
+        {/* The pointer and the zoom ladder describe a canvas you pan around.
+            A deck is a fixed stage that always fits its pane, so the deck dock
+            carries only the four things you do to the slide in front of you:
+            quote it, comment on it, note it, edit it. */}
+        {effectiveDeck ? null : (
+          <button
+            type="button"
+            className={`viewer-action viewer-action-icon od-tooltip${pointerToolSelected ? ' active' : ''}`}
+            data-testid="canvas-dock-select"
+            aria-pressed={pointerToolSelected}
+            title={t('fileViewer.selectTool')}
+            data-tooltip={t('fileViewer.selectTool')}
+            aria-label={t('fileViewer.selectTool')}
+            onClick={() => {
+              clearCanvasTools();
+              setPointerToolSelected(true);
+            }}
+          >
+            <RemixIcon name="drag-move-line" size={15} />
+          </button>
+        )}
+        {effectiveDeck ? null : <span className="canvas-dock-divider" aria-hidden />}
         <div className="canvas-dock-tools">
           <div
             className="canvas-dock-collapsible"
@@ -15199,30 +15312,43 @@ function HtmlViewer({
                   type="button"
                   className="viewer-action viewer-action-icon od-tooltip"
                   data-testid="edit-screenshot-to-chat-button"
-                  data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.editScreenshotToChat')}
+                  /* Same action, deck-specific name: on a stage that shows one
+                     slide at a time, "screenshot to chat" describes the
+                     mechanism and "quote this slide" describes the intent. */
+                  data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : screenshotToChatLabel}
                   data-tooltip-placement="bottom"
-                  title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.editScreenshotToChat')}
-                  aria-label={t('fileViewer.editScreenshotToChat')}
+                  title={viewerOnly ? viewerOnlyDisabledTitle : screenshotToChatLabel}
+                  aria-label={screenshotToChatLabel}
                   disabled={viewerOnly}
                   onClick={() => void handleScreenshotToChat()}
                 >
                   <RemixIcon name="camera-line" size={15} />
+                  {effectiveDeck ? (
+                    <span className="canvas-dock-label">{screenshotToChatLabel}</span>
+                  ) : null}
                 </button>
               ) : null}
-              <button
-                className={`viewer-action viewer-action-icon od-tooltip${drawOverlayOpen ? ' active' : ''}`}
-                type="button"
-                data-testid="draw-overlay-toggle"
-                data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.mark')}
-                data-tooltip-placement="bottom"
-                disabled={viewerOnly}
-                title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.mark')}
-                aria-label={t('fileViewer.mark')}
-                aria-pressed={drawOverlayOpen}
-                onClick={activateDrawTool}
-              >
-                <RemixIcon name="mark-pen-line" size={15} />
-              </button>
+              {/* A deck's authoring row is the three things you do to ONE
+                  slide — quote it, comment on it, write its note. Freehand
+                  marking belongs to a page you are redlining, not to a slide
+                  you are about to present, so it folds out of the deck dock
+                  (the toolbar's ⋯ menu still carries it). */}
+              {effectiveDeck ? null : (
+                <button
+                  className={`viewer-action viewer-action-icon od-tooltip${drawOverlayOpen ? ' active' : ''}`}
+                  type="button"
+                  data-testid="draw-overlay-toggle"
+                  data-tooltip={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.mark')}
+                  data-tooltip-placement="bottom"
+                  disabled={viewerOnly}
+                  title={viewerOnly ? viewerOnlyDisabledTitle : t('fileViewer.mark')}
+                  aria-label={t('fileViewer.mark')}
+                  aria-pressed={drawOverlayOpen}
+                  onClick={activateDrawTool}
+                >
+                  <RemixIcon name="mark-pen-line" size={15} />
+                </button>
+              )}
               {/* The edit-pencil that used to sit here is gone: the mode
                   segment's 编辑 is the same control wearing a word, and two
                   buttons named Edit on one 30px strip is one too many. The
@@ -15241,11 +15367,38 @@ function HtmlViewer({
                 onClick={(event) => activateCommentCreateTool(event.currentTarget)}
               >
                 <RemixIcon name="message-3-line" size={15} />
+                {effectiveDeck ? (
+                  <span className="canvas-dock-label">{t('chat.tabComments')}</span>
+                ) : null}
                 <span className="viewer-comment-count" aria-hidden>{visibleSideComments.length}</span>
               </button>
+              {/* Speaker notes used to be a strip permanently docked under the
+                  stage, costing the slide ~120px on every deck whether or not
+                  anyone was writing notes. It is a per-slide authoring action
+                  like the two above it, so it joins them as a dock toggle and
+                  opens over the canvas only while in use. */}
+              {showSpeakerNotesPanel ? (
+                <button
+                  type="button"
+                  className={`viewer-action viewer-action-icon od-tooltip${speakerNotesOpen ? ' active' : ''}`}
+                  data-testid="canvas-dock-speaker-notes"
+                  data-tooltip={t('fileViewer.speakerNotes')}
+                  data-tooltip-placement="bottom"
+                  title={t('fileViewer.speakerNotes')}
+                  aria-label={t('fileViewer.speakerNotes')}
+                  aria-pressed={speakerNotesOpen}
+                  aria-expanded={speakerNotesOpen}
+                  onClick={() => setSpeakerNotesOpen((open) => !open)}
+                >
+                  {/* A microphone reads as "record something". These are notes
+                      you write and read, so the glyph is a page of them. */}
+                  <RemixIcon name="file-text-line" size={15} />
+                  <span className="canvas-dock-label">{t('fileViewer.speakerNotes')}</span>
+                </button>
+              ) : null}
             </div>
           </div>
-          {source !== null && mode === 'preview' ? (
+          {source !== null && mode === 'preview' && !effectiveDeck ? (
             <div className="zoom-menu viewer-toolbar-zoom" ref={zoomMenuRef}>
               {/* Stays live at 100%. It looks like a readout, but this menu is
                   the ONLY way to change zoom on a wide pane — the ⋯ overflow
@@ -15313,23 +15466,26 @@ function HtmlViewer({
         </div>
         {/* Full screen survives the fold. Present is exactly when a user
             reaches for it, and the dock is its only entry point — the ⋯ menu
-            never mirrored it. */}
-        <span className="canvas-dock-divider" aria-hidden />
-        <button
-          type="button"
-          className="viewer-action viewer-action-icon od-tooltip"
-          data-testid="canvas-dock-fullscreen"
-          title={t('fileViewer.presentFullscreen')}
-          data-tooltip={t('fileViewer.presentFullscreen')}
-          aria-label={t('fileViewer.presentFullscreen')}
-          disabled={source === null}
-          onClick={() => {
-            firePresentPopoverClick('fullscreen');
-            presentFullscreen();
-          }}
-        >
-          <RemixIcon name="fullscreen-line" size={15} />
-        </button>
+            never mirrored it. On a deck it moves to the header instead, beside
+            the other things you do to the whole file. */}
+        {effectiveDeck ? null : <span className="canvas-dock-divider" aria-hidden />}
+        {effectiveDeck ? null : (
+          <button
+            type="button"
+            className="viewer-action viewer-action-icon od-tooltip"
+            data-testid="canvas-dock-fullscreen"
+            title={t('fileViewer.presentFullscreen')}
+            data-tooltip={t('fileViewer.presentFullscreen')}
+            aria-label={t('fileViewer.presentFullscreen')}
+            disabled={source === null}
+            onClick={() => {
+              firePresentPopoverClick('fullscreen');
+              presentFullscreen();
+            }}
+          >
+            <RemixIcon name="fullscreen-line" size={15} />
+          </button>
+        )}
         {/* Canvas mode segment, dock-trailing — the pill-in-a-trough that used
             to sit in the top toolbar, moved to the end of the strip whose
             contents it governs.
@@ -15381,26 +15537,41 @@ function HtmlViewer({
             title={viewerOnly ? viewerOnlyDisabledTitle : undefined}
             onClick={() => {
               fireArtifactToolbarClick('preview');
+              // With Present gone from the deck dock, Edit has to be able to
+              // put itself down — otherwise a deck armed for editing has no
+              // way back to a plain, clickable slide.
+              if (effectiveDeck && manualEditMode) {
+                enterCanvasPresentMode();
+                return;
+              }
               exitCanvasPresentMode();
               activateManualEditTool();
             }}
           >
+            {effectiveDeck ? <RemixIcon name="edit-line" size={15} /> : null}
             <span className="viewer-tab-label">{t('fileViewer.edit')}</span>
           </button>
-          <button
-            type="button"
-            role="tab"
-            className={`viewer-tab ${canvasPresentMode ? 'active' : ''}`}
-            data-testid="canvas-dock-present"
-            aria-selected={canvasPresentMode}
-            disabled={source === null}
-            onClick={() => {
-              firePresentPopoverClick('in_this_tab');
-              enterCanvasPresentMode();
-            }}
-          >
-            <span className="viewer-tab-label">{t('fileViewer.present')}</span>
-          </button>
+          {/* Present left the deck dock for the header (beside version
+              history): the dock is the per-slide authoring row, and "show this
+              whole file to a room" is not one of the things you do to a slide.
+              Edit stays behind as a plain toggle — press to arm, press again to
+              stand down. */}
+          {effectiveDeck ? null : (
+            <button
+              type="button"
+              role="tab"
+              className={`viewer-tab ${canvasPresentMode ? 'active' : ''}`}
+              data-testid="canvas-dock-present"
+              aria-selected={canvasPresentMode}
+              disabled={source === null}
+              onClick={() => {
+                firePresentPopoverClick('in_this_tab');
+                enterCanvasPresentMode();
+              }}
+            >
+              <span className="viewer-tab-label">{t('fileViewer.present')}</span>
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -15418,27 +15589,11 @@ function HtmlViewer({
       ))(
       <div className="viewer-toolbar">
         <div className="viewer-toolbar-left">
-          {showDeckThumbnailRail ? (
-            <button
-              type="button"
-              className="icon-only deck-thumbnail-toolbar-toggle od-tooltip"
-              aria-expanded={!deckThumbnailsCollapsed}
-              aria-label={deckThumbnailsCollapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
-              title={deckThumbnailsCollapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
-              data-tooltip={deckThumbnailsCollapsed ? t('designFiles.expandGroup') : t('designFiles.collapseGroup')}
-              data-tooltip-placement="bottom"
-              onClick={() => {
-                fireDeckViewerClick('thumbnail_rail_toggle', {
-                  action: deckThumbnailsCollapsed ? 'expand' : 'collapse',
-                  slide_index: activeDeckSlideIndex,
-                  slide_count: deckSlideTotal,
-                });
-                setDeckThumbnailsCollapsed((value) => !value);
-              }}
-            >
-              <Icon name="panel-left" size={15} />
-            </button>
-          ) : null}
+          {/* The strip's collapse toggle is gone with the left rail it used
+              to fold: a bottom strip costs the stage 118px, not a fifth of its
+              width, and it is the only way to change slides now — a control
+              whose whole job is to take the navigator away had nothing left to
+              offer. */}
           <button
             type="button"
             className="icon-only od-tooltip"
@@ -15461,7 +15616,10 @@ function HtmlViewer({
               interactive, so Edit makes the page a document you pick elements
               out of and Present makes it a prototype you click through. The
               fullscreen stage is still the dock's own button. */}
-          {showPreviewToolbarControls ? (
+          {/* A deck is a fixed 16:9 stage, not a responsive page: asking it to
+              render "as a phone" describes nothing the author can act on, so
+              the viewport picker sits out on decks. */}
+          {showPreviewToolbarControls && !effectiveDeck ? (
             <span className="viewer-preview-toolbar-inline">
               <PreviewViewportControls
                 viewport={previewViewport}
@@ -15470,7 +15628,7 @@ function HtmlViewer({
               />
             </span>
           ) : null}
-          {showPreviewToolbarControls && showDeckNavigation && !showDeckFloatingNav ? (
+          {showPreviewToolbarControls && showDeckNavigation && !showDeckFloatingNav && !showDeckThumbnailRail ? (
             <span
               className="deck-nav viewer-deck-nav-inline"
               role="group"
@@ -15735,6 +15893,65 @@ function HtmlViewer({
               <RemixIcon name="history-line" size={15} />
             </button>
           ) : null}
+          {/* Present sits with the file-level actions (history, share, export)
+              rather than in the canvas dock: it acts on the whole deck, not on
+              the slide you happen to be looking at. It is also a verb here, not
+              a mode — pressing it puts the deck on the full screen. Standing
+              down from editing is the dock's Edit toggle. Decks only; every
+              other file keeps the dock's Edit / Present segment. */}
+          {effectiveDeck && source !== null ? (
+            <div className="present-wrap chrome-present-wrap" ref={deckPresentWrapRef}>
+              <button
+                type="button"
+                className={`chrome-action chrome-action-secondary chrome-action-labelled od-tooltip${deckPresentMenuOpen ? ' is-active' : ''}`}
+                data-testid="chrome-deck-present"
+                aria-haspopup="menu"
+                aria-expanded={deckPresentMenuOpen}
+                aria-label={t('fileViewer.present')}
+                data-tooltip={deckPresentMenuOpen ? undefined : t('fileViewer.present')}
+                data-tooltip-placement="bottom"
+                title={t('fileViewer.present')}
+                onClick={() => setDeckPresentMenuOpen((open) => !open)}
+              >
+                <RemixIcon name="slideshow-line" size={15} />
+                <span className="chrome-action-label">{t('fileViewer.present')}</span>
+              </button>
+              {/* Two ways to show a deck: full screen is the deck and nothing
+                  else, presenter mode adds a second window with the notes and a
+                  timer. Naming them side by side is what makes the difference
+                  choosable — as one button it was a coin flip. */}
+              {deckPresentMenuOpen ? (
+                <div className="present-menu deck-present-menu" role="menu">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid="deck-present-fullscreen"
+                    onClick={() => {
+                      setDeckPresentMenuOpen(false);
+                      firePresentPopoverClick('fullscreen');
+                      presentFullscreen();
+                    }}
+                  >
+                    <span className="present-icon"><RemixIcon name="fullscreen-line" size={14} /></span>
+                    <span className="present-menu-title">{t('fileViewer.presentFullscreenOption')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid="deck-present-presenter"
+                    onClick={() => {
+                      setDeckPresentMenuOpen(false);
+                      firePresentPopoverClick('presenter_mode');
+                      openPresenterWindow();
+                    }}
+                  >
+                    <span className="present-icon"><RemixIcon name="artboard-line" size={14} /></span>
+                    <span className="present-menu-title">{t('fileViewer.presenterMode')}</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
           {rawCanShare || rawCanDownload ? (
             <div className="chrome-file-action-menus">
               {/* Outside-click dismissal is scoped to the Share/Export pair —
@@ -15759,7 +15976,7 @@ function HtmlViewer({
                   <button
                     type="button"
                     className={
-                      'chrome-action chrome-action-secondary chrome-action-icon chrome-action-unified' +
+                      `chrome-action chrome-action-secondary chrome-action-unified ${effectiveDeck ? 'chrome-action-labelled' : 'chrome-action-icon'}` +
                       (deployMenuOpen && unifiedActionTab === 'share' ? '' : ' od-tooltip')
                     }
                     aria-haspopup="menu"
@@ -15776,13 +15993,16 @@ function HtmlViewer({
                     onClick={openShareMenu}
                   >
                     <RemixIcon name="share-forward-line" size={15} />
+                    {effectiveDeck ? (
+                      <span className="chrome-action-label">{shareMenuLabel}</span>
+                    ) : null}
                   </button>
                 ) : null}
                 {rawCanDownload ? (
                   <button
                     type="button"
                     className={
-                      'chrome-action chrome-action-secondary chrome-action-icon chrome-action-unified chrome-action-dark' +
+                      `chrome-action chrome-action-secondary chrome-action-unified chrome-action-dark ${effectiveDeck ? 'chrome-action-labelled' : 'chrome-action-icon'}` +
                       (deployMenuOpen && unifiedActionTab === 'export' ? '' : ' od-tooltip') +
                       (exportReadyNudge ? ' export-ready-nudge' : '')
                     }
@@ -15800,6 +16020,9 @@ function HtmlViewer({
                     onClick={openDownloadMenu}
                   >
                     <RemixIcon name="download-line" size={15} />
+                    {effectiveDeck ? (
+                      <span className="chrome-action-label">{t('fileViewer.unifiedExportTab')}</span>
+                    ) : null}
                   </button>
                 ) : null}
                 {deployMenuOpen && (rawCanShare || rawCanDownload) ? (
@@ -16269,7 +16492,9 @@ function HtmlViewer({
           )
         ) : mode === 'preview' ? (
           <div
-            className={`${manualEditMode ? 'manual-edit-workspace' : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
+            className={`${manualEditMode
+              ? `manual-edit-workspace${showDeckThumbnailRail && !deckThumbnailsCollapsed ? ' comment-preview-layer-with-deck-rail' : ''}`
+              : commentPreviewLayoutClass} preview-viewport preview-viewport-${previewViewport}${drawOverlayOpen ? ' preview-draw-active' : ''}`}
             data-testid={manualEditMode ? undefined : 'comment-preview-layout'}
             ref={manualEditMode ? undefined : setCommentComposerHostRef}
             style={previewViewportStyle(previewViewport, previewScale, boardPreviewCanvasSize, boardPreviewScaleOptions)}
@@ -16774,7 +16999,8 @@ function HtmlViewer({
           <pre className="viewer-source">{source}</pre>
         )}
       </div>
-      {speakerNotesPanel}
+      {/* `speakerNotesPanel` renders inside the canvas dock now — see
+          `canvasDock`. Nothing takes a permanent bite out of the stage. */}
       {workspaceActive && inTabPresent && source && typeof document !== 'undefined' ? createPortal(
         <div
           ref={presentOverlayRef}

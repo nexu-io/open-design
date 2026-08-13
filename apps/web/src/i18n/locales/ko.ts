@@ -3069,6 +3069,8 @@ export const ko: Dict = {
   'fileViewer.versions.restoreFailed': '이 버전으로 전환하지 못했습니다.',
   'fileViewer.versions.restoreSuccess': '이 버전으로 전환했습니다.',
   'fileViewer.editScreenshotToChat': '스크린샷을 채팅으로',
+  'fileViewer.quoteSlide': '이 슬라이드 인용',
+  'fileViewer.presentFullscreenOption': "전체 화면",
   'manualEdit.layers': '레이어',
   'manualEdit.editableCount': '{count}개 편집 가능',
   'manualEdit.hiddenBadge': '숨김',

@@ -3069,6 +3069,8 @@ export const ptBR: Dict = {
   'fileViewer.versions.restoreFailed': 'Não foi possível alternar para esta versão.',
   'fileViewer.versions.restoreSuccess': 'Alternado para esta versão.',
   'fileViewer.editScreenshotToChat': 'Captura de tela para o chat',
+  'fileViewer.quoteSlide': 'Citar este slide',
+  'fileViewer.presentFullscreenOption': "Tela cheia",
   'manualEdit.layers': 'Camadas',
   'manualEdit.editableCount': '{count} editáveis',
   'manualEdit.hiddenBadge': 'Oculto',

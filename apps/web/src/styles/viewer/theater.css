@@ -776,155 +776,127 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
 }
+/* The film strip lies along the BOTTOM of the stage, not down its left edge:
+   a deck is read one slide at a time, so the slide keeps the full width of the
+   pane and the strip is a navigation ribbon under it. The rail element still
+   comes first in DOM order (it is an <aside> before the canvas), so the rows
+   are assigned explicitly rather than by source order. */
 .comment-preview-layer-with-deck-rail {
+  --deck-strip-height: 118px;
   display: grid;
-  grid-template-columns: 194px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 0;
   padding: 0;
   overflow: hidden;
 }
-/* Collapsed rail claims no column and no divider: the aside unmounts entirely,
+.comment-preview-layer-with-deck-rail > .deck-thumbnail-rail {
+  grid-row: 2;
+}
+.comment-preview-layer-with-deck-rail > .comment-preview-canvas,
+.comment-preview-layer-with-deck-rail > .manual-edit-canvas {
+  grid-row: 1;
+}
+/* Collapsed rail claims no row and no divider: the aside unmounts entirely,
    so the slide fills the pane edge-to-edge and the toolbar toggle is the only
    affordance left. No sliver of chrome, no border line. */
 .comment-preview-layer-with-deck-rail.comment-preview-layer-deck-rail-collapsed {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
-.deck-thumbnail-toolbar-toggle {
-  flex: 0 0 auto;
-}
+/* The strip used to be a black slab: it was a theatre rail down the left edge,
+   where a dark gutter framed the lit slide. Lying under the stage in a light
+   app it read as a foreign bar bolted to the bottom of the window. It wears the
+   app's own panel surface now — same background, same hairline, same muted text
+   as every other docked surface — so it belongs to the page and follows the
+   theme instead of fighting it. */
 .deck-thumbnail-rail {
   position: relative;
   min-width: 0;
-  min-height: 0;
+  /* Fixed strip height: 132px-wide 16:9 thumbnail (74px) + page number + the
+     list's own padding. Pinning it keeps the stage above from resizing by a
+     pixel or two as thumbnails mount in. */
+  height: var(--deck-strip-height, 118px);
   /* Hairline divider drawn with an inset shadow (not border) so it never adds
-     layout width, keeping the film-strip flush against the stage. */
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.06);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0) 120px),
-    #0b0b0d;
+     layout height, keeping the film-strip flush against the stage. */
+  box-shadow: inset 0 1px 0 var(--border);
+  background: var(--bg-panel);
   overflow: hidden;
 }
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail {
-  --deck-device-frame-radius: 18px;
-  --deck-compact-rail-width: 56px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-}
-.preview-viewport-mobile.comment-preview-layer-with-deck-rail {
-  --deck-device-frame-radius: 28px;
-}
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-rail {
-  flex: 0 0 var(--deck-compact-rail-width);
-  width: var(--deck-compact-rail-width);
-  height: calc(var(--preview-viewport-height) * var(--preview-scale, 1));
-  border: 1px solid var(--border-strong);
-  border-right: 0;
-  border-radius: var(--deck-device-frame-radius) 0 0 var(--deck-device-frame-radius);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
-}
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .comment-preview-canvas {
-  border-left: 0;
-  border-radius: 0 var(--deck-device-frame-radius) var(--deck-device-frame-radius) 0;
-}
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail.comment-preview-layer-deck-rail-collapsed .comment-preview-canvas {
-  border-left: 1px solid var(--border-strong);
-  border-radius: var(--deck-device-frame-radius);
-}
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-list {
-  gap: 6px;
-  padding: 20px 8px;
-  overflow-x: hidden;
-}
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-button {
-  grid-template-columns: 1fr;
-  justify-items: center;
-  gap: 0;
-  min-height: 30px;
-}
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-frame {
-  display: none;
-}
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-number {
-  box-sizing: border-box;
-  width: 28px;
-  height: 28px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  line-height: 1;
-}
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-button:hover:not(:disabled) .deck-thumbnail-number {
-  background: rgba(255, 255, 255, 0.07);
-}
-.preview-viewport:not(.preview-viewport-desktop).comment-preview-layer-with-deck-rail .deck-thumbnail-button.active .deck-thumbnail-number {
-  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
-  color: #fff;
-}
+/* Phone/tablet viewports used to swap the rail for a column of bare page
+   numbers hugging a device frame. A bottom strip has room for real thumbnails
+   at every viewport, so those overrides are gone — one film strip, one shape. */
 .deck-thumbnail-list {
+  width: 100%;
   height: 100%;
-  overflow: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
-  padding: 12px 12px 16px;
+  scrollbar-color: var(--border-strong) transparent;
+  padding: 12px 16px;
   display: grid;
-  align-content: start;
+  grid-auto-flow: column;
+  grid-auto-columns: 132px;
+  /* `1fr` (not the default auto) so the single row fills the strip's height:
+     an auto row would size to the page number and leave the frame at zero,
+     since the frame takes its height from the row rather than the other way
+     round. */
+  grid-auto-rows: 1fr;
+  justify-content: start;
+  align-content: stretch;
   gap: 10px;
 }
 .deck-thumbnail-list::-webkit-scrollbar {
-  width: 8px;
+  height: 8px;
 }
 .deck-thumbnail-list::-webkit-scrollbar-thumb {
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
-  background-color: rgba(255, 255, 255, 0.14);
+  background-color: var(--border-strong);
 }
 .deck-thumbnail-list::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.24);
+  background-color: var(--text-muted);
 }
+/* `column-reverse` rather than reordering the DOM: the number stays first in
+   source (so screen readers announce "3" before the slide picture) while the
+   strip shows the thumbnail on top and its page number tucked underneath. */
 .deck-thumbnail-button {
   position: relative;
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
-  align-items: start;
-  gap: 9px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  gap: 5px;
   width: 100%;
-  /* The frame's aspect-ratio is resolved after the auto grid row's intrinsic
-     contribution, so without an explicit row floor Chromium sizes the row
-     from the 11px page number and lets the 16:9 frame overlap the next item.
-     82px is the rounded 16:9 height of the 145px frame in the fixed 194px rail
-     (194 - 24px list padding - 16px number - 9px gap). */
-  min-height: 82px;
+  /* Fills the strip row so the frame can take the leftover height below.
+     Deriving the frame's height from `aspect-ratio` instead collapses it:
+     during intrinsic row sizing the frame has no resolved width yet, so the
+     ratio contributes nothing and the row settles at the page number's
+     height. */
+  height: 100%;
   padding: 0;
   border: 0;
   background: transparent;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-muted);
   text-align: left;
   cursor: pointer;
   transition: color 140ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 /* `:not(:disabled)` is load-bearing: it lifts specificity above the global
-   `button:hover:not(:disabled)` primitive, whose light-theme --bg-subtle
-   would otherwise paint a white block over this dark rail. Hover feedback
-   belongs to the thumbnail frame, never the row. */
+   `button:hover:not(:disabled)` primitive, which would otherwise paint a
+   filled block behind the whole row. Hover feedback belongs to the thumbnail
+   frame, never the row. */
 .deck-thumbnail-button:hover:not(:disabled) {
   background: transparent;
   border-color: transparent;
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--text);
 }
 .deck-thumbnail-button.active {
-  color: #fff;
+  color: var(--text-strong);
 }
 .deck-thumbnail-number {
   display: flex;
-  justify-content: flex-end;
-  padding-top: 5px;
+  justify-content: center;
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
@@ -934,28 +906,32 @@
 .deck-thumbnail-frame {
   display: block;
   position: relative;
-  aspect-ratio: 16 / 9;
+  flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   border-radius: 8px;
-  background: #050506;
+  /* Slides are overwhelmingly light documents, so the frame's own ground is
+     the app's page colour: a black plate behind a white slide showed as a dark
+     hairline around every thumbnail while its iframe was still mounting. */
+  background: var(--bg);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 1px 3px rgba(0, 0, 0, 0.4);
+    inset 0 0 0 1px var(--border),
+    0 1px 2px rgba(0, 0, 0, 0.06);
   transition:
     box-shadow 160ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .deck-thumbnail-button:hover .deck-thumbnail-frame {
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
-    0 4px 14px rgba(0, 0, 0, 0.45);
+    inset 0 0 0 1px var(--border-strong),
+    0 3px 10px rgba(0, 0, 0, 0.10);
 }
 .deck-thumbnail-button.active .deck-thumbnail-frame {
   box-shadow:
     inset 0 0 0 1.5px var(--accent),
-    0 0 0 3px color-mix(in srgb, var(--accent) 26%, transparent),
-    0 6px 18px rgba(0, 0, 0, 0.5);
+    0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent),
+    0 4px 12px rgba(0, 0, 0, 0.10);
 }
 /* 200%/scale(0.5) keeps thumbnails 2× supersampled (crisp on retina) while
    rasterizing a quarter of the pixels the previous 400%/scale(0.25) did —
@@ -969,7 +945,7 @@
   transform: scale(0.5);
   transform-origin: top left;
   pointer-events: none;
-  background: #000;
+  background: var(--bg);
 }
 /* Shadow-root thumbnail host (the default path): the single cloned slide lives
    in a shadow root whose `.od-thumb-canvas` is scaled + centered inline by
@@ -982,7 +958,7 @@
   height: 100%;
   overflow: hidden;
   pointer-events: none;
-  background: #050506;
+  background: var(--bg);
   contain: strict;
 }
 .deck-thumbnail-loading {
