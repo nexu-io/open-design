@@ -294,26 +294,20 @@ describe('UpdateDialog', () => {
     await waitFor(() => expect(openExternal).toHaveBeenCalledWith('https://github.com/nexu-io/open-design/releases'));
   });
 
-  it('defaults to Later when tasks are active and requires an explicit Restart anyway override', async () => {
+  it('quick-fails an occupied update without exposing a force override', async () => {
     let openDialogListener: OpenDesignHostUpdaterOpenDialogListener | null = null;
     const ready = payloadReadyStatus();
     const blocked = payloadReadyStatus({
       error: {
-        code: 'active-runs-blocked',
-        details: { activeRunCount: 2 },
-        message: 'tasks are active',
+        code: 'standalone-lifecycle-occupied',
+        details: {
+          occupantCount: 2,
+          occupants: [{ key: 'electron:other' }, { key: 'codex-plugin:other' }],
+        },
+        message: 'Open Design is still in use by electron:other, codex-plugin:other.',
       },
     });
-    const installed = payloadReadyStatus({
-      installResult: {
-        openedAt: '2026-07-16T12:00:00.000Z',
-        path: '/tmp/open-design-1.2.4-payload.zip',
-      },
-      state: 'installing',
-    });
-    const install = vi.fn()
-      .mockResolvedValueOnce(blocked)
-      .mockResolvedValueOnce(installed);
+    const install = vi.fn().mockResolvedValueOnce(blocked);
     const quit = vi.fn(async () => ({ ok: true as const }));
     restoreHost = installMockOpenDesignHost({
       host: {
@@ -337,15 +331,10 @@ describe('UpdateDialog', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Install and restart' }));
 
     expect(await screen.findByText('Open Design is still working')).toBeTruthy();
-    expect(screen.getByText('2 active tasks are still running. Restarting now will interrupt them.')).toBeTruthy();
+    expect(screen.getByText('Open Design is still in use by electron:other, codex-plugin:other.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Later' })).toHaveFocus();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Restart anyway' }));
-    await waitFor(() => expect(install).toHaveBeenLastCalledWith({
-      payload: { force: true, source: 'mac-app-menu' },
-    }));
-    await waitFor(() => expect(quit).toHaveBeenCalledWith({
-      payload: { force: true, source: 'mac-app-menu' },
-    }));
+    expect(screen.queryByRole('button', { name: 'Restart anyway' })).toBeNull();
+    expect(install).toHaveBeenCalledTimes(1);
+    expect(quit).not.toHaveBeenCalled();
   });
 });

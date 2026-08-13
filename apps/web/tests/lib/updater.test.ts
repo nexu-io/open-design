@@ -298,18 +298,26 @@ describe('web updater model', () => {
   it('treats blocked and unknown active-run preflights as explicit restart risks', () => {
     expect(restartSafetyFromUpdaterStatus(downloadedStatus({
       error: {
-        code: 'active-runs-blocked',
-        details: { activeRunCount: 2 },
+        code: 'standalone-lifecycle-occupied',
+        details: {
+          occupantCount: 2,
+          occupants: [{ key: 'electron:other' }, { key: 'codex-plugin:other' }],
+        },
         message: 'tasks are active',
       },
-    }))).toEqual({ activeRunCount: 2, state: 'blocked' });
+    }))).toEqual({
+      message: 'tasks are active',
+      occupantCount: 2,
+      occupants: ['electron:other', 'codex-plugin:other'],
+      state: 'blocked',
+    });
     expect(restartSafetyFromUpdaterStatus(downloadedStatus({
       error: {
-        code: 'active-runs-unknown',
-        details: { activeRunCount: null },
+        code: 'standalone-lifecycle-unavailable',
+        details: { occupantCount: null },
         message: 'could not check tasks',
       },
-    }))).toEqual({ activeRunCount: null, state: 'unknown' });
+    }))).toEqual({ message: 'could not check tasks', occupantCount: null, state: 'unknown' });
     expect(restartSafetyFromUpdaterStatus(downloadedStatus())).toBeNull();
   });
 });

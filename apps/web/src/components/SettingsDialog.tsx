@@ -1933,15 +1933,15 @@ export function SettingsDialog({
     };
   }, [aboutUpdateQuitFailed, aboutUpdaterModel, appVersionInfo]);
 
-  // Restart-safety preflight denials stay hard-blocked in Settings → About
-  // (the force path lives in the app-menu UpdateDialog), but the toast must
-  // explain the active-run situation instead of a generic failure.
+  // Lifecycle denials stay hard-blocked in Settings → About, and preserve the
+  // concrete Shell occupants when the control plane can identify them.
   const aboutUpdaterToastText = useCallback(
     (safety: UpdaterRestartSafety | null, fallback: string): string => {
       if (safety == null) return fallback;
-      return safety.state === 'blocked'
-        ? t('updater.activeRunsBody', { count: safety.activeRunCount })
-        : t('updater.activeRunsUnknownBody');
+      if (safety.message != null) return safety.message;
+      if (safety.state !== 'blocked') return t('updater.activeRunsUnknownBody');
+      const base = t('updater.activeRunsBody', { count: safety.occupantCount });
+      return safety.occupants.length === 0 ? base : `${base} (${safety.occupants.join(', ')})`;
     },
     [t],
   );

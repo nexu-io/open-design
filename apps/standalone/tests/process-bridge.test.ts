@@ -372,6 +372,78 @@ describe("Standalone process bridge", () => {
     }
   });
 
+  it("coordinates update transitions across Shell attachments without exposing sidecar credentials", async () => {
+    const firstBinding = await descriptor("electron-a", 3);
+    const secondBinding = {
+      ...firstBinding,
+      attachment: (await descriptor("codex-plugin-a", 3)).attachment,
+    };
+    const body = await exposeStandaloneBodyBridge({
+      descriptor: firstBinding,
+      async handoff(request) {
+        return fakeHandle({
+          attachment: request.attachment,
+          handoff: request.handoff,
+          paths: request.paths,
+        });
+      },
+    });
+    const capabilities = {
+      async invoke(request: StandaloneShellCapabilityRequest) {
+        return {
+          attachmentId: request.attachmentId,
+          handoff: request.handoff,
+          outcome: "unsupported" as const,
+          requestId: request.requestId,
+          schemaVersion: request.schemaVersion,
+        };
+      },
+    };
+    try {
+      const first = await connectStandaloneBodyBridge({ capabilities, descriptor: firstBinding });
+      const second = await connectStandaloneBodyBridge({ capabilities, descriptor: secondBinding });
+
+      await expect(first.lifecycle.beginTransition("apply-shell-update")).resolves.toEqual({
+        occupants: [{
+          generation: 3,
+          incarnation: "codex-plugin-a",
+          key: "electron:codex-plugin-a",
+          projection: {
+            shellDigest: secondBinding.attachment.shell.digest,
+            shellVersion: secondBinding.attachment.shell.version,
+          },
+        }],
+        reason: "occupied",
+        state: "blocked",
+      });
+
+      await second.close();
+      const acquired = await first.lifecycle.beginTransition("apply-shell-update");
+      expect(acquired.state).toBe("acquired");
+      if (acquired.state !== "acquired") throw new Error("update transition unexpectedly blocked");
+
+      const lifecycle = bootstrapSidecarLifecycle({
+        controlRoot: firstBinding.paths.dataRoot,
+        scope: {
+          channel: firstBinding.handoff.scope.channel,
+          namespace: firstBinding.handoff.scope.namespace,
+        },
+      });
+      await expect(lifecycle.snapshot()).resolves.toMatchObject({
+        leases: [{ owner: { incarnation: firstBinding.attachment.id } }],
+        transition: { kind: "apply-shell-update" },
+      });
+      await acquired.transition.release();
+      await expect(lifecycle.snapshot()).resolves.toMatchObject({
+        leases: [{ owner: { incarnation: firstBinding.attachment.id } }],
+        transition: null,
+      });
+      await first.close();
+    } finally {
+      await body.close();
+    }
+  });
+
   it("derives attachment-local services and fences a different generation", async () => {
     const current = await descriptor("electron-a", 3);
     const sibling = { ...current, attachment: (await descriptor("electron-b", 3)).attachment };

@@ -6,6 +6,7 @@ import {
   STANDALONE_HANDOFF_SCHEMA_VERSION,
   STANDALONE_PROTOCOL_VERSION,
   type StandaloneHandle,
+  type StandaloneShellHandle,
   type StandaloneHandoffRequest,
   type StandaloneRuntimeTerminalStatus,
   type StandaloneShellCapabilityPort,
@@ -59,7 +60,7 @@ function binding(generation = 3): ElectronStandaloneBinding {
   };
 }
 
-function runningHandle(request: StandaloneHandoffRequest): StandaloneHandle {
+function runningHandle(request: StandaloneHandoffRequest): StandaloneShellHandle {
   const stopped: StandaloneRuntimeTerminalStatus = {
     handoff: request.handoff,
     pid: 42,
@@ -78,6 +79,15 @@ function runningHandle(request: StandaloneHandoffRequest): StandaloneHandle {
         requestId: value.requestId,
         schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
       };
+    },
+    lifecycle: {
+      async beginTransition() {
+        return {
+          occupants: [],
+          reason: "unavailable" as const,
+          state: "blocked" as const,
+        };
+      },
     },
     async readStatus() {
       return {

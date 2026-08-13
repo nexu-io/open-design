@@ -24,7 +24,7 @@ import {
   type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar-proto";
-import type { StandaloneRuntimeStatus } from "@open-design/standalone-proto";
+import type { StandaloneLifecyclePort, StandaloneRuntimeStatus } from "@open-design/standalone-proto";
 import { dirname, join } from "node:path";
 
 import {
@@ -62,6 +62,7 @@ import {
   type DesktopUpdater,
   type DesktopUpdaterScheduler,
 } from "./updater.js";
+import { DesktopUpdateTransitionOwner } from "./update-preflight.js";
 import {
   exportDiagnosticsToFile,
   registerDesktopDiagnosticsIpc,
@@ -186,6 +187,7 @@ export type DesktopMainOptions = {
   registerDesktopAuth?: (secret: Buffer) => Promise<boolean>;
   /** Protocol-owned runtime status projection; sidecar internals stay private. */
   readStandaloneStatus?: () => Promise<StandaloneRuntimeStatus>;
+  standaloneLifecycle?: StandaloneLifecyclePort;
   windowTitle?: string;
   onDesktopReady?: (controls: {
     dispatchInviteDeeplink(url: string | null): void;
@@ -765,6 +767,7 @@ export async function runDesktopMain(
     },
     { openPath: (path) => shell.openPath(path) },
   );
+  const updateTransition = new DesktopUpdateTransitionOwner(options.standaloneLifecycle);
   // Resolve the namespace root the same way the daemon diagnostics export does
   // (apps/daemon/src/diagnostics-export.ts buildSidecarLogSources). In packaged
   // builds `runtime.base` is `<namespaceRoot>/runtime`, so re-appending the
@@ -887,14 +890,15 @@ export async function runDesktopMain(
   async function shutdown(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
-    await options.beforeShutdown?.().catch((error: unknown) => {
-      console.error("desktop beforeShutdown failed", error);
-    });
     updateScheduler?.stop("shutdown");
     disposeMenu();
     removeDiagnosticsIpc();
     await ipcServer?.close().catch(() => undefined);
     await desktop?.close().catch(() => undefined);
+    await options.beforeShutdown?.().catch((error: unknown) => {
+      console.error("desktop beforeShutdown failed", error);
+    });
+    await updateTransition.release();
     // Mark the session clean only AFTER teardown actually completed, right
     // before app.quit(). Doing it at the start of shutdown would flag a quit as
     // clean even if a later await hangs and the process is then force-quit or
@@ -904,6 +908,11 @@ export async function runDesktopMain(
   }
 
   function shutdownAndExit(): void {
+    // Destroying the BrowserWindow emits `window-all-closed` while the first
+    // shutdown is still awaiting Standalone teardown. A second exit owner here
+    // would resolve the already-started shutdown as a no-op and terminate the
+    // process before the lifecycle lease can detach.
+    if (shuttingDown) return;
     void shutdown().finally(() => process.exit(0));
   }
 
@@ -1004,6 +1013,7 @@ export async function runDesktopMain(
     onRevealed: () => markDesktopSessionRunning({ stateFilePath: sessionStatePath }),
     onUpdateMenuLabels: menuController.setUpdateLabels,
     requestQuit: shutdownAndExit,
+    updateTransition,
     splashWindow: options.splashWindow,
     splashStartedAt: options.splashStartedAt,
     updater,
@@ -1069,6 +1079,7 @@ export async function runDesktopMain(
         return config.allowSilentUpdates === true;
       },
       requestQuit: shutdownAndExit,
+      transition: updateTransition,
     },
   });
   if (updater.shouldAutoCheck()) updateScheduler.start();
@@ -1079,12 +1090,6 @@ export async function runDesktopMain(
     if (shuttingDown) return;
     event.preventDefault();
     void shutdown().finally(() => process.exit(0));
-  });
-
-  app.on("before-quit", (event) => {
-    if (shuttingDown) return;
-    event.preventDefault();
-    shutdownAndExit();
   });
 
   app.on("window-all-closed", () => {

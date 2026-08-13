@@ -82,7 +82,7 @@ describe("namespace lifecycle leases", () => {
 });
 
 describe("namespace transition", () => {
-  it("atomically prunes, checks occupants and promotes the requester out of the blocker set", async () => {
+  it("atomically prunes, checks occupants and lets only the requester stay live inside the transition", async () => {
     const { plane } = await createFixture();
     const requester = await attach(plane, "electron-a", 3);
     const occupant = await attach(plane, "codex-plugin", 2);
@@ -111,6 +111,15 @@ describe("namespace transition", () => {
     await expect(plane.renewLease({ credential: requester.credential, leaseMs: 60_000 })).resolves.toMatchObject({
       reason: "transition-active",
       state: "rejected",
+    });
+    await expect(plane.renewLease({
+      credential: requester.credential,
+      leaseMs: 60_000,
+      transition: acquired.credential,
+    })).resolves.toMatchObject({ state: "renewed" });
+    await expect(plane.snapshot()).resolves.toMatchObject({
+      leases: [{ owner: { key: "electron-a" } }],
+      transition: { id: acquired.credential.id },
     });
     await expect(plane.attach({ leaseMs: 60_000, owner: owner("old-generation", 3) })).resolves.toMatchObject({
       reason: "transition-active",

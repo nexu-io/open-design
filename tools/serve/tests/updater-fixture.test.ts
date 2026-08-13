@@ -4,6 +4,12 @@ import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import {
+  CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  CLOSURE_PROTOCOL_VERSION,
+  createClosureDistributionManifest,
+  type ClosureDigest,
+} from "@open-design/closure-proto";
 import { describe, expect, it } from "vitest";
 import {
   CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
@@ -161,6 +167,95 @@ describe("updater fixture server", () => {
       expect(metadata.control?.launcher?.version?.url).toBe("https://example.com/reinstall-help");
     } finally {
       await server.close();
+    }
+  });
+
+  it("serves one version-wide Closure graph and its content-addressed blobs", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-closure-distribution-fixture-"));
+    const blobsRoot = join(root, "blobs");
+    const version = "2.0.0-beta.5";
+    const digest = (value: string): ClosureDigest => (
+      `sha256:${createHash("sha256").update(value).digest("hex")}`
+    );
+    const content = {
+      body: "body archive",
+      launcher: "launcher archive",
+      native: "native archive",
+    };
+    try {
+      await mkdir(blobsRoot, { recursive: true });
+      const artifacts = Object.fromEntries(await Promise.all(Object.entries(content).map(async ([key, value]) => {
+        const valueDigest = digest(value);
+        await writeFile(join(blobsRoot, valueDigest.slice("sha256:".length)), value);
+        return [key, {
+          digest: valueDigest,
+          mediaType: "application/zip",
+          size: Buffer.byteLength(value),
+          url: `https://releases.example/beta/blobs/${valueDigest.slice("sha256:".length)}`,
+        }] as const;
+      }))) as Record<keyof typeof content, {
+        digest: ClosureDigest;
+        mediaType: string;
+        size: number;
+        url: string;
+      }>;
+      const tree = (value: string): ClosureDigest => digest(`tree:${value}`);
+      const manifest = createClosureDistributionManifest({
+        blobs: Object.fromEntries(Object.values(artifacts).map((artifact) => [artifact.digest, artifact])),
+        compatibility: { shell: { electron: { version: { min: "2.0.0-beta.4" } } } },
+        identity: { channel: "beta", protocolVersion: CLOSURE_PROTOCOL_VERSION, version },
+        required: {
+          body: { blob: artifacts.body.digest, entryPath: "bootloader.mjs", treeDigest: tree(content.body) },
+          launcher: {
+            blob: artifacts.launcher.digest,
+            entryPath: "launcher.mjs",
+            handoffPath: "bootloader.mjs",
+            treeDigest: tree(content.launcher),
+          },
+          targets: {
+            "darwin-arm64": {
+              native: { blob: artifacts.native.digest, treeDigest: tree(content.native) },
+            },
+          },
+        },
+        resources: [],
+        schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+      }, digest);
+      const manifestPath = join(root, "closure-distribution.json");
+      await writeFile(manifestPath, `${JSON.stringify(manifest)}\n`);
+      const server = await startUpdaterFixtureServer({
+        channel: "beta",
+        closureBlobDir: blobsRoot,
+        closureDistributionManifestPath: manifestPath,
+        platform: "mac",
+        version,
+      });
+      try {
+        for (const metadataUrl of [
+          server.info.metadataUrl,
+          `${server.info.origin}/beta/versions/${version}/metadata.json`,
+        ]) {
+          const metadata = await (await fetch(metadataUrl)).json() as {
+            closure?: typeof manifest;
+            releaseState?: string;
+          };
+          expect(metadata.releaseState).toBe("complete");
+          expect(metadata.closure?.identity.version).toBe(version);
+          expect(metadata.closure?.identity.digest).not.toBe(manifest.identity.digest);
+          expect(metadata.closure?.blobs[artifacts.body.digest]?.url).toBe(
+            `${server.info.origin}/beta/blobs/${artifacts.body.digest.slice("sha256:".length)}`,
+          );
+        }
+        const bodyUrl = `${server.info.origin}/beta/blobs/${artifacts.body.digest.slice("sha256:".length)}`;
+        expect(await (await fetch(bodyUrl)).text()).toBe(content.body);
+        const range = await fetch(bodyUrl, { headers: { range: "bytes=0-3" } });
+        expect(range.status).toBe(206);
+        expect(await range.text()).toBe("body");
+      } finally {
+        await server.close();
+      }
+    } finally {
+      await rm(root, { force: true, recursive: true });
     }
   });
 

@@ -14,6 +14,8 @@ import {
 type CliOptions = {
   artifactPath?: string;
   channel?: ReleaseChannel;
+  closureBlobDir?: string;
+  closureDistributionManifestPath?: string;
   closureManifestPath?: string;
   controlLauncherVersionMin?: string;
   controlLauncherVersionUrl?: string;
@@ -98,6 +100,8 @@ async function start(service: string, options: CliOptions): Promise<void> {
   const server = await startUpdaterFixtureServer({
     artifactPath: options.artifactPath,
     channel: options.channel,
+    closureBlobDir: options.closureBlobDir,
+    closureDistributionManifestPath: options.closureDistributionManifestPath,
     closureManifestPath: options.closureManifestPath,
     controlLauncherVersionMin: options.controlLauncherVersionMin,
     controlLauncherVersionUrl: options.controlLauncherVersionUrl,
@@ -137,6 +141,8 @@ cli
   .command("start <service>", "Start a local fixture service")
   .option("--artifact-path <path>", "Serve a local update artifact file")
   .option("--channel <channel>", "Updater channel: stable|beta|betas|prerelease|preview", { default: "stable" })
+  .option("--closure-blob-dir <path>", "Serve content-addressed blobs for a Closure distribution graph")
+  .option("--closure-distribution-manifest-path <path>", "Serve a version-wide Closure distribution graph beside updater metadata")
   .option("--closure-manifest-path <path>", "Serve a real Standalone Closure build beside updater metadata")
   .option("--control-launcher-version-min <version>", "Publish control.launcher.version.min in fixture metadata")
   .option("--control-launcher-version-url <url>", "Publish control.launcher.version.url in fixture metadata")

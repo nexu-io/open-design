@@ -12,7 +12,7 @@ import {
 import { hashJson, hashPath, type ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
-import { electronBuilderVersionForShellVersion } from "../versions.js";
+import { electronBuilderVersionForShellVersion, readReleaseBindingVersion } from "../versions.js";
 import {
   resolveToolPackLauncherChannel,
   resolveToolPackLauncherRoot,
@@ -74,13 +74,14 @@ export async function buildWinLauncherPayloadArchive(
   if (process.platform !== "win32") throw new Error("Windows launcher payload build must run on Windows");
   const timings: WinPackTiming[] = [];
   const packagedVersion = await readPackagedVersion(config);
+  const releaseVersion = await readReleaseBindingVersion(config);
   const channel = resolveToolPackLauncherChannel(config);
   const launcherRoot = resolveToolPackLauncherRoot(config);
   resolveLauncherVersionPaths({
     channel,
     namespace: config.namespace,
     root: launcherRoot,
-    version: packagedVersion,
+    version: releaseVersion,
   });
   const stageRoot = join(dirname(paths.launcherPayloadPath), "stage");
   const payloadRoot = join(stageRoot, "payload");
@@ -88,7 +89,7 @@ export async function buildWinLauncherPayloadArchive(
   const manifest = buildWinLauncherPayloadManifest({
     channel,
     namespace: config.namespace,
-    version: packagedVersion,
+    version: releaseVersion,
   });
 
   const runSegment = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {

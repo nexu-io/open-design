@@ -4,6 +4,7 @@ import {
 } from "@open-design/sidecar-proto";
 
 import type { DesktopUpdater, DesktopUpdaterLogger } from "../updater.js";
+import type { DesktopUpdateTransitionOwner } from "../update-preflight.js";
 
 /**
  * @module updater-scheduler
@@ -24,6 +25,7 @@ export type DesktopUpdaterScheduler = {
 type StartupSilentPayloadUpdateOptions = {
   isEnabled(): Promise<boolean>;
   requestQuit(): void;
+  transition: DesktopUpdateTransitionOwner;
 };
 
 export function createDesktopUpdaterScheduler(
@@ -120,14 +122,21 @@ export function createDesktopUpdaterScheduler(
         try {
           const enabled = await options.startupSilentPayloadUpdate.isEnabled();
           if (enabled) {
-            status = await updater.installUpdate();
-            if (status.installResult != null) {
-              stop("silent-payload-installed");
-              options.startupSilentPayloadUpdate.requestQuit();
-              return;
+            const safety = await options.startupSilentPayloadUpdate.transition.acquire();
+            if (safety.state !== "clear") {
+              logger.warn("[open-design updater] startup silent payload update is blocked by lifecycle truth", safety);
+            } else {
+              status = await updater.installUpdate();
+              if (status.installResult != null) {
+                stop("silent-payload-installed");
+                options.startupSilentPayloadUpdate.requestQuit();
+                return;
+              }
+              await options.startupSilentPayloadUpdate.transition.release();
             }
           }
         } catch (silentError) {
+          await options.startupSilentPayloadUpdate.transition.release();
           logger.warn("[open-design updater] startup silent payload update failed", silentError);
         }
       }

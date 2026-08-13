@@ -132,6 +132,7 @@ function request(
   value: Awaited<ReturnType<typeof fixture>>,
   shellVersion: string,
   metadataUrl: string | null = value.metadataUrl,
+  releaseVersion: string = shellVersion,
 ) {
   return {
     attachment: {
@@ -140,6 +141,7 @@ function request(
     },
     discovery: { metadataUrl, target: "darwin-arm64" },
     paths: value.paths,
+    releaseVersion,
     repositoryConfigPath: value.repositoryConfigPath,
     schemaVersion: STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
     scope: { channel: "beta" as const, namespace: "release-beta" },
@@ -229,7 +231,7 @@ describe("Standalone unresolved bootstrap", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("aligns an older committed Standalone to the newer Shell version", async () => {
+  it("aligns an older committed Standalone to the requested release", async () => {
     const value = await fixture();
     await consumeTransition(
       value,
@@ -240,6 +242,23 @@ describe("Standalone unresolved bootstrap", () => {
 
     expect(resolution.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.2");
     expect(resolution.handoff.handoff.scope.generation).toBe(1);
+  });
+
+  it("keeps Shell identity independent while aligning Standalone to a newer release", async () => {
+    const value = await fixture();
+    await consumeTransition(
+      value,
+      await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), { fetch: value.fetch }),
+    );
+    const resolution = await resolveStandaloneBootstrap(
+      request(value, "0.19.0-beta.1", value.metadataUrl, "0.19.0-beta.2"),
+      { fetch: value.fetch },
+    );
+    await consumeTransition(value, resolution);
+
+    expect(resolution.handoff.attachment.shell.version).toBe("0.19.0-beta.1");
+    expect(resolution.handoff.handoff.descriptor.release.version).toBe("0.19.0-beta.2");
+    expect(resolution.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.2");
   });
 
   it("keeps a newer compatible Standalone when an older Shell attaches", async () => {

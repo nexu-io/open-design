@@ -25,7 +25,13 @@ import type { WinBuiltAppManifest, WinPaths } from "../src/win/types.js";
 
 const execFileAsync = promisify(execFile);
 
-function makeConfig(root: string, platform: ToolPackPlatform, namespace: string, releaseVersion: string): ToolPackConfig {
+function makeConfig(
+  root: string,
+  platform: ToolPackPlatform,
+  namespace: string,
+  releaseVersion: string,
+  shellVersion: string = releaseVersion,
+): ToolPackConfig {
   return {
     releaseVersion,
     electronBuilderCliPath: "/x/electron-builder/cli.js",
@@ -56,6 +62,7 @@ function makeConfig(root: string, platform: ToolPackPlatform, namespace: string,
     },
     signed: false,
     shell: "electron",
+    shellVersion,
     silent: true,
     to: platform === "win" ? "nsis" : "app",
     webOutputMode: "standalone",
@@ -85,7 +92,7 @@ async function writeFakeMacApp(config: ToolPackConfig): Promise<ReturnType<typeo
   await writeFile(
     join(resourcesRoot, "open-design-config.json"),
     `${JSON.stringify({
-      shellVersion: config.releaseVersion,
+      shellVersion: config.shellVersion,
       daemonSidecarEntryRelative: "open-design/prebundled/daemon/daemon-sidecar.mjs",
       namespace: config.namespace,
       nodeCommandRelative: "open-design/bin/node",
@@ -247,7 +254,7 @@ describe("tools-pack launcher payload archives", () => {
   it.skipIf(process.platform !== "darwin")("creates a mac payload zip with bootstrap-readable contents", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-tools-pack-mac-payload-"));
     try {
-      const config = makeConfig(root, "mac", "release-beta", "0.9.0-beta.2");
+      const config = makeConfig(root, "mac", "release-beta", "0.9.0-beta.2", "0.9.0-beta.1");
       const paths = await writeFakeMacApp(config);
       const archivePath = await createMacLauncherPayloadArchive(config, paths);
       const extractRoot = join(root, "extracted");
@@ -263,14 +270,19 @@ describe("tools-pack launcher payload archives", () => {
       expect(manifest.entry.executable).toBe("payload/Open Design Beta.app/Contents/MacOS/Open Design Beta");
       expect(manifest.version).toBe("0.9.0-beta.2");
       await expectPathExists(join(extractRoot, manifest.entry.executable));
-      await expectPathExists(join(
+      const packagedConfigPath = join(
         extractRoot,
         "payload",
         "Open Design Beta.app",
         "Contents",
         "Resources",
         "open-design-config.json",
-      ));
+      );
+      await expectPathExists(packagedConfigPath);
+      const packagedConfig = JSON.parse(await readFile(packagedConfigPath, "utf8")) as {
+        shellVersion: string;
+      };
+      expect(packagedConfig.shellVersion).toBe("0.9.0-beta.1");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

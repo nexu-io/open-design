@@ -10,6 +10,7 @@ import {
   type StandaloneBootstrapResolution,
   type StandaloneHandoffDescriptor,
   type StandaloneHandle,
+  type StandaloneShellHandle,
   type StandaloneHandoff,
   type StandaloneHandoffRequest,
   type StandaloneHandoffScope,
@@ -115,6 +116,17 @@ function errorDetail(error: unknown): string {
   return String(error);
 }
 
+function requireShellHandle(value: StandaloneHandle): StandaloneShellHandle {
+  const lifecycle = (value as Partial<StandaloneShellHandle>).lifecycle;
+  if (lifecycle == null || typeof lifecycle.beginTransition !== "function") {
+    throw new ElectronStandaloneLaunchError(
+      "standalone-start-failed",
+      "Committed Standalone does not expose the Shell lifecycle port",
+    );
+  }
+  return value as StandaloneShellHandle;
+}
+
 /**
  * Lazy-load one committed Standalone binding. Repeated identical launches
  * share the task; any different binding fails closed. The Shell never imports
@@ -126,11 +138,11 @@ export function createElectronStandaloneLauncher(
   launch(
     binding: ElectronStandaloneBinding,
     capabilities: StandaloneShellCapabilityPort,
-  ): Promise<StandaloneHandle>;
+  ): Promise<StandaloneShellHandle>;
 }> {
   const importBootloader = options.importBootloader
     ?? (async (bootloaderUrl: string) => await import(bootloaderUrl) as BootloaderModule);
-  let entered: Readonly<{ key: string; task: Promise<StandaloneHandle> }> | null = null;
+  let entered: Readonly<{ key: string; task: Promise<StandaloneShellHandle> }> | null = null;
 
   return Object.freeze({
     async launch(binding, capabilities) {
@@ -149,7 +161,7 @@ export function createElectronStandaloneLauncher(
       const task = (async () => {
         try {
           const module = await importBootloader(pathToFileURL(binding.bootloaderPath).href);
-          return await bootloaderHandoff(module)(request);
+          return requireShellHandle(await bootloaderHandoff(module)(request));
         } catch (error) {
           if (
             typeof error === "object"

@@ -111,6 +111,7 @@ describe("desktop updater host boundary", () => {
     expect(installEnd).toBeGreaterThan(installStart);
     const installHandler = runtime.slice(installStart, installEnd);
     expect(installHandler).toContain("guardedUpdaterStatus(updaterOptions)");
+    expect(installHandler).toContain("updateTransition.release()");
     expect(installHandler).toContain("installUpdate()");
     expect(installHandler).not.toContain("quit");
     expect(installHandler).not.toContain("relaunch");
@@ -130,5 +131,39 @@ describe("desktop updater host boundary", () => {
     expect(quitHandler).toContain("requestQuit");
     expect(quitHandler).not.toContain("app.relaunch()");
     expect(quitHandler).not.toContain("installUpdate()");
+  });
+
+  it("uses one Standalone lifecycle transition owner for manual and silent update paths", () => {
+    const main = source("src/main/index.ts");
+    expect(main).toContain("new DesktopUpdateTransitionOwner(options.standaloneLifecycle)");
+    expect(main).toContain("updateTransition,");
+    const runtime = source("src/main/runtime.ts");
+    expect(runtime).toContain("options.updateTransition ?? new DesktopUpdateTransitionOwner(null)");
+    expect(runtime).not.toContain("/api/runs?status=active");
+    const scheduler = source("src/main/updater/scheduler.ts");
+    expect(scheduler).toContain("startupSilentPayloadUpdate.transition.acquire()");
+  });
+
+  it("uses the committed release version for updater and user-facing version truth", () => {
+    const entry = source("src/index.ts");
+    expect(entry).toContain("startupTelemetryContext.appVersion = binding.descriptor.release.version");
+    expect(entry).toContain("currentVersion: binding.descriptor.release.version");
+    expect(entry).not.toContain("currentVersion: shellVersion");
+  });
+
+  it("has exactly one asynchronous before-quit owner so teardown cannot be bypassed", () => {
+    const main = source("src/main/index.ts");
+    expect(main.match(/app\.on\("before-quit"/g)).toHaveLength(1);
+    const beforeQuitStart = main.indexOf('app.on("before-quit"');
+    const windowCloseStart = main.indexOf('app.on("window-all-closed"', beforeQuitStart);
+    const handler = main.slice(beforeQuitStart, windowCloseStart);
+    expect(handler).toContain("event.preventDefault()");
+    expect(handler).toContain("void shutdown().finally(() => process.exit(0))");
+    expect(handler).not.toContain("shutdownAndExit()");
+    const exitOwnerStart = main.indexOf("function shutdownAndExit(): void");
+    const exitOwnerEnd = main.indexOf("console.info", exitOwnerStart);
+    const exitOwner = main.slice(exitOwnerStart, exitOwnerEnd);
+    expect(exitOwner).toContain("if (shuttingDown) return");
+    expect(exitOwner).toContain("void shutdown().finally(() => process.exit(0))");
   });
 });

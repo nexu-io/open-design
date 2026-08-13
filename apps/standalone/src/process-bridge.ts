@@ -14,6 +14,7 @@ import {
 import {
   bootstrapSidecarLifecycle,
   type SidecarLifecyclePlane,
+  type SidecarTransitionCredential,
 } from "@open-design/sidecar/lifecycle";
 import {
   validateStandaloneHandoffDescriptor,
@@ -25,6 +26,10 @@ import {
   type StandaloneHandle,
   type StandaloneHandoff,
   type StandaloneHandoffDescriptor,
+  type StandaloneLifecycleOccupant,
+  type StandaloneLifecyclePort,
+  type StandaloneLifecycleTransition,
+  type StandaloneProtocolJsonValue,
   type StandaloneRuntimeCommandRequest,
   type StandaloneRuntimeCommandResult,
   type StandaloneRuntimeStatus,
@@ -32,6 +37,7 @@ import {
   type StandaloneShellCapabilityPort,
   type StandaloneShellCapabilityRequest,
   type StandaloneShellCapabilityResult,
+  type StandaloneShellHandle,
 } from "@open-design/standalone-proto";
 
 import { createStandaloneLauncherBootstrapEnv } from "./launcher-bootstrap.js";
@@ -68,6 +74,7 @@ type BodyAttachment = Readonly<{
 type StandaloneShellBridgeExposure = Readonly<{
   abortTransition(): Promise<void>;
   completeTransition(): Promise<void>;
+  lifecycle: StandaloneLifecyclePort;
   service: string;
   sidecar: AttachedSidecar;
 }>;
@@ -138,17 +145,18 @@ export async function exposeStandaloneShellBridge(options: Readonly<{
       namespace: descriptor.handoff.scope.namespace,
     },
   });
+  const owner = {
+    generation: descriptor.handoff.scope.generation,
+    incarnation: descriptor.attachment.id,
+    key: `${descriptor.attachment.shell.type}:${descriptor.attachment.id}`,
+    projection: {
+      shellDigest: descriptor.attachment.shell.digest,
+      shellVersion: descriptor.attachment.shell.version,
+    },
+  } as const;
   const attached = await lifecycle.attach({
     leaseMs: 60_000,
-    owner: {
-      generation: descriptor.handoff.scope.generation,
-      incarnation: descriptor.attachment.id,
-      key: `${descriptor.attachment.shell.type}:${descriptor.attachment.id}`,
-      projection: {
-        shellDigest: descriptor.attachment.shell.digest,
-        shellVersion: descriptor.attachment.shell.version,
-      },
-    },
+    owner,
     ...(descriptor.transition == null ? {} : { transition: descriptor.transition }),
   });
   if (attached.state === "blocked") {
@@ -183,24 +191,41 @@ export async function exposeStandaloneShellBridge(options: Readonly<{
 
   let closed = false;
   let transitionCompleted = descriptor.transition == null;
+  let activeTransition: SidecarTransitionCredential | null = null;
+  let activeTransitionHandle: StandaloneLifecycleTransition | null = null;
   let heartbeat: NodeJS.Timeout;
+  const releaseActiveTransition = async (): Promise<void> => {
+    const credential = activeTransition;
+    activeTransition = null;
+    activeTransitionHandle = null;
+    if (credential != null) await lifecycle.abortTransition(credential).catch(() => undefined);
+  };
   const close = async (): Promise<void> => {
     if (closed) return;
     closed = true;
     clearInterval(heartbeat);
+    await releaseActiveTransition();
     await lifecycle.detach(attached.credential).catch(() => undefined);
     await rawSidecar.close();
   };
   heartbeat = setInterval(() => {
-    void lifecycle.renewLease({
-      credential: attached.credential,
-      leaseMs: 60_000,
-      ...(transitionCompleted || descriptor.transition == null
-        ? {}
-        : { transition: descriptor.transition }),
-    }).then(async (result) => {
+    void (async () => {
+      const transition = activeTransition
+        ?? (transitionCompleted || descriptor.transition == null ? null : descriptor.transition);
+      if (activeTransition != null) {
+        const renewed = await lifecycle.renewTransition({
+          credential: activeTransition,
+          leaseMs: 60_000,
+        });
+        if (renewed.state === "rejected") return await close();
+      }
+      const result = await lifecycle.renewLease({
+        credential: attached.credential,
+        leaseMs: 60_000,
+        ...(transition == null ? {} : { transition }),
+      });
       if (result.state === "rejected") await close();
-    }).catch(async () => await close());
+    })().catch(async () => await close());
   }, 20_000);
   heartbeat.unref();
   const sidecar: AttachedSidecar = Object.freeze({ close, context: rawSidecar.context });
@@ -221,6 +246,52 @@ export async function exposeStandaloneShellBridge(options: Readonly<{
       }
       transitionCompleted = true;
     },
+    lifecycle: Object.freeze({
+      async beginTransition(kind: string) {
+        if (closed) return { occupants: [], reason: "unavailable", state: "blocked" } as const;
+        if (!transitionCompleted) {
+          return { occupants: [], reason: "transition-active", state: "blocked" } as const;
+        }
+        if (activeTransitionHandle != null) {
+          return { state: "acquired", transition: activeTransitionHandle } as const;
+        }
+        let acquired;
+        try {
+          acquired = await lifecycle.beginTransition({
+            kind,
+            leaseMs: 60_000,
+            owner,
+            requester: attached.credential,
+          });
+        } catch {
+          return { occupants: [], reason: "unavailable", state: "blocked" } as const;
+        }
+        if (acquired.state === "blocked") {
+          const occupants: StandaloneLifecycleOccupant[] = (acquired.occupants ?? []).map((entry) => ({
+            generation: entry.owner.generation,
+            incarnation: entry.owner.incarnation,
+            key: entry.owner.key,
+            ...(entry.owner.projection == null
+              ? {}
+              : { projection: entry.owner.projection as StandaloneProtocolJsonValue }),
+          }));
+          return {
+            occupants,
+            reason: acquired.reason === "occupied" ? "occupied" : "transition-active",
+            state: "blocked",
+          } as const;
+        }
+        activeTransition = acquired.credential;
+        const credential = acquired.credential;
+        activeTransitionHandle = Object.freeze({
+          async release() {
+            if (activeTransition?.id !== credential.id || activeTransition.fence !== credential.fence) return;
+            await releaseActiveTransition();
+          },
+        });
+        return { state: "acquired", transition: activeTransitionHandle } as const;
+      },
+    }),
     service,
     sidecar,
   };
@@ -508,11 +579,11 @@ export async function attachStandaloneBodyBridge(
 function bodyClientHandle(
   client: SidecarControlClient<StandaloneBodyBridgeMethods>,
   descriptor: StandaloneHandoffDescriptor,
-  shell: AttachedSidecar,
-): StandaloneHandle {
+  shell: StandaloneShellBridgeExposure,
+): StandaloneShellHandle {
   const attachmentId = descriptor.attachment.id;
   let closeTask: Promise<StandaloneRuntimeTerminalStatus> | null = null;
-  const closeShell = async (): Promise<void> => await shell.close().catch(() => undefined);
+  const closeShell = async (): Promise<void> => await shell.sidecar.close().catch(() => undefined);
   return {
     async close() {
       if (closeTask == null) {
@@ -533,6 +604,7 @@ function bodyClientHandle(
         requestId: command.requestId,
       });
     },
+    lifecycle: shell.lifecycle,
     async readStatus() {
       return validateStandaloneRuntimeStatus(await client.call("readStatus", { attachmentId }), {
         handoff: descriptor.handoff,
@@ -555,7 +627,7 @@ async function attachShellToStandaloneBody(
   client: SidecarControlClient<StandaloneBodyBridgeMethods>,
   descriptor: StandaloneHandoffDescriptor,
   shell: StandaloneShellBridgeExposure,
-): Promise<StandaloneHandle> {
+): Promise<StandaloneShellHandle> {
   try {
     validateStandaloneRuntimeStatus(
       // A cold attachment owns full Standalone acquisition (daemon + Web), so
@@ -567,7 +639,7 @@ async function attachShellToStandaloneBody(
       { handoff: descriptor.handoff, state: "running" },
     );
     await shell.completeTransition();
-    return bodyClientHandle(client, descriptor, shell.sidecar);
+    return bodyClientHandle(client, descriptor, shell);
   } catch (error) {
     await client.call("close", { attachmentId: descriptor.attachment.id }, { timeoutMs: null })
       .catch(() => undefined);
@@ -583,7 +655,7 @@ function isUnavailableSidecar(error: unknown): boolean {
 export async function connectStandaloneBodyBridge(options: Readonly<{
   capabilities: StandaloneShellCapabilityPort;
   descriptor: StandaloneHandoffDescriptor;
-}>): Promise<StandaloneHandle> {
+}>): Promise<StandaloneShellHandle> {
   const { control, descriptor } = descriptorControl(options.descriptor);
   const shell = await exposeStandaloneShellBridge(options);
   try {
@@ -605,7 +677,7 @@ export async function launchStandaloneBodyBridge(options: Readonly<{
   capabilities: StandaloneShellCapabilityPort;
   descriptor: StandaloneHandoffDescriptor;
   launch: StandaloneBodyProcessLaunchSpec;
-}>): Promise<StandaloneHandle> {
+}>): Promise<StandaloneShellHandle> {
   const { control, descriptor } = descriptorControl(options.descriptor);
   const shell = await exposeStandaloneShellBridge(options);
   const ownedLaunch: { stop: (() => Promise<unknown>) | null } = { stop: null };

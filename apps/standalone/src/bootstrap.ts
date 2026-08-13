@@ -43,8 +43,8 @@ export class StandaloneBootstrapError extends Error {
 
 /**
  * Resolve an unresolved Shell attachment into exactly one committed
- * generation. This is Standalone policy: callers provide identity, roots and
- * repository capability, but never choose a product version or component.
+ * generation. The launcher supplies the release binding while Standalone owns
+ * discovery, component selection, compatibility, commit, and repair policy.
  */
 export async function resolveStandaloneBootstrap(
   requestInput: StandaloneBootstrapDescriptor,
@@ -213,14 +213,14 @@ export async function resolveStandaloneBootstrap(
   try {
     const committedBeforeAlignment = descriptor.committed;
     if (committedBeforeAlignment == null) {
-      await withTransition("install-standalone", async () => await commitExact(request.attachment.shell.version));
+      await withTransition("install-standalone", async () => await commitExact(request.releaseVersion));
     } else if (
       compareStandaloneVersions(
         committedBeforeAlignment.standalone.version,
-        request.attachment.shell.version,
+        request.releaseVersion,
       ) < 0
     ) {
-      await withTransition("align-standalone-to-shell", async () => await commitExact(request.attachment.shell.version));
+      await withTransition("align-standalone-to-release", async () => await commitExact(request.releaseVersion));
     }
 
     let committed = descriptor.committed;

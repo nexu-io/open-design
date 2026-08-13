@@ -237,9 +237,8 @@ export interface UpdateIndicatorClickProps {
     | 'later'
     | 'install_update'
     | 'check_for_updates'
-    | 'view_release_notes'
-    | 'restart_anyway';
-  action: 'open_prompt' | 'dismiss' | 'install' | 'check' | 'open_link' | 'force_restart';
+    | 'view_release_notes';
+  action: 'open_prompt' | 'dismiss' | 'install' | 'check' | 'open_link';
   app_version_before?: string;
   app_version_after?: string;
 }

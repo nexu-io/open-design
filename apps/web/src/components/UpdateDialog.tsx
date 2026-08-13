@@ -231,19 +231,19 @@ export function UpdateDialog() {
     }
   }, [applyStatus, source]);
 
-  const installAndQuit = useCallback(async (force: boolean) => {
+  const installAndQuit = useCallback(async () => {
     setActionBusy(true);
     setActionError(null);
     setRestartSafety(null);
     trackUpdateIndicatorClick(analytics.track, {
-      action: force ? 'force_restart' : 'install',
+      action: 'install',
       area: 'update_dialog',
-      element: force ? 'restart_anyway' : 'install_update',
+      element: 'install_update',
       page_name: 'app',
       ...versionProps,
     });
     try {
-      const options = { payload: { force, source } };
+      const options = { payload: { source } };
       const installResult = await openUpdaterInstaller(options);
       if (!installResult.ok) {
         setActionError(installResult.reason);
@@ -261,7 +261,7 @@ export function UpdateDialog() {
         setRestartSafety(safety);
         trackUpdateInstallResult(analytics.track, {
           area: 'update_dialog',
-          error_code: safety.state === 'blocked' ? 'active-runs-blocked' : 'active-runs-unknown',
+          error_code: safety.state === 'blocked' ? 'standalone-lifecycle-occupied' : 'standalone-lifecycle-unavailable',
           page_name: 'app',
           result: 'failed',
           ...versionProps,
@@ -275,7 +275,7 @@ export function UpdateDialog() {
         setRestartSafety(quitSafety);
         trackUpdateInstallResult(analytics.track, {
           area: 'update_dialog',
-          error_code: quitSafety.state === 'blocked' ? 'active-runs-blocked' : 'active-runs-unknown',
+          error_code: quitSafety.state === 'blocked' ? 'standalone-lifecycle-occupied' : 'standalone-lifecycle-unavailable',
           page_name: 'app',
           result: 'failed',
           ...versionProps,
@@ -324,8 +324,12 @@ export function UpdateDialog() {
   const unsupported = state === 'unsupported';
   const progress = model.downloadProgress?.percent;
   const statusMessage = (() => {
+    if (restartSafety?.message != null) return restartSafety.message;
     if (restartSafety?.state === 'blocked') {
-      return t('updater.activeRunsBody', { count: restartSafety.activeRunCount });
+      const base = t('updater.activeRunsBody', { count: restartSafety.occupantCount });
+      return restartSafety.occupants.length === 0
+        ? base
+        : `${base} (${restartSafety.occupants.join(', ')})`;
     }
     if (restartSafety?.state === 'unknown') return t('updater.activeRunsUnknownBody');
     if (actionError != null) {
@@ -460,21 +464,12 @@ export function UpdateDialog() {
             >
               {t('updater.viewVersionFeatures')} <Icon name="external-link" size={13} />
             </button>
-          ) : showSafety ? (
-            <button
-              className={styles.dangerButton}
-              disabled={actionBusy}
-              onClick={() => void installAndQuit(true)}
-              type="button"
-            >
-              {t('updater.restartAnyway')}
-            </button>
-          ) : (!checking && !downloading && !installing) ? (
+          ) : !showSafety && (!checking && !downloading && !installing) ? (
             <button
               className={styles.primaryButton}
               disabled={primaryDisabled}
               onClick={() => {
-                if (ready) void installAndQuit(false);
+                if (ready) void installAndQuit();
                 else if (available) void download();
                 else if (unsupported) openReleaseNotes();
                 else void checkAgain();

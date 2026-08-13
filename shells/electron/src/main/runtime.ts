@@ -40,8 +40,7 @@ import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
 import { parseDesktopUpdateMenuLabels } from "./update-menu.js";
 import {
-  checkUpdateRestartSafety,
-  parseUpdateActionRequest,
+  DesktopUpdateTransitionOwner,
   updateRestartSafetyError,
 } from "./update-preflight.js";
 
@@ -417,6 +416,7 @@ export type DesktopRuntimeOptions = {
    */
   rendererLogPath?: string | null;
   requestQuit?: () => void;
+  updateTransition?: DesktopUpdateTransitionOwner;
   /**
    * Optional pre-created splash window. The packaged entry creates the splash
    * BEFORE awaiting the daemon/web sidecars so the brand animation is on screen
@@ -2558,16 +2558,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       throw new Error("host IPC is only available to the main Open Design window");
     }
   };
-  const discoverUpdateDaemonBaseUrl = async (): Promise<string> => {
-    const daemonUrl = await options.discoverDaemonUrl?.();
-    const baseUrl = daemonUrl ?? await options.discoverUrl();
-    if (baseUrl == null) throw new Error("daemon URL is unavailable");
-    return baseUrl;
-  };
-  const guardedUpdaterStatus = async (rawOptions: unknown): Promise<DesktopUpdateStatusSnapshot | null> => {
-    const request = parseUpdateActionRequest(rawOptions);
-    if (request.force) return null;
-    const safety = await checkUpdateRestartSafety({ discoverDaemonBaseUrl: discoverUpdateDaemonBaseUrl });
+  const updateTransition = options.updateTransition ?? new DesktopUpdateTransitionOwner(null);
+  const guardedUpdaterStatus = async (_rawOptions: unknown): Promise<DesktopUpdateStatusSnapshot | null> => {
+    const safety = await updateTransition.acquire();
     if (safety.state === "clear") return null;
     const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
     return { ...status, error: updateRestartSafetyError(safety) };
@@ -2666,21 +2659,37 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       // failure that never happened.
       return blocked;
     }
-    const status = await (options.updater?.installUpdate() ?? unavailableUpdaterStatus());
-    sendUpdaterStatus(status);
-    return status;
+    try {
+      const status = await (options.updater?.installUpdate() ?? unavailableUpdaterStatus());
+      if (status.installResult == null) await updateTransition.release();
+      sendUpdaterStatus(status);
+      return status;
+    } catch (error) {
+      await updateTransition.release();
+      throw error;
+    }
   });
   ipcMain.handle("od:update:quit", async (event, updaterOptions: unknown): Promise<OpenDesignHostActionResult> => {
     requireMainWindowSender(event);
     const blocked = await guardedUpdaterStatus(updaterOptions);
     if (blocked?.error != null) {
-      return { details: blocked.error.details, ok: false, reason: blocked.error.code };
+      const details = blocked.error.details;
+      return {
+        details: {
+          ...(typeof details === "object" && details != null ? details : {}),
+          message: blocked.error.message,
+        },
+        ok: false,
+        reason: blocked.error.code,
+      };
     }
     const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
     if (status.installResult == null) {
+      await updateTransition.release();
       return { ok: false, reason: "installer has not been opened" };
     }
     if (options.requestQuit == null) {
+      await updateTransition.release();
       return { ok: false, reason: "desktop quit is not available" };
     }
     setTimeout(() => options.requestQuit?.(), 0);

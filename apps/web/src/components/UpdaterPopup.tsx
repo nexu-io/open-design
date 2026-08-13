@@ -103,14 +103,14 @@ function updaterErrorCode(model: UpdaterModel): string | undefined {
 }
 
 /**
- * User-facing copy for a restart-safety preflight denial. The popup keeps
- * these denials hard-blocked (no force path — that lives in the app-menu
- * UpdateDialog), but the copy must say why instead of a generic failure.
+ * User-facing copy for a lifecycle quick failure. Every updater surface keeps
+ * the denial hard-blocked; concrete Shell occupants remain visible when known.
  */
 function restartSafetyText(t: Translator, safety: UpdaterRestartSafety): string {
-  return safety.state === 'blocked'
-    ? t('updater.activeRunsBody', { count: safety.activeRunCount })
-    : t('updater.activeRunsUnknownBody');
+  if (safety.message != null) return safety.message;
+  if (safety.state !== 'blocked') return t('updater.activeRunsUnknownBody');
+  const base = t('updater.activeRunsBody', { count: safety.occupantCount });
+  return safety.occupants.length === 0 ? base : `${base} (${safety.occupants.join(', ')})`;
 }
 
 export function UpdaterPopup({

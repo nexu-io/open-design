@@ -3,6 +3,18 @@ import { describe, expect, it, vi } from "vitest";
 import { DESKTOP_UPDATE_CHANNELS, DESKTOP_UPDATE_STATES } from "@open-design/sidecar-proto";
 
 import { createDesktopUpdaterScheduler } from "../../../src/main/updater/scheduler.js";
+import { DesktopUpdateTransitionOwner } from "../../../src/main/update-preflight.js";
+
+function updateTransition() {
+  return new DesktopUpdateTransitionOwner({
+    async beginTransition() {
+      return {
+        state: "acquired" as const,
+        transition: { async release() {} },
+      };
+    },
+  });
+}
 
 describe("desktop updater scheduler", () => {
   it("silently applies a ready launcher payload during the startup poll when enabled", async () => {
@@ -62,6 +74,7 @@ describe("desktop updater scheduler", () => {
         startupSilentPayloadUpdate: {
           isEnabled: readSilentPreference,
           requestQuit,
+          transition: updateTransition(),
         },
       });
 
@@ -137,6 +150,7 @@ describe("desktop updater scheduler", () => {
         startupSilentPayloadUpdate: {
           isEnabled: readSilentPreference,
           requestQuit,
+          transition: updateTransition(),
         },
       });
 
@@ -145,6 +159,74 @@ describe("desktop updater scheduler", () => {
 
       expect(updater.status).toHaveBeenCalledTimes(1);
       expect(readSilentPreference).not.toHaveBeenCalled();
+      expect(updater.installUpdate).not.toHaveBeenCalled();
+      expect(requestQuit).not.toHaveBeenCalled();
+      expect(scheduler.isRunning()).toBe(true);
+      scheduler.stop("test");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not silently apply or quit when another Shell occupies the namespace", async () => {
+    vi.useFakeTimers();
+    const requestQuit = vi.fn();
+    const payloadStatus = {
+      arch: "arm64",
+      artifact: {
+        name: "open-design-1.0.1-mac-arm64-payload.zip",
+        platformKey: "mac",
+        size: 1024,
+        type: "payload",
+        url: "https://example.invalid/payload.zip",
+      },
+      capabilities: {
+        canApplyInPlace: true,
+        canDownload: true,
+        canOpenInstaller: false,
+        requiresManualInstall: false,
+      },
+      channel: DESKTOP_UPDATE_CHANNELS.BETA,
+      currentVersion: "1.0.0",
+      downloadPath: "/tmp/open-design-updates/payload.zip",
+      enabled: true,
+      mode: "package-launcher" as const,
+      platform: "darwin",
+      state: DESKTOP_UPDATE_STATES.DOWNLOADED,
+      supported: true,
+    };
+    const updater = {
+      checkForUpdates: vi.fn(async () => payloadStatus),
+      config: {},
+      installUpdate: vi.fn(),
+      snapshot: vi.fn(() => payloadStatus),
+      status: vi.fn(async () => payloadStatus),
+      subscribe: vi.fn(() => () => undefined),
+    };
+    const transition = new DesktopUpdateTransitionOwner({
+      async beginTransition() {
+        return {
+          occupants: [{ generation: 1, incarnation: "other", key: "codex-plugin:other" }],
+          reason: "occupied" as const,
+          state: "blocked" as const,
+        };
+      },
+    });
+    try {
+      const scheduler = createDesktopUpdaterScheduler(updater as any, {
+        backoffInitialMs: 100,
+        backoffMaxMs: 1_000,
+        initialDelayMs: 10,
+        intervalMs: 100,
+        startupSilentPayloadUpdate: {
+          isEnabled: async () => true,
+          requestQuit,
+          transition,
+        },
+      });
+      scheduler.start();
+      await vi.advanceTimersByTimeAsync(10);
+
       expect(updater.installUpdate).not.toHaveBeenCalled();
       expect(requestQuit).not.toHaveBeenCalled();
       expect(scheduler.isRunning()).toBe(true);
@@ -214,6 +296,7 @@ describe("desktop updater scheduler", () => {
         startupSilentPayloadUpdate: {
           isEnabled: readSilentPreference,
           requestQuit,
+          transition: updateTransition(),
         },
       });
 

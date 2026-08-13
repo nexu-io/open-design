@@ -70,6 +70,8 @@ export type StandaloneBootstrapDescriptor = Readonly<{
     target: string;
   }>;
   paths: StandalonePaths;
+  /** Product release requested by the launcher; independent from Shell bytes. */
+  releaseVersion: string;
   repositoryConfigPath: string;
   schemaVersion: typeof STANDALONE_BOOTSTRAP_SCHEMA_VERSION;
   scope: StandaloneBootstrapScope;
@@ -439,6 +441,42 @@ export interface StandaloneHandle {
   invoke(request: StandaloneRuntimeCommandRequest): Promise<StandaloneRuntimeCommandResult>;
   readStatus(): Promise<StandaloneRuntimeStatus>;
   waitForTerminal(): Promise<StandaloneRuntimeTerminalStatus>;
+}
+
+export type StandaloneLifecycleOccupant = Readonly<{
+  generation: number;
+  incarnation: string;
+  key: string;
+  projection?: StandaloneProtocolJsonValue;
+}>;
+
+export interface StandaloneLifecycleTransition {
+  release(): Promise<void>;
+}
+
+export type StandaloneLifecycleTransitionResult =
+  | Readonly<{
+      state: "acquired";
+      transition: StandaloneLifecycleTransition;
+    }>
+  | Readonly<{
+      occupants: readonly StandaloneLifecycleOccupant[];
+      reason: "occupied" | "transition-active" | "unavailable";
+      state: "blocked";
+    }>;
+
+/**
+ * Shell-local semantic lifecycle port. Implementations keep sidecar paths,
+ * credentials and transport private; callers only select an opaque transition
+ * kind and receive non-secret occupant projections on a quick failure.
+ */
+export interface StandaloneLifecyclePort {
+  beginTransition(kind: string): Promise<StandaloneLifecycleTransitionResult>;
+}
+
+/** The validated outer Shell adapter; raw Standalone body handles stay smaller. */
+export interface StandaloneShellHandle extends StandaloneHandle {
+  lifecycle: StandaloneLifecyclePort;
 }
 
 export type StandaloneHandoff = (
@@ -846,7 +884,7 @@ export function validateStandaloneBootstrapDescriptor(
   const descriptor = requireRecord(value, "standalone bootstrap descriptor");
   requireKnownKeys(
     descriptor,
-    ["attachment", "discovery", "paths", "repositoryConfigPath", "schemaVersion", "scope"],
+    ["attachment", "discovery", "paths", "releaseVersion", "repositoryConfigPath", "schemaVersion", "scope"],
     "standalone bootstrap descriptor",
   );
   if (descriptor.schemaVersion !== STANDALONE_BOOTSTRAP_SCHEMA_VERSION) {
@@ -861,6 +899,7 @@ export function validateStandaloneBootstrapDescriptor(
       target: normalizeToken(discovery.target, "standalone bootstrap target"),
     }),
     paths: validateStandalonePaths(descriptor.paths),
+    releaseVersion: normalizeVersion(descriptor.releaseVersion, "standalone requested release version"),
     repositoryConfigPath: normalizePath(
       descriptor.repositoryConfigPath,
       "standalone bootstrap repositoryConfigPath",
@@ -874,13 +913,14 @@ export function validateStandaloneBootstrapRequest(value: unknown): StandaloneBo
   const request = requireRecord(value, "standalone bootstrap request");
   requireKnownKeys(
     request,
-    ["attachment", "capabilities", "discovery", "paths", "repositoryConfigPath", "schemaVersion", "scope"],
+    ["attachment", "capabilities", "discovery", "paths", "releaseVersion", "repositoryConfigPath", "schemaVersion", "scope"],
     "standalone bootstrap request",
   );
   const descriptor = validateStandaloneBootstrapDescriptor({
     attachment: request.attachment,
     discovery: request.discovery,
     paths: request.paths,
+    releaseVersion: request.releaseVersion,
     repositoryConfigPath: request.repositoryConfigPath,
     schemaVersion: request.schemaVersion,
     scope: request.scope,

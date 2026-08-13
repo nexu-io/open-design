@@ -11,9 +11,9 @@ import {
   resolveToolPackLauncherChannel,
   resolveToolPackLauncherRoot,
 } from "../launcher-layout.js";
+import { readReleaseBindingVersion } from "../versions.js";
 import { execFileAsync } from "./commands.js";
 import { resolveMacInstallIdentity } from "./identity.js";
-import { readPackagedVersion } from "./manifest.js";
 import type { MacPaths } from "./types.js";
 
 export type MacLauncherPayloadManifest = {
@@ -56,14 +56,14 @@ export async function createMacLauncherPayloadArchive(
   config: ToolPackConfig,
   paths: MacPaths,
 ): Promise<string> {
-  const packagedVersion = await readPackagedVersion(config);
+  const releaseVersion = await readReleaseBindingVersion(config);
   const channel = resolveToolPackLauncherChannel(config);
   const launcherRoot = resolveToolPackLauncherRoot(config);
   resolveLauncherVersionPaths({
     channel,
     namespace: config.namespace,
     root: launcherRoot,
-    version: packagedVersion,
+    version: releaseVersion,
   });
 
   const identity = resolveMacInstallIdentity(config);
@@ -75,7 +75,7 @@ export async function createMacLauncherPayloadArchive(
     executableName: identity.executableName,
     namespace: config.namespace,
     publicAppBundleName: identity.publicAppBundleName,
-    version: packagedVersion,
+    version: releaseVersion,
   });
 
   await rm(stageRoot, { force: true, recursive: true });

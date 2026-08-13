@@ -34,8 +34,8 @@ export type UpdaterActionResult =
   | OpenDesignHostFailure;
 
 export type UpdaterRestartSafety =
-  | { activeRunCount: number; state: 'blocked' }
-  | { activeRunCount: null; state: 'unknown' };
+  | { message: string | null; occupantCount: number; occupants: readonly string[]; state: 'blocked' }
+  | { message: string | null; occupantCount: null; state: 'unknown' };
 
 export type UpdaterModel = {
   availableVersion: string | null;
@@ -219,29 +219,52 @@ export function restartSafetyFromUpdaterStatus(
   status: OpenDesignHostUpdaterStatusSnapshot | null,
 ): UpdaterRestartSafety | null {
   const code = status?.error?.code;
-  if (code !== 'active-runs-blocked' && code !== 'active-runs-unknown') return null;
+  if (code !== 'standalone-lifecycle-occupied' && code !== 'standalone-lifecycle-unavailable') return null;
   const details = status?.error?.details;
-  const activeRunCount =
-    typeof details === 'object' && details != null && 'activeRunCount' in details
-      ? (details as { activeRunCount?: unknown }).activeRunCount
+  const occupantCount =
+    typeof details === 'object' && details != null && 'occupantCount' in details
+      ? (details as { occupantCount?: unknown }).occupantCount
       : null;
-  if (code === 'active-runs-blocked' && typeof activeRunCount === 'number' && activeRunCount > 0) {
-    return { activeRunCount, state: 'blocked' };
+  if (code === 'standalone-lifecycle-occupied' && typeof occupantCount === 'number' && occupantCount > 0) {
+    const occupants = typeof details === 'object' && details != null && 'occupants' in details
+      && Array.isArray((details as { occupants?: unknown }).occupants)
+      ? (details as { occupants: unknown[] }).occupants.flatMap((entry) => (
+          typeof entry === 'object' && entry != null && 'key' in entry && typeof entry.key === 'string'
+            ? [entry.key]
+            : []
+        ))
+      : [];
+    return { message: status?.error?.message ?? null, occupantCount, occupants, state: 'blocked' };
   }
-  return { activeRunCount: null, state: 'unknown' };
+  return { message: status?.error?.message ?? null, occupantCount: null, state: 'unknown' };
 }
 
 export function restartSafetyFromActionResult(result: OpenDesignHostActionResult): UpdaterRestartSafety | null {
-  if (result.ok || (result.reason !== 'active-runs-blocked' && result.reason !== 'active-runs-unknown')) {
+  if (
+    result.ok
+    || (result.reason !== 'standalone-lifecycle-occupied' && result.reason !== 'standalone-lifecycle-unavailable')
+  ) {
     return null;
   }
   const details = result.details;
-  const activeRunCount =
-    typeof details === 'object' && details != null && 'activeRunCount' in details
-      ? (details as { activeRunCount?: unknown }).activeRunCount
+  const occupantCount =
+    typeof details === 'object' && details != null && 'occupantCount' in details
+      ? (details as { occupantCount?: unknown }).occupantCount
       : null;
-  if (result.reason === 'active-runs-blocked' && typeof activeRunCount === 'number' && activeRunCount > 0) {
-    return { activeRunCount, state: 'blocked' };
+  if (result.reason === 'standalone-lifecycle-occupied' && typeof occupantCount === 'number' && occupantCount > 0) {
+    const occupants = typeof details === 'object' && details != null && 'occupants' in details
+      && Array.isArray((details as { occupants?: unknown }).occupants)
+      ? (details as { occupants: unknown[] }).occupants.flatMap((entry) => (
+          typeof entry === 'object' && entry != null && 'key' in entry && typeof entry.key === 'string'
+            ? [entry.key]
+            : []
+        ))
+      : [];
+    const message = typeof details === 'object' && details != null && 'message' in details
+      && typeof details.message === 'string' ? details.message : null;
+    return { message, occupantCount, occupants, state: 'blocked' };
   }
-  return { activeRunCount: null, state: 'unknown' };
+  const message = typeof details === 'object' && details != null && 'message' in details
+    && typeof details.message === 'string' ? details.message : null;
+  return { message, occupantCount: null, state: 'unknown' };
 }

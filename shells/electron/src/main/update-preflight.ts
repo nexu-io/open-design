@@ -1,80 +1,100 @@
-export type UpdateActionRequest = {
-  force: boolean;
-  source: string | null;
-};
+import type {
+  StandaloneLifecycleOccupant,
+  StandaloneLifecyclePort,
+  StandaloneLifecycleTransition,
+} from "@open-design/standalone-proto";
 
 export type UpdateRestartSafety =
-  | { activeRunCount: 0; state: "clear" }
-  | { activeRunCount: number; state: "blocked" }
-  | { activeRunCount: null; reason: string; state: "unknown" };
+  | { occupantCount: 0; state: "clear" }
+  | { occupantCount: number; occupants: readonly StandaloneLifecycleOccupant[]; state: "blocked" }
+  | { occupantCount: null; reason: string; state: "unknown" };
 
-export const UPDATE_RESTART_BLOCKED_ERROR_CODE = "active-runs-blocked";
-export const UPDATE_RESTART_UNKNOWN_ERROR_CODE = "active-runs-unknown";
+export const UPDATE_RESTART_BLOCKED_ERROR_CODE = "standalone-lifecycle-occupied";
+export const UPDATE_RESTART_UNKNOWN_ERROR_CODE = "standalone-lifecycle-unavailable";
+
+export type DesktopUpdateTransition = Readonly<{
+  release(): Promise<void>;
+}>;
 
 export function updateRestartSafetyError(safety: Exclude<UpdateRestartSafety, { state: "clear" }>): {
   code: string;
-  details: { activeRunCount: number | null };
+  details: { occupantCount: number | null; occupants?: readonly StandaloneLifecycleOccupant[] };
   message: string;
 } {
   if (safety.state === "blocked") {
     return {
       code: UPDATE_RESTART_BLOCKED_ERROR_CODE,
-      details: { activeRunCount: safety.activeRunCount },
-      message: `Open Design is still working on ${safety.activeRunCount} active task${safety.activeRunCount === 1 ? "" : "s"}.`,
+      details: { occupantCount: safety.occupantCount, occupants: safety.occupants },
+      message: safety.occupants.length === 0
+        ? "Another Open Design Shell is already coordinating an update."
+        : `Open Design is still in use by ${safety.occupants.map((entry) => entry.key).join(", ")}.`,
     };
   }
   return {
     code: UPDATE_RESTART_UNKNOWN_ERROR_CODE,
-    details: { activeRunCount: null },
-    message: "Open Design could not confirm whether tasks are still running.",
+    details: { occupantCount: null },
+    message: "Open Design could not acquire the Standalone lifecycle transition.",
   };
 }
 
-type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value != null && !Array.isArray(value);
-}
-
-export function parseUpdateActionRequest(input: unknown): UpdateActionRequest {
-  if (!isRecord(input) || !isRecord(input.payload)) return { force: false, source: null };
-  const source = input.payload.source;
-  return {
-    force: input.payload.force === true,
-    source:
-      typeof source === "string" && source.length > 0 && source.length <= 80 && /^[a-z0-9:_-]+$/i.test(source)
-        ? source
-        : null,
-  };
-}
-
-export async function checkUpdateRestartSafety(input: {
-  discoverDaemonBaseUrl: () => Promise<string>;
-  fetchImpl?: FetchLike;
-  timeoutMs?: number;
-}): Promise<UpdateRestartSafety> {
+export async function beginDesktopUpdateTransition(
+  lifecycle: StandaloneLifecyclePort | null | undefined,
+): Promise<
+  | Readonly<{ state: "acquired"; transition: DesktopUpdateTransition }>
+  | Readonly<{ safety: Exclude<UpdateRestartSafety, { state: "clear" }>; state: "blocked" }>
+> {
+  if (lifecycle == null) {
+    return { safety: { occupantCount: null, reason: "Standalone lifecycle is unavailable", state: "unknown" }, state: "blocked" };
+  }
   try {
-    const baseUrl = (await input.discoverDaemonBaseUrl()).replace(/\/$/, "");
-    if (baseUrl.length === 0) throw new Error("daemon URL is unavailable");
-    const response = await (input.fetchImpl ?? fetch)(`${baseUrl}/api/runs?status=active`, {
-      cache: "no-store",
-      headers: { accept: "application/json" },
-      signal: AbortSignal.timeout(input.timeoutMs ?? 1500),
-    });
-    if (!response.ok) throw new Error(`active runs request failed with ${response.status}`);
-    const payload: unknown = await response.json();
-    if (!isRecord(payload) || !Array.isArray(payload.runs)) {
-      throw new Error("active runs response is invalid");
+    const result = await lifecycle.beginTransition("apply-shell-update");
+    if (result.state === "acquired") {
+      return { state: "acquired", transition: result.transition };
     }
-    const activeRunCount = payload.runs.length;
-    return activeRunCount === 0
-      ? { activeRunCount: 0, state: "clear" }
-      : { activeRunCount, state: "blocked" };
+    return {
+      safety: result.reason === "occupied"
+        ? { occupantCount: result.occupants.length, occupants: result.occupants, state: "blocked" }
+        : { occupantCount: null, reason: "Another update transition is active", state: "unknown" },
+      state: "blocked",
+    };
   } catch (error) {
     return {
-      activeRunCount: null,
-      reason: error instanceof Error ? error.message : String(error),
-      state: "unknown",
+      safety: {
+        occupantCount: null,
+        reason: error instanceof Error ? error.message : String(error),
+        state: "unknown",
+      },
+      state: "blocked",
     };
+  }
+}
+
+export class DesktopUpdateTransitionOwner {
+  private acquisition: Promise<UpdateRestartSafety> | null = null;
+  private transition: StandaloneLifecycleTransition | null = null;
+
+  constructor(private readonly lifecycle: StandaloneLifecyclePort | null | undefined) {}
+
+  async acquire(): Promise<UpdateRestartSafety> {
+    if (this.transition != null) return { occupantCount: 0, state: "clear" };
+    if (this.acquisition != null) return await this.acquisition;
+    this.acquisition = (async () => {
+      const result = await beginDesktopUpdateTransition(this.lifecycle);
+      if (result.state === "blocked") return result.safety;
+      this.transition = result.transition;
+      return { occupantCount: 0, state: "clear" } as const;
+    })();
+    try {
+      return await this.acquisition;
+    } finally {
+      this.acquisition = null;
+    }
+  }
+
+  async release(): Promise<void> {
+    await this.acquisition?.catch(() => undefined);
+    const transition = this.transition;
+    this.transition = null;
+    await transition?.release().catch(() => undefined);
   }
 }

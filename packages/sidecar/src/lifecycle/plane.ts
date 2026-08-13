@@ -326,7 +326,6 @@ export function bootstrapSidecarLifecycle(options: BootstrapSidecarLifecycleOpti
         if (occupants.length > 0) {
           return { occupants: occupants.map(leaseView), reason: "occupied", state: "blocked" };
         }
-        if (requesterRecord) state.leases = state.leases.filter((lease) => lease !== requesterRecord);
         const credential = { fence: state.nextFence, id: randomUUID(), token: randomUUID() };
         state.nextFence += 1;
         const transition: TransitionRecord = {

@@ -1,59 +1,89 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
-  checkUpdateRestartSafety,
-  parseUpdateActionRequest,
+  DesktopUpdateTransitionOwner,
+  beginDesktopUpdateTransition,
+  updateRestartSafetyError,
 } from "../../src/main/update-preflight.js";
 
-describe("desktop update restart preflight", () => {
-  it("blocks an update when the daemon reports active runs", async () => {
-    const result = await checkUpdateRestartSafety({
-      discoverDaemonBaseUrl: async () => "http://127.0.0.1:3000",
-      fetchImpl: async (input, init) => {
-        expect(String(input)).toBe("http://127.0.0.1:3000/api/runs?status=active");
-        expect(init?.cache).toBe("no-store");
-        return new Response(JSON.stringify({ runs: [{ id: "run-1" }, { id: "run-2" }] }), {
-          headers: { "content-type": "application/json" },
-          status: 200,
-        });
+describe("desktop update lifecycle transition", () => {
+  it("acquires and releases the semantic Standalone lifecycle transition", async () => {
+    const release = vi.fn(async () => undefined);
+    const beginTransition = vi.fn(async () => ({
+      state: "acquired" as const,
+      transition: { release },
+    }));
+    const owner = new DesktopUpdateTransitionOwner({ beginTransition });
+
+    await expect(owner.acquire()).resolves.toEqual({ occupantCount: 0, state: "clear" });
+    await expect(owner.acquire()).resolves.toEqual({ occupantCount: 0, state: "clear" });
+    expect(beginTransition).toHaveBeenCalledTimes(1);
+    expect(beginTransition).toHaveBeenCalledWith("apply-shell-update");
+
+    await owner.release();
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("quick-fails with exact other-Shell occupants", async () => {
+    const occupant = {
+      generation: 8,
+      incarnation: "codex-plugin-a",
+      key: "codex-plugin:codex-plugin-a",
+      projection: { shellVersion: "0.19.0-beta.9" },
+    };
+    const result = await beginDesktopUpdateTransition({
+      async beginTransition() {
+        return { occupants: [occupant], reason: "occupied" as const, state: "blocked" as const };
       },
     });
-    expect(result).toEqual({ activeRunCount: 2, state: "blocked" });
-  });
 
-  it("returns clear only for a valid empty runs response", async () => {
-    const result = await checkUpdateRestartSafety({
-      discoverDaemonBaseUrl: async () => "http://127.0.0.1:3000/",
-      fetchImpl: async () => new Response(JSON.stringify({ runs: [] }), { status: 200 }),
+    expect(result).toEqual({
+      safety: { occupantCount: 1, occupants: [occupant], state: "blocked" },
+      state: "blocked",
     });
-    expect(result).toEqual({ activeRunCount: 0, state: "clear" });
+    if (result.state !== "blocked") throw new Error("transition unexpectedly acquired");
+    expect(updateRestartSafetyError(result.safety)).toMatchObject({
+      code: "standalone-lifecycle-occupied",
+      details: { occupantCount: 1, occupants: [occupant] },
+      message: "Open Design is still in use by codex-plugin:codex-plugin-a.",
+    });
   });
 
-  it("treats unreachable or malformed daemon responses as unknown risk", async () => {
-    const unreachable = await checkUpdateRestartSafety({
-      discoverDaemonBaseUrl: async () => {
-        throw new Error("daemon unavailable");
+  it("fails closed when lifecycle truth is unavailable", async () => {
+    await expect(new DesktopUpdateTransitionOwner(null).acquire()).resolves.toMatchObject({
+      occupantCount: null,
+      state: "unknown",
+    });
+    await expect(new DesktopUpdateTransitionOwner({
+      async beginTransition() {
+        throw new Error("control state unreadable");
       },
-      fetchImpl: fetch,
-    });
-    expect(unreachable).toMatchObject({ activeRunCount: null, state: "unknown" });
-
-    const malformed = await checkUpdateRestartSafety({
-      discoverDaemonBaseUrl: async () => "http://127.0.0.1:3000",
-      fetchImpl: async () => new Response(JSON.stringify({ runs: "not-an-array" }), { status: 200 }),
-    });
-    expect(malformed).toMatchObject({ activeRunCount: null, state: "unknown" });
+    }).acquire()).resolves.toMatchObject({ occupantCount: null, state: "unknown" });
   });
 
-  it("accepts only the force and source fields used by updater UI actions", () => {
-    expect(parseUpdateActionRequest({ payload: { force: true, source: "mac-app-menu" } })).toEqual({
-      force: true,
-      source: "mac-app-menu",
-    });
-    expect(parseUpdateActionRequest({ payload: { force: "yes", source: 42 } })).toEqual({
-      force: false,
-      source: null,
-    });
-    expect(parseUpdateActionRequest(null)).toEqual({ force: false, source: null });
+  it("serializes concurrent manual and silent update acquisition", async () => {
+    let resolveBegin!: (value: {
+      state: "acquired";
+      transition: { release(): Promise<void> };
+    }) => void;
+    const beginTransition = vi.fn(() => new Promise<{
+      state: "acquired";
+      transition: { release(): Promise<void> };
+    }>((resolve) => {
+      resolveBegin = resolve;
+    }));
+    const release = vi.fn(async () => undefined);
+    const owner = new DesktopUpdateTransitionOwner({ beginTransition });
+
+    const manual = owner.acquire();
+    const silent = owner.acquire();
+    expect(beginTransition).toHaveBeenCalledTimes(1);
+    resolveBegin({ state: "acquired", transition: { release } });
+    await expect(Promise.all([manual, silent])).resolves.toEqual([
+      { occupantCount: 0, state: "clear" },
+      { occupantCount: 0, state: "clear" },
+    ]);
+    await owner.release();
+    expect(release).toHaveBeenCalledTimes(1);
   });
 });

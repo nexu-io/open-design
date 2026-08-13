@@ -122,6 +122,7 @@ describe("Standalone bootloader protocol", () => {
         target: "darwin-arm64",
       },
       paths: full.paths,
+      releaseVersion: "0.18.0-beta.4",
       repositoryConfigPath: "/shell/resources/repository.json",
       schemaVersion: 1,
       scope: { channel: "beta", namespace: "release-beta" },

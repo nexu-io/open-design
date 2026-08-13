@@ -174,7 +174,9 @@ export async function runPackagedStandalone(
   const launcherRuntime = await resolvePackagedLauncherRuntime(config, initialPaths);
   const shellConfig = launcherRuntime.config;
   const shellVersion = shellConfig.shellVersion;
+  const releaseVersion = shellConfig.releaseVersion;
   if (shellVersion == null) throw new Error("Electron Shell version is unavailable");
+  if (releaseVersion == null) throw new Error("Standalone release version is unavailable");
   const paths = launcherRuntime.paths;
   const stamp = createStandaloneStamp(config.namespace);
   const mcpBootstrap = options.mcpBootstrapLaunch
@@ -207,6 +209,7 @@ export async function runPackagedStandalone(
         resourceRoot: paths.resourceRoot,
         runtimeRoot: paths.runtimeRoot,
       },
+      releaseVersion,
       repositoryConfigPath: join(shellConfig.resourceRoot, "standalone", "repository.json"),
       schemaVersion: 1,
       scope: { channel: launcherRuntime.launcherPaths.channel, namespace: config.namespace },
