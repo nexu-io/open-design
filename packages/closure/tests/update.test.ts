@@ -40,6 +40,7 @@ import {
   ensureClosureDistributionBlob,
   ensureClosureResource,
   discoverClosureDistributionBootstrapCandidate,
+  discoverClosureDistributionVersionCandidate,
   readClosureResourceRepositoryConfig,
   selectClosureDistributionReleaseCandidate,
   selectClosureReleaseCandidate,
@@ -436,6 +437,43 @@ describe("Closure baseline discovery", () => {
       repository: { localSeeds: [{ root: seedRoot }], remoteOrigins: [], schemaVersion: 1 },
       target: "darwin-arm64",
     })).resolves.toMatchObject({ releaseVersion: candidate.releaseVersion });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("accepts an already immutable exact-version metadata endpoint", async () => {
+    const fixture = await downloadableDistribution();
+    const metadataUrl = "https://releases.example.test/beta/versions/0.19.0-beta.10/metadata.json?cache=miss#ignored";
+    const fetch = vi.fn(async (input: string | URL | Request) => new Response(JSON.stringify({
+      channel: "beta",
+      closure: fixture.candidate.manifest,
+      releaseState: "complete",
+      releaseVersion: fixture.candidate.releaseVersion,
+    }), { status: 200 })) as typeof globalThis.fetch;
+
+    await expect(discoverClosureDistributionVersionCandidate({
+      channel: "beta",
+      fetch,
+      metadataUrl,
+      repository: { localSeeds: [], remoteOrigins: [], schemaVersion: 1 },
+      target: "darwin-arm64",
+      version: fixture.candidate.releaseVersion,
+    })).resolves.toMatchObject({ releaseVersion: fixture.candidate.releaseVersion });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://releases.example.test/beta/versions/0.19.0-beta.10/metadata.json",
+      expect.anything(),
+    );
+  });
+
+  it("rejects an immutable metadata endpoint for a different version", async () => {
+    const fetch = vi.fn() as typeof globalThis.fetch;
+    await expect(discoverClosureDistributionVersionCandidate({
+      channel: "beta",
+      fetch,
+      metadataUrl: "https://releases.example.test/beta/versions/0.19.0-beta.9/metadata.json",
+      repository: { localSeeds: [], remoteOrigins: [], schemaVersion: 1 },
+      target: "darwin-arm64",
+      version: "0.19.0-beta.10",
+    })).rejects.toThrow(/not exact version/u);
     expect(fetch).not.toHaveBeenCalled();
   });
 });

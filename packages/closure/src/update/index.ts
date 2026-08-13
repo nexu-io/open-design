@@ -434,6 +434,25 @@ export async function discoverClosureDistributionBootstrapCandidate(input: Reado
 
 function versionMetadataUrl(latestMetadataUrl: string, version: string): string {
   const latest = new URL(requireHttpUrl(latestMetadataUrl, "Closure release metadata URL"));
+  const immutableMatch = latest.pathname.match(/\/versions\/([^/]+)\/metadata\.json$/u);
+  if (immutableMatch != null) {
+    let immutableVersion: string;
+    try {
+      immutableVersion = decodeURIComponent(immutableMatch[1]!);
+    } catch {
+      throw new ClosureUpdateError(
+        "Closure release metadata URL contains an invalid immutable version endpoint",
+      );
+    }
+    if (immutableVersion !== version) {
+      throw new ClosureUpdateError(
+        `Closure release metadata URL describes ${immutableVersion}, not exact version ${version}`,
+      );
+    }
+    latest.search = "";
+    latest.hash = "";
+    return latest.toString();
+  }
   const suffix = "/latest/metadata.json";
   if (!latest.pathname.endsWith(suffix)) {
     throw new ClosureUpdateError(
