@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   decideAutoOpenAfterWrite,
+  reevaluateAutoOpenOnFilesSettled,
   selectAutoOpenProducedArtifact,
   selectAutoOpenTurnArtifact,
 } from '../../src/components/auto-open-file';
@@ -485,5 +486,167 @@ describe('selectAutoOpenTurnArtifact', () => {
 
       expect(result).toBe('index.html');
     });
+  });
+});
+
+describe('reevaluateAutoOpenOnFilesSettled', () => {
+  const TURN_START = 1_000_000;
+  const TURN_END = TURN_START + 20_000;
+  const DEADLINE = TURN_END + 15_000;
+
+  const PLAN = { name: 'plan.md', path: 'plan.md', kind: 'text', mtime: TURN_START + 4_000 };
+  const INDEX = {
+    name: 'index.html',
+    path: 'index.html',
+    kind: 'html',
+    mtime: TURN_START + 9_000,
+  };
+
+  // The turn-end pass's own inputs: what it saw, and what it decided from it.
+  const request = (
+    overrides: Partial<Parameters<typeof reevaluateAutoOpenOnFilesSettled>[0]> = {},
+  ) => ({
+    producedFiles: [],
+    resolveTurnOptions: () => ({ turnStartedAt: TURN_START, turnEndedAt: TURN_END }),
+    requestedFileName: null,
+    activeFileNameAtTurnEnd: null,
+    deadline: DEADLINE,
+    ...overrides,
+  });
+
+  it('opens the generated HTML once it lands in a later file list', () => {
+    // Turn-end read had not caught up with the turn's writes at all, so the
+    // turn-end pass selected nothing and opened nothing.
+    const beforeSettle = reevaluateAutoOpenOnFilesSettled(request(), [], {
+      now: TURN_END,
+      activeFileName: null,
+    });
+    expect(beforeSettle).toEqual({ openFileName: null, keepWatching: true });
+
+    const afterSettle = reevaluateAutoOpenOnFilesSettled(request(), [PLAN, INDEX], {
+      now: TURN_END + 500,
+      activeFileName: null,
+    });
+    expect(afterSettle).toEqual({ openFileName: 'index.html', keepWatching: false });
+  });
+
+  it('upgrades from the support file the turn-end pass had to settle for', () => {
+    // Turn end saw plan.md only, opened it, and index.html arrived after.
+    const decision = reevaluateAutoOpenOnFilesSettled(
+      request({ requestedFileName: 'plan.md' }),
+      [PLAN, INDEX],
+      { now: TURN_END + 500, activeFileName: 'plan.md' },
+    );
+
+    expect(decision).toEqual({ openFileName: 'index.html', keepWatching: false });
+  });
+
+  it('re-issues the open request when the tab exists but never took focus', () => {
+    const decision = reevaluateAutoOpenOnFilesSettled(
+      request({ requestedFileName: 'index.html', activeFileNameAtTurnEnd: 'notes.md' }),
+      [PLAN, INDEX, { name: 'notes.md', path: 'notes.md', kind: 'text', mtime: 1 }],
+      { now: TURN_END + 500, activeFileName: 'notes.md' },
+    );
+
+    expect(decision).toEqual({ openFileName: 'index.html', keepWatching: false });
+  });
+
+  it('does not re-open the artifact that already has focus', () => {
+    const decision = reevaluateAutoOpenOnFilesSettled(
+      request({ requestedFileName: 'index.html' }),
+      [PLAN, INDEX],
+      { now: TURN_END + 500, activeFileName: 'index.html' },
+    );
+
+    expect(decision).toEqual({ openFileName: null, keepWatching: true });
+  });
+
+  it('keeps watching while focus sits on the support file the turn settled for', () => {
+    // The trap this avoids: treating "the current best is focused" as done
+    // would close the watch on plan.md and never notice index.html arriving in
+    // the next list.
+    const onlyPlan = reevaluateAutoOpenOnFilesSettled(
+      request({ requestedFileName: 'plan.md' }),
+      [PLAN],
+      { now: TURN_END + 200, activeFileName: 'plan.md' },
+    );
+    expect(onlyPlan).toEqual({ openFileName: null, keepWatching: true });
+
+    const withHtml = reevaluateAutoOpenOnFilesSettled(
+      request({ requestedFileName: 'plan.md' }),
+      [PLAN, INDEX],
+      { now: TURN_END + 700, activeFileName: 'plan.md' },
+    );
+    expect(withHtml).toEqual({ openFileName: 'index.html', keepWatching: false });
+  });
+
+  it('leaves focus alone when the user has moved to another file', () => {
+    const decision = reevaluateAutoOpenOnFilesSettled(
+      request({ requestedFileName: 'plan.md', activeFileNameAtTurnEnd: null }),
+      [PLAN, INDEX, { name: 'notes.md', path: 'notes.md', kind: 'text', mtime: 1 }],
+      { now: TURN_END + 500, activeFileName: 'notes.md' },
+    );
+
+    expect(decision).toEqual({ openFileName: null, keepWatching: false });
+  });
+
+  it('keeps waiting while the selected name is not yet an openable entry', () => {
+    // Produced-file name known from the turn diff, but the settled list has
+    // not caught up — a tab now would be filtered straight back out.
+    const decision = reevaluateAutoOpenOnFilesSettled(
+      request({ producedFiles: [INDEX] }),
+      [PLAN],
+      { now: TURN_END + 500, activeFileName: null },
+    );
+
+    expect(decision).toEqual({ openFileName: null, keepWatching: true });
+  });
+
+  it('never treats a directory entry as openable', () => {
+    const decision = reevaluateAutoOpenOnFilesSettled(
+      request({ producedFiles: [INDEX] }),
+      [PLAN, { ...INDEX, type: 'dir' }],
+      { now: TURN_END + 500, activeFileName: null },
+    );
+
+    expect(decision).toEqual({ openFileName: null, keepWatching: true });
+  });
+
+  it('gives up after the window closes rather than opening a stale artifact', () => {
+    const decision = reevaluateAutoOpenOnFilesSettled(request(), [PLAN, INDEX], {
+      now: DEADLINE + 1,
+      activeFileName: null,
+    });
+
+    expect(decision).toEqual({ openFileName: null, keepWatching: false });
+  });
+
+  it('re-resolves touched names against the settled list, not the turn-end one', () => {
+    // The regression behind the `claude` failures: the touched-name set is
+    // resolved FROM the file list, so a list still missing index.html also
+    // fails to resolve the write that produced it — and the file is then
+    // excluded as "not touched" even after it lands. Re-resolving per list is
+    // what makes the second call able to find it.
+    const resolveTurnOptions = (files: ReadonlyArray<{ name: string }>) => ({
+      turnStartedAt: TURN_START,
+      turnEndedAt: TURN_END,
+      agentTouchedFileNames: new Set(
+        ['plan.md', 'index.html'].filter((name) => files.some((file) => file.name === name)),
+      ),
+    });
+
+    const beforeSettle = reevaluateAutoOpenOnFilesSettled(
+      request({ resolveTurnOptions, requestedFileName: 'plan.md' }),
+      [PLAN],
+      { now: TURN_END, activeFileName: 'plan.md' },
+    );
+    expect(beforeSettle.openFileName).toBeNull();
+
+    const afterSettle = reevaluateAutoOpenOnFilesSettled(
+      request({ resolveTurnOptions, requestedFileName: 'plan.md' }),
+      [PLAN, INDEX],
+      { now: TURN_END + 500, activeFileName: 'plan.md' },
+    );
+    expect(afterSettle.openFileName).toBe('index.html');
   });
 });

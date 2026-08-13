@@ -225,6 +225,89 @@ export function selectAutoOpenTurnArtifact(
   return selectAutoOpenProducedArtifact(candidates, options);
 }
 
+// Generic over the caller's file record (ProjectView passes `ProjectFile`) so
+// the stored resolver keeps its own parameter type instead of being widened to
+// `CandidateFile` at the call site.
+export interface AutoOpenSettleRequest<F extends CandidateFile = CandidateFile> {
+  // The turn's produced (name-diffed) files, as computed at turn end.
+  readonly producedFiles: ReadonlyArray<CandidateFile>;
+  // Rebuilt against each settled list rather than captured once: the touched
+  // NAME set is resolved from the file list itself
+  // (`resolveAgentTouchedFileNames`), so a list that was still missing
+  // `index.html` at turn end also fails to resolve the write event that
+  // produced it — and `selectAutoOpenTurnArtifact` would then exclude the file
+  // as "not touched" even after it lands.
+  readonly resolveTurnOptions: (allFiles: ReadonlyArray<F>) => SelectAutoOpenTurnOptions;
+  // What the turn-end pass asked the workspace to open, or null when that pass
+  // found nothing openable.
+  readonly requestedFileName: string | null;
+  // Active workspace tab as of the turn-end pass, before its own open request
+  // landed. Together with `requestedFileName` this distinguishes "auto-open
+  // never landed" from "the user has since chosen a different tab".
+  readonly activeFileNameAtTurnEnd: string | null;
+  // Epoch ms after which the turn stops being re-evaluated.
+  readonly deadline: number;
+}
+
+export interface AutoOpenSettleDecision {
+  // File to (re)open now, or null when there is nothing to do this round.
+  readonly openFileName: string | null;
+  // Whether later settled lists should still be re-evaluated for this turn.
+  readonly keepWatching: boolean;
+}
+
+// Post-turn re-evaluation (issue #5352). The turn-end pass selects from one
+// `fresh: true` file-list read taken right after the daemon reports terminal
+// status; when the generated file has not surfaced in that read yet, the pass
+// selects nothing (or a lower-ranked artifact) and nothing ever revisits the
+// decision. Both observed failure modes come from that single-shot handoff:
+// `index.html` never becomes an openable tab, or a different tab keeps focus.
+//
+// So instead of making the turn-end path await a settled list — which would
+// touch the turn-end sequencing #5602 deliberately centralised — each later
+// settled file list re-runs the same selection with the same turn inputs and
+// opens the artifact once it is actually openable.
+//
+// It stays silent unless the answer is unambiguous: the artifact must exist in
+// the settled list (an entry the workspace can render as a tab), the turn must
+// still be inside its window, and focus must not have moved anywhere the
+// turn-end pass did not put it.
+export function reevaluateAutoOpenOnFilesSettled<F extends CandidateFile>(
+  request: AutoOpenSettleRequest<F>,
+  allFiles: ReadonlyArray<F>,
+  context: { now: number; activeFileName: string | null },
+): AutoOpenSettleDecision {
+  if (context.now > request.deadline) return { openFileName: null, keepWatching: false };
+
+  const resolved = selectAutoOpenTurnArtifact(
+    request.producedFiles,
+    allFiles,
+    request.resolveTurnOptions(allFiles),
+  );
+  // Nothing selectable yet — the list may still be catching up.
+  if (!resolved) return { openFileName: null, keepWatching: true };
+  // Selected, but the workspace cannot render it as a tab yet: a produced-file
+  // name the settled list has not caught up with. Keep waiting rather than
+  // asking for a tab that would be filtered straight back out.
+  const openable = allFiles.some((file) => file.name === resolved && file.type !== 'dir');
+  if (!openable) return { openFileName: null, keepWatching: true };
+  // Already focused — nothing to correct right now. Keep watching rather than
+  // finishing here: the current best may still be a support file the turn-end
+  // pass settled for, and the deliverable can land in a later list. The
+  // deadline, not this round, ends the watch.
+  if (context.activeFileName === resolved) return { openFileName: null, keepWatching: true };
+  // Focus is somewhere neither the pre-turn state nor the turn-end request put
+  // it: the user (or another flow) moved on. Re-opening now would yank them
+  // out of what they chose.
+  if (
+    context.activeFileName !== request.activeFileNameAtTurnEnd
+    && context.activeFileName !== request.requestedFileName
+  ) {
+    return { openFileName: null, keepWatching: false };
+  }
+  return { openFileName: resolved, keepWatching: false };
+}
+
 // Pick which of a turn's produced files to auto-open in the viewer. Among
 // previewable files, a higher-priority kind always beats a lower one; ties
 // break to the most recently written file (newest mtime). Returns null when

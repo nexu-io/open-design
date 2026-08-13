@@ -288,8 +288,10 @@ import { useIframeKeepAlivePool } from './IframeKeepAlivePool';
 import { invalidateHtmlSourceSnapshotProject } from './html-source-snapshot-cache';
 import {
   decideAutoOpenAfterWrite,
+  reevaluateAutoOpenOnFilesSettled,
   selectAutoOpenProducedArtifact,
   selectAutoOpenTurnArtifact,
+  type AutoOpenSettleRequest,
 } from './auto-open-file';
 import { buildRepoImportPrompt, designSystemNeedsRepoConnect } from './design-system-github-evidence';
 import { isDesignSystemProject, resolveProjectDesignSystemId } from './design-system-project';
@@ -690,6 +692,12 @@ let liveArtifactEventSequence = 0;
 // local literal to respect the web↔daemon boundary.
 const BRAND_KIT_FILE = 'brand.html';
 const BRAND_EMPTY_TRANSCRIPT_RETRY_DELAYS_MS = [120, 500, 1_200, 2_000] as const;
+// How long after a turn ends its auto-open decision keeps being re-evaluated
+// against newly settled file lists (issue #5352). Wide enough to cover a
+// chokidar burst plus the coalescing window and the refetch behind it; short
+// enough that a file landing much later reads as the user's own work, not the
+// turn's, and is left alone.
+const AUTO_OPEN_SETTLE_WINDOW_MS = 15_000;
 const CHAT_PANEL_WIDTH_STORAGE_KEY = 'open-design.project.chatPanelWidth';
 const DEFAULT_CHAT_PANEL_WIDTH = 460;
 const MIN_CHAT_PANEL_WIDTH = 345;
@@ -2422,6 +2430,13 @@ export function ProjectView({
     tabs: [],
     active: null,
   });
+  // Mirror for the run-completion continuation, which reads the active tab
+  // long after the render that captured it.
+  const openTabsActiveRef = useRef<string | null>(openTabsState.active);
+  openTabsActiveRef.current = openTabsState.active;
+  // The turn whose auto-open decision is still being re-evaluated as post-turn
+  // file lists settle (issue #5352); null when no turn is in that window.
+  const pendingAutoOpenSettleRef = useRef<AutoOpenSettleRequest<ProjectFile> | null>(null);
   // Artifact context for the header actions (settings gear, handoff) that live
   // in this workspace's header alongside FileViewer's present/share/download.
   // Mirrors the artifact_id / artifact_kind that FileViewer attaches, derived
@@ -3725,6 +3740,30 @@ export function ProjectView({
       // changes instead of leaving the project view in its empty shell.
     });
   }, [daemonLive, refreshWorkspaceItems, filesRefresh]);
+
+  // Issue #5352 — post-turn settle re-evaluation. The turn-end auto-open pass
+  // decides from ONE `fresh: true` read taken right after the daemon reports
+  // terminal status, and the generated file does not always appear in it: the
+  // daemon's own write, the chokidar event, its coalescing window and the
+  // refetch behind it all settle on their own clocks. This re-runs that same
+  // decision against each settled list until it resolves, its window expires,
+  // or focus moves somewhere the turn did not put it.
+  const evaluateAutoOpenSettle = useCallback(() => {
+    const pending = pendingAutoOpenSettleRef.current;
+    if (!pending) return;
+    const decision = reevaluateAutoOpenOnFilesSettled(pending, projectFilesRef.current, {
+      now: Date.now(),
+      activeFileName: openTabsActiveRef.current,
+    });
+    if (!decision.keepWatching) pendingAutoOpenSettleRef.current = null;
+    if (decision.openFileName) requestOpenFile(decision.openFileName);
+  }, [requestOpenFile]);
+
+  // Later lists: every accepted file-list generation (and every focus change,
+  // which can retire the watch) re-runs the decision.
+  useEffect(() => {
+    evaluateAutoOpenSettle();
+  }, [committedFilesGeneration, evaluateAutoOpenSettle, openTabsState.active]);
 
   // Live-reload: when the daemon's chokidar watcher reports a file change,
   // bump filesRefresh so the file list refetches with new mtimes — which
@@ -6924,6 +6963,10 @@ export function ProjectView({
       // agent finishes and surface anything new (e.g. a generated .pptx)
       // as download chips on the assistant message.
       const beforeFileNames = new Set(preTurnFileNames);
+      // A new turn owns auto-open from here on: drop any previous turn's
+      // still-open settle watch so a late file list cannot pull focus back to
+      // the artifact of the turn before this one.
+      pendingAutoOpenSettleRef.current = null;
       // Pending Write/Edit tool invocations for this run: tool_use_id -> path.
       // Keeping this local prevents a superseded stream's late tool_result from
       // consuming a replacement run's colliding tool id.
@@ -7376,20 +7419,31 @@ export function ProjectView({
                 project.id,
                 projectDetail.resolvedDir,
               ) ?? [];
-              const turnArtifactToOpen = selectAutoOpenTurnArtifact(produced, nextFiles, {
+              // Captured (not read through the live Set) because the `finally`
+              // below clears `traceTouchedFilePaths` as soon as this turn ends,
+              // while the settle re-evaluation runs after it.
+              const turnTouchedPaths = [
+                ...traceTouchedFilePaths,
+                ...(authoritativeArtifactPaths ?? []),
+              ];
+              const turnAutoOpenOptionsFor = (
+                files: ReadonlyArray<ProjectFile>,
+              ) => ({
                 ...autoOpenArtifactOptions,
                 turnStartedAt: startedAt,
                 turnEndedAt: endedAt ?? null,
                 agentTouchedFileNames: resolveAgentTouchedFileNames(
-                  [
-                    ...traceTouchedFilePaths,
-                    ...(authoritativeArtifactPaths ?? []),
-                  ],
-                  nextFiles,
+                  turnTouchedPaths,
+                  files,
                   project.id,
                   projectDetail.resolvedDir,
                 ),
               });
+              const turnArtifactToOpen = selectAutoOpenTurnArtifact(
+                produced,
+                nextFiles,
+                turnAutoOpenOptionsFor(nextFiles),
+              );
               const producedArtifactToOpen = selectAutoOpenProducedArtifact(
                 [
                   ...provenTraceTouchedFiles(),
@@ -7402,10 +7456,30 @@ export function ProjectView({
                 ],
                 autoOpenArtifactOptions,
               );
+              const activeFileNameAtTurnEnd = openTabsActiveRef.current;
               if (producedArtifactToOpen) {
                 completionSelectedAutoOpen = true;
                 requestOpenFile(producedArtifactToOpen);
               }
+              // Issue #5352: `nextFiles` above is a single post-run read. When
+              // the generated file has not surfaced in it yet, the selection
+              // just made is wrong — it either found nothing or ranked a
+              // support file first — and nothing revisits it. Hand the same
+              // turn inputs to the settle watcher so the next file lists that
+              // land re-run the selection instead.
+              pendingAutoOpenSettleRef.current = {
+                producedFiles: produced,
+                resolveTurnOptions: turnAutoOpenOptionsFor,
+                requestedFileName: producedArtifactToOpen ?? null,
+                activeFileNameAtTurnEnd,
+                deadline: Date.now() + AUTO_OPEN_SETTLE_WINDOW_MS,
+              };
+              // The list this turn wanted may already have landed while the
+              // completion path was still running (persisting the artifact,
+              // diffing produced files). Nothing re-renders on arming alone, so
+              // evaluate once here rather than waiting for a further refresh
+              // that may never come.
+              evaluateAutoOpenSettle();
               const deliveryCandidate: ChatMessage = {
                 ...latestAssistantMsg,
                 endedAt,
