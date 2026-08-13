@@ -1,6 +1,6 @@
 import { resolve, sep } from "node:path";
 
-import type { ClosureDigest } from "../protocol/index.js";
+import type { ClosureDigest } from "../../protocol/index.js";
 
 function segment(value: string, label: string): string {
   if (value.length === 0 || value === "." || value === ".." || /[\\/\0]/u.test(value)) {

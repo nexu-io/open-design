@@ -1,0 +1,317 @@
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { readFile, stat } from "node:fs/promises";
+import { isAbsolute, join, resolve, sep } from "node:path";
+
+import {
+  validateClosureBindingIdentity,
+  type ClosureBindingIdentity,
+  type ClosureCandidateManifest,
+  type ClosureFileInventory,
+} from "../protocol/index.js";
+import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
+import { normalizeNamespace } from "@open-design/sidecar/protocol";
+
+export const CLOSURE_BINDING_SCHEMA_VERSION = 3 as const;
+export const CLOSURE_STORE_EPOCH = 3 as const;
+
+export type ClosureStoreRequest = {
+  channel: string;
+  namespace: string;
+  root: string;
+};
+
+export type ClosureStorePaths = {
+  bindingPath: string;
+  blobsRoot: string;
+  channel: ReleaseChannel;
+  channelRoot: string;
+  closureRoot: string;
+  installationsRoot: string;
+  namespace: string;
+  namespaceRoot: string;
+  resourcesRoot: string;
+  root: string;
+  stagingRoot: string;
+  stateRoot: string;
+  versionsRoot: string;
+};
+
+export type ClosureStoreVersionPaths = ClosureStorePaths & {
+  archivePath: string;
+  digest: string;
+  inventoryPath: string;
+  manifestPath: string;
+  payloadRoot: string;
+  version: string;
+  versionRoot: string;
+};
+
+export type ClosureRuntimePointer = Omit<ClosureBindingIdentity, "platform"> & {
+  generation: number;
+  target: string;
+};
+
+export type CommittedClosureBinding = {
+  releaseVersion: string;
+  standalone: ClosureRuntimePointer;
+};
+
+export type ClosureBindingDescriptor = {
+  channel: ReleaseChannel;
+  committed: CommittedClosureBinding | null;
+  namespace: string;
+  nextGeneration: number;
+  schemaVersion: typeof CLOSURE_BINDING_SCHEMA_VERSION;
+  updatedAt: string;
+};
+
+export type StoredClosureVerification = {
+  binding: ClosureBindingIdentity;
+  inventory: ClosureFileInventory;
+  inventoryDigest: string;
+  manifest: ClosureCandidateManifest;
+  paths: ClosureStoreVersionPaths;
+};
+
+export class ClosureStoreError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "ClosureStoreError";
+  }
+}
+
+function normalizeRoot(value: string): string {
+  if (value.length === 0 || value.includes("\0") || !isAbsolute(value)) {
+    throw new ClosureStoreError(`Closure store root must be a non-empty absolute path: ${value}`);
+  }
+  return resolve(value);
+}
+
+function normalizeChannel(value: string): ReleaseChannel {
+  if (!isReleaseChannel(value)) throw new ClosureStoreError(`unsupported Closure store channel: ${value}`);
+  return value;
+}
+
+function normalizeStoreNamespace(value: string): string {
+  try {
+    return normalizeNamespace(value);
+  } catch (error) {
+    throw new ClosureStoreError(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export function assertUnderRoot(root: string, target: string): string {
+  const normalized = resolve(target);
+  if (normalized !== root && !normalized.startsWith(`${root}${sep}`)) {
+    throw new ClosureStoreError(`Closure store path escapes root: ${normalized}`);
+  }
+  return normalized;
+}
+
+export function resolveClosureStorePaths(request: ClosureStoreRequest): ClosureStorePaths {
+  const root = normalizeRoot(request.root);
+  const channel = normalizeChannel(request.channel);
+  const namespace = normalizeStoreNamespace(request.namespace);
+  const closureRoot = assertUnderRoot(root, join(root, "closure"));
+  const channelRoot = assertUnderRoot(root, join(closureRoot, "channels", channel));
+  const namespaceRoot = assertUnderRoot(root, join(channelRoot, "epochs", String(CLOSURE_STORE_EPOCH), "namespaces", namespace));
+  const stateRoot = assertUnderRoot(root, join(namespaceRoot, "state"));
+  return {
+    bindingPath: assertUnderRoot(root, join(stateRoot, "binding.json")),
+    blobsRoot: assertUnderRoot(root, join(channelRoot, "blobs")),
+    channel,
+    channelRoot,
+    closureRoot,
+    installationsRoot: assertUnderRoot(root, join(namespaceRoot, "installations")),
+    namespace,
+    namespaceRoot,
+    resourcesRoot: assertUnderRoot(root, join(channelRoot, "resources")),
+    root,
+    stagingRoot: assertUnderRoot(root, join(namespaceRoot, "staging")),
+    stateRoot,
+    versionsRoot: assertUnderRoot(root, join(namespaceRoot, "versions")),
+  };
+}
+
+export function sameBinding(left: ClosureBindingIdentity, right: ClosureBindingIdentity): boolean {
+  return left.channel === right.channel
+    && left.namespace === right.namespace
+    && left.platform === right.platform
+    && left.protocolVersion === right.protocolVersion
+    && left.version === right.version
+    && left.digest === right.digest;
+}
+
+export function normalizeGeneration(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new ClosureStoreError(`Closure generation must be a non-negative safe integer: ${String(value)}`);
+  }
+  return value;
+}
+
+function requireRecord(value: unknown, label: string): Record<string, unknown> {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    throw new ClosureStoreError(`${label} must be an object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function assertExactKeys(value: Record<string, unknown>, allowed: readonly string[], label: string): void {
+  const extras = Object.keys(value).filter((key) => !allowed.includes(key));
+  if (extras.length > 0) throw new ClosureStoreError(`${label} contains unsupported fields: ${extras.join(", ")}`);
+}
+
+function normalizeIsoString(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0 || Number.isNaN(Date.parse(value))) {
+    throw new ClosureStoreError(`${label} must be an ISO timestamp`);
+  }
+  return value;
+}
+
+export function normalizeReleaseVersion(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value !== value.trim()) {
+    throw new ClosureStoreError("Closure release version must be a non-empty trimmed string");
+  }
+  return value;
+}
+
+export function normalizePointer(
+  value: unknown,
+  expected: Pick<ClosureStorePaths, "channel" | "namespace">,
+): ClosureRuntimePointer {
+  const pointer = requireRecord(value, "Closure runtime pointer");
+  assertExactKeys(pointer, [
+    "channel",
+    "digest",
+    "generation",
+    "namespace",
+    "protocolVersion",
+    "target",
+    "version",
+  ], "Closure runtime pointer");
+  const binding = validateClosureBindingIdentity({
+    ...pointer,
+    platform: pointer.target,
+  }, expected);
+  return {
+    channel: binding.channel,
+    digest: binding.digest,
+    generation: normalizeGeneration(pointer.generation),
+    namespace: binding.namespace,
+    protocolVersion: binding.protocolVersion,
+    target: binding.platform,
+    version: binding.version,
+  };
+}
+
+export function closureBindingIdentityFromRuntimePointer(
+  pointer: ClosureRuntimePointer,
+): ClosureBindingIdentity {
+  return validateClosureBindingIdentity({
+    channel: pointer.channel,
+    digest: pointer.digest,
+    namespace: pointer.namespace,
+    platform: pointer.target,
+    protocolVersion: pointer.protocolVersion,
+    version: pointer.version,
+  });
+}
+
+function normalizeCommittedBinding(
+  value: unknown,
+  expected: Pick<ClosureStorePaths, "channel" | "namespace">,
+): CommittedClosureBinding {
+  const committed = requireRecord(value, "Committed Closure binding");
+  assertExactKeys(committed, ["releaseVersion", "standalone"], "Committed Closure binding");
+  return {
+    releaseVersion: normalizeReleaseVersion(committed.releaseVersion),
+    standalone: normalizePointer(committed.standalone, expected),
+  };
+}
+
+export function validateClosureBindingDescriptor(
+  value: unknown,
+  expected: Pick<ClosureStorePaths, "channel" | "namespace">,
+): ClosureBindingDescriptor {
+  const descriptor = requireRecord(value, "Closure binding descriptor");
+  assertExactKeys(descriptor, [
+    "channel",
+    "committed",
+    "namespace",
+    "nextGeneration",
+    "schemaVersion",
+    "updatedAt",
+  ], "Closure binding descriptor");
+  if (descriptor.schemaVersion !== CLOSURE_BINDING_SCHEMA_VERSION) {
+    throw new ClosureStoreError(`unsupported Closure binding schema: ${String(descriptor.schemaVersion)}`);
+  }
+  const channel = normalizeChannel(String(descriptor.channel));
+  const namespace = normalizeStoreNamespace(String(descriptor.namespace));
+  if (channel !== expected.channel || namespace !== expected.namespace) {
+    throw new ClosureStoreError("Closure binding descriptor does not match its channel/namespace store");
+  }
+  const committed = descriptor.committed == null
+    ? null
+    : normalizeCommittedBinding(descriptor.committed, expected);
+  const nextGeneration = normalizeGeneration(descriptor.nextGeneration);
+  if (committed != null && committed.standalone.generation >= nextGeneration) {
+    throw new ClosureStoreError("Closure nextGeneration must be greater than the committed generation");
+  }
+  return {
+    channel,
+    committed,
+    namespace,
+    nextGeneration,
+    schemaVersion: CLOSURE_BINDING_SCHEMA_VERSION,
+    updatedAt: normalizeIsoString(descriptor.updatedAt, "Closure binding updatedAt"),
+  };
+}
+
+export function resolveClosureStoreVersionPaths(
+  paths: ClosureStorePaths,
+  binding: ClosureBindingIdentity,
+): ClosureStoreVersionPaths {
+  const identity = validateClosureBindingIdentity(binding, paths);
+  const digest = identity.digest.slice("sha256:".length);
+  const versionRoot = assertUnderRoot(paths.root, join(paths.versionsRoot, identity.version, digest));
+  return {
+    ...paths,
+    archivePath: assertUnderRoot(paths.root, join(versionRoot, "closure.zip")),
+    digest,
+    inventoryPath: assertUnderRoot(paths.root, join(versionRoot, "inventory.json")),
+    manifestPath: assertUnderRoot(paths.root, join(versionRoot, "manifest.json")),
+    payloadRoot: assertUnderRoot(paths.root, join(versionRoot, "payload")),
+    version: identity.version,
+    versionRoot,
+  };
+}
+
+export async function readRequiredJson(path: string, label: string): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(path, "utf8")) as unknown;
+  } catch (error) {
+    throw new ClosureStoreError(`${label} is missing or unreadable at ${path}: ${
+      error instanceof Error ? error.message : String(error)
+    }`);
+  }
+}
+
+export async function readOptionalJson(path: string, label: string): Promise<unknown | null> {
+  try {
+    return JSON.parse(await readFile(path, "utf8")) as unknown;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw new ClosureStoreError(`${label} is unreadable at ${path}: ${
+      error instanceof Error ? error.message : String(error)
+    }`);
+  }
+}
+
+export async function digestFile(path: string): Promise<{ digest: string; size: number }> {
+  const metadata = await stat(path).catch(() => null);
+  if (metadata == null || !metadata.isFile()) throw new ClosureStoreError(`Closure file is missing: ${path}`);
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
+  return { digest: `sha256:${hash.digest("hex")}`, size: metadata.size };
+}

@@ -16,22 +16,22 @@ import { writeJsonFile } from "@open-design/sidecar";
 
 import {
   CLOSURE_BINDING_SCHEMA_VERSION,
-  ClosureStorePaths,
-  ClosureStoreVersionPaths,
-  ClosureRuntimePointer,
-  CommittedClosureBinding,
-  ClosureBindingDescriptor,
-  StoredClosureVerification,
   ClosureStoreError,
   assertUnderRoot,
-  sameBinding,
-  normalizeReleaseVersion,
-  validateClosureBindingDescriptor,
-  resolveClosureStoreVersionPaths,
-  readRequiredJson,
-  readOptionalJson,
   digestFile,
-} from "./index.js";
+  normalizeReleaseVersion,
+  readOptionalJson,
+  readRequiredJson,
+  resolveClosureStoreVersionPaths,
+  sameBinding,
+  validateClosureBindingDescriptor,
+  type ClosureBindingDescriptor,
+  type ClosureRuntimePointer,
+  type ClosureStorePaths,
+  type ClosureStoreVersionPaths,
+  type CommittedClosureBinding,
+  type StoredClosureVerification,
+} from "./binding.js";
 
 export function compareName(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
