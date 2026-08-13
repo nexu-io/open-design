@@ -1436,8 +1436,7 @@ winDescribe('packaged windows runtime smoke', () => {
 
   const nativeInstallBoundariesTest = !verifyCoreOnly && updateFixture === 'tools-serve' ? test : test.skip;
   nativeInstallBoundariesTest(WIN_PACKAGED_SMOKE_SCENARIOS.nativeInstallBoundaries.title, async () => {
-    const baseVersion = normalizeOptionalEnv(releaseVersion) ?? normalizeOptionalEnv(shellVersion);
-    if (baseVersion == null) throw new Error('native Windows installer boundaries require a base release version');
+    const baseVersion = updateScenario.expectedInstalledShellVersion;
     const update = await resolveLocalUpdateFixture();
     const fakeProtocolCommand = '"C:\\Other Vendor\\Other Design.exe" "%1"';
     const dataMarkerPath = join(nativeRuntimeNamespaceRoot, 'data', 'native-installer-boundary.json');
