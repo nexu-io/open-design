@@ -1,0 +1,92 @@
+name: Publish release metadata
+description: Publish notes and immutable metadata, verify the public contract, and report distribution outputs
+
+inputs:
+  enable_mac_arm64:
+    description: Whether macOS arm64 is part of the distribution
+    required: true
+  enable_mac_x64:
+    description: Whether macOS x64 is part of the distribution
+    required: true
+  enable_win_x64:
+    description: Whether Windows x64 is part of the distribution
+    required: true
+  mac_arm64_result:
+    description: macOS arm64 build result
+    required: true
+  mac_x64_result:
+    description: macOS x64 build result
+    required: true
+  win_x64_result:
+    description: Windows x64 build result
+    required: true
+
+outputs:
+  release_state:
+    value: ${{ steps.outputs.outputs.release_state }}
+  version_metadata_url:
+    value: ${{ steps.outputs.outputs.version_metadata_url }}
+  mac_arm64_url:
+    value: ${{ steps.outputs.outputs.mac_arm64_dmg_url }}
+  mac_x64_url:
+    value: ${{ steps.outputs.outputs.mac_x64_dmg_url }}
+  win_x64_url:
+    value: ${{ steps.outputs.outputs.win_x64_installer_url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Publish release notes
+      shell: bash
+      env:
+        RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
+        RELEASE_NOTE_PLAN_PATH: ${{ runner.temp }}/release-metadata/release-note-plan.json
+      run: |
+        pnpm exec tools-release prepare-release-note
+        pnpm exec tools-release publish-release-note
+        pnpm exec tools-release verify-release-note
+
+    - name: Publish immutable metadata
+      shell: bash
+      env:
+        ENABLE_MAC_ARM64: ${{ inputs.enable_mac_arm64 }}
+        ENABLE_MAC_X64: ${{ inputs.enable_mac_x64 }}
+        ENABLE_WIN_X64: ${{ inputs.enable_win_x64 }}
+        MAC_ARM64_RESULT: ${{ inputs.mac_arm64_result }}
+        MAC_X64_RESULT: ${{ inputs.mac_x64_result }}
+        RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
+        RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
+        RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-metadata/outputs.json
+        WIN_X64_RESULT: ${{ inputs.win_x64_result }}
+      run: pnpm exec tools-release publish-metadata
+
+    - name: Read metadata outputs
+      id: outputs
+      uses: actions/github-script@v8
+      with:
+        script: |
+          const fs = require("fs");
+          const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-metadata/outputs.json`, "utf8"));
+          for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
+
+    - name: Verify immutable metadata
+      shell: bash
+      env:
+        ENABLE_MAC_ARM64: ${{ inputs.enable_mac_arm64 }}
+        ENABLE_MAC_X64: ${{ inputs.enable_mac_x64 }}
+        ENABLE_WIN_X64: ${{ inputs.enable_win_x64 }}
+        MAC_ARM64_RESULT: ${{ inputs.mac_arm64_result }}
+        MAC_X64_RESULT: ${{ inputs.mac_x64_result }}
+        RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
+        RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
+        WIN_X64_RESULT: ${{ inputs.win_x64_result }}
+      run: pnpm exec tools-release verify-metadata
+
+    - name: Publish metadata summary
+      shell: bash
+      env:
+        RELEASE_METADATA_URL: ${{ steps.outputs.outputs.version_metadata_url }}
+        RELEASE_SUMMARY_PATH: ${{ runner.temp }}/release-metadata/summary.md
+      run: |
+        pnpm exec tools-release summary-metadata
+        cat "${{ runner.temp }}/release-metadata/summary.md" >> "$GITHUB_STEP_SUMMARY"

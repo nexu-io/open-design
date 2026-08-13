@@ -20,9 +20,33 @@ function countOccurrences(content: string, needle: string): number {
   return content.split(needle).length - 1;
 }
 
+async function readReleaseWorkflow(channel: "beta" | "preview" | "prerelease" | "stable"): Promise<string> {
+  const [ritual, distribution] = await Promise.all([
+    readFile(new URL(`../../../.github/workflows/release-${channel}.yml`, import.meta.url), "utf8"),
+    readFile(new URL(`../../../.github/workflows/distribution-${channel}.yml`, import.meta.url), "utf8"),
+  ]);
+  return `${ritual}\n${distribution}`;
+}
+
 describe("release workflows", () => {
+  it("keeps each release channel as an explicit distribution ritual", async () => {
+    for (const channel of ["beta", "preview", "prerelease", "stable"] as const) {
+      const ritual = await readFile(
+        new URL(`../../../.github/workflows/release-${channel}.yml`, import.meta.url),
+        "utf8",
+      );
+      expect(ritual).toContain("workflow_dispatch:");
+      expect(ritual).toContain("workflow_call:");
+      expect(ritual).toContain(`uses: ./.github/workflows/distribution-${channel}.yml`);
+      expect(ritual).toContain("secrets: inherit");
+      expect(ritual).not.toContain("runs-on:");
+      expect(ritual).not.toMatch(/^\s+run:/mu);
+      expect(countOccurrences(ritual, "\n  distribute:\n")).toBe(1);
+    }
+  });
+
   it("enables the complete release-beta platform cohort by default", async () => {
-    const beta = await readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8");
+    const beta = await readReleaseWorkflow("beta");
     const dispatchInputs = sectionBetween(beta, "  workflow_dispatch:", "  workflow_call:");
     const callInputs = sectionBetween(beta, "  workflow_call:", "    outputs:");
 
@@ -35,10 +59,10 @@ describe("release workflows", () => {
 
   it("retains only the newest outer tools-pack cache for each release lane", async () => {
     const workflows = await Promise.all([
-      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+      readReleaseWorkflow("beta"),
+      readReleaseWorkflow("preview"),
+      readReleaseWorkflow("prerelease"),
+      readReleaseWorkflow("stable"),
     ]);
 
     expect(workflows.map((workflow) => countOccurrences(workflow, "keep=1"))).toEqual([2, 2, 2, 0]);
@@ -50,16 +74,16 @@ describe("release workflows", () => {
   });
 
   it("requires Vela CLI for every beta desktop packaging target", async () => {
-    const [beta, preview, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, winLifecycle, desktopUpdater, macBuild, macFs, installUnsafeDmg, winApp, macWorkspace] = await Promise.all([
-      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+    const [beta, preview, prerelease, stable, stablePrepare, buildMac, buildWin, prepareMac, prepareWin, publishPlatform, winLifecycle, desktopUpdater, macBuild, macFs, installUnsafeDmg, winApp, macWorkspace, countedDistribution, metadataDistribution] = await Promise.all([
+      readReleaseWorkflow("beta"),
+      readReleaseWorkflow("preview"),
+      readReleaseWorkflow("prerelease"),
+      readReleaseWorkflow("stable"),
       readFile(new URL("../../../tools/release/src/metadata/prepare-stable.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../tools/release/scripts/build-platform.sh", import.meta.url), "utf8"),
       readFile(new URL("../../../tools/release/scripts/build-platform.ps1", import.meta.url), "utf8"),
-      readFile(new URL("../../../tools/release/scripts/prepare-platform-assets.sh", import.meta.url), "utf8"),
-      readFile(new URL("../../../tools/release/scripts/prepare-platform-assets.ps1", import.meta.url), "utf8"),
+      readFile(new URL("../scripts/prepare-platform-assets.sh", import.meta.url), "utf8"),
+      readFile(new URL("../scripts/prepare-platform-assets.ps1", import.meta.url), "utf8"),
       readFile(new URL("../../../tools/release/src/storage/publish-platform.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/win/lifecycle.ts", import.meta.url), "utf8"),
       readFile(new URL("../../../shells/electron/src/main/updater/payload.ts", import.meta.url), "utf8"),
@@ -68,6 +92,8 @@ describe("release workflows", () => {
       readFile(new URL("../../../scripts/install-unsafe-dmg.sh", import.meta.url), "utf8"),
       readFile(new URL("../src/win/app.ts", import.meta.url), "utf8"),
       readFile(new URL("../src/mac/workspace.ts", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/actions/release/publish-counted/action.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/actions/release/publish-metadata/action.yml", import.meta.url), "utf8"),
     ]);
     const mac = sectionBetween(beta, "  build_mac_arm64:", "  build_mac_x64:");
     const macX64 = sectionBetween(beta, "  build_mac_x64:", "  build_win_x64:");
@@ -177,8 +203,9 @@ describe("release workflows", () => {
     expect(beta).not.toContain("publish-beta-metadata.ts");
     expect(beta).not.toContain("verify-beta-metadata.ts");
     expect(beta).not.toContain("summary-beta.ts");
-    expect(beta).toContain("tools-release publish-metadata");
-    expect(beta).toContain("tools-release verify-metadata");
+    expect(beta).toContain("uses: ./.github/actions/release/publish-metadata");
+    expect(metadataDistribution).toContain("tools-release publish-metadata");
+    expect(metadataDistribution).toContain("tools-release verify-metadata");
     expect(beta).toContain("Validate checkout ref shape");
     expect(beta).toContain("full 40-character commit SHA; abbreviated SHA");
     expect(betaPublish).toContain("Observe directly activated beta public feed");
@@ -187,7 +214,7 @@ describe("release workflows", () => {
     expect(betaPublish).toContain("tools-release issue-public-acceptance");
     expect(betaPublish).toContain("tools-release activate-public-release");
     expect(betaPublish).toContain("tools-release observe-public-feed");
-    expect(beta).toContain("tools-release summary-metadata");
+    expect(metadataDistribution).toContain("tools-release summary-metadata");
     for (const workflow of [beta, preview, prerelease, stable]) {
       expect(workflow).not.toContain(".github/scripts/release/r2/");
     }
@@ -228,13 +255,21 @@ describe("release workflows", () => {
       expect(metadata).toContain("run: pnpm install --frozen-lockfile");
       expect(metadata.indexOf("run: pnpm install --frozen-lockfile")).toBeLessThan(metadata.indexOf("tools-release prepare"));
     }
-    for (const publish of [betaPublish, previewPublish, prereleasePublish, stablePublish]) {
+    for (const publish of [betaPublish, stablePublish]) {
       expect(publish).toContain("uses: pnpm/action-setup@v5");
       expect(publish).toContain("run: pnpm install --frozen-lockfile");
       expect(publish.indexOf("run: pnpm install --frozen-lockfile")).toBeLessThan(
-        publish.indexOf("tools-release publish-metadata"),
+        publish.indexOf("uses: ./.github/actions/release/publish-metadata"),
       );
     }
+    for (const publish of [previewPublish, prereleasePublish]) {
+      expect(publish).toContain("uses: ./.github/actions/release/publish-counted");
+    }
+    expect(countedDistribution).toContain("uses: pnpm/action-setup@v5");
+    expect(countedDistribution).toContain("run: pnpm install --frozen-lockfile");
+    expect(countedDistribution.indexOf("run: pnpm install --frozen-lockfile")).toBeLessThan(
+      countedDistribution.indexOf("uses: ./.github/actions/release/publish-metadata"),
+    );
     expect(macBuild).toContain('runPhase("xattr-scrub"');
     expect(macBuild).toContain("scrubMacExtendedAttributes(paths.appPath)");
     expect(macFs).toContain("com.apple.provenance");
@@ -281,12 +316,14 @@ describe("release workflows", () => {
     expect(preview).not.toContain(".github/scripts/release/r2/publish.sh");
     expect(preview).not.toContain(".github/scripts/release/r2/verify.sh");
     expect(preview).not.toContain(".github/scripts/release/r2/summary.sh");
-    expect(countOccurrences(preview, "tools/release/scripts/prepare-platform-assets.sh")).toBeGreaterThanOrEqual(2);
-    expect(preview).toContain("tools\\release\\scripts\\prepare-platform-assets.ps1");
+    expect(countOccurrences(preview, "tools/pack/scripts/prepare-platform-assets.sh")).toBeGreaterThanOrEqual(2);
+    expect(preview).toContain("tools\\pack\\scripts\\prepare-platform-assets.ps1");
     expect(countOccurrences(preview, "tools-release publish-platform")).toBeGreaterThanOrEqual(3);
-    expect(preview).toContain("tools-release publish-metadata");
-    expect(preview).toContain("tools-release verify-metadata");
-    expect(preview).toContain("tools-release summary-metadata");
+    expect(preview).toContain("uses: ./.github/actions/release/publish-counted");
+    expect(countedDistribution).toContain("uses: ./.github/actions/release/publish-metadata");
+    expect(metadataDistribution).toContain("tools-release publish-metadata");
+    expect(metadataDistribution).toContain("tools-release verify-metadata");
+    expect(metadataDistribution).toContain("tools-release summary-metadata");
     expect(preview).toContain("RELEASE_ARTIFACT_MODE: all");
     expect(preview).toContain("open-design-preview-mac-arm64-publish-manifest");
     expect(preview).toContain("open-design-preview-win-x64-publish-manifest");
@@ -294,7 +331,7 @@ describe("release workflows", () => {
     expect(preview).toContain("OPEN_DESIGN_PREVIEW_VERSION: ${{ inputs.release_version }}");
     expect(preview).toContain("GITHUB_SHA: ${{ needs.metadata.outputs.commit }}");
     expect(preview).toContain("previous_commit: ${{ steps.prev.outputs.previous_commit }}");
-    expect(preview).toContain("version_metadata_url: ${{ steps.outputs.outputs.version_metadata_url }}");
+    expect(preview).toContain("version_metadata_url: ${{ steps.distribute.outputs.version_metadata_url }}");
     expect(previewPublish).toContain('GITHUB_RELEASE_ENABLED: "false"');
     expect(preview).not.toContain("gh release");
     expect(previewMac).toContain("uses: actions/cache/restore@v5");
@@ -325,7 +362,7 @@ describe("release workflows", () => {
     expect(prerelease).toContain("OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}");
     expect(prerelease).toContain("GITHUB_SHA: ${{ needs.metadata.outputs.commit }}");
     expect(prerelease).toContain("previous_commit: ${{ steps.prev.outputs.previous_commit }}");
-    expect(prerelease).toContain("version_metadata_url: ${{ steps.outputs.outputs.version_metadata_url }}");
+    expect(prerelease).toContain("version_metadata_url: ${{ steps.distribute.outputs.version_metadata_url }}");
     expect(prerelease).not.toContain("RELEASE_CHANNEL: Prerelease");
     expect(prerelease).not.toContain("tools-release prepare preview");
     expect(prereleaseMetadata).toContain("GH_TOKEN: ${{ github.token }}");
@@ -398,10 +435,11 @@ describe("release workflows", () => {
     expect(stable).not.toContain(".github/scripts/release/r2/publish.sh");
     expect(stable).not.toContain(".github/scripts/release/r2/verify.sh");
     expect(stable).not.toContain(".github/scripts/release/r2/summary.sh");
-    expect(countOccurrences(stable, "tools/release/scripts/prepare-platform-assets.sh")).toBeGreaterThanOrEqual(2);
-    expect(stable).toContain("tools\\release\\scripts\\prepare-platform-assets.ps1");
+    expect(countOccurrences(stable, "tools/pack/scripts/prepare-platform-assets.sh")).toBeGreaterThanOrEqual(2);
+    expect(stable).toContain("tools\\pack\\scripts\\prepare-platform-assets.ps1");
     expect(countOccurrences(stable, "tools-release publish-platform")).toBeGreaterThanOrEqual(3);
-    expect(stable).toContain("tools-release publish-metadata");
+    expect(stable).toContain("uses: ./.github/actions/release/publish-metadata");
+    expect(metadataDistribution).toContain("tools-release publish-metadata");
     // The stable promotion gate validates prerelease metadata.github fields; the
     // publish steps must therefore pass the resolved release attribution through.
     expect(stable).toContain("RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}");
@@ -411,8 +449,8 @@ describe("release workflows", () => {
     expect(stable).toContain("RELEASE_RUN_ID: ${{ github.run_id }}");
     expect(countOccurrences(stable, "RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}")).toBeGreaterThanOrEqual(4);
     expect(stable).not.toContain("RELEASE_BRANCH: ${{ github.ref_name }}");
-    expect(stable).toContain("tools-release verify-metadata");
-    expect(stable).toContain("tools-release summary-metadata");
+    expect(metadataDistribution).toContain("tools-release verify-metadata");
+    expect(metadataDistribution).toContain("tools-release summary-metadata");
     expect(stable).toContain("open-design-release-mac-arm64-publish-manifest");
     expect(stable).toContain("open-design-release-win-x64-publish-manifest");
     expect(stable).toContain("--signed");
@@ -433,6 +471,16 @@ describe("release workflows", () => {
     expect(stable).toContain("RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}");
     expect(stable).toContain("pnpm exec tools-release prepare-github-assets");
     expect(stable).toContain('gh release upload "$VERSION_TAG" "$RUNNER_TEMP/github-release-assets"/*');
+    expect(stable.indexOf("Pre-flight tag/release check")).toBeLessThan(stable.indexOf("Create draft release with tag"));
+    expect(stable.indexOf("Create draft release with tag")).toBeLessThan(
+      stable.indexOf("uses: ./.github/actions/release/publish-metadata"),
+    );
+    expect(stable.indexOf("uses: ./.github/actions/release/publish-metadata")).toBeLessThan(
+      stable.indexOf("Promote draft to published latest"),
+    );
+    expect(stable.indexOf("Promote draft to published latest")).toBeLessThan(
+      stable.indexOf("Cleanup release + tag on failure"),
+    );
     expect(stable).toContain("RELEASE_METADATA_PATH:");
     expect(stable).not.toContain("inputs.channel");
     expect(stable).not.toContain("prepare ${{ inputs.channel }}");
@@ -466,10 +514,10 @@ describe("release workflows", () => {
 
   it("bakes both halves of the workspace-team gate into every shipping lane", async () => {
     const [beta, preview, prerelease, stable] = await Promise.all([
-      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+      readReleaseWorkflow("beta"),
+      readReleaseWorkflow("preview"),
+      readReleaseWorkflow("prerelease"),
+      readReleaseWorkflow("stable"),
     ]);
 
     // workspaceTeamTransportEnv (shells/electron/src/workspace-team.ts) enables the
@@ -500,10 +548,10 @@ describe("release workflows", () => {
 
   it("maps existing repo vars into the installation floor for metadata publish and verify", async () => {
     const [beta, preview, prerelease, stable] = await Promise.all([
-      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
-      readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+      readReleaseWorkflow("beta"),
+      readReleaseWorkflow("preview"),
+      readReleaseWorkflow("prerelease"),
+      readReleaseWorkflow("stable"),
     ]);
 
     const passthrough = (suffix: string): string[] => [
@@ -516,20 +564,20 @@ describe("release workflows", () => {
     // format/https/floor validation) lives only in
     // tools/release/src/storage/installation-version-floor.ts, never in YAML.
     const lanes: Array<{ minSteps: number; suffix: string; workflow: string }> = [
-      { minSteps: 2, suffix: "BETA", workflow: beta },
-      { minSteps: 2, suffix: "PREVIEW", workflow: preview },
-      { minSteps: 2, suffix: "PRERELEASE", workflow: prerelease },
+      { minSteps: 1, suffix: "BETA", workflow: beta },
+      { minSteps: 1, suffix: "PREVIEW", workflow: preview },
+      { minSteps: 1, suffix: "PRERELEASE", workflow: prerelease },
     ];
     for (const lane of lanes) {
       for (const key of [...passthrough(lane.suffix), ...passthrough("STABLE")]) {
-        // publish-metadata always carries the pair; lanes with a
-        // verify-metadata step must carry it there too.
+        // The distribution call forwards the pair once; the shared composite
+        // inherits it for both publish and verification.
         expect(countOccurrences(lane.workflow, key)).toBeGreaterThanOrEqual(lane.minSteps);
       }
       expect(lane.workflow).not.toContain(`vars.RELEASE_LAUNCHER_VERSION_MIN_${lane.suffix} ||`);
     }
     for (const key of passthrough("STABLE")) {
-      expect(countOccurrences(stable, key)).toBeGreaterThanOrEqual(2);
+      expect(countOccurrences(stable, key)).toBeGreaterThanOrEqual(1);
     }
     expect(stable).not.toContain("vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE ||");
   });

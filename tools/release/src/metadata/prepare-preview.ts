@@ -1,17 +1,19 @@
 import {
   compareReleaseBaseVersions,
-  formatReleaseVersion,
-  parseCountedReleaseVersion,
   parseReleaseBaseVersion,
   type ReleaseBaseVersionTuple,
 } from "@open-design/release";
 import {
+  nextCountedReleaseVersion,
+  parseCountedReleaseMetadata,
+  type CountedReleaseState,
+} from "../channel/counted-version.ts";
+import { countedReleaseChannelProfile } from "../channel/profiles.ts";
+import {
   extractStableVersionFromTag,
   fetchGitTags,
   fetchOptionalHttpsText as fetchOptionalHttpsTextRequest,
-  readNumberField,
   readShellVersion,
-  readStringField,
   setGitHubOutput as setOutput,
   validateHttpsUrl,
 } from "../lib/release-script.ts";
@@ -22,16 +24,6 @@ type ParsedStableVersion = {
   parsed: ReleaseBaseVersionTuple;
   source?: string;
   value: string;
-};
-
-type ParsedPreviewVersion = {
-  baseVersion: string;
-  previewNumber: number;
-  previewVersion: string;
-};
-
-type ParsedPreviewMetadata = ParsedPreviewVersion & {
-  source: "metadata-json";
 };
 
 function fail(message: string): never {
@@ -78,77 +70,13 @@ function resolvePreviewBaseVersion(branch: string, inputValue: string | undefine
   return { parsed: packagedParsed, source: "shells/electron/package.json", value: packagedVersion };
 }
 
-function parsePreviewParts(baseVersion: string, previewNumber: string): ParsedPreviewVersion {
-  const parsedPreviewNumber = Number(previewNumber);
-  if (!Number.isSafeInteger(parsedPreviewNumber) || parsedPreviewNumber < 1) {
-    fail(`invalid preview number in latest preview metadata: ${previewNumber}`);
-  }
-
-  return {
-    baseVersion,
-    previewNumber: parsedPreviewNumber,
-    previewVersion: formatReleaseVersion("preview", baseVersion, parsedPreviewNumber),
-  };
-}
-
-function parsePreviewVersion(value: string, sourceName: string): ParsedPreviewVersion {
-  const parsed = parseCountedReleaseVersion(value, "preview");
-  if (parsed == null) {
-    fail(`${sourceName} previewVersion must be x.y.z-preview.N; got ${value}`);
-  }
-  return {
-    baseVersion: parsed.baseVersion,
-    previewNumber: parsed.number,
-    previewVersion: parsed.releaseVersion,
-  };
-}
-
-function parsePreviewMetadataJson(value: string): ParsedPreviewMetadata {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch (error) {
-    fail(`R2 preview metadata.json is invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
-  }
-
-  if (typeof parsed !== "object" || parsed == null || Array.isArray(parsed)) {
-    fail("R2 preview metadata.json must be a JSON object");
-  }
-
-  const record = parsed as Record<string, unknown>;
-  const previewVersion = readStringField(record, "releaseVersion") ?? readStringField(record, "previewVersion");
-  const previewNumber = readNumberField(record, "releaseNumber") ?? readNumberField(record, "previewNumber");
-  const baseVersion = readStringField(record, "baseVersion");
-
-  if (previewVersion != null) {
-    const preview = parsePreviewVersion(previewVersion, "R2 preview metadata.json");
-    if (baseVersion != null && baseVersion !== preview.baseVersion) {
-      fail(`R2 preview metadata.json baseVersion ${baseVersion} does not match previewVersion ${preview.previewVersion}`);
-    }
-    if (previewNumber != null && previewNumber !== preview.previewNumber) {
-      fail(`R2 preview metadata.json releaseNumber ${previewNumber} does not match releaseVersion ${preview.previewVersion}`);
-    }
-    return { ...preview, source: "metadata-json" };
-  }
-
-  if (baseVersion == null || previewNumber == null) {
-    fail("R2 preview metadata.json must include releaseVersion or baseVersion+releaseNumber");
-  }
-
-  const parsedBase = parseReleaseBaseVersion(baseVersion);
-  if (parsedBase == null) {
-    fail(`R2 preview metadata.json baseVersion must be x.y.z; got ${baseVersion}`);
-  }
-
-  return { ...parsePreviewParts(baseVersion, String(previewNumber)), source: "metadata-json" };
-}
-
 function fetchOptionalHttpsText(url: string, redirectCount = 0): Promise<string | null> {
   return fetchOptionalHttpsTextRequest(url, { feedLabel: "preview" }, redirectCount);
 }
 
 const packagedVersion = await readShellVersion(fail);
 const branch = process.env.GITHUB_REF_NAME ?? "";
+const profile = countedReleaseChannelProfile("preview");
 const previewBaseVersion = resolvePreviewBaseVersion(branch, process.env.OPEN_DESIGN_PREVIEW_VERSION, packagedVersion);
 const packagedParsed = previewBaseVersion.parsed;
 if (previewBaseVersion.value !== packagedVersion) {
@@ -178,41 +106,34 @@ if (metadataUrl == null || metadataUrl.length === 0) {
 }
 validateHttpsUrl(metadataUrl, "OPEN_DESIGN_PREVIEW_METADATA_URL", fail);
 
-let previewNumber = 1;
-let latestPreview: ParsedPreviewVersion | null = null;
+let latestPreview: CountedReleaseState | null = null;
 let stateSource = "R2 metadata.json";
 const latestMetadataJson = await fetchOptionalHttpsText(metadataUrl);
 if (latestMetadataJson == null) {
   latestPreview = {
     baseVersion: packagedVersion,
-    previewNumber: 0,
-    previewVersion: `${packagedVersion}-preview.0`,
+    releaseNumber: 0,
+    releaseVersion: `${packagedVersion}-preview.0`,
   };
   stateSource = "missing R2 metadata.json fallback preview.0";
   console.log("[release-preview] R2 preview metadata.json: not found; using preview.0 fallback");
 } else {
-  latestPreview = parsePreviewMetadataJson(latestMetadataJson);
-  console.log(`[release-preview] R2 preview metadata.json version: ${latestPreview.previewVersion}`);
+  try {
+    latestPreview = parseCountedReleaseMetadata(profile, latestMetadataJson);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+  console.log(`[release-preview] R2 preview metadata.json version: ${latestPreview.releaseVersion}`);
 }
 
-if (latestPreview != null) {
-  const preview = latestPreview;
-  const existingBase = parseReleaseBaseVersion(preview.baseVersion);
-  if (existingBase == null) {
-    fail(`invalid preview base version in ${stateSource}: ${preview.baseVersion}`);
-  }
-
-  const ordering = compareReleaseBaseVersions(packagedParsed, existingBase);
-  if (ordering < 0) {
-    fail(`packaged base version ${packagedVersion} regressed below current preview base version ${preview.baseVersion}`);
-  }
-
-  if (ordering === 0) {
-    previewNumber = preview.previewNumber + 1;
-  }
+let nextPreview: CountedReleaseState;
+try {
+  nextPreview = nextCountedReleaseVersion({ allowRegression: false, baseVersion: packagedVersion, latest: latestPreview, profile });
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
 }
-
-const previewVersion = `${packagedVersion}-preview.${previewNumber}`;
+const previewNumber = nextPreview.releaseNumber;
+const previewVersion = nextPreview.releaseVersion;
 const commit = process.env.GITHUB_SHA ?? "";
 const releaseName = `Open Design Preview ${previewVersion}`;
 
@@ -221,7 +142,7 @@ console.log(`[release-preview] base version: ${packagedVersion}`);
 console.log(`[release-preview] preview version: ${previewVersion}`);
 console.log(`[release-preview] preview state source: ${stateSource}`);
 if (latestStable != null) console.log(`[release-preview] latest stable: ${latestStable.value}`);
-if (latestPreview != null) console.log(`[release-preview] latest preview: ${latestPreview.previewVersion}`);
+if (latestPreview != null) console.log(`[release-preview] latest preview: ${latestPreview.releaseVersion}`);
 
 setOutput("asset_version_suffix", "");
 setOutput("base_version", packagedVersion);

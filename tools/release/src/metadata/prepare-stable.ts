@@ -11,9 +11,10 @@ import {
   type ReleaseBaseVersionTuple,
   type ReleaseChannel,
 } from "@open-design/release";
+import { parseCountedReleaseMetadata } from "../channel/counted-version.ts";
+import { countedReleaseChannelProfile } from "../channel/profiles.ts";
 import {
   fetchOptionalHttpsText as fetchOptionalHttpsTextRequest,
-  readNumberField,
   readShellVersion,
   readStringField,
   setGitHubOutput as setOutput,
@@ -169,19 +170,6 @@ function extractStableVersion(release: GitHubRelease): ParsedStableVersion | nul
   return null;
 }
 
-function parsePrereleaseParts(baseVersion: string, prereleaseNumber: string): ParsedPrereleaseVersion {
-  const parsedPrereleaseNumber = Number(prereleaseNumber);
-  if (!Number.isSafeInteger(parsedPrereleaseNumber) || parsedPrereleaseNumber < 1) {
-    fail(`invalid prerelease number in latest prerelease metadata: ${prereleaseNumber}`);
-  }
-
-  return {
-    baseVersion,
-    prereleaseNumber: parsedPrereleaseNumber,
-    prereleaseVersion: formatReleaseVersion("prerelease", baseVersion, parsedPrereleaseNumber),
-  };
-}
-
 function readBooleanField(record: Record<string, unknown>, field: string): boolean | null {
   const value = record[field];
   return typeof value === "boolean" ? value : null;
@@ -225,36 +213,18 @@ function parsePrereleaseVersion(value: string, sourceName: string): ParsedPrerel
 }
 
 function parsePrereleaseMetadataJson(value: string): ParsedPrereleaseMetadata {
-  const record = parseJsonRecord(value, "R2 prerelease metadata.json");
-  const prereleaseVersion = readStringField(record, "releaseVersion") ?? readStringField(record, "prereleaseVersion");
-  const prereleaseNumber = readNumberField(record, "releaseNumber") ?? readNumberField(record, "prereleaseNumber");
-  const baseVersion = readStringField(record, "baseVersion");
-
-  if (prereleaseVersion != null) {
-    const prerelease = parsePrereleaseVersion(prereleaseVersion, "R2 prerelease metadata.json");
-    if (baseVersion != null && baseVersion !== prerelease.baseVersion) {
-      fail(
-        `R2 prerelease metadata.json baseVersion ${baseVersion} does not match prereleaseVersion ${prerelease.prereleaseVersion}`,
-      );
-    }
-    if (prereleaseNumber != null && prereleaseNumber !== prerelease.prereleaseNumber) {
-      fail(
-        `R2 prerelease metadata.json releaseNumber ${prereleaseNumber} does not match releaseVersion ${prerelease.prereleaseVersion}`,
-      );
-    }
-    return { ...prerelease, source: "metadata-json" };
+  let parsed;
+  try {
+    parsed = parseCountedReleaseMetadata(countedReleaseChannelProfile("prerelease"), value);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
   }
-
-  if (baseVersion == null || prereleaseNumber == null) {
-    fail("R2 prerelease metadata.json must include releaseVersion or baseVersion+releaseNumber");
-  }
-
-  const parsedBase = parseReleaseBaseVersion(baseVersion);
-  if (parsedBase == null) {
-    fail(`R2 prerelease metadata.json baseVersion must be x.y.z; got ${baseVersion}`);
-  }
-
-  return { ...parsePrereleaseParts(baseVersion, String(prereleaseNumber)), source: "metadata-json" };
+  return {
+    baseVersion: parsed.baseVersion,
+    prereleaseNumber: parsed.releaseNumber,
+    prereleaseVersion: parsed.releaseVersion,
+    source: "metadata-json",
+  };
 }
 
 function requireObjectField(record: Record<string, unknown>, field: string, sourceName: string): Record<string, unknown> {

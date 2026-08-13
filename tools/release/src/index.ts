@@ -7,20 +7,29 @@ const cli = cac("tools-release");
 cli
   .command("prepare <channel>", "Prepare release metadata outputs for a lane")
   .action(async (channel: string) => {
-    if (channel === "beta") {
+    const { releaseChannelProfile } = await import("./channel/profiles.ts");
+    const profile = releaseChannelProfile(channel);
+    if (profile.channel === "beta") {
       await import("./metadata/prepare-beta.ts");
       return;
     }
-    if (channel === "preview") {
+    if (profile.channel === "preview") {
       await import("./metadata/prepare-preview.ts");
       return;
     }
-    if (channel === "prerelease" || channel === "stable") {
-      process.env.OPEN_DESIGN_RELEASE_CHANNEL = channel;
+    if (profile.channel === "prerelease" || profile.channel === "stable") {
+      process.env.OPEN_DESIGN_RELEASE_CHANNEL = profile.channel;
       await import("./metadata/prepare-stable.ts");
       return;
     }
-    throw new Error(`unsupported prepare channel: ${channel}`);
+    throw new Error(`unsupported prepare channel: ${profile.channel}`);
+  });
+
+cli
+  .command("profile <channel>", "Print the registered release policy for a channel")
+  .action(async (channel: string) => {
+    const { releaseChannelProfile } = await import("./channel/profiles.ts");
+    process.stdout.write(`${JSON.stringify(releaseChannelProfile(channel), null, 2)}\n`);
   });
 
 cli

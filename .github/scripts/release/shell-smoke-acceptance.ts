@@ -77,11 +77,11 @@ export async function resolveShellSmokeAcceptanceDigest(
   platform: ShellSmokeAcceptancePlatform,
   workspaceRoot: string,
 ): Promise<`sha256:${string}`> {
-  const workflowPath = resolve(workspaceRoot, ".github/workflows/release-beta.yml");
+  const workflowPath = resolve(workspaceRoot, ".github/workflows/distribution-beta.yml");
   const jobName = platform === "win_x64" ? "build_win_x64" : `build_${platform}`;
   const parts: Array<{ body: Uint8Array | string; label: string }> = [{
     body: extractWorkflowJob(await readFile(workflowPath, "utf8"), jobName),
-    label: `.github/workflows/release-beta.yml#${jobName}`,
+    label: `.github/workflows/distribution-beta.yml#${jobName}`,
   }];
   for (const path of shellSmokeAcceptanceSourcePaths(platform)) {
     parts.push({ body: await readFile(resolve(workspaceRoot, path)), label: path });

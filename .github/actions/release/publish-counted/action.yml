@@ -1,0 +1,81 @@
+name: Publish counted release distribution
+description: Publish and verify one registered counted channel from immutable platform manifests
+
+inputs:
+  channel:
+    description: Registered counted release channel
+    required: true
+  mac_arm64_result:
+    description: macOS arm64 build result
+    required: true
+  mac_x64_result:
+    description: macOS x64 build result
+    required: true
+  win_x64_result:
+    description: Windows x64 build result
+    required: true
+
+outputs:
+  version_metadata_url:
+    value: ${{ steps.metadata.outputs.version_metadata_url }}
+  mac_arm64_url:
+    value: ${{ steps.metadata.outputs.mac_arm64_url }}
+  mac_x64_url:
+    value: ${{ steps.metadata.outputs.mac_x64_url }}
+  win_x64_url:
+    value: ${{ steps.metadata.outputs.win_x64_url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Download macOS arm64 publish manifest
+      uses: actions/download-artifact@v8
+      with:
+        name: open-design-${{ inputs.channel }}-mac-arm64-publish-manifest
+        path: ${{ runner.temp }}/release-platform-manifests
+
+    - name: Download macOS x64 publish manifest
+      uses: actions/download-artifact@v8
+      with:
+        name: open-design-${{ inputs.channel }}-mac-x64-publish-manifest
+        path: ${{ runner.temp }}/release-platform-manifests
+
+    - name: Download Windows x64 publish manifest
+      uses: actions/download-artifact@v8
+      with:
+        name: open-design-${{ inputs.channel }}-win-x64-publish-manifest
+        path: ${{ runner.temp }}/release-platform-manifests
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v5
+      with:
+        version: 10.33.2
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: 24.18.0
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Publish counted release metadata
+      id: metadata
+      uses: ./.github/actions/release/publish-metadata
+      with:
+        enable_mac_arm64: "true"
+        enable_mac_x64: "true"
+        enable_win_x64: "true"
+        mac_arm64_result: ${{ inputs.mac_arm64_result }}
+        mac_x64_result: ${{ inputs.mac_x64_result }}
+        win_x64_result: ${{ inputs.win_x64_result }}
+      env:
+        RELEASE_ASSET_SUFFIX: ""
+        RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+        RELEASE_SIGNED: "true"
+
+    - name: Cleanup workflow artifacts
+      if: ${{ success() }}
+      shell: bash
+      run: bash .github/scripts/release/github/cleanup-artifacts.sh
