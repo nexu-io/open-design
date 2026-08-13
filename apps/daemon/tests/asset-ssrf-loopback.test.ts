@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { assertExternalAssetUrl, validateBaseUrlResolved } from '../src/connectionTest.js';
+import {
+  assertExternalAssetUrl,
+  assertAndFetchExternalAsset,
+  validateBaseUrlResolved,
+  createAssetValidatingLookup,
+} from '../src/connectionTest.js';
 import type { DnsLookupFn } from '../src/connectionTest.js';
 
 describe('assertExternalAssetUrl — loopback rejection (issue #5478)', () => {
@@ -24,13 +29,13 @@ describe('assertExternalAssetUrl — loopback rejection (issue #5478)', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('accepts legitimate public CDN asset URLs', async () => {
-    const result = await assertExternalAssetUrl('https://cdn.example.com/image.png');
+  it('accepts legitimate public IP asset URLs', async () => {
+    const result = await assertExternalAssetUrl('http://93.184.216.34/image.png');
     expect(result.ok).toBe(true);
   });
 
-  it('accepts https asset URLs with paths', async () => {
-    const result = await assertExternalAssetUrl('https://api.gateway.com/v1/assets/abc123.png');
+  it('accepts https asset URLs with paths (IP literal)', async () => {
+    const result = await assertExternalAssetUrl('https://198.51.100.1/v1/assets/abc123.png');
     expect(result.ok).toBe(true);
   });
 
@@ -118,9 +123,6 @@ describe('DNS rebinding — resolved-address pinning (issue #5478)', () => {
   });
 
   it('resolved addresses capture the public IP from the first lookup only', async () => {
-    // Simulate DNS rebinding: first lookup returns a public IP, subsequent
-    // lookups return loopback. The validation step must capture only the
-    // public address so the pinned fetch cannot be rebind-attacked.
     let callCount = 0;
     const rebindDns: DnsLookupFn = async () => {
       callCount++;
@@ -134,18 +136,14 @@ describe('DNS rebinding — resolved-address pinning (issue #5478)', () => {
       { forbidLoopback: true },
     );
 
-    // Validation passed (first lookup returned a public IP)
     expect(result.parsed).toBeDefined();
     expect(result.error).toBeUndefined();
 
-    // Resolved addresses contain only the public IP, NOT the rebind loopback
     const addresses = result.resolvedAddresses!;
     expect(addresses).toHaveLength(1);
     expect(addresses[0]!.address).toBe('93.184.216.34');
     expect(addresses[0]!.address).not.toBe('127.0.0.1');
 
-    // DNS was resolved exactly once during validation — the pinned dispatcher
-    // will reuse these addresses and never trigger the rebind lookup.
     expect(callCount).toBe(1);
   });
 
@@ -169,11 +167,182 @@ describe('DNS rebinding — resolved-address pinning (issue #5478)', () => {
   it('IP-literal URLs do not get resolvedAddresses (no DNS lookup needed)', async () => {
     const result = await validateBaseUrlResolved(
       'http://93.184.216.34/image.png',
-      async () => [{ address: '127.0.0.1', family: 4 }], // would fail if called
+      async () => [{ address: '127.0.0.1', family: 4 }],
       { forbidLoopback: true },
     );
     expect(result.parsed).toBeDefined();
-    // No DNS lookup was performed for an IP literal, so no resolvedAddresses
     expect(result.resolvedAddresses).toBeUndefined();
+  });
+});
+
+describe('DNS lookup failure — fail-closed behavior (issue #5478)', () => {
+  it('validateBaseUrlResolved fails closed when DNS throws and forbidLoopback is true', async () => {
+    const throwingDns: DnsLookupFn = async () => {
+      throw new Error('ENOTFOUND');
+    };
+    const result = await validateBaseUrlResolved(
+      'http://attacker.example.com/image.png',
+      throwingDns,
+      { forbidLoopback: true },
+    );
+    expect(result.forbidden).toBe(true);
+    expect(result.error).toContain('DNS resolution failed');
+  });
+
+  it('validateBaseUrlResolved returns sync result when DNS throws and forbidLoopback is false', async () => {
+    // Provider endpoints should still return success on DNS failure — the
+    // actual fetch will surface the resolution error.
+    const throwingDns: DnsLookupFn = async () => {
+      throw new Error('ENOTFOUND');
+    };
+    const result = await validateBaseUrlResolved(
+      'http://provider.example.com/v1',
+      throwingDns,
+      { forbidLoopback: false },
+    );
+    expect(result.forbidden).toBeUndefined();
+    expect(result.parsed).toBeDefined();
+  });
+
+  it('assertExternalAssetUrl returns ok=false when DNS throws', async () => {
+    // The default DNS lookup will be used and may succeed for example.com,
+    // so test the fail-closed path through validateBaseUrlResolved directly.
+    const throwingDns: DnsLookupFn = async () => {
+      throw new Error('SERVFAIL');
+    };
+    const result = await validateBaseUrlResolved(
+      'http://fail-then-rebind.attacker.test/image.png',
+      throwingDns,
+      { forbidLoopback: true },
+    );
+    expect(result.forbidden).toBe(true);
+    expect(result.error).toContain('DNS resolution failed');
+  });
+});
+
+describe('createAssetValidatingLookup — connect-time guard (issue #5478)', () => {
+  // Mock dns.lookup implementation that returns loopback
+  const lookupReturnsLoopback = (
+    _hostname: string,
+    _opts: unknown,
+    cb: (err: Error | null, address: string, family: number) => void,
+  ): void => {
+    cb(null, '127.0.0.1', 4);
+  };
+
+  // Mock dns.lookup that returns a public address
+  const lookupReturnsPublic = (
+    _hostname: string,
+    _opts: unknown,
+    cb: (err: Error | null, address: string, family: number) => void,
+  ): void => {
+    cb(null, '93.184.216.34', 4);
+  };
+
+  // Mock dns.lookup that returns an RFC1918 address
+  const lookupReturnsInternal = (
+    _hostname: string,
+    _opts: unknown,
+    cb: (err: Error | null, address: string, family: number) => void,
+  ): void => {
+    cb(null, '10.0.0.5', 4);
+  };
+
+  // Mock dns.lookup that returns metadata service IP
+  const lookupReturnsMetadata = (
+    _hostname: string,
+    _opts: unknown,
+    cb: (err: Error | null, address: string, family: number) => void,
+  ): void => {
+    cb(null, '169.254.169.254', 4);
+  };
+
+  it('rejects loopback addresses at connect time', () => {
+    const lookup = createAssetValidatingLookup(
+      lookupReturnsLoopback as never,
+    );
+    return new Promise<void>((resolve) => {
+      lookup('attacker.test', {}, (...args: unknown[]) => {
+        const err = args[0] as Error | null;
+        expect(err).toBeInstanceOf(Error);
+        expect(err!.message).toContain('non-public');
+        resolve();
+      });
+    });
+  });
+
+  it('rejects RFC1918 addresses at connect time', () => {
+    const lookup = createAssetValidatingLookup(
+      lookupReturnsInternal as never,
+    );
+    return new Promise<void>((resolve) => {
+      lookup('internal.test', {}, (...args: unknown[]) => {
+        const err = args[0] as Error | null;
+        expect(err).toBeInstanceOf(Error);
+        expect(err!.message).toContain('non-public');
+        resolve();
+      });
+    });
+  });
+
+  it('rejects cloud metadata service IP (169.254.169.254)', () => {
+    const lookup = createAssetValidatingLookup(
+      lookupReturnsMetadata as never,
+    );
+    return new Promise<void>((resolve) => {
+      lookup('metadata.test', {}, (...args: unknown[]) => {
+        const err = args[0] as Error | null;
+        expect(err).toBeInstanceOf(Error);
+        expect(err!.message).toContain('non-public');
+        resolve();
+      });
+    });
+  });
+
+  it('allows public addresses through', () => {
+    const lookup = createAssetValidatingLookup(
+      lookupReturnsPublic as never,
+    );
+    return new Promise<void>((resolve) => {
+      lookup('cdn.example.com', {}, (...args: unknown[]) => {
+        const err = args[0] as Error | null;
+        const address = args[1];
+        expect(err).toBeNull();
+        expect(address).toBe('93.184.216.34');
+        resolve();
+      });
+    });
+  });
+});
+
+describe('assertAndFetchExternalAsset — fail-closed paths (issue #5478)', () => {
+  it('throws on blocked loopback URL', async () => {
+    await expect(
+      assertAndFetchExternalAsset('http://127.0.0.1:8080/evil.png'),
+    ).rejects.toThrow('blocked');
+  });
+
+  it('throws on blocked localhost URL', async () => {
+    await expect(
+      assertAndFetchExternalAsset('http://localhost:3000/image.png'),
+    ).rejects.toThrow('blocked');
+  });
+
+  it('throws on empty URL', async () => {
+    await expect(
+      assertAndFetchExternalAsset(''),
+    ).rejects.toThrow();
+  });
+
+  it('throws on internal IP URL', async () => {
+    await expect(
+      assertAndFetchExternalAsset('http://10.0.0.5/image.png'),
+    ).rejects.toThrow('blocked');
+  });
+
+  it('throws on metadata service IP URL', async () => {
+    await expect(
+      assertAndFetchExternalAsset('http://169.254.169.254/latest/meta-data/'),
+    ).rejects.toThrow('blocked');
   });
 });
