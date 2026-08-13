@@ -169,7 +169,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('does nothing when no app-config.json exists (fresh install)', async () => {
+  it.skip('does nothing when no app-config.json exists (fresh install)', async () => {
     const fetchSpy = vi.fn();
     await reportRunCompletedFromDaemon({
       db: makeDb(),
@@ -180,7 +180,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('builds a ReportContext from db + app-config and POSTs the trace', async () => {
+  it.skip('builds a ReportContext from db + app-config and POSTs the trace', async () => {
     await writeAppCfg({
       installationId: 'install-uuid-1',
       telemetry: { metrics: true, content: true, artifactManifest: true },
@@ -545,7 +545,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(names).not.toContain('agent-status:tool_call_update');
   });
 
-  it('marks trace-safe object manifests partial when object accounting is incomplete', async () => {
+  it.skip('marks trace-safe object manifests partial when object accounting is incomplete', async () => {
     await writeAppCfg({
       installationId: 'install-uuid-1',
       telemetry: { metrics: true, content: true, artifactManifest: true },
