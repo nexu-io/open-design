@@ -176,6 +176,7 @@
         const dialog = document.querySelector('[role="dialog"]');
         const [to, subject, message] = dialog.querySelectorAll('input, textarea');
         assert(document.querySelector('.app-background').inert, 'Background is not inert while the dialog is open.');
+        assert(document.activeElement === to, 'Composer initial focus did not land on To.');
 
         await typeThroughCurrentFocus(to, 'recipient@example.com');
         await typeThroughCurrentFocus(message, 'Message body stays here');
@@ -183,7 +184,7 @@
         assert(subject.value === '', `Subject unexpectedly changed to "${subject.value}".`);
         assert(message.value === 'Message body stays here', `Message changed to "${message.value}".`);
         assert(document.activeElement === message, 'Message did not retain focus while typing.');
-        report('Composer fields retain focus and values', true);
+        report('Composer initially focuses To and fields retain focus and values', true);
 
         const send = dialog.querySelector('button[type="submit"]');
         send.focus();
