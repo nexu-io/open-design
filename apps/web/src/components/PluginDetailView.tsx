@@ -15,6 +15,7 @@ import type {
 } from '@open-design/contracts';
 import {
   applyPlugin,
+  pluginApplyFailed,
   resolvedWorkspaceContextForWrite,
 } from '../state/projects';
 import type { WorkspaceContextState } from '../collab/useWorkspaceContext';
@@ -303,8 +304,11 @@ export function PluginDetailView(props: Props) {
       workspaceContext: resolvedWorkspaceContextForWrite(workspaceContextState),
     });
     setApplying(false);
-    if (!result) {
-      setError({ kind: 'apply', message: '' });
+    if (!result || pluginApplyFailed(result)) {
+      setError({
+        kind: 'apply',
+        message: pluginApplyFailed(result) ? result.message : '',
+      });
       return;
     }
     // This surface is a route rendered outside `EntryShell`, so navigating home

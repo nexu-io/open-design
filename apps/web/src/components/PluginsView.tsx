@@ -57,6 +57,7 @@ import {
   installPluginSource,
   listPluginMarketplaces,
   listPlugins,
+  pluginApplyFailed,
   refreshPluginMarketplace,
   removePluginMarketplace,
   resolvedWorkspaceContextForWrite,
@@ -409,10 +410,12 @@ export function PluginsView({
       workspaceContext: pluginsContextRef.current,
     });
     setPendingApplyId(null);
-    if (!result) {
+    if (!result || pluginApplyFailed(result)) {
       setNotice({
         ok: false,
-        message: `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
+        message: pluginApplyFailed(result)
+          ? `Failed to apply ${record.title}: ${result.message}`
+          : `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
       });
       return;
     }

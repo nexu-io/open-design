@@ -14,6 +14,7 @@ import type {
 import {
   applyPlugin,
   listPlugins,
+  pluginApplyFailed,
   resolvedWorkspaceContextForWrite,
 } from '../state/projects';
 import { useProjectCollabContext } from '../collab/collab-context';
@@ -176,9 +177,11 @@ export function InlinePluginsRail(props: Props) {
     });
     if (workspaceIdentityRef.current !== issuedIdentity) return;
     setPendingId(null);
-    if (!result) {
+    if (!result || pluginApplyFailed(result)) {
       setError(
-        `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
+        pluginApplyFailed(result)
+          ? `Failed to apply ${record.title}: ${result.message}`
+          : `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
       );
       return;
     }

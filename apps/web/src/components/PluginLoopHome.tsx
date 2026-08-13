@@ -14,6 +14,7 @@ import {
   applyPlugin,
   duplicatePluginAsProject,
   listPlugins,
+  pluginApplyFailed,
   renderPluginBriefTemplate,
   resolvedWorkspaceContextForWrite,
   resolvePluginQueryFallback,
@@ -153,8 +154,12 @@ export function PluginLoopHome({ onSubmit }: Props) {
       workspaceContext: resolvedWorkspaceContextForWrite(workspaceContextState),
     });
     setPendingApplyId(null);
-    if (!result) {
-      setError(`Failed to apply ${record.title}. Make sure the daemon is reachable.`);
+    if (!result || pluginApplyFailed(result)) {
+      setError(
+        pluginApplyFailed(result)
+          ? `Failed to apply ${record.title}: ${result.message}`
+          : `Failed to apply ${record.title}. Make sure the daemon is reachable.`,
+      );
       return;
     }
     const inputs: Record<string, unknown> = {};

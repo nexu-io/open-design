@@ -37,6 +37,7 @@ import type {
 } from '@open-design/contracts';
 import {
   applyPlugin,
+  pluginApplyFailed,
   renderPluginBriefTemplate,
   resolvedWorkspaceContextForWrite,
 } from '../state/projects';
@@ -174,7 +175,7 @@ export const PluginsSection = forwardRef<PluginsSectionHandle, Props>(
             locale,
             workspaceContext,
           });
-          if (!result) return null;
+          if (!result || pluginApplyFailed(result)) return null;
           handleApplied(record, result);
           return result;
         },

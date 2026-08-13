@@ -2599,6 +2599,16 @@ export interface PluginMarketplaceMutationOutcome {
   message: string;
 }
 
+export type ApplyPluginOutcome =
+  | (ApplyResult & { ok?: true })
+  | { ok: false; message: string };
+
+export function pluginApplyFailed(
+  result: ApplyPluginOutcome | null,
+): result is { ok: false; message: string } {
+  return result !== null && result.ok === false;
+}
+
 export async function listPluginMarketplaces(): Promise<PluginMarketplace[]> {
   try {
     const resp = await fetch('/api/marketplaces');
@@ -2696,7 +2706,7 @@ export async function applyPlugin(
     pluginSource?: string;
     workspaceContext?: WorkspaceCollabContext | null;
   } = {},
-): Promise<ApplyResult | null> {
+): Promise<ApplyPluginOutcome | null> {
   try {
     const requestBody = JSON.stringify({
       ...(options.pluginSource ? { source: options.pluginSource } : {}),
@@ -2724,17 +2734,22 @@ export async function applyPlugin(
     // daemons still accept old ID-only clients through /apply; during the brief
     // new-Web/old-daemon upgrade window, omitting the plugin is safer than
     // silently substituting different local bytes.
-    if (!resp.ok) return null;
-    const json = (await resp.json()) as ApplyResult & { ok?: boolean };
+    if (!resp.ok) {
+      return { ok: false, message: await readErrorMessage(resp) };
+    }
+    const json = (await resp.json()) as ApplyPluginOutcome;
     return json;
-  } catch {
-    return null;
+  } catch (err) {
+    return {
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
 async function readErrorMessage(resp: Response): Promise<string> {
   try {
-    const json = (await resp.json()) as {
+    const json = (await resp.clone().json()) as {
       error?: string | { message?: string; data?: { errors?: unknown } };
       errors?: unknown;
       message?: string;
@@ -2748,6 +2763,12 @@ async function readErrorMessage(resp: Response): Promise<string> {
     );
     if (message && details.length > 0) return `${message}: ${details.join('; ')}`;
     if (message) return message;
+  } catch {
+    // Fall through to the text/status fallback below.
+  }
+  try {
+    const text = (await resp.text()).trim();
+    if (text) return text;
   } catch {
     // Fall through to the status text below.
   }

@@ -131,6 +131,10 @@ interface PluginShareTaskLike {
   waiters: Set<() => void>;
 }
 
+function logPluginApplyFailure(route: 'apply' | 'apply-local', pluginId: string, err: unknown): void {
+  console.error(`[plugins/${route}] failed to apply plugin ${pluginId}:`, err);
+}
+
 interface PluginRouteHelpers {
   PLUGIN_PREVIEWS_DIR: string;
   pluginUpload: {
@@ -662,6 +666,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       if (err instanceof plugins.MissingInputError) {
         return res.status(422).json({ error: 'missing_inputs', fields: err.fields });
       }
+      logPluginApplyFailure('apply-local', req.params.id, err);
       return res.status(500).json({ error: String(err) });
     }
   });
@@ -696,6 +701,7 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       if (err instanceof plugins.MissingInputError) {
         return res.status(422).json({ error: 'missing_inputs', fields: err.fields });
       }
+      logPluginApplyFailure('apply', req.params.id, err);
       res.status(500).json({ error: String(err) });
     }
   });

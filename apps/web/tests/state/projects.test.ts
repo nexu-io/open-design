@@ -464,7 +464,7 @@ describe('applyPlugin', () => {
 
     await expect(applyPlugin('bundled-plugin', {
       pluginSource: 'bundled:bundled-plugin',
-    })).resolves.toBeNull();
+    })).resolves.toEqual({ ok: false, message: 'not found' });
 
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
       '/api/plugins/bundled-plugin/apply-local',
@@ -480,7 +480,7 @@ describe('applyPlugin', () => {
 
     await expect(applyPlugin('shared-plugin-id', {
       pluginSource: 'team:plugin:workspace-a:shared-plugin-id',
-    })).resolves.toBeNull();
+    })).resolves.toEqual({ ok: false, message: 'plugin not found' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
