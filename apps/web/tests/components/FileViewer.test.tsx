@@ -9431,7 +9431,7 @@ describe('FileViewer tweaks toolbar', () => {
     expect(screen.queryByTestId('annotation-style-summary')).toBeNull();
   });
 
-  it('switches to the comment panel after saving an annotation comment', async () => {
+  it('keeps the comment panel closed after saving an annotation comment', async () => {
     function Harness() {
       const [comments, setComments] = useState<PreviewComment[]>([]);
       return (
@@ -9472,7 +9472,7 @@ describe('FileViewer tweaks toolbar', () => {
     render(<Harness />);
 
     const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
-    fireEvent.click(screen.getByTestId('comment-panel-toggle'));
+    clickAgentTool('board-mode-toggle');
 
     window.dispatchEvent(new MessageEvent('message', {
       source: frame.contentWindow,
@@ -9488,17 +9488,13 @@ describe('FileViewer tweaks toolbar', () => {
     }));
 
     const input = await screen.findByTestId('comment-popover-input');
-    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
     fireEvent.change(input, { target: { value: '加大字号' } });
     fireEvent.click(screen.getByTestId('comment-popover-save'));
 
     await waitFor(() => expect(screen.queryByTestId('comment-popover')).toBeNull());
-    expect(screen.getByTestId('comment-side-panel')).toBeTruthy();
-    expect(screen.getByTestId('comment-panel-toggle').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByText('加大字号')).toBeTruthy();
-    const activeItem = document.querySelector('[data-comment-id="comment-saved"]');
-    expect(activeItem?.className).toContain('active');
-    expect(activeItem?.getAttribute('aria-current')).toBe('true');
+    expect(screen.queryByTestId('comment-side-panel')).toBeNull();
+    expect(screen.getByText('Comment saved')).toBeTruthy();
   });
 
   it('keeps saved marker numbers stable after saving another comment', async () => {

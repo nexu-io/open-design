@@ -13400,8 +13400,6 @@ function HtmlViewer({
         setActiveCommentExistingAttachments(saved.attachments ?? []);
         setBoardMode(true);
         setCommentCreateMode(true);
-        setCommentPanelOpen(true);
-        setCommentSidePanelCollapsed(false);
         setActivePreviewCommentId(saved.id);
         setCommentSavedToast(isFreePin ? t('chat.comments.pinSavedToast') : t('chat.comments.savedToast'));
       }
