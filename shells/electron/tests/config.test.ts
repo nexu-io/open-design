@@ -9,6 +9,7 @@ import {
   resolvePackagedAmrProfile,
   resolvePackagedNamespaceBaseRoot,
   resolvePackagedStandaloneMetadataUrl,
+  resolvePackagedStandaloneReleaseVersion,
 } from '../src/config.js';
 
 describe('resolveDefaultPackagedNodeCommandRelative', () => {
@@ -67,5 +68,47 @@ describe('resolvePackagedStandaloneMetadataUrl', () => {
     expect(resolvePackagedStandaloneMetadataUrl('https://releases.example/beta/latest/metadata.json', {
       [PACKAGED_STANDALONE_METADATA_URL_ENV]: ' https://releases.example/beta/versions/0.19.0-beta.32/metadata.json ',
     })).toBe('https://releases.example/beta/versions/0.19.0-beta.32/metadata.json');
+  });
+});
+
+describe('resolvePackagedStandaloneReleaseVersion', () => {
+  it('keeps an explicitly pinned release without requesting metadata', async () => {
+    let requested = false;
+    const fetchImpl = (async () => {
+      requested = true;
+      throw new Error('unexpected request');
+    }) as typeof fetch;
+
+    await expect(resolvePackagedStandaloneReleaseVersion(
+      ' 0.19.1-beta.6 ',
+      'https://releases.example/beta/latest/metadata.json',
+      fetchImpl,
+    )).resolves.toBe('0.19.1-beta.6');
+    expect(requested).toBe(false);
+  });
+
+  it('resolves an unbound reusable Shell from public release metadata', async () => {
+    const fetchImpl = (async (input: string | URL | Request) => {
+      expect(String(input)).toBe('https://releases.example/beta/latest/metadata.json');
+      return new Response(JSON.stringify({ releaseVersion: '0.19.1-beta.7' }), { status: 200 });
+    }) as typeof fetch;
+
+    await expect(resolvePackagedStandaloneReleaseVersion(
+      null,
+      'https://releases.example/beta/latest/metadata.json',
+      fetchImpl,
+    )).resolves.toBe('0.19.1-beta.7');
+  });
+
+  it('fails closed when neither a pin nor usable metadata exists', async () => {
+    await expect(resolvePackagedStandaloneReleaseVersion(null, null)).rejects.toThrow(
+      'Standalone release version and metadata URL are unavailable',
+    );
+    const fetchImpl = (async () => new Response(JSON.stringify({ releaseVersion: 7 }), { status: 200 })) as typeof fetch;
+    await expect(resolvePackagedStandaloneReleaseVersion(
+      null,
+      'https://releases.example/beta/latest/metadata.json',
+      fetchImpl,
+    )).rejects.toThrow('Standalone release metadata does not declare releaseVersion');
   });
 });

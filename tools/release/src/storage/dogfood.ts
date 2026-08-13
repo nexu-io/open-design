@@ -10,7 +10,7 @@
  * dogfood upload writes is minted by `dogfoodObjectKey` and re-validated by
  * `assertDogfoodObjectKey` immediately before the PUT, so the only reachable
  * destinations are `dogfood/<version>/<build>/<file>`. Channel prefixes
- * (`beta/`, `prerelease/`, `preview/`, `stable/`), any `latest` pointer
+ * (`<exact>/`, `prerelease/`, `stable/`), any `latest` pointer
  * directory, and the electron-updater feed filenames are all unreachable — a
  * caller cannot express them, and a caller that hand-builds a key anyway is
  * rejected before any credential is used.

@@ -124,27 +124,30 @@ describe("writePackagedConfigFile", () => {
       await writePackagedConfigFile(filePath, makeConfig({ portable: true }), "1.2.3");
       const written = JSON.parse(await readFile(filePath, "utf8"));
       expect(written.namespace).toBe("test-namespace");
+      expect(written.launcherVersion).toBe("1.2.3");
       expect(written.shellVersion).toBe("1.2.3");
       expect(written).not.toHaveProperty("namespaceBaseRoot");
+      expect(written).not.toHaveProperty("releaseVersion");
     } finally {
       await rm(root, { force: true, recursive: true });
     }
   });
 
-  it("writes product, Shell, and launcher versions independently", async () => {
+  it("leaves portable Shell bytes release-independent", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-manifest-"));
     try {
       const filePath = join(root, "config", "open-design-config.json");
       await writePackagedConfigFile(filePath, makeConfig({
         launcherVersion: "1.2.3-beta.3",
+        portable: true,
         releaseVersion: "1.2.3-beta.2",
         shellVersion: "1.2.3-beta.1",
       }), "1.2.3-beta.1");
       expect(JSON.parse(await readFile(filePath, "utf8"))).toMatchObject({
-        launcherVersion: "1.2.3-beta.3",
-        releaseVersion: "1.2.3-beta.2",
+        launcherVersion: "1.2.3-beta.1",
         shellVersion: "1.2.3-beta.1",
       });
+      expect(JSON.parse(await readFile(filePath, "utf8"))).not.toHaveProperty("releaseVersion");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

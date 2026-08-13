@@ -9,20 +9,13 @@ cli
   .action(async (channel: string) => {
     const { releaseChannelProfile } = await import("./channel/profiles.ts");
     const profile = releaseChannelProfile(channel);
-    if (profile.channel === "beta") {
-      await import("./metadata/prepare-beta.ts");
-      return;
-    }
-    if (profile.channel === "preview") {
-      await import("./metadata/prepare-preview.ts");
-      return;
-    }
     if (profile.channel === "prerelease" || profile.channel === "stable") {
       process.env.OPEN_DESIGN_RELEASE_CHANNEL = profile.channel;
       await import("./metadata/prepare-stable.ts");
       return;
     }
-    throw new Error(`unsupported prepare channel: ${profile.channel}`);
+    process.env.RELEASE_CHANNEL = profile.channel;
+    await import("./metadata/prepare-exact.ts");
   });
 
 cli
@@ -36,7 +29,7 @@ cli
   .command("reserve-version <channel>", "Reserve a counted release version")
   .action(async (channel: string) => {
     process.env.RELEASE_CHANNEL = channel;
-    await import("./storage/reserve-beta-version.ts");
+    await import("./storage/reserve-version.ts");
   });
 
 cli
@@ -154,9 +147,8 @@ cli
     sourceBlobDir?: string;
     target?: string;
   }) => {
-    if (options.channel !== "beta" && options.channel !== "preview" && options.channel !== "prerelease" && options.channel !== "stable") {
-      throw new Error("prepare-closure-seed requires a supported --channel");
-    }
+    const { releaseChannelDescriptor } = await import("@open-design/release");
+    const channel = releaseChannelDescriptor(options.channel ?? "").channel;
     if (options.manifest == null || options.output == null || options.releaseVersion == null || options.target == null) {
       throw new Error("prepare-closure-seed requires --manifest, --output, --release-version, and --target");
     }
@@ -165,7 +157,7 @@ cli
     }
     const { prepareClosureSeed } = await import("./storage/prepare-closure-seed.ts");
     const result = await prepareClosureSeed({
-      channel: options.channel,
+      channel,
       manifestPath: options.manifest,
       mode: options.mode ?? "metadata",
       outputRoot: options.output,

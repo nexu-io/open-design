@@ -246,10 +246,11 @@ describe("copyMacPrebundleRuntimeDependencies", () => {
 });
 
 describe("renderMacPackagedConfig", () => {
-  it("writes product, Shell, and launcher versions independently", () => {
+  it("leaves portable Shell bytes release-independent", () => {
     const packagedConfig = JSON.parse(renderMacPackagedConfig({
       config: makeConfig("/work", {
         launcherVersion: "1.2.3-beta.3",
+        portable: true,
         releaseVersion: "1.2.3-beta.2",
         shellVersion: "1.2.3-beta.1",
       }),
@@ -258,10 +259,23 @@ describe("renderMacPackagedConfig", () => {
     })) as Record<string, unknown>;
 
     expect(packagedConfig).toMatchObject({
-      launcherVersion: "1.2.3-beta.3",
-      releaseVersion: "1.2.3-beta.2",
+      launcherVersion: "1.2.3-beta.1",
       shellVersion: "1.2.3-beta.1",
     });
+    expect(packagedConfig).not.toHaveProperty("releaseVersion");
+  });
+
+  it("keeps an explicit release pin for non-portable local packages", () => {
+    const packagedConfig = JSON.parse(renderMacPackagedConfig({
+      config: makeConfig("/work", {
+        releaseVersion: "1.2.3-beta.2",
+        shellVersion: "1.2.3-beta.1",
+      }),
+      shellVersion: "1.2.3-beta.1",
+      usePrebundledStandaloneWeb: true,
+    })) as Record<string, unknown>;
+
+    expect(packagedConfig.releaseVersion).toBe("1.2.3-beta.2");
   });
 
   it("omits nodeCommandRelative so packaged mac uses the fossil Shell Node path", async () => {

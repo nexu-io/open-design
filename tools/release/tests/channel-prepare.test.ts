@@ -173,7 +173,7 @@ async function readPackagedVersion(): Promise<string> {
 }
 
 function countedMetadata(
-  channel: "beta" | "prerelease" | "preview",
+  channel: string,
   releaseVersion: string,
   releaseNumber: number,
   baseVersion = "0.10.0",
@@ -303,12 +303,12 @@ function stableQualification(metadata: Record<string, unknown>, publicOrigin: st
 }
 
 describe("tools-release local channel prepare validation", () => {
-  it("prepares beta, preview, and prerelease from local metadata fixtures", async () => {
+  it("prepares beta, a custom exact name, and prerelease from local metadata fixtures", async () => {
     const packagedVersion = await readPackagedVersion();
     const objects: Record<string, unknown> = {
       "beta/latest/metadata.json": countedMetadata("beta", "0.10.0-beta.2", 2),
       "prerelease/latest/metadata.json": countedMetadata("prerelease", "0.10.1-prerelease.2", 2, "0.10.1"),
-      "preview/latest/metadata.json": countedMetadata("preview", "0.10.0-preview.2", 2),
+      "qa2/latest/metadata.json": countedMetadata("qa2", "0.10.0-qa2.2", 2),
       "stable/latest/metadata.json": {
         baseVersion: "0.9.0",
         channel: "stable",
@@ -335,22 +335,20 @@ describe("tools-release local channel prepare validation", () => {
       const beta = await runPrepare("beta", {
         ...commonEnv,
         GITHUB_REF_NAME: "main",
-        OPEN_DESIGN_BETA_METADATA_URL: `${server.origin}/beta/latest/metadata.json`,
+        OPEN_DESIGN_EXACT_METADATA_URL: `${server.origin}/beta/latest/metadata.json`,
       });
-      expect(beta.stdout).toContain("[release-beta] channel: beta");
+      expect(beta.stdout).toContain("[release-exact] name: beta");
       expect(beta.outputs.release_version).toBe(`${packagedVersion}-beta.1`);
       expect(beta.outputs.release_number).toBe("1");
-      expect(beta.outputs.beta_version).toBe(`${packagedVersion}-beta.1`);
 
-      const preview = await runPrepare("preview", {
+      const exact = await runPrepare("qa2", {
         ...commonEnv,
         GITHUB_REF_NAME: "main",
-        OPEN_DESIGN_PREVIEW_METADATA_URL: `${server.origin}/preview/latest/metadata.json`,
-        OPEN_DESIGN_PREVIEW_VERSION: packagedVersion,
+        OPEN_DESIGN_EXACT_METADATA_URL: `${server.origin}/qa2/latest/metadata.json`,
       });
-      expect(preview.stdout).toContain("[release-preview] channel: preview");
-      expect(preview.outputs.release_version).toBe(`${packagedVersion}-preview.1`);
-      expect(preview.outputs.release_number).toBe("1");
+      expect(exact.stdout).toContain("[release-exact] name: qa2");
+      expect(exact.outputs.release_version).toBe(`${packagedVersion}-qa2.1`);
+      expect(exact.outputs.release_number).toBe("1");
 
       const prerelease = await runPrepare("prerelease", {
         ...commonEnv,
@@ -367,8 +365,7 @@ describe("tools-release local channel prepare validation", () => {
     }
   });
 
-  it("allows beta force to bypass stable and beta base version ordering checks", async () => {
-    const packagedVersion = await readPackagedVersion();
+  it("does not let force bypass exact release ordering checks", async () => {
     const objects: Record<string, unknown> = {
       "beta/latest/metadata.json": countedMetadata("beta", "99.0.0-beta.7", 7, "99.0.0"),
       "stable/latest/metadata.json": {
@@ -381,60 +378,55 @@ describe("tools-release local channel prepare validation", () => {
     const server = await startMetadataServer(objects);
 
     try {
-      const beta = await runPrepare("beta", {
+      await expect(runPrepare("beta", {
         GITHUB_REF_NAME: "main",
         GITHUB_REPOSITORY: "nexu-io/open-design",
         GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
-        OPEN_DESIGN_BETA_METADATA_URL: `${server.origin}/beta/latest/metadata.json`,
+        OPEN_DESIGN_EXACT_METADATA_URL: `${server.origin}/beta/latest/metadata.json`,
         OPEN_DESIGN_RELEASE_FORCE: "1",
         OPEN_DESIGN_STABLE_METADATA_URL: `${server.origin}/stable/latest/metadata.json`,
-      });
-
-      expect(beta.stdout).toContain("[release-beta] force: true");
-      expect(beta.outputs.force).toBe("true");
-      expect(beta.outputs.release_version).toBe(`${packagedVersion}-beta.1`);
-      expect(beta.outputs.release_number).toBe("1");
+      })).rejects.toThrow(/must be strictly greater than latest stable 99\.0\.0/);
     } finally {
       await server.close();
     }
   });
 
-  it("prepares preview from the packaged version when branch and explicit version are absent", async () => {
+  it("prepares a custom exact release from the packaged version", async () => {
     const packagedVersion = await readPackagedVersion();
     const objects: Record<string, unknown> = {
-      "preview/latest/metadata.json": countedMetadata("preview", "0.10.0-preview.2", 2),
+      "qa2/latest/metadata.json": countedMetadata("qa2", "0.10.0-qa2.2", 2),
     };
     const server = await startMetadataServer(objects);
 
     try {
-      const preview = await runPrepare("preview", {
+      const exact = await runPrepare("qa2", {
         GITHUB_REF_NAME: "main",
         GITHUB_REPOSITORY: "nexu-io/open-design",
         GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
-        OPEN_DESIGN_PREVIEW_METADATA_URL: `${server.origin}/preview/latest/metadata.json`,
+        OPEN_DESIGN_EXACT_METADATA_URL: `${server.origin}/qa2/latest/metadata.json`,
         ...(await createHermeticTagRepoEnv(["open-design-v0.10.0"])),
       });
 
-      expect(preview.stdout).toContain(`[release-preview] base version: ${packagedVersion}`);
-      expect(preview.outputs.release_version).toBe(`${packagedVersion}-preview.1`);
+      expect(exact.stdout).toContain(`[release-exact] base version: ${packagedVersion}`);
+      expect(exact.outputs.release_version).toBe(`${packagedVersion}-qa2.1`);
     } finally {
       await server.close();
     }
   });
 
-  it("rejects a preview prepare whose packaged version does not clear the latest stable tag", async () => {
+  it("rejects an exact prepare whose packaged version does not clear the latest stable tag", async () => {
     const objects: Record<string, unknown> = {
-      "preview/latest/metadata.json": countedMetadata("preview", "0.10.0-preview.2", 2),
+      "qa2/latest/metadata.json": countedMetadata("qa2", "0.10.0-qa2.2", 2),
     };
     const server = await startMetadataServer(objects);
 
     try {
       await expect(
-        runPrepare("preview", {
+        runPrepare("qa2", {
           GITHUB_REF_NAME: "main",
           GITHUB_REPOSITORY: "nexu-io/open-design",
           GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
-          OPEN_DESIGN_PREVIEW_METADATA_URL: `${server.origin}/preview/latest/metadata.json`,
+          OPEN_DESIGN_EXACT_METADATA_URL: `${server.origin}/qa2/latest/metadata.json`,
           ...(await createHermeticTagRepoEnv(["open-design-v99.0.0"])),
         }),
       ).rejects.toThrow(/must be strictly greater than latest stable 99\.0\.0/);

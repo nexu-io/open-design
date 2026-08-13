@@ -154,7 +154,7 @@ concurrency:
 jobs:
   distribute:
     name: Distribute prerelease release
-    uses: ./.github/workflows/distribution.yml
+    uses: ./.github/workflows/distribution-counted.yml
     secrets: inherit
     with:
       channel: prerelease

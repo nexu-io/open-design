@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 function runReservationCheck(options: { releaseRunId?: string }): Promise<string> {
   const repoRoot = resolve(import.meta.dirname, "../../..");
   const script = `
-    const { validateVersionReservation } = await import("./tools/release/src/storage/beta-version-reservation.ts");
+    const { validateVersionReservation } = await import("./tools/release/src/storage/counted-version-reservation.ts");
     const reservation = {
       baseVersion: "1.2.3",
       channel: "beta",

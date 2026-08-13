@@ -92,7 +92,7 @@ function nextHyphenPrerelease(version: string, label: string): string {
     throw new Error(`unsupported counted release channel: ${label}`);
   }
   const parsed = parseReleaseVersion(version, label);
-  if (parsed.channel === 'stable') {
+  if (!("number" in parsed)) {
     throw new Error(`${label} release version must be x.y.z-${label}.N; got ${version}`);
   }
   return formatReleaseVersion(label, parsed.baseVersion, parsed.number + 1);

@@ -70,8 +70,8 @@ const bakePreviewsReleaseWorkflowPath = join(
 );
 const finalizeReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "finalize-release.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
-const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
-const distributionBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "distribution-beta.yml");
+const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-exact.yml");
+const distributionBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "distribution-exact.yml");
 const betaMacDistributionActionPath = join(
   workspaceRoot,
   ".github",
@@ -79,7 +79,7 @@ const betaMacDistributionActionPath = join(
   "release",
   "platform",
   "mac",
-  "beta",
+  "exact",
   "action.yml",
 );
 const betaWinDistributionActionPath = join(
@@ -89,7 +89,7 @@ const betaWinDistributionActionPath = join(
   "release",
   "platform",
   "win",
-  "beta",
+  "exact",
   "action.yml",
 );
 const macDistributionActionPath = join(
@@ -111,10 +111,8 @@ const winDistributionActionPath = join(
   "action.yml",
 );
 const packagedMacSpecPath = join(e2eRoot, "specs", "mac.spec.ts");
-const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releasePrereleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease.yml");
 const distributionCountedWorkflowPath = join(workspaceRoot, ".github", "workflows", "distribution-counted.yml");
-const distributionPreviewWorkflowPath = distributionCountedWorkflowPath;
 const distributionPrereleaseWorkflowPath = distributionCountedWorkflowPath;
 const mainPrereleaseWinSmokeWorkflowPath = join(
   workspaceRoot,
@@ -125,9 +123,8 @@ const mainPrereleaseWinSmokeWorkflowPath = join(
 const releaseStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-stable.yml");
 const distributionStableWorkflowPath = join(workspaceRoot, ".github", "workflows", "distribution-stable.yml");
 const releaseStableNotesScriptPath = join(workspaceRoot, ".github", "scripts", "release", "github", "stable-notes.sh");
-const releasePreviewScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-preview.ts");
 const releaseStableScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-stable.ts");
-const releaseBetaScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-beta.ts");
+const releaseBetaScriptPath = join(workspaceRoot, "tools", "release", "src", "metadata", "prepare-exact.ts");
 const shellPackageJsonPath = join(workspaceRoot, "shells", "electron", "package.json");
 const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
 const runnersScriptPath = join(workspaceRoot, ".github", "scripts", "runners.py");
@@ -172,11 +169,14 @@ const releaseLatestPublicationScriptPath = join(
 );
 
 async function readReleaseWorkflow(ritualPath: string, distributionPath: string): Promise<string> {
-  const [ritual, distribution] = await Promise.all([
+  const [ritual, distribution, acceptance] = await Promise.all([
     readFile(ritualPath, "utf8"),
     readFile(distributionPath, "utf8"),
+    distributionPath === distributionBetaWorkflowPath
+      ? readFile(join(workspaceRoot, ".github", "workflows", "distribution-exact-accept.yml"), "utf8")
+      : Promise.resolve(""),
   ]);
-  return `${ritual}\n${distribution}`;
+  return `${ritual}\n${distribution}\n${acceptance}`;
 }
 
 function workflowFixtureEnv(
@@ -1820,7 +1820,6 @@ process.stdin.on("end", () => {
   it("[P0] preserves the permission ceiling required by the shared release dispatcher", async () => {
     const entryWorkflows = await Promise.all([
       releaseBetaWorkflowPath,
-      releasePreviewWorkflowPath,
       releasePrereleaseWorkflowPath,
       releaseStableWorkflowPath,
     ].map(async (path) => await readFile(path, "utf8")));
@@ -1842,7 +1841,6 @@ process.stdin.on("end", () => {
     const [
       releaseStableWorkflow,
       releaseStableScript,
-      releasePreviewWorkflow,
       releasePrereleaseWorkflow,
       releaseBetaWorkflow,
       macAction,
@@ -1852,7 +1850,6 @@ process.stdin.on("end", () => {
     ] = await Promise.all([
       readReleaseWorkflow(releaseStableWorkflowPath, distributionStableWorkflowPath),
       readFile(releaseStableScriptPath, "utf8"),
-      readReleaseWorkflow(releasePreviewWorkflowPath, distributionPreviewWorkflowPath),
       readReleaseWorkflow(releasePrereleaseWorkflowPath, distributionPrereleaseWorkflowPath),
       readReleaseWorkflow(releaseBetaWorkflowPath, distributionBetaWorkflowPath),
       readFile(macDistributionActionPath, "utf8"),
@@ -1874,10 +1871,7 @@ process.stdin.on("end", () => {
     expect(winAction).toContain("OD_PACKAGED_E2E_NAMESPACE: ${{ inputs.namespace }}");
     expect(releaseStableWorkflow).not.toMatch(/--namespace release-stable(?:-intel|-win)?\b/);
 
-    for (const [channel, workflow] of [
-      ["preview", releasePreviewWorkflow],
-      ["prerelease", releasePrereleaseWorkflow],
-    ] as const) {
+    for (const [channel, workflow] of [["prerelease", releasePrereleaseWorkflow]] as const) {
       expect(workflow).toContain(`channel: ${channel}`);
       expect(workflow).toContain("namespace: release-${{ inputs.channel }}");
       expect(workflow).toContain("namespace: release-${{ inputs.channel }}-intel");
@@ -1886,16 +1880,14 @@ process.stdin.on("end", () => {
 
     const betaDispatch = sectionBetween(releaseBetaWorkflow, "  workflow_dispatch:", "  workflow_call:");
     expect([...betaDispatch.matchAll(/^      [a-z0-9_]+:$/gmu)].length).toBeLessThanOrEqual(25);
-    expect(releaseBetaWorkflow).toContain("namespace: release-beta");
-    expect(releaseBetaWorkflow).toContain("namespace: release-beta-x64");
+    expect(releaseBetaWorkflow).toContain("namespace: ${{ matrix.target == 'mac_arm64' && format('release-{0}', inputs.exact_name) || format('release-{0}-x64', inputs.exact_name) }}");
     expect(betaMacAction).toContain("RELEASE_NAMESPACE: ${{ inputs.namespace }}");
     expect(betaMacAction).toContain("RELEASE_TARGET: ${{ inputs.target }}");
     expect(betaMacAction).not.toMatch(/^\s+description:.*\$\{\{/mu);
-    expect(betaWinAction).toContain("RELEASE_NAMESPACE: release-beta-win");
+    expect(betaWinAction).toContain("RELEASE_NAMESPACE: release-${{ inputs.channel }}-win");
     expect(betaWinAction).toContain("RELEASE_TARGET: win_x64");
 
-    expect(releaseBetaWorkflow).toContain("shell-smoke-matrix: mac-shell-v3");
-    expect(releaseBetaWorkflow).toContain("shell-smoke-matrix: mac-shell-v2");
+    expect(releaseBetaWorkflow).toContain("shell-smoke-matrix: ${{ matrix.target == 'mac_arm64' && 'mac-shell-v3' || 'mac-shell-v2' }}");
     expect(betaMacAction).toContain("Resolve ${{ inputs.target }} Shell smoke acceptance identity");
     expect(betaMacAction).toContain("RELEASE_STANDALONE_PROTOCOL_VERSION: \"1\"");
     expect(betaMacAction).toContain("Register ${{ inputs.target }} Electron Shell full-smoke proof");
@@ -1903,7 +1895,6 @@ process.stdin.on("end", () => {
     expect(betaWinAction).toContain("Register win_x64 Electron Shell full-smoke proof");
 
     expectWindowsUpdaterSmokeContract(`${releaseBetaWorkflow}\n${betaWinAction}`, "beta");
-    expectWindowsUpdaterSmokeContract(`${releasePreviewWorkflow}\n${winAction}`, "preview");
     expectWindowsUpdaterSmokeContract(`${releasePrereleaseWorkflow}\n${winAction}`, "prerelease");
     expectWindowsUpdaterSmokeContract(`${releaseStableWorkflow}\n${winAction}`, "stable");
   });
@@ -1937,21 +1928,13 @@ process.stdin.on("end", () => {
     }
   });
 
-  it("[P2] keeps counted release workflow calls on a consistent ref and output contract", async () => {
-    const [previewWorkflow, prereleaseWorkflow, previewScript] = await Promise.all([
-      readReleaseWorkflow(releasePreviewWorkflowPath, distributionPreviewWorkflowPath),
-      readReleaseWorkflow(releasePrereleaseWorkflowPath, distributionPrereleaseWorkflowPath),
-      readFile(releasePreviewScriptPath, "utf8"),
-    ]);
+  it("[P2] keeps the prerelease workflow call on a consistent ref and output contract", async () => {
+    const prereleaseWorkflow = await readReleaseWorkflow(
+      releasePrereleaseWorkflowPath,
+      distributionPrereleaseWorkflowPath,
+    );
 
-    expectCountedReleaseWorkflowCallContract(previewWorkflow, "preview");
     expectCountedReleaseWorkflowCallContract(prereleaseWorkflow, "prerelease");
-
-    expect(previewWorkflow).toContain("OPEN_DESIGN_PREVIEW_VERSION: ${{ inputs.release_version }}");
-    expect(previewWorkflow).toContain("Empty uses preview/vX.Y.Z when present, otherwise shells/electron/package.json.");
-    expect(previewScript).toContain("function resolvePreviewBaseVersion");
-    expect(previewScript).toContain('source: "shells/electron/package.json"');
-    expect(previewScript).not.toContain("release-preview can only run from preview/vX.Y.Z branches");
 
     expect(prereleaseWorkflow).toContain("OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}");
     expect(prereleaseWorkflow).toContain("Required when ref is not release/vX.Y.Z");
@@ -1964,9 +1947,9 @@ process.stdin.on("end", () => {
       readFile(betaWinDistributionActionPath, "utf8"),
     ]);
 
-    expect(workflow).toContain('dogfood-enabled: "true"');
+    expect(workflow).toContain("dogfood-enabled: ${{ matrix.target == 'mac_arm64' && 'true' || 'false' }}");
     expect(workflow).toContain("publish: ${{ inputs.publish }}");
-    expect(workflow).toContain("workflow_publish: ${{ inputs.publish }}");
+    expect(workflow).toContain("publish: ${{ inputs.publish }}");
 
     const macDogfood = sectionBetween(
       macAction,
@@ -1988,15 +1971,14 @@ process.stdin.on("end", () => {
       }
     }
     expect(macDogfood).toContain("inputs.publish != 'true'");
-    expect(winDogfood).toContain("inputs.workflow_publish != 'true'");
+    expect(winDogfood).toContain("inputs.publish != 'true'");
     expect(workflow).not.toContain("open-design-beta-mac-arm64-dmg");
     expect(workflow).not.toContain("open-design-beta-win-x64-installer");
   });
   it("[P2] publishes release notes through one channel-neutral tools-release pipeline", async () => {
-    const [betaWorkflow, prereleaseWorkflow, previewWorkflow, stableWorkflow, countedDistribution, metadataDistribution] = await Promise.all([
+    const [betaWorkflow, prereleaseWorkflow, stableWorkflow, countedDistribution, metadataDistribution] = await Promise.all([
       readReleaseWorkflow(releaseBetaWorkflowPath, distributionBetaWorkflowPath),
       readReleaseWorkflow(releasePrereleaseWorkflowPath, distributionPrereleaseWorkflowPath),
-      readReleaseWorkflow(releasePreviewWorkflowPath, distributionPreviewWorkflowPath),
       readReleaseWorkflow(releaseStableWorkflowPath, distributionStableWorkflowPath),
       readFile(join(workspaceRoot, ".github", "actions", "release", "publish-counted", "action.yml"), "utf8"),
       readFile(join(workspaceRoot, ".github", "actions", "release", "publish-metadata", "action.yml"), "utf8"),
@@ -2015,9 +1997,7 @@ process.stdin.on("end", () => {
     expect(metadataDistribution.indexOf("tools-release verify-release-note")).toBeLessThan(
       metadataDistribution.indexOf("tools-release publish-metadata"),
     );
-    for (const workflow of [previewWorkflow, prereleaseWorkflow]) {
-      expect(workflow).toContain("uses: ./.github/actions/release/publish-counted");
-    }
+    expect(prereleaseWorkflow).toContain("uses: ./.github/actions/release/publish-counted");
 
     expect(stableWorkflow).toContain("Validate stable release note policy");
     expect(stableWorkflow).toContain(
@@ -2094,15 +2074,16 @@ process.stdin.on("end", () => {
           GITHUB_REF_NAME: "main",
           GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
           NODE_TLS_REJECT_UNAUTHORIZED: "0",
-          OPEN_DESIGN_BETA_METADATA_URL: `${fixture.origin}/beta/latest/metadata.json`,
+          OPEN_DESIGN_EXACT_METADATA_URL: `${fixture.origin}/beta/latest/metadata.json`,
           OPEN_DESIGN_STABLE_METADATA_URL: `${fixture.origin}/stable/latest/metadata.json`,
+          RELEASE_CHANNEL: "beta",
         },
         maxBuffer: 1024 * 1024,
       });
 
-      expect(result.stdout).toContain(`[release-beta] beta version: ${packagedVersion}-beta.5`);
+      expect(result.stdout).toContain(`[release-exact] version: ${packagedVersion}-beta.5`);
       const outputs = await readFile(outputPath, "utf8");
-      expect(outputs).toContain(`beta_version=${packagedVersion}-beta.5`);
+      expect(outputs).toContain(`release_version=${packagedVersion}-beta.5`);
     } finally {
       await fixture.close();
       await rm(runnerTemp, { force: true, recursive: true });
@@ -2116,11 +2097,11 @@ process.stdin.on("end", () => {
       readFile(betaMacDistributionActionPath, "utf8"),
       readFile(betaWinDistributionActionPath, "utf8"),
     ]);
-    const metadataJob = sectionBetween(betaWorkflow, "  metadata:", "  build_mac_arm64:");
+    const metadataJob = sectionBetween(betaWorkflow, "  metadata:", "  build:");
     const publisherGuard = sectionBetween(
       metadataJob,
-      "- name: Validate exact beta publisher ref",
-      "- name: Capture previous beta commit",
+      "- name: Validate exact publisher inputs and ref",
+      "- name: Capture previous exact commit",
     );
 
     expect(betaWorkflow).toContain(
@@ -2141,40 +2122,53 @@ process.stdin.on("end", () => {
     const manualDispatch = sectionBetween(betaWorkflow, "  workflow_dispatch:", "  workflow_call:");
     expect(manualDispatch).toContain("      promote:");
     expect(manualDispatch).toContain("        default: true");
-    expect(betaWorkflow).toContain("value: ${{ jobs.build_mac_arm64.outputs.smoke_result }}");
-    expect(betaWorkflow).toContain("value: ${{ jobs.build_win_x64.outputs.smoke_result }}");
-    expect(betaWorkflow).toContain(
-      "value: ${{ jobs.publish.outputs.mac_arm64_url || jobs.build_mac_arm64.outputs.mac_arm64_url }}",
-    );
-    expect(betaWorkflow).toContain(
-      "value: ${{ jobs.publish.outputs.win_x64_url || jobs.build_win_x64.outputs.win_x64_url }}",
-    );
+    expect(betaWorkflow).toContain("value: ${{ jobs.stage.outputs.mac_arm64_smoke_result }}");
+    expect(betaWorkflow).toContain("value: ${{ jobs.stage.outputs.win_x64_smoke_result }}");
+    expect(betaWorkflow).toContain("value: ${{ jobs.stage.outputs.mac_arm64_url }}");
+    expect(betaWorkflow).toContain("value: ${{ jobs.stage.outputs.win_x64_url }}");
 
-    const macJob = sectionBetween(betaWorkflow, "  build_mac_arm64:", "  build_mac_x64:");
-    expect(macJob).toContain("smoke_result: ${{ steps.platform.outputs.smoke_result }}");
-    expect(macJob).toContain("mac_arm64_url: ${{ steps.platform.outputs.dmg_url }}");
+    const buildJob = sectionBetween(betaWorkflow, "  build:", "  stage:");
+    expect(buildJob).toContain("matrix: ${{ fromJSON(needs.metadata.outputs.build_matrix) }}");
+    expect(buildJob).toContain("id: mac");
+    expect(buildJob).toContain("id: win");
+    expect(buildJob).toContain("open-design-${{ inputs.exact_name }}-${{ matrix.target }}-build-result");
     expect(betaMacAction).toContain("value: ${{ steps.smoke.outcome }}");
     expect(betaMacAction).toContain("value: ${{ steps.platform_outputs.outputs.dmg_url }}");
     expect(betaMacAction).toContain("id: smoke");
     expect(betaMacAction).toContain("continue-on-error: true");
     expect(betaMacAction).toContain("id: platform_outputs");
 
-    const winJob = sectionBetween(betaWorkflow, "  build_win_x64:", "  publish:");
-    expect(winJob).toContain("smoke_result: ${{ steps.platform.outputs.smoke_result }}");
-    expect(winJob).toContain("win_x64_url: ${{ steps.platform.outputs.win_x64_url }}");
     expect(betaWinAction).toContain("value: ${{ steps.win_x64_smoke.outcome }}");
     expect(betaWinAction).toContain("value: ${{ steps.win_x64_platform_outputs.outputs.installer_url }}");
     expect(betaWinAction).toContain("id: win_x64_smoke");
     expect(betaWinAction).toContain("continue-on-error: true");
     expect(betaWinAction).toContain("id: win_x64_platform_outputs");
 
-    const publishJob = betaWorkflow.slice(betaWorkflow.indexOf("  publish:"));
-    expect(publishJob).toContain("inputs.promote");
+    const stageJob = betaWorkflow.slice(betaWorkflow.indexOf("  stage:"));
+    expect(stageJob).toContain("inputs.promote");
     expect(dailyWorkflow).toContain("enable_mac_x64: true");
     expect(dailyWorkflow).toContain("notification_stream: daily");
     expect(dailyWorkflow).not.toContain("force:");
     expect(dailyWorkflow).not.toContain("release_version:");
     expect(dailyWorkflow).not.toContain("tools/release/src/notifications/");
+  });
+
+  it("[P1] routes release entries directly to their channel distributions", async () => {
+    const [exact, prerelease, stable] = await Promise.all([
+      readFile(releaseBetaWorkflowPath, "utf8"),
+      readFile(releasePrereleaseWorkflowPath, "utf8"),
+      readFile(releaseStableWorkflowPath, "utf8"),
+    ]);
+
+    expect(exact).toContain("uses: ./.github/workflows/distribution-exact.yml");
+    expect(prerelease).toContain("uses: ./.github/workflows/distribution-counted.yml");
+    expect(stable).toContain("uses: ./.github/workflows/distribution-stable.yml");
+    for (const workflow of [exact, prerelease, stable]) {
+      expect(workflow).not.toContain("uses: ./.github/workflows/distribution.yml");
+    }
+    expect(existsSync(join(workspaceRoot, ".github", "workflows", "distribution.yml"))).toBe(false);
+    expect(existsSync(join(workspaceRoot, ".github", "workflows", "release-preview.yml"))).toBe(false);
+    expect(existsSync(join(workspaceRoot, ".github", "workflows", "release-beta.yml"))).toBe(false);
   });
 
   it("[P2] daily beta resolve defaults to main and preserves the ref override", async () => {
@@ -2207,18 +2201,16 @@ process.stdin.on("end", () => {
   });
 
   it("[P1] gives every release channel one explicit non-gating Feishu terminal report", async () => {
-    const [notifyCapability, beta, preview, prerelease, stable, daily, releaseBranch] = await Promise.all([
+    const [notifyCapability, exact, prerelease, stable, daily, releaseBranch] = await Promise.all([
       readFile(releaseNotifyWorkflowPath, "utf8"),
       readFile(releaseBetaWorkflowPath, "utf8"),
-      readFile(releasePreviewWorkflowPath, "utf8"),
       readFile(releasePrereleaseWorkflowPath, "utf8"),
       readFile(releaseStableWorkflowPath, "utf8"),
       readFile(notifyDailyFeishuWorkflowPath, "utf8"),
       readFile(notifyReleaseFeishuWorkflowPath, "utf8"),
     ]);
     const entries = [
-      ["beta", beta, "RELEASE_FEISHU_BETA"],
-      ["preview", preview, "RELEASE_FEISHU_PREVIEW"],
+      ["exact", exact, "RELEASE_FEISHU_EXACT"],
       ["prerelease", prerelease, "RELEASE_FEISHU_PRERELEASE"],
       ["stable", stable, "RELEASE_FEISHU_STABLE"],
     ] as const;
@@ -2226,8 +2218,8 @@ process.stdin.on("end", () => {
       const notifyJob = workflow.slice(workflow.indexOf("  notify:"));
       expect(notifyJob, channel).toContain("uses: ./.github/workflows/release-notify.yml");
       expect(notifyJob, channel).toContain("if: ${{ always() && !cancelled() }}");
-      expect(notifyJob, channel).toContain(`channel: ${channel}`);
-      expect(notifyJob, channel).toContain(`bot: \${{ secrets.${secret} }}`);
+      expect(notifyJob, channel).toContain(channel === "exact" ? "channel: ${{ inputs.exact_name }}" : `channel: ${channel}`);
+      expect(notifyJob, channel).toContain(`secrets.${secret}`);
       for (const [, , otherSecret] of entries) {
         if (otherSecret !== secret) expect(notifyJob, channel).not.toContain(otherSecret);
       }
@@ -2246,7 +2238,7 @@ process.stdin.on("end", () => {
     const [mac, win, distribution] = await Promise.all([
       readFile(packagedMacSpecPath, "utf8"),
       readFile(join(e2eRoot, "specs", "win.spec.ts"), "utf8"),
-      readFile(distributionBetaWorkflowPath, "utf8"),
+      readFile(join(workspaceRoot, ".github", "workflows", "distribution-exact-accept.yml"), "utf8"),
     ]);
     for (const [platform, spec] of [["mac", mac], ["win", win]] as const) {
       expect(spec, platform).toContain("readPackagedClosureBinding");
@@ -2763,11 +2755,9 @@ process.stdin.on("end", () => {
       readFile(betaWinDistributionActionPath, "utf8"),
       readFile(join(workspaceRoot, ".github", "actions", "release", "closure", "shared", "action.yml"), "utf8"),
     ]);
-    const sharedJob = sectionBetween(workflow, "  metadata:", "  build_mac_arm64:");
-    const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
-    const macX64Job = sectionBetween(workflow, "  build_mac_x64:", "  build_win_x64:");
-    const winJob = sectionBetween(workflow, "  build_win_x64:", "  publish:");
-    const publishJob = sectionBetween(workflow, "  publish:", "  public_acceptance:");
+    const sharedJob = sectionBetween(workflow, "  metadata:", "  build:");
+    const buildJob = sectionBetween(workflow, "  build:", "  stage:");
+    const stageJob = sectionBetween(workflow, "  stage:", "  public_acceptance:");
     const publicAcceptanceJob = sectionBetween(
       workflow,
       "  public_acceptance:",
@@ -2775,7 +2765,7 @@ process.stdin.on("end", () => {
     );
     const activationJob = workflow.slice(workflow.indexOf("\n  activate:"));
 
-    expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.4");
+    expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: ${{ inputs.exact_name == 'beta' && '0.19.0-beta.4'");
     expect(workflow).toContain("OPEN_DESIGN_POSTINSTALL_CONCURRENCY: 2");
     expect(workflow).not.toContain("  closure_shared:");
     expect(workflow).not.toContain("needs.closure_shared");
@@ -2803,25 +2793,27 @@ process.stdin.on("end", () => {
     expect(sharedClosureAction).toContain("tools-release publish-closure-contribution");
     expect(sharedClosureAction).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: shared");
     expect(sharedClosureAction).toContain('cp -R "$blob_root"');
-    for (const platformJob of [macJob, macX64Job, winJob]) {
-      expect(platformJob).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke");
-    }
+    expect(buildJob).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke");
+    expect(buildJob).toContain("matrix: ${{ fromJSON(needs.metadata.outputs.build_matrix) }}");
+    expect(sharedJob).toContain("runner\":\"macos-14");
+    expect(sharedJob).toContain("runner\":\"macos-15-intel");
+    expect(sharedJob).toContain("runner\":\"windows-latest");
     for (const targetContributionStep of [
       sectionBetween(
         betaMacAction,
-        "    - name: Build beta ${{ inputs.target }} Standalone native contribution",
+        "    - name: Build exact ${{ inputs.target }} Standalone native contribution",
         "    - name: Prepare ${{ inputs.target }} Standalone smoke graph",
       ),
       sectionBetween(
         betaWinAction,
-        "    - name: Build beta win_x64 Standalone native contribution",
+        "    - name: Build exact win_x64 Standalone native contribution",
         "    - name: Prepare win_x64 Standalone smoke graph",
       ),
     ]) {
       expect(targetContributionStep).toContain("tools-pack closure build-distribution-target");
       expect(targetContributionStep).not.toContain("--require-vela-cli");
     }
-    expect(betaMacAction).toContain("Build beta ${{ inputs.target }} Standalone native contribution");
+    expect(betaMacAction).toContain("Build exact ${{ inputs.target }} Standalone native contribution");
     expect(betaMacAction).toContain("Resolve immutable ${{ inputs.target }} Electron Shell");
     expect(betaMacAction).toContain("tools-pack mac identity");
     expect(betaMacAction).toContain("tools-release resolve-shell-build");
@@ -2834,14 +2826,14 @@ process.stdin.on("end", () => {
     expect(betaMacAction).toContain("Publish verified ${{ inputs.target }} Standalone native blob");
     expect(betaMacAction).toContain("tools-release publish-closure-contribution");
     expect(betaMacAction).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: target");
-    expect(macJob).toContain("needs.metadata.outputs.closure_version");
+    expect(buildJob).toContain("needs.metadata.outputs.closure_version");
     expect(betaMacAction).toContain("OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH:");
     expect(betaMacAction).toContain("OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON:");
     expect(betaMacAction).toContain('RELEASE_CLOSURE_ENABLED: "false"');
     expect(betaMacAction).toContain('RELEASE_SHELL_ENABLED: "true"');
     expect(betaMacAction).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
     expect(betaMacAction).toContain("DOGFOOD_BUILD_JSON_KEYS: dmgPath");
-    expect(betaWinAction).toContain("Build beta win_x64 Standalone native contribution");
+    expect(betaWinAction).toContain("Build exact win_x64 Standalone native contribution");
     expect(betaWinAction).toContain("Resolve immutable win_x64 Electron Shell");
     expect(betaWinAction).toContain('"tools-pack", "win", "identity"');
     expect(betaWinAction).toContain("tools-release resolve-shell-build");
@@ -2854,27 +2846,27 @@ process.stdin.on("end", () => {
     expect(betaWinAction).toContain("Publish verified win_x64 Standalone native blob");
     expect(betaWinAction).toContain("tools-release publish-closure-contribution");
     expect(betaWinAction).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: target");
-    expect(winJob).toContain("needs.metadata.outputs.closure_version");
+    expect(buildJob).toContain("closure-version: ${{ needs.metadata.outputs.closure_version }}");
     expect(betaWinAction).toContain("OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH:");
     expect(betaWinAction).toContain("$env:OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON = @(");
     expect(betaWinAction).toContain(") | ConvertTo-Json -Compress");
     expect(betaWinAction).toContain('RELEASE_CLOSURE_ENABLED: "false"');
     expect(betaWinAction).toContain('RELEASE_SHELL_ENABLED: "true"');
     expect(betaWinAction).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
-    expect(publishJob).toContain("Merge the sole version-wide Standalone graph");
-    expect(publishJob).toContain("tools-release merge-closure-distribution");
-    expect(publishJob).toContain("RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH:");
-    expect(publishJob).toContain('RELEASE_CLOSURE_DISTRIBUTION_REQUIRED: "true"');
-    expect(publishJob).not.toContain("RELEASE_CLOSURE_REQUIRED:");
-    expect(publishJob).toContain('RELEASE_SHELL_REQUIRED: "true"');
+    expect(stageJob).toContain("Merge the sole version-wide Standalone graph");
+    expect(stageJob).toContain("tools-release merge-closure-distribution");
+    expect(stageJob).toContain("RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH:");
+    expect(stageJob).toContain('RELEASE_CLOSURE_DISTRIBUTION_REQUIRED: "true"');
+    expect(stageJob).not.toContain("RELEASE_CLOSURE_REQUIRED:");
+    expect(stageJob).toContain('RELEASE_SHELL_REQUIRED: "true"');
     expect(workflow).not.toContain("/beta/closure/");
     expect(workflow).not.toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH:");
     expect(workflow).toContain("Validate checkout ref shape");
     expect(workflow).toContain("full 40-character commit SHA; abbreviated SHA");
-    expect(publishJob).toContain('RELEASE_ACTIVATE_LATEST: "false"');
-    expect(publishJob).toContain('RELEASE_LATEST_CAS_REQUIRED: "true"');
-    expect(publishJob).toContain("RELEASE_WIN_X64_SIGN_MODE: ${{ inputs.win_x64_sign_mode }}");
-    expect(publishJob).not.toContain("Observe directly activated beta public feed");
+    expect(stageJob).toContain('RELEASE_ACTIVATE_LATEST: "false"');
+    expect(stageJob).toContain('RELEASE_LATEST_CAS_REQUIRED: "true"');
+    expect(workflow).toContain("RELEASE_WIN_X64_SIGN_MODE: ${{ inputs.win_x64_sign_mode }}");
+    expect(stageJob).not.toContain("Observe directly activated beta public feed");
     expect(publicAcceptanceJob).toContain("runs-on: ${{ matrix.runner }}");
     expect(publicAcceptanceJob).toContain("target: mac_arm64");
     expect(publicAcceptanceJob).toContain("target: mac_x64");
@@ -2884,14 +2876,15 @@ process.stdin.on("end", () => {
     expect(publicAcceptanceJob).toContain("tools-release issue-public-acceptance");
     expect(publicAcceptanceJob).toContain("OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core");
     expect(publicAcceptanceJob).toContain("OD_PACKAGED_E2E_WIN_SMOKE_LANES: shell");
-    expect(publicAcceptanceJob).toContain("OD_UPDATE_METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}");
-    expect(publicAcceptanceJob).toContain("OD_STANDALONE_METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}");
+    expect(publicAcceptanceJob).toContain('OD_TOOLS_PACK_EMBEDDED_CONFIG_ONLY: "1"');
+    expect(publicAcceptanceJob).toContain("OD_STANDALONE_METADATA_URL: ${{ inputs.metadata_url }}");
+    expect(publicAcceptanceJob).not.toContain("OD_PACKAGED_CONFIG_PATH:");
     expect(publicAcceptanceJob).not.toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH");
     expect(publicAcceptanceJob).not.toContain("RELEASE_STORAGE_SECRET_ACCESS_KEY");
     expect(activationJob).toContain("needs.public_acceptance.result == 'success'");
     expect(activationJob).toContain("tools-release activate-public-release");
-    expect(activationJob).toContain("Activate accepted immutable beta metadata with CAS");
-    expect(activationJob).toContain("Read back activated beta public feed");
+    expect(activationJob).toContain("Activate accepted immutable exact metadata with CAS");
+    expect(activationJob).toContain("Read back activated exact public feed");
     expect(activationJob).toContain("tools-release observe-public-feed");
     expect(activationJob).not.toContain("continue-on-error");
   });
@@ -2902,12 +2895,12 @@ process.stdin.on("end", () => {
       readFile(packagedMacSpecPath, "utf8"),
       readFile(betaMacDistributionActionPath, "utf8"),
     ]);
-    const macX64Job = sectionBetween(workflow, "  build_mac_x64:", "  build_win_x64:");
+    const buildJob = sectionBetween(workflow, "  build:", "  stage:");
     const prepareStep = sectionBetween(betaMacAction, "    - name: Prepare ${{ inputs.target }} assets", "    - name: Publish ${{ inputs.target }} platform");
     const publishStep = sectionBetween(betaMacAction, "    - name: Publish ${{ inputs.target }} platform", "    - name: Upload ${{ inputs.target }} publish manifest");
     const artifactMode = "RELEASE_ARTIFACT_MODE: ${{ inputs.build-target == 'all' && 'all' || 'dmg-and-payload' }}";
 
-    expect(macX64Job).toContain("build-target: ${{ inputs.mac_x64_target }}");
+    expect(buildJob).toContain("build-target: ${{ matrix.target == 'mac_arm64' && inputs.mac_arm64_target || inputs.mac_x64_target }}");
     expect(prepareStep).toContain(artifactMode);
     expect(publishStep).toContain(artifactMode);
     expect(macSpec).toContain("const packagedMacClosureTarget = process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64';");
@@ -3432,9 +3425,9 @@ function expectWindowsUpdaterSmokeContract(workflow: string, channel: "beta" | "
   expect(workflow).toContain("win_x64_update_metadata_url:");
   expect(workflow).toContain("win_x64_update_target_version:");
   expect(workflow).toMatch(/win_x64_smoke_mode:[\s\S]*?options:[\s\S]*?- skip[\s\S]*?- core[\s\S]*?- full[\s\S]*?default: core/);
-  const smokeMode = channel === "beta" ? "inputs.workflow_win_x64_smoke_mode" : "inputs.smoke-mode";
-  const metadataUrl = channel === "beta" ? "inputs.workflow_win_x64_update_metadata_url" : "inputs.update-metadata-url";
-  const targetVersion = channel === "beta" ? "inputs.workflow_win_x64_update_target_version" : "inputs.update-target-version";
+  const smokeMode = "inputs.smoke-mode";
+  const metadataUrl = "inputs.update-metadata-url";
+  const targetVersion = "inputs.update-target-version";
   expect(workflow).toContain("OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ " + smokeMode + " }}");
   expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: ${{ " + smokeMode + " == 'full' && " + metadataUrl + " == '' && " + targetVersion + " == '' && 'tools-serve' || '' }}");
   expect(workflow).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ " + metadataUrl + " }}");
@@ -3447,9 +3440,9 @@ function expectWindowsUpdaterSmokeContract(workflow: string, channel: "beta" | "
     expect(workflow).toContain('"--cache-dir", "${{ runner.temp }}\\tools-pack-cache",');
     expect(workflow).toContain('tools-pack win validate-payload --namespace "${{ inputs.namespace }}"');
   } else {
-    expect(workflow).toContain(channel === "beta" ? "Build beta win_x64 update fixture" : "Build updater fixture");
+    expect(workflow).toContain(channel === "beta" ? "Build win_x64 exact update fixture" : "Build updater fixture");
     expect(workflow).toContain(channel === "beta"
-      ? "full Windows smoke requires a counted beta version"
+      ? "full Windows smoke requires a counted exact version"
       : "full Windows smoke requires a counted ${{ inputs.channel }} version");
   }
   if (channel === "beta") {

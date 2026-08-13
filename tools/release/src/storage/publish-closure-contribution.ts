@@ -16,7 +16,7 @@ import {
 
 import { normalizePublicUrl, optional, publicUrl, required, storageConfigFromEnv, writeJson } from "./common.ts";
 import { getStorageObject, putStorageObjectWithStatus, type StorageConfig } from "./s3-upload.ts";
-import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
+import { assertCurrentVersionReservation, versionLockObjectKey } from "./counted-version-reservation.ts";
 
 type Digest = `sha256:${string}`;
 type ContributionKind = "shared" | "target";

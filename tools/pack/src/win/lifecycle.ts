@@ -71,6 +71,11 @@ import type {
 } from "./types.js";
 
 const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
+const EMBEDDED_CONFIG_ONLY_ENV = "OD_TOOLS_PACK_EMBEDDED_CONFIG_ONLY";
+
+function embeddedConfigOnly(): boolean {
+  return process.env[EMBEDDED_CONFIG_ONLY_ENV] === "1";
+}
 
 function withWinRuntimeBaseRoot(config: ToolPackConfig, runtimeBaseRoot: string | undefined): ToolPackConfig {
   if (runtimeBaseRoot == null) return config;
@@ -262,7 +267,7 @@ export async function installPackedWinApp(
   // ordinary tools-pack installs retain isolation while public acceptance can
   // deliberately prove a native AppData OS-protocol cold launch.
   await measureLifecycleStep(lifecycleTimings, "pin installed packaged namespace", async () => {
-    await pinInstalledPackagedConfigNamespace(runtimeConfig, paths.installedExePath);
+    if (!embeddedConfigOnly()) await pinInstalledPackagedConfigNamespace(runtimeConfig, paths.installedExePath);
   });
   const registryEntries = await measureLifecycleStep(lifecycleTimings, "query registry", async () => queryPreferredWinRegistryEntries(config, paths));
   const installPayload = await measureLifecycleStep(lifecycleTimings, "collect payload report", async () => collectInstallPayloadReport(paths));
@@ -342,7 +347,9 @@ async function resolveStartTarget(config: ToolPackConfig): Promise<{ configPath:
   const paths = resolveWinPaths(config);
   if (await pathExists(paths.installedExePath)) {
     return {
-      configPath: await writeInstalledLaunchPackagedConfig(config, paths.installedExePath),
+      configPath: embeddedConfigOnly()
+        ? null
+        : await writeInstalledLaunchPackagedConfig(config, paths.installedExePath),
       executablePath: paths.installedExePath,
       source: "installed",
     };
@@ -359,7 +366,7 @@ export async function startPackedWinApp(
 ): Promise<WinStartResult> {
   const resolvedTarget = await resolveStartTarget(config);
   const runtimeConfig = withWinRuntimeBaseRoot(config, options.runtimeBaseRoot);
-  const target = options.runtimeBaseRoot == null || resolvedTarget.source !== "installed"
+  const target = embeddedConfigOnly() || options.runtimeBaseRoot == null || resolvedTarget.source !== "installed"
     ? resolvedTarget
     : {
         ...resolvedTarget,

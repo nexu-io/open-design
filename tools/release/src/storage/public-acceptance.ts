@@ -12,6 +12,9 @@ import {
 } from "@open-design/closure/protocol";
 
 import {
+  isReleaseChannel,
+  releaseChannelFromVersion,
+  type CountedReleaseChannel,
   type ReleaseTarget,
 } from "@open-design/release";
 
@@ -39,7 +42,7 @@ export type PublicArtifactBinding = {
 };
 
 export type PublicClosureBinding = {
-  channel: "beta";
+  channel: CountedReleaseChannel;
   digest: string;
   protocolVersion: 1;
   target: ClosureTarget;
@@ -131,8 +134,10 @@ function publicClosureBinding(value: unknown, label: string): PublicClosureBindi
   const version = stringField(value, "version", label);
   assertDigest(digest, `${label}.digest`);
   if (
-    channel !== "beta"
+    !isReleaseChannel(channel)
+    || channel === "stable"
     || protocolVersion !== 1
+    || releaseChannelFromVersion(version) !== channel
     || !Object.values(targetDefinitions).some((definition) => definition.closureTarget === target)
   ) {
     throw new Error(`${label} identity mismatch`);
@@ -149,8 +154,15 @@ export function resolvePublicClosure(input: {
   const value = childRecord(input.metadata, "closure", "metadata");
   const identity = childRecord(value, "identity", "metadata.closure");
   const version = input.expectedVersion ?? stringField(identity, "version", "metadata.closure.identity");
+  const channel = stringField(identity, "channel", "metadata.closure.identity");
+  if (!isReleaseChannel(channel) || channel === "stable" || releaseChannelFromVersion(version) !== channel) {
+    throw new Error("metadata exact release identity mismatch");
+  }
+  if (typeof input.metadata.channel === "string" && input.metadata.channel !== channel) {
+    throw new Error("metadata channel differs from Closure identity");
+  }
   const closure = validateClosureDistributionPublication({
-    channel: "beta",
+    channel,
     expectedTargets: [targetDefinitions[input.target].closureTarget],
     publicOrigin: input.publicOrigin,
     releaseVersion: version,
@@ -159,7 +171,7 @@ export function resolvePublicClosure(input: {
   const target = targetDefinitions[input.target].closureTarget;
   return {
     binding: {
-      channel: "beta",
+      channel,
       digest: closure.identity.digest,
       protocolVersion: closure.identity.protocolVersion,
       target,

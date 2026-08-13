@@ -8,7 +8,7 @@ import {
   storageConfigFromEnv,
   writeJson,
 } from "./common.ts";
-import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-version-reservation.ts";
+import { assertCurrentVersionReservation, versionLockObjectKey } from "./counted-version-reservation.ts";
 import { putImmutableStorageObject, putStorageObject } from "./s3-upload.ts";
 import { publishLatestPlatformObjects, publishLatestRelease } from "./latest-publication.ts";
 import {

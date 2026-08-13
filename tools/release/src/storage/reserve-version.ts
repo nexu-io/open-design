@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { required, storageConfigFromEnv } from "./common.ts";
-import { reserveVersion, writeGithubOutputs } from "./beta-version-reservation.ts";
+import { reserveVersion, writeGithubOutputs } from "./counted-version-reservation.ts";
 
 const releaseChannel = required("RELEASE_CHANNEL");
 if (releaseChannel === "stable") throw new Error("reserve-version only supports counted channels");
@@ -32,7 +32,6 @@ const { objectKey, reservation, url } = await reserveVersion({
 });
 
 writeGithubOutputs({
-  ...(releaseChannel === "beta" ? { beta_number: String(reservation.releaseNumber), beta_version: reservation.releaseVersion } : {}),
   release_name: `Open Design ${releaseChannel[0]?.toUpperCase() ?? ""}${releaseChannel.slice(1)} ${reservation.releaseVersion}`,
   release_number: String(reservation.releaseNumber),
   release_version: reservation.releaseVersion,

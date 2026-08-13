@@ -55,7 +55,7 @@ describe("launcher protocol paths", () => {
 
   it("rejects unsafe roots, namespaces, channels, and version path segments", () => {
     expect(() => resolveLauncherPaths({ channel: "beta", namespace: "../escape", root })).toThrow(LauncherProtocolError);
-    expect(() => resolveLauncherPaths({ channel: "canary", namespace: "release-beta", root })).toThrow(LauncherProtocolError);
+    expect(() => resolveLauncherPaths({ channel: "Canary", namespace: "release-beta", root })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherPaths({ channel: "beta", namespace: "release-beta", root: "relative" })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherVersionPaths({ channel: "beta", namespace: "release-beta", root, version: "../0.8.1" })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherVersionPaths({ channel: "beta", namespace: "release-beta", root, version: "0.8..1" })).toThrow(LauncherProtocolError);

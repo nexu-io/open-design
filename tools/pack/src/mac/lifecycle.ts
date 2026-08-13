@@ -542,7 +542,10 @@ export async function startPackedMacApp(
   const target = await resolvePackedMacStartTarget(config, options.source);
   const stamp = desktopStamp(config);
   const logPath = desktopLogPath(config);
-  const launchConfigPath = await writeLaunchPackagedConfig(config, target.appPath);
+  const embeddedConfigOnly = process.env.OD_TOOLS_PACK_EMBEDDED_CONFIG_ONLY === "1";
+  const launchConfigPath = embeddedConfigOnly
+    ? null
+    : await writeLaunchPackagedConfig(config, target.appPath);
   await mkdir(dirname(logPath), { recursive: true });
   await writeFile(logPath, "", "utf8");
 
@@ -560,7 +563,7 @@ export async function startPackedMacApp(
         extraEnv: {
           ...process.env,
           [DESKTOP_LOG_ECHO_ENV]: "0",
-          [PACKAGED_CONFIG_PATH_ENV]: launchConfigPath,
+          ...(launchConfigPath == null ? {} : { [PACKAGED_CONFIG_PATH_ENV]: launchConfigPath }),
         },
         stamp,
       }),

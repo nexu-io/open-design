@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 
+import { releaseChannelDescriptor, type ReleaseChannel } from "@open-design/release";
+
 import type { FeishuCard } from "./feishu-client.ts";
 import { loadReleaseRunFailures, type ReleaseRunFailure } from "./run-diagnostics.ts";
 
@@ -8,7 +10,7 @@ type FeishuElement = Record<string, unknown>;
 
 export type ReleaseNotificationInput = {
   branch: string;
-  channel: "beta" | "preview" | "prerelease" | "stable";
+  channel: ReleaseChannel;
   changelogFile: string;
   commit: string;
   macArm64Smoke: string;
@@ -47,13 +49,6 @@ export type ReleaseNotificationDetails = {
   failures: ReleaseRunFailure[];
   warnings: string[];
 };
-
-const channelProfiles = {
-  beta: { label: "Beta" },
-  preview: { label: "Preview" },
-  prerelease: { label: "Prerelease" },
-  stable: { label: "Stable" },
-} as const;
 
 function record(value: unknown): JsonRecord | null {
   return value != null && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : null;
@@ -157,7 +152,7 @@ export async function loadReleaseNotificationDetails(
       const metadata = record(await response.json());
       if (metadata == null) throw new Error("metadata is not an object");
       coldStarts = coldStartFromMetadata(metadata);
-      if (input.channel === "beta") {
+      if (input.channel !== "stable" && input.channel !== "prerelease") {
         await Promise.all(coldStarts.map(async (entry) => {
           entry.timing = await acceptanceTiming(input.metadataUrl, entry.target, fetchImpl);
         }));
@@ -241,7 +236,7 @@ export function buildReleaseFeishuCard(
   details: ReleaseNotificationDetails,
 ): FeishuCard {
   const state = notificationState(input);
-  const profile = channelProfiles[input.channel];
+  const profile = releaseChannelDescriptor(input.channel);
   const smokeFailures = [
     ["macOS arm64", input.macArm64Smoke],
     ["macOS x64", input.macX64Smoke],
@@ -322,7 +317,7 @@ export function buildReleaseFeishuCard(
       template: state === "failed" ? "red" : warning ? "orange" : state === "complete" ? "green" : "blue",
       title: {
         tag: "plain_text",
-        content: `${icon} ${profile.label} ${input.version || "(未生成版本)"} ${stateLabel}`,
+        content: `${icon} ${profile.displayLabel} ${input.version || "(未生成版本)"} ${stateLabel}`,
       },
     },
     elements,

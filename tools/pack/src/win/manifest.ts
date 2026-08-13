@@ -24,9 +24,9 @@ function createPackagedConfig(
   return {
     ...(config.amrProfile == null ? {} : { amrProfile: config.amrProfile }),
     ...entrypoints,
-    ...(config.launcherVersion == null ? {} : { launcherVersion: config.launcherVersion }),
+    launcherVersion: packagedVersion,
     namespace: config.namespace,
-    ...(config.releaseVersion == null ? {} : { releaseVersion: config.releaseVersion }),
+    ...(!config.portable && config.releaseVersion != null ? { releaseVersion: config.releaseVersion } : {}),
     shellVersion: packagedVersion,
     ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
     ...(config.updateMetadataUrl == null ? {} : { updateMetadataUrl: config.updateMetadataUrl }),

@@ -93,9 +93,11 @@ export function renderMacPackagedConfig(options: {
   return `${JSON.stringify(
     {
       ...(options.config.amrProfile == null ? {} : { amrProfile: options.config.amrProfile }),
-      ...(options.config.launcherVersion == null ? {} : { launcherVersion: options.config.launcherVersion }),
+      launcherVersion: options.shellVersion,
       namespace: options.config.namespace,
-      ...(options.config.releaseVersion == null ? {} : { releaseVersion: options.config.releaseVersion }),
+      ...(!options.config.portable && options.config.releaseVersion != null
+        ? { releaseVersion: options.config.releaseVersion }
+        : {}),
       shellVersion: options.shellVersion,
       ...(options.config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: options.config.telemetryRelayUrl }),
       ...(options.config.updateMetadataUrl == null ? {} : { updateMetadataUrl: options.config.updateMetadataUrl }),

@@ -7,6 +7,7 @@ const publicOrigin = required("RELEASE_PUBLIC_ORIGIN");
 const releaseVersion = required("RELEASE_VERSION");
 const latestMetadataUrl = required("RELEASE_LATEST_METADATA_URL");
 const versionMetadataUrl = required("RELEASE_METADATA_URL");
+const channel = required("RELEASE_CHANNEL");
 const reportPath = optional("RELEASE_PUBLIC_FEED_REPORT_PATH");
 const summaryPath = optional("GITHUB_STEP_SUMMARY");
 
@@ -20,7 +21,7 @@ try {
   if (reportPath.length > 0) writeJson(reportPath, observation);
   if (summaryPath.length > 0) {
     appendFileSync(summaryPath, [
-      "### Public beta feed observation",
+      `### Public ${channel} feed observation`,
       "",
       `- version: \`${releaseVersion}\``,
       `- public objects probed: \`${observation.probes.length}\``,
@@ -43,10 +44,10 @@ try {
   }
   if (summaryPath.length > 0) {
     appendFileSync(summaryPath, [
-      "### Public beta feed observation",
+      `### Public ${channel} feed observation`,
       "",
       `- version: \`${releaseVersion}\``,
-      "- status: `failed` (non-blocking beta observation)",
+      `- status: \`failed\` (non-blocking ${channel} observation)`,
       `- error: ${message.replace(/[\r\n]+/g, " ")}`,
       "",
     ].join("\n"), "utf8");

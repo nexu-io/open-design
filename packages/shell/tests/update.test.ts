@@ -66,7 +66,7 @@ describe("Shell update persistence contract", () => {
 
   it("rejects unsafe roots, namespaces, versions, generations, and handoff ids", () => {
     expect(() => resolveLauncherPaths({ channel: "beta", namespace: "../escape", root })).toThrow(LauncherProtocolError);
-    expect(() => resolveLauncherPaths({ channel: "canary", namespace: "release-beta", root })).toThrow(LauncherProtocolError);
+    expect(() => resolveLauncherPaths({ channel: "Canary", namespace: "release-beta", root })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherPaths({ channel: "beta", namespace: "release-beta", root: "relative" })).toThrow(LauncherProtocolError);
     expect(() => resolveLauncherVersionPaths({ channel: "beta", namespace: "release-beta", root, version: "../0.19.1" })).toThrow(LauncherProtocolError);
     expect(() => normalizeLauncherGeneration(-1)).toThrow(LauncherProtocolError);

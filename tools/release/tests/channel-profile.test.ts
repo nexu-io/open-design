@@ -8,9 +8,13 @@ describe("registered release channel profiles", () => {
     expect(releaseChannelProfile("beta")).toMatchObject({
       activation: "accepted-publication",
       counted: true,
-      workflow: "release-beta",
+      workflow: "release-exact",
     });
-    expect(releaseChannelProfile("preview")).toMatchObject({ activation: "direct-latest", workflow: "release-preview" });
+    expect(releaseChannelProfile("qa2")).toMatchObject({
+      activation: "accepted-publication",
+      channel: "qa2",
+      workflow: "release-exact",
+    });
     expect(releaseChannelProfile("prerelease")).toMatchObject({ activation: "direct-latest", workflow: "release-prerelease" });
     expect(releaseChannelProfile("stable")).toMatchObject({
       activation: "stable-promotion",
@@ -22,7 +26,7 @@ describe("registered release channel profiles", () => {
   });
 
   it("rejects unregistered and non-counted channels", () => {
-    expect(() => releaseChannelProfile("nightly")).toThrow(/RELEASE_CHANNEL must be/);
+    expect(() => releaseChannelProfile("nightly-release")).toThrow(/RELEASE_CHANNEL must be/);
     expect(() => countedReleaseChannelProfile("stable")).toThrow(/not a counted release channel/);
   });
 

@@ -20,6 +20,7 @@ import {
   releaseShellPrefix,
   releaseVersionLockObjectKey,
   releaseVersionPrefix,
+  isReleaseChannel,
 } from "../src/index.js";
 
 describe("@open-design/release", () => {
@@ -71,10 +72,25 @@ describe("@open-design/release", () => {
     expect(releaseNamespace("prerelease")).toBe("release-prerelease");
     expect(releaseNamespace("prerelease", "win")).toBe("release-prerelease-win");
     expect(releaseNamespace("prerelease", "macIntel")).toBe("release-prerelease-intel");
+    expect(releaseChannelDescriptor("qa2")).toMatchObject({
+      appId: "io.open-design.desktop.qa2",
+      channel: "qa2",
+      productName: "Open Design Qa2",
+      storagePrefix: "qa2",
+    });
+  });
+
+  it("limits exact names to 1-12 lowercase letters or digits", () => {
+    expect(isReleaseChannel("beta")).toBe(true);
+    expect(isReleaseChannel("qa1234567890")).toBe(true);
+    expect(isReleaseChannel("qa-2")).toBe(false);
+    expect(isReleaseChannel("Beta")).toBe(false);
+    expect(isReleaseChannel("qa12345678901")).toBe(false);
   });
 
   it("infers release channels from versions and namespaces", () => {
     expect(releaseChannelFromVersion("1.2.3-beta.1")).toBe("beta");
+    expect(releaseChannelFromVersion("1.2.3-beta-internal.1")).toBe("beta");
     expect(releaseChannelFromVersion("1.2.3-prerelease.1")).toBe("prerelease");
     expect(releaseChannelFromNamespace("release-preview-linux")).toBe("preview");
     expect(releaseChannelFromNamespace("open-design")).toBe("stable");

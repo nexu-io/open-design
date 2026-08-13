@@ -21,11 +21,6 @@ export type CountedVersionReservation = {
   version: 1;
 };
 
-export type BetaVersionReservation = CountedVersionReservation & {
-  betaNumber?: number;
-  channel: "beta";
-};
-
 function requiredCountedChannel(): CountedReleaseChannel {
   const channel = required("RELEASE_CHANNEL");
   if (channel === "stable") throw new Error("version reservation only supports counted release channels");
@@ -42,11 +37,6 @@ export function parseCountedVersion(value: string, channel: CountedReleaseChanne
     releaseNumber: parsed.number,
     releaseVersion: value,
   };
-}
-
-export function parseBetaVersion(value: string): { baseVersion: string; betaNumber: number; releaseVersion: string } {
-  const parsed = parseCountedVersion(value, "beta");
-  return { baseVersion: parsed.baseVersion, betaNumber: parsed.releaseNumber, releaseVersion: parsed.releaseVersion };
 }
 
 export function versionLockObjectKey(releaseVersion: string, channel: CountedReleaseChannel = "beta"): string {

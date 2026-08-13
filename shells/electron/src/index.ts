@@ -24,6 +24,7 @@ import { readProcessStamp } from "@open-design/platform";
 import {
   readPackagedConfig,
   resolvePackagedStandaloneMetadataUrl,
+  resolvePackagedStandaloneReleaseVersion,
 } from "./config.js";
 import { createDesktopCapabilityAdapter } from "./desktop-capability-adapter.js";
 import {
@@ -184,10 +185,8 @@ async function main(): Promise<void> {
   const shellConfig = shellRuntime.config;
   const paths = shellRuntime.paths;
   const shellVersion = shellConfig.shellVersion;
-  const releaseVersion = shellConfig.releaseVersion;
   const launcherVersion = shellConfig.launcherVersion;
   if (shellVersion == null) throw new Error("Electron Shell version is unavailable");
-  if (releaseVersion == null) throw new Error("Standalone release version is unavailable");
   if (launcherVersion == null) throw new Error("Electron launcher version is unavailable");
   const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
     installedLaunchPath: shellRuntime.installedLaunchPath,
@@ -240,6 +239,10 @@ async function main(): Promise<void> {
 
   const metadataUrl = resolvePackagedStandaloneMetadataUrl(
     shellConfig.updateMetadataUrl,
+  );
+  const releaseVersion = await resolvePackagedStandaloneReleaseVersion(
+    shellConfig.releaseVersion,
+    metadataUrl,
   );
   const target = resolveElectronStandaloneTarget();
   if (target == null) throw new Error(`Standalone is unsupported on ${process.platform}-${process.arch}`);

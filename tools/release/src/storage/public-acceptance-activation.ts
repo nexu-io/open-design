@@ -80,6 +80,7 @@ export async function activateAcceptedPublicRelease(input: {
     if (
       credential.commit !== primary.commit
       || credential.releaseVersion !== primary.releaseVersion
+      || credential.closure.channel !== primary.closure.channel
       || !isDeepStrictEqual(credential.metadata, primary.metadata)
     ) throw new Error("public acceptance credentials do not bind one release identity");
     for (const [label, binding] of [
@@ -88,6 +89,7 @@ export async function activateAcceptedPublicRelease(input: {
       [`credential ${credential.artifactKind} URL`, credential.artifact],
     ] as const) assertPublicImmutableUrl(binding.url, input.publicOrigin, label);
   }
+  const channel = primary.closure.channel;
   const metadataBytes = await fetchBytes(primary.metadata.url, fetchImpl);
   assertFileBinding(
     { digest: sha256Digest(metadataBytes), size: metadataBytes.byteLength },
@@ -167,7 +169,7 @@ export async function activateAcceptedPublicRelease(input: {
     platformInputs[target] = { manifest, path };
   }
   const versionPrefix = stringField(metadataR2, "versionPrefix", "metadata.r2");
-  const expectedVersionPrefix = releaseVersionPrefix("beta", primary.releaseVersion);
+  const expectedVersionPrefix = releaseVersionPrefix(channel, primary.releaseVersion);
   if (versionPrefix !== expectedVersionPrefix) {
     throw new Error(`accepted metadata has unexpected version prefix: ${versionPrefix}`);
   }
@@ -185,7 +187,7 @@ export async function activateAcceptedPublicRelease(input: {
     },
   ];
   for (const { bytes, credential, path } of accepted) {
-    const key = releaseAcceptanceObjectKey("beta", primary.releaseVersion, credential.target);
+    const key = releaseAcceptanceObjectKey(channel, primary.releaseVersion, credential.target);
     await uploadImmutableCredential({
       credentialBytes: bytes,
       credentialPath: path,
@@ -230,7 +232,7 @@ export async function activateAcceptedPublicRelease(input: {
     }
   }
   const inventoryUrl = await publishReleaseInventory({
-    channel: "beta",
+    channel,
     objects: inventoryObjects,
     publicOrigin: input.publicOrigin,
     releaseVersion: primary.releaseVersion,
@@ -243,7 +245,7 @@ export async function activateAcceptedPublicRelease(input: {
   const metadataPath = join(input.workDir, "metadata.json");
   await writeFile(metadataPath, metadataBytes);
   await publishLatestRelease({
-    channel: "beta",
+    channel,
     metadataDir: input.workDir,
     metadataPath,
     platforms: platformInputs,
@@ -253,6 +255,6 @@ export async function activateAcceptedPublicRelease(input: {
   return {
     acceptanceUrls,
     inventoryUrl,
-    latestMetadataUrl: normalizePublicUrl(`${input.publicOrigin.replace(/\/+$/u, "")}/beta/latest/metadata.json`),
+    latestMetadataUrl: normalizePublicUrl(`${input.publicOrigin.replace(/\/+$/u, "")}/${channel}/latest/metadata.json`),
   };
 }

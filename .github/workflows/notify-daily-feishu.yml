@@ -1,12 +1,12 @@
 name: notify-daily-feishu
 
-# Every morning (09:00 Asia/Shanghai) build a beta package off main. The release
-# entry owns the single terminal Feishu card and the RELEASE_FEISHU_BETA secret;
-# this wrapper only selects the daily stream label and build ref.
+# Every morning (09:00 Asia/Shanghai) build the default exact package (beta)
+# from main. The exact entry owns the terminal Feishu card; this wrapper only
+# selects the daily stream label and build ref.
 #
 # Beta is the daily R&D channel, so it tracks main rather than a release branch:
 # a per-patch release/vX.Y.Z branch freezes once it ships stable, at which point
-# its base version equals the latest stable and release-beta's
+# its base version equals the latest stable and exact beta's
 # strictly-greater-than-stable guard rejects every build. main always leads
 # stable, so it never hits that trap. Pass `ref` to build a one-off beta from a
 # specific branch (e.g. a release branch) instead.
@@ -59,7 +59,7 @@ jobs:
   build:
     name: Build beta from main
     needs: resolve
-    uses: ./.github/workflows/release-beta.yml
+    uses: ./.github/workflows/release-exact.yml
     secrets: inherit
     with:
       enable_mac_arm64: true

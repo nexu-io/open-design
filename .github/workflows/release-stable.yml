@@ -153,10 +153,9 @@ concurrency:
 jobs:
   distribute:
     name: Distribute stable release
-    uses: ./.github/workflows/distribution.yml
+    uses: ./.github/workflows/distribution-stable.yml
     secrets: inherit
     with:
-      channel: stable
       prerelease_version: ${{ inputs.prerelease_version }}
       dry_run: ${{ inputs.dry_run }}
       ref: ${{ inputs.ref }}

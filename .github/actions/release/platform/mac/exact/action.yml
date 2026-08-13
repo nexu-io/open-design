@@ -1,7 +1,10 @@
-name: Distribute beta macOS platform
-description: Mechanically extracted beta Closure platform orchestration
+name: Distribute exact macOS platform
+description: Shared exact-release Closure platform orchestration
 
 inputs:
+  channel:
+    description: Validated exact release name
+    required: true
   amr-profile:
     description: Optional AMR profile baked into the app
     required: false
@@ -39,7 +42,7 @@ inputs:
     description: Optional release public origin override
     required: true
   release-version:
-    description: Exact beta release version
+    description: Exact release version
     required: true
   shell-smoke-matrix:
     description: Immutable Electron Shell smoke matrix identifier
@@ -88,8 +91,8 @@ runs:
       id: cache
       uses: ./.github/actions/release/platform/cache
       with:
-        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/workflows/release-beta.yml', '.github/workflows/distribution-beta.yml', '.github/scripts/release/cache/mac.sh') }}
-        prefix: tools-pack-mac-v1-beta-${{ runner.os }}-${{ inputs.arch }}-
+        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/workflows/release-exact.yml', '.github/workflows/distribution-exact.yml', '.github/scripts/release/cache/mac.sh') }}
+        prefix: tools-pack-mac-v1-${{ inputs.channel }}-${{ runner.os }}-${{ inputs.arch }}-
     - name: Install dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
@@ -103,14 +106,14 @@ runs:
     - name: Download shared Standalone contract
       uses: actions/download-artifact@v8
       with:
-        name: open-design-beta-closure-shared
+        name: open-design-${{ inputs.channel }}-closure-shared
         path: ${{ runner.temp }}/release-closure/shared
     - name: Resolve immutable ${{ inputs.target }} Electron Shell
       shell: bash
       id: shell_resolution
       env:
         OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
-        RELEASE_CHANNEL: beta
+        RELEASE_CHANNEL: ${{ inputs.channel }}
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
         RELEASE_SHELL_SMOKE_MATRIX: ${{ inputs.shell-smoke-matrix }}
@@ -144,7 +147,7 @@ runs:
     - name: Prepare ${{ inputs.target }} signing certificate
       if: ${{ steps.shell_resolution.outputs.state == 'miss' && inputs.sign-mode != 'unsigned' }}
       uses: ./.github/actions/release/platform/mac/signing
-    - name: Build beta ${{ inputs.target }}
+    - name: Build exact ${{ inputs.target }}
       shell: bash
       id: tools_pack_build
       if: ${{ steps.shell_resolution.outputs.state == 'miss' }}
@@ -157,8 +160,7 @@ runs:
         # feature-test dispatch produces a packaged app that targets that
         # profile's AMR backend and enables the workspace-team transport. The
         # matching console origin arrives via the workflow-level
-        # OD_VELA_WEB_URL. Empty = default (prod) — the normal beta pipeline is
-        # unaffected.
+        # OD_VELA_WEB_URL. Empty keeps the normal exact pipeline on prod.
         OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
       run: |
         set -euo pipefail
@@ -185,7 +187,7 @@ runs:
           printf '%s\n' "$build_output"
           exit "$build_status"
         fi
-    - name: Retry beta ${{ inputs.target }} without restored cache
+    - name: Retry exact ${{ inputs.target }} without restored cache
       shell: bash
       if: ${{ steps.shell_resolution.outputs.state == 'miss' && steps.tools_pack_build.outcome == 'failure' }}
       env:
@@ -220,7 +222,7 @@ runs:
           printf '%s\n' "$build_output"
           exit "$build_status"
         fi
-    - name: Build beta ${{ inputs.target }} Standalone native contribution
+    - name: Build exact ${{ inputs.target }} Standalone native contribution
       shell: bash
       env:
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -230,7 +232,7 @@ runs:
         mkdir -p "$RUNNER_TEMP/release-build/${{ inputs.target }}"
         pnpm exec tools-pack closure build-distribution-target \
           --blob-origin "$RELEASE_PUBLIC_ORIGIN" \
-          --channel beta \
+          --channel "${{ inputs.channel }}" \
           --dir "$RUNNER_TEMP/tools-pack" \
           --platform ${{ inputs.platform }} \
           --version "$version" \
@@ -257,7 +259,7 @@ runs:
         app_path="$(jq -er '.appPath' "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.json")"
         dmg_path="$(jq -er '.dmgPath' "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.json")"
         app_name="$(basename "$app_path")"
-        mount_point="$(mktemp -d "$RUNNER_TEMP/release-beta-${{ inputs.artifact-id }}.XXXXXX")"
+        mount_point="$(mktemp -d "$RUNNER_TEMP/release-${{ inputs.channel }}-${{ inputs.artifact-id }}.XXXXXX")"
         cleanup() {
           /usr/bin/hdiutil detach "$mount_point" >/dev/null 2>&1 || true
           rmdir "$mount_point" >/dev/null 2>&1 || true
@@ -278,7 +280,7 @@ runs:
       shell: bash
       if: ${{ steps.shell_resolution.outputs.state == 'miss' }}
       env:
-        RELEASE_CHANNEL: beta
+        RELEASE_CHANNEL: ${{ inputs.channel }}
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
         RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/shell-plan.json
@@ -292,8 +294,8 @@ runs:
       shell: bash
       if: ${{ inputs.publish == 'true' }}
       env:
-        RELEASE_CHANNEL: beta
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/tools-pack/out/closure-distribution/beta/${{ inputs.platform }}/versions/${{ inputs.closure-version }}/blobs
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/tools-pack/out/closure-distribution/${{ inputs.channel }}/${{ inputs.platform }}/versions/${{ inputs.closure-version }}/blobs
         RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/target-contribution.json
         RELEASE_CLOSURE_CONTRIBUTION_KIND: target
         RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/closure-publication.json
@@ -318,7 +320,7 @@ runs:
         DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         DOGFOOD_BUILD_JSON_KEYS: dmgPath
         DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
-        DOGFOOD_LABEL: macOS ${{ inputs.arch }} beta ${{ inputs.release-version }}
+        DOGFOOD_LABEL: macOS ${{ inputs.arch }} ${{ inputs.channel }} ${{ inputs.release-version }}
         DOGFOOD_VERSION: ${{ inputs.release-version }}
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
@@ -333,17 +335,18 @@ runs:
       with:
         matched-key: ${{ steps.cache.outputs.cache-matched-key }}
         platform: mac
-    - name: Build beta ${{ inputs.target }} update fixture
+    - name: Build exact ${{ inputs.target }} update fixture
       shell: bash
       id: update_fixture
       if: ${{ inputs.smoke-mode == 'full' && steps.shell_resolution.outputs.smoke_proof != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
       run: |
         set -euo pipefail
         version="${{ inputs.release-version }}"
-        if [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
-          update_version="${BASH_REMATCH[1]}-beta.$((BASH_REMATCH[2] + 1))"
+        channel="${{ inputs.channel }}"
+        if [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-${channel}\.([0-9]+)$ ]]; then
+          update_version="${BASH_REMATCH[1]}-${channel}.$((BASH_REMATCH[2] + 1))"
         else
-          echo "full ${{ inputs.target }} smoke requires counted beta version x.y.z-beta.N; got $version" >&2
+          echo "full ${{ inputs.target }} smoke requires counted exact version x.y.z-${channel}.N; got $version" >&2
           exit 1
         fi
         update_build_json_path="$RUNNER_TEMP/release-work/${{ inputs.target }}/mac-tools-pack-update-build.json"
@@ -403,7 +406,7 @@ runs:
           echo "dmg_path=$dmg_path"
           echo "version=$LEGACY_MAC_ARM64_VERSION"
         } >> "$GITHUB_OUTPUT"
-    - name: Smoke beta ${{ inputs.target }} packaged runtime
+    - name: Smoke exact ${{ inputs.target }} packaged runtime
       shell: bash
       id: smoke
       if: ${{ inputs.smoke-mode != 'skip' }}
@@ -424,7 +427,7 @@ runs:
         OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.smoke-mode == 'full' && (steps.shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || inputs.smoke-lanes-on-miss) || '' }}
         OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: ${{ inputs.smoke-mode }}
         OD_PACKAGED_E2E_NAMESPACE: ${{ inputs.namespace }}
-        OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
+        OD_PACKAGED_E2E_RELEASE_CHANNEL: ${{ inputs.channel }}
         OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.release-version }}
         OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.shell_resolution.outputs.smoke_proof }}
         # Preserve the immutable outer's origin version separately from the
@@ -437,7 +440,7 @@ runs:
       shell: bash
       if: ${{ inputs.smoke-mode == 'full' && steps.shell_resolution.outputs.smoke_proof != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
       env:
-        RELEASE_CHANNEL: beta
+        RELEASE_CHANNEL: ${{ inputs.channel }}
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
         RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/shell-plan.json
@@ -457,7 +460,7 @@ runs:
         BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
         BUILD_LOG_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.log
         RELEASE_BUILD_TARGET: ${{ inputs.build-target }}
-        RELEASE_CHANNEL: beta
+        RELEASE_CHANNEL: ${{ inputs.channel }}
         RELEASE_NAMESPACE: ${{ inputs.namespace }}
         RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/${{ inputs.target }}
         RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/${{ inputs.target }}/report.json
@@ -465,7 +468,7 @@ runs:
         RELEASE_SMOKE_MODE: ${{ inputs.smoke-mode }}
         RELEASE_TARGET: ${{ inputs.target }}
         RELEASE_VERSION: ${{ inputs.release-version }}
-        REPORT_TITLE: ${{ inputs.target }} beta build
+        REPORT_TITLE: ${{ inputs.target }} ${{ inputs.channel }} build
       run: pnpm exec tools-release write-report
     - name: Publish ${{ inputs.target }} report summary
       shell: bash
@@ -487,9 +490,9 @@ runs:
         RELEASE_ARTIFACT_MODE: ${{ inputs.build-target == 'all' && 'all' || 'dmg-and-payload' }}
         RELEASE_ASSET_SUFFIX: ${{ inputs.sign-mode != 'unsigned' && '.signed' || '.unsigned' }}
         RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/${{ inputs.target }}
-        RELEASE_CHANNEL: beta
+        RELEASE_CHANNEL: ${{ inputs.channel }}
         RELEASE_NAMESPACE: ${{ inputs.namespace }}
-        RELEASE_NOTES: Open Design beta ${{ inputs.release-version }}${{ inputs.sign-mode != 'unsigned' && '.signed' || '.unsigned' }}
+        RELEASE_NOTES: Open Design ${{ inputs.channel }} ${{ inputs.release-version }}${{ inputs.sign-mode != 'unsigned' && '.signed' || '.unsigned' }}
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_TARGET: ${{ inputs.target }}
         RELEASE_VERSION: ${{ inputs.release-version }}
@@ -502,7 +505,7 @@ runs:
         RELEASE_ASSET_SUFFIX: ${{ inputs.sign-mode != 'unsigned' && '.signed' || '.unsigned' }}
         RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/${{ inputs.target }}
         RELEASE_ARTIFACT_MODE: ${{ inputs.build-target == 'all' && 'all' || 'dmg-and-payload' }}
-        RELEASE_CHANNEL: beta
+        RELEASE_CHANNEL: ${{ inputs.channel }}
         RELEASE_CLOSURE_ENABLED: "false"
         RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
         RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/${{ inputs.target }}.json
@@ -533,13 +536,13 @@ runs:
       if: ${{ inputs.publish == 'true' }}
       uses: actions/upload-artifact@v7
       with:
-        name: open-design-beta-${{ inputs.artifact-id }}-publish-manifest
+        name: open-design-${{ inputs.channel }}-${{ inputs.artifact-id }}-publish-manifest
         path: ${{ runner.temp }}/release-platform-manifests/${{ inputs.target }}.json
         if-no-files-found: error
     - name: Upload ${{ inputs.target }} Standalone contribution
       if: ${{ inputs.publish == 'true' }}
       uses: actions/upload-artifact@v7
       with:
-        name: open-design-beta-closure-${{ inputs.platform }}
+        name: open-design-${{ inputs.channel }}-closure-${{ inputs.platform }}
         path: ${{ runner.temp }}/release-build/${{ inputs.target }}/target-contribution.json
         if-no-files-found: error

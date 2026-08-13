@@ -17,7 +17,11 @@ import type {
   StandaloneRuntimeStatus,
 } from "@open-design/standalone/protocol";
 
-import type { PackagedConfig } from "./config.js";
+import {
+  resolvePackagedStandaloneMetadataUrl,
+  resolvePackagedStandaloneReleaseVersion,
+  type PackagedConfig,
+} from "./config.js";
 import {
   createElectronStandaloneRuntimeIdentity,
   writePackagedDesktopIdentity,
@@ -174,9 +178,7 @@ export async function runPackagedStandalone(
   const launcherRuntime = await resolvePackagedLauncherRuntime(config, initialPaths);
   const shellConfig = launcherRuntime.config;
   const shellVersion = shellConfig.shellVersion;
-  const releaseVersion = shellConfig.releaseVersion;
   if (shellVersion == null) throw new Error("Electron Shell version is unavailable");
-  if (releaseVersion == null) throw new Error("Standalone release version is unavailable");
   const paths = launcherRuntime.paths;
   const stamp = createStandaloneStamp(config.namespace);
   const mcpBootstrap = options.mcpBootstrapLaunch
@@ -187,6 +189,8 @@ export async function runPackagedStandalone(
   await mkdir(paths.runtimeRoot, { recursive: true });
   const target = resolveElectronStandaloneTarget();
   if (target == null) throw new Error(`Standalone is unsupported on ${process.platform}-${process.arch}`);
+  const metadataUrl = resolvePackagedStandaloneMetadataUrl(shellConfig.updateMetadataUrl);
+  const releaseVersion = await resolvePackagedStandaloneReleaseVersion(shellConfig.releaseVersion, metadataUrl);
   const nodeCommand = resolveShellNodeCommand(shellConfig.nodeCommand);
   const shellDigest = await digestElectronShellEntry(options.shellEntryUrl);
   const resolution = await resolveStandaloneViaOfficialNode({
@@ -200,7 +204,7 @@ export async function runPackagedStandalone(
           version: shellVersion,
         },
       },
-      discovery: { metadataUrl: shellConfig.updateMetadataUrl, target },
+      discovery: { metadataUrl, target },
       paths: {
         cacheRoot: paths.cacheRoot,
         dataRoot: paths.dataRoot,

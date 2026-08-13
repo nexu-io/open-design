@@ -162,12 +162,10 @@ jobs:
     env:
       # Frozen once per channel. This is the Closure protocol declaration, not
       # the temporary old-installer migration floor forwarded at publication.
-      CLOSURE_MIN_SHELL_VERSION: ${{ inputs.channel == 'preview' && vars.RELEASE_SHELL_VERSION_MIN_PREVIEW || vars.RELEASE_SHELL_VERSION_MIN_PRERELEASE }}
+      CLOSURE_MIN_SHELL_VERSION: ${{ vars.RELEASE_SHELL_VERSION_MIN_PRERELEASE }}
       GH_TOKEN: ${{ github.token }}
       OPEN_DESIGN_COUNTED_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/${{ inputs.channel }}/latest/metadata.json
       OPEN_DESIGN_PRERELEASE_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/${{ inputs.channel }}/latest/metadata.json
-      OPEN_DESIGN_PREVIEW_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/${{ inputs.channel }}/latest/metadata.json
-      OPEN_DESIGN_PREVIEW_VERSION: ${{ inputs.release_version }}
       OPEN_DESIGN_RELEASE_CHANNEL: ${{ inputs.channel }}
       OPEN_DESIGN_STABLE_VERSION: ${{ inputs.release_version }}
       RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -544,10 +542,8 @@ jobs:
       RELEASE_NAME: ${{ needs.metadata.outputs.release_name }}
       RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
       REPORT_MODE: zip
-      RELEASE_INSTALLATION_VERSION_MIN_PREVIEW: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_PREVIEW }}
       RELEASE_INSTALLATION_VERSION_MIN_PRERELEASE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE }}
       RELEASE_INSTALLATION_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
-      RELEASE_INSTALLATION_VERSION_MIN_URL_PREVIEW: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_PREVIEW }}
       RELEASE_INSTALLATION_VERSION_MIN_URL_PRERELEASE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_PRERELEASE }}
       RELEASE_INSTALLATION_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
       RELEASE_LEGACY_INSTALLATION_MIGRATION_REQUIRED: "true"

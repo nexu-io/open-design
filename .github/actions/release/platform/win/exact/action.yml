@@ -1,47 +1,50 @@
-name: Distribute beta Windows x64
-description: Mechanically extracted beta Closure platform orchestration
+name: Distribute exact Windows x64
+description: Shared exact-release Closure platform orchestration
 
 inputs:
-  metadata_beta_version:
-    description: Forwarded beta workflow contract value
+  channel:
+    description: Validated exact release name
     required: true
-  metadata_closure_version:
-    description: Forwarded beta workflow contract value
+  release-version:
+    description: Exact release version
     required: true
-  metadata_shell_version:
-    description: Forwarded beta workflow contract value
+  closure-version:
+    description: Standalone Closure version
     required: true
-  workflow_amr_profile:
-    description: Forwarded beta workflow contract value
+  shell-version:
+    description: Reusable Electron Shell version
     required: true
-  workflow_publish:
-    description: Forwarded beta workflow contract value
+  amr-profile:
+    description: Optional AMR profile baked into the app
     required: true
-  workflow_release_public_origin:
-    description: Forwarded beta workflow contract value
+  publish:
+    description: Publish exact assets and metadata
     required: true
-  workflow_win_x64_sign_mode:
-    description: Forwarded beta workflow contract value
+  release-public-origin:
+    description: Optional public release origin override
     required: true
-  workflow_win_x64_smoke_mode:
-    description: Forwarded beta workflow contract value
+  sign-mode:
+    description: Windows signing mode
     required: true
-  workflow_win_x64_target:
-    description: Forwarded beta workflow contract value
+  smoke-mode:
+    description: Windows smoke coverage
     required: true
-  workflow_win_x64_update_metadata_url:
-    description: Forwarded beta workflow contract value
+  build-target:
+    description: tools-pack Windows build target
     required: true
-  workflow_win_x64_update_target_version:
-    description: Forwarded beta workflow contract value
+  update-metadata-url:
+    description: Optional external updater metadata URL
+    required: true
+  update-target-version:
+    description: Optional external updater target version
     required: true
 
 outputs:
   smoke_result:
-    description: Forwarded beta platform result
+    description: Packaged smoke outcome
     value: ${{ steps.win_x64_smoke.outcome }}
   win_x64_url:
-    description: Forwarded beta platform result
+    description: Published Windows installer URL
     value: ${{ steps.win_x64_platform_outputs.outputs.installer_url }}
 
 runs:
@@ -55,8 +58,8 @@ runs:
       id: cache
       uses: ./.github/actions/release/platform/cache
       with:
-        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/workflows/release-beta.yml', '.github/workflows/distribution-beta.yml', '.github/scripts/release/cache/win.ps1') }}
-        prefix: tools-pack-win-v1-beta-${{ runner.os }}-
+        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/workflows/release-exact.yml', '.github/workflows/distribution-exact.yml', '.github/scripts/release/cache/win.ps1') }}
+        prefix: tools-pack-win-v1-${{ inputs.channel }}-${{ runner.os }}-
     - name: Install dependencies
       shell: pwsh
       run: pnpm install --frozen-lockfile
@@ -72,15 +75,15 @@ runs:
     - name: Download shared Standalone contract
       uses: actions/download-artifact@v8
       with:
-        name: open-design-beta-closure-shared
+        name: open-design-${{ inputs.channel }}-closure-shared
         path: ${{ runner.temp }}\release-closure\shared
     - name: Resolve immutable win_x64 Electron Shell
       id: win_x64_shell_resolution
       shell: pwsh
       env:
-        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.workflow_amr_profile }}
-        RELEASE_CHANNEL: beta
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.workflow_release_public_origin != '' && inputs.workflow_release_public_origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
         RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\shell-plan.json
         RELEASE_SHELL_SMOKE_MATRIX: win-shell-v2
@@ -93,67 +96,64 @@ runs:
       run: |
         $ErrorActionPreference = "Stop"
         New-Item -ItemType Directory -Force -Path "${{ runner.temp }}\release-build\win_x64" | Out-Null
-        $identityArgs = @("exec", "tools-pack", "win", "identity", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--release-version", "${{ inputs.metadata_beta_version }}", "--shell-version", "${{ inputs.metadata_shell_version }}", "--to", "${{ inputs.workflow_win_x64_target }}", "--sign-mode", "${{ inputs.workflow_win_x64_sign_mode }}", "--json")
+        $identityArgs = @("exec", "tools-pack", "win", "identity", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-${{ inputs.channel }}-win", "--portable", "--release-version", "${{ inputs.release-version }}", "--shell-version", "${{ inputs.shell-version }}", "--to", "${{ inputs.build-target }}", "--sign-mode", "${{ inputs.sign-mode }}", "--json")
         $identityOutput = pnpm.cmd @identityArgs
         if ($LASTEXITCODE -ne 0) { throw "tools-pack win identity failed with exit code $LASTEXITCODE" }
         $identityOutput | Set-Content -Path $env:RELEASE_SHELL_PLAN_JSON_PATH -Encoding utf8
         pnpm.cmd exec tools-release resolve-shell-build
         if ($LASTEXITCODE -ne 0) { throw "immutable Windows Shell resolution failed with exit code $LASTEXITCODE" }
     - name: Setup NSIS
-      if: ${{ steps.win_x64_shell_resolution.outputs.state == 'miss' || (inputs.workflow_win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.workflow_win_x64_update_metadata_url == '' && inputs.workflow_win_x64_update_target_version == '') }}
+      if: ${{ steps.win_x64_shell_resolution.outputs.state == 'miss' || (inputs.smoke-mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '') }}
       uses: ./.github/actions/release/platform/win/nsis
       with:
         attempts: "3"
         delay-seconds: "5"
-    - name: Build beta win_x64
+    - name: Build exact win_x64
       id: win_tools_pack_build
       if: ${{ steps.win_x64_shell_resolution.outputs.state == 'miss' }}
       continue-on-error: true
       shell: pwsh
       env:
-        OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.workflow_win_x64_update_metadata_url }}
-        OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.workflow_win_x64_update_target_version }}
+        OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.update-metadata-url }}
+        OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.update-target-version }}
         # Bake the AMR profile (tools-pack reads OPEN_DESIGN_AMR_PROFILE) so a
         # feature-test dispatch produces a packaged app that targets that
         # profile's AMR backend and enables the workspace-team transport. Empty
-        # = default (prod) — the normal beta pipeline is unaffected. Mirrors the
-        # mac_arm64 build step above; this was missing here, so every win_x64
-        # dogfood build silently fell back to prod and could not sign in to a
-        # feature-test AMR environment.
-        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.workflow_amr_profile }}
+        # Empty keeps the normal exact pipeline on prod.
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
       run: |
         $ErrorActionPreference = "Stop"
         New-Item -ItemType Directory -Force -Path "${{ runner.temp }}\release-build\win_x64" | Out-Null
-        pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace release-beta-win --json
-        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--release-version", "${{ inputs.metadata_beta_version }}", "--shell-version", "${{ inputs.metadata_shell_version }}", "--to", "${{ inputs.workflow_win_x64_target }}", "--sign-mode", "${{ inputs.workflow_win_x64_sign_mode }}", "--require-vela-cli", "--json")
+        pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace "release-${{ inputs.channel }}-win" --json
+        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-${{ inputs.channel }}-win", "--portable", "--release-version", "${{ inputs.release-version }}", "--shell-version", "${{ inputs.shell-version }}", "--to", "${{ inputs.build-target }}", "--sign-mode", "${{ inputs.sign-mode }}", "--require-vela-cli", "--json")
         $buildOutput = pnpm.cmd @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "tools-pack win build failed with exit code $LASTEXITCODE" }
         $buildOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\build.json" -Encoding utf8
         $build = $buildOutput | ConvertFrom-Json
-        pnpm.cmd exec tools-pack win validate-payload --namespace release-beta-win --payload-path $build.payloadPath --expected-version "${{ inputs.metadata_shell_version }}" --json
-    - name: Retry beta win_x64 without restored cache
+        pnpm.cmd exec tools-pack win validate-payload --namespace "release-${{ inputs.channel }}-win" --payload-path $build.payloadPath --expected-version "${{ inputs.shell-version }}" --json
+    - name: Retry exact win_x64 without restored cache
       id: win_tools_pack_build_retry
       if: ${{ steps.win_x64_shell_resolution.outputs.state == 'miss' && steps.win_tools_pack_build.outcome == 'failure' }}
       shell: pwsh
       env:
-        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.workflow_amr_profile }}
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
       run: |
         $ErrorActionPreference = "Stop"
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "${{ runner.temp }}\tools-pack-cache"
         New-Item -ItemType Directory -Force -Path "${{ runner.temp }}\release-build\win_x64" | Out-Null
-        pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace release-beta-win --json
-        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--release-version", "${{ inputs.metadata_beta_version }}", "--shell-version", "${{ inputs.metadata_shell_version }}", "--to", "${{ inputs.workflow_win_x64_target }}", "--sign-mode", "${{ inputs.workflow_win_x64_sign_mode }}", "--require-vela-cli", "--json")
+        pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace "release-${{ inputs.channel }}-win" --json
+        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-${{ inputs.channel }}-win", "--portable", "--release-version", "${{ inputs.release-version }}", "--shell-version", "${{ inputs.shell-version }}", "--to", "${{ inputs.build-target }}", "--sign-mode", "${{ inputs.sign-mode }}", "--require-vela-cli", "--json")
         $buildOutput = pnpm.cmd @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "tools-pack win fallback build failed with exit code $LASTEXITCODE" }
         $buildOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\build.json" -Encoding utf8
         $build = $buildOutput | ConvertFrom-Json
-        pnpm.cmd exec tools-pack win validate-payload --namespace release-beta-win --payload-path $build.payloadPath --expected-version "${{ inputs.metadata_shell_version }}" --json
+        pnpm.cmd exec tools-pack win validate-payload --namespace "release-${{ inputs.channel }}-win" --payload-path $build.payloadPath --expected-version "${{ inputs.shell-version }}" --json
     - name: Register verified immutable win_x64 Electron Shell
       shell: pwsh
       if: ${{ steps.win_x64_shell_resolution.outputs.state == 'miss' }}
       env:
-        RELEASE_CHANNEL: beta
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.workflow_release_public_origin != '' && inputs.workflow_release_public_origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
         RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\shell-plan.json
         RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
@@ -162,16 +162,16 @@ runs:
         RELEASE_STORAGE_REGION: auto
         RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
       run: pnpm exec tools-release register-shell-build
-    - name: Build beta win_x64 Standalone native contribution
+    - name: Build exact win_x64 Standalone native contribution
       shell: pwsh
       env:
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.workflow_release_public_origin != '' && inputs.workflow_release_public_origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       run: |
         $ErrorActionPreference = "Stop"
-        $version = "${{ inputs.metadata_closure_version }}"
+        $version = "${{ inputs.closure-version }}"
         $closureOutput = pnpm.cmd exec tools-pack closure build-distribution-target `
           --blob-origin $env:RELEASE_PUBLIC_ORIGIN `
-          --channel beta `
+          --channel "${{ inputs.channel }}" `
           --dir "${{ runner.temp }}\tools-pack" `
           --platform win32-x64 `
           --version $version `
@@ -194,20 +194,20 @@ runs:
           --output "${{ runner.temp }}\release-build\win_x64\closure-distribution.json"
     - name: Publish verified win_x64 Standalone native blob
       shell: pwsh
-      if: ${{ inputs.workflow_publish == 'true' }}
+      if: ${{ inputs.publish == 'true' }}
       env:
-        RELEASE_CHANNEL: beta
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}\tools-pack\out\closure-distribution\beta\win32-x64\versions\${{ inputs.metadata_closure_version }}\blobs
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}\tools-pack\out\closure-distribution\${{ inputs.channel }}\win32-x64\versions\${{ inputs.closure-version }}\blobs
         RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\target-contribution.json
         RELEASE_CLOSURE_CONTRIBUTION_KIND: target
         RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\closure-publication.json
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.workflow_release_public_origin != '' && inputs.workflow_release_public_origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
         RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
         RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
         RELEASE_STORAGE_REGION: auto
         RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
-        RELEASE_VERSION: ${{ inputs.metadata_closure_version }}
+        RELEASE_VERSION: ${{ inputs.closure-version }}
       run: pnpm.cmd exec tools-release publish-closure-contribution
     - name: Upload win_x64 dogfood build to release storage
       shell: pwsh
@@ -216,15 +216,15 @@ runs:
       # portableZipPath the selected win_x64_target actually produced is what
       # gets uploaded. Writes under dogfood/<version>/<build>/ and nowhere
       # else; see the guard in tools/release/src/storage/dogfood.ts.
-      if: ${{ !cancelled() && inputs.workflow_publish != 'true' }}
+      if: ${{ !cancelled() && inputs.publish != 'true' }}
       continue-on-error: true
       env:
         DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
         DOGFOOD_BUILD_JSON_KEYS: installerPath,portableZipPath
         DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
-        DOGFOOD_LABEL: Windows x64 beta ${{ inputs.metadata_beta_version }}
-        DOGFOOD_VERSION: ${{ inputs.metadata_beta_version }}
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.workflow_release_public_origin != '' && inputs.workflow_release_public_origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        DOGFOOD_LABEL: Windows x64 ${{ inputs.channel }} ${{ inputs.release-version }}
+        DOGFOOD_VERSION: ${{ inputs.release-version }}
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
         RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
         RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
@@ -237,28 +237,28 @@ runs:
       with:
         matched-key: ${{ steps.cache.outputs.cache-matched-key }}
         platform: win
-    - name: Build beta win_x64 update fixture
-      if: ${{ inputs.workflow_win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.workflow_win_x64_update_metadata_url == '' && inputs.workflow_win_x64_update_target_version == '' }}
+    - name: Build win_x64 exact update fixture
+      if: ${{ inputs.smoke-mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
       shell: pwsh
       env:
         OD_TOOLS_PACK_WIN_NSIS_TEST_HOOKS: faults
       run: |
         $ErrorActionPreference = "Stop"
-        $match = [regex]::Match("${{ inputs.metadata_beta_version }}", "^(?<base>\d+\.\d+\.\d+)-beta\.(?<number>\d+)$")
-        if (-not $match.Success) { throw "full Windows smoke requires a counted beta version; got ${{ inputs.metadata_beta_version }}" }
-        $updateVersion = "{0}-beta.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
-        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-beta-win", "--portable", "--release-version", "${{ inputs.metadata_beta_version }}", "--shell-version", $updateVersion, "--launcher-version", $updateVersion, "--to", "nsis", "--sign-mode", "${{ inputs.workflow_win_x64_sign_mode }}", "--require-vela-cli", "--json")
+        $match = [regex]::Match("${{ inputs.release-version }}", "^(?<base>\d+\.\d+\.\d+)-${{ inputs.channel }}\.(?<number>\d+)$")
+        if (-not $match.Success) { throw "full Windows smoke requires a counted exact version; got ${{ inputs.release-version }}" }
+        $updateVersion = "{0}-${{ inputs.channel }}.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
+        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-${{ inputs.channel }}-win", "--portable", "--release-version", "${{ inputs.release-version }}", "--shell-version", $updateVersion, "--launcher-version", $updateVersion, "--to", "nsis", "--sign-mode", "${{ inputs.sign-mode }}", "--require-vela-cli", "--json")
         $updateOutput = pnpm.cmd @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
         $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8
         $updateBuild = $updateOutput | ConvertFrom-Json
-        pnpm.cmd exec tools-pack win validate-payload --namespace release-beta-win --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
+        pnpm.cmd exec tools-pack win validate-payload --namespace "release-${{ inputs.channel }}-win" --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
     - name: Materialize legacy win_x64 migration fixture
       id: win_x64_legacy_fixture
-      if: ${{ inputs.workflow_win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' }}
+      if: ${{ inputs.channel == 'beta' && inputs.smoke-mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' }}
       shell: pwsh
       env:
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.workflow_release_public_origin != '' && inputs.workflow_release_public_origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       run: |
         $ErrorActionPreference = "Stop"
         $fixtureDir = "${{ runner.temp }}\release-work\win_x64\legacy-migration"
@@ -272,32 +272,32 @@ runs:
         }
         "installer_path=$installerPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
         "version=$env:LEGACY_WIN_X64_VERSION" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-    - name: Smoke beta win_x64 packaged runtime
+    - name: Smoke exact win_x64 packaged runtime
       id: win_x64_smoke
-      if: ${{ inputs.workflow_win_x64_smoke_mode != 'skip' }}
+      if: ${{ inputs.smoke-mode != 'skip' }}
       continue-on-error: true
       working-directory: e2e
       env:
         OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
         OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH: ${{ runner.temp }}\release-build\win_x64\closure-distribution.json
-        OD_PACKAGED_E2E_NAMESPACE: release-beta-win
-        OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
-        OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.metadata_beta_version }}
+        OD_PACKAGED_E2E_NAMESPACE: release-${{ inputs.channel }}-win
+        OD_PACKAGED_E2E_RELEASE_CHANNEL: ${{ inputs.channel }}
+        OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.release-version }}
         OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
         OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}\tools-pack
         OD_PACKAGED_E2E_WIN: "1"
         OD_PACKAGED_E2E_WIN_LEGACY_INSTALLER_PATH: ${{ steps.win_x64_legacy_fixture.outputs.installer_path }}
         OD_PACKAGED_E2E_WIN_LEGACY_VERSION: ${{ steps.win_x64_legacy_fixture.outputs.version }}
         OD_PACKAGED_E2E_WIN_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}
-        OD_PACKAGED_E2E_WIN_SMOKE_LANES: ${{ inputs.workflow_win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}
-        OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.workflow_win_x64_smoke_mode }}
-        OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: ${{ inputs.workflow_win_x64_smoke_mode == 'full' && inputs.workflow_win_x64_update_metadata_url == '' && inputs.workflow_win_x64_update_target_version == '' && 'tools-serve' || '' }}
-        OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.workflow_win_x64_update_metadata_url }}
-        OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.workflow_win_x64_update_target_version }}
+        OD_PACKAGED_E2E_WIN_SMOKE_LANES: ${{ inputs.smoke-mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}
+        OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.smoke-mode }}
+        OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: ${{ inputs.smoke-mode == 'full' && inputs.update-metadata-url == '' && inputs.update-target-version == '' && 'tools-serve' || '' }}
+        OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.update-metadata-url }}
+        OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.update-target-version }}
         OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.win_x64_shell_resolution.outputs.smoke_proof }}
         # Preserve the immutable outer's origin version separately from the
         # current release projection. Reinstall acceptance needs both facts.
-        OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.win_x64_shell_resolution.outputs.shell_version != '' && steps.win_x64_shell_resolution.outputs.shell_version || inputs.metadata_shell_version }}
+        OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.win_x64_shell_resolution.outputs.shell_version != '' && steps.win_x64_shell_resolution.outputs.shell_version || inputs.shell-version }}
       shell: pwsh
       run: |
         # Native runner paths contain backslashes. Let PowerShell serialize
@@ -310,10 +310,10 @@ runs:
         pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
     - name: Register win_x64 Electron Shell full-smoke proof
       shell: pwsh
-      if: ${{ inputs.workflow_win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.workflow_win_x64_update_metadata_url == '' && inputs.workflow_win_x64_update_target_version == '' }}
+      if: ${{ inputs.smoke-mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
       env:
-        RELEASE_CHANNEL: beta
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.workflow_release_public_origin != '' && inputs.workflow_release_public_origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
         RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\shell-plan.json
         RELEASE_SHELL_SMOKE_MATRIX: win-shell-v2
@@ -330,16 +330,16 @@ runs:
       if: ${{ always() }}
       env:
         BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
-        RELEASE_BUILD_TARGET: ${{ inputs.workflow_win_x64_target }}
-        RELEASE_CHANNEL: beta
-        RELEASE_NAMESPACE: release-beta-win
+        RELEASE_BUILD_TARGET: ${{ inputs.build-target }}
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_NAMESPACE: release-${{ inputs.channel }}-win
         RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
         RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}\release-report\win_x64\report.json
         RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}\release-report\win_x64\summary.md
-        RELEASE_SMOKE_MODE: ${{ inputs.workflow_win_x64_smoke_mode }}
+        RELEASE_SMOKE_MODE: ${{ inputs.smoke-mode }}
         RELEASE_TARGET: win_x64
-        RELEASE_VERSION: ${{ inputs.metadata_beta_version }}
-        REPORT_TITLE: win_x64 beta build
+        RELEASE_VERSION: ${{ inputs.release-version }}
+        REPORT_TITLE: win_x64 ${{ inputs.channel }} build
       run: pnpm exec tools-release write-report
     - name: Publish win_x64 report summary
       if: ${{ always() }}
@@ -355,45 +355,45 @@ runs:
         platform: win
         prefix: ${{ steps.cache.outputs.prefix }}
     - name: Prepare win_x64 assets
-      if: ${{ inputs.workflow_publish == 'true' }}
+      if: ${{ inputs.publish == 'true' }}
       shell: pwsh
       run: |
         tools\pack\scripts\prepare-platform-assets.ps1 `
           -ReleaseTarget win_x64 `
           -ReleaseAssetsDir "${{ runner.temp }}\release-assets\win_x64" `
           -BuildJsonPath "${{ runner.temp }}\release-build\win_x64\build.json" `
-          -ReleaseNamespace release-beta-win `
-          -ReleaseVersion "${{ inputs.metadata_beta_version }}" `
+          -ReleaseNamespace "release-${{ inputs.channel }}-win" `
+          -ReleaseVersion "${{ inputs.release-version }}" `
           -ReleaseAssetSuffix ".unsigned" `
-          -ReleaseChannel beta `
-          -ReleasePublicOrigin "${{ inputs.workflow_release_public_origin != '' && inputs.workflow_release_public_origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}" `
-          -IncludeZip $${{ inputs.workflow_win_x64_target == 'all' || inputs.workflow_win_x64_target == 'zip' }}
+          -ReleaseChannel "${{ inputs.channel }}" `
+          -ReleasePublicOrigin "${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}" `
+          -IncludeZip $${{ inputs.build-target == 'all' || inputs.build-target == 'zip' }}
     - name: Publish win_x64 platform
       shell: pwsh
-      if: ${{ inputs.workflow_publish == 'true' }}
+      if: ${{ inputs.publish == 'true' }}
       env:
         RELEASE_ASSET_SUFFIX: .unsigned
         RELEASE_ASSETS_DIR: ${{ runner.temp }}\release-assets\win_x64
-        RELEASE_CHANNEL: beta
+        RELEASE_CHANNEL: ${{ inputs.channel }}
         RELEASE_CLOSURE_ENABLED: "false"
         RELEASE_MANIFEST_DIR: ${{ runner.temp }}\release-platform-manifests
         RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.workflow_release_public_origin != '' && inputs.workflow_release_public_origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
         RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
         RELEASE_SHELL_ENABLED: "true"
-        WIN_INCLUDE_ZIP: ${{ inputs.workflow_win_x64_target == 'all' || inputs.workflow_win_x64_target == 'zip' }}
+        WIN_INCLUDE_ZIP: ${{ inputs.build-target == 'all' || inputs.build-target == 'zip' }}
         RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
         RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
         RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
         RELEASE_STORAGE_REGION: auto
         RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
         RELEASE_TARGET: win_x64
-        RELEASE_VERSION: ${{ inputs.metadata_beta_version }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
       run: pnpm exec tools-release publish-platform
     - name: Read win_x64 platform outputs
       id: win_x64_platform_outputs
-      if: ${{ inputs.workflow_publish == 'true' }}
+      if: ${{ inputs.publish == 'true' }}
       uses: actions/github-script@v8
       with:
         script: |
@@ -401,16 +401,16 @@ runs:
           const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-platform-outputs/win_x64.json`, "utf8"));
           for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
     - name: Upload win_x64 publish manifest
-      if: ${{ inputs.workflow_publish == 'true' }}
+      if: ${{ inputs.publish == 'true' }}
       uses: actions/upload-artifact@v7
       with:
-        name: open-design-beta-win-x64-publish-manifest
+        name: open-design-${{ inputs.channel }}-win-x64-publish-manifest
         path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
         if-no-files-found: error
     - name: Upload win_x64 Standalone contribution
-      if: ${{ inputs.workflow_publish == 'true' }}
+      if: ${{ inputs.publish == 'true' }}
       uses: actions/upload-artifact@v7
       with:
-        name: open-design-beta-closure-win32-x64
+        name: open-design-${{ inputs.channel }}-closure-win32-x64
         path: ${{ runner.temp }}\release-build\win_x64\target-contribution.json
         if-no-files-found: error

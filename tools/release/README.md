@@ -7,12 +7,12 @@ tools through CLI and file contracts.
 
 ## Channel Architecture Snapshot
 
-This matrix is a quick check before changing or validating the stable lane.
+The public release surface has exactly three rituals: stable, prerelease, and
+exact. `beta` is the default exact name, not a separate implementation.
 
 | Channel | Workflow / lane | Role | Build source | Publish gate | GitHub Release surface | R2 / storage surface | Linux policy | Dry-run focus |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `beta` | `release-beta` / `beta` | Daily R&D and fast validation | Build the current beta lane artifacts directly | No stable promotion gate | Beta artifacts according to beta policy | Beta channel metadata, feeds, platform manifests, payloads, and reports | Source-build only; no packaged lane | Fast build, cache, updater, and metadata validation |
-| `preview` | `release-preview` / `preview` | Independent early-access with stable-like rigor | Build preview artifacts directly | Not a stable gate | None; preview is R2-internal for this migration | R2-only preview metadata, feeds, platform manifests, payloads, and reports | Source-build only; no packaged lane | Stable-like release flow without GitHub Release publication |
+| `exact` (`beta` by default) | `release-exact` / `<name>` | Named R&D and exact validation | Build immutable artifacts for a 1-12 character lowercase alphanumeric name | Three-platform public acceptance before latest CAS | None | Named metadata, feeds, Shells, Closure, platform manifests, payloads, and reports | Source-build only; no packaged lane | Real install, cold start, updater, and metadata validation |
 | `prerelease` | `release-prerelease` / `prerelease` | Stable delivery validation | Build prerelease artifacts directly | The only stable promotion gate | No final stable GitHub Release semantics | Prerelease metadata, feeds, platform manifests, payloads, and reports | Source-build only; no packaged lane | Complete materials that a future stable release can promote |
 | `stable` | `release-stable` / `stable` | Formal public release | Promote from a validated `vX.Y.Z` prerelease, with prepublish validation when requested | Must detect available prerelease artifacts for the exact `vX.Y.Z` target | Installers/packages and matching SHA files only | All other platform artifacts, launcher payloads, manifests, metadata, feeds, and reports | Source-build only; no packaged lane | `metadata` validates promotion inputs and plan; `prepublish` covers build, smoke, reports, and final publish plan without side effects |
 
@@ -21,11 +21,11 @@ This matrix is a quick check before changing or validating the stable lane.
 - Stable must verify an available, usable `vX.Y.Z` prerelease artifact set before
   publication.
 - Non-stable channels publish counted versions with a `-<channel>.N` suffix, for
-  example `-beta.N`, `-preview.N`, and `-prerelease.N`; stable
+  example `-beta.N`, `-qa2.N`, and `-prerelease.N`; stable
   promotion checks must match the prerelease suffix while deriving the stable
   `vX.Y.Z` target.
-- Stable promotion depends on prerelease only; preview must not become a stable
-  gate.
+- Stable promotion depends on prerelease only; exact releases never become a
+  stable gate.
 - `--dry-run=metadata` should validate prerelease metadata, materials, and the
   stable publish plan without triggering build or smoke work.
 - `--dry-run=prepublish` should run all pre-publication build, smoke, payload or
