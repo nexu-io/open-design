@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export type ShellSmokeAcceptancePlatform = "mac_arm64" | "win_x64";
+export type ShellSmokeAcceptancePlatform = "mac_arm64" | "mac_x64" | "win_x64";
 
 const SHARED_ACCEPTANCE_SOURCES = [
   ".github/scripts/release/shell-smoke-acceptance.ts",
@@ -24,12 +24,15 @@ const SHARED_ACCEPTANCE_SOURCES = [
   "tools/serve/src/updater-fixture.ts",
 ] as const;
 
+const MAC_ACCEPTANCE_SOURCES = [
+  "e2e/lib/desktop/desktop-test-helpers.ts",
+  "e2e/lib/vitest/packaged-smoke-plan-mac.ts",
+  "e2e/specs/mac.spec.ts",
+] as const;
+
 const PLATFORM_ACCEPTANCE_SOURCES = {
-  mac_arm64: [
-    "e2e/lib/desktop/desktop-test-helpers.ts",
-    "e2e/lib/vitest/packaged-smoke-plan-mac.ts",
-    "e2e/specs/mac.spec.ts",
-  ],
+  mac_arm64: MAC_ACCEPTANCE_SOURCES,
+  mac_x64: MAC_ACCEPTANCE_SOURCES,
   win_x64: [
     "e2e/lib/vitest/packaged-app-shell.ts",
     "e2e/lib/vitest/packaged-smoke-plan-win.ts",
@@ -75,7 +78,7 @@ export async function resolveShellSmokeAcceptanceDigest(
   workspaceRoot: string,
 ): Promise<`sha256:${string}`> {
   const workflowPath = resolve(workspaceRoot, ".github/workflows/release-beta.yml");
-  const jobName = platform === "mac_arm64" ? "build_mac_arm64" : "build_win_x64";
+  const jobName = platform === "win_x64" ? "build_win_x64" : `build_${platform}`;
   const parts: Array<{ body: Uint8Array | string; label: string }> = [{
     body: extractWorkflowJob(await readFile(workflowPath, "utf8"), jobName),
     label: `.github/workflows/release-beta.yml#${jobName}`,
@@ -87,8 +90,8 @@ export async function resolveShellSmokeAcceptanceDigest(
 }
 
 function parsePlatform(value: string | undefined): ShellSmokeAcceptancePlatform {
-  if (value === "mac_arm64" || value === "win_x64") return value;
-  throw new Error("usage: tsx .github/scripts/release/shell-smoke-acceptance.ts <mac_arm64|win_x64>");
+  if (value === "mac_arm64" || value === "mac_x64" || value === "win_x64") return value;
+  throw new Error("usage: tsx .github/scripts/release/shell-smoke-acceptance.ts <mac_arm64|mac_x64|win_x64>");
 }
 
 const scriptPath = fileURLToPath(import.meta.url);

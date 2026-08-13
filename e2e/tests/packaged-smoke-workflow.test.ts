@@ -1777,7 +1777,24 @@ process.stdin.on("end", () => {
     expect(betaMacArm64Job).toContain("Register mac_arm64 Electron Shell full-smoke proof");
     expect(betaMacArm64Job).toContain("run: pnpm exec tools-release register-shell-smoke");
     expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.json");
-    expect(betaMacX64Job).toContain("OD_PACKAGED_E2E_SHELL_VERSION: ${{ needs.metadata.outputs.shell_version }}");
+    expect(betaMacX64Job).toContain("RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v2");
+    expect(betaMacX64Job).toContain("Resolve mac_x64 Shell smoke acceptance identity");
+    expect(betaMacX64Job).toContain("shell-smoke-acceptance.ts mac_x64");
+    expect(betaMacX64Job).toContain("Resolve immutable mac_x64 Electron Shell");
+    expect(betaMacX64Job).toContain("steps.mac_x64_shell_resolution.outputs.state == 'miss'");
+    expect(betaMacX64Job).toContain("steps.mac_x64_shell_resolution.outputs.smoke_proof != 'hit'");
+    expect(betaMacX64Job).toContain("Build beta mac_x64 update fixture");
+    expect(sectionBetween(
+      betaMacX64Job,
+      "      - name: Build beta mac_x64 update fixture",
+      "      - name: Smoke beta mac_x64 packaged runtime",
+    )).toContain("--to app");
+    expect(betaMacX64Job).not.toContain("Materialize legacy mac_x64 migration fixture");
+    expect(betaMacX64Job).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_x64_smoke_mode == 'full' && (steps.mac_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || 'shell,standalone') || '' }}");
+    expect(betaMacX64Job).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_x64_shell_resolution.outputs.smoke_proof }}");
+    expect(betaMacX64Job).toContain("OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.mac_x64_shell_resolution.outputs.shell_version != '' && steps.mac_x64_shell_resolution.outputs.shell_version || needs.metadata.outputs.shell_version }}");
+    expect(betaMacX64Job).toContain("Register mac_x64 Electron Shell full-smoke proof");
+    expect(betaMacX64Job).toContain("RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_x64/summary.json");
     const betaWinJob = sectionBetween(releaseBetaWorkflow, "  build_win_x64:", "  publish:");
     expect(betaWinJob).not.toContain("tools\\release\\scripts\\build-platform.ps1");
     expect(betaWinJob).toContain("uses: actions/cache/restore@v5");
@@ -1794,6 +1811,8 @@ process.stdin.on("end", () => {
     );
     expect(betaWinJob).toContain("steps.win_x64_shell_resolution.outputs.state == 'miss'");
     expect(betaWinJob).toContain("steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit'");
+    expect(betaWinJob).toContain("Chocolatey NSIS install failed after $maxAttempts attempts");
+    expect(betaWinJob).toContain("Start-Sleep -Seconds $delaySeconds");
     expect(betaWinJob).toContain("OD_PACKAGED_E2E_WIN_SMOKE_LANES: ${{ inputs.win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}");
     expect(betaWinJob).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.win_x64_shell_resolution.outputs.smoke_proof }}");
     expect(betaWinJob).toContain("Materialize legacy win_x64 migration fixture");

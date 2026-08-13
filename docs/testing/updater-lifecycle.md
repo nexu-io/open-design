@@ -53,7 +53,8 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Stale relaunch freeze scrub after rollback (installResult.activeVersion > running) | U, P | desktop unit stale-freeze spec; exercised by the spec's self-heal phase |
 | Exact desktop identity, cold-start reconvergence | P, F | specs; real-feed loop |
 | Historical-outer handoff bridge (prepared→armed→confirmed) | U, partial P | daemon handoff unit; win spec legacy-executable path |
-| Full historical-outer migration with a real legacy binary | P | release-beta mac and win full specs pin `0.16.2-beta.155` from the public immutable feed, prove installer-required against candidate metadata, replace the outer, and reopen persisted product data |
+| Full historical-outer migration with a real legacy binary | P | release-beta mac arm64 and win x64 full specs pin `0.16.2-beta.155` from the public immutable feed, prove installer-required against candidate metadata, replace the outer, and reopen persisted product data |
+| First public mac Intel cohort | P | release-beta mac x64 full smoke runs the Shell lifecycle/update/rollback and Standalone lanes under `mac-shell-v2`; no pre-Standalone Intel DMG was published, so the workflow excludes rather than fabricates a cross-architecture migration fixture |
 | Obsolete outer retirement (mac/win) | U | packaged `obsolete-installed-outer.test.ts` |
 | Reinstalled newer outer resets runtime (bound > active) | U | packaged `launcher-runtime.test.ts` supersede case |
 | Reinstalled older outer delegates (bound < active) | P | spec recovery segment precondition |

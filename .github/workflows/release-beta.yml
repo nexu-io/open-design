@@ -125,6 +125,16 @@ on:
           - dmg
           - all
         default: all
+      mac_x64_update_metadata_url:
+        description: "Optional external updater metadata URL for full macOS x64 payload smoke."
+        required: false
+        type: string
+        default: ""
+      mac_x64_update_target_version:
+        description: "Optional external updater target version expected by full macOS x64 payload smoke."
+        required: false
+        type: string
+        default: ""
       win_x64_sign_mode:
         description: "Windows x64 signing mode."
         required: true
@@ -249,6 +259,14 @@ on:
         required: false
         type: string
         default: all
+      mac_x64_update_metadata_url:
+        required: false
+        type: string
+        default: ""
+      mac_x64_update_target_version:
+        required: false
+        type: string
+        default: ""
       win_x64_sign_mode:
         required: false
         type: string
@@ -1204,11 +1222,59 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Resolve mac_x64 Shell smoke acceptance identity
+        run: |
+          set -euo pipefail
+          digest="$(pnpm exec tsx .github/scripts/release/shell-smoke-acceptance.ts mac_x64)"
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST=$digest" >> "$GITHUB_ENV"
+
       - name: Download shared Standalone contract
         uses: actions/download-artifact@v8
         with:
           name: open-design-beta-closure-shared
           path: ${{ runner.temp }}/release-closure/shared
+
+      - name: Resolve immutable mac_x64 Electron Shell
+        id: mac_x64_shell_resolution
+        env:
+          OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
+          RELEASE_CHANNEL: beta
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
+          RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v2
+          RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/shell-plan.json
+          RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-build/mac_x64"
+          rm -rf "$RUNNER_TEMP/tools-pack"
+          identity_args=(
+            exec tools-pack mac identity
+            --dir "$RUNNER_TEMP/tools-pack"
+            --cache-dir "$RUNNER_TEMP/tools-pack-cache"
+            --namespace release-beta-x64
+            --portable
+            --release-version "${{ needs.metadata.outputs.beta_version }}"
+            --shell-version "${{ needs.metadata.outputs.shell_version }}"
+            --mac-compression normal
+            --to "${{ inputs.mac_x64_target }}"
+            --json
+          )
+          case "${{ inputs.mac_x64_sign_mode }}" in
+            no) ;;
+            sign-only) identity_args+=(--signed) ;;
+            notarize) identity_args+=(--signed --notarize) ;;
+            *) echo "unsupported mac_x64_sign_mode: ${{ inputs.mac_x64_sign_mode }}" >&2; exit 1 ;;
+          esac
+          pnpm "${identity_args[@]}" > "$RELEASE_SHELL_PLAN_JSON_PATH"
+          : > "$RUNNER_TEMP/release-build/mac_x64/build.log"
+          pnpm exec tools-release resolve-shell-build
 
       - name: Build beta mac_x64 Standalone native contribution
         env:
@@ -1256,7 +1322,7 @@ jobs:
         run: pnpm exec tools-release publish-closure-contribution
 
       - name: Prepare mac_x64 signing certificate
-        if: ${{ inputs.mac_x64_sign_mode != 'no' }}
+        if: ${{ steps.mac_x64_shell_resolution.outputs.state == 'miss' && inputs.mac_x64_sign_mode != 'no' }}
         env:
           APPLE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.APPLE_SIGNING_CERTIFICATE_BASE64 }}
           APPLE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_SIGNING_CERTIFICATE_PASSWORD }}
@@ -1273,11 +1339,13 @@ jobs:
 
       - name: Build beta mac_x64
         id: mac_x64_tools_pack_build
+        if: ${{ steps.mac_x64_shell_resolution.outputs.state == 'miss' }}
         continue-on-error: true
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/release-build/mac_x64"
@@ -1311,7 +1379,12 @@ jobs:
           fi
 
       - name: Retry beta mac_x64 without restored cache
-        if: ${{ steps.mac_x64_tools_pack_build.outcome == 'failure' }}
+        if: ${{ steps.mac_x64_shell_resolution.outputs.state == 'miss' && steps.mac_x64_tools_pack_build.outcome == 'failure' }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
         run: |
           set -euo pipefail
           rm -rf "$RUNNER_TEMP/tools-pack-cache"
@@ -1370,6 +1443,20 @@ jobs:
           /usr/bin/xcrun stapler validate "$candidate_app"
           /usr/sbin/spctl --assess --type execute --verbose=4 "$candidate_app"
 
+      - name: Register verified immutable mac_x64 Electron Shell
+        if: ${{ steps.mac_x64_shell_resolution.outputs.state == 'miss' }}
+        env:
+          RELEASE_CHANNEL: beta
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
+          RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/shell-plan.json
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+        run: pnpm exec tools-release register-shell-build
+
       - name: Delete failed mac_x64 tools-pack cache
         if: ${{ steps.mac_x64_tools_pack_build.outcome == 'failure' && steps.mac_x64_tools_pack_cache_restore.outputs.cache-matched-key != '' }}
         continue-on-error: true
@@ -1388,7 +1475,39 @@ jobs:
           done <<< "$cache_ids"
           echo "deletedFailedCacheKey=$matched_key count=$count"
 
+      - name: Build beta mac_x64 update fixture
+        id: mac_x64_update_fixture
+        if: ${{ inputs.mac_x64_smoke_mode == 'full' && steps.mac_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.mac_x64_update_metadata_url == '' && inputs.mac_x64_update_target_version == '' }}
+        run: |
+          set -euo pipefail
+          version="${{ needs.metadata.outputs.beta_version }}"
+          if [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
+            update_version="${BASH_REMATCH[1]}-beta.$((BASH_REMATCH[2] + 1))"
+          else
+            echo "full mac_x64 smoke requires counted beta version x.y.z-beta.N; got $version" >&2
+            exit 1
+          fi
+          update_build_json_path="$RUNNER_TEMP/release-work/mac_x64/mac-tools-pack-update-build.json"
+          mkdir -p "$(dirname "$update_build_json_path")"
+          update_output="$(pnpm exec tools-pack mac build \
+            --dir "$RUNNER_TEMP/release-work/mac_x64/tools-pack-update-fixture" \
+            --cache-dir "$RUNNER_TEMP/tools-pack-cache" \
+            --namespace release-beta-x64 \
+            --portable \
+            --release-version "$update_version" \
+            --shell-version "$update_version" \
+            --mac-compression normal \
+            --to app \
+            --require-vela-cli \
+            --json)"
+          printf '%s\n' "$update_output" > "$update_build_json_path"
+          {
+            echo "update_build_json_path=$update_build_json_path"
+            echo "update_version=$update_version"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Smoke beta mac_x64 packaged runtime
+        id: mac_x64_smoke
         if: ${{ inputs.mac_x64_smoke_mode != 'skip' }}
         working-directory: e2e
         env:
@@ -1397,14 +1516,40 @@ jobs:
           OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON: '["${{ runner.temp }}/release-closure/shared/blobs","${{ runner.temp }}/release-build/mac_x64/closure-blobs"]'
           OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH: ${{ runner.temp }}/release-build/mac_x64/closure-distribution.json
           OD_PACKAGED_E2E_MAC: "1"
+          OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_x64_update_fixture.outputs.update_build_json_path }}
+          OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.mac_x64_smoke_mode == 'full' && inputs.mac_x64_update_metadata_url == '' && inputs.mac_x64_update_target_version == '' && 'tools-serve' || '' }}
+          OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_x64_update_metadata_url }}
+          OD_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.mac_x64_update_target_version != '' && inputs.mac_x64_update_target_version || steps.mac_x64_update_fixture.outputs.update_version }}
+          # No pre-Standalone Intel DMG was ever published. The first public
+          # mac_x64 cohort therefore proves Shell + Standalone without
+          # fabricating a cross-architecture historical migration fixture.
+          OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_x64_smoke_mode == 'full' && (steps.mac_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || 'shell,standalone') || '' }}
           OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: ${{ inputs.mac_x64_smoke_mode }}
           OD_PACKAGED_E2E_NAMESPACE: release-beta-x64
           OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
           OD_PACKAGED_E2E_RELEASE_VERSION: ${{ needs.metadata.outputs.beta_version }}
-          OD_PACKAGED_E2E_SHELL_VERSION: ${{ needs.metadata.outputs.shell_version }}
+          OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_x64_shell_resolution.outputs.smoke_proof }}
+          OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.mac_x64_shell_resolution.outputs.shell_version != '' && steps.mac_x64_shell_resolution.outputs.shell_version || needs.metadata.outputs.shell_version }}
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/mac_x64
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
         run: pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+
+      - name: Register mac_x64 Electron Shell full-smoke proof
+        if: ${{ inputs.mac_x64_smoke_mode == 'full' && steps.mac_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.mac_x64_update_metadata_url == '' && inputs.mac_x64_update_target_version == '' }}
+        env:
+          RELEASE_CHANNEL: beta
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/build.json
+          RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/mac_x64/shell-plan.json
+          RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v2
+          RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_x64/summary.json
+          RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+        run: pnpm exec tools-release register-shell-smoke
 
       - name: Write mac_x64 release report
         if: ${{ always() }}
@@ -1615,10 +1760,21 @@ jobs:
         if: ${{ steps.win_x64_shell_resolution.outputs.state == 'miss' || (inputs.win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '') }}
         shell: pwsh
         run: |
+          $ErrorActionPreference = "Stop"
           if ((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe")) {
             exit 0
           }
-          choco install nsis -y --no-progress
+          $maxAttempts = 3
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            choco install nsis -y --no-progress
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            if ($attempt -eq $maxAttempts) {
+              throw "Chocolatey NSIS install failed after $maxAttempts attempts (last exit code $LASTEXITCODE)"
+            }
+            $delaySeconds = 5 * $attempt
+            Write-Warning "Chocolatey NSIS install attempt $attempt failed; retrying in $delaySeconds seconds"
+            Start-Sleep -Seconds $delaySeconds
+          }
 
       - name: Probe Windows signing capability
         id: sign_probe

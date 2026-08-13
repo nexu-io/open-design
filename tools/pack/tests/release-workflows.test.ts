@@ -82,7 +82,7 @@ describe("release workflows", () => {
     expect(macX64).not.toContain("bash tools/release/scripts/build-platform.sh");
     expect(selfHostedMac).toContain("fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh");
     expect(countOccurrences(mac, "--require-vela-cli")).toBe(3);
-    expect(countOccurrences(macX64, "--require-vela-cli")).toBe(2);
+    expect(countOccurrences(macX64, "--require-vela-cli")).toBe(3);
     expect(countOccurrences(win, "--require-vela-cli")).toBe(3);
     expect(selfHostedMac).toContain("REQUIRE_VELA_CLI: \"true\"");
     expect(selfHostedWin).toContain("-RequireVelaCli");
@@ -123,6 +123,19 @@ describe("release workflows", () => {
     expect(macX64).toContain("tools-pack-mac-v1-beta-${RUNNER_OS}-x64-");
     expect(macX64).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-beta-x64 --json");
     expect(macX64).toContain("exec tools-pack mac build");
+    expect(macX64).toContain("Resolve mac_x64 Shell smoke acceptance identity");
+    expect(macX64).toContain("shell-smoke-acceptance.ts mac_x64");
+    expect(macX64).toContain("Resolve immutable mac_x64 Electron Shell");
+    expect(macX64).toContain("RELEASE_SHELL_SMOKE_MATRIX: mac-shell-v2");
+    expect(macX64).toContain("steps.mac_x64_shell_resolution.outputs.state == 'miss'");
+    expect(macX64).toContain("steps.mac_x64_shell_resolution.outputs.smoke_proof != 'hit'");
+    expect(macX64).toContain("Build beta mac_x64 update fixture");
+    expect(macX64).toMatch(/Build beta mac_x64 update fixture[\s\S]*?--to app/);
+    expect(macX64).not.toContain("Materialize legacy mac_x64 migration fixture");
+    expect(macX64).toContain("OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_x64_update_fixture.outputs.update_build_json_path }}");
+    expect(macX64).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_x64_smoke_mode == 'full' && (steps.mac_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || 'shell,standalone') || '' }}");
+    expect(macX64).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_x64_shell_resolution.outputs.smoke_proof }}");
+    expect(macX64).toContain("Register mac_x64 Electron Shell full-smoke proof");
     expect(macX64).toContain("pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts");
     expect(buildMac).toContain("build_args+=(--require-vela-cli)");
     expect(buildMac).toContain("update_args+=(--require-vela-cli)");
@@ -137,6 +150,7 @@ describe("release workflows", () => {
     expect(betaSelfHosted).toContain("sparse-checkout disable");
     expect(betaSelfHosted).toContain("metadata checkout is missing packages/");
     expect(beta).toContain("mac_arm64_update_metadata_url:");
+    expect(beta).toContain("mac_x64_update_metadata_url:");
     expect(beta).toContain("win_x64_update_metadata_url:");
     expect(beta).toContain("Verify mac_arm64 signed and notarized artifacts");
     expect(beta).toContain("Verify mac_x64 signed and notarized artifacts");
@@ -146,6 +160,7 @@ describe("release workflows", () => {
     expect(countOccurrences(beta, '/usr/sbin/spctl --assess --type execute --verbose=4 "$candidate_app"')).toBe(2);
     expect(beta).not.toContain('/usr/bin/xcrun stapler validate "$dmg_path"');
     expect(beta).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_arm64_update_metadata_url }}");
+    expect(beta).toContain("OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.mac_x64_update_metadata_url }}");
     expect(beta).toContain("OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.win_x64_update_metadata_url }}");
     expect(beta).toContain("POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}");
     expect(beta).toContain("POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}");
@@ -179,6 +194,8 @@ describe("release workflows", () => {
     expect(win).toContain(
       "steps.win_x64_shell_resolution.outputs.state == 'miss' || (inputs.win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '')",
     );
+    expect(win).toContain("Chocolatey NSIS install failed after $maxAttempts attempts");
+    expect(win).toContain("Start-Sleep -Seconds $delaySeconds");
     expect(win).toContain('pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\\tools-pack" --namespace release-beta-win --json');
     expect(win).toContain('"tools-pack", "win", "build"');
     expect(buildWin).toContain('$buildArgs += "--require-vela-cli"');
