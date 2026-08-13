@@ -1,1 +1,0 @@
-import "./verify-metadata.ts";
