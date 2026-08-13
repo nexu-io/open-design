@@ -3323,6 +3323,7 @@ async function seedConfiguredPackagedClosure(): Promise<PackagedStandaloneDistri
 
 async function runMacStandaloneDistributionAcceptance(): Promise<void> {
   const installationRoot = join(toolsPackDir, 'runtime', 'mac');
+  const report = await createPackagedSmokeReport('mac');
   let installed = false;
   let started = false;
   try {
@@ -3336,7 +3337,8 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
     }
     const first = await runToolsPackJson<MacStartResult>('start');
     started = true;
-    await waitForHealthyDesktop();
+    const firstInspect = await waitForHealthyDesktop();
+    await capturePackagedCheckpoint(report, 'closure-first-start', firstInspect);
     fixture ??= await readConfiguredPackagedStandaloneDistribution();
     assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
 
@@ -3346,7 +3348,8 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
     const restarted = await runToolsPackJson<MacStartResult>('start');
     started = true;
     expect(restarted.pid).not.toBe(first.pid);
-    await waitForHealthyDesktop();
+    const restartedInspect = await waitForHealthyDesktop();
+    await capturePackagedCheckpoint(report, 'closure-reinstall', restartedInspect);
     assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
 
     await runToolsPackJson<MacStopResult>('stop');
@@ -3354,7 +3357,8 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
     await damagePackagedStandaloneDistributionFixture(fixture);
     await runToolsPackJson<MacStartResult>('start');
     started = true;
-    await waitForHealthyDesktop();
+    const repairedInspect = await waitForHealthyDesktop();
+    await capturePackagedCheckpoint(report, 'closure-repaired', repairedInspect);
     const repaired = await readConfiguredPackagedStandaloneDistribution();
     expect(repaired.pointer).toMatchObject({
       digest: fixture.pointer.digest,
@@ -3374,7 +3378,8 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
     }
     await runToolsPackJson<MacStartResult>('start');
     started = true;
-    await waitForHealthyDesktop();
+    const recoveredInspect = await waitForHealthyDesktop();
+    await capturePackagedCheckpoint(report, 'closure-store-recovered', recoveredInspect);
     const recovered = recoveredFixture ?? await readConfiguredPackagedStandaloneDistribution();
     assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
   } finally {
