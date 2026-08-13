@@ -74,6 +74,8 @@ own default decide.
 For Vela images, pass a resolution only when the selected model publishes it
 for the requested aspect ratio; omit it to use the model's default profile.
 For SiftQ MiniMax-H3, valid values are \`768P\` (default) and \`2K\`.
+For \`siftq-minimax-h3\`, \`--length\` must be an integer from 4 through 15
+(default 5); do not pass 3 or 30.
 
 A size or tier the user names IS that ask, in any language — "2K", "1k",
 "high quality", "高质量" — so map it onto the flag; restating it inside the

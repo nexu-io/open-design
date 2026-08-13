@@ -152,7 +152,10 @@ export async function renderSiftqVideo(
   if (!resultUrl) throw new Error(`SiftQ task ${taskId} timed out.`);
 
   const download = runtime.download ?? assertAndFetchExternalAsset;
-  const videoResponse = await download(resultUrl, { method: 'GET' });
+  const videoResponse = await download(resultUrl, {
+    ...input.requestInit,
+    method: 'GET',
+  });
   if (!videoResponse.ok) {
     throw new Error(`SiftQ video download failed with HTTP ${videoResponse.status}.`);
   }

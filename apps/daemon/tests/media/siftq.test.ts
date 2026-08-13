@@ -119,6 +119,7 @@ describe('SiftQ renderer', () => {
   };
 
   it('submits, polls, and downloads without leaking bearer auth to the asset host', async () => {
+    const dispatcher = Symbol('proxy-dispatcher') as unknown as NonNullable<RequestInit['dispatcher']>;
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ task_id: 'task-1' }))
       .mockResolvedValueOnce(jsonResponse({ task: { id: 'task-1', status: 'queued' } }))
@@ -132,7 +133,7 @@ describe('SiftQ renderer', () => {
     const download = vi.fn().mockResolvedValue(videoResponse());
     const progress = vi.fn();
     const result = await renderSiftqVideo(
-      { ...input, onProgress: progress },
+      { ...input, requestInit: { dispatcher }, onProgress: progress },
       { fetch: fetchMock, download, sleep: async () => {}, pollIntervalMs: 1 },
     );
 
@@ -150,7 +151,10 @@ describe('SiftQ renderer', () => {
       method: 'GET',
       headers: { Authorization: `Bearer ${TEST_TOKEN}` },
     });
-    expect(download).toHaveBeenCalledWith('https://8.8.8.8/output.mp4', { method: 'GET' });
+    expect(download).toHaveBeenCalledWith('https://8.8.8.8/output.mp4', {
+      dispatcher,
+      method: 'GET',
+    });
     expect(JSON.stringify(download.mock.calls)).not.toContain(TEST_TOKEN);
     expect(progress).toHaveBeenCalledWith('SiftQ task task-1: succeeded');
   });
