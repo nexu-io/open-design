@@ -1,9 +1,9 @@
-import { createHash } from "node:crypto";
 import { access, cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 
 import { hashJson, hashPath, ToolPackCache } from "./cache.js";
 import type { ToolPackConfig } from "./config.js";
+import { hashText } from "./lib/hash.js";
 import { hashPackageSourcePath } from "./package-source-hash.js";
 import { toolPackShellDefinition } from "./shells.js";
 import { readRuntimeShellVersion, versionFamilyForShellVersion } from "./versions.js";
@@ -94,10 +94,6 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function hashText(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 async function readPackageManager(workspaceRoot: string): Promise<unknown> {

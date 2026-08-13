@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { cp, lstat, mkdir, readFile, readdir, readlink, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative } from "node:path";
 
+import { hashText } from "./lib/hash.js";
 import { withDirectoryLock } from "./lock.js";
 
 export const CACHE_SCHEMA_VERSION = 1;
@@ -78,10 +79,6 @@ function normalizeRelativePath(path: string): string {
 
 function safePathToken(value: string): string {
   return value.replace(/[^a-zA-Z0-9._-]/g, "_");
-}
-
-function hashText(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
 }
 
 async function pathExists(path: string): Promise<boolean> {

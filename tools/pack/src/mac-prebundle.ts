@@ -1,6 +1,9 @@
-import { readFile } from "node:fs/promises";
-
 import type { ToolPackConfig } from "./config.js";
+import {
+  assertPrebundleMetafile,
+  findForbiddenPrebundleInputs,
+  renderPackagedMainEntry,
+} from "./lib/prebundle.js";
 
 export const MAC_PREBUNDLED_APP_DIR_NAME = "prebundled";
 export const MAC_PREBUNDLE_META_DIR_NAME = "prebundle-meta";
@@ -117,10 +120,6 @@ export const MAC_PREBUNDLE_POLICIES = {
 
 export type MacPrebundlePolicyName = keyof typeof MAC_PREBUNDLE_POLICIES;
 
-function toPosixPath(value: string): string {
-  return value.replaceAll("\\", "/");
-}
-
 export function shouldUseMacStandalonePrebundle(webOutputMode: ToolPackConfig["webOutputMode"]): boolean {
   void webOutputMode;
   return true;
@@ -139,10 +138,7 @@ export function findForbiddenMacPrebundleInputs(options: {
   forbiddenInputs: readonly string[];
   inputs: readonly string[];
 }): string[] {
-  return options.inputs
-    .map(toPosixPath)
-    .filter((input) => options.forbiddenInputs.some((forbidden) => input.includes(forbidden)))
-    .filter((input) => !options.allowedInputs?.some((allowed) => input.includes(allowed)));
+  return findForbiddenPrebundleInputs(options);
 }
 
 export async function assertMacPrebundleMetafile(options: {
@@ -150,19 +146,9 @@ export async function assertMacPrebundleMetafile(options: {
   policyName: MacPrebundlePolicyName;
 }): Promise<void> {
   const policy = MAC_PREBUNDLE_POLICIES[options.policyName];
-  const metafile = JSON.parse(await readFile(options.metafilePath, "utf8")) as { inputs?: Record<string, unknown> };
-  const matched = findForbiddenMacPrebundleInputs({
-    ...( "allowedInputs" in policy ? { allowedInputs: policy.allowedInputs } : {}),
-    forbiddenInputs: policy.forbiddenInputs,
-    inputs: Object.keys(metafile.inputs ?? {}),
-  });
-  if (matched.length > 0) {
-    throw new Error(`${policy.label} prebundle included forbidden inputs: ${matched.join(", ")}`);
-  }
+  await assertPrebundleMetafile({ metafilePath: options.metafilePath, policy });
 }
 
 export function renderMacPackagedMainEntry(usePrebundle: boolean): string {
-  return usePrebundle
-    ? 'import("./prebundled/packaged-main.mjs").catch((error) => {\n  console.error("packaged entry failed", error);\n  process.exit(1);\n});\n'
-    : 'import("@open-design/shell-electron").catch((error) => {\n  console.error("Electron Shell entry failed", error);\n  process.exit(1);\n});\n';
+  return renderPackagedMainEntry(usePrebundle);
 }
