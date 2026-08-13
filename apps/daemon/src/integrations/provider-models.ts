@@ -178,6 +178,29 @@ function parseModelCapability(value: unknown): ModelCapability | null {
     : null;
 }
 
+function extractOllamaModels(data: unknown): ProviderModelOption[] {
+  // Ollama's GET /api/tags returns { models: [{ name, model, ... }] } where
+  // `name` is the pullable id (e.g. "llama3.3:70b").
+  const items = (data as { models?: unknown }).models;
+  if (!Array.isArray(items)) return [];
+  return uniqueModels(
+    items
+      .map((item) => {
+        const obj = item && typeof item === 'object'
+          ? (item as { name?: unknown; model?: unknown })
+          : null;
+        const id =
+          typeof obj?.name === 'string' && obj.name.trim()
+            ? obj.name
+            : typeof obj?.model === 'string'
+              ? obj.model
+              : '';
+        return id ? { id, label: id } : null;
+      })
+      .filter((item): item is ProviderModelOption => item != null),
+  );
+}
+
 function extractAnthropicModels(data: unknown): ProviderModelOption[] {
   const items = (data as { data?: unknown }).data;
   if (!Array.isArray(items)) return [];
@@ -252,6 +275,10 @@ function providerModelsUrl(protocol: ConnectionTestProtocol, baseUrl: string, ap
   if (protocol === 'google') {
     return googleProviderModelsUrl(baseUrl, apiKey);
   }
+  if (protocol === 'ollama') {
+    // Ollama lists locally-installed models at GET /api/tags (root path, not /v1).
+    return new URL('/api/tags', baseUrl).toString();
+  }
   throw new Error(`Unsupported protocol: ${protocol}`);
 }
 
@@ -288,6 +315,7 @@ function extractModels(protocol: ConnectionTestProtocol, data: unknown): Provide
   if (protocol === 'openai' || protocol === 'senseaudio') return extractOpenAiModels(data);
   if (protocol === 'anthropic') return extractAnthropicModels(data);
   if (protocol === 'google') return extractGoogleModels(data);
+  if (protocol === 'ollama') return extractOllamaModels(data);
   return [];
 }
 
@@ -320,6 +348,16 @@ export async function listProviderModels(
       latencyMs: Date.now() - start,
       models: BEDROCK_MODEL_OPTIONS,
       detail: 'AWS Bedrock uses a static seed until AWS credential-backed discovery is available.',
+    };
+  }
+  if (input.protocol === 'ollama' && !isLoopbackApiHost(validated.parsed.hostname)) {
+    // Discovery via /api/tags is a local-Ollama capability. Ollama Cloud
+    // (ollama.com) does not expose it, so keep the existing unsupported path.
+    return {
+      ok: false,
+      kind: 'unsupported_protocol',
+      latencyMs: Date.now() - start,
+      detail: 'Ollama model discovery is only available for local (loopback) endpoints.',
     };
   }
 

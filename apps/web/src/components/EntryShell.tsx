@@ -225,6 +225,7 @@ import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { isMacPlatform } from '../utils/platform';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { summarizeProjectNameFromPrompt } from '../utils/projectName';
+import { isLocalOllamaBaseUrl } from '../utils/byokProvider';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import {
   providerModelsCacheKey,
@@ -2177,10 +2178,12 @@ function OnboardingView({
     Boolean(config.apiKey.trim()) &&
     Boolean(config.baseUrl.trim()) &&
     Boolean(config.model.trim());
+  const isLocalOllamaProvider =
+    apiProtocol === 'ollama' && isLocalOllamaBaseUrl(config.baseUrl);
   const canFetchProviderModels =
     apiProtocol !== 'azure' &&
-    apiProtocol !== 'ollama' &&
-    Boolean(config.apiKey.trim()) &&
+    (apiProtocol !== 'ollama' || isLocalOllamaProvider) &&
+    (isLocalOllamaProvider || Boolean(config.apiKey.trim())) &&
     Boolean(config.baseUrl.trim()) &&
     isLikelyHttpUrl(config.baseUrl);
   const visibleProviderTestState =

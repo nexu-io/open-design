@@ -33,6 +33,7 @@ import {
 } from '../integrations/aihubmix.js';
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
+import { isLoopbackApiHost } from '@open-design/contracts/api/connectionTest';
 import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
 import { resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
@@ -218,9 +219,21 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       );
     }
     // AIHubMix's catalogue (GET /api/v1/models?type=llm) is public, so its
-    // model list loads without a key. Every other protocol needs the key to
-    // hit its /v1/models endpoint.
-    const apiKeyRequired = protocol !== 'aihubmix' && protocol !== 'bedrock';
+    // model list loads without a key. Local Ollama (GET /api/tags) is also
+    // unauthenticated. Every other protocol needs the key to hit its
+    // /v1/models endpoint.
+    const isLocalOllamaDiscovery =
+      protocol === 'ollama' &&
+      typeof body.baseUrl === 'string' &&
+      (() => {
+        try {
+          return isLoopbackApiHost(new URL(body.baseUrl).hostname);
+        } catch {
+          return false;
+        }
+      })();
+    const apiKeyRequired =
+      protocol !== 'aihubmix' && protocol !== 'bedrock' && !isLocalOllamaDiscovery;
     if (
       typeof body.baseUrl !== 'string' ||
       typeof body.apiKey !== 'string' ||
