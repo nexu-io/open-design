@@ -139,6 +139,7 @@ on:
 permissions:
   actions: write
   contents: write
+  id-token: write
   packages: write
 
 concurrency:

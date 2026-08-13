@@ -90,7 +90,9 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  contents: write
+  id-token: write
+  packages: write
 
 concurrency:
   group: open-design-release-preview

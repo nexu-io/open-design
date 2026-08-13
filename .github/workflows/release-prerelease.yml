@@ -141,7 +141,9 @@ on:
         value: ${{ jobs.distribute.outputs.win_url }}
 permissions:
   actions: write
-  contents: read
+  contents: write
+  id-token: write
+  packages: write
 concurrency:
   group: open-design-release-prerelease
   cancel-in-progress: false
