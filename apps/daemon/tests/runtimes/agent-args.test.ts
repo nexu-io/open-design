@@ -3,8 +3,8 @@ import { test } from 'vitest';
 import {
   AGENT_DEFS, aider, antigravity, assert, claude, codex, copilot, cursorAgent, deepseek, devin, detectAgents, grokBuild, join, kilo, kimi, kiro, mkdtempSync, opencode, pi, qoder, qwen, rmSync, spawnEnvForAgent, tmpdir, vibe, writeFileSync, chmodSync,
 } from './helpers/test-helpers.js';
-import { writeAntigravityModelSelection } from '../../src/runtimes/defs/antigravity.js';
 import { agentCapabilities } from '../../src/runtimes/capabilities.js';
+import { isKnownModel } from '../../src/runtimes/models.js';
 import type { TestAgentDef } from './helpers/test-helpers.js';
 
 // ---- Cursor Agent --trust capability (issue #4461) -------------------------
@@ -534,36 +534,73 @@ test('qwen args check promptViaStdin, base args, model args and exclude `-` sent
 // the daemon would render the resulting empty reply as a "successful"
 // agent response — exactly the failure mode the auth/quota guard at
 // server.ts ~12090 is meant to catch but for the wrong reason.
-test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
+test('antigravity passes the prompt as the -p flag value (print mode)', () => {
   assert.equal(antigravity.bin, 'agy');
   assert.equal(antigravity.streamFormat, 'plain');
-  assert.equal(antigravity.promptViaStdin, true);
+  // agy v1.1.7 dropped stdin prompt delivery: `-p` takes the prompt as its
+  // argument, and the old `-p -` sentinel is read as a literal `-` prompt,
+  // which the model answers with a generic greeting instead of doing the
+  // work. Print mode is argv-only, so the adapter must NOT set
+  // promptViaStdin and must carry an argv budget guard.
+  assert.equal(antigravity.promptViaStdin, undefined);
+  assert.equal(typeof antigravity.maxPromptArgBytes, 'number');
 
   const args = antigravity.buildArgs('write hello world', [], [], {}, {});
-  assert.deepEqual(args, ['-p', '-']);
+  assert.deepEqual(args, ['-p', 'write hello world']);
+  assert.equal(args.includes('-'), false);
 
   const argsWithLog = antigravity.buildArgs('write hello world', [], [], {}, {
     agentLogFilePath: '/tmp/od-agy-test.log',
   });
-  assert.deepEqual(argsWithLog, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
+  assert.deepEqual(argsWithLog, [
+    '--log-file',
+    '/tmp/od-agy-test.log',
+    '-p',
+    'write hello world',
+  ]);
 
-  // No `--model` flag exists upstream, so buildArgs argv must stay the
-  // same regardless of which label the user picks.
-  // Pass a temp antigravitySettingsPath so buildArgs does not touch the
-  // real ~/.gemini/antigravity-cli/settings.json during a unit test run.
-  const settingsDir = mkdtempSync(join(tmpdir(), 'od-agy-argv-'));
-  try {
-    const withModel = antigravity.buildArgs('hi', [], [], {
-      model: 'Gemini 3.1 Pro (High)',
-    }, {
-      agentLogFilePath: '/tmp/od-agy-test.log',
-      antigravitySettingsPath: join(settingsDir, 'settings.json'),
-    });
-    assert.equal(withModel.includes('--model'), false);
-    assert.deepEqual(withModel, ['--log-file', '/tmp/od-agy-test.log', '-p', '-']);
-  } finally {
-    rmSync(settingsDir, { recursive: true, force: true });
+  // v1.1.7 added a real `--model` flag, so a concrete selection rides
+  // argv and no longer mutates ~/.gemini/antigravity-cli/settings.json.
+  // `--model` must land before `-p` so the prompt stays the last value.
+  const withModel = antigravity.buildArgs('hi', [], [], {
+    model: 'gemini-3.1-pro-high',
+  }, {
+    agentLogFilePath: '/tmp/od-agy-test.log',
+  });
+  assert.deepEqual(withModel, [
+    '--log-file',
+    '/tmp/od-agy-test.log',
+    '--model',
+    'gemini-3.1-pro-high',
+    '-p',
+    'hi',
+  ]);
+
+  // A selection saved by the pre-v1.1.7 picker was a display label. It
+  // must still work: canonicalised to the slug in argv, and accepted by
+  // the daemon's own `isKnownModel` validation so the run is not
+  // rejected as `invalid_model_id` before it ever spawns.
+  const withLegacyLabel = antigravity.buildArgs('hi', [], [], {
+    model: 'Gemini 3.1 Pro (High)',
+  }, {});
+  assert.deepEqual(withLegacyLabel, ['--model', 'gemini-3.1-pro-high', '-p', 'hi']);
+  assert.equal(isKnownModel(antigravity as never, 'Gemini 3.1 Pro (High)'), true);
+  assert.equal(isKnownModel(antigravity as never, 'gemini-3.1-pro-high'), true);
+  assert.equal(isKnownModel(antigravity as never, 'Totally Bogus (High)'), false);
+
+  // Every retired label maps onto an id the picker actually offers.
+  const offered = new Set(antigravity.fallbackModels.map((m) => m.id));
+  for (const [legacy, slug] of Object.entries(
+    antigravity.legacyModelAliases ?? {},
+  )) {
+    assert.ok(offered.has(slug), `${legacy} maps to unknown id ${slug}`);
   }
+
+  // `default` is synthetic — it means "let agy use its own configured
+  // model", so no --model flag at all.
+  const withDefault = antigravity.buildArgs('hi', [], [], { model: 'default' }, {});
+  assert.deepEqual(withDefault, ['-p', 'hi']);
+  assert.equal(withDefault.includes('--model'), false);
 
   // Argv must NOT carry `-c` even on follow-up turns. We tested resume
   // mode and found agy's `-c` activates an internal agentic loop (tool
@@ -576,41 +613,42 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
   const followUp = antigravity.buildArgs('next message', [], [], {}, {
     hasPriorAssistantTurn: true,
   });
-  assert.deepEqual(followUp, ['-p', '-']);
+  assert.deepEqual(followUp, ['-p', 'next message']);
   assert.equal(followUp.includes('-c'), false);
 
   const firstTurn = antigravity.buildArgs('first', [], [], {}, {
     hasPriorAssistantTurn: false,
   });
-  assert.deepEqual(firstTurn, ['-p', '-']);
+  assert.deepEqual(firstTurn, ['-p', 'first']);
   assert.equal(antigravity.resumesSessionViaCli, undefined);
 
-  assert.equal(antigravity.maxPromptArgBytes, undefined);
-
-  // Picker exposes the synthetic Default + the 8 labels agy's TUI
-  // Switch-Model surfaces for consumer-tier accounts. The set is small
-  // enough to ship statically; revisit when upstream adds an `agy
-  // models` subcommand (also tracked under issue #35).
+  // Deliberately no `listModels` probe: `agy models` prints its list and
+  // then never exits (it only terminates interactively because a
+  // downstream pager SIGPIPEs it), so probing it would burn the full
+  // detection timeout and fall back regardless.
+  assert.equal(antigravity.listModels, undefined);
   assert.deepEqual(
     antigravity.fallbackModels.map((m) => m.id),
     [
       'default',
-      'Gemini 3.1 Pro (High)',
-      'Gemini 3.1 Pro (Low)',
-      'Gemini 3.5 Flash (High)',
-      'Gemini 3.5 Flash (Medium)',
-      'Gemini 3.5 Flash (Low)',
-      'Claude Sonnet 4.6 (Thinking)',
-      'Claude Opus 4.6 (Thinking)',
-      'GPT-OSS 120B (Medium)',
+      'gemini-3.6-flash-high',
+      'gemini-3.6-flash-medium',
+      'gemini-3.6-flash-low',
+      'gemini-3.5-flash-high',
+      'gemini-3.5-flash-medium',
+      'gemini-3.5-flash-low',
+      'gemini-3.1-pro-high',
+      'gemini-3.1-pro-low',
+      'claude-sonnet-4-6',
+      'claude-opus-4-6-thinking',
+      'gpt-oss-120b-medium',
     ],
   );
 
-  // `agy` v1.0.3 has no `--model` flag (upstream #35), no `models`
-  // subcommand, and no `/model` slash command — a user-typed model id
-  // would be silently ignored at spawn, looking like an OD bug. The
-  // settings UI hides the "Custom (fill below)" option when this is
-  // `false`. Remove this opt-out once upstream wires #35.
+  // Still opted out of the free-text "Custom" picker option. `--model`
+  // now validates and errors clearly on a bad id, so this could be
+  // relaxed — but the live `agy models` list already covers the
+  // catalogue, so there is nothing a typed id would unlock.
   assert.equal(antigravity.supportsCustomModel, false);
 });
 
@@ -627,53 +665,6 @@ test('antigravity pipes prompt via stdin via -p flag (print mode)', () => {
 //   2. Picking a concrete label must write that exact string into the
 //      `model` field while preserving every other key (e.g.
 //      `trustedWorkspaces` that agy populates on first-run consent).
-test('antigravity persists model selection to agy settings.json', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'od-antigravity-settings-'));
-  try {
-    const settingsPath = join(dir, 'settings.json');
-
-    // 1. Pre-seed the file as agy would after onboarding: a model label
-    //    plus a trustedWorkspaces array the user has already consented to.
-    writeFileSync(
-      settingsPath,
-      JSON.stringify(
-        {
-          model: 'GPT-OSS 120B (Medium)',
-          trustedWorkspaces: ['/tmp/od-project'],
-        },
-        null,
-        2,
-      ),
-    );
-
-    // 2. Write a new label and assert the model swap + trusted list intact.
-    writeAntigravityModelSelection('Gemini 3.1 Pro (High)', settingsPath);
-    const after = JSON.parse(readFileSync(settingsPath, 'utf8'));
-    assert.equal(after.model, 'Gemini 3.1 Pro (High)');
-    assert.deepEqual(after.trustedWorkspaces, ['/tmp/od-project']);
-
-    // 3. When the file doesn't exist (fresh install before onboarding),
-    //    we must create it rather than crash the spawn pipeline.
-    const freshPath = join(dir, 'fresh', 'settings.json');
-    writeAntigravityModelSelection('Claude Sonnet 4.6 (Thinking)', freshPath);
-    assert.ok(existsSync(freshPath));
-    assert.equal(
-      JSON.parse(readFileSync(freshPath, 'utf8')).model,
-      'Claude Sonnet 4.6 (Thinking)',
-    );
-
-    // 4. When the existing file is corrupt JSON, we must rewrite it from
-    //    scratch instead of leaving agy with an unparseable settings file.
-    const corruptPath = join(dir, 'corrupt-settings.json');
-    writeFileSync(corruptPath, '{not valid json');
-    writeAntigravityModelSelection('Gemini 3.5 Flash (Low)', corruptPath);
-    const recovered = JSON.parse(readFileSync(corruptPath, 'utf8'));
-    assert.equal(recovered.model, 'Gemini 3.5 Flash (Low)');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-});
-
 // AMR routes model selection through ACP `session/set_model` and only
 // accepts ids that survive the live `vela models` preflight, so a free
 // text id silently fails at spawn. Same custom-model opt-out shape as
