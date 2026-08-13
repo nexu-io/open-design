@@ -47,6 +47,7 @@ export function withCurrentDesktopAuthGate(snapshot: DaemonStatusSnapshot): Daem
 }
 
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
+const DEFAULT_DAEMON_PORT = 7456;
 const WEB_PORT_ENV = SIDECAR_ENV.WEB_PORT;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
@@ -64,6 +65,11 @@ function parsePort(value: string | undefined): number {
     throw new Error(`${DAEMON_PORT_ENV} must be an integer between 0 and 65535`);
   }
   return port;
+}
+
+export function resolveDaemonListenPort(value: string | undefined): number {
+  if (value == null || value.trim().length === 0) return DEFAULT_DAEMON_PORT;
+  return parsePort(value);
 }
 
 function parseOptionalTrustedWebPort(value: string | undefined): number | null {
@@ -157,7 +163,7 @@ export async function startDaemonSidecar(runtime: SidecarRuntimeContext<SidecarS
         { timeoutMs: 600_000 },
       );
     },
-    port: parsePort(process.env[DAEMON_PORT_ENV]) || 7456,
+    port: resolveDaemonListenPort(process.env[DAEMON_PORT_ENV]),
     runtime,
   });
 

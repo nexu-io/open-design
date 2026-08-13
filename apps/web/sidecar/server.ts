@@ -37,6 +37,7 @@ const STANDALONE_BACKEND_HOST = "127.0.0.1";
 const DAEMON_PORT_ENV = SIDECAR_ENV.DAEMON_PORT;
 const WEB_DIST_DIR_ENV = SIDECAR_ENV.WEB_DIST_DIR;
 const WEB_PORT_ENV = SIDECAR_ENV.WEB_PORT;
+const DEFAULT_WEB_PORT = 7457;
 const TOOLS_DEV_PARENT_PID_ENV = SIDECAR_ENV.TOOLS_DEV_PARENT_PID;
 const WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
 const WEB_STANDALONE_ROOT_ENV = "OD_WEB_STANDALONE_ROOT";
@@ -110,6 +111,11 @@ function parsePort(value: string | undefined): number {
     throw new Error(`${WEB_PORT_ENV} must be an integer between 0 and 65535`);
   }
   return port;
+}
+
+export function resolveWebListenPort(value: string | undefined): number {
+  if (value == null || value.trim().length === 0) return DEFAULT_WEB_PORT;
+  return parsePort(value);
 }
 
 function parsePositiveIntegerEnv(envName: string, defaultValue: number): number {
@@ -935,7 +941,7 @@ async function createWebSidecarHandle(
   closeRuntime: () => Promise<void> | void,
   isRuntimeRunning?: () => boolean,
 ): Promise<WebSidecarHandle> {
-  const port = await listen(httpServer, parsePort(process.env[WEB_PORT_ENV]) || 7457);
+  const port = await listen(httpServer, resolveWebListenPort(process.env[WEB_PORT_ENV]));
   const state: WebStatusSnapshot = {
     pid: process.pid,
     state: "running",
