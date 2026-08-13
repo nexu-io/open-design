@@ -176,4 +176,11 @@ describe("release Feishu notification", () => {
     expect(buildReleaseFeishuCard(input({ releaseMode: "validation" }), emptyDetails).header)
       .toMatchObject({ template: "blue" });
   });
+
+  it("renders arbitrary validated exact names without workspace dependencies", () => {
+    expect(JSON.stringify(buildReleaseFeishuCard(input({ channel: "qa2", version: "0.19.1-qa2.1" }), emptyDetails)))
+      .toContain("Qa2 0.19.1-qa2.1");
+    expect(() => buildReleaseFeishuCard(input({ channel: "Preview-2" }), emptyDetails))
+      .toThrow("unsupported release notification channel");
+  });
 });

@@ -1,8 +1,7 @@
 import { readFileSync } from "node:fs";
 
-import { releaseChannelDescriptor, type ReleaseChannel } from "@open-design/release";
-
 import type { FeishuCard } from "./feishu-client.ts";
+import { releaseChannelDisplayLabel } from "./release-channel.ts";
 import { loadReleaseRunFailures, type ReleaseRunFailure } from "./run-diagnostics.ts";
 
 type JsonRecord = Record<string, unknown>;
@@ -10,7 +9,7 @@ type FeishuElement = Record<string, unknown>;
 
 export type ReleaseNotificationInput = {
   branch: string;
-  channel: ReleaseChannel;
+  channel: string;
   changelogFile: string;
   commit: string;
   macArm64Smoke: string;
@@ -236,7 +235,7 @@ export function buildReleaseFeishuCard(
   details: ReleaseNotificationDetails,
 ): FeishuCard {
   const state = notificationState(input);
-  const profile = releaseChannelDescriptor(input.channel);
+  const channelLabel = releaseChannelDisplayLabel(input.channel);
   const smokeFailures = [
     ["macOS arm64", input.macArm64Smoke],
     ["macOS x64", input.macX64Smoke],
@@ -317,7 +316,7 @@ export function buildReleaseFeishuCard(
       template: state === "failed" ? "red" : warning ? "orange" : state === "complete" ? "green" : "blue",
       title: {
         tag: "plain_text",
-        content: `${icon} ${profile.displayLabel} ${input.version || "(未生成版本)"} ${stateLabel}`,
+        content: `${icon} ${channelLabel} ${input.version || "(未生成版本)"} ${stateLabel}`,
       },
     },
     elements,

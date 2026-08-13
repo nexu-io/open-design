@@ -76,10 +76,12 @@ describe('update apply observations', () => {
     });
   });
 
-  it('normalizes prerelease and preview observation channels without collapsing them to beta', () => {
+  it('normalizes fixed, exact, and legacy observation channel spellings', () => {
     expect(normalizeUpdateObservationChannel('0.8.0-prerelease.2')).toBe('prerelease');
     expect(normalizeUpdateObservationChannel('0.8.0-preview.2')).toBe('preview');
     expect(normalizeUpdateObservationChannel('0.8.0', 'prerelease')).toBe('prerelease');
+    expect(normalizeUpdateObservationChannel('0.8.0-qa2.3', 'qa2')).toBe('qa2');
+    expect(normalizeUpdateObservationChannel('0.8.0', 'beta-internal')).toBe('beta');
   });
 
   it.each(['installer', 'payload'] as const)(

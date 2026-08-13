@@ -1,13 +1,12 @@
 import { appendFileSync } from "node:fs";
 
-import { isReleaseChannel } from "@open-design/release";
-
 import { decodeReleaseFeishuBot } from "./bot-codec.ts";
 import {
   buildReleaseFeishuCard,
   loadReleaseNotificationDetails,
   type ReleaseNotificationInput,
 } from "./release-card.ts";
+import { isNotificationReleaseChannel } from "./release-channel.ts";
 import {
   createFeishuSignedEnvelope,
   optionalEnv,
@@ -25,7 +24,7 @@ if (bot == null) {
   summary("Feishu: not configured");
 } else {
   const channel = optionalEnv("RELEASE_CHANNEL");
-  if (!isReleaseChannel(channel)) {
+  if (!isNotificationReleaseChannel(channel)) {
     throw new Error(`unsupported release notification channel: ${channel}`);
   }
   const input: ReleaseNotificationInput = {
