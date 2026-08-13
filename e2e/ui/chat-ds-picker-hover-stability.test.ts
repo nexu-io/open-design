@@ -141,53 +141,31 @@ test('[P1] hovering a filtered design system does not resize or move the popover
 // Content-driven sizing used to mask this in short windows; with a fixed
 // height the popover itself must clamp to the available side space, like the
 // New Project picker already does (see new-project-ds-picker-clipping.test.ts).
-test('[P1] popover stays inside a short viewport (downward placement)', async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 300 });
-  await page.goto('/');
-  await createProject(page, 'DS picker short viewport down');
-  await expect(page.getByTestId('chat-composer')).toBeVisible();
-
-  // The chrome-header pill sits near the top, so the popover opens below the
-  // trigger and must not spill past the viewport bottom.
-  await page.getByTestId('project-ds-picker-trigger').click();
-  const popover = page.getByTestId('project-ds-picker-popover');
-  await expect(popover).toBeVisible();
-  await expect(popover).toHaveAttribute('data-placement', 'down');
-  await expectPopoverInsideViewport(page, 'down');
-});
-
+//
+// #5517/#6142 moved this trigger from a separate chrome-header pill into a
+// single inline icon in the composer's own icon row (composer-design-system-
+// trigger), which is itself always docked a fixed, small distance above the
+// composer pane's bottom edge. That distance stays constant across viewport
+// heights, so spaceBelow is always tiny (well under the 320px openUp
+// threshold) and spaceAbove is always the larger side: this trigger opens
+// upward in every reachable viewport size, short or tall. There is no longer
+// a composer surface that can drive the downward branch, so only the upward
+// clamp is exercised here. `clampHeight` in DesignSystemPicker.tsx applies
+// the identical formula to spaceAbove and spaceBelow, so this still covers
+// the downward branch's math even though this trigger can't reach it live.
 test('[P1] popover stays inside a short viewport (upward placement)', async ({ page }) => {
+  // Short enough that spaceAbove drops under the 220px preferred minimum
+  // (the trigger sits ~50-60px above the composer pane's bottom edge
+  // regardless of viewport height), but tall enough for the app shell to
+  // still lay out normally.
+  await page.setViewportSize({ width: 1280, height: 260 });
   await page.goto('/');
   await createProject(page, 'DS picker short viewport up');
   await expect(page.getByTestId('chat-composer')).toBeVisible();
 
-  // Open the composer picker at the default height first to locate its
-  // trigger chip.
   await openDesignSystemPicker(page);
   const popover = page.getByTestId('project-ds-picker-popover');
   await expect(popover).toBeVisible();
-
-  const chip = page.locator(
-    '.staged-context-picker--design-system [data-testid="project-ds-picker-trigger"]',
-  );
-  const chipBox = await chip.boundingBox();
-  const viewport = page.viewportSize();
-  if (!chipBox || !viewport) throw new Error('Expected composer picker trigger geometry');
-
-  // The composer is pinned to the pane bottom, so the chip keeps a roughly
-  // constant distance to the bottom edge across window heights. Derive a
-  // height where the space above the chip is larger than the space below
-  // (upward placement wins) but still under the 220px preferred minimum, so
-  // the clamped branch is exercised. spaceAbove = newHeight - distToBottom
-  // - 18 and spaceBelow stays ~(distToBottom - chipHeight - 18).
-  const distToBottom = Math.round(viewport.height - chipBox.y);
-  const newHeight = Math.round(2 * distToBottom - chipBox.height + 40);
-  expect(
-    newHeight < distToBottom + 238,
-    `Derived height ${newHeight} cannot exercise the sub-220px branch (distToBottom ${distToBottom})`,
-  ).toBe(true);
-
-  await page.setViewportSize({ width: 1280, height: newHeight });
   await expect(popover).toHaveAttribute('data-placement', 'up');
   await expectPopoverInsideViewport(page, 'up');
 });
@@ -224,8 +202,7 @@ async function expectPopoverInsideViewport(page: Page, placement: 'up' | 'down')
 
 async function openDesignSystemPicker(page: Page) {
   const composer = page.getByTestId('chat-composer');
-  await composer.getByTestId('chat-plus-trigger').click();
-  await page.getByTestId('composer-plus-design-system').click();
+  await composer.getByTestId('composer-design-system-trigger').click();
 }
 
 async function createProject(page: Page, projectName: string): Promise<void> {
