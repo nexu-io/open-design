@@ -294,6 +294,23 @@ describe("Electron Shell workspace build cache", () => {
     }
   });
 
+  it("keeps capability identity stable across checkout line endings", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-shell-capability-eol-"));
+    try {
+      await writeWorkspace(root);
+      const config = createConfig(root, join(root, ".cache"));
+      const before = await resolveShellBuildIdentity(config);
+      await writeFile(join(root, "apps/standalone/src/bootloader.ts"), "export const value = 1;\r\n");
+      const after = await resolveShellBuildIdentity(config);
+
+      expect(after.capabilityDigest).toBe(before.capabilityDigest);
+      expect(after.sourceDigest).not.toBe(before.sourceDigest);
+      expect(after.buildDigest).not.toBe(before.buildDigest);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("keeps Windows version-family aliases while macOS stays content-addressed", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-shell-alias-"));
     const cache = new ToolPackCache(join(root, ".cache"));

@@ -439,7 +439,10 @@ export class ToolPackCache {
 
 export async function hashPath(
   path: string,
-  options: { ignoreDirectoryNames?: readonly string[] } = {},
+  options: {
+    ignoreDirectoryNames?: readonly string[];
+    normalizeTextLineEndings?: boolean;
+  } = {},
 ): Promise<string> {
   const hash = createHash("sha256");
   const ignoredDirectoryNames = new Set(options.ignoreDirectoryNames ?? ["node_modules"]);
@@ -455,7 +458,10 @@ export async function hashPath(
     }
     if (!metadata.isDirectory()) {
       hash.update("file");
-      hash.update(await readFile(current));
+      const content = await readFile(current);
+      hash.update(options.normalizeTextLineEndings === true
+        ? content.toString("utf8").replace(/\r\n/gu, "\n")
+        : content);
       return;
     }
     hash.update("dir");

@@ -111,7 +111,7 @@ async function digestSourcePaths(
 ): Promise<`sha256:${string}`> {
   const entries = await Promise.all(paths.map(async (sourcePath) => [
     sourcePath,
-    await hashPath(join(workspaceRoot, sourcePath)),
+    await hashPath(join(workspaceRoot, sourcePath), { normalizeTextLineEndings: true }),
   ] as const));
   return `sha256:${hashJson(Object.fromEntries(entries))}`;
 }
