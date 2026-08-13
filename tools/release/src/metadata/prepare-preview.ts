@@ -1,9 +1,3 @@
-import { execFile as execFileCallback } from "node:child_process";
-import { appendFileSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { get as httpsGet } from "node:https";
-import { join } from "node:path";
-import { promisify } from "node:util";
 import {
   compareReleaseBaseVersions,
   formatReleaseVersion,
@@ -11,10 +5,17 @@ import {
   parseReleaseBaseVersion,
   type ReleaseBaseVersionTuple,
 } from "@open-design/release";
+import {
+  extractStableVersionFromTag,
+  fetchGitTags,
+  fetchOptionalHttpsText as fetchOptionalHttpsTextRequest,
+  readNumberField,
+  readShellVersion,
+  readStringField,
+  setGitHubOutput as setOutput,
+  validateHttpsUrl,
+} from "../lib/release-script.js";
 
-const execFile = promisify(execFileCallback);
-
-const stableTagPattern = /^open-design-v(\d+\.\d+\.\d+)$/;
 const previewReleaseBranchPattern = /^preview\/v(\d+\.\d+\.\d+)$/;
 
 type ParsedStableVersion = {
@@ -36,14 +37,6 @@ type ParsedPreviewMetadata = ParsedPreviewVersion & {
 function fail(message: string): never {
   console.error(`[release-preview] ${message}`);
   process.exit(1);
-}
-
-function extractStableVersionFromTag(tag: string): ParsedStableVersion | null {
-  const match = stableTagPattern.exec(tag);
-  if (match?.[1] == null) return null;
-
-  const parsed = parseReleaseBaseVersion(match[1]);
-  return parsed == null ? null : { parsed, value: match[1] };
 }
 
 function parsePreviewBaseVersionInput(value: string | undefined, sourceName: string): ParsedStableVersion | null {
@@ -98,16 +91,6 @@ function parsePreviewParts(baseVersion: string, previewNumber: string): ParsedPr
   };
 }
 
-function readStringField(record: Record<string, unknown>, field: string): string | null {
-  const value = record[field];
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-function readNumberField(record: Record<string, unknown>, field: string): number | null {
-  const value = record[field];
-  return typeof value === "number" && Number.isSafeInteger(value) ? value : null;
-}
-
 function parsePreviewVersion(value: string, sourceName: string): ParsedPreviewVersion {
   const parsed = parseCountedReleaseVersion(value, "preview");
   if (parsed == null) {
@@ -160,107 +143,11 @@ function parsePreviewMetadataJson(value: string): ParsedPreviewMetadata {
   return { ...parsePreviewParts(baseVersion, String(previewNumber)), source: "metadata-json" };
 }
 
-async function readShellVersion(): Promise<string> {
-  const packageJsonPath = join(process.cwd(), "shells", "electron", "package.json");
-  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as { version?: unknown };
-
-  if (typeof packageJson.version !== "string") {
-    fail(`missing version in ${packageJsonPath}`);
-  }
-
-  if (parseReleaseBaseVersion(packageJson.version) == null) {
-    fail(`shells/electron/package.json version must be a stable x.y.z base version; got ${packageJson.version}`);
-  }
-
-  return packageJson.version;
-}
-
-async function fetchGitTags(pattern: string): Promise<string[]> {
-  const { stdout } = await execFile("git", ["tag", "--list", pattern]);
-  return stdout
-    .split("\n")
-    .map((tag) => tag.trim())
-    .filter((tag) => tag.length > 0);
-}
-
 function fetchOptionalHttpsText(url: string, redirectCount = 0): Promise<string | null> {
-  return new Promise((resolvePromise, reject) => {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") {
-      reject(new Error(`expected HTTPS URL for preview feed lookup: ${parsed.protocol}`));
-      return;
-    }
-
-    const request = httpsGet(
-      parsed,
-      {
-        headers: {
-          "Cache-Control": "no-cache",
-        },
-      },
-      (response) => {
-        const statusCode = response.statusCode ?? 0;
-        if (statusCode === 404) {
-          response.resume();
-          resolvePromise(null);
-          return;
-        }
-
-        const location = response.headers.location;
-        if (statusCode >= 300 && statusCode < 400 && typeof location === "string") {
-          response.resume();
-          if (redirectCount >= 3) {
-            reject(new Error("too many redirects while reading preview feed"));
-            return;
-          }
-          const nextUrl = new URL(location, parsed).toString();
-          fetchOptionalHttpsText(nextUrl, redirectCount + 1).then(resolvePromise, reject);
-          return;
-        }
-
-        if (statusCode < 200 || statusCode >= 300) {
-          response.resume();
-          reject(new Error(`preview feed request failed with HTTP ${statusCode}`));
-          return;
-        }
-
-        const chunks: Buffer[] = [];
-        response.on("data", (chunk: Buffer) => {
-          chunks.push(chunk);
-        });
-        response.on("end", () => {
-          resolvePromise(Buffer.concat(chunks).toString("utf8"));
-        });
-      },
-    );
-
-    request.setTimeout(10_000, () => {
-      request.destroy(new Error("timed out while reading preview feed"));
-    });
-    request.on("error", reject);
-  });
+  return fetchOptionalHttpsTextRequest(url, { feedLabel: "preview" }, redirectCount);
 }
 
-function validateHttpsUrl(value: string, name: string): void {
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    fail(`${name} must be an HTTPS URL; got ${value}`);
-  }
-
-  if (parsed.protocol !== "https:") {
-    fail(`${name} must be an HTTPS URL; got ${value}`);
-  }
-}
-
-function setOutput(name: string, value: string): void {
-  const outputPath = process.env.GITHUB_OUTPUT;
-  if (outputPath == null || outputPath.length === 0) return;
-  appendFileSync(outputPath, `${name}=${value}\n`);
-}
-
-const packagedVersion = await readShellVersion();
+const packagedVersion = await readShellVersion(fail);
 const branch = process.env.GITHUB_REF_NAME ?? "";
 const previewBaseVersion = resolvePreviewBaseVersion(branch, process.env.OPEN_DESIGN_PREVIEW_VERSION, packagedVersion);
 const packagedParsed = previewBaseVersion.parsed;
@@ -289,7 +176,7 @@ const metadataUrl = process.env.OPEN_DESIGN_PREVIEW_METADATA_URL;
 if (metadataUrl == null || metadataUrl.length === 0) {
   fail("OPEN_DESIGN_PREVIEW_METADATA_URL is required");
 }
-validateHttpsUrl(metadataUrl, "OPEN_DESIGN_PREVIEW_METADATA_URL");
+validateHttpsUrl(metadataUrl, "OPEN_DESIGN_PREVIEW_METADATA_URL", fail);
 
 let previewNumber = 1;
 let latestPreview: ParsedPreviewVersion | null = null;
