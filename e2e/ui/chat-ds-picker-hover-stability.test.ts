@@ -15,9 +15,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@/playwright/suite';
 import type { Page } from '@playwright/test';
-import { routeAgents } from '@/playwright/mock-factory';
-
-const STORAGE_KEY = 'open-design:config';
+import { applyStandardMocks } from '@/playwright/mock-factory';
 
 const DESIGN_SYSTEMS = [
   {
@@ -37,48 +35,10 @@ const DESIGN_SYSTEMS = [
 ];
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: {},
-      }),
-    );
-  }, STORAGE_KEY);
-
-  await page.route('**/api/app-config', async (route) => {
-    await route.fulfill({
-      json: {
-        config: {
-          onboardingCompleted: true,
-          agentId: 'mock',
-          skillId: null,
-          designSystemId: null,
-          agentModels: {},
-          agentCliEnv: {},
-        },
-      },
-    });
-  });
-
-  await routeAgents(page, [
-    {
-      id: 'mock',
-      name: 'Mock Agent',
-      bin: 'mock-agent',
-      available: true,
-      version: 'test',
-      models: [{ id: 'default', label: 'Default' }],
-    },
-  ]);
+  // Seeds localStorage + /api/app-config with privacyDecisionAt set, so the
+  // first-run privacy-consent surface doesn't render over the composer and
+  // interfere with the hover/geometry assertions below.
+  await applyStandardMocks(page);
 
   await page.route('**/api/design-systems', async (route) => {
     await route.fulfill({ json: { designSystems: DESIGN_SYSTEMS } });
