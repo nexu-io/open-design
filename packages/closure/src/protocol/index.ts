@@ -180,6 +180,17 @@ export type ResolvedClosureDistributionTarget = {
   target: string;
 };
 
+export type ClosureDistributionColdStartBudget = {
+  budgetBytes: typeof CLOSURE_DISTRIBUTION_MAX_REQUIRED_BYTES;
+  components: {
+    body: ClosureDistributionBlob;
+    launcher: ClosureDistributionBlob;
+    native: ClosureDistributionBlob;
+  };
+  requiredBytes: number;
+  target: string;
+};
+
 export class ClosureProtocolError extends Error {
   constructor(message: string) {
     super(message);

@@ -111,13 +111,6 @@ const winDistributionActionPath = join(
   "action.yml",
 );
 const packagedMacSpecPath = join(e2eRoot, "specs", "mac.spec.ts");
-const dailyBetaRecoveryScriptPath = join(
-  workspaceRoot,
-  ".github",
-  "scripts",
-  "release",
-  "resolve-daily-beta-recovery.ts",
-);
 const releasePreviewWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-preview.yml");
 const releasePrereleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease.yml");
 const distributionCountedWorkflowPath = join(workspaceRoot, ".github", "workflows", "distribution-counted.yml");
@@ -140,6 +133,7 @@ const scopesScriptPath = join(workspaceRoot, "scripts", "scopes.ts");
 const runnersScriptPath = join(workspaceRoot, ".github", "scripts", "runners.py");
 const notifyDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-daily-feishu.yml");
 const notifyReleaseFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "notify-release-feishu.yml");
+const releaseNotifyWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-notify.yml");
 const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-release.yml");
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
 const feishuCardScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu.ts");
@@ -317,14 +311,6 @@ async function readPackagedVersion(): Promise<string> {
   return packageJson.version;
 }
 
-function nextMinorBaseVersion(version: string): string {
-  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(version);
-  if (match == null) {
-    throw new Error(`shell version must be x.y.z; got ${version}`);
-  }
-  return `${match[1]}.${Number(match[2]) + 1}.0`;
-}
-
 async function runScopesPrint(eventName: string, eventPayload: unknown, changedFiles: string[] = []): Promise<Record<string, unknown>> {
   const tempDir = await mkdtemp(join(tmpdir(), "od-scopes-"));
   const eventPath = join(tempDir, "event.json");
@@ -452,11 +438,17 @@ async function renderFeishuBuildCard(env: Record<string, string>): Promise<Recor
       cwd: workspaceRoot,
       env: {
         ...process.env,
-        BUILD_STATE: "success",
-        CHANNEL_LABEL: "Prerelease",
-        FEISHU_WEBHOOK: `http://127.0.0.1:${address.port}`,
-        VERSION: "0.19.0-prerelease.1",
-        ...env,
+        RELEASE_CHANNEL: (env.CHANNEL_LABEL ?? "Prerelease").toLowerCase(),
+        RELEASE_FEISHU_BOT: JSON.stringify(["v1", `http://127.0.0.1:${address.port}`, ""]),
+        RELEASE_MAC_ARM64_SMOKE: env.MAC_ARM64_SMOKE_RESULT ?? "",
+        RELEASE_MAC_ARM64_URL: env.MAC_ARM64_URL ?? "",
+        RELEASE_MAC_X64_SMOKE: env.MAC_X64_SMOKE_RESULT ?? "",
+        RELEASE_MAC_X64_URL: env.MAC_INTEL_URL ?? "",
+        RELEASE_RESULT: env.BUILD_STATE ?? "success",
+        RELEASE_STATE: env.RELEASE_STATE ?? "complete",
+        RELEASE_VERSION: env.VERSION ?? "0.19.0-prerelease.1",
+        RELEASE_WIN_X64_SMOKE: env.WIN_X64_SMOKE_RESULT ?? "",
+        RELEASE_WIN_X64_URL: env.WIN_URL ?? "",
       },
     });
   } finally {
@@ -2117,69 +2109,6 @@ process.stdin.on("end", () => {
     }
   });
 
-  it("[P1] lets the daily main build recover a shared beta advanced by a feature branch", async () => {
-    const packagedVersion = await readPackagedVersion();
-    const foreignBaseVersion = nextMinorBaseVersion(packagedVersion);
-    const objects: Record<string, unknown> = {
-      "beta/latest/metadata.json": {
-        baseVersion: foreignBaseVersion,
-        channel: "beta",
-        github: { branch: "feat/standalone-closure" },
-        releaseNumber: 9,
-        releaseVersion: `${foreignBaseVersion}-beta.9`,
-      },
-    };
-    const fixture = await startStablePrereleaseMetadataServer(objects);
-    const runnerTemp = await mkdtemp(join(tmpdir(), "od-release-beta-foreign-recovery-"));
-    const outputPath = join(runnerTemp, "outputs.txt");
-    const baseEnv = {
-      ...process.env,
-      BUILD_REF: "main",
-      GITHUB_OUTPUT: outputPath,
-      GITHUB_RUN_NUMBER: "4242",
-      NODE_TLS_REJECT_UNAUTHORIZED: "0",
-      OPEN_DESIGN_BETA_METADATA_URL: `${fixture.origin}/beta/latest/metadata.json`,
-      PACKAGED_VERSION: packagedVersion,
-    };
-
-    try {
-      const recovered = await execFileAsync(
-        process.execPath,
-        ["--experimental-strip-types", dailyBetaRecoveryScriptPath],
-        {
-          cwd: workspaceRoot,
-          env: baseEnv,
-          maxBuffer: 1024 * 1024,
-        },
-      );
-      expect(recovered.stdout).toContain(
-        "[daily-beta] recovering shared beta from foreign branch feat/standalone-closure",
-      );
-      const recoveryOutputs = await readFile(outputPath, "utf8");
-      expect(recoveryOutputs).toContain("force=true");
-      expect(recoveryOutputs).toContain("promote=false");
-      expect(recoveryOutputs).toContain(`release_version=${packagedVersion}-beta.4242`);
-
-      await writeFile(outputPath, "", "utf8");
-      const featureBuild = await execFileAsync(
-        process.execPath,
-        ["--experimental-strip-types", dailyBetaRecoveryScriptPath],
-        {
-          cwd: workspaceRoot,
-          env: { ...baseEnv, BUILD_REF: "feat/standalone-closure" },
-          maxBuffer: 1024 * 1024,
-        },
-      );
-      expect(featureBuild.stdout).toContain("[daily-beta] recovery disabled for non-main ref");
-      const featureOutputs = await readFile(outputPath, "utf8");
-      expect(featureOutputs).toContain("force=false");
-      expect(featureOutputs).toContain("promote=true");
-    } finally {
-      await fixture.close();
-      await rm(runnerTemp, { force: true, recursive: true });
-    }
-  });
-
   it("[P1] binds beta publication to the exact requested ref", async () => {
     const [betaWorkflow, dailyWorkflow, betaMacAction, betaWinAction] = await Promise.all([
       readReleaseWorkflow(releaseBetaWorkflowPath, distributionBetaWorkflowPath),
@@ -2241,15 +2170,11 @@ process.stdin.on("end", () => {
 
     const publishJob = betaWorkflow.slice(betaWorkflow.indexOf("  publish:"));
     expect(publishJob).toContain("inputs.promote");
-    expect(dailyWorkflow).toContain("resolve-daily-beta-recovery.ts");
-    expect(dailyWorkflow).toContain("force: ${{ needs.resolve.outputs.force == 'true' }}");
-    expect(dailyWorkflow).toContain("promote: ${{ needs.resolve.outputs.promote == 'true' }}");
-    expect(dailyWorkflow).toContain("release_version: ${{ needs.resolve.outputs.release_version }}");
-    expect(dailyWorkflow).toContain(
-      "MAC_ARM64_SMOKE_RESULT: ${{ needs.build.outputs.mac_arm64_smoke_result }}",
-    );
-    expect(dailyWorkflow).toContain("WIN_X64_SMOKE_RESULT: ${{ needs.build.outputs.win_x64_smoke_result }}");
-    expect(dailyWorkflow).toContain("RELEASE_STATE: ${{ needs.build.outputs.release_state }}");
+    expect(dailyWorkflow).toContain("enable_mac_x64: true");
+    expect(dailyWorkflow).toContain("notification_stream: daily");
+    expect(dailyWorkflow).not.toContain("force:");
+    expect(dailyWorkflow).not.toContain("release_version:");
+    expect(dailyWorkflow).not.toContain("tools/release/src/notifications/");
   });
 
   it("[P2] daily beta resolve defaults to main and preserves the ref override", async () => {
@@ -2266,9 +2191,7 @@ process.stdin.on("end", () => {
     // builds main, and the workflow_dispatch override is still propagated.
     const workflow = await readFile(notifyDailyFeishuWorkflowPath, "utf8");
     const resolveJob = sectionBetween(workflow, "  resolve:", "\n  build:");
-    expect(resolveJob).toContain("force: ${{ steps.recovery.outputs.force }}");
-    expect(resolveJob).toContain("promote: ${{ steps.recovery.outputs.promote }}");
-    expect(resolveJob).toContain("release_version: ${{ steps.recovery.outputs.release_version }}");
+    expect(resolveJob).toContain("ref: ${{ steps.pick.outputs.ref }}");
     // Override path: workflow_dispatch ref is wired in and forwarded verbatim.
     expect(resolveJob).toContain("OVERRIDE_REF: ${{ inputs.ref }}");
     expect(resolveJob).toContain('echo "ref=$OVERRIDE_REF" >> "$GITHUB_OUTPUT"');
@@ -2276,12 +2199,65 @@ process.stdin.on("end", () => {
     expect(resolveJob).toContain('echo "ref=main" >> "$GITHUB_OUTPUT"');
     expect(resolveJob).not.toContain("refs/heads/release/v*");
 
-    // Metadata failures happen before beta_version exists, so the normal
-    // download-card job is skipped. Keep a separate failure-only notice or a
-    // stale main version can fail silently every day without reaching smoke.
-    expect(workflow).toContain("  notify_failure:");
-    expect(workflow).toContain("if: ${{ always() && needs.build.result == 'failure' }}");
-    expect(workflow).toContain("tools/release/src/notifications/feishu-notice.ts");
+    // The release entry owns the sole terminal card, including failures before
+    // a version is allocated. The schedule only selects the stream and ref.
+    expect(workflow).toContain("notification_stream: daily");
+    expect(workflow).not.toContain("  notify:");
+    expect(workflow).not.toContain("  notify_failure:");
+  });
+
+  it("[P1] gives every release channel one explicit non-gating Feishu terminal report", async () => {
+    const [notifyCapability, beta, preview, prerelease, stable, daily, releaseBranch] = await Promise.all([
+      readFile(releaseNotifyWorkflowPath, "utf8"),
+      readFile(releaseBetaWorkflowPath, "utf8"),
+      readFile(releasePreviewWorkflowPath, "utf8"),
+      readFile(releasePrereleaseWorkflowPath, "utf8"),
+      readFile(releaseStableWorkflowPath, "utf8"),
+      readFile(notifyDailyFeishuWorkflowPath, "utf8"),
+      readFile(notifyReleaseFeishuWorkflowPath, "utf8"),
+    ]);
+    const entries = [
+      ["beta", beta, "RELEASE_FEISHU_BETA"],
+      ["preview", preview, "RELEASE_FEISHU_PREVIEW"],
+      ["prerelease", prerelease, "RELEASE_FEISHU_PRERELEASE"],
+      ["stable", stable, "RELEASE_FEISHU_STABLE"],
+    ] as const;
+    for (const [channel, workflow, secret] of entries) {
+      const notifyJob = workflow.slice(workflow.indexOf("  notify:"));
+      expect(notifyJob, channel).toContain("uses: ./.github/workflows/release-notify.yml");
+      expect(notifyJob, channel).toContain("if: ${{ always() && !cancelled() }}");
+      expect(notifyJob, channel).toContain(`channel: ${channel}`);
+      expect(notifyJob, channel).toContain(`bot: \${{ secrets.${secret} }}`);
+      for (const [, , otherSecret] of entries) {
+        if (otherSecret !== secret) expect(notifyJob, channel).not.toContain(otherSecret);
+      }
+    }
+    expect(notifyCapability).toContain("RELEASE_FEISHU_BOT: ${{ secrets.bot }}");
+    expect(notifyCapability).toContain("continue-on-error: true");
+    expect(notifyCapability).toContain("Feishu release notification failed after notifier retries");
+    expect(notifyCapability).toContain("tools/release/src/notifications/feishu.ts");
+    expect(daily).toContain("notification_stream: daily");
+    expect(releaseBranch).toContain("notification_stream: release-branch");
+    expect(daily).not.toContain("tools/release/src/notifications/");
+    expect(releaseBranch).not.toContain("tools/release/src/notifications/");
+  });
+
+  it("[P1] keeps macOS and Windows public Closure binding and cold-start evidence symmetric", async () => {
+    const [mac, win, distribution] = await Promise.all([
+      readFile(packagedMacSpecPath, "utf8"),
+      readFile(join(e2eRoot, "specs", "win.spec.ts"), "utf8"),
+      readFile(distributionBetaWorkflowPath, "utf8"),
+    ]);
+    for (const [platform, spec] of [["mac", mac], ["win", win]] as const) {
+      expect(spec, platform).toContain("readPackagedClosureBinding");
+      expect(spec, platform).toContain("createPackagedColdStartObservation");
+      expect(spec, platform).toContain("...(coldStart == null ? {} : { coldStart })");
+      expect(spec, platform).toContain("expected:");
+    }
+    expect(distribution).toContain("target: mac_arm64");
+    expect(distribution).toContain("target: mac_x64");
+    expect(distribution).toContain("target: win_x64");
+    expect(distribution).toContain("Issue public ${{ matrix.target }} acceptance credential");
   });
 
   it("[P1] skips the scheduled minor cut until the highest release branch is published stable", async () => {
@@ -2359,9 +2335,10 @@ process.stdin.on("end", () => {
   });
 
   it("[P1] keeps prerelease smoke failures advisory and annotates the download card", async () => {
-    const [prerelease, notify, feishuCard, macAction, winAction] = await Promise.all([
+    const [prerelease, notify, releaseNotify, feishuCard, macAction, winAction] = await Promise.all([
       readReleaseWorkflow(releasePrereleaseWorkflowPath, distributionPrereleaseWorkflowPath),
       readFile(notifyReleaseFeishuWorkflowPath, "utf8"),
+      readFile(releaseNotifyWorkflowPath, "utf8"),
       readFile(feishuCardScriptPath, "utf8"),
       readFile(macDistributionActionPath, "utf8"),
       readFile(winDistributionActionPath, "utf8"),
@@ -2410,22 +2387,14 @@ process.stdin.on("end", () => {
     expect(winAction.indexOf("Smoke packaged runtime")).toBeLessThan(
       winAction.indexOf("Publish platform"),
     );
-    const notifyJob = notify.slice(notify.indexOf("  notify:"));
-    expect(notifyJob).toContain("MAC_ARM64_SMOKE_RESULT: ${{ needs.build.outputs.mac_arm64_smoke_result }}");
-    expect(notifyJob).toContain("WIN_X64_SMOKE_RESULT: ${{ needs.build.outputs.win_x64_smoke_result }}");
-    expect(notifyJob).toContain("MAC_ARM64_URL: ${{ needs.build.outputs.mac_arm64_url }}");
-    expect(notifyJob).toContain("WIN_URL: ${{ needs.build.outputs.win_url }}");
-    expect(notifyJob).toContain("tools/release/src/notifications/feishu.ts");
-    expect(notifyJob).not.toContain("tools/release/src/notifications/feishu-notice.ts");
-
-    expect(feishuCard).toContain('optional("MAC_ARM64_SMOKE_RESULT")');
-    expect(feishuCard).toContain('optional("WIN_X64_SMOKE_RESULT")');
-    expect(feishuCard).toContain("Windows x64 smoke 失败");
-    expect(feishuCard).toContain("macOS arm64 smoke 失败");
-    expect(feishuCard).toContain("产物已继续发布，可通过下方链接下载");
-    expect(feishuCard).toContain(
-      'template: smokeFailures.length > 0 || releaseState === "partial" ? "orange"',
-    );
+    expect(notify).toContain("notification_stream: release-branch");
+    expect(notify).not.toContain("tools/release/src/notifications/");
+    expect(releaseNotify).toContain("RELEASE_MAC_ARM64_SMOKE: ${{ inputs.mac_arm64_smoke }}");
+    expect(releaseNotify).toContain("RELEASE_WIN_X64_SMOKE: ${{ inputs.win_x64_smoke }}");
+    expect(releaseNotify).toContain("tools/release/src/notifications/feishu.ts");
+    expect(releaseNotify).not.toContain("tools/release/src/notifications/feishu-notice.ts");
+    expect(feishuCard).toContain('optionalEnv("RELEASE_MAC_ARM64_SMOKE")');
+    expect(feishuCard).toContain('optionalEnv("RELEASE_WIN_X64_SMOKE")');
   });
 
   it("[P1] keeps download actions on a prerelease card with a failed Windows smoke", async () => {
@@ -2442,10 +2411,10 @@ process.stdin.on("end", () => {
 
     expect(card.header).toMatchObject({
       template: "orange",
-      title: { content: expect.stringContaining("Windows x64 smoke 失败") },
+      title: { content: expect.stringContaining("Prerelease") },
     });
     expect(card.elements.map((element) => element.text?.content).filter(Boolean)).toContain(
-      "**Smoke 告警**\n- Windows x64 smoke 失败\n\n产物已继续发布，可通过下方链接下载。",
+      "**告警**\n- Windows x64 smoke 失败",
     );
     expect(card.elements.flatMap((element) => element.actions ?? []).map((action) => action.url)).toEqual([
       "https://releases.example/mac.dmg",
@@ -2469,11 +2438,8 @@ process.stdin.on("end", () => {
 
     expect(card.header).toMatchObject({
       template: "orange",
-      title: { content: expect.stringContaining("未更新 Beta latest") },
+      title: { content: expect.stringContaining("部分完成") },
     });
-    expect(card.elements.map((element) => element.text?.content).filter(Boolean)).toContain(
-      "**渠道状态**\n产物已发布并可下载，但未更新 Beta latest。\n\n共享 beta/latest 版本高于 main，本次仅发布版本化快照。",
-    );
     expect(card.elements.flatMap((element) => element.actions ?? []).map((action) => action.url)).toEqual([
       "https://releases.example/beta-mac.dmg",
       "https://releases.example/beta-windows.exe",
@@ -2953,7 +2919,29 @@ process.stdin.on("end", () => {
     expect(macSpec).toContain("'launch-services-witness.json'");
     expect(macSpec).toContain("observeMacLaunchProcesses(executablePath)");
     expect(macSpec).toContain("collectMacLaunchServicesLog({ bundleId, executableName })");
-    expect(macSpec).toContain("['-a', installedAppPath, packagedInviteDeeplink]");
+    expect(macSpec).toContain("...(packagedHeadless ? ['-g'] : [])");
+    expect(macSpec).toContain("installedAppPath,\n    packagedInviteDeeplink");
+  });
+
+  it("keeps local macOS saturation complete through a package-level background agent", async () => {
+    const [runner, macSpec, builder, shellEntry] = await Promise.all([
+      readFile(join(e2eRoot, "scripts/release-smoke.ts"), "utf8"),
+      readFile(packagedMacSpecPath, "utf8"),
+      readFile(join(workspaceRoot, "tools/pack/src/mac/builder.ts"), "utf8"),
+      readFile(join(workspaceRoot, "shells/electron/src/index.ts"), "utf8"),
+    ]);
+
+    expect(runner).toContain("assertMacBackgroundAgentBuild");
+    expect(runner).toContain("build.backgroundAgent !== true");
+    expect(runner).not.toContain("mac-launch-services:release-beta");
+    expect(runner).toContain("await stopPackagedRuntime(platform, namespace)");
+    expect(runner).toContain("const terminationSignals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const");
+    expect(builder).toContain("extendInfo: config.macBackgroundAgent === true ? { LSUIElement: true } : undefined");
+    expect(shellEntry).not.toContain("setActivationPolicy");
+    expect(macSpec).toContain("new MacFocusWitness(toolsPackDir)");
+    expect(macSpec).toContain("await macFocusWitness.track");
+    expect(macSpec).toContain("await invokeMacInviteDeeplink(install.installedAppPath)");
+    expect(macSpec).toContain("await launchMacAppWithLaunchServices(install.installedAppPath)");
   });
 
   it("rejects stale latest platform manifests from a previous beta version", async () => {

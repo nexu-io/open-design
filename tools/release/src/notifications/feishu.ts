@@ -1,185 +1,54 @@
-// Posts a packaged build notification to a Feishu (Lark) custom-bot webhook as
-// an interactive card: version, branch, commit, per-platform download buttons,
-// and the changelog since the previously published build of the same channel.
-//
-// Inputs (all via env):
-//   FEISHU_WEBHOOK        (required) custom-bot webhook URL
-//   FEISHU_SIGN_SECRET    (optional) signing secret when the bot enables 签名校验
-//   CHANNEL_LABEL         display channel name, e.g. "Prerelease" (default "Prerelease")
-//   VERSION               (required) build version, e.g. 0.9.0-prerelease.1
-//   BRANCH                git branch that was built
-//   COMMIT                commit SHA that was built
-//   PREVIOUS_COMMIT       changelog baseline (last published build); empty on cold start
-//   CHANGELOG_FILE        path to a file holding `git log` output (one commit per line)
-//   BUILD_STATE           build result (success | ...) — drives header color
-//   RELEASE_STATE         complete | partial; partial means artifacts exist but channel latest was not promoted
-//   RELEASE_NOTE          optional operator-facing explanation for a partial release
-//   MAC_ARM64_SMOKE_RESULT macOS arm64 packaged smoke outcome (success | failure | skipped)
-//   WIN_X64_SMOKE_RESULT  Windows x64 packaged smoke outcome (success | failure | skipped)
-//   STREAM_LABEL          human label for the trigger (e.g. "release 分支推送" / "每日定时")
-//   REPO                  owner/name
-//   RUN_URL               link back to the GitHub Actions run
-//   MAC_ARM64_URL         macOS arm64 download URL (optional)
-//   MAC_INTEL_URL         macOS x64 (Intel) download URL (optional)
-//   WIN_URL               Windows x64 download URL (optional)
+import { appendFileSync } from "node:fs";
 
-import { readFileSync } from "node:fs";
-
+import { decodeReleaseFeishuBot } from "./bot-codec.ts";
+import {
+  buildReleaseFeishuCard,
+  loadReleaseNotificationDetails,
+  type ReleaseNotificationInput,
+} from "./release-card.ts";
 import {
   createFeishuSignedEnvelope,
-  optionalEnv as optional,
+  optionalEnv,
   postFeishuWebhook,
-  requiredEnv as required,
-  type FeishuCard,
 } from "./feishu-client.ts";
 
-type FeishuElement = Record<string, unknown>;
-
-const webhook = required("FEISHU_WEBHOOK");
-const signSecret = optional("FEISHU_SIGN_SECRET");
-const channelLabel = optional("CHANNEL_LABEL", "Prerelease");
-const version = required("VERSION");
-const branch = optional("BRANCH");
-const commit = optional("COMMIT");
-const previousCommit = optional("PREVIOUS_COMMIT");
-const changelogFile = optional("CHANGELOG_FILE");
-const buildState = optional("BUILD_STATE", "success");
-const releaseState = optional("RELEASE_STATE", "complete");
-const releaseNote = optional("RELEASE_NOTE");
-const streamLabel = optional("STREAM_LABEL", "构建");
-const repo = optional("REPO");
-const runUrl = optional("RUN_URL");
-
-const smokeFailures = buildState === "success"
-  ? [
-      { failureText: "macOS arm64 smoke 失败", result: optional("MAC_ARM64_SMOKE_RESULT") },
-      { failureText: "Windows x64 smoke 失败", result: optional("WIN_X64_SMOKE_RESULT") },
-    ]
-      .filter((entry) => entry.result === "failure")
-      .map((entry) => entry.failureText)
-  : [];
-
-const MAX_CHANGELOG_LINES = 30;
-
-// Download buttons, in display order. Empty URLs are skipped, so the set of
-// buttons reflects exactly the platforms this build published.
-const DOWNLOADS = [
-  { label: "macOS (Apple Silicon)", url: optional("MAC_ARM64_URL") },
-  { label: "macOS (Intel)", url: optional("MAC_INTEL_URL") },
-  { label: "Windows", url: optional("WIN_URL") },
-];
-
-function downloadButtons(): FeishuElement[] {
-  const present = DOWNLOADS.filter((d) => d.url.length > 0);
-  return present.map((d, index) => ({
-    tag: "button",
-    text: { tag: "plain_text", content: `下载 ${d.label}` },
-    type: index === 0 ? "primary" : "default",
-    url: d.url,
-  }));
+function summary(line: string): void {
+  const path = optionalEnv("GITHUB_STEP_SUMMARY");
+  if (path.length > 0) appendFileSync(path, `${line}\n`, "utf8");
+  console.log(line);
 }
 
-function readChangelog(): { lines: string[]; total: number; truncated: boolean } {
-  if (changelogFile.length === 0) return { lines: [], truncated: false, total: 0 };
-  let raw = "";
-  try {
-    raw = readFileSync(changelogFile, "utf8");
-  } catch {
-    return { lines: [], truncated: false, total: 0 };
+const bot = decodeReleaseFeishuBot(optionalEnv("RELEASE_FEISHU_BOT"));
+if (bot == null) {
+  summary("Feishu: not configured");
+} else {
+  const channel = optionalEnv("RELEASE_CHANNEL") as ReleaseNotificationInput["channel"];
+  if (!["beta", "preview", "prerelease", "stable"].includes(channel)) {
+    throw new Error(`unsupported release notification channel: ${channel}`);
   }
-  const all = raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  const truncated = all.length > MAX_CHANGELOG_LINES;
-  return { lines: truncated ? all.slice(0, MAX_CHANGELOG_LINES) : all, truncated, total: all.length };
-}
-
-function changelogMarkdown(): string {
-  const { lines, truncated, total } = readChangelog();
-  if (previousCommit.length === 0) {
-    return `首个 ${channelLabel} 包,无上个版本可对比。`;
-  }
-  if (lines.length === 0) {
-    return `与上个 ${channelLabel} 包之间没有新增提交。`;
-  }
-  const body = lines.map((line) => `- ${line}`).join("\n");
-  if (truncated) {
-    return `${body}\n- …还有 ${total - lines.length} 条提交(共 ${total} 条)`;
-  }
-  return body;
-}
-
-function headerTemplate(): "blue" | "red" {
-  return buildState === "success" ? "blue" : "red";
-}
-
-function buildCard(): FeishuCard {
-  const shortCommit = commit.length >= 7 ? commit.slice(0, 7) : commit;
-  const fields: FeishuElement[] = [];
-  if (branch.length > 0) {
-    fields.push({ is_short: true, text: { tag: "lark_md", content: `**分支**\n${branch}` } });
-  }
-  if (shortCommit.length > 0) {
-    const link = repo.length > 0 ? `[\`${shortCommit}\`](https://github.com/${repo}/commit/${commit})` : `\`${shortCommit}\``;
-    fields.push({ is_short: true, text: { tag: "lark_md", content: `**提交**\n${link}` } });
-  }
-  fields.push({ is_short: true, text: { tag: "lark_md", content: `**渠道**\n${channelLabel}` } });
-  fields.push({ is_short: true, text: { tag: "lark_md", content: `**触发**\n${streamLabel}` } });
-
-  const elements: FeishuElement[] = [{ tag: "div", fields }];
-  if (smokeFailures.length > 0) {
-    elements.push({
-      tag: "div",
-      text: {
-        tag: "lark_md",
-        content: `**Smoke 告警**\n${smokeFailures.map((failure) => `- ${failure}`).join("\n")}\n\n产物已继续发布，可通过下方链接下载。`,
-      },
-    });
-  }
-  if (releaseState === "partial") {
-    const detail = releaseNote.length > 0 ? `\n\n${releaseNote}` : "";
-    elements.push({
-      tag: "div",
-      text: {
-        tag: "lark_md",
-        content: `**渠道状态**\n产物已发布并可下载，但未更新 ${channelLabel} latest。${detail}`,
-      },
-    });
-  }
-  elements.push({
-    tag: "div",
-    text: { tag: "lark_md", content: `**自上个 ${channelLabel} 新增提交**\n${changelogMarkdown()}` },
-  });
-
-  const buttons = downloadButtons();
-  if (buttons.length > 0) {
-    elements.push({ tag: "hr" });
-    elements.push({ tag: "action", actions: buttons });
-  }
-
-  if (runUrl.length > 0) {
-    elements.push({
-      tag: "note",
-      elements: [{ tag: "lark_md", content: `[GitHub Actions run](${runUrl})` }],
-    });
-  }
-
-  return {
-    config: { wide_screen_mode: true },
-    header: {
-      template: smokeFailures.length > 0 || releaseState === "partial" ? "orange" : headerTemplate(),
-      title: {
-        tag: "plain_text",
-        content: releaseState === "partial"
-          ? `⚠️ Open Design ${channelLabel} ${version} · 未更新 ${channelLabel} latest`
-          : smokeFailures.length > 0
-          ? `⚠️ Open Design ${channelLabel} ${version} · ${smokeFailures.join("、")}`
-          : `🚀 Open Design ${channelLabel} ${version}`,
-      },
-    },
-    elements,
+  const input: ReleaseNotificationInput = {
+    branch: optionalEnv("RELEASE_BRANCH"),
+    channel,
+    changelogFile: optionalEnv("RELEASE_CHANGELOG_FILE"),
+    commit: optionalEnv("RELEASE_COMMIT"),
+    macArm64Smoke: optionalEnv("RELEASE_MAC_ARM64_SMOKE"),
+    macArm64Url: optionalEnv("RELEASE_MAC_ARM64_URL"),
+    macX64Smoke: optionalEnv("RELEASE_MAC_X64_SMOKE"),
+    macX64Url: optionalEnv("RELEASE_MAC_X64_URL"),
+    metadataUrl: optionalEnv("RELEASE_METADATA_URL"),
+    previousCommit: optionalEnv("RELEASE_PREVIOUS_COMMIT"),
+    releaseMode: optionalEnv("RELEASE_MODE", "publish"),
+    releaseResult: optionalEnv("RELEASE_RESULT", "success"),
+    releaseState: optionalEnv("RELEASE_STATE", "complete"),
+    repository: optionalEnv("RELEASE_REPOSITORY"),
+    runUrl: optionalEnv("RELEASE_RUN_URL"),
+    stream: optionalEnv("RELEASE_NOTIFICATION_STREAM", "release"),
+    version: optionalEnv("RELEASE_VERSION"),
+    winX64Smoke: optionalEnv("RELEASE_WIN_X64_SMOKE"),
+    winX64Url: optionalEnv("RELEASE_WIN_X64_URL"),
   };
+  const details = await loadReleaseNotificationDetails(input);
+  const card = buildReleaseFeishuCard(input, details);
+  await postFeishuWebhook(bot.webhook, createFeishuSignedEnvelope(card, bot.signSecret));
+  summary(`Feishu: delivered ${channel} ${input.version || "validation"}`);
 }
-
-await postFeishuWebhook(webhook, createFeishuSignedEnvelope(buildCard(), signSecret));

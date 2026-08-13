@@ -21,6 +21,7 @@ import {
   ClosureDistributionSharedContribution,
   ClosureDistributionTargetContribution,
   ClosureDistributionDigest,
+  ClosureDistributionColdStartBudget,
   ResolvedClosureDistributionTarget,
   ClosureProtocolError,
   requireRecord,
@@ -282,15 +283,20 @@ function normalizeClosureDistributionManifestDraft(value: unknown): ClosureDistr
     }
   }
   for (const [target, targetComponents] of Object.entries(normalized.required.targets)) {
-    const required = new Set([
-      normalized.required.body.blob,
-      normalized.required.launcher.blob,
-      targetComponents.native.blob,
-    ]);
-    const bytes = [...required].reduce((total, blob) => total + normalized.blobs[blob]!.size, 0);
-    if (bytes >= CLOSURE_DISTRIBUTION_MAX_REQUIRED_BYTES) {
+    const componentEntries = [
+      ["body", normalized.required.body.blob],
+      ["launcher", normalized.required.launcher.blob],
+      ["native", targetComponents.native.blob],
+    ] as const;
+    const required = new Set(componentEntries.map(([, blob]) => blob));
+    const requiredBytes = [...required].reduce((total, blob) => total + normalized.blobs[blob]!.size, 0);
+    if (requiredBytes >= CLOSURE_DISTRIBUTION_MAX_REQUIRED_BYTES) {
+      const components = componentEntries
+        .map(([name, blob]) => `${name}=${normalized.blobs[blob]!.size}`)
+        .join(", ");
       throw new ClosureProtocolError(
-        `closure distribution ${target} required bytes ${bytes} must be below ${CLOSURE_DISTRIBUTION_MAX_REQUIRED_BYTES}`,
+        `closure distribution ${target} cold-start bytes ${components}, unique=${requiredBytes}, `
+        + `budget<${CLOSURE_DISTRIBUTION_MAX_REQUIRED_BYTES}`,
       );
     }
   }
@@ -597,5 +603,29 @@ export function resolveClosureDistributionTarget(
       return { ...resource, artifact };
     }),
     target,
+  };
+}
+
+export function resolveClosureDistributionColdStartBudget(
+  manifest: ClosureDistributionManifest,
+  value: string,
+): ClosureDistributionColdStartBudget {
+  const resolved = resolveClosureDistributionTarget(manifest, value);
+  const component = (digest: ClosureDigest): ClosureDistributionBlob => {
+    const artifact = manifest.blobs[digest];
+    if (artifact == null) {
+      throw new ClosureProtocolError(`closure distribution target references unknown blob ${digest}`);
+    }
+    return artifact;
+  };
+  return {
+    budgetBytes: CLOSURE_DISTRIBUTION_MAX_REQUIRED_BYTES,
+    components: {
+      body: component(resolved.required.body.blob),
+      launcher: component(resolved.required.launcher.blob),
+      native: component(resolved.required.native.blob),
+    },
+    requiredBytes: resolved.requiredBlobs.reduce((total, artifact) => total + artifact.size, 0),
+    target: resolved.target,
   };
 }

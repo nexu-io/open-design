@@ -7,23 +7,30 @@ import { pipeline } from "node:stream/promises";
 import { isDeepStrictEqual } from "node:util";
 
 import {
-  releaseAcceptanceObjectKey,
-  releaseVersionPrefix,
+  resolveClosureDistributionColdStartBudget,
+  type ClosureDistributionColdStartBudget,
+} from "@open-design/closure/protocol";
+
+import {
   type ReleaseTarget,
 } from "@open-design/release";
 
-import { putStorageObjectWithStatus, getStorageObject, type StorageConfig } from "./s3-upload.ts";
 import { normalizePublicUrl, writeJson } from "./common.ts";
+import {
+  createPublicColdStartEvidence,
+  parsePublicColdStartBudget,
+  parsePublicColdStartEvidence,
+  type PublicColdStartEvidence,
+} from "./cold-start-evidence.ts";
 import { validateClosureDistributionPublication } from "./closure-distribution-metadata.ts";
-import { publishLatestRelease, sha256Digest } from "./latest-publication.ts";
-import { publishReleaseInventory, type ReleaseInventoryObject } from "./release-inventory.ts";
+import { sha256Digest } from "./latest-publication.ts";
 import {
   publicAcceptanceTargets as targetDefinitions,
   type ClosureTarget,
   type PublicArtifactKind,
 } from "./public-acceptance-targets.ts";
 
-type JsonRecord = Record<string, unknown>;
+export type JsonRecord = Record<string, unknown>;
 
 export type PublicArtifactBinding = {
   digest: string;
@@ -43,13 +50,14 @@ export type PublicAcceptancePlan = {
   artifact: PublicArtifactBinding & { path: string };
   artifactKind: PublicArtifactKind;
   closure: PublicClosureBinding;
+  coldStart: ClosureDistributionColdStartBudget;
   commit: string;
   metadata: PublicArtifactBinding & { path: string };
   namespace: string;
   platformManifest: PublicArtifactBinding & { path: string };
   releaseGeneratedAt: string;
   releaseVersion: string;
-  schemaVersion: 2;
+  schemaVersion: 3;
   target: ReleaseTarget;
 };
 
@@ -58,12 +66,13 @@ export type PublicAcceptanceCredential = {
   artifact: PublicArtifactBinding;
   artifactKind: PublicArtifactKind;
   closure: PublicAcceptancePlan["closure"];
+  coldStart: PublicColdStartEvidence;
   commit: string;
   metadata: PublicArtifactBinding;
   namespace: string;
   platformManifest: PublicArtifactBinding;
   releaseVersion: string;
-  schemaVersion: 2;
+  schemaVersion: 3;
   smoke: {
     profile: string;
     selectedLanes: string[];
@@ -74,13 +83,13 @@ export type PublicAcceptanceCredential = {
   target: ReleaseTarget;
 };
 
-function assertRecord(value: unknown, label: string): asserts value is JsonRecord {
+export function assertRecord(value: unknown, label: string): asserts value is JsonRecord {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} must be an object`);
   }
 }
 
-function stringField(record: JsonRecord, name: string, label: string): string {
+export function stringField(record: JsonRecord, name: string, label: string): string {
   const value = record[name];
   if (typeof value !== "string" || value.length === 0) {
     throw new Error(`${label}.${name} must be a non-empty string`);
@@ -88,7 +97,7 @@ function stringField(record: JsonRecord, name: string, label: string): string {
   return value;
 }
 
-function numberField(record: JsonRecord, name: string, label: string): number {
+export function numberField(record: JsonRecord, name: string, label: string): number {
   const value = record[name];
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new Error(`${label}.${name} must be a non-negative safe integer`);
@@ -102,7 +111,7 @@ function assertDigest(value: string, label: string): void {
   }
 }
 
-function artifactBinding(value: unknown, label: string): PublicArtifactBinding {
+export function artifactBinding(value: unknown, label: string): PublicArtifactBinding {
   assertRecord(value, label);
   const binding = {
     digest: stringField(value, "digest", label),
@@ -131,12 +140,12 @@ function publicClosureBinding(value: unknown, label: string): PublicClosureBindi
   return { channel, digest, protocolVersion, target: target as ClosureTarget, version };
 }
 
-function resolvePublicClosureBinding(input: {
+export function resolvePublicClosure(input: {
   expectedVersion?: string;
   metadata: JsonRecord;
   publicOrigin: string;
   target: ReleaseTarget;
-}): PublicClosureBinding {
+}): { binding: PublicClosureBinding; coldStart: ClosureDistributionColdStartBudget } {
   const value = childRecord(input.metadata, "closure", "metadata");
   const identity = childRecord(value, "identity", "metadata.closure");
   const version = input.expectedVersion ?? stringField(identity, "version", "metadata.closure.identity");
@@ -147,22 +156,26 @@ function resolvePublicClosureBinding(input: {
     releaseVersion: version,
     value,
   });
+  const target = targetDefinitions[input.target].closureTarget;
   return {
-    channel: "beta",
-    digest: closure.identity.digest,
-    protocolVersion: closure.identity.protocolVersion,
-    target: targetDefinitions[input.target].closureTarget,
-    version: closure.identity.version,
+    binding: {
+      channel: "beta",
+      digest: closure.identity.digest,
+      protocolVersion: closure.identity.protocolVersion,
+      target,
+      version: closure.identity.version,
+    },
+    coldStart: resolveClosureDistributionColdStartBudget(closure, target),
   };
 }
 
-function childRecord(record: JsonRecord, name: string, label: string): JsonRecord {
+export function childRecord(record: JsonRecord, name: string, label: string): JsonRecord {
   const child = record[name];
   assertRecord(child, `${label}.${name}`);
   return child;
 }
 
-function assertPublicImmutableUrl(url: string, publicOrigin: string, label: string): void {
+export function assertPublicImmutableUrl(url: string, publicOrigin: string, label: string): void {
   const parsed = new URL(normalizePublicUrl(url));
   const origin = new URL(normalizePublicUrl(publicOrigin));
   if (parsed.origin !== origin.origin || !parsed.pathname.startsWith(origin.pathname.replace(/\/$/u, ""))) {
@@ -173,7 +186,7 @@ function assertPublicImmutableUrl(url: string, publicOrigin: string, label: stri
   }
 }
 
-function assertIdentity(input: {
+export function assertIdentity(input: {
   commit: string;
   metadata: JsonRecord;
   platform: JsonRecord;
@@ -205,7 +218,7 @@ function assertIdentity(input: {
   }
 }
 
-function parseJsonBytes(bytes: Buffer, label: string): JsonRecord {
+export function parseJsonBytes(bytes: Buffer, label: string): JsonRecord {
   let value: unknown;
   try {
     value = JSON.parse(bytes.toString("utf8").replace(/^\uFEFF/u, "")) as unknown;
@@ -241,7 +254,7 @@ async function fetchPublic(url: string, fetchImpl: typeof fetch): Promise<Respon
   throw new Error(`public object did not become readable after 5 attempts: ${url} (${cause})`);
 }
 
-async function fetchBytes(url: string, fetchImpl: typeof fetch): Promise<Buffer> {
+export async function fetchBytes(url: string, fetchImpl: typeof fetch): Promise<Buffer> {
   const response = await fetchPublic(url, fetchImpl);
   return Buffer.from(await response.arrayBuffer());
 }
@@ -287,7 +300,7 @@ async function describeFile(path: string): Promise<{ digest: string; size: numbe
   };
 }
 
-function assertFileBinding(
+export function assertFileBinding(
   actual: { digest: string; size: number },
   expected: PublicArtifactBinding,
   label: string,
@@ -341,7 +354,7 @@ export async function preparePublicAcceptance(input: {
     artifacts[definition.artifactKind],
     `platform.artifacts.${definition.artifactKind}`,
   );
-  const closure = resolvePublicClosureBinding({
+  const resolvedClosure = resolvePublicClosure({
     metadata,
     publicOrigin: input.publicOrigin,
     target: input.target,
@@ -362,7 +375,8 @@ export async function preparePublicAcceptance(input: {
   const plan: PublicAcceptancePlan = {
     artifact: { ...artifact, path: artifactPath },
     artifactKind: definition.artifactKind,
-    closure,
+    closure: resolvedClosure.binding,
+    coldStart: resolvedClosure.coldStart,
     commit: input.commit,
     metadata: {
       digest: sha256Digest(metadataBytes),
@@ -379,7 +393,7 @@ export async function preparePublicAcceptance(input: {
     },
     releaseGeneratedAt: stringField(metadata, "generatedAt", "metadata"),
     releaseVersion: input.releaseVersion,
-    schemaVersion: 2,
+    schemaVersion: 3,
     target: input.target,
   };
   writeJson(input.buildJsonPath, { [definition.buildJsonField]: artifactPath });
@@ -395,24 +409,29 @@ export async function preparePublicWindowsAcceptance(
 
 function parsePlan(value: unknown): PublicAcceptancePlan {
   assertRecord(value, "public acceptance plan");
-  if (value.schemaVersion !== 2 || typeof value.target !== "string" || !(value.target in targetDefinitions)) {
+  if (value.schemaVersion !== 3 || typeof value.target !== "string" || !(value.target in targetDefinitions)) {
     throw new Error("unsupported public acceptance plan identity");
   }
   const closure = publicClosureBinding(value.closure, "public acceptance plan.closure");
+  const coldStart = parsePublicColdStartBudget(value.coldStart);
   const definition = targetDefinitions[value.target as ReleaseTarget];
-  if (closure.target !== definition.closureTarget || value.artifactKind !== definition.artifactKind) {
+  if (
+    closure.target !== definition.closureTarget
+    || coldStart.target !== definition.closureTarget
+    || value.artifactKind !== definition.artifactKind
+  ) {
     throw new Error("public acceptance plan target binding is invalid");
   }
   if (!Number.isFinite(Date.parse(stringField(value, "releaseGeneratedAt", "public acceptance plan")))) {
     throw new Error("public acceptance plan releaseGeneratedAt is invalid");
   }
-  return value as PublicAcceptancePlan;
+  return { ...value, closure, coldStart } as PublicAcceptancePlan;
 }
 
-function parseCredential(value: unknown): PublicAcceptanceCredential {
+export function parseCredential(value: unknown): PublicAcceptanceCredential {
   assertRecord(value, "public acceptance credential");
   if (
-    value.schemaVersion !== 2
+    value.schemaVersion !== 3
     || typeof value.target !== "string"
     || !(value.target in targetDefinitions)
     || value.status !== "accepted"
@@ -426,6 +445,10 @@ function parseCredential(value: unknown): PublicAcceptanceCredential {
     throw new Error("public acceptance credential target binding is invalid");
   }
   const smoke = childRecord(value, "smoke", "public acceptance credential");
+  const coldStart = parsePublicColdStartEvidence(value.coldStart);
+  if (coldStart.target !== closure.target) {
+    throw new Error("public acceptance coldStart target binding is invalid");
+  }
   if (
     smoke.status !== "success"
     || smoke.profile !== "core"
@@ -445,6 +468,7 @@ function parseCredential(value: unknown): PublicAcceptanceCredential {
     artifact: artifactBinding(value.artifact, "public acceptance credential.artifact"),
     artifactKind: definition.artifactKind,
     closure,
+    coldStart,
     commit,
     metadata: artifactBinding(value.metadata, "public acceptance credential.metadata"),
     namespace: stringField(value, "namespace", "credential"),
@@ -453,7 +477,7 @@ function parseCredential(value: unknown): PublicAcceptanceCredential {
       "public acceptance credential.platformManifest",
     ),
     releaseVersion,
-    schemaVersion: 2,
+    schemaVersion: 3,
     smoke: {
       profile: "core",
       selectedLanes: ["shell"],
@@ -533,6 +557,7 @@ export async function issuePublicAcceptance(input: {
     },
     artifactKind: plan.artifactKind,
     closure: plan.closure,
+    coldStart: createPublicColdStartEvidence(plan.coldStart, summary.coldStart),
     commit: plan.commit,
     metadata: {
       digest: plan.metadata.digest,
@@ -546,7 +571,7 @@ export async function issuePublicAcceptance(input: {
       url: plan.platformManifest.url,
     },
     releaseVersion: plan.releaseVersion,
-    schemaVersion: 2,
+    schemaVersion: 3,
     smoke: {
       profile,
       selectedLanes: ["shell"],
@@ -561,230 +586,6 @@ export async function issuePublicAcceptance(input: {
 }
 
 export const issuePublicWindowsAcceptance = issuePublicAcceptance;
-
-async function uploadImmutableCredential(input: {
-  credentialBytes: Buffer;
-  credentialPath: string;
-  objectKey: string;
-  storage: StorageConfig;
-}): Promise<void> {
-  const result = await putStorageObjectWithStatus({
-    ...input.storage,
-    bodyPath: input.credentialPath,
-    cacheControl: "public, max-age=31536000, immutable",
-    contentType: "application/json; charset=utf-8",
-    headers: { "if-none-match": "*" },
-    objectKey: input.objectKey,
-  });
-  if (result.ok) return;
-  if (result.status !== 412) {
-    throw new Error(`acceptance credential PUT failed with HTTP ${result.status}: ${result.body}`);
-  }
-  const existing = await getStorageObject({ ...input.storage, objectKey: input.objectKey });
-  if (existing == null || !existing.bytes.equals(input.credentialBytes)) {
-    throw new Error(`immutable acceptance credential conflict: ${input.objectKey}`);
-  }
-}
-
-export async function activateAcceptedPublicRelease(input: {
-  credentialPaths: string[];
-  fetchImpl?: typeof fetch;
-  publicOrigin: string;
-  storage: StorageConfig;
-  workDir: string;
-}): Promise<{
-  acceptanceUrls: Record<ReleaseTarget, string>;
-  inventoryUrl: string;
-  latestMetadataUrl: string;
-}> {
-  const fetchImpl = input.fetchImpl ?? fetch;
-  const accepted = await Promise.all(input.credentialPaths.map(async (path) => {
-    const bytes = await readFile(path);
-    return { bytes, credential: parseCredential(parseJsonBytes(bytes, `public acceptance credential ${path}`)), path };
-  }));
-  const requiredTargets = Object.keys(targetDefinitions).sort();
-  const acceptedTargets = accepted.map(({ credential }) => credential.target).sort();
-  if (!isDeepStrictEqual(acceptedTargets, requiredTargets)) {
-    throw new Error(`activation requires exactly ${requiredTargets.join(", ")}; got ${acceptedTargets.join(", ") || "none"}`);
-  }
-  const primary = accepted[0]?.credential;
-  if (primary == null) throw new Error("activation requires public acceptance credentials");
-  for (const { credential } of accepted) {
-    if (
-      credential.commit !== primary.commit
-      || credential.releaseVersion !== primary.releaseVersion
-      || !isDeepStrictEqual(credential.metadata, primary.metadata)
-    ) throw new Error("public acceptance credentials do not bind one release identity");
-    for (const [label, binding] of [
-      ["credential metadata URL", credential.metadata],
-      [`credential ${credential.target} platform manifest URL`, credential.platformManifest],
-      [`credential ${credential.artifactKind} URL`, credential.artifact],
-    ] as const) assertPublicImmutableUrl(binding.url, input.publicOrigin, label);
-  }
-  const metadataBytes = await fetchBytes(primary.metadata.url, fetchImpl);
-  assertFileBinding(
-    { digest: sha256Digest(metadataBytes), size: metadataBytes.byteLength },
-    primary.metadata,
-    "public metadata",
-  );
-  const metadata = parseJsonBytes(metadataBytes, "public metadata");
-  const metadataR2 = childRecord(metadata, "r2", "metadata");
-  if (stringField(metadataR2, "versionMetadataUrl", "metadata.r2") !== primary.metadata.url) {
-    throw new Error("accepted metadata URL no longer matches its public metadata identity");
-  }
-  const closureManifestUrl = normalizePublicUrl(
-    stringField(metadataR2, "closureManifestUrl", "metadata.r2"),
-  );
-  assertPublicImmutableUrl(closureManifestUrl, input.publicOrigin, "Closure manifest URL");
-  const closureManifestBytes = await fetchBytes(closureManifestUrl, fetchImpl);
-  const publicClosureManifest = parseJsonBytes(closureManifestBytes, "public Closure manifest");
-  const embeddedClosure = childRecord(metadata, "closure", "metadata");
-  if (!isDeepStrictEqual(publicClosureManifest, embeddedClosure)) {
-    throw new Error("public Closure manifest differs from metadata.closure");
-  }
-  const platformBytes = new Map<ReleaseTarget, Buffer>();
-  for (const { credential } of accepted) {
-    const bytes = await fetchBytes(credential.platformManifest.url, fetchImpl);
-    assertFileBinding(
-      { digest: sha256Digest(bytes), size: bytes.byteLength },
-      credential.platformManifest,
-      `public ${credential.target} platform manifest`,
-    );
-    const platform = parseJsonBytes(bytes, `public ${credential.target} platform manifest`);
-    assertIdentity({
-      commit: credential.commit,
-      metadata,
-      platform,
-      releaseVersion: credential.releaseVersion,
-      target: credential.target,
-    });
-    const publicArtifact = artifactBinding(
-      childRecord(platform, "artifacts", "platform")[credential.artifactKind],
-      `platform.artifacts.${credential.artifactKind}`,
-    );
-    if (!isDeepStrictEqual(publicArtifact, credential.artifact)) {
-      throw new Error(`accepted ${credential.artifactKind} no longer matches ${credential.target} metadata`);
-    }
-    const publicClosure = resolvePublicClosureBinding({
-      expectedVersion: credential.closure.version,
-      metadata,
-      publicOrigin: input.publicOrigin,
-      target: credential.target,
-    });
-    if (!isDeepStrictEqual(publicClosure, credential.closure)) {
-      throw new Error(`accepted Closure binding no longer matches ${credential.target} metadata`);
-    }
-    platformBytes.set(credential.target, bytes);
-  }
-
-  const releaseTargets = childRecord(metadata, "releaseTargets", "metadata");
-  const platformInputs: Record<string, { manifest: JsonRecord; path: string }> = {};
-  await mkdir(input.workDir, { recursive: true });
-  for (const [target, embedded] of Object.entries(releaseTargets)) {
-    assertRecord(embedded, `metadata.releaseTargets.${target}`);
-    if (embedded.status !== "published") continue;
-    const r2 = childRecord(embedded, "r2", `metadata.releaseTargets.${target}`);
-    const url = normalizePublicUrl(stringField(r2, "versionManifestUrl", `${target}.r2`));
-    assertPublicImmutableUrl(url, input.publicOrigin, `${target} platform manifest URL`);
-    const bytes = platformBytes.get(target as ReleaseTarget) ?? await fetchBytes(url, fetchImpl);
-    const manifest = parseJsonBytes(bytes, `${target} public platform manifest`);
-    if (!isDeepStrictEqual(embedded, manifest)) {
-      throw new Error(`combined metadata ${target} differs from its immutable platform manifest`);
-    }
-    const path = join(input.workDir, `${target}.json`);
-    await writeFile(path, bytes);
-    platformInputs[target] = { manifest, path };
-  }
-  const versionPrefix = stringField(metadataR2, "versionPrefix", "metadata.r2");
-  const expectedVersionPrefix = releaseVersionPrefix("beta", primary.releaseVersion);
-  if (versionPrefix !== expectedVersionPrefix) {
-    throw new Error(`accepted metadata has unexpected version prefix: ${versionPrefix}`);
-  }
-  const acceptanceUrls = {} as Record<ReleaseTarget, string>;
-  const versionRootUrl = `${input.publicOrigin.replace(/\/+$/u, "")}/${expectedVersionPrefix}`;
-  const versionLockUrl = `${versionRootUrl}/version.lock.json`;
-  const versionLockBytes = await fetchBytes(versionLockUrl, fetchImpl);
-  const inventoryObjects: ReleaseInventoryObject[] = [
-    { kind: "metadata", ...primary.metadata },
-    {
-      digest: sha256Digest(versionLockBytes),
-      kind: "version-lock",
-      size: versionLockBytes.byteLength,
-      url: versionLockUrl,
-    },
-  ];
-  for (const { bytes, credential, path } of accepted) {
-    const key = releaseAcceptanceObjectKey("beta", primary.releaseVersion, credential.target);
-    await uploadImmutableCredential({
-      credentialBytes: bytes,
-      credentialPath: path,
-      objectKey: key,
-      storage: input.storage,
-    });
-    acceptanceUrls[credential.target] = normalizePublicUrl(`${input.publicOrigin.replace(/\/+$/u, "")}/${key}`);
-    inventoryObjects.push(
-      { kind: "platform-manifest", target: credential.target, ...credential.platformManifest },
-      { kind: credential.artifactKind, target: credential.target, ...credential.artifact },
-      {
-        digest: sha256Digest(bytes),
-        kind: "acceptance",
-        size: bytes.byteLength,
-        target: credential.target,
-        url: acceptanceUrls[credential.target],
-      },
-    );
-  }
-  inventoryObjects.push({
-    digest: sha256Digest(closureManifestBytes),
-    kind: "closure-manifest",
-    size: closureManifestBytes.byteLength,
-    url: closureManifestUrl,
-  });
-  const closureBlobs = childRecord(embeddedClosure, "blobs", "metadata.closure");
-  for (const blob of Object.values(closureBlobs)) {
-    assertRecord(blob, "metadata.closure.blob");
-    inventoryObjects.push({
-      digest: stringField(blob, "digest", "metadata.closure.blob"),
-      kind: "closure-blob",
-      size: numberField(blob, "size", "metadata.closure.blob"),
-      url: stringField(blob, "url", "metadata.closure.blob"),
-    });
-  }
-  for (const [target, platform] of Object.entries(releaseTargets)) {
-    assertRecord(platform, `metadata.releaseTargets.${target}`);
-    const artifacts = childRecord(platform, "artifacts", `metadata.releaseTargets.${target}`);
-    for (const artifact of Object.values(artifacts)) {
-      const binding = artifactBinding(artifact, `${target} Shell artifact`);
-      inventoryObjects.push({ kind: "shell-artifact", target, ...binding });
-    }
-  }
-  const inventoryUrl = await publishReleaseInventory({
-    channel: "beta",
-    objects: inventoryObjects,
-    publicOrigin: input.publicOrigin,
-    releaseVersion: primary.releaseVersion,
-    storage: input.storage,
-    workDir: input.workDir,
-  });
-  if (stringField(metadataR2, "inventoryUrl", "metadata.r2") !== inventoryUrl) {
-    throw new Error("metadata inventory URL does not match the final release inventory");
-  }
-  const metadataPath = join(input.workDir, "metadata.json");
-  await writeFile(metadataPath, metadataBytes);
-  await publishLatestRelease({
-    channel: "beta",
-    metadataDir: input.workDir,
-    metadataPath,
-    platforms: platformInputs,
-    releaseVersion: primary.releaseVersion,
-    storage: input.storage,
-  });
-  return {
-    acceptanceUrls,
-    inventoryUrl,
-    latestMetadataUrl: normalizePublicUrl(`${input.publicOrigin.replace(/\/+$/u, "")}/beta/latest/metadata.json`),
-  };
-}
 
 export const publicAcceptanceInternals = {
   artifactBinding,

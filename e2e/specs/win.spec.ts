@@ -38,6 +38,10 @@ import {
 } from '@/vitest/standalone-distribution-fixture';
 import { readPackagedClosureBinding } from '@/vitest/packaged-closure-binding';
 import {
+  createPackagedColdStartObservation,
+  type PackagedColdStartObservation,
+} from '@/vitest/packaged-cold-start';
+import {
   hasPackagedSmokeLane,
   resolvePackagedSmokeLanes,
 } from '@/vitest/packaged-smoke-contract';
@@ -602,6 +606,7 @@ winDescribe('packaged windows runtime smoke', () => {
     let upgradePersistence: UpgradePersistenceSeed | { skipped: true } = { skipped: true };
     let payloadFixture: ToolsServeUpdaterFixture | null = null;
     let closureAcceptance: PackagedClosureFixture | null = null;
+    let coldStart: PackagedColdStartObservation | null = null;
     let expectedClosureReleaseVersion = updateScenario.expectedCurrentVersion;
     let expectedStandaloneVersion = updateScenario.expectedCurrentVersion;
     let intermediateUpdateFixture: Awaited<ReturnType<typeof resolveLocalUpdateFixture>> | null = null;
@@ -686,6 +691,7 @@ winDescribe('packaged windows runtime smoke', () => {
         // later URL-protocol cold start exercises the same Closure Store a
         // normal Windows launch uses. A tools-pack launch injects an isolated
         // namespace base root and cannot prove that OS launch boundary.
+        const coldLaunchStartedAt = Date.now();
         const firstRunStart = await measureSmokeStep(timings, 'start unseeded first run', async () => {
           if (!verifyPublicImmutableArtifacts) return runToolsPackJson<WinStartResult>('start');
           const launch = await launchNativeWindowsAcceptance(install.installDir);
@@ -698,6 +704,7 @@ winDescribe('packaged windows runtime smoke', () => {
             status: null,
           };
         });
+        const coldLaunchFinishedAt = Date.now();
         started = true;
         expect(firstRunStart.source).toBe('installed');
         const firstRunInspect = await measureSmokeStep(timings, 'wait healthy unseeded first run', async () =>
@@ -707,6 +714,14 @@ winDescribe('packaged windows runtime smoke', () => {
           // rather than the shorter steady-state health budget here.
           waitForHealthyDesktop(maxStartDurationMs),
         );
+        if (verifyPublicImmutableArtifacts) {
+          coldStart = createPackagedColdStartObservation({
+            launchFinishedAt: coldLaunchFinishedAt,
+            launchStartedAt: coldLaunchStartedAt,
+            readinessBudgetMs: maxStartDurationMs,
+            readyAt: Date.now(),
+          });
+        }
         expect(firstRunInspect.status?.state).toBe('running');
         if (!firstRunInspect.desktopIpcUnavailable) {
           const firstRunPhase = await measureSmokeStep(timings, 'ensure first-run app shell', async () =>
@@ -1096,6 +1111,15 @@ winDescribe('packaged windows runtime smoke', () => {
         label: 'packaged Windows',
         namespace,
         root: verifyPublicImmutableArtifacts ? nativeProductUserDataRoot : join(toolsPackDir, 'runtime', 'win'),
+        ...(verifyPublicImmutableArtifacts
+          ? { expected: {
+              channel: updateScenario.channel,
+              namespace,
+              releaseVersion: releaseVersion!,
+              target: 'win32-x64',
+              version: releaseVersion!,
+            } }
+          : {}),
       });
 
       const uninstall = await measureSmokeStep(timings, 'uninstall remove data', async () =>
@@ -1115,6 +1139,7 @@ winDescribe('packaged windows runtime smoke', () => {
       await report.saveSummary({
         appShell,
         closureBinding,
+        ...(coldStart == null ? {} : { coldStart }),
         onboarding: {
           afterSeed: seededOnboardingCompleted,
           atAppShell: onboardingCompleted,

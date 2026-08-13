@@ -128,6 +128,11 @@ export async function runElectronBuilder(
       electronLanguages: MAC_ELECTRON_LANGUAGES,
       entitlements: config.signMode !== "unsigned" ? macResources.entitlements : undefined,
       entitlementsInherit: config.signMode !== "unsigned" ? macResources.entitlementsInherit : undefined,
+      // Local packaged E2E still runs the real Electron renderer, but its app
+      // must be classified before process launch so macOS never activates it.
+      // Runtime activationPolicy calls are too late and payload handoffs can
+      // detach from the original runner; the bundle identity survives both.
+      extendInfo: config.macBackgroundAgent === true ? { LSUIElement: true } : undefined,
       gatekeeperAssess: false,
       hardenedRuntime: config.signMode !== "unsigned",
       icon: macResources.icon,

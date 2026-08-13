@@ -69,6 +69,7 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
 
   return {
     appPath: paths.appPath,
+    backgroundAgent: config.macBackgroundAgent === true,
     artifacts: {
       dmg: await describeToolPackArtifact(artifacts.dmgPath),
       payload: await describeToolPackArtifact(payloadPath),

@@ -1,9 +1,9 @@
 name: notify-release-feishu
 
 # On every push to a release/** branch, build a full prerelease package by reusing
-# release-prerelease, then post a Feishu card with the download
-# links (macOS arm64 + Intel and Windows) and the changelog
-# since the previously published prerelease. Consecutive pushes to the same branch
+# release-prerelease. That release entry owns the single terminal Feishu card and
+# RELEASE_FEISHU_PRERELEASE; this wrapper only supplies the release-branch stream.
+# Consecutive pushes to the same branch
 # are throttled, not debounced: an in-flight build is allowed to finish (so a
 # busy release branch always produces a prerelease), while pushes that arrive
 # during it coalesce into a single trailing build of the latest commit. With
@@ -96,64 +96,4 @@ jobs:
       # job dies before the smoke starts. That is how release/v0.18.1's first
       # prerelease failed on its branch-cut commit.
       win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode || 'core' }}
-
-  notify:
-    name: Notify Feishu (release)
-    needs: build
-    if: ${{ !cancelled() && needs.build.outputs.release_version != '' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout built ref
-        uses: actions/checkout@v6.0.2
-        with:
-          # The commit release-prerelease actually built, not github.sha. On push
-          # the two coincide, but on workflow_dispatch with an explicit ref they
-          # can differ — anchoring on the built commit keeps the changelog range
-          # (previous_commit..commit) correct for manual prerelease runs.
-          ref: ${{ needs.build.outputs.commit }}
-          fetch-depth: 0
-
-      - name: Compute changelog since last prerelease
-        id: changelog
-        env:
-          PREV: ${{ needs.build.outputs.previous_commit }}
-          CUR: ${{ needs.build.outputs.commit }}
-        run: |
-          set -euo pipefail
-          file="$RUNNER_TEMP/changelog.txt"
-          : > "$file"
-          if [ -n "$PREV" ] && git cat-file -e "${PREV}^{commit}" 2>/dev/null && git cat-file -e "${CUR}^{commit}" 2>/dev/null; then
-            git log --no-merges --pretty=format:'%s (%h)' "${PREV}..${CUR}" > "$file" || true
-          fi
-          echo "file=$file" >> "$GITHUB_OUTPUT"
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          version: 10.33.2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24.18.0
-
-      - name: Post Feishu card
-        env:
-          FEISHU_WEBHOOK: ${{ secrets.FEISHU_RELEASE_WEBHOOK }}
-          FEISHU_SIGN_SECRET: ${{ secrets.FEISHU_RELEASE_SIGN_SECRET }}
-          CHANNEL_LABEL: "Prerelease"
-          VERSION: ${{ needs.build.outputs.release_version }}
-          BRANCH: ${{ needs.build.outputs.branch }}
-          COMMIT: ${{ needs.build.outputs.commit }}
-          PREVIOUS_COMMIT: ${{ needs.build.outputs.previous_commit }}
-          CHANGELOG_FILE: ${{ steps.changelog.outputs.file }}
-          BUILD_STATE: ${{ needs.build.result }}
-          MAC_ARM64_SMOKE_RESULT: ${{ needs.build.outputs.mac_arm64_smoke_result }}
-          WIN_X64_SMOKE_RESULT: ${{ needs.build.outputs.win_x64_smoke_result }}
-          MAC_ARM64_URL: ${{ needs.build.outputs.mac_arm64_url }}
-          MAC_INTEL_URL: ${{ needs.build.outputs.mac_intel_url }}
-          WIN_URL: ${{ needs.build.outputs.win_url }}
-          STREAM_LABEL: "release 分支推送"
-          REPO: ${{ github.repository }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: node --experimental-strip-types tools/release/src/notifications/feishu.ts
+      notification_stream: release-branch

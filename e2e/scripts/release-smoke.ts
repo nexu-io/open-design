@@ -45,6 +45,18 @@ async function main(): Promise<void> {
   // headed default because its immutable historical fixture predates this
   // contract and must still receive full release-beta migration coverage.
   process.env.OD_PACKAGED_E2E_HEADLESS ??= process.env.CI === 'true' ? '0' : '1';
+  const headless = process.env.OD_PACKAGED_E2E_HEADLESS === '1';
+  if (platform === 'mac' && headless) {
+    await assertMacBackgroundAgentBuild(
+      process.env.OD_PACKAGED_E2E_BUILD_JSON_PATH,
+      'OD_PACKAGED_E2E_BUILD_JSON_PATH',
+    );
+    await assertMacBackgroundAgentBuild(
+      process.env.OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH,
+      'OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH',
+      false,
+    );
+  }
 
   await report.json('manifest.json', {
     ...(process.env.OD_PACKAGED_E2E_RELEASE_CHANNEL == null
@@ -59,10 +71,8 @@ async function main(): Promise<void> {
     githubRunAttempt: process.env.GITHUB_RUN_ATTEMPT ?? null,
     githubRunId: process.env.GITHUB_RUN_ID ?? null,
     namespace,
-    headless: process.env.OD_PACKAGED_E2E_HEADLESS === '1',
-    headlessDelegations: process.env.OD_PACKAGED_E2E_HEADLESS === '1'
-      ? ['historical-outer-migration:release-beta']
-      : [],
+    headless,
+    headlessDelegations: headless ? ['historical-outer-migration:release-beta'] : [],
     platform,
     reportPath: report.root,
     screenshot: `screenshots/open-design-${platform}-smoke.png`,
@@ -81,6 +91,9 @@ async function main(): Promise<void> {
     exitCode: 1,
     log: formatUnknown(error),
   }));
+  await stopPackagedRuntime(platform, namespace).catch((error: unknown) => {
+    console.error(`[release-smoke] failed to stop ${platform} namespace ${namespace}`, error);
+  });
   await report.save('vitest.log', result.log);
   await report.json('summary.json', await resolveSmokeSummary({
     platform,
@@ -131,6 +144,27 @@ async function saveOptionalSource(
   await report.save(relpath, await readFile(resolved));
 }
 
+async function assertMacBackgroundAgentBuild(
+  sourcePath: string | undefined,
+  envName: string,
+  required = true,
+): Promise<void> {
+  if (sourcePath == null || sourcePath === '') {
+    if (!required) return;
+    throw new Error(`missing source path for ${envName}`);
+  }
+  const resolved = resolveFromWorkspace(sourcePath);
+  if (!existsSync(resolved)) {
+    throw new Error(`${envName} does not exist: ${resolved}`);
+  }
+  const build = JSON.parse(await readFile(resolved, 'utf8')) as { backgroundAgent?: unknown };
+  if (build.backgroundAgent !== true) {
+    throw new Error(
+      `${envName} was not built as a macOS background agent; rebuild the initial and update packages with OD_PACKAGED_E2E_HEADLESS=1`,
+    );
+  }
+}
+
 async function runVitest(spec: string, resultPath: string): Promise<{ exitCode: number; log: string }> {
   const chunks: string[] = [];
   const child = spawn(process.execPath, [
@@ -158,11 +192,58 @@ async function runVitest(spec: string, resultPath: string): Promise<{ exitCode: 
     process.stderr.write(chunk);
   });
 
+  const terminationSignals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const;
+  const forwardSignal = (signal: NodeJS.Signals): void => {
+    if (child.exitCode == null && child.signalCode == null) {
+      child.kill(signal === 'SIGHUP' ? 'SIGTERM' : signal);
+    }
+  };
+  const signalHandlers = terminationSignals.map((signal) => {
+    const handler = (): void => forwardSignal(signal);
+    process.once(signal, handler);
+    return { handler, signal };
+  });
+
+  try {
+    const exitCode = await new Promise<number>((resolveExit, rejectExit) => {
+      child.once('error', rejectExit);
+      child.once('exit', (code) => resolveExit(code ?? 1));
+    });
+    return { exitCode, log: chunks.join('') };
+  } finally {
+    for (const { handler, signal } of signalHandlers) process.removeListener(signal, handler);
+  }
+}
+
+async function stopPackagedRuntime(platform: Platform, namespace: string): Promise<void> {
+  const command = process.env.OD_E2E_PNPM_COMMAND ?? (process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm');
+  const toolsPackDir = resolveFromWorkspace(
+    process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack',
+  );
+  const child = spawn(command, [
+    'exec',
+    'tools-pack',
+    platform,
+    'stop',
+    '--dir',
+    toolsPackDir,
+    '--namespace',
+    namespace,
+    '--json',
+  ], {
+    cwd: workspaceRoot,
+    env: process.env,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  const stderr: Buffer[] = [];
+  child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
   const exitCode = await new Promise<number>((resolveExit, rejectExit) => {
     child.once('error', rejectExit);
     child.once('exit', (code) => resolveExit(code ?? 1));
   });
-  return { exitCode, log: chunks.join('') };
+  if (exitCode !== 0) {
+    throw new Error(`tools-pack ${platform} stop exited ${exitCode}: ${Buffer.concat(stderr).toString('utf8')}`);
+  }
 }
 
 type VitestJsonResult = {

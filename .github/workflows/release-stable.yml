@@ -101,6 +101,10 @@ on:
         required: false
         type: string
         default: ""
+      notification_stream:
+        required: false
+        type: string
+        default: release
     outputs:
       release_version:
         description: "The stable version that was validated or published."
@@ -162,3 +166,24 @@ jobs:
       win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode }}
       win_x64_update_metadata_url: ${{ inputs.win_x64_update_metadata_url }}
       win_x64_update_target_version: ${{ inputs.win_x64_update_target_version }}
+
+  notify:
+    name: Report stable release
+    needs: distribute
+    if: ${{ always() && !cancelled() }}
+    uses: ./.github/workflows/release-notify.yml
+    with:
+      branch: ${{ needs.distribute.outputs.branch }}
+      channel: stable
+      commit: ${{ needs.distribute.outputs.commit }}
+      mac_arm64_url: ${{ needs.distribute.outputs.mac_arm64_url }}
+      mac_x64_url: ${{ needs.distribute.outputs.mac_intel_url }}
+      metadata_url: ${{ needs.distribute.outputs.version_metadata_url }}
+      notification_stream: ${{ inputs.notification_stream }}
+      previous_commit: ${{ needs.distribute.outputs.previous_commit }}
+      release_mode: ${{ needs.distribute.outputs.dry_run_mode || inputs.dry_run }}
+      release_result: ${{ needs.distribute.result }}
+      version: ${{ needs.distribute.outputs.release_version }}
+      win_x64_url: ${{ needs.distribute.outputs.win_url }}
+    secrets:
+      bot: ${{ secrets.RELEASE_FEISHU_STABLE }}

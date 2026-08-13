@@ -161,6 +161,16 @@ describe("public Windows release acceptance", () => {
         },
       },
       plan: { profile: "core", selectedLanes: ["shell"] },
+      coldStart: {
+        schemaVersion: 1,
+        status: "success",
+        timing: {
+          launchDurationMs: 1_250,
+          readinessBudgetMs: 300_000,
+          readinessDurationMs: 2_750,
+          totalDurationMs: 4_000,
+        },
+      },
       timings: [{ status: "success", step: "win-shell-lifecycle" }],
     }, null, 2)}\n`);
     await writeFile(suiteResultPath, `${JSON.stringify({ exitCode: 0, status: "success" })}\n`);
@@ -178,6 +188,24 @@ describe("public Windows release acceptance", () => {
         protocolVersion: CLOSURE_PROTOCOL_VERSION,
         target: "win32-x64",
         version: closureVersion,
+      },
+      coldStart: {
+        budgetBytes: 30_000_000,
+        components: {
+          body: source.closure.blobs[source.closure.required.body.blob],
+          launcher: source.closure.blobs[source.closure.required.launcher.blob],
+          native: source.closure.blobs[source.closure.required.targets["win32-x64"]!.native.blob],
+        },
+        requiredBytes: expect.any(Number),
+        schemaVersion: 1,
+        status: "success",
+        target: "win32-x64",
+        timing: {
+          launchDurationMs: 1_250,
+          readinessBudgetMs: 300_000,
+          readinessDurationMs: 2_750,
+          totalDurationMs: 4_000,
+        },
       },
       commit,
       releaseVersion,
@@ -221,6 +249,16 @@ describe("public Windows release acceptance", () => {
         },
       },
       plan: { profile: "core", selectedLanes: ["shell"] },
+      coldStart: {
+        schemaVersion: 1,
+        status: "success",
+        timing: {
+          launchDurationMs: 1,
+          readinessBudgetMs: 300_000,
+          readinessDurationMs: 2,
+          totalDurationMs: 3,
+        },
+      },
       timings: [{ status: "success", step: "win-shell-lifecycle" }],
     })}\n`);
     const suiteResultPath = join(root, "suite-result.json");

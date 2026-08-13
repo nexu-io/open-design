@@ -19,6 +19,7 @@ import {
   createClosureComponentTreeDigest,
   createClosureDistributionManifest,
   mergeClosureDistributionContributions,
+  resolveClosureDistributionColdStartBudget,
   resolveClosureDistributionTarget,
   serializeClosureCandidateManifestForSigning,
   validateClosureBindingIdentity,
@@ -367,6 +368,16 @@ describe("layered Closure distribution manifest", () => {
       distributionDigests.nativeMac,
     ].sort());
     expect(target.requiredBlobs.map((entry) => entry.digest)).not.toContain(distributionDigests.resource);
+    expect(resolveClosureDistributionColdStartBudget(produced, "darwin-arm64")).toEqual({
+      budgetBytes: 30_000_000,
+      components: {
+        body: produced.blobs[distributionDigests.body],
+        launcher: produced.blobs[distributionDigests.launcher],
+        native: produced.blobs[distributionDigests.nativeMac],
+      },
+      requiredBytes: 3_072,
+      target: "darwin-arm64",
+    });
   });
 
   it("enforces the strict 30 MB unique cold-start component budget", () => {
@@ -380,7 +391,34 @@ describe("layered Closure distribution manifest", () => {
       ])),
     };
     expect(() => createClosureDistributionManifest(oversized, digestCanonical))
-      .toThrow(/required bytes 30000000 must be below 30000000/u);
+      .toThrow(
+        /darwin-arm64 cold-start bytes body=10000000, launcher=10000000, native=10000000, unique=30000000, budget<30000000/u,
+      );
+  });
+
+  it("counts a shared cold-start blob once while preserving named component diagnostics", () => {
+    const sharedNative = {
+      ...distributionDraft,
+      blobs: Object.fromEntries(
+        Object.entries(distributionDraft.blobs).filter(([digest]) => digest !== distributionDigests.nativeMac),
+      ),
+      required: {
+        ...distributionDraft.required,
+        targets: {
+          ...distributionDraft.required.targets,
+          "darwin-arm64": {
+            native: {
+              blob: distributionDigests.launcher,
+              treeDigest: distributionDigests.launcher,
+            },
+          },
+        },
+      },
+    };
+    const produced = createClosureDistributionManifest(sharedNative, digestCanonical);
+    const budget = resolveClosureDistributionColdStartBudget(produced, "darwin-arm64");
+    expect(budget.components.native).toEqual(budget.components.launcher);
+    expect(budget.requiredBytes).toBe(2_048);
   });
 
   it("keeps resource identity content-addressed across release versions", () => {

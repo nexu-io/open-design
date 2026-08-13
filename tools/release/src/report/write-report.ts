@@ -128,6 +128,7 @@ const smokeTimings = reportTimings.smoke;
 const cacheReport = objectOrNull(build?.cacheReport);
 const cacheEntries = arrayOrEmpty(cacheReport?.entries ?? index?.cache);
 const buildSegments = arrayOrEmpty(build?.segments ?? index?.buildSegments);
+const coldStart = objectOrNull(smokeSummary?.coldStart);
 
 const report = {
   version: 1,
@@ -175,6 +176,7 @@ const report = {
     cache: cacheReport ?? (cacheEntries.length > 0 ? { entries: cacheEntries } : null),
     segments: buildSegments,
   },
+  coldStart,
   reportFiles: listFiles(reportRoot),
 };
 
@@ -190,6 +192,17 @@ const lines = [
 ];
 if (reportTimings.totalDurationMs != null) {
   lines.push(`- measured duration: ${code(seconds(reportTimings.totalDurationMs))} (${code(reportTimings.totalDurationSource)})`);
+}
+const coldStartTiming = objectOrNull(coldStart?.timing);
+if (coldStartTiming != null) {
+  lines.push(
+    "",
+    "| Cold start phase | Duration / budget |",
+    "| --- | ---: |",
+    `| launch / materialize | ${seconds(coldStartTiming.launchDurationMs)} |`,
+    `| readiness | ${seconds(coldStartTiming.readinessDurationMs)} / ${seconds(coldStartTiming.readinessBudgetMs)} |`,
+    `| total | ${seconds(coldStartTiming.totalDurationMs)} |`,
+  );
 }
 if (releaseScriptTimings.length > 0) {
   lines.push("", "| Release script step | Status | Duration |", "| --- | --- | ---: |");

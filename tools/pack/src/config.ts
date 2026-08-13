@@ -90,6 +90,8 @@ export type ToolPackConfig = {
   electronDistPath: string;
   electronVersion: string;
   macCompression: ToolPackMacCompression;
+  /** Build a macOS UIElement agent for local packaged E2E without desktop activation. */
+  macBackgroundAgent?: boolean;
   namespace: string;
   platform: ToolPackPlatform;
   portable: boolean;
@@ -407,6 +409,7 @@ export function resolveToolPackConfig(
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT, shell),
     electronVersion: resolveElectronVersion(WORKSPACE_ROOT, shell),
     macCompression: resolveToolPackMacCompression(options.macCompression),
+    macBackgroundAgent: platform === "mac" && process.env.OD_PACKAGED_E2E_HEADLESS === "1",
     namespace,
     platform,
     portable: options.portable === true,

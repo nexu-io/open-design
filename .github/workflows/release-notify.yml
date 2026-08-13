@@ -1,0 +1,142 @@
+name: release-notify
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        required: false
+        type: string
+        default: ""
+      channel:
+        required: true
+        type: string
+      commit:
+        required: false
+        type: string
+        default: ""
+      mac_arm64_smoke:
+        required: false
+        type: string
+        default: ""
+      mac_arm64_url:
+        required: false
+        type: string
+        default: ""
+      mac_x64_smoke:
+        required: false
+        type: string
+        default: ""
+      mac_x64_url:
+        required: false
+        type: string
+        default: ""
+      metadata_url:
+        required: false
+        type: string
+        default: ""
+      notification_stream:
+        required: false
+        type: string
+        default: release
+      previous_commit:
+        required: false
+        type: string
+        default: ""
+      release_mode:
+        required: false
+        type: string
+        default: publish
+      release_result:
+        required: true
+        type: string
+      release_state:
+        required: false
+        type: string
+        default: complete
+      version:
+        required: false
+        type: string
+        default: ""
+      win_x64_smoke:
+        required: false
+        type: string
+        default: ""
+      win_x64_url:
+        required: false
+        type: string
+        default: ""
+    secrets:
+      # Compact 1:1 channel secret codec:
+      # ["v1","https://open.feishu.cn/open-apis/bot/v2/hook/<id>","<sign-secret-or-empty>"]
+      bot:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    name: Report release to Feishu
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release notifier
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.commit != '' && inputs.commit || github.sha }}
+          fetch-depth: 0
+
+      - name: Compute release changelog
+        id: changelog
+        shell: bash
+        env:
+          CURRENT_COMMIT: ${{ inputs.commit }}
+          PREVIOUS_COMMIT: ${{ inputs.previous_commit }}
+        run: |
+          set -euo pipefail
+          changelog="$RUNNER_TEMP/release-changelog.txt"
+          : > "$changelog"
+          if [ -n "$PREVIOUS_COMMIT" ] \
+            && [ -n "$CURRENT_COMMIT" ] \
+            && git cat-file -e "${PREVIOUS_COMMIT}^{commit}" 2>/dev/null \
+            && git cat-file -e "${CURRENT_COMMIT}^{commit}" 2>/dev/null; then
+            git log --no-merges --pretty=format:'%s (%h)' "${PREVIOUS_COMMIT}..${CURRENT_COMMIT}" > "$changelog" || true
+          fi
+          echo "path=$changelog" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+
+      - name: Post terminal release card
+        id: post
+        continue-on-error: true
+        env:
+          RELEASE_BRANCH: ${{ inputs.branch }}
+          RELEASE_CHANNEL: ${{ inputs.channel }}
+          RELEASE_CHANGELOG_FILE: ${{ steps.changelog.outputs.path }}
+          RELEASE_COMMIT: ${{ inputs.commit }}
+          RELEASE_FEISHU_BOT: ${{ secrets.bot }}
+          RELEASE_MAC_ARM64_SMOKE: ${{ inputs.mac_arm64_smoke }}
+          RELEASE_MAC_ARM64_URL: ${{ inputs.mac_arm64_url }}
+          RELEASE_MAC_X64_SMOKE: ${{ inputs.mac_x64_smoke }}
+          RELEASE_MAC_X64_URL: ${{ inputs.mac_x64_url }}
+          RELEASE_METADATA_URL: ${{ inputs.metadata_url }}
+          RELEASE_MODE: ${{ inputs.release_mode }}
+          RELEASE_NOTIFICATION_STREAM: ${{ inputs.notification_stream }}
+          RELEASE_PREVIOUS_COMMIT: ${{ inputs.previous_commit }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_RESULT: ${{ inputs.release_result }}
+          RELEASE_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RELEASE_STATE: ${{ inputs.release_state }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          RELEASE_WIN_X64_SMOKE: ${{ inputs.win_x64_smoke }}
+          RELEASE_WIN_X64_URL: ${{ inputs.win_x64_url }}
+        run: node --experimental-strip-types tools/release/src/notifications/feishu.ts
+
+      - name: Warn when Feishu delivery fails
+        if: steps.post.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "::warning::Feishu release notification failed after notifier retries; release outcome is unchanged."
+          echo "Feishu: delivery failed (non-gating)" >> "$GITHUB_STEP_SUMMARY"

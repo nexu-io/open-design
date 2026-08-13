@@ -388,6 +388,7 @@ describe("runElectronBuilder", () => {
     return JSON.parse(await readFile(paths.appBuilderConfigPath, "utf8")) as {
       afterSign?: string;
       mac?: {
+        extendInfo?: { LSUIElement?: boolean };
         notarize?: boolean;
       };
     };
@@ -412,6 +413,19 @@ describe("runElectronBuilder", () => {
 
       expect(builderConfig.afterSign).toBeUndefined();
       expect(builderConfig.mac?.notarize).toBe(false);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("classifies only headless E2E bundles as macOS background agents", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const background = await prepareElectronBuilderConfig(root, { macBackgroundAgent: true });
+      expect(background.mac?.extendInfo).toEqual({ LSUIElement: true });
+
+      const headed = await prepareElectronBuilderConfig(root, { macBackgroundAgent: false });
+      expect(headed.mac?.extendInfo).toBeUndefined();
     } finally {
       await rm(root, { force: true, recursive: true });
     }

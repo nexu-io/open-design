@@ -1,5 +1,5 @@
 import { required, storageConfigFromEnv, writeJson } from "./common.ts";
-import { activateAcceptedPublicRelease } from "./public-acceptance.ts";
+import { activateAcceptedPublicRelease } from "./public-acceptance-activation.ts";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 

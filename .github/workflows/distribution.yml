@@ -179,7 +179,7 @@ on:
       mac_arm64_smoke_result:
         value: ${{ jobs.beta.outputs.mac_arm64_smoke_result || jobs.counted.outputs.mac_arm64_smoke_result }}
       mac_x64_smoke_result:
-        value: ${{ jobs.counted.outputs.mac_x64_smoke_result }}
+        value: ${{ jobs.beta.outputs.mac_x64_smoke_result || jobs.counted.outputs.mac_x64_smoke_result }}
       win_x64_smoke_result:
         value: ${{ jobs.beta.outputs.win_x64_smoke_result || jobs.counted.outputs.win_x64_smoke_result }}
 

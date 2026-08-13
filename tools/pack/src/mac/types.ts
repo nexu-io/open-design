@@ -52,6 +52,7 @@ export type SeededAppConfigPaths = {
 
 export type MacPackResult = {
   appPath: string;
+  backgroundAgent: boolean;
   artifacts: {
     dmg: ToolPackArtifactDescriptor | null;
     payload: ToolPackArtifactDescriptor | null;

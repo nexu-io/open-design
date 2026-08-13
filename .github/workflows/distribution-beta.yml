@@ -126,12 +126,15 @@ on:
       mac_arm64_smoke_result:
         description: "macOS arm64 packaged smoke outcome; advisory to publication."
         value: ${{ jobs.build_mac_arm64.outputs.smoke_result }}
+      mac_x64_smoke_result:
+        description: "macOS x64 packaged smoke outcome; advisory to publication."
+        value: ${{ jobs.build_mac_x64.outputs.smoke_result }}
       win_x64_smoke_result:
         description: "Windows x64 packaged smoke outcome; advisory to publication."
         value: ${{ jobs.build_win_x64.outputs.smoke_result }}
       mac_x64_url:
         description: "macOS x64 dmg download URL."
-        value: ${{ jobs.publish.outputs.mac_x64_url }}
+        value: ${{ jobs.publish.outputs.mac_x64_url || jobs.build_mac_x64.outputs.mac_x64_url }}
 
 permissions:
   actions: write
@@ -436,6 +439,9 @@ jobs:
       - metadata
     if: ${{ inputs.enable_mac_x64 }}
     runs-on: macos-15-intel
+    outputs:
+      mac_x64_url: ${{ steps.platform.outputs.dmg_url }}
+      smoke_result: ${{ steps.platform.outputs.smoke_result }}
     env:
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       APPLE_ID: ${{ secrets.APPLE_ID }}

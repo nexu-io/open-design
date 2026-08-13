@@ -44,6 +44,11 @@ import {
   type PackagedClosureFixture,
 } from '@/vitest/packaged-closure-fixture';
 import { readPackagedClosureBinding } from '@/vitest/packaged-closure-binding';
+import {
+  createPackagedColdStartObservation,
+  type PackagedColdStartObservation,
+} from '@/vitest/packaged-cold-start';
+import { MacFocusWitness } from '@/vitest/mac-focus-witness';
 import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
 import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
 import { createDesktopHarness, STORAGE_KEY, waitFor } from '../lib/desktop/desktop-test-helpers.ts';
@@ -59,6 +64,9 @@ const shellVersion = process.env.OD_PACKAGED_E2E_SHELL_VERSION;
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion, shellVersion });
 const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
 const packagedHeadless = process.env.OD_PACKAGED_E2E_HEADLESS === '1';
+const macFocusWitness = packagedHeadless && process.platform === 'darwin'
+  ? new MacFocusWitness(toolsPackDir)
+  : null;
 const packagedMacClosureTarget = process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64';
 const packagedMacUpdaterPlatform = process.arch === 'x64' ? 'macIntel' : 'mac';
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
@@ -80,6 +88,7 @@ const closureBlobRoots = parsePathListEnv(process.env.OD_PACKAGED_E2E_CLOSURE_BL
 const standaloneSeedEmbedded = process.env.OD_PACKAGED_E2E_STANDALONE_SEED_EMBEDDED === '1';
 const verifyPublicImmutableArtifacts =
   normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_SHELL_SMOKE_PROOF) === 'public-immutable-artifacts';
+const maxStartDurationMs = 90_000;
 const legacyDmgPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH);
 const legacyVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_VERSION);
 const minimumShellVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION);
@@ -396,6 +405,15 @@ const macOnboardingDescribe = shouldRunPackagedMacOnboardingSmoke ? describe : d
 const shouldRunDesktopMacSmoke = process.platform === 'darwin' && process.env.OD_DESKTOP_SMOKE === '1';
 const desktopMacDescribe = shouldRunDesktopMacSmoke ? describe : describe.skip;
 
+afterAll(async () => {
+  if (macFocusWitness == null) return;
+  try {
+    await macFocusWitness.assertNeverFrontmost();
+  } finally {
+    await macFocusWitness.stop();
+  }
+}, 10_000);
+
 macShellDescribe('packaged mac Shell runtime smoke', () => {
   let installedAppPath: string | null = null;
   let started = false;
@@ -414,6 +432,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
     let updaterRecovery: UpdaterRecoverySummary | { skipped: true } = { skipped: true };
     let upgradePersistence: UpgradePersistenceSeed | { skipped: true } = { skipped: true };
     let closureAcceptance: PackagedClosureFixture | null = null;
+    let coldStart: PackagedColdStartObservation | null = null;
     let passed = false;
     try {
       await resetPackagedRuntimeState();
@@ -460,7 +479,9 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         }
       }
 
+      const coldLaunchStartedAt = Date.now();
       const start = await runToolsPackJson<MacStartResult>('start');
+      const coldLaunchFinishedAt = Date.now();
       started = true;
 
       expect(start.namespace).toBe(namespace);
@@ -478,6 +499,14 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       }
 
       const inspect = await waitForHealthyDesktop();
+      if (verifyPublicImmutableArtifacts) {
+        coldStart = createPackagedColdStartObservation({
+          launchFinishedAt: coldLaunchFinishedAt,
+          launchStartedAt: coldLaunchStartedAt,
+          readinessBudgetMs: maxStartDurationMs,
+          readyAt: Date.now(),
+        });
+      }
       expect(inspect.status?.state).toBe('running');
       expect(inspect.status?.url).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       await capturePackagedCheckpoint(report, 'shell-initial-ready', inspect);
@@ -556,6 +585,12 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         const protocolColdStarted = await waitForHealthyDesktop();
         expect(protocolColdStarted.status?.state).toBe('running');
         expect(protocolColdStarted.status?.pid).not.toBe(protocolHotPid);
+        if (macFocusWitness != null && protocolColdStarted.status?.pid != null) {
+          await macFocusWitness.track({
+            appPath: install.installedAppPath,
+            pid: protocolColdStarted.status.pid,
+          });
+        }
 
         await invokeMacInviteDeeplink(install.installedAppPath);
         const protocolColdInspect = await waitForHealthyDesktop();
@@ -843,6 +878,13 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
             label: 'packaged macOS',
             namespace,
             root: join(toolsPackDir, 'runtime', 'mac'),
+            expected: {
+              channel: updateScenario.channel,
+              namespace,
+              releaseVersion: releaseVersion!,
+              target: packagedMacClosureTarget,
+              version: releaseVersion!,
+            },
           })
         : null;
 
@@ -860,6 +902,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       expect(await pathExists(install.installedAppPath)).toBe(false);
       await report.saveSummary({
         ...(closureBinding == null ? {} : { closureBinding }),
+        ...(coldStart == null ? {} : { coldStart }),
         health: value,
         install: {
           detached: install.detached,
@@ -2102,7 +2145,18 @@ async function runToolsPackJson<T>(
   });
 
   try {
-    return JSON.parse(result.stdout) as T;
+    const parsed = JSON.parse(result.stdout) as T;
+    if (action === 'start' && macFocusWitness != null) {
+      const start = parsed as MacStartResult;
+      await macFocusWitness.track({ appPath: start.appPath, pid: start.pid });
+    } else if (action === 'inspect' && macFocusWitness != null) {
+      const inspect = parsed as MacInspectResult;
+      if (inspect.status?.pid != null) {
+        const identity = await readDesktopIdentityMarker();
+        await macFocusWitness.track({ appPath: identity.appPath, pid: inspect.status.pid });
+      }
+    }
+    return parsed;
   } catch (error) {
     throw new Error(`tools-pack mac ${action} did not print JSON: ${String(error)}\n${result.stdout}`);
   }
@@ -2127,6 +2181,11 @@ async function capturePackagedCheckpoint(
     expect(observed.status?.windowVisible, `${name} must remain hidden in headless smoke`).toBe(false);
     expect(capture.status?.windowVisible, `${name} capture must not reveal the window`).toBe(false);
   }
+  const focusWitness = macFocusWitness;
+  if (focusWitness != null) {
+    const identity = await readDesktopIdentityMarker();
+    await focusWitness.track({ appPath: identity.appPath, pid: identity.pid });
+  }
   const logs = await runToolsPackJson<LogsResult>('logs').catch((error: unknown) => ({
     error: formatUnknown(error),
   }));
@@ -2134,7 +2193,11 @@ async function capturePackagedCheckpoint(
     logs,
     name,
     screenshotPath: checkpointPath,
-    snapshot: { capture, observed },
+    snapshot: {
+      capture,
+      focus: macFocusWitness?.snapshot() ?? null,
+      observed,
+    },
   });
   console.info(`[packaged evidence] ${checkpoint.name}: ${checkpoint.snapshot}`);
 }
@@ -2606,7 +2669,7 @@ async function readDesktopLocalCliSnapshot(
 async function waitForHealthyDesktop(
   releaseVersionOverride: string | null | undefined = releaseVersion,
 ): Promise<MacInspectResult> {
-  const timeoutMs = 90_000;
+  const timeoutMs = maxStartDurationMs;
   const startedAt = Date.now();
   let lastResult: unknown = null;
 
@@ -3120,7 +3183,14 @@ async function assertMacInviteProtocolRegistration(installedAppPath: string): Pr
 async function invokeMacInviteDeeplink(installedAppPath: string): Promise<void> {
   // `-a` pins delivery to this namespace's installed test bundle instead of a
   // developer's stable Open Design app that may own the same global scheme.
-  await execFileAsync('/usr/bin/open', ['-a', installedAppPath, packagedInviteDeeplink]);
+  // `-g` preserves protocol delivery without asking macOS to foreground the
+  // package-level background agent used by local saturation.
+  await execFileAsync('/usr/bin/open', [
+    ...(packagedHeadless ? ['-g'] : []),
+    '-a',
+    installedAppPath,
+    packagedInviteDeeplink,
+  ]);
 }
 
 async function launchMacAppWithLaunchServices(installedAppPath: string): Promise<void> {
@@ -3148,6 +3218,7 @@ async function launchMacAppWithLaunchServices(installedAppPath: string): Promise
     rm(witnessPath, { force: true }),
   ]);
   await execFileAsync('/usr/bin/open', [
+    ...(packagedHeadless ? ['-g'] : []),
     '-n',
     '--stdout', stdoutPath,
     '--stderr', stderrPath,
