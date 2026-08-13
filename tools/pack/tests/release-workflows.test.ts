@@ -91,6 +91,7 @@ describe("release workflows", () => {
     expect(macX64.match(/RELEASE_ARTIFACT_MODE: \$\{\{ inputs\.mac_x64_target == 'all' && 'all' \|\| 'dmg-and-payload' \}\}/g)?.length ?? 0).toBe(2);
     expect(mac).toContain("uses: actions/cache/restore@v5");
     expect(mac).toContain("uses: actions/cache/save@v5");
+    expect(mac).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke");
     expect(mac).toContain("tools-pack-mac-v1-beta-${RUNNER_OS}-arm64-");
     expect(mac).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-beta --json");
     expect(mac).toContain("exec tools-pack mac build");
@@ -120,6 +121,7 @@ describe("release workflows", () => {
     expect(mac).toContain("bash .github/scripts/release/cache/mac.sh");
     expect(macX64).toContain("uses: actions/cache/restore@v5");
     expect(macX64).toContain("uses: actions/cache/save@v5");
+    expect(macX64).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke");
     expect(macX64).toContain("tools-pack-mac-v1-beta-${RUNNER_OS}-x64-");
     expect(macX64).toContain("pnpm exec tools-pack mac cleanup --dir \"$RUNNER_TEMP/tools-pack\" --namespace release-beta-x64 --json");
     expect(macX64).toContain("exec tools-pack mac build");
@@ -189,6 +191,7 @@ describe("release workflows", () => {
     expect(win).not.toContain("tools\\release\\scripts\\build-platform.ps1");
     expect(win).toContain("uses: actions/cache/restore@v5");
     expect(win).toContain("uses: actions/cache/save@v5");
+    expect(win).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke");
     expect(win).toContain("tools-pack-win-v1-beta-$env:RUNNER_OS-");
     expect(win).toContain(
       "steps.win_x64_shell_resolution.outputs.state == 'miss' || (inputs.win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.win_x64_update_metadata_url == '' && inputs.win_x64_update_target_version == '')",

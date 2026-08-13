@@ -583,7 +583,7 @@ jobs:
       mac_arm64_url: ${{ steps.mac_arm64_platform_outputs.outputs.dmg_url }}
       smoke_result: ${{ steps.mac_arm64_smoke.outcome }}
     env:
-      OPEN_DESIGN_POSTINSTALL_LEVEL: release-platform
+      OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
     steps:
       - name: Checkout
@@ -1154,7 +1154,7 @@ jobs:
     if: ${{ inputs.enable_mac_x64 }}
     runs-on: macos-15-intel
     env:
-      OPEN_DESIGN_POSTINSTALL_LEVEL: release-platform
+      OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
     steps:
       - name: Checkout
@@ -1646,7 +1646,7 @@ jobs:
       smoke_result: ${{ steps.win_x64_smoke.outcome }}
       win_x64_url: ${{ steps.win_x64_platform_outputs.outputs.installer_url }}
     env:
-      OPEN_DESIGN_POSTINSTALL_LEVEL: release-platform
+      OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
       OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/beta/latest/metadata.json
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
     steps:

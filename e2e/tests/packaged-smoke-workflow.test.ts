@@ -2727,6 +2727,7 @@ process.stdin.on("end", () => {
     const workflow = await readFile(releaseBetaWorkflowPath, "utf8");
     const sharedJob = sectionBetween(workflow, "  metadata:", "  build_mac_arm64:");
     const macJob = sectionBetween(workflow, "  build_mac_arm64:", "  build_mac_x64:");
+    const macX64Job = sectionBetween(workflow, "  build_mac_x64:", "  build_win_x64:");
     const winJob = sectionBetween(workflow, "  build_win_x64:", "  publish:");
     const publishJob = sectionBetween(workflow, "  publish:", "  public_win_x64_acceptance:");
     const publicAcceptanceJob = sectionBetween(
@@ -2762,7 +2763,9 @@ process.stdin.on("end", () => {
     expect(sharedJob).toContain("tools-release publish-closure-contribution");
     expect(sharedJob).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: shared");
     expect(sharedJob).toContain('cp -R "$blob_root"');
-    expect(macJob).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-platform");
+    for (const platformJob of [macJob, macX64Job, winJob]) {
+      expect(platformJob).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke");
+    }
     expect(macJob).toContain("cache: pnpm");
     expect(macJob).toContain("Build beta mac_arm64 Standalone native contribution");
     expect(macJob).toContain("Resolve immutable mac_arm64 Electron Shell");
