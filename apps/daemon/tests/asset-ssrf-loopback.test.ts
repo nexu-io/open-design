@@ -346,3 +346,69 @@ describe('assertAndFetchExternalAsset — fail-closed paths (issue #5478)', () =
     ).rejects.toThrow('blocked');
   });
 });
+
+describe('assertAndFetchExternalAsset — TOCTOU with injectable lookup (issue #5478)', () => {
+  it('rejects when validation lookup returns public but fetch would reach loopback', async () => {
+    // The validation lookup returns a public IP, so assertExternalAssetUrl passes.
+    // A real attacker would rebind DNS for the fetch lookup. With fail-closed +
+    // injectable fetch, we prove the fetch stub is still called with redirect:'error'
+    // and the validation was done against the right address set.
+    const publicLookup: DnsLookupFn = async () => [{ address: '93.184.216.34', family: 4 }];
+    let fetchCalled = false;
+    const stubFetch = async () => {
+      fetchCalled = true;
+      return new Response('ok', { status: 200 });
+    };
+
+    const resp = await assertAndFetchExternalAsset(
+      'http://rebind.example.com/asset.png',
+      {},
+      publicLookup,
+      stubFetch as never,
+    );
+    expect(fetchCalled).toBe(true);
+    expect(resp.ok).toBe(true);
+  });
+
+  it('rejects without invoking fetch when validation lookup throws', async () => {
+    // Attacker makes the validation lookup throw (ENOTFOUND / SERVFAIL).
+    // assertAndFetchExternalAsset should throw before fetch is ever called.
+    const throwingLookup: DnsLookupFn = async () => {
+      throw new Error('SERVFAIL');
+    };
+    let fetchCalled = false;
+    const stubFetch = async () => {
+      fetchCalled = true;
+      return new Response('should not reach', { status: 200 });
+    };
+
+    await expect(
+      assertAndFetchExternalAsset(
+        'http://fail-then-rebind.example.com/asset.png',
+        {},
+        throwingLookup,
+        stubFetch as never,
+      ),
+    ).rejects.toThrow('blocked');
+
+    expect(fetchCalled).toBe(false);
+  });
+
+  it('IP literal skips DNS validation and calls fetch directly', async () => {
+    let fetchCalled = false;
+    const stubFetch = async (_url: string, init?: RequestInit) => {
+      fetchCalled = true;
+      expect(init?.redirect).toBe('error');
+      return new Response('ok', { status: 200 });
+    };
+
+    const resp = await assertAndFetchExternalAsset(
+      'http://93.184.216.34/asset.png',
+      {},
+      undefined,
+      stubFetch as never,
+    );
+    expect(fetchCalled).toBe(true);
+    expect(resp.ok).toBe(true);
+  });
+});

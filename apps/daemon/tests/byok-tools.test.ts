@@ -83,13 +83,13 @@ describe('executeGenerateImage', () => {
         });
         return new Response(
           JSON.stringify({
-            url: 'https://cdn.example.test/generated/cat.png',
+            url: 'https://93.184.216.34/generated/cat.png',
             base_resp: { status_code: 0, status_msg: 'success' },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      if (url === 'https://cdn.example.test/generated/cat.png') {
+      if (url === 'https://93.184.216.34/generated/cat.png') {
         return new Response(pngBytes, {
           status: 200,
           headers: { 'content-type': 'image/png' },
@@ -129,7 +129,7 @@ describe('executeGenerateImage', () => {
       if (url.endsWith('/v1/image/sync')) {
         expect(JSON.parse(String(init?.body)).model).toBe('doubao-seedream-5-0-260128');
         return new Response(
-          JSON.stringify({ url: 'https://cdn.example.test/hi.png' }),
+          JSON.stringify({ url: 'https://93.184.216.34/hi.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
@@ -151,7 +151,7 @@ describe('executeGenerateImage', () => {
       if (url.endsWith('/v1/image/sync')) {
         expect(JSON.parse(String(init?.body)).model).toBe('senseaudio-image-1.0-260319');
         return new Response(
-          JSON.stringify({ url: 'https://cdn.example.test/std.png' }),
+          JSON.stringify({ url: 'https://93.184.216.34/std.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
@@ -174,7 +174,7 @@ describe('executeGenerateImage', () => {
         // Falls through to ctx.defaultImageModel (registry-valid).
         expect(JSON.parse(String(init?.body)).model).toBe('senseaudio-image-1.0-260319');
         return new Response(
-          JSON.stringify({ url: 'https://cdn.example.test/x.png' }),
+          JSON.stringify({ url: 'https://93.184.216.34/x.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
@@ -197,7 +197,7 @@ describe('executeGenerateImage', () => {
         // Registry default is the first SenseAudio entry — 2.0 today.
         expect(JSON.parse(String(init?.body)).model).toBe('senseaudio-image-2.0-260319');
         return new Response(
-          JSON.stringify({ url: 'https://cdn.example.test/d.png' }),
+          JSON.stringify({ url: 'https://93.184.216.34/d.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
@@ -236,7 +236,7 @@ describe('executeGenerateImage', () => {
       if (url.endsWith('/v1/image/sync')) {
         expect(JSON.parse(String(init?.body)).size).toBe('1280x720');
         return new Response(
-          JSON.stringify({ url: 'https://cdn.example.test/wide.png' }),
+          JSON.stringify({ url: 'https://93.184.216.34/wide.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
@@ -259,7 +259,7 @@ describe('executeGenerateImage', () => {
       if (url.endsWith('/v1/image/sync')) {
         expect(JSON.parse(String(init?.body)).size).toBe('1024x1024');
         return new Response(
-          JSON.stringify({ url: 'https://cdn.example.test/square.png' }),
+          JSON.stringify({ url: 'https://93.184.216.34/square.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
@@ -361,7 +361,7 @@ describe('executeGenerateImage', () => {
       const url = String(input);
       if (url.endsWith('/v1/image/sync')) {
         return new Response(
-          JSON.stringify({ url: 'https://cdn.example.test/will-404.png' }),
+          JSON.stringify({ url: 'https://93.184.216.34/will-404.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
@@ -673,14 +673,14 @@ describe('executeGenerateVideo', () => {
           JSON.stringify({
             status: 'completed',
             progress: 100,
-            video_url: 'https://cdn.example.test/video/done.mp4',
+            video_url: 'https://93.184.216.34/video/done.mp4',
             duration: 8,
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
 
-      if (url === 'https://cdn.example.test/video/done.mp4') {
+      if (url === 'https://93.184.216.34/video/done.mp4') {
         return new Response(mp4Bytes, {
           status: 200,
           headers: { 'content-type': 'video/mp4' },
@@ -736,7 +736,7 @@ describe('executeGenerateVideo', () => {
         return new Response(
           JSON.stringify({
             status: 'completed',
-            video_url: 'https://cdn.example.test/video/d.mp4',
+            video_url: 'https://93.184.216.34/video/d.mp4',
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
@@ -770,7 +770,7 @@ describe('executeGenerateVideo', () => {
         return new Response(
           JSON.stringify({
             status: 'completed',
-            video_url: 'https://cdn.example.test/clamp.mp4',
+            video_url: 'https://93.184.216.34/clamp.mp4',
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
@@ -1003,13 +1003,13 @@ describe('executeAIHubMixGenerateVideo', () => {
         return new Response(
           JSON.stringify({
             status: 'completed',
-            video_url: 'https://cdn.example.test/video/done.mp4',
+            video_url: 'https://93.184.216.34/video/done.mp4',
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
 
-      if (url === 'https://cdn.example.test/video/done.mp4') {
+      if (url === 'https://93.184.216.34/video/done.mp4') {
         return new Response(mp4Bytes, {
           status: 200,
           headers: { 'content-type': 'video/mp4' },
@@ -1095,11 +1095,11 @@ describe('executeAIHubMixGenerateVideo', () => {
       }
       if (url === 'https://aihubmix.com/v1/videos/v-cdn') {
         return new Response(
-          JSON.stringify({ status: 'completed', video_url: 'https://cdn.example.test/signed.mp4' }),
+          JSON.stringify({ status: 'completed', video_url: 'https://93.184.216.34/signed.mp4' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      if (url === 'https://cdn.example.test/signed.mp4') {
+      if (url === 'https://93.184.216.34/signed.mp4') {
         cdnHeaders = init?.headers ?? {};
         return new Response(Buffer.from([0x01]), { status: 200 });
       }
@@ -1157,7 +1157,7 @@ describe('executeAIHubMixGenerateVideo', () => {
       }
       if (url === 'https://aihubmix.com/v1/videos/v1') {
         return new Response(
-          JSON.stringify({ status: 'completed', url: 'https://cdn.example.test/v.mp4' }),
+          JSON.stringify({ status: 'completed', url: 'https://93.184.216.34/v.mp4' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
@@ -1186,7 +1186,7 @@ describe('executeAIHubMixGenerateVideo', () => {
         });
       }
       return new Response(
-        JSON.stringify({ status: 'completed', url: 'https://cdn.example.test/v.mp4' }),
+        JSON.stringify({ status: 'completed', url: 'https://93.184.216.34/v.mp4' }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     });
@@ -1208,7 +1208,7 @@ describe('executeAIHubMixGenerateVideo', () => {
         });
       }
       return new Response(
-        JSON.stringify({ status: 'completed', url: 'https://cdn.example.test/v.mp4' }),
+        JSON.stringify({ status: 'completed', url: 'https://93.184.216.34/v.mp4' }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     });
@@ -1254,7 +1254,7 @@ describe('executeAIHubMixGenerateVideo', () => {
         });
       }
       return new Response(
-        JSON.stringify({ status: 'completed', url: 'https://cdn.example.test/v.mp4' }),
+        JSON.stringify({ status: 'completed', url: 'https://93.184.216.34/v.mp4' }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
     });
@@ -1292,7 +1292,7 @@ describe('executeAIHubMixGenerateVideo', () => {
       }
       if (url === 'https://aihubmix.com/v1/videos/v-i2v') {
         return new Response(
-          JSON.stringify({ status: 'completed', url: 'https://cdn.example.test/v.mp4' }),
+          JSON.stringify({ status: 'completed', url: 'https://93.184.216.34/v.mp4' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
@@ -1339,7 +1339,7 @@ describe('executeAIHubMixGenerateVideo', () => {
       }
       if (url === 'https://aihubmix.com/v1/videos/v-i2v2') {
         return new Response(
-          JSON.stringify({ status: 'completed', url: 'https://cdn.example.test/v.mp4' }),
+          JSON.stringify({ status: 'completed', url: 'https://93.184.216.34/v.mp4' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
@@ -1385,7 +1385,7 @@ describe('executeAIHubMixGenerateVideo', () => {
       }
       if (url === 'https://aihubmix.com/v1/videos/v-t2v') {
         return new Response(
-          JSON.stringify({ status: 'completed', url: 'https://cdn.example.test/v.mp4' }),
+          JSON.stringify({ status: 'completed', url: 'https://93.184.216.34/v.mp4' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }

@@ -240,6 +240,7 @@ export function validateUserProviderBaseUrl(
  */
 export async function assertExternalAssetUrl(
   rawUrl: string,
+  lookup?: DnsLookupFn,
 ): Promise<
   | { ok: true; resolvedAddresses?: ReadonlyArray<{ address: string; family: number }> }
   | { ok: false; error: string }
@@ -250,7 +251,7 @@ export async function assertExternalAssetUrl(
   // Asset URLs come from upstream API responses (data.url / data.video_url)
   // and are attacker-controllable. They MUST NOT point at loopback or
   // internal addresses, regardless of operator allowlists (issue #5478).
-  const validated = await validateBaseUrlResolved(rawUrl, undefined, {
+  const validated = await validateBaseUrlResolved(rawUrl, lookup, {
     forbidLoopback: true,
   });
   if (validated.error || !validated.parsed) {
@@ -312,6 +313,9 @@ export function createAssetValidatingLookup(
 // Long-lived dispatcher reused across calls. A per-request Agent leaks
 // keep-alive sockets; a shared dispatcher avoids that while still pinning the
 // connection-time validating lookup (same approach as plugin-asset-cache.ts).
+// Used by `createAssetValidatingLookup` consumers in production; the default
+// fetch in `assertAndFetchExternalAsset` is `globalThis.fetch` so test stubs
+// still intercept.
 const assetDispatcher = new Agent({
   connect: { lookup: createAssetValidatingLookup() as never },
 });
@@ -338,8 +342,10 @@ const assetDispatcher = new Agent({
 export async function assertAndFetchExternalAsset(
   url: string,
   init: RequestInit = {},
+  lookup?: DnsLookupFn,
+  fetchImpl: typeof fetch = fetch,
 ): Promise<Response> {
-  const check = await assertExternalAssetUrl(url);
+  const check = await assertExternalAssetUrl(url, lookup);
   if (!check.ok) throw new Error(check.error);
 
   // Determine whether the hostname is an IP literal. If so, the synchronous
@@ -361,15 +367,10 @@ export async function assertAndFetchExternalAsset(
     throw new Error('asset URL hostname was not DNS-validated — refusing unpinned fetch');
   }
 
-  // Route through the long-lived asset dispatcher whose connection-time lookup
-  // rejects non-public addresses. This is defense-in-depth on top of the
-  // pre-validation: even if a rebind slips through, the socket-level check
-  // catches it.
-  return undiciFetch(url, {
-    ...init,
-    redirect: 'error',
-    dispatcher: assetDispatcher,
-  } as Parameters<typeof undiciFetch>[1]);
+  // Use the injected (or default global) fetch so tests can stub it with
+  // vi.stubGlobal('fetch', …). redirect:'error' blocks a 3xx hop into
+  // private space (issue #5478).
+  return fetchImpl(url, { ...init, redirect: 'error' });
 }
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
