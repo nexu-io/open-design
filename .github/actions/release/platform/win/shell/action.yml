@@ -1,0 +1,166 @@
+name: Resolve Windows Shell
+description: Resolve, build, validate, and register one immutable Windows Shell target
+
+inputs:
+  amr-profile:
+    required: false
+    default: ""
+  build-target:
+    required: false
+    default: all
+  channel:
+    required: true
+  namespace:
+    required: true
+  register-enabled:
+    required: false
+    default: "true"
+  release-version:
+    required: true
+  require-vela-cli:
+    required: false
+    default: "false"
+  shell-smoke-matrix:
+    required: false
+    default: ""
+  shell-version:
+    required: false
+    default: ""
+  sign-mode:
+    required: true
+
+outputs:
+  build-outcome:
+    value: ${{ steps.build.outcome }}
+  build-json-path:
+    value: ${{ steps.paths.outputs.build_json_path }}
+  shell-version:
+    value: ${{ steps.resolution.outputs.shell_version != '' && steps.resolution.outputs.shell_version || inputs.shell-version != '' && inputs.shell-version || inputs.release-version }}
+  smoke-proof:
+    value: ${{ steps.resolution.outputs.smoke_proof }}
+  state:
+    value: ${{ steps.resolution.outputs.state }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve Shell paths
+      id: paths
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+        $buildDir = Join-Path $env:RUNNER_TEMP "release-build\win_x64"
+        New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
+        "build_json_path=$(Join-Path $buildDir 'build.json')" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+        "plan_json_path=$(Join-Path $buildDir 'shell-plan.json')" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+    - name: Resolve Shell smoke acceptance identity
+      if: ${{ inputs.shell-smoke-matrix != '' }}
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+        $digest = (pnpm.cmd exec tsx .github/scripts/release/shell-smoke-acceptance.ts win_x64).Trim()
+        if ($LASTEXITCODE -ne 0 -or $digest -notmatch '^sha256:[0-9a-f]{64}$') { throw "invalid win_x64 Shell smoke digest: $digest" }
+        "RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST=$digest" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+    - name: Resolve immutable Electron Shell
+      id: resolution
+      shell: pwsh
+      env:
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_SHELL_BUILD_JSON_PATH: ${{ steps.paths.outputs.build_json_path }}
+        RELEASE_SHELL_PLAN_JSON_PATH: ${{ steps.paths.outputs.plan_json_path }}
+        RELEASE_SHELL_SMOKE_MATRIX: ${{ inputs.shell-smoke-matrix }}
+        RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
+      run: |
+        $ErrorActionPreference = "Stop"
+        $shellVersion = "${{ inputs.shell-version }}"
+        if ([string]::IsNullOrWhiteSpace($shellVersion)) { $shellVersion = "${{ inputs.release-version }}" }
+        $identityArgs = @(
+          "exec", "tools-pack", "win", "identity",
+          "--dir", "${{ runner.temp }}\tools-pack",
+          "--cache-dir", "${{ runner.temp }}\tools-pack-cache",
+          "--namespace", "${{ inputs.namespace }}",
+          "--portable",
+          "--release-version", "${{ inputs.release-version }}",
+          "--shell-version", $shellVersion,
+          "--to", "${{ inputs.build-target }}",
+          "--sign-mode", "${{ inputs.sign-mode }}",
+          "--json"
+        )
+        $identityOutput = pnpm.cmd @identityArgs
+        if ($LASTEXITCODE -ne 0) { throw "tools-pack win identity failed with exit code $LASTEXITCODE" }
+        $identityOutput | Set-Content -Path "${{ steps.paths.outputs.plan_json_path }}" -Encoding utf8
+        pnpm.cmd exec tools-release resolve-shell-build
+        if ($LASTEXITCODE -ne 0) { throw "immutable Windows Shell resolution failed with exit code $LASTEXITCODE" }
+
+    - name: Build immutable Electron Shell
+      id: build
+      if: ${{ steps.resolution.outputs.state == 'miss' }}
+      continue-on-error: true
+      shell: pwsh
+      env:
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
+      run: |
+        $ErrorActionPreference = "Stop"
+        $shellVersion = "${{ inputs.shell-version }}"
+        if ([string]::IsNullOrWhiteSpace($shellVersion)) { $shellVersion = "${{ inputs.release-version }}" }
+        pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace "${{ inputs.namespace }}" --json
+        $buildArgs = @(
+          "exec", "tools-pack", "win", "build",
+          "--dir", "${{ runner.temp }}\tools-pack",
+          "--cache-dir", "${{ runner.temp }}\tools-pack-cache",
+          "--namespace", "${{ inputs.namespace }}",
+          "--portable",
+          "--release-version", "${{ inputs.release-version }}",
+          "--shell-version", $shellVersion,
+          "--to", "${{ inputs.build-target }}",
+          "--sign-mode", "${{ inputs.sign-mode }}",
+          "--json"
+        )
+        if ("${{ inputs.require-vela-cli }}" -eq "true") { $buildArgs += "--require-vela-cli" }
+        $buildOutput = pnpm.cmd @buildArgs
+        if ($LASTEXITCODE -ne 0) { throw "tools-pack win build failed with exit code $LASTEXITCODE" }
+        $buildOutput | Set-Content -Path "${{ steps.paths.outputs.build_json_path }}" -Encoding utf8
+        $build = $buildOutput | ConvertFrom-Json
+        pnpm.cmd exec tools-pack win validate-payload --namespace "${{ inputs.namespace }}" --payload-path $build.payloadPath --expected-version $shellVersion --json
+
+    - name: Retry immutable Shell without restored cache
+      if: ${{ steps.resolution.outputs.state == 'miss' && steps.build.outcome == 'failure' }}
+      shell: pwsh
+      env:
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
+      run: |
+        $ErrorActionPreference = "Stop"
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "${{ runner.temp }}\tools-pack-cache"
+        $shellVersion = "${{ inputs.shell-version }}"
+        if ([string]::IsNullOrWhiteSpace($shellVersion)) { $shellVersion = "${{ inputs.release-version }}" }
+        pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace "${{ inputs.namespace }}" --json
+        $buildArgs = @(
+          "exec", "tools-pack", "win", "build",
+          "--dir", "${{ runner.temp }}\tools-pack",
+          "--cache-dir", "${{ runner.temp }}\tools-pack-cache",
+          "--namespace", "${{ inputs.namespace }}",
+          "--portable",
+          "--release-version", "${{ inputs.release-version }}",
+          "--shell-version", $shellVersion,
+          "--to", "${{ inputs.build-target }}",
+          "--sign-mode", "${{ inputs.sign-mode }}",
+          "--json"
+        )
+        if ("${{ inputs.require-vela-cli }}" -eq "true") { $buildArgs += "--require-vela-cli" }
+        $buildOutput = pnpm.cmd @buildArgs
+        if ($LASTEXITCODE -ne 0) { throw "tools-pack win retry failed with exit code $LASTEXITCODE" }
+        $buildOutput | Set-Content -Path "${{ steps.paths.outputs.build_json_path }}" -Encoding utf8
+        $build = $buildOutput | ConvertFrom-Json
+        pnpm.cmd exec tools-pack win validate-payload --namespace "${{ inputs.namespace }}" --payload-path $build.payloadPath --expected-version $shellVersion --json
+
+    - name: Register verified immutable Electron Shell
+      if: ${{ steps.resolution.outputs.state == 'miss' && inputs.register-enabled == 'true' }}
+      shell: pwsh
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_SHELL_BUILD_JSON_PATH: ${{ steps.paths.outputs.build_json_path }}
+        RELEASE_SHELL_PLAN_JSON_PATH: ${{ steps.paths.outputs.plan_json_path }}
+      run: pnpm.cmd exec tools-release register-shell-build

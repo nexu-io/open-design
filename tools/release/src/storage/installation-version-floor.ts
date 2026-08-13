@@ -40,6 +40,25 @@ export function resolveInstallationVersionFloor(
   return channel === "stable" ? null : readPair(env, "STABLE");
 }
 
+/**
+ * Temporary old-architecture migration boundary.
+ *
+ * Every public channel keeps the legacy installer-floor projection until the
+ * first Shell + Standalone generation has replaced the old outer package.
+ * Missing policy must fail closed while that migration is active; the floor
+ * does not participate in new-generation Shell selection or hash reuse.
+ */
+export function requireInstallationVersionFloor(
+  channel: ReleaseChannel,
+  env: NodeJS.ProcessEnv = process.env,
+): InstallationVersionFloor {
+  const floor = resolveInstallationVersionFloor(channel, env);
+  if (floor == null) {
+    throw new Error(`legacy installation migration requires RELEASE_INSTALLATION_VERSION_MIN_${channel.toUpperCase()}`);
+  }
+  return floor;
+}
+
 type SemanticVersion = { base: [number, number, number]; prerelease: string[] | null };
 
 function parseSemanticVersion(value: string): SemanticVersion {

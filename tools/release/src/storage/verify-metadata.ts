@@ -1,6 +1,7 @@
 import { optional, required } from "./common.ts";
 import {
   assertInstallationVersionFloorSatisfiable,
+  requireInstallationVersionFloor,
   resolveInstallationVersionFloor,
 } from "./installation-version-floor.ts";
 import { parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
@@ -83,7 +84,10 @@ if (metadata[versionField] !== releaseVersion) {
 // The published control.shell.installation.version block must match the channel policy
 // resolved from the same repo-vars pairs the publish step consumed; unknown
 // fields would otherwise pass silently.
-const expectedInstallationVersionFloor = resolveInstallationVersionFloor(releaseChannel);
+const legacyInstallationMigrationRequired = process.env.RELEASE_LEGACY_INSTALLATION_MIGRATION_REQUIRED === "true";
+const expectedInstallationVersionFloor = legacyInstallationMigrationRequired
+  ? requireInstallationVersionFloor(releaseChannel)
+  : resolveInstallationVersionFloor(releaseChannel);
 if (expectedInstallationVersionFloor != null) {
   assertInstallationVersionFloorSatisfiable(expectedInstallationVersionFloor, releaseVersion);
 }
@@ -150,6 +154,11 @@ if (metadata.closure != null) {
     expectedTargets: expectedClosureDistributionTargets,
     publicOrigin: metadata.r2.publicOrigin,
     releaseVersion,
+    selectedShells: Object.values(metadata.releaseTargets ?? {}).flatMap((target) => (
+      target.status !== "published" || target.shell?.type == null || target.shell.version == null
+        ? []
+        : [{ type: target.shell.type, version: target.shell.version }]
+    )),
     value: metadata.closure,
   });
 }

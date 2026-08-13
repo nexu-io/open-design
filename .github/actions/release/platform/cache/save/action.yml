@@ -1,0 +1,66 @@
+name: Save tools-pack cache
+description: Prune, persist, and retain the latest release platform cache
+
+inputs:
+  build-failed:
+    description: Whether the first cached build attempt failed
+    required: true
+  cache-hit:
+    description: Exact cache hit result from actions/cache
+    required: false
+    default: "false"
+  key:
+    description: Cache key to persist
+    required: true
+  platform:
+    description: mac or win
+    required: true
+  prefix:
+    description: Cache namespace prefix used for retention
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Prune macOS tools-pack cache
+      if: ${{ inputs.platform == 'mac' }}
+      continue-on-error: true
+      shell: bash
+      run: bash .github/scripts/release/cache/mac.sh
+
+    - name: Prune Windows tools-pack cache
+      if: ${{ inputs.platform == 'win' }}
+      continue-on-error: true
+      shell: pwsh
+      run: ./.github/scripts/release/cache/win.ps1
+
+    - name: Save tools-pack cache
+      if: ${{ inputs.cache-hit != 'true' || inputs.build-failed == 'true' }}
+      uses: actions/cache/save@v5
+      continue-on-error: true
+      with:
+        path: ${{ runner.temp }}/tools-pack-cache
+        key: ${{ inputs.key }}
+
+    - name: Retain recent macOS tools-pack caches
+      if: ${{ inputs.platform == 'mac' }}
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        cache_ids="$(gh cache list --key "${{ inputs.prefix }}" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq '.[1:] | .[].id')"
+        while IFS= read -r cache_id; do
+          if [ -n "$cache_id" ]; then gh cache delete "$cache_id"; fi
+        done <<< "$cache_ids"
+
+    - name: Retain recent Windows tools-pack caches
+      if: ${{ inputs.platform == 'win' }}
+      continue-on-error: true
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $caches = @(gh cache list --key "${{ inputs.prefix }}" --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
+        foreach ($cache in @($caches | Select-Object -Skip 1)) { gh cache delete $cache.id }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertInstallationVersionFloorSatisfiable,
+  requireInstallationVersionFloor,
   resolveInstallationVersionFloor,
 } from "../src/storage/installation-version-floor.js";
 
@@ -49,6 +50,15 @@ describe("installation version floor channel policy", () => {
   it("returns null when neither the channel nor stable defines a floor", () => {
     expect(resolveInstallationVersionFloor("preview", {})).toBeNull();
     expect(resolveInstallationVersionFloor("stable", {})).toBeNull();
+  });
+
+  it("fails closed when the temporary legacy migration capability is required", () => {
+    expect(() => requireInstallationVersionFloor("preview", {})).toThrow(
+      /legacy installation migration requires RELEASE_INSTALLATION_VERSION_MIN_PREVIEW/,
+    );
+    expect(requireInstallationVersionFloor("preview", {
+      RELEASE_INSTALLATION_VERSION_MIN_PREVIEW: "1.2.0-preview.1",
+    })).toEqual({ min: "1.2.0-preview.1" });
   });
 
   it("treats empty-string vars as unset (GitHub passes unset vars as empty)", () => {

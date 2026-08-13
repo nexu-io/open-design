@@ -1,0 +1,66 @@
+name: Build shared Standalone Closure
+description: Build, optionally publish, and hand off the once-owned Closure components
+
+inputs:
+  channel:
+    required: true
+  min-shell-version:
+    description: Frozen initial Shell compatibility declaration for this channel
+    required: true
+  publish-enabled:
+    required: false
+    default: "true"
+  release-version:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Validate frozen Closure compatibility boundary
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -z "${{ inputs.min-shell-version }}" ]; then
+          echo "${{ inputs.channel }} requires a frozen minimum compatible Shell version" >&2
+          exit 1
+        fi
+
+    - name: Build shared Closure components
+      shell: bash
+      run: |
+        set -euo pipefail
+        build_dir="$RUNNER_TEMP/release-build/closure-shared"
+        mkdir -p "$build_dir"
+        pnpm exec tools-pack closure build-distribution-shared \
+          --blob-origin "$RELEASE_PUBLIC_ORIGIN" \
+          --channel "${{ inputs.channel }}" \
+          --dir "$RUNNER_TEMP/tools-pack" \
+          --min-shell-version "${{ inputs.min-shell-version }}" \
+          --version "${{ inputs.release-version }}" \
+          --json > "$build_dir/build.json"
+        contribution_path="$(jq -er '.contributionPath' "$build_dir/build.json")"
+        blob_root="$(jq -er '.blobRoot' "$build_dir/build.json")"
+        cp "$contribution_path" "$build_dir/shared-contribution.json"
+        cp -R "$blob_root" "$build_dir/blobs"
+
+    - name: Publish verified shared Closure blobs
+      if: ${{ inputs.publish-enabled == 'true' }}
+      shell: bash
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/tools-pack/out/closure-distribution/${{ inputs.channel }}/shared/versions/${{ inputs.release-version }}/blobs
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/closure-shared/shared-contribution.json
+        RELEASE_CLOSURE_CONTRIBUTION_KIND: shared
+        RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ runner.temp }}/release-build/closure-shared/publication.json
+        RELEASE_VERSION: ${{ inputs.release-version }}
+      run: pnpm exec tools-release publish-closure-contribution
+
+    - name: Upload shared Closure contract and acceptance blobs
+      uses: actions/upload-artifact@v7
+      with:
+        name: open-design-${{ inputs.channel }}-closure-shared
+        path: |
+          ${{ runner.temp }}/release-build/closure-shared/shared-contribution.json
+          ${{ runner.temp }}/release-build/closure-shared/blobs
+        if-no-files-found: error
+        retention-days: 1

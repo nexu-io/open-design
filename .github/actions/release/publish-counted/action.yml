@@ -46,6 +46,30 @@ runs:
         name: open-design-${{ inputs.channel }}-win-x64-publish-manifest
         path: ${{ runner.temp }}/release-platform-manifests
 
+    - name: Download shared Standalone contribution
+      uses: actions/download-artifact@v8
+      with:
+        name: open-design-${{ inputs.channel }}-closure-shared
+        path: ${{ runner.temp }}/release-closure/shared
+
+    - name: Download macOS arm64 Standalone contribution
+      uses: actions/download-artifact@v8
+      with:
+        name: open-design-${{ inputs.channel }}-closure-darwin-arm64
+        path: ${{ runner.temp }}/release-closure/targets/darwin-arm64
+
+    - name: Download macOS x64 Standalone contribution
+      uses: actions/download-artifact@v8
+      with:
+        name: open-design-${{ inputs.channel }}-closure-darwin-x64
+        path: ${{ runner.temp }}/release-closure/targets/darwin-x64
+
+    - name: Download Windows x64 Standalone contribution
+      uses: actions/download-artifact@v8
+      with:
+        name: open-design-${{ inputs.channel }}-closure-win32-x64
+        path: ${{ runner.temp }}/release-closure/targets/win32-x64
+
     - name: Setup pnpm
       uses: pnpm/action-setup@v5
       with:
@@ -60,6 +84,17 @@ runs:
       shell: bash
       run: pnpm install --frozen-lockfile
 
+    - name: Merge version-wide Standalone graph
+      shell: bash
+      run: |
+        set -euo pipefail
+        pnpm exec tools-release merge-closure-distribution \
+          "$RUNNER_TEMP/release-closure/shared/shared-contribution.json" \
+          "$RUNNER_TEMP/release-closure/targets/darwin-arm64/target-contribution.json" \
+          "$RUNNER_TEMP/release-closure/targets/darwin-x64/target-contribution.json" \
+          "$RUNNER_TEMP/release-closure/targets/win32-x64/target-contribution.json" \
+          --output "$RUNNER_TEMP/release-closure/closure-distribution.json"
+
     - name: Publish counted release metadata
       id: metadata
       uses: ./.github/actions/release/publish-metadata
@@ -72,6 +107,9 @@ runs:
         win_x64_result: ${{ inputs.win_x64_result }}
       env:
         RELEASE_ASSET_SUFFIX: ""
+        RELEASE_CLOSURE_DISTRIBUTION_MANIFEST_PATH: ${{ runner.temp }}/release-closure/closure-distribution.json
+        RELEASE_CLOSURE_DISTRIBUTION_REQUIRED: "true"
+        RELEASE_CLOSURE_REQUIRED: "false"
         RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
 
     - name: Cleanup workflow artifacts

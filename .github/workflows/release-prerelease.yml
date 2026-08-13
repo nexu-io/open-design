@@ -148,11 +148,14 @@ concurrency:
 jobs:
   distribute:
     name: Distribute prerelease release
-    uses: ./.github/workflows/distribution-prerelease.yml
+    uses: ./.github/workflows/distribution.yml
     secrets: inherit
     with:
+      channel: prerelease
+      enhanced_validation: true
       ref: ${{ inputs.ref }}
       release_version: ${{ inputs.release_version }}
+      release_name: Open Design Prerelease
       amr_profile: ${{ inputs.amr_profile }}
       mac_arm64_sign_mode: ${{ inputs.mac_arm64_sign_mode }}
       mac_x64_sign_mode: ${{ inputs.mac_x64_sign_mode }}
@@ -160,3 +163,6 @@ jobs:
       win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode }}
       win_x64_update_metadata_url: ${{ inputs.win_x64_update_metadata_url }}
       win_x64_update_target_version: ${{ inputs.win_x64_update_target_version }}
+      smoke_advisory: true
+      stable_qualification: true
+      verify_notarization: true

@@ -26,7 +26,7 @@ function fixture(publicOrigin = "https://releases.open-design.test"): ReturnType
   });
   const draft: ClosureDistributionManifestDraft = {
     blobs: Object.fromEntries([launcher, body, native].map((value) => [value, artifact(value)])),
-    compatibility: { shell: { electron: { version: { min: "0.19.0" } } } },
+    compatibility: { shell: { electron: { version: { min: "0.19.0-beta.1" } } } },
     identity: { channel: "beta", protocolVersion: CLOSURE_PROTOCOL_VERSION, version: "0.19.0-beta.10" },
     required: {
       body: { blob: body, entryPath: "bootloader.mjs", treeDigest: digest("body-tree") },
@@ -86,5 +86,17 @@ describe("version-wide Closure publication metadata", () => {
       releaseVersion: "0.19.0-beta.10",
       value: { ...manifest, identity: { ...manifest.identity, version: "0.19.0-beta.11" } },
     })).toThrow(/digest/u);
+  });
+
+  it("rejects a Closure floor above any selected immutable Shell", () => {
+    const manifest = fixture();
+    expect(() => validateClosureDistributionPublication({
+      channel: "beta",
+      expectedTargets: ["darwin-arm64"],
+      publicOrigin: "https://releases.open-design.test",
+      releaseVersion: "0.19.0-beta.10",
+      selectedShells: [{ type: "electron", version: "0.18.0-beta.1" }],
+      value: manifest,
+    })).toThrow(/minVersion .* exceeds selected Shell/u);
   });
 });

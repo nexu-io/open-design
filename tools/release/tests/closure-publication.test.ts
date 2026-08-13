@@ -267,7 +267,7 @@ describe("Standalone Closure release publication", () => {
     });
     const distribution = createClosureDistributionManifest({
       blobs: Object.fromEntries([launcher, body, native].map((value) => [value, artifact(value)])),
-      compatibility: { shell: { electron: { version: { min: "0.18.0" } } } },
+      compatibility: { shell: { electron: { version: { min: "0.18.0-beta.3" } } } },
       identity: {
         channel: "beta",
         protocolVersion: CLOSURE_PROTOCOL_VERSION,

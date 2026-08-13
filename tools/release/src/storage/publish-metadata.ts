@@ -13,6 +13,7 @@ import { putStorageObject } from "./s3-upload.ts";
 import { publishLatestPlatformObjects, publishLatestRelease } from "./latest-publication.ts";
 import {
   assertInstallationVersionFloorSatisfiable,
+  requireInstallationVersionFloor,
   resolveInstallationVersionFloor,
 } from "./installation-version-floor.ts";
 import {
@@ -112,7 +113,10 @@ const shellRequired = process.env.RELEASE_SHELL_REQUIRED === "true";
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
 const parameterMatrix = releaseParameterMatrixFromEnv();
 
-const installationVersionFloor = resolveInstallationVersionFloor(releaseChannel);
+const legacyInstallationMigrationRequired = process.env.RELEASE_LEGACY_INSTALLATION_MIGRATION_REQUIRED === "true";
+const installationVersionFloor = legacyInstallationMigrationRequired
+  ? requireInstallationVersionFloor(releaseChannel)
+  : resolveInstallationVersionFloor(releaseChannel);
 if (installationVersionFloor != null) {
   assertInstallationVersionFloorSatisfiable(installationVersionFloor, releaseVersion);
 }
@@ -361,6 +365,12 @@ const closureDistribution = closureDistributionManifestPath.length === 0
       path: closureDistributionManifestPath,
       publicOrigin,
       releaseVersion,
+      selectedShells: readyManifests.flatMap((manifest) => {
+        const shell = manifest.shell;
+        return shell?.type == null || shell.version == null
+          ? []
+          : [{ type: shell.type, version: shell.version }];
+      }),
     });
 
 const latestMetadataUpdated = releaseState === "complete";

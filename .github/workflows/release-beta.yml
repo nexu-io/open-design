@@ -321,9 +321,10 @@ concurrency:
 jobs:
   distribute:
     name: Distribute beta release
-    uses: ./.github/workflows/distribution-beta.yml
+    uses: ./.github/workflows/distribution.yml
     secrets: inherit
     with:
+      channel: beta
       enable_mac_arm64: ${{ inputs.enable_mac_arm64 }}
       enable_win_x64: ${{ inputs.enable_win_x64 }}
       enable_mac_x64: ${{ inputs.enable_mac_x64 }}

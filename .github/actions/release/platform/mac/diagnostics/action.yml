@@ -1,0 +1,79 @@
+name: Capture macOS packaging diagnostics
+description: Materialize Electron framework evidence for failed release packaging
+
+inputs:
+  app-name:
+    description: Packaged .app bundle name
+    required: true
+  namespace:
+    description: tools-pack namespace
+    required: true
+  target:
+    description: Release target
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Capture framework diagnostics
+      shell: bash
+      run: |
+        set -euo pipefail
+        output="$RUNNER_TEMP/${{ inputs.target }}-framework-diagnostics.txt"
+        source_resolve_log="$RUNNER_TEMP/${{ inputs.target }}-framework-source-resolve.err"
+        source_framework="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "shells/electron/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist", "Electron.app", "Contents", "Frameworks", "Electron Framework.framework"));' 2>"$source_resolve_log" || true)"
+        built_framework="$RUNNER_TEMP/tools-pack/out/mac/namespaces/${{ inputs.namespace }}/builder/mac-${{ inputs.target == 'mac_arm64' && 'arm64' || 'x64' }}/${{ inputs.app-name }}/Contents/Frameworks/Electron Framework.framework"
+
+        dump_framework() {
+          local label="$1"
+          local framework="$2"
+          echo "## $label"
+          echo "path=$framework"
+          if [ ! -e "$framework" ] && [ ! -L "$framework" ]; then
+            echo "missing"
+            return 0
+          fi
+          echo "### top-level"
+          ls -la "$framework" || true
+          echo "### symlinks"
+          find "$framework" -maxdepth 4 -type l -print0 | while IFS= read -r -d '' link; do
+            printf '%s -> %s\n' "$link" "$(readlink "$link")"
+          done || true
+          echo "### selected stat"
+          for path in \
+            "$framework" \
+            "$framework/Electron Framework" \
+            "$framework/Versions" \
+            "$framework/Versions/Current" \
+            "$framework/Versions/Current/Electron Framework" \
+            "$framework/Versions/A" \
+            "$framework/Versions/A/Electron Framework" \
+            "$framework/Resources" \
+            "$framework/Versions/A/Resources/Info.plist"; do
+            if [ -e "$path" ] || [ -L "$path" ]; then
+              stat -f '%Sp %HT %N' "$path" || true
+            else
+              echo "missing: $path"
+            fi
+          done
+          echo "### plist"
+          plutil -p "$framework/Versions/A/Resources/Info.plist" 2>&1 || true
+          echo "### codesign display"
+          codesign --display --verbose=4 "$framework/Electron Framework" 2>&1 || true
+          codesign --display --verbose=4 "$framework/Versions/Current/Electron Framework" 2>&1 || true
+          codesign --display --verbose=4 "$framework/Versions/A/Electron Framework" 2>&1 || true
+          codesign --display --verbose=4 "$framework" 2>&1 || true
+        }
+
+        {
+          date -u
+          if [ -n "$source_framework" ]; then
+            dump_framework "source Electron Framework" "$source_framework"
+          else
+            echo "## source Electron Framework"
+            echo "resolve failed"
+            cat "$source_resolve_log" || true
+          fi
+          dump_framework "built Electron Framework" "$built_framework"
+        } > "$output"
+        cat "$output"

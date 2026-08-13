@@ -1,0 +1,306 @@
+name: Distribute Windows release platform
+description: Build, smoke, report, and publish one Windows release target
+
+inputs:
+  bundle-artifact-name:
+    description: Optional workflow artifact containing the prepared release assets
+    required: false
+    default: ""
+  channel:
+    description: Registered counted release channel
+    required: true
+  closure-version:
+    description: Exact Standalone Closure version
+    required: true
+  manifest-artifact-name:
+    description: Optional publish manifest artifact name override
+    required: false
+    default: ""
+  namespace:
+    description: tools-pack namespace
+    required: true
+  release-name:
+    description: Human-readable release name used in asset notes
+    required: true
+  release-version:
+    description: Exact counted release version
+    required: true
+  report-artifact-name:
+    description: Optional smoke report artifact name override
+    required: false
+    default: ""
+  require-vela-cli:
+    description: Require Vela CLI while packaging
+    required: false
+    default: "false"
+  sign-mode:
+    description: tools-pack Windows sign mode
+    required: true
+  smoke-advisory:
+    description: Record smoke failure without blocking platform publication
+    required: false
+    default: "false"
+  smoke-mode:
+    description: skip, core, or full
+    required: true
+  update-metadata-url:
+    description: Optional external updater metadata URL
+    required: false
+    default: ""
+  update-target-version:
+    description: Optional external updater target version
+    required: false
+    default: ""
+  update-version-policy:
+    description: counted increments a channel counter; patch increments a stable patch
+    required: false
+    default: counted
+  write-report:
+    description: Materialize the tools-release report after smoke
+    required: false
+    default: "true"
+
+outputs:
+  smoke_result:
+    description: Packaged smoke step outcome
+    value: ${{ steps.smoke.outcome }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup release toolchain
+      uses: ./.github/actions/release/platform/setup
+
+    - name: Restore tools-pack cache
+      id: cache
+      uses: ./.github/actions/release/platform/cache
+      with:
+        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/scripts/release/cache/win.ps1') }}
+        prefix: tools-pack-win-v1-${{ inputs.channel }}-${{ runner.os }}-
+
+    - name: Install dependencies
+      shell: pwsh
+      run: pnpm install --frozen-lockfile
+
+    - name: Download shared Standalone contract
+      uses: actions/download-artifact@v8
+      with:
+        name: open-design-${{ inputs.channel }}-closure-shared
+        path: ${{ runner.temp }}\release-closure\shared
+
+    - name: Setup NSIS
+      uses: ./.github/actions/release/platform/win/nsis
+
+    - name: Resolve Windows Shell publication
+      id: shell
+      uses: ./.github/actions/release/platform/win/shell
+      with:
+        amr-profile: ${{ env.OPEN_DESIGN_AMR_PROFILE }}
+        build-target: all
+        channel: ${{ inputs.channel }}
+        namespace: ${{ inputs.namespace }}
+        register-enabled: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
+        release-version: ${{ inputs.release-version }}
+        require-vela-cli: ${{ inputs.require-vela-cli }}
+        shell-version: ${{ inputs.release-version }}
+        sign-mode: ${{ inputs.sign-mode }}
+
+    - name: Build Standalone native contribution
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+        $buildDir = "${{ runner.temp }}\release-build\win_x64"
+        $closureOutput = pnpm.cmd exec tools-pack closure build-distribution-target `
+          --blob-origin $env:RELEASE_PUBLIC_ORIGIN `
+          --channel "${{ inputs.channel }}" `
+          --dir "${{ runner.temp }}\tools-pack" `
+          --platform win32-x64 `
+          --version "${{ inputs.closure-version }}" `
+          --json
+        if ($LASTEXITCODE -ne 0) { throw "Standalone Closure build failed with exit code $LASTEXITCODE" }
+        $reportPath = Join-Path $buildDir "closure-target.json"
+        $closureOutput | Set-Content -Path $reportPath -Encoding utf8
+        $report = $closureOutput | ConvertFrom-Json
+        Copy-Item -LiteralPath $report.contributionPath -Destination (Join-Path $buildDir "target-contribution.json")
+        $targetBlobRoot = Join-Path $buildDir "closure-blobs"
+        New-Item -ItemType Directory -Force -Path $targetBlobRoot | Out-Null
+        $digest = [string]$report.contribution.native.artifact.digest
+        Copy-Item -LiteralPath (Join-Path $report.blobRoot $digest.Substring(7)) -Destination (Join-Path $targetBlobRoot $digest.Substring(7))
+        pnpm.cmd exec tools-release merge-closure-distribution `
+          "${{ runner.temp }}\release-closure\shared\shared-contribution.json" `
+          (Join-Path $buildDir "target-contribution.json") `
+          --output (Join-Path $buildDir "closure-distribution.json")
+
+    - name: Publish verified Standalone native blob
+      if: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
+      shell: pwsh
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}\tools-pack\out\closure-distribution\${{ inputs.channel }}\win32-x64\versions\${{ inputs.closure-version }}\blobs
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\target-contribution.json
+        RELEASE_CLOSURE_CONTRIBUTION_KIND: target
+        RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\closure-publication.json
+        RELEASE_VERSION: ${{ inputs.closure-version }}
+      run: pnpm.cmd exec tools-release publish-closure-contribution
+
+    - name: Delete failed tools-pack cache
+      if: ${{ steps.shell.outputs.build-outcome == 'failure' && steps.cache.outputs.cache-matched-key != '' }}
+      uses: ./.github/actions/release/platform/cache/delete-failed
+      with:
+        matched-key: ${{ steps.cache.outputs.cache-matched-key }}
+        platform: win
+
+    - name: Build updater fixture
+      if: ${{ inputs.smoke-mode == 'full' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
+      continue-on-error: true
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+        if ("${{ inputs.update-version-policy }}" -eq "patch") {
+          $match = [regex]::Match("${{ inputs.release-version }}", "^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$")
+          if (-not $match.Success) { throw "full Windows stable smoke requires stable version x.y.z; got ${{ inputs.release-version }}" }
+          $updateVersion = "{0}.{1}.{2}" -f $match.Groups["major"].Value, $match.Groups["minor"].Value, ([int]$match.Groups["patch"].Value + 1)
+        } else {
+          $channel = [regex]::Escape("${{ inputs.channel }}")
+          $match = [regex]::Match("${{ inputs.release-version }}", "^(?<base>\d+\.\d+\.\d+)-$channel\.(?<number>\d+)$")
+          if (-not $match.Success) { throw "full Windows smoke requires a counted ${{ inputs.channel }} version; got ${{ inputs.release-version }}" }
+          $updateVersion = "{0}-${{ inputs.channel }}.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
+        }
+        $buildArgs = @(
+          "exec", "tools-pack", "win", "build",
+          "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture",
+          "--cache-dir", "${{ runner.temp }}\tools-pack-cache",
+          "--namespace", "${{ inputs.namespace }}",
+          "--release-version", $updateVersion,
+          "--to", "nsis",
+          "--sign-mode", "${{ inputs.sign-mode }}",
+          "--json"
+        )
+        if ("${{ inputs.require-vela-cli }}" -eq "true") { $buildArgs += "--require-vela-cli" }
+        $updateOutput = pnpm.cmd @buildArgs
+        if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
+        $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8
+        $updateBuild = $updateOutput | ConvertFrom-Json
+        pnpm.cmd exec tools-pack win validate-payload --namespace "${{ inputs.namespace }}" --payload-path $updateBuild.payloadPath --expected-version $updateVersion --json
+
+    - name: Smoke packaged runtime
+      id: smoke
+      if: ${{ inputs.smoke-mode != 'skip' }}
+      continue-on-error: ${{ inputs.smoke-advisory == 'true' }}
+      shell: pwsh
+      working-directory: e2e
+      env:
+        OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+        OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH: ${{ runner.temp }}\release-build\win_x64\closure-distribution.json
+        OD_PACKAGED_E2E_WIN: "1"
+        OD_PACKAGED_E2E_NAMESPACE: ${{ inputs.namespace }}
+        OD_PACKAGED_E2E_RELEASE_CHANNEL: ${{ inputs.channel }}
+        OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.release-version }}
+        OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+        OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+        OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: ${{ inputs.smoke-mode }}
+        OD_PACKAGED_E2E_WIN_UPDATE_FIXTURE: ${{ inputs.smoke-mode == 'full' && inputs.update-metadata-url == '' && inputs.update-target-version == '' && 'tools-serve' || '' }}
+        OD_PACKAGED_E2E_WIN_UPDATE_METADATA_URL: ${{ inputs.update-metadata-url }}
+        OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.update-target-version }}
+      run: |
+        $env:OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON = @(
+          "${{ runner.temp }}\release-closure\shared\blobs"
+          "${{ runner.temp }}\release-build\win_x64\closure-blobs"
+        ) | ConvertTo-Json -Compress
+        pnpm exec tsx scripts/release-smoke.ts win specs/win.spec.ts
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+    - name: Write release report
+      if: ${{ always() && inputs.write-report == 'true' }}
+      shell: pwsh
+      env:
+        BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
+        RELEASE_BUILD_TARGET: all
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_NAMESPACE: ${{ inputs.namespace }}
+        RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+        RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}\release-report\win_x64\report.json
+        RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}\release-report\win_x64\summary.md
+        RELEASE_SMOKE_MODE: ${{ inputs.smoke-mode }}
+        RELEASE_TARGET: win_x64
+        RELEASE_VERSION: ${{ inputs.release-version }}
+        REPORT_TITLE: win_x64 ${{ inputs.channel }} build
+      run: pnpm exec tools-release write-report
+
+    - name: Publish report summary
+      if: ${{ always() && inputs.write-report == 'true' }}
+      shell: pwsh
+      run: Get-Content "${{ runner.temp }}\release-report\win_x64\summary.md" | Add-Content $env:GITHUB_STEP_SUMMARY
+
+    - name: Upload smoke report
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.report-artifact-name != '' && inputs.report-artifact-name || format('open-design-{0}-win-e2e-report', inputs.channel) }}
+        path: ${{ runner.temp }}\release-report\win_x64
+        if-no-files-found: warn
+
+    - name: Persist tools-pack cache
+      if: ${{ success() }}
+      uses: ./.github/actions/release/platform/cache/save
+      with:
+        build-failed: ${{ steps.shell.outputs.build-outcome == 'failure' }}
+        cache-hit: ${{ steps.cache.outputs.cache-hit }}
+        key: ${{ steps.cache.outputs.key }}
+        platform: win
+        prefix: ${{ steps.cache.outputs.prefix }}
+
+    - name: Prepare release assets
+      shell: pwsh
+      run: |
+        tools\pack\scripts\prepare-platform-assets.ps1 `
+          -ReleaseTarget win_x64 `
+          -ReleaseAssetsDir "${{ runner.temp }}\release-assets\win_x64" `
+          -BuildJsonPath "${{ runner.temp }}\release-build\win_x64\build.json" `
+          -ReleaseNamespace "${{ inputs.namespace }}" `
+          -ReleaseVersion "${{ inputs.release-version }}" `
+          -ReleaseAssetSuffix "" `
+          -ReleaseChannel "${{ inputs.channel }}" `
+          -ReleasePublicOrigin "$env:RELEASE_PUBLIC_ORIGIN" `
+          -ReleaseNotes "${{ inputs.release-name }} ${{ inputs.release-version }}" `
+          -IncludeZip $true
+
+    - name: Publish platform
+      shell: pwsh
+      env:
+        RELEASE_ASSET_SUFFIX: ""
+        RELEASE_ASSETS_DIR: ${{ runner.temp }}\release-assets\win_x64
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_MANIFEST_DIR: ${{ runner.temp }}\release-platform-manifests
+        RELEASE_OUTPUTS_PATH: ${{ runner.temp }}\release-platform-outputs\win_x64.json
+        RELEASE_REPORT_DIR: ${{ runner.temp }}\release-report\win_x64
+        RELEASE_SHELL_BUILD_JSON_PATH: ${{ steps.shell.outputs.build-json-path }}
+        RELEASE_SHELL_ENABLED: "true"
+        RELEASE_TARGET: win_x64
+        RELEASE_VERSION: ${{ inputs.release-version }}
+        WIN_INCLUDE_ZIP: "true"
+      run: pnpm exec tools-release publish-platform
+
+    - name: Upload publish manifest
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.manifest-artifact-name != '' && inputs.manifest-artifact-name || format('open-design-{0}-win-x64-publish-manifest', inputs.channel) }}
+        path: ${{ runner.temp }}\release-platform-manifests\win_x64.json
+        if-no-files-found: error
+        retention-days: 1
+
+    - name: Upload Standalone contribution
+      uses: actions/upload-artifact@v7
+      with:
+        name: open-design-${{ inputs.channel }}-closure-win32-x64
+        path: ${{ runner.temp }}\release-build\win_x64\target-contribution.json
+        if-no-files-found: error
+        retention-days: 1
+
+    - name: Upload release asset bundle
+      if: ${{ inputs.bundle-artifact-name != '' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.bundle-artifact-name }}
+        path: ${{ runner.temp }}\release-assets\win_x64
+        retention-days: 1

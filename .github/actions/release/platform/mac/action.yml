@@ -1,0 +1,350 @@
+name: Distribute macOS release platform
+description: Build, smoke, report, and publish one macOS release target
+
+inputs:
+  app-name:
+    description: Packaged .app bundle name
+    required: true
+  artifact-id:
+    description: Hyphenated target token used in workflow artifact names
+    required: true
+  bundle-artifact-name:
+    description: Optional workflow artifact containing the prepared release assets
+    required: false
+    default: ""
+  cache-enabled:
+    description: Restore and persist the tools-pack cache
+    required: false
+    default: "true"
+  channel:
+    description: Registered release channel
+    required: true
+  closure-version:
+    description: Exact Standalone Closure version
+    required: true
+  diagnostics-artifact-name:
+    description: Workflow artifact name for build diagnostics
+    required: false
+    default: ""
+  diagnostics:
+    description: Capture Electron framework diagnostics
+    required: false
+    default: "false"
+  inspect-framework:
+    description: Inspect source Electron framework symlinks before packaging
+    required: false
+    default: "false"
+  manifest-artifact-name:
+    description: Optional publish manifest artifact name override
+    required: false
+    default: ""
+  namespace:
+    description: tools-pack namespace
+    required: true
+  release-name:
+    description: Human-readable release name used in asset notes
+    required: true
+  report-artifact-name:
+    description: Workflow artifact name for the smoke report
+    required: false
+    default: ""
+  require-vela-cli:
+    description: Require Vela CLI while packaging
+    required: false
+    default: "false"
+  release-version:
+    description: Exact release version
+    required: true
+  sign-mode:
+    description: tools-pack sign mode
+    required: true
+  smoke-advisory:
+    description: Record smoke failure without blocking platform publication
+    required: false
+    default: "false"
+  smoke-enabled:
+    description: Run packaged smoke for this target
+    required: false
+    default: "true"
+  target:
+    description: mac_arm64 or mac_x64
+    required: true
+  upload-report:
+    description: Upload the generated smoke report artifact
+    required: false
+    default: "false"
+  verify-notarization:
+    description: Verify the mounted app when sign-mode is notarized
+    required: false
+    default: "false"
+  write-report:
+    description: Materialize the tools-release report after smoke
+    required: false
+    default: "true"
+
+outputs:
+  smoke_result:
+    description: Packaged smoke step outcome
+    value: ${{ steps.smoke.outcome }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup release toolchain
+      uses: ./.github/actions/release/platform/setup
+
+    - name: Resolve platform parameters
+      id: platform
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "${{ inputs.target }}" in
+          mac_arm64) arch=arm64; closure_platform=darwin-arm64 ;;
+          mac_x64) arch=x64; closure_platform=darwin-x64 ;;
+          *) echo "unsupported mac release target: ${{ inputs.target }}" >&2; exit 1 ;;
+        esac
+        {
+          echo "arch=$arch"
+          echo "build_dir=$RUNNER_TEMP/release-build/${{ inputs.target }}"
+          echo "closure_platform=$closure_platform"
+          echo "report_dir=$RUNNER_TEMP/release-report/${{ inputs.target }}"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore tools-pack cache
+      if: ${{ inputs.cache-enabled == 'true' }}
+      id: cache
+      uses: ./.github/actions/release/platform/cache
+      with:
+        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/scripts/release/cache/mac.sh') }}
+        prefix: tools-pack-mac-v1-${{ inputs.channel }}-${{ runner.os }}-${{ steps.platform.outputs.arch }}-
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Download shared Standalone contract
+      uses: actions/download-artifact@v8
+      with:
+        name: open-design-${{ inputs.channel }}-closure-shared
+        path: ${{ runner.temp }}/release-closure/shared
+
+    - name: Inspect Electron framework symlinks
+      if: ${{ inputs.inspect-framework == 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        electron_dist="$(node -e 'const path = require("node:path"); const { createRequire } = require("node:module"); const requireFromDesktop = createRequire(path.join(process.cwd(), "shells/electron/package.json")); const electron = requireFromDesktop.resolve("electron"); process.stdout.write(path.join(path.dirname(electron), "dist"));')"
+        framework="$electron_dist/Electron.app/Contents/Frameworks/Electron Framework.framework"
+        missing_links=0
+        for link in \
+          "$framework/Electron Framework" \
+          "$framework/Helpers" \
+          "$framework/Libraries" \
+          "$framework/Resources" \
+          "$framework/Versions/Current"; do
+          if [ ! -L "$link" ]; then
+            echo "::warning::Expected Electron framework symlink, got non-symlink: $link"
+            missing_links=1
+          fi
+        done
+        if [ "$missing_links" -ne 0 ]; then
+          ls -la "$framework" >&2 || true
+          ls -la "$framework/Versions" >&2 || true
+          echo "Continuing into tools-pack because electron-builder is the source of truth for whether packaging actually works."
+        fi
+
+    - name: Resolve macOS Shell publication
+      id: shell
+      uses: ./.github/actions/release/platform/mac/shell
+      with:
+        amr-profile: ${{ env.OPEN_DESIGN_AMR_PROFILE }}
+        app-name: ${{ inputs.app-name }}
+        build-target: all
+        cache-enabled: ${{ inputs.cache-enabled }}
+        channel: ${{ inputs.channel }}
+        namespace: ${{ inputs.namespace }}
+        register-enabled: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
+        release-version: ${{ inputs.release-version }}
+        require-vela-cli: ${{ inputs.require-vela-cli }}
+        shell-version: ${{ inputs.release-version }}
+        sign-mode: ${{ inputs.sign-mode }}
+        target: ${{ inputs.target }}
+        verify-notarization: ${{ inputs.verify-notarization }}
+
+    - name: Build Standalone native contribution
+      shell: bash
+      run: |
+        set -euo pipefail
+        build_dir="${{ steps.platform.outputs.build_dir }}"
+        pnpm exec tools-pack closure build-distribution-target \
+          --blob-origin "$RELEASE_PUBLIC_ORIGIN" \
+          --channel "${{ inputs.channel }}" \
+          --dir "$RUNNER_TEMP/tools-pack" \
+          --platform "${{ steps.platform.outputs.closure_platform }}" \
+          --version "${{ inputs.closure-version }}" \
+          --json > "$build_dir/closure-target.json"
+        contribution_path="$(jq -er '.contributionPath' "$build_dir/closure-target.json")"
+        blob_root="$(jq -er '.blobRoot' "$build_dir/closure-target.json")"
+        cp "$contribution_path" "$build_dir/target-contribution.json"
+        mkdir -p "$build_dir/closure-blobs"
+        digest="$(jq -er '.contribution.native.artifact.digest' "$build_dir/closure-target.json")"
+        cp "$blob_root/${digest#sha256:}" "$build_dir/closure-blobs/${digest#sha256:}"
+        pnpm exec tools-release merge-closure-distribution \
+          "$RUNNER_TEMP/release-closure/shared/shared-contribution.json" \
+          "$build_dir/target-contribution.json" \
+          --output "$build_dir/closure-distribution.json"
+
+    - name: Publish verified Standalone native blob
+      if: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
+      shell: bash
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/tools-pack/out/closure-distribution/${{ inputs.channel }}/${{ steps.platform.outputs.closure_platform }}/versions/${{ inputs.closure-version }}/blobs
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ steps.platform.outputs.build_dir }}/target-contribution.json
+        RELEASE_CLOSURE_CONTRIBUTION_KIND: target
+        RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ steps.platform.outputs.build_dir }}/closure-publication.json
+        RELEASE_VERSION: ${{ inputs.closure-version }}
+      run: pnpm exec tools-release publish-closure-contribution
+
+    - name: Delete failed tools-pack cache
+      if: ${{ inputs.cache-enabled == 'true' && steps.shell.outputs.build-outcome == 'failure' && steps.cache.outputs.cache-matched-key != '' }}
+      uses: ./.github/actions/release/platform/cache/delete-failed
+      with:
+        matched-key: ${{ steps.cache.outputs.cache-matched-key }}
+        platform: mac
+
+    - name: Capture framework diagnostics
+      if: ${{ failure() && inputs.diagnostics == 'true' }}
+      continue-on-error: true
+      uses: ./.github/actions/release/platform/mac/diagnostics
+      with:
+        app-name: ${{ inputs.app-name }}
+        namespace: ${{ inputs.namespace }}
+        target: ${{ inputs.target }}
+
+    - name: Upload build diagnostics
+      if: ${{ always() && inputs.diagnostics == 'true' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.diagnostics-artifact-name }}
+        path: |
+          ${{ steps.platform.outputs.build_dir }}/build.log
+          ${{ steps.platform.outputs.build_dir }}/build.json
+          ${{ runner.temp }}/${{ inputs.target }}-framework-diagnostics.txt
+        if-no-files-found: warn
+
+    - name: Smoke packaged runtime
+      id: smoke
+      if: ${{ inputs.smoke-enabled == 'true' }}
+      continue-on-error: ${{ inputs.smoke-advisory == 'true' }}
+      shell: bash
+      working-directory: e2e
+      env:
+        OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ steps.platform.outputs.build_dir }}/build.json
+        OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ steps.platform.outputs.build_dir }}/build.log
+        OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON: '["${{ runner.temp }}/release-closure/shared/blobs","${{ steps.platform.outputs.build_dir }}/closure-blobs"]'
+        OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH: ${{ steps.platform.outputs.build_dir }}/closure-distribution.json
+        OD_PACKAGED_E2E_MAC: "1"
+        OD_PACKAGED_E2E_NAMESPACE: ${{ inputs.namespace }}
+        OD_PACKAGED_E2E_RELEASE_CHANNEL: ${{ inputs.channel }}
+        OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.release-version }}
+        OD_PACKAGED_E2E_REPORT_DIR: ${{ steps.platform.outputs.report_dir }}
+        OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+      run: pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+
+    - name: Write release report
+      if: ${{ always() && inputs.write-report == 'true' }}
+      shell: bash
+      env:
+        BUILD_JSON_PATH: ${{ steps.platform.outputs.build_dir }}/build.json
+        BUILD_LOG_PATH: ${{ steps.platform.outputs.build_dir }}/build.log
+        RELEASE_BUILD_TARGET: all
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_NAMESPACE: ${{ inputs.namespace }}
+        RELEASE_REPORT_DIR: ${{ steps.platform.outputs.report_dir }}
+        RELEASE_REPORT_JSON_PATH: ${{ steps.platform.outputs.report_dir }}/report.json
+        RELEASE_REPORT_SUMMARY_PATH: ${{ steps.platform.outputs.report_dir }}/summary.md
+        RELEASE_SMOKE_MODE: core
+        RELEASE_TARGET: ${{ inputs.target }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+        REPORT_TITLE: ${{ inputs.target }} ${{ inputs.channel }} build
+      run: pnpm exec tools-release write-report
+
+    - name: Publish report summary
+      if: ${{ always() && inputs.write-report == 'true' }}
+      shell: bash
+      run: cat "${{ steps.platform.outputs.report_dir }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload smoke report
+      if: ${{ always() && inputs.smoke-enabled == 'true' && inputs.upload-report == 'true' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.report-artifact-name }}
+        path: ${{ steps.platform.outputs.report_dir }}
+        if-no-files-found: warn
+
+    - name: Persist tools-pack cache
+      if: ${{ inputs.cache-enabled == 'true' && success() }}
+      uses: ./.github/actions/release/platform/cache/save
+      with:
+        build-failed: ${{ steps.shell.outputs.build-outcome == 'failure' }}
+        cache-hit: ${{ steps.cache.outputs.cache-hit }}
+        key: ${{ steps.cache.outputs.key }}
+        platform: mac
+        prefix: ${{ steps.cache.outputs.prefix }}
+
+    - name: Prepare release assets
+      shell: bash
+      env:
+        RELEASE_ARTIFACT_MODE: all
+        RELEASE_ASSET_SUFFIX: ""
+        RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/${{ inputs.target }}
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_NAMESPACE: ${{ inputs.namespace }}
+        RELEASE_NOTES: ${{ inputs.release-name }} ${{ inputs.release-version }}
+        RELEASE_PUBLIC_ORIGIN: ${{ env.RELEASE_PUBLIC_ORIGIN }}
+        RELEASE_TARGET: ${{ inputs.target }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+        TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+      run: bash tools/pack/scripts/prepare-platform-assets.sh
+
+    - name: Publish platform
+      shell: bash
+      env:
+        RELEASE_ARTIFACT_MODE: all
+        RELEASE_ASSET_SUFFIX: ""
+        RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/${{ inputs.target }}
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+        RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/${{ inputs.target }}.json
+        RELEASE_REPORT_DIR: ${{ steps.platform.outputs.report_dir }}
+        RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/${{ inputs.target }}-report.zip
+        RELEASE_SHELL_BUILD_JSON_PATH: ${{ steps.shell.outputs.build-json-path }}
+        RELEASE_SHELL_ENABLED: "true"
+        RELEASE_TARGET: ${{ inputs.target }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+      run: pnpm exec tools-release publish-platform
+
+    - name: Upload publish manifest
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.manifest-artifact-name != '' && inputs.manifest-artifact-name || format('open-design-{0}-{1}-publish-manifest', inputs.channel, inputs.artifact-id) }}
+        path: ${{ runner.temp }}/release-platform-manifests/${{ inputs.target }}.json
+        if-no-files-found: error
+        retention-days: 1
+
+    - name: Upload Standalone contribution
+      uses: actions/upload-artifact@v7
+      with:
+        name: open-design-${{ inputs.channel }}-closure-${{ steps.platform.outputs.closure_platform }}
+        path: ${{ steps.platform.outputs.build_dir }}/target-contribution.json
+        if-no-files-found: error
+        retention-days: 1
+
+    - name: Upload release asset bundle
+      if: ${{ inputs.bundle-artifact-name != '' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ inputs.bundle-artifact-name }}
+        path: ${{ runner.temp }}/release-assets/${{ inputs.target }}
+        retention-days: 1

@@ -1,0 +1,545 @@
+name: Distribute beta macOS platform
+description: Mechanically extracted beta Closure platform orchestration
+
+inputs:
+  amr-profile:
+    description: Optional AMR profile baked into the app
+    required: false
+    default: ""
+  arch:
+    description: arm64 or x64 cache architecture token
+    required: true
+  artifact-id:
+    description: Hyphenated mac target token used in workflow artifacts
+    required: true
+  build-target:
+    description: tools-pack mac build target
+    required: true
+  closure-version:
+    description: Exact Standalone Closure version
+    required: true
+  dogfood-enabled:
+    description: Publish a dogfood projection when publish is disabled
+    required: false
+    default: "false"
+  legacy-migration-enabled:
+    description: Materialize the legacy migration fixture during full smoke
+    required: false
+    default: "false"
+  namespace:
+    description: tools-pack namespace
+    required: true
+  platform:
+    description: ${{ inputs.platform }} or darwin-x64 Closure platform
+    required: true
+  publish:
+    description: Publish versioned platform artifacts
+    required: true
+  release-public-origin:
+    description: Optional release public origin override
+    required: true
+  release-version:
+    description: Exact beta release version
+    required: true
+  shell-smoke-matrix:
+    description: Immutable Electron Shell smoke matrix identifier
+    required: true
+  shell-version:
+    description: Exact immutable Electron Shell version
+    required: true
+  sign-mode:
+    description: tools-pack macOS sign mode
+    required: true
+  smoke-lanes-on-miss:
+    description: Explicit full-smoke lanes when no immutable Shell proof exists
+    required: false
+    default: ""
+  smoke-mode:
+    description: skip, core, or full
+    required: true
+  target:
+    description: ${{ inputs.target }} or mac_x64
+    required: true
+  update-metadata-url:
+    description: Optional external updater metadata URL
+    required: false
+    default: ""
+  update-target-version:
+    description: Optional external updater target version
+    required: false
+    default: ""
+
+outputs:
+  dmg_url:
+    description: Published platform DMG URL
+    value: ${{ steps.platform_outputs.outputs.dmg_url }}
+  smoke_result:
+    description: Packaged smoke outcome
+    value: ${{ steps.smoke.outcome }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup release toolchain
+      uses: ./.github/actions/release/platform/setup
+      with:
+        dependency-cache: "true"
+    - name: Restore ${{ inputs.target }} tools-pack cache
+      id: cache
+      uses: ./.github/actions/release/platform/cache
+      with:
+        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/workflows/release-beta.yml', '.github/workflows/distribution-beta.yml', '.github/scripts/release/cache/mac.sh') }}
+        prefix: tools-pack-mac-v1-beta-${{ runner.os }}-${{ inputs.arch }}-
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+    - name: Resolve ${{ inputs.target }} Shell smoke acceptance identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        digest="$(pnpm exec tsx .github/scripts/release/shell-smoke-acceptance.ts ${{ inputs.target }})"
+        [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+        echo "RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST=$digest" >> "$GITHUB_ENV"
+    - name: Download shared Standalone contract
+      uses: actions/download-artifact@v8
+      with:
+        name: open-design-beta-closure-shared
+        path: ${{ runner.temp }}/release-closure/shared
+    - name: Resolve immutable ${{ inputs.target }} Electron Shell
+      shell: bash
+      id: shell_resolution
+      env:
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
+        RELEASE_CHANNEL: beta
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
+        RELEASE_SHELL_SMOKE_MATRIX: ${{ inputs.shell-smoke-matrix }}
+        RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/shell-plan.json
+        RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$RUNNER_TEMP/release-build/${{ inputs.target }}"
+        rm -rf "$RUNNER_TEMP/tools-pack"
+        identity_args=(
+          exec tools-pack mac identity
+          --dir "$RUNNER_TEMP/tools-pack"
+          --cache-dir "$RUNNER_TEMP/tools-pack-cache"
+          --namespace "${{ inputs.namespace }}"
+          --portable
+          --release-version "${{ inputs.release-version }}"
+          --shell-version "${{ inputs.shell-version }}"
+          --mac-compression normal
+          --to "${{ inputs.build-target }}"
+          --sign-mode "${{ inputs.sign-mode }}"
+          --json
+        )
+        pnpm "${identity_args[@]}" > "$RELEASE_SHELL_PLAN_JSON_PATH"
+        : > "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.log"
+        pnpm exec tools-release resolve-shell-build
+    - name: Prepare ${{ inputs.target }} signing certificate
+      if: ${{ steps.shell_resolution.outputs.state == 'miss' && inputs.sign-mode != 'unsigned' }}
+      uses: ./.github/actions/release/platform/mac/signing
+    - name: Build beta ${{ inputs.target }}
+      shell: bash
+      id: tools_pack_build
+      if: ${{ steps.shell_resolution.outputs.state == 'miss' }}
+      continue-on-error: true
+      env:
+        APPLE_ID: ${{ env.APPLE_ID }}
+        APPLE_APP_SPECIFIC_PASSWORD: ${{ env.APPLE_APP_SPECIFIC_PASSWORD }}
+        APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
+        # Bake the AMR profile (tools-pack reads OPEN_DESIGN_AMR_PROFILE) so a
+        # feature-test dispatch produces a packaged app that targets that
+        # profile's AMR backend and enables the workspace-team transport. The
+        # matching console origin arrives via the workflow-level
+        # OD_VELA_WEB_URL. Empty = default (prod) — the normal beta pipeline is
+        # unaffected.
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$RUNNER_TEMP/release-build/${{ inputs.target }}"
+        : > "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.log"
+        build_args=(
+          exec tools-pack mac build
+          --dir "$RUNNER_TEMP/tools-pack"
+          --cache-dir "$RUNNER_TEMP/tools-pack-cache"
+          --namespace "${{ inputs.namespace }}"
+          --portable
+          --release-version "${{ inputs.release-version }}"
+          --shell-version "${{ inputs.shell-version }}"
+          --mac-compression normal
+          --to "${{ inputs.build-target }}"
+          --sign-mode "${{ inputs.sign-mode }}"
+          --json
+          --require-vela-cli
+        )
+        if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.log" >&2))"; then
+          printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.json"
+        else
+          build_status=$?
+          printf '%s\n' "$build_output"
+          exit "$build_status"
+        fi
+    - name: Retry beta ${{ inputs.target }} without restored cache
+      shell: bash
+      if: ${{ steps.shell_resolution.outputs.state == 'miss' && steps.tools_pack_build.outcome == 'failure' }}
+      env:
+        APPLE_ID: ${{ env.APPLE_ID }}
+        APPLE_APP_SPECIFIC_PASSWORD: ${{ env.APPLE_APP_SPECIFIC_PASSWORD }}
+        APPLE_TEAM_ID: ${{ env.APPLE_TEAM_ID }}
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
+      run: |
+        set -euo pipefail
+        rm -rf "$RUNNER_TEMP/tools-pack-cache"
+        mkdir -p "$RUNNER_TEMP/release-build/${{ inputs.target }}"
+        pnpm exec tools-pack mac cleanup --dir "$RUNNER_TEMP/tools-pack" --namespace "${{ inputs.namespace }}" --json
+        : > "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.log"
+        build_args=(
+          exec tools-pack mac build
+          --dir "$RUNNER_TEMP/tools-pack"
+          --cache-dir "$RUNNER_TEMP/tools-pack-cache"
+          --namespace "${{ inputs.namespace }}"
+          --portable
+          --release-version "${{ inputs.release-version }}"
+          --shell-version "${{ inputs.shell-version }}"
+          --mac-compression normal
+          --to "${{ inputs.build-target }}"
+          --sign-mode "${{ inputs.sign-mode }}"
+          --json
+          --require-vela-cli
+        )
+        if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.log" >&2))"; then
+          printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.json"
+        else
+          build_status=$?
+          printf '%s\n' "$build_output"
+          exit "$build_status"
+        fi
+    - name: Build beta ${{ inputs.target }} Standalone native contribution
+      shell: bash
+      env:
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      run: |
+        set -euo pipefail
+        version="${{ inputs.closure-version }}"
+        mkdir -p "$RUNNER_TEMP/release-build/${{ inputs.target }}"
+        pnpm exec tools-pack closure build-distribution-target \
+          --blob-origin "$RELEASE_PUBLIC_ORIGIN" \
+          --channel beta \
+          --dir "$RUNNER_TEMP/tools-pack" \
+          --platform ${{ inputs.platform }} \
+          --version "$version" \
+          --json > "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json"
+        contribution_path="$(jq -er '.contributionPath' "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json")"
+        blob_root="$(jq -er '.blobRoot' "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json")"
+        cp "$contribution_path" "$RUNNER_TEMP/release-build/${{ inputs.target }}/target-contribution.json"
+        mkdir -p "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-blobs"
+        digest="$(jq -er '.contribution.native.artifact.digest' "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json")"
+        cp "$blob_root/${digest#sha256:}" "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-blobs/${digest#sha256:}"
+    - name: Prepare ${{ inputs.target }} Standalone smoke graph
+      shell: bash
+      run: |
+        set -euo pipefail
+        pnpm exec tools-release merge-closure-distribution \
+          "$RUNNER_TEMP/release-closure/shared/shared-contribution.json" \
+          "$RUNNER_TEMP/release-build/${{ inputs.target }}/target-contribution.json" \
+          --output "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-distribution.json"
+    - name: Verify ${{ inputs.target }} signed and notarized artifacts
+      shell: bash
+      if: ${{ inputs.sign-mode == 'notarized' }}
+      run: |
+        set -euo pipefail
+        app_path="$(jq -er '.appPath' "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.json")"
+        dmg_path="$(jq -er '.dmgPath' "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.json")"
+        app_name="$(basename "$app_path")"
+        mount_point="$(mktemp -d "$RUNNER_TEMP/release-beta-${{ inputs.artifact-id }}.XXXXXX")"
+        cleanup() {
+          /usr/bin/hdiutil detach "$mount_point" >/dev/null 2>&1 || true
+          rmdir "$mount_point" >/dev/null 2>&1 || true
+        }
+        trap cleanup EXIT
+
+        /usr/bin/hdiutil verify "$dmg_path"
+        /usr/bin/hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
+        candidate_app="$mount_point/$app_name"
+        if [ ! -d "$candidate_app" ]; then
+          echo "signed app not found in ${{ inputs.target }} DMG: $candidate_app" >&2
+          exit 1
+        fi
+        /usr/bin/codesign --verify --deep --strict --verbose=2 "$candidate_app"
+        /usr/bin/xcrun stapler validate "$candidate_app"
+        /usr/sbin/spctl --assess --type execute --verbose=4 "$candidate_app"
+    - name: Register verified immutable ${{ inputs.target }} Electron Shell
+      shell: bash
+      if: ${{ steps.shell_resolution.outputs.state == 'miss' }}
+      env:
+        RELEASE_CHANNEL: beta
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
+        RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/shell-plan.json
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
+      run: pnpm exec tools-release register-shell-build
+    - name: Publish verified ${{ inputs.target }} Standalone native blob
+      shell: bash
+      if: ${{ inputs.publish == 'true' }}
+      env:
+        RELEASE_CHANNEL: beta
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/tools-pack/out/closure-distribution/beta/${{ inputs.platform }}/versions/${{ inputs.closure-version }}/blobs
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/target-contribution.json
+        RELEASE_CLOSURE_CONTRIBUTION_KIND: target
+        RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/closure-publication.json
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
+        RELEASE_VERSION: ${{ inputs.closure-version }}
+      run: pnpm exec tools-release publish-closure-contribution
+    - name: Upload ${{ inputs.target }} dogfood build to release storage
+      shell: bash
+      # publish=false QA stays on the release storage plane and does not
+      # round-trip through GitHub artifacts. It writes no channel metadata or latest
+      # pointer (enforced by the guard in tools/release/src/storage/dogfood.ts),
+      # so it cannot change what an installed client sees as an available
+      # update. The publish=true pipeline is untouched.
+      if: ${{ !cancelled() && inputs.dogfood-enabled == 'true' && inputs.publish != 'true' }}
+      continue-on-error: true
+      env:
+        DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        DOGFOOD_BUILD_JSON_KEYS: dmgPath
+        DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
+        DOGFOOD_LABEL: macOS ${{ inputs.arch }} beta ${{ inputs.release-version }}
+        DOGFOOD_VERSION: ${{ inputs.release-version }}
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
+      run: pnpm exec tools-release publish-dogfood
+    - name: Delete failed ${{ inputs.target }} tools-pack cache
+      if: ${{ steps.tools_pack_build.outcome == 'failure' && steps.cache.outputs.cache-matched-key != '' }}
+      uses: ./.github/actions/release/platform/cache/delete-failed
+      with:
+        matched-key: ${{ steps.cache.outputs.cache-matched-key }}
+        platform: mac
+    - name: Build beta ${{ inputs.target }} update fixture
+      shell: bash
+      id: update_fixture
+      if: ${{ inputs.smoke-mode == 'full' && steps.shell_resolution.outputs.smoke_proof != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
+      run: |
+        set -euo pipefail
+        version="${{ inputs.release-version }}"
+        if [[ "$version" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-beta\.([0-9]+)$ ]]; then
+          update_version="${BASH_REMATCH[1]}-beta.$((BASH_REMATCH[2] + 1))"
+        else
+          echo "full ${{ inputs.target }} smoke requires counted beta version x.y.z-beta.N; got $version" >&2
+          exit 1
+        fi
+        update_build_json_path="$RUNNER_TEMP/release-work/${{ inputs.target }}/mac-tools-pack-update-build.json"
+        mkdir -p "$(dirname "$update_build_json_path")"
+        update_output="$(pnpm exec tools-pack mac build \
+          --dir "$RUNNER_TEMP/release-work/${{ inputs.target }}/tools-pack-update-fixture" \
+          --cache-dir "$RUNNER_TEMP/tools-pack-cache" \
+          --namespace "${{ inputs.namespace }}" \
+          --portable \
+          --release-version "$version" \
+          --shell-version "$update_version" \
+          --launcher-version "$update_version" \
+          --mac-compression normal \
+          --to app \
+          --require-vela-cli \
+          --json)"
+        printf '%s\n' "$update_output" > "$update_build_json_path"
+        {
+          echo "update_build_json_path=$update_build_json_path"
+          echo "update_version=$update_version"
+        } >> "$GITHUB_OUTPUT"
+    - name: Materialize legacy ${{ inputs.target }} migration fixture
+      shell: bash
+      id: legacy_fixture
+      if: ${{ inputs.legacy-migration-enabled == 'true' && inputs.smoke-mode == 'full' && steps.shell_resolution.outputs.smoke_proof != 'hit' }}
+      env:
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      run: |
+        set -euo pipefail
+        fixture_dir="$RUNNER_TEMP/release-work/${{ inputs.target }}/legacy-migration"
+        metadata_path="$fixture_dir/metadata.json"
+        dmg_path="$fixture_dir/open-design-$LEGACY_MAC_ARM64_VERSION-mac-arm64.dmg"
+        mkdir -p "$fixture_dir"
+        curl --fail --location --retry 3 --silent --show-error \
+          "$RELEASE_PUBLIC_ORIGIN/beta/versions/$LEGACY_MAC_ARM64_VERSION/metadata.json" \
+          --output "$metadata_path"
+        metadata_version="$(jq -er '.releaseVersion' "$metadata_path")"
+        if [ "$metadata_version" != "$LEGACY_MAC_ARM64_VERSION" ]; then
+          echo "legacy metadata version mismatch: expected $LEGACY_MAC_ARM64_VERSION, got $metadata_version" >&2
+          exit 1
+        fi
+        dmg_url="$(jq -er '.releaseTargets.${{ inputs.target }}.artifacts.dmg.url' "$metadata_path")"
+        sha256_url="$(jq -er '.releaseTargets.${{ inputs.target }}.artifacts.dmg.sha256Url' "$metadata_path")"
+        expected_digest="${LEGACY_MAC_ARM64_DIGEST#sha256:}"
+        published_digest="$(curl --fail --location --retry 3 --silent --show-error "$sha256_url" | awk '{print $1}')"
+        if [ "$published_digest" != "$expected_digest" ]; then
+          echo "legacy published digest mismatch: expected $expected_digest, got $published_digest" >&2
+          exit 1
+        fi
+        curl --fail --location --retry 3 --silent --show-error "$dmg_url" --output "$dmg_path"
+        actual_digest="$(shasum -a 256 "$dmg_path" | awk '{print $1}')"
+        if [ "$actual_digest" != "$expected_digest" ]; then
+          echo "legacy DMG digest mismatch: expected $expected_digest, got $actual_digest" >&2
+          exit 1
+        fi
+        {
+          echo "dmg_path=$dmg_path"
+          echo "version=$LEGACY_MAC_ARM64_VERSION"
+        } >> "$GITHUB_OUTPUT"
+    - name: Smoke beta ${{ inputs.target }} packaged runtime
+      shell: bash
+      id: smoke
+      if: ${{ inputs.smoke-mode != 'skip' }}
+      working-directory: e2e
+      env:
+        OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
+        OD_PACKAGED_E2E_BUILD_LOG_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.log
+        OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON: '["${{ runner.temp }}/release-closure/shared/blobs","${{ runner.temp }}/release-build/${{ inputs.target }}/closure-blobs"]'
+        OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/closure-distribution.json
+        OD_PACKAGED_E2E_MAC: "1"
+        OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.update_fixture.outputs.update_build_json_path }}
+        OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE: ${{ inputs.smoke-mode == 'full' && inputs.update-metadata-url == '' && inputs.update-target-version == '' && 'tools-serve' || '' }}
+        OD_PACKAGED_E2E_MAC_UPDATE_METADATA_URL: ${{ inputs.update-metadata-url }}
+        OD_PACKAGED_E2E_MAC_UPDATE_VERSION: ${{ inputs.update-target-version != '' && inputs.update-target-version || steps.update_fixture.outputs.update_version }}
+        OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH: ${{ steps.legacy_fixture.outputs.dmg_path }}
+        OD_PACKAGED_E2E_MAC_LEGACY_VERSION: ${{ steps.legacy_fixture.outputs.version }}
+        OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}
+        OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.smoke-mode == 'full' && (steps.shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || inputs.smoke-lanes-on-miss) || '' }}
+        OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: ${{ inputs.smoke-mode }}
+        OD_PACKAGED_E2E_NAMESPACE: ${{ inputs.namespace }}
+        OD_PACKAGED_E2E_RELEASE_CHANNEL: beta
+        OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.release-version }}
+        OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.shell_resolution.outputs.smoke_proof }}
+        # Preserve the immutable outer's origin version separately from the
+        # current release projection. Reinstall acceptance needs both facts.
+        OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.shell_resolution.outputs.shell_version != '' && steps.shell_resolution.outputs.shell_version || inputs.shell-version }}
+        OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/${{ inputs.target }}
+        OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+      run: pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
+    - name: Register ${{ inputs.target }} Electron Shell full-smoke proof
+      shell: bash
+      if: ${{ inputs.smoke-mode == 'full' && steps.shell_resolution.outputs.smoke_proof != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
+      env:
+        RELEASE_CHANNEL: beta
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
+        RELEASE_SHELL_PLAN_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/shell-plan.json
+        RELEASE_SHELL_SMOKE_MATRIX: ${{ inputs.shell-smoke-matrix }}
+        RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/release-report/${{ inputs.target }}/summary.json
+        RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
+      run: pnpm exec tools-release register-shell-smoke
+    - name: Write ${{ inputs.target }} release report
+      shell: bash
+      if: ${{ always() }}
+      env:
+        BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
+        BUILD_LOG_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.log
+        RELEASE_BUILD_TARGET: ${{ inputs.build-target }}
+        RELEASE_CHANNEL: beta
+        RELEASE_NAMESPACE: ${{ inputs.namespace }}
+        RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/${{ inputs.target }}
+        RELEASE_REPORT_JSON_PATH: ${{ runner.temp }}/release-report/${{ inputs.target }}/report.json
+        RELEASE_REPORT_SUMMARY_PATH: ${{ runner.temp }}/release-report/${{ inputs.target }}/summary.md
+        RELEASE_SMOKE_MODE: ${{ inputs.smoke-mode }}
+        RELEASE_TARGET: ${{ inputs.target }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+        REPORT_TITLE: ${{ inputs.target }} beta build
+      run: pnpm exec tools-release write-report
+    - name: Publish ${{ inputs.target }} report summary
+      shell: bash
+      if: ${{ always() }}
+      run: cat "${{ runner.temp }}/release-report/${{ inputs.target }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
+    - name: Persist ${{ inputs.target }} tools-pack cache
+      if: ${{ success() }}
+      uses: ./.github/actions/release/platform/cache/save
+      with:
+        build-failed: ${{ steps.tools_pack_build.outcome == 'failure' }}
+        cache-hit: ${{ steps.cache.outputs.cache-hit }}
+        key: ${{ steps.cache.outputs.key }}
+        platform: mac
+        prefix: ${{ steps.cache.outputs.prefix }}
+    - name: Prepare ${{ inputs.target }} assets
+      shell: bash
+      if: ${{ inputs.publish == 'true' }}
+      env:
+        RELEASE_ARTIFACT_MODE: ${{ inputs.build-target == 'all' && 'all' || 'dmg-and-payload' }}
+        RELEASE_ASSET_SUFFIX: ${{ inputs.sign-mode != 'unsigned' && '.signed' || '.unsigned' }}
+        RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/${{ inputs.target }}
+        RELEASE_CHANNEL: beta
+        RELEASE_NAMESPACE: ${{ inputs.namespace }}
+        RELEASE_NOTES: Open Design beta ${{ inputs.release-version }}${{ inputs.sign-mode != 'unsigned' && '.signed' || '.unsigned' }}
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_TARGET: ${{ inputs.target }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+        TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
+      run: bash tools/pack/scripts/prepare-platform-assets.sh
+    - name: Publish ${{ inputs.target }} platform
+      shell: bash
+      if: ${{ inputs.publish == 'true' }}
+      env:
+        RELEASE_ASSET_SUFFIX: ${{ inputs.sign-mode != 'unsigned' && '.signed' || '.unsigned' }}
+        RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/${{ inputs.target }}
+        RELEASE_ARTIFACT_MODE: ${{ inputs.build-target == 'all' && 'all' || 'dmg-and-payload' }}
+        RELEASE_CHANNEL: beta
+        RELEASE_CLOSURE_ENABLED: "false"
+        RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+        RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-platform-outputs/${{ inputs.target }}.json
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_REPORT_DIR: ${{ runner.temp }}/release-report/${{ inputs.target }}
+        RELEASE_REPORT_ZIP_PATH: ${{ runner.temp }}/release-report/${{ inputs.target }}-report.zip
+        RELEASE_SHELL_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
+        RELEASE_SHELL_ENABLED: "true"
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
+        RELEASE_SUMMARY_PATH: ${{ runner.temp }}/release-platform-outputs/${{ inputs.target }}.md
+        RELEASE_TARGET: ${{ inputs.target }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+      run: pnpm exec tools-release publish-platform
+    - name: Read ${{ inputs.target }} platform outputs
+      id: platform_outputs
+      if: ${{ inputs.publish == 'true' }}
+      uses: actions/github-script@v8
+      with:
+        script: |
+          const fs = require("fs");
+          const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-platform-outputs/${{ inputs.target }}.json`, "utf8"));
+          for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
+    - name: Upload ${{ inputs.target }} publish manifest
+      if: ${{ inputs.publish == 'true' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: open-design-beta-${{ inputs.artifact-id }}-publish-manifest
+        path: ${{ runner.temp }}/release-platform-manifests/${{ inputs.target }}.json
+        if-no-files-found: error
+    - name: Upload ${{ inputs.target }} Standalone contribution
+      if: ${{ inputs.publish == 'true' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: open-design-beta-closure-${{ inputs.platform }}
+        path: ${{ runner.temp }}/release-build/${{ inputs.target }}/target-contribution.json
+        if-no-files-found: error

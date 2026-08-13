@@ -1,0 +1,44 @@
+name: Restore tools-pack cache
+description: Restore a release platform cache from an explicit content key and namespace prefix
+
+inputs:
+  origin-key:
+    description: Content hash for the tools-pack build inputs
+    required: true
+  prefix:
+    description: OS, channel, and architecture-specific cache prefix
+    required: true
+
+outputs:
+  cache-hit:
+    value: ${{ steps.restore.outputs.cache-hit }}
+  cache-matched-key:
+    value: ${{ steps.restore.outputs.cache-matched-key }}
+  key:
+    value: ${{ steps.key.outputs.key }}
+  prefix:
+    value: ${{ inputs.prefix }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate cache identity
+      id: key
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ -z "${{ inputs.origin-key }}" ]; then
+          echo "tools-pack cache origin key is empty" >&2
+          exit 1
+        fi
+        echo "key=${{ inputs.prefix }}${{ inputs.origin-key }}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore tools-pack cache
+      id: restore
+      uses: actions/cache/restore@v5
+      continue-on-error: true
+      with:
+        path: ${{ runner.temp }}/tools-pack-cache
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: |
+          ${{ inputs.prefix }}

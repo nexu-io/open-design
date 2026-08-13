@@ -5,7 +5,11 @@ import {
   validateClosureDistributionManifest,
   type ClosureDistributionManifest,
 } from "@open-design/closure/protocol";
-import { parseReleaseVersion, type ReleaseChannel } from "@open-design/release";
+import {
+  compareReleaseVersions,
+  parseReleaseVersion,
+  type ReleaseChannel,
+} from "@open-design/release";
 
 function digestCanonical(value: string): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -27,6 +31,7 @@ export function validateClosureDistributionPublication(input: Readonly<{
   expectedTargets: readonly string[];
   publicOrigin: string;
   releaseVersion: string;
+  selectedShells?: readonly Readonly<{ type: string; version: string }>[];
   value: unknown;
 }>): ClosureDistributionManifest {
   const manifest = validateClosureDistributionManifest(input.value, digestCanonical);
@@ -40,6 +45,27 @@ export function validateClosureDistributionPublication(input: Readonly<{
     throw new Error(
       `Closure distribution version ${manifest.identity.version} does not match release ${input.releaseVersion}`,
     );
+  }
+  for (const [type, compatibility] of Object.entries(manifest.compatibility.shell)) {
+    try {
+      parseReleaseVersion(compatibility.version.min, input.channel);
+    } catch {
+      throw new Error(
+        `Closure distribution ${type} minVersion is invalid for ${input.channel}: ${compatibility.version.min}`,
+      );
+    }
+  }
+  for (const shell of input.selectedShells ?? []) {
+    const floor = manifest.compatibility.shell[shell.type]?.version.min;
+    if (floor == null) {
+      throw new Error(`Closure distribution does not declare ${shell.type} Shell compatibility`);
+    }
+    parseReleaseVersion(shell.version, input.channel);
+    if (compareReleaseVersions(floor, shell.version, input.channel) > 0) {
+      throw new Error(
+        `Closure distribution ${shell.type} minVersion ${floor} exceeds selected Shell ${shell.version}`,
+      );
+    }
   }
   for (const target of input.expectedTargets) {
     if (manifest.required.targets[target] == null) {
@@ -63,6 +89,7 @@ export function readClosureDistributionPublication(input: Readonly<{
   path: string;
   publicOrigin: string;
   releaseVersion: string;
+  selectedShells?: readonly Readonly<{ type: string; version: string }>[];
 }>): ClosureDistributionManifest {
   let value: unknown;
   try {
@@ -75,6 +102,7 @@ export function readClosureDistributionPublication(input: Readonly<{
     expectedTargets: input.expectedTargets,
     publicOrigin: input.publicOrigin,
     releaseVersion: input.releaseVersion,
+    selectedShells: input.selectedShells,
     value,
   });
 }

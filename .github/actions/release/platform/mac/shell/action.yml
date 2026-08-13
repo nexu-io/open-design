@@ -1,0 +1,224 @@
+name: Resolve macOS Shell
+description: Resolve, build, verify, and register one immutable macOS Shell target
+
+inputs:
+  amr-profile:
+    required: false
+    default: ""
+  app-name:
+    required: true
+  build-target:
+    required: false
+    default: all
+  cache-enabled:
+    required: false
+    default: "true"
+  channel:
+    required: true
+  namespace:
+    required: true
+  register-enabled:
+    description: Persist a verified miss in Shell release metadata
+    required: false
+    default: "true"
+  release-version:
+    required: true
+  require-vela-cli:
+    required: false
+    default: "false"
+  shell-smoke-matrix:
+    required: false
+    default: ""
+  shell-version:
+    description: Requested Shell version; defaults to the release version
+    required: false
+    default: ""
+  sign-mode:
+    required: true
+  target:
+    description: mac_arm64 or mac_x64
+    required: true
+  verify-notarization:
+    required: false
+    default: "false"
+
+outputs:
+  build-outcome:
+    value: ${{ steps.build.outcome }}
+  build-json-path:
+    value: ${{ steps.paths.outputs.build_json_path }}
+  shell-version:
+    value: ${{ steps.resolution.outputs.shell_version != '' && steps.resolution.outputs.shell_version || inputs.shell-version != '' && inputs.shell-version || inputs.release-version }}
+  smoke-proof:
+    value: ${{ steps.resolution.outputs.smoke_proof }}
+  state:
+    value: ${{ steps.resolution.outputs.state }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve Shell paths
+      id: paths
+      shell: bash
+      run: |
+        set -euo pipefail
+        build_dir="$RUNNER_TEMP/release-build/${{ inputs.target }}"
+        mkdir -p "$build_dir"
+        {
+          echo "build_dir=$build_dir"
+          echo "build_json_path=$build_dir/build.json"
+          echo "plan_json_path=$build_dir/shell-plan.json"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Resolve Shell smoke acceptance identity
+      if: ${{ inputs.shell-smoke-matrix != '' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        digest="$(pnpm exec tsx .github/scripts/release/shell-smoke-acceptance.ts ${{ inputs.target }})"
+        [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+        echo "RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST=$digest" >> "$GITHUB_ENV"
+
+    - name: Resolve immutable Electron Shell
+      id: resolution
+      shell: bash
+      env:
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_SHELL_BUILD_JSON_PATH: ${{ steps.paths.outputs.build_json_path }}
+        RELEASE_SHELL_PLAN_JSON_PATH: ${{ steps.paths.outputs.plan_json_path }}
+        RELEASE_SHELL_SMOKE_MATRIX: ${{ inputs.shell-smoke-matrix }}
+        RELEASE_STANDALONE_PROTOCOL_VERSION: "1"
+      run: |
+        set -euo pipefail
+        rm -rf "$RUNNER_TEMP/tools-pack"
+        shell_version="${{ inputs.shell-version }}"
+        if [ -z "$shell_version" ]; then shell_version="${{ inputs.release-version }}"; fi
+        identity_args=(
+          exec tools-pack mac identity
+          --dir "$RUNNER_TEMP/tools-pack"
+          --namespace "${{ inputs.namespace }}"
+          --portable
+          --release-version "${{ inputs.release-version }}"
+          --shell-version "$shell_version"
+          --mac-compression normal
+          --to "${{ inputs.build-target }}"
+          --sign-mode "${{ inputs.sign-mode }}"
+          --json
+        )
+        if [ "${{ inputs.cache-enabled }}" = "true" ]; then
+          identity_args+=(--cache-dir "$RUNNER_TEMP/tools-pack-cache")
+        fi
+        pnpm "${identity_args[@]}" > "${{ steps.paths.outputs.plan_json_path }}"
+        : > "${{ steps.paths.outputs.build_dir }}/build.log"
+        pnpm exec tools-release resolve-shell-build
+
+    - name: Prepare Apple signing certificate
+      if: ${{ steps.resolution.outputs.state == 'miss' && inputs.sign-mode != 'unsigned' }}
+      uses: ./.github/actions/release/platform/mac/signing
+
+    - name: Build immutable Electron Shell
+      id: build
+      if: ${{ steps.resolution.outputs.state == 'miss' }}
+      continue-on-error: true
+      shell: bash
+      env:
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
+      run: |
+        set -euo pipefail
+        shell_version="${{ inputs.shell-version }}"
+        if [ -z "$shell_version" ]; then shell_version="${{ inputs.release-version }}"; fi
+        build_args=(
+          exec tools-pack mac build
+          --dir "$RUNNER_TEMP/tools-pack"
+          --namespace "${{ inputs.namespace }}"
+          --portable
+          --release-version "${{ inputs.release-version }}"
+          --shell-version "$shell_version"
+          --mac-compression normal
+          --to "${{ inputs.build-target }}"
+          --sign-mode "${{ inputs.sign-mode }}"
+          --json
+        )
+        if [ "${{ inputs.cache-enabled }}" = "true" ]; then
+          build_args+=(--cache-dir "$RUNNER_TEMP/tools-pack-cache")
+        fi
+        if [ "${{ inputs.require-vela-cli }}" = "true" ]; then
+          build_args+=(--require-vela-cli)
+        fi
+        if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "${{ steps.paths.outputs.build_dir }}/build.log" >&2))"; then
+          printf '%s\n' "$build_output" | tee "${{ steps.paths.outputs.build_json_path }}"
+        else
+          build_status=$?
+          printf '%s\n' "$build_output"
+          exit "$build_status"
+        fi
+
+    - name: Retry immutable Shell without restored cache
+      if: ${{ steps.resolution.outputs.state == 'miss' && inputs.cache-enabled == 'true' && steps.build.outcome == 'failure' }}
+      shell: bash
+      env:
+        OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr-profile }}
+      run: |
+        set -euo pipefail
+        rm -rf "$RUNNER_TEMP/tools-pack-cache"
+        pnpm exec tools-pack mac cleanup --dir "$RUNNER_TEMP/tools-pack" --namespace "${{ inputs.namespace }}" --json
+        shell_version="${{ inputs.shell-version }}"
+        if [ -z "$shell_version" ]; then shell_version="${{ inputs.release-version }}"; fi
+        build_args=(
+          exec tools-pack mac build
+          --dir "$RUNNER_TEMP/tools-pack"
+          --cache-dir "$RUNNER_TEMP/tools-pack-cache"
+          --namespace "${{ inputs.namespace }}"
+          --portable
+          --release-version "${{ inputs.release-version }}"
+          --shell-version "$shell_version"
+          --mac-compression normal
+          --to "${{ inputs.build-target }}"
+          --sign-mode "${{ inputs.sign-mode }}"
+          --json
+        )
+        if [ "${{ inputs.require-vela-cli }}" = "true" ]; then
+          build_args+=(--require-vela-cli)
+        fi
+        pnpm "${build_args[@]}" | tee "${{ steps.paths.outputs.build_json_path }}"
+
+    - name: Fail a non-cached Shell build
+      if: ${{ steps.resolution.outputs.state == 'miss' && inputs.cache-enabled != 'true' && steps.build.outcome == 'failure' }}
+      shell: bash
+      run: |
+        echo "${{ inputs.target }} Shell build failed" >&2
+        exit 1
+
+    - name: Verify notarized immutable Shell
+      if: ${{ steps.resolution.outputs.state == 'miss' && inputs.verify-notarization == 'true' && inputs.sign-mode == 'notarized' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        build_json="${{ steps.paths.outputs.build_json_path }}"
+        dmg_path="$(node -e 'const fs = require("node:fs"); const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).dmgPath; if (typeof value !== "string" || value.length === 0) process.exit(1); process.stdout.write(value);' "$build_json")"
+        /usr/bin/hdiutil verify "$dmg_path"
+        mount_point="$(mktemp -d "$RUNNER_TEMP/${{ inputs.channel }}-${{ inputs.target }}.XXXXXX")"
+        cleanup() {
+          /usr/bin/hdiutil detach "$mount_point" >/dev/null 2>&1 || true
+          rmdir "$mount_point" >/dev/null 2>&1 || true
+        }
+        trap cleanup EXIT
+        /usr/bin/hdiutil attach "$dmg_path" -nobrowse -readonly -mountpoint "$mount_point"
+        candidate_app="$mount_point/${{ inputs.app-name }}"
+        if [ ! -d "$candidate_app" ]; then
+          echo "app not found in ${{ inputs.target }} DMG: $candidate_app" >&2
+          exit 1
+        fi
+        /usr/bin/codesign --verify --deep --strict --verbose=2 "$candidate_app"
+        /usr/bin/xcrun stapler validate "$candidate_app"
+        /usr/sbin/spctl --assess --type execute --verbose=4 "$candidate_app"
+
+    - name: Register verified immutable Electron Shell
+      if: ${{ steps.resolution.outputs.state == 'miss' && inputs.register-enabled == 'true' }}
+      shell: bash
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_SHELL_BUILD_JSON_PATH: ${{ steps.paths.outputs.build_json_path }}
+        RELEASE_SHELL_PLAN_JSON_PATH: ${{ steps.paths.outputs.plan_json_path }}
+      run: pnpm exec tools-release register-shell-build

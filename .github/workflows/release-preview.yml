@@ -99,11 +99,17 @@ concurrency:
 jobs:
   distribute:
     name: Distribute preview release
-    uses: ./.github/workflows/distribution-preview.yml
+    uses: ./.github/workflows/distribution.yml
     secrets: inherit
     with:
+      amr_profile: prod
+      channel: preview
+      mac_arm64_sign_mode: notarized
+      mac_x64_sign_mode: notarized
       ref: ${{ inputs.ref }}
       release_version: ${{ inputs.release_version }}
+      release_name: Open Design Preview
+      win_x64_sign_mode: unsigned
       win_x64_smoke_mode: ${{ inputs.win_x64_smoke_mode }}
       win_x64_update_metadata_url: ${{ inputs.win_x64_update_metadata_url }}
       win_x64_update_target_version: ${{ inputs.win_x64_update_target_version }}

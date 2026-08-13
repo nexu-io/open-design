@@ -1,0 +1,30 @@
+name: Setup NSIS
+description: Ensure makensis is available on the Windows release runner
+
+inputs:
+  attempts:
+    description: Maximum Chocolatey install attempts
+    required: false
+    default: "4"
+  delay-seconds:
+    description: Linear retry delay multiplier in seconds
+    required: false
+    default: "15"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup NSIS
+      shell: pwsh
+      run: |
+        function Test-Makensis {
+          [bool]((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe"))
+        }
+        if (Test-Makensis) { Write-Host "makensis already present"; exit 0 }
+        foreach ($attempt in 1..${{ inputs.attempts }}) {
+          Write-Host "choco install nsis (attempt $attempt)"
+          choco install nsis -y --no-progress
+          if (Test-Makensis) { break }
+          Start-Sleep -Seconds (${{ inputs.delay-seconds }} * $attempt)
+        }
+        if (-not (Test-Makensis)) { throw "NSIS install failed after ${{ inputs.attempts }} attempts" }

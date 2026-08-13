@@ -1,0 +1,37 @@
+name: Delete failed tools-pack cache
+description: Remove an exact restored cache entry after a cached platform build fails
+
+inputs:
+  matched-key:
+    description: Exact cache key restored by actions/cache
+    required: true
+  platform:
+    description: mac or win
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Delete failed macOS cache
+      if: ${{ inputs.platform == 'mac' }}
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        set -euo pipefail
+        cache_ids="$(gh cache list --key "${{ inputs.matched-key }}" --limit 100 --json id,key,ref --jq '.[] | select(.key == "${{ inputs.matched-key }}") | .id')"
+        while IFS= read -r cache_id; do
+          if [ -n "$cache_id" ]; then gh cache delete "$cache_id"; fi
+        done <<< "$cache_ids"
+
+    - name: Delete failed Windows cache
+      if: ${{ inputs.platform == 'win' }}
+      continue-on-error: true
+      shell: pwsh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        $matchedKey = "${{ inputs.matched-key }}"
+        $caches = @(gh cache list --key $matchedKey --limit 100 --json id,key,ref | ConvertFrom-Json | Where-Object { $_.key -eq $matchedKey })
+        foreach ($cache in $caches) { gh cache delete $cache.id }
