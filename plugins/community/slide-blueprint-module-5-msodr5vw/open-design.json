@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "slide-blueprint-module-5-msodr5vw",
+  "title": "SLIDE BLUEPRINT — MODULE 5",
+  "version": "0.1.0",
+  "description": "**Field labels, layouts (L1–L8), colour conventions and the [CORE]/[SUPPORTING]/[OPTIONAL] tagging are defined in `00_Design_Rules_and_Architecture.md`.**",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
