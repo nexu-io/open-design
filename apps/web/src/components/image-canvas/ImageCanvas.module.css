@@ -1,0 +1,398 @@
+/* Image-project canvas. Layout ported from the reference prototype
+   `version/v2/pages/workspace-social-canvas.html`, repainted onto Open
+   Design's own tokens so it sits inside the existing shell (top bar, nav rail
+   and chat pane are untouched by this surface). */
+
+.canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  background: var(--bg-app);
+}
+
+.empty {
+  flex: 1 1 auto;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+/* 平铺 / 详情 lives in the shared workspace toolbar row (portalled), not on
+   the canvas — see ImageCanvas.tsx. */
+
+.toast {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  z-index: 20;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 12.5px;
+  box-shadow: var(--shadow-md);
+}
+
+/* ---- justified grid ---- */
+.gridWrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-content: flex-start;
+  align-items: flex-start;
+}
+
+.card {
+  position: relative;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-subtle);
+  cursor: pointer;
+  /* Width/height come from the justified solver as inline styles. The
+     containment context lets the hover metadata below shed its longest part on
+     narrow (portrait) cards. */
+  container-type: inline-size;
+}
+
+.card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  pointer-events: none;
+}
+
+/* Metadata reads on hover only — the pictures are the content, the model
+   string is a detail you go looking for. */
+.cardMeta {
+  position: absolute;
+  /* Pinned to BOTH edges: anchored only on the left, the pill grew past a
+     portrait card's right edge and got sliced by the card's overflow. */
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  padding: 3px 7px;
+  border-radius: var(--radius-large);
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  /* 10.5px keeps the longest model name whole inside the narrowest (9:16)
+     card — at 11px "Seedream 5 Lite" clipped to an ellipsis. */
+  font-size: 10.5px;
+  line-height: 1.35;
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity var(--duration-fast) cubic-bezier(0.23, 1, 0.32, 1),
+    transform var(--duration-fast) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Model on its own row, spec beneath it. On a wide card the two sit side by
+   side; a narrow portrait card wraps instead of dropping the model name. */
+.cardMetaModel,
+.cardMetaSpec {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardMetaSpec {
+  opacity: 0.8;
+}
+
+@container (min-width: 240px) {
+  .cardMeta {
+    display: flex;
+    align-items: baseline;
+    gap: 5px;
+  }
+
+  .cardMetaModel::after {
+    content: '·';
+    margin-inline-start: 5px;
+    opacity: 0.6;
+  }
+}
+
+.card:hover .cardMeta,
+.card:focus-visible .cardMeta {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.cardLoading {
+  display: grid;
+  place-items: center;
+  background: var(--bg-subtle);
+  cursor: default;
+}
+
+.loadingLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
+.dots {
+  width: 14px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  opacity: 0.45;
+  animation: dots 1.1s ease-in-out infinite;
+}
+
+@keyframes dots {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 0.8; }
+}
+
+/* ---- focus view ---- */
+.modeFocus .gridWrap {
+  display: none;
+}
+
+.thumbRail {
+  position: absolute;
+  left: 14px;
+  top: 22px;
+  bottom: 76px;
+  z-index: 8;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.thumbRail::-webkit-scrollbar {
+  display: none;
+}
+
+.thumb {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--bg-subtle);
+  cursor: pointer;
+  opacity: 0.62;
+  transition: opacity var(--duration-fast) cubic-bezier(0.23, 1, 0.32, 1),
+    border-color var(--duration-fast) cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumb:hover {
+  opacity: 0.9;
+}
+
+.thumbOn {
+  opacity: 1;
+  border-color: var(--accent);
+}
+
+.stageWrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  /* Left and right insets must match. The left one clears the thumbnail rail;
+     with a narrower right one the picture centred off-axis while the dock —
+     which centres on the whole pane — stayed put, so the two disagreed. */
+  padding: 22px 80px 84px;
+  overflow: hidden;
+}
+
+.stage {
+  position: relative;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--bg-subtle);
+  box-shadow: var(--shadow-md);
+}
+
+.stage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.stageCommenting {
+  cursor: crosshair;
+}
+
+.caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 26px 16px 12px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.62), transparent);
+  color: #fff;
+  opacity: 0;
+  transition: opacity var(--duration-fast) cubic-bezier(0.23, 1, 0.32, 1);
+  pointer-events: none;
+}
+
+.stage:hover .caption {
+  opacity: 1;
+}
+
+.captionMeta {
+  font-size: 11.5px;
+  opacity: 0.82;
+}
+
+/* ---- comment pins ---- */
+.pin {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-circular);
+  background: var(--brand);
+  color: var(--brand-text);
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.32);
+  cursor: pointer;
+}
+
+.pinSaved {
+  background: var(--green);
+  color: #fff;
+}
+
+.pinActive {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.pinComposer {
+  position: absolute;
+  right: 22px;
+  bottom: 86px;
+  z-index: 14;
+  width: 240px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-md);
+}
+
+.pinComposer textarea {
+  width: 100%;
+  min-height: 62px;
+  resize: vertical;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 7px 9px;
+  background: var(--bg);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.pinComposerRow {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.ghost {
+  padding: 4px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ghost:hover {
+  background: var(--bg-fill-tertiary);
+  color: var(--text-strong);
+}
+
+/* ---- action dock ----
+   Shell, metrics and states come from the shared `.canvas-dock` /
+   `.viewer-action` rules in styles/viewer/canvas.css — the same dock the HTML
+   canvas uses. Only the label layout (these buttons carry icon + text, the
+   HTML dock's are glyph-only) and the send button live here. */
+.dockAction {
+  height: 30px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dockSend {
+  flex: none;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--brand);
+  color: var(--brand-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dockSend:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.dockCount {
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, 0.14);
+  font-size: 11px;
+  font-weight: 600;
+}

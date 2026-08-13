@@ -872,6 +872,9 @@ html.od-radial-open .workspace-shell {
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text);
+  /* The class also dresses anchors (the image canvas's 导出 is a real
+     download link), which would otherwise arrive underlined. */
+  text-decoration: none;
   transition: background var(--dur-quick) var(--ease-out), border-color var(--dur-quick) var(--ease-out), color var(--dur-quick) var(--ease-out);
 }
 .chrome-action svg {

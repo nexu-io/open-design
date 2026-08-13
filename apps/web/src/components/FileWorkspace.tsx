@@ -154,6 +154,7 @@ import { MissingBrandFontsBanner } from './MissingBrandFontsBanner';
 import { LibraryPicker } from './LibraryPicker';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
+import { ImageCanvas } from './image-canvas/ImageCanvas';
 import { SketchEnginePrewarm } from './SketchEnginePrewarm';
 import { useWorkspaceTabsDockRef } from './workspaceTabsDock';
 import {
@@ -3260,6 +3261,19 @@ export function FileWorkspace({
   const designFilesTabActive =
     activeTab === DESIGN_FILES_TAB || !activeTabHasRenderableSurface;
 
+  // An image project's artifact is the whole set of pictures, so it gets a
+  // canvas instead of the one-file-at-a-time viewer — the same shape as a
+  // sketch file swapping in SketchEditor, but keyed on the project rather than
+  // the active file. The other workspace tabs (Design Files, browser, side
+  // chat, terminal, design system) still win, so nothing becomes unreachable.
+  const imageCanvasActive =
+    projectKind === 'image'
+    && activeTab !== DESIGN_FILES_TAB
+    && activeTab !== DESIGN_SYSTEM_TAB
+    && !isBrowserTabId(activeTab)
+    && !isSideChatTabId(activeTab)
+    && !isTerminalTabId(activeTab);
+
   // Identity-stable props for the memoized FileViewer. Without these, every
   // FileWorkspace state change (closing an adjacent tab, drag hover, launcher
   // toggles) would hand FileViewer fresh object/function identities and drag
@@ -3802,7 +3816,10 @@ export function FileWorkspace({
             id={APP_CHROME_FILE_ACTIONS_ID}
             className="ws-tabs-file-actions"
             data-app-chrome-file-actions="true"
-            hidden={!viewerFileActive}
+            /* The image canvas owns this slot for the whole project, not for a
+               single open file, so it must stay visible even with no file tab
+               active. */
+            hidden={!viewerFileActive && !imageCanvasActive}
           />
           {headerActions ? (
             <div className="ws-tabs-project-actions">{headerActions}</div>
@@ -3947,6 +3964,22 @@ export function FileWorkspace({
             editFocusRequest={designSystemEditRequest}
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
+          />
+        ) : imageCanvasActive ? (
+          <ImageCanvas
+            projectId={projectId}
+            files={visibleFiles}
+            previewComments={previewComments}
+            onSavePreviewComment={onSavePreviewComment}
+            onRemovePreviewComment={onRemovePreviewComment}
+            projectName={projectName}
+            projectDir={resolvedDir}
+            agents={handoffAgents}
+            artifactId={handoffArtifactId}
+            artifactKind={handoffArtifactKind}
+            metricsConsent={metricsConsent}
+            installationId={installationId}
+            viewerOnly={viewerOnly}
           />
         ) : designFilesTabActive ? (
           <DesignFilesPanel
@@ -4187,7 +4220,9 @@ export function FileWorkspace({
             </div>
           );
         })}
-        {viewerFile ? (
+        {/* The image canvas owns the pane while it is up, so the retained
+            single-file viewer must not render a second copy beneath it. */}
+        {viewerFile && !imageCanvasActive ? (
           <div
             ref={(element) => {
               syncInertAttribute(element, !viewerFileActive);
