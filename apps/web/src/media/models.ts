@@ -45,6 +45,7 @@ export type MediaProviderId =
   | 'midjourney'
   | 'kling'
   | 'minimax'
+  | 'siftq'
   | 'suno'
   | 'udio'
   | 'elevenlabs'
@@ -233,6 +234,15 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     integrated: true,
     defaultBaseUrl: 'https://api.minimaxi.chat/v1',
     docsUrl: 'https://platform.minimaxi.com',
+  },
+  {
+    id: 'siftq',
+    label: 'SiftQ',
+    hint: 'MiniMax-H3 V2 video generation',
+    integrated: true,
+    defaultBaseUrl: 'https://siftq.com/api/minimax/',
+    docsUrl: 'https://siftq.com',
+    supportsCustomModel: false,
   },
   {
     id: 'suno',
@@ -637,6 +647,7 @@ export const VIDEO_MODELS: MediaModel[] = [
 
   // MiniMax video.
   { id: 'minimax-video-01', label: 'video-01', hint: 'MiniMax · Hailuo', provider: 'minimax', caps: ['t2v', 'i2v'] },
+  { id: 'siftq-minimax-h3', label: 'MiniMax-H3', hint: 'SiftQ · H3 V2 · 768P/2K', provider: 'siftq', caps: ['t2v', 'i2v'] },
   { id: 'hyperframes-html', label: 'hyperframes-html', hint: 'HyperFrames · local HTML renderer', provider: 'hyperframes', caps: ['t2v'] },
 ];
 

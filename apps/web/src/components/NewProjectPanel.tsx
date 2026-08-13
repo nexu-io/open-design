@@ -63,6 +63,12 @@ import { Skeleton } from './Loading';
 import { Toast } from './Toast';
 import { useOpenFolderImport } from './useOpenFolderImport';
 
+export const SIFTQ_VIDEO_LENGTHS_SEC = [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const;
+
+export function videoLengthsForModel(modelId: string): readonly number[] {
+  return modelId === 'siftq-minimax-h3' ? SIFTQ_VIDEO_LENGTHS_SEC : VIDEO_LENGTHS_SEC;
+}
+
 // Snapshot of a curated prompt template, captured at New Project time and
 // folded into ProjectMetadata.promptTemplate. The user may have edited the
 // prompt body before clicking Create — that edited copy lives here.
@@ -579,6 +585,7 @@ export function NewProjectPanel({
     if (m && VIDEO_MODELS.some((x) => x.id === m)) {
       setVideoModel(m);
       setVideoModelTouched(true);
+      if (!videoLengthsForModel(m).includes(videoLength)) setVideoLength(5);
     }
     const a = pick?.summary.aspect;
     if (a && (MEDIA_ASPECTS as readonly string[]).includes(a)) {
@@ -588,6 +595,7 @@ export function NewProjectPanel({
   function handleVideoModel(id: string) {
     setVideoModel(id);
     setVideoModelTouched(true);
+    if (!videoLengthsForModel(id).includes(videoLength)) setVideoLength(5);
   }
 
   // The HyperFrames skill renders HTML compositions through a local
@@ -2699,7 +2707,7 @@ function MediaProjectOptions(props:
         <label className="newproj-label">
           <span>{t('newproj.videoLengthLabel')}</span>
           <select value={props.videoLength} onChange={(e) => props.onVideoLength(Number(e.target.value))}>
-            {VIDEO_LENGTHS_SEC.map((sec) => (
+            {videoLengthsForModel(props.videoModel).map((sec) => (
               <option key={sec} value={sec}>{t('newproj.videoLengthSeconds', { n: sec })}</option>
             ))}
           </select>
@@ -2760,7 +2768,7 @@ function MediaProjectOptions(props:
 export function supportedModels(surface: 'image' | 'video' | 'audio', models: MediaModel[]): MediaModel[] {
   const supportedProviders: Record<'image' | 'video' | 'audio', Set<string>> = {
     image: new Set(['vela', 'openai', 'volcengine', 'grok', 'nanobanana', 'openrouter', 'imagerouter', 'leonardo', 'custom-image', 'aihubmix', 'minimax']),
-    video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix']),
+    video: new Set(['volcengine', 'hyperframes', 'grok', 'openrouter', 'imagerouter', 'aihubmix', 'siftq']),
     audio: new Set(['minimax', 'fishaudio', 'senseaudio', 'elevenlabs', 'openai', 'volcengine', 'aihubmix']),
   };
   return models.filter((model) => {

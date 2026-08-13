@@ -2,9 +2,27 @@
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { NewProjectPanel } from '../../src/components/NewProjectPanel';
+import {
+  NewProjectPanel,
+  supportedModels,
+  videoLengthsForModel,
+} from '../../src/components/NewProjectPanel';
+import { VIDEO_MODELS } from '../../src/media/models';
 
 describe('NewProjectPanel media provider badges', () => {
+  it('offers the integrated SiftQ video model', () => {
+    expect(supportedModels('video', VIDEO_MODELS)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'siftq-minimax-h3', provider: 'siftq' }),
+      ]),
+    );
+    expect(videoLengthsForModel('siftq-minimax-h3')).toEqual([
+      4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+    ]);
+    expect(videoLengthsForModel('siftq-minimax-h3')).not.toContain(3);
+    expect(videoLengthsForModel('siftq-minimax-h3')).not.toContain(30);
+  });
+
   beforeEach(() => {
     vi.stubGlobal('ResizeObserver', class {
       observe() {}

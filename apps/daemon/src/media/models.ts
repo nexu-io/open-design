@@ -49,6 +49,7 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
   { id: 'kling', label: 'Kuaishou Kling', hint: 'Kling 1.6 / 2.0 video', integrated: false },
   { id: 'midjourney', label: 'Midjourney (proxy)', hint: 'midjourney-v7', integrated: false },
   { id: 'minimax', label: 'MiniMax', hint: 'TTS / image-01 / video-01', integrated: true, defaultBaseUrl: 'https://api.minimaxi.chat/v1' },
+  { id: 'siftq', label: 'SiftQ', hint: 'MiniMax-H3 V2 video generation', integrated: true, defaultBaseUrl: 'https://siftq.com/api/minimax/', docsUrl: 'https://siftq.com', supportsCustomModel: false },
   { id: 'suno', label: 'Suno', hint: 'Music generation', integrated: false },
   { id: 'udio', label: 'Udio', hint: 'Music generation', integrated: false },
   {
@@ -193,6 +194,7 @@ export const VIDEO_MODELS: MediaModel[] = [
   { id: 'sora-2-pro', label: 'sora-2-pro', hint: 'Fal · OpenAI Sora 2 Pro', provider: 'fal', caps: ['t2v'] },
 
   { id: 'minimax-video-01', label: 'video-01', hint: 'MiniMax · Hailuo', provider: 'minimax', caps: ['t2v', 'i2v'] },
+  { id: 'siftq-minimax-h3', label: 'MiniMax-H3', hint: 'SiftQ · H3 V2 · 768P/2K', provider: 'siftq', caps: ['t2v', 'i2v'] },
   { id: 'hyperframes-html', label: 'hyperframes-html', hint: 'HyperFrames · local HTML renderer', provider: 'hyperframes', caps: ['t2v'] },
 ];
 

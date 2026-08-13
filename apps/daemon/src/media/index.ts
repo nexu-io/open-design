@@ -38,6 +38,8 @@
 //                              for image-01 (T2I + I2I via subject_reference)
 //                              on api.minimax.io, plus TTS via the legacy
 //                              api.minimaxi.chat host
+//   * provider 'siftq'      → SiftQ MiniMax-H3 V2: asynchronous text-to-video
+//                              and single first-frame image-to-video
 //   * provider 'custom-image'→ user-supplied OpenAI-compatible
 //                              /v1/images/generations + /v1/images/edits
 //                              endpoints
@@ -77,6 +79,7 @@ import {
   type ImageGenerationRequestSummary,
 } from './image-generation-retry.js';
 import { renderVelaImage, renderVelaVideo } from './vela.js';
+import { renderSiftqVideo } from './siftq-video.js';
 import {
   ensureProject,
   kindFor,
@@ -440,7 +443,7 @@ export async function generateMedia(args: {
   // when stubs are swapped for paid integrations.
   const lengthClamp =
     surface === 'video'
-      ? def.provider === 'vela'
+      ? def.provider === 'vela' || def.provider === 'siftq'
         ? {
             value:
               typeof length === 'number' && Number.isFinite(length)
@@ -676,6 +679,21 @@ export async function generateMedia(args: {
       suggestedExt = result.suggestedExt;
     } else if (def.provider === 'openrouter' && surface === 'video') {
       const result = await renderOpenRouterVideo(ctx, credentials, args.onProgress);
+      bytes = result.bytes;
+      providerNote = result.providerNote;
+      suggestedExt = result.suggestedExt;
+    } else if (def.provider === 'siftq' && surface === 'video') {
+      const result = await renderSiftqVideo({
+        apiKey: credentials.apiKey,
+        baseUrl: credentials.baseUrl,
+        prompt: ctx.prompt,
+        duration: ctx.length,
+        resolution: ctx.resolution,
+        ratio: ctx.aspect,
+        images: ctx.imageRefs,
+        requestInit: ctx.requestInit,
+        onProgress: args.onProgress,
+      });
       bytes = result.bytes;
       providerNote = result.providerNote;
       suggestedExt = result.suggestedExt;

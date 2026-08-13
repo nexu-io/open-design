@@ -7905,15 +7905,17 @@ function MediaProvidersSection({
                   onChange={(e) => updateProvider(activeProvider, { baseUrl: e.target.value })}
                 />
               </label>
-              <label className="media-provider-detail-field">
-                <span>{t('settings.mediaProviderModel')}</span>
-                <input
-                  value={activeEntry.model ?? ''}
-                  placeholder={activeProvider.customModelPlaceholder ?? t('settings.mediaProviderModelPlaceholder')}
-                  aria-label={`${activeProvider.label} ${t('settings.mediaProviderModel')}`}
-                  onChange={(e) => updateProvider(activeProvider, { model: e.target.value })}
-                />
-              </label>
+              {activeProvider.supportsCustomModel !== false ? (
+                <label className="media-provider-detail-field">
+                  <span>{t('settings.mediaProviderModel')}</span>
+                  <input
+                    value={activeEntry.model ?? ''}
+                    placeholder={activeProvider.customModelPlaceholder ?? t('settings.mediaProviderModelPlaceholder')}
+                    aria-label={`${activeProvider.label} ${t('settings.mediaProviderModel')}`}
+                    onChange={(e) => updateProvider(activeProvider, { model: e.target.value })}
+                  />
+                </label>
+              ) : null}
             </div>
           ) : (
             <div className="media-provider-no-key">

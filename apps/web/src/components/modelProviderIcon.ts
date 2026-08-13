@@ -36,6 +36,7 @@ export function modelProviderIconSrc(
     return '/agent-icons/kimi.svg';
   if (vendor.includes('mimo')) return '/agent-icons/mimo.svg';
   if (vendor.includes('minimax')) return '/model-icons/minimax.svg';
+  if (vendor.includes('siftq')) return '/model-icons/siftq.svg';
   if (vendor.includes('muse') || vendor.includes('meta') || vendor.includes('llama'))
     return '/model-icons/meta.png';
   if (vendor.includes('doubao') || vendor.includes('bytedance'))

@@ -4258,6 +4258,20 @@ describe('SettingsDialog media providers interactions', () => {
     expect(baseUrlInput.disabled).toBe(false);
   });
 
+  it('renders SiftQ as a fixed-model provider without a misleading model override', () => {
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'codex' },
+      { initialSection: 'media' },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /SiftQ/ }));
+
+    expect(screen.getByLabelText('SiftQ API key')).toBeTruthy();
+    expect(screen.getByLabelText('SiftQ Base URL')).toBeTruthy();
+    expect(screen.queryByLabelText('SiftQ Model')).toBeNull();
+    expect(screen.getByText('MiniMax-H3 V2 video generation')).toBeTruthy();
+  });
+
   it('clears an existing provider config and removes it from the persisted payload', async () => {
     const { onPersist } = renderSettingsDialog(
       {

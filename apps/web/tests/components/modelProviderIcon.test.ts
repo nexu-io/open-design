@@ -13,6 +13,7 @@ describe('modelProviderIconSrc', () => {
     expect(modelProviderIconSrc('openrouter/anthropic/claude-sonnet-4-5')).toBe(
       '/model-icons/openrouter.svg',
     );
+    expect(modelProviderIconSrc('siftq/siftq-minimax-h3')).toBe('/model-icons/siftq.svg');
   });
 
   it('matches on provider-name substrings so aliased prefixes still resolve', () => {

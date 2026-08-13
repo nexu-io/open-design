@@ -1849,14 +1849,14 @@ Common options:
   --prompt "<text>"         Generation prompt. ElevenLabs SFX prompts must stay under 450 characters.
   --prompt-file <path|->     Read the prompt from a file, or - for stdin (for long-form prompts).
   --output <filename>       File to write under the project. Auto-named if omitted.
-  --aspect 1:1|16:9|9:16|4:3|3:4
+  --aspect 1:1|16:9|9:16|4:3|3:4|21:9
   --quality <tier>          Open Design Cloud images only: published quality tier
                             (gpt-image-2 accepts low|medium|high). Omit to let the
                             model's own default tier decide — tiers are priced
                             differently, so this is a billing choice.
-  --resolution <res>        Open Design Cloud images only: published output resolution
-                            (e.g. 1K, 2K). Must name a resolution the model publishes
-                            for --aspect. Omit to use the model's default profile.
+  --resolution <res>        Published output resolution. SiftQ MiniMax-H3 accepts
+                            768P or 2K; Open Design Cloud accepts model-specific values.
+                            Omit to use the provider's default profile.
   --length <seconds>        Video length.
   --duration <seconds>      Audio duration.
   --prompt-influence <0-1>  ElevenLabs SFX prompt adherence. Higher values follow the prompt more closely.
