@@ -5,7 +5,7 @@ import {
   buildClosureArchive,
   buildClosureDistributionShared,
   buildClosureDistributionTarget,
-} from "./closure.js";
+} from "./closure/index.js";
 import { resolveToolPackConfig, type ToolPackCliOptions, type ToolPackPlatform } from "./config.js";
 import { resolveToolPackShellBuildPlan } from "./shell-build-plan.js";
 import {

@@ -29,12 +29,12 @@ import {
   createClosureDistributionTargetContribution,
   type ClosureDistributionSharedContribution,
   type ClosureDistributionTargetContribution,
-} from "./closure-distribution.js";
+} from "./distribution.js";
 import {
   resolveClosureArchiveInvocation,
   type ClosureArchiveInvocation,
   type ClosurePlatformTarget,
-} from "./closure-platform.js";
+} from "./platform.js";
 
 export const CLOSURE_COMPONENT_MEDIA_TYPE = "application/zip" as const;
 

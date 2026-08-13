@@ -20,7 +20,7 @@ import {
   pruneClosureNativeRuntime,
   resolveClosureArchiveInvocation,
   resolveClosureRuntimeDependencies,
-} from "../src/closure.js";
+} from "../src/closure/index.js";
 import { WORKSPACE_ROOT } from "../src/config.js";
 
 const roots: string[] = [];
@@ -167,6 +167,11 @@ describe("tools-pack Closure archive", () => {
     const initial = await createClosureBuildCacheKey(options);
     await writeFile(join(root, "apps", "desktop", "src", "index.ts"), "export const shell = 2;\n");
     expect(await createClosureBuildCacheKey(options)).toBe(initial);
+
+    const closureSourcePath = join(root, "tools", "pack", "src", "closure", "source.txt");
+    await writeFile(closureSourcePath, "closure implementation changed\n");
+    expect(await createClosureBuildCacheKey(options)).not.toBe(initial);
+    await writeFile(closureSourcePath, "source:tools/pack/src/closure\n");
 
     await writeFile(join(root, "apps", "standalone", "source.txt"), "standalone changed\n");
     expect(await createClosureBuildCacheKey(options)).not.toBe(initial);

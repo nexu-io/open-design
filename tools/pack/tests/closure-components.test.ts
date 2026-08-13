@@ -17,12 +17,12 @@ import {
   validateClosureNodeRuntimeComponent,
   validateClosureNodeRuntimeIdentity,
   type ClosureComponentArchiveRunner,
-} from "../src/closure-components.js";
-import { mergeClosureDistributionTargetContributions } from "../src/closure-distribution.js";
+} from "../src/closure/components.js";
+import { mergeClosureDistributionTargetContributions } from "../src/closure/distribution.js";
 import {
   resolveHostClosurePlatformTarget,
   type ClosurePlatformTarget,
-} from "../src/closure-platform.js";
+} from "../src/closure/platform.js";
 
 const roots: string[] = [];
 

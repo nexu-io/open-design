@@ -1,4 +1,4 @@
-import { winResources } from "./resources.js";
+import { winResources } from "../resources.js";
 
 export const CLOSURE_PLATFORM_TARGETS = Object.freeze({
   DARWIN_ARM64: "darwin-arm64",

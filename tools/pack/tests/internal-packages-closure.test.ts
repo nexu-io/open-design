@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { CLOSURE_INTERNAL_PACKAGES } from "../src/closure.js";
+import { CLOSURE_INTERNAL_PACKAGES } from "../src/closure/index.js";
 import { INTERNAL_PACKAGES as MAC_INTERNAL_PACKAGES } from "../src/mac/constants.js";
 import { shouldInstallInternalPackageForMacPrebundle } from "../src/mac-prebundle.js";
 import { INTERNAL_PACKAGES as WIN_INTERNAL_PACKAGES } from "../src/win/constants.js";

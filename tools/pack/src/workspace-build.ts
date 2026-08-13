@@ -62,8 +62,8 @@ const STANDALONE_CAPABILITY_SOURCE_PATHS = [
   "shells/electron/src/standalone-handoff.ts",
   "shells/electron/src/standalone-launcher-entry.ts",
   "shells/electron/src/standalone-launcher.ts",
-  "tools/pack/src/closure-components.ts",
-  "tools/pack/src/closure-distribution.ts",
+  "tools/pack/src/closure/components.ts",
+  "tools/pack/src/closure/distribution.ts",
   "tools/pack/src/shell-build-plan.ts",
   "tools/pack/src/standalone-seed.ts",
 ] as const;
@@ -77,8 +77,8 @@ const STANDALONE_CARRIER_SOURCE_PATHS = [
   "apps/standalone/src/native-loader.ts",
   "packages/closure/src/store",
   "packages/closure/src/update",
-  "tools/pack/src/closure-components.ts",
-  "tools/pack/src/closure-platform.ts",
+  "tools/pack/src/closure/components.ts",
+  "tools/pack/src/closure/platform.ts",
 ] as const;
 
 async function resolveWorkspaceBuildVersionFamily(config: ToolPackConfig): Promise<string | null> {

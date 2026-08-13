@@ -6,7 +6,7 @@ import { CLOSURE_ARCHIVE_ENTRY_PATH } from "@open-design/closure/protocol";
 import {
   standaloneBodySource,
   standaloneInnerBootloaderSource,
-} from "./closure-runtime-source.js";
+} from "./runtime-source.js";
 
 const CLOSURE_FORBIDDEN_BUNDLE_INPUTS = [
   "/shells/electron/",

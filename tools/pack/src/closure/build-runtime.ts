@@ -7,7 +7,7 @@ import { createPackageManagerInvocation } from "@open-design/platform";
 import {
   resolveHostClosurePlatformTarget,
   type ClosurePlatformTarget,
-} from "./closure-platform.js";
+} from "./platform.js";
 
 export const CLOSURE_INTERNAL_PACKAGES = [
   { directory: "packages/release", name: "@open-design/release" },

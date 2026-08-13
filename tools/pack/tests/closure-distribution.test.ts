@@ -18,7 +18,7 @@ import {
   createClosureDistributionTargetContribution,
   mergeClosureDistributionTargetContributions,
   sealClosureDistributionManifest,
-} from "../src/closure-distribution.js";
+} from "../src/closure/distribution.js";
 
 const fixturePath = fileURLToPath(
   new URL("../../../packages/closure/fixtures/distribution-v2.json", import.meta.url),

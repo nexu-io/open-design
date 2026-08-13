@@ -88,7 +88,11 @@ async function writeWorkspace(root: string): Promise<void> {
   await mkdir(join(root, "tools/pack/src/win"), { recursive: true });
   await writeFile(join(root, "tools/pack/package.json"), `${JSON.stringify({ name: "@open-design/tools-pack" })}\n`);
   await writeFile(join(root, "tools/pack/src/index.ts"), "export const pack = 1;\n");
-  for (const source of ["closure-components.ts", "closure-distribution.ts", "shell-build-plan.ts", "standalone-seed.ts", "closure-platform.ts"]) {
+  await mkdir(join(root, "tools/pack/src/closure"), { recursive: true });
+  for (const source of ["components.ts", "distribution.ts", "platform.ts"]) {
+    await writeFile(join(root, "tools/pack/src/closure", source), "export const value = 1;\n");
+  }
+  for (const source of ["shell-build-plan.ts", "standalone-seed.ts"]) {
     await writeFile(join(root, "tools/pack/src", source), "export const value = 1;\n");
   }
   await writeFile(join(root, "tools/pack/src/mac/index.ts"), "export const mac = 1;\n");

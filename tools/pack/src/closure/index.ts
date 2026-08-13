@@ -26,32 +26,32 @@ import {
 } from "@open-design/closure/protocol";
 import { isReleaseChannel, parseReleaseVersion, type ReleaseChannel } from "@open-design/release";
 
-import { hashJson, hashPath, ToolPackCache, type CacheInvalidation } from "./cache.js";
-import { WORKSPACE_ROOT } from "./config.js";
-import { hashPackageSourcePath } from "./package-source-hash.js";
-import { resolveShellDepsDigestFromWorkspace } from "./workspace-build.js";
-import { copyBundledResourceTrees } from "./resources.js";
+import { hashJson, hashPath, ToolPackCache, type CacheInvalidation } from "../cache.js";
+import { WORKSPACE_ROOT } from "../config.js";
+import { hashPackageSourcePath } from "../package-source-hash.js";
+import { resolveShellDepsDigestFromWorkspace } from "../workspace-build.js";
+import { copyBundledResourceTrees } from "../resources.js";
 import {
   BUNDLED_RESOURCE_GROUPS,
   copyBundledResourceGroup,
-} from "./resources.js";
+} from "../resources.js";
 import {
   buildClosureDistributionSharedContribution,
   buildClosureDistributionTargetContribution,
   prepareClosureLauncherComponent,
   probeClosureNativeModules,
   type ClosureSharedResourceRoot,
-} from "./closure-components.js";
+} from "./components.js";
 import type {
   ClosureDistributionSharedContribution,
   ClosureDistributionTargetContribution,
-} from "./closure-distribution.js";
+} from "./distribution.js";
 import {
   CLOSURE_PLATFORM_TARGETS,
   normalizeClosurePlatformTarget,
   resolveClosureArchiveInvocation,
   type ClosurePlatformTarget,
-} from "./closure-platform.js";
+} from "./platform.js";
 import {
   CLOSURE_DAEMON_EXTERNALS,
   CLOSURE_INTERNAL_PACKAGES,
@@ -65,16 +65,16 @@ import {
   resolveNodeNpmCliPath,
   runClosureBuildCommand,
   runClosurePnpm,
-} from "./closure-build-runtime.js";
+} from "./build-runtime.js";
 import {
   buildClosurePrebundles,
   copyClosureWebRuntime,
-} from "./closure-prebundle.js";
+} from "./prebundle.js";
 import {
   standaloneBodySource,
   standaloneBootloaderSource,
   standaloneInnerBootloaderSource,
-} from "./closure-runtime-source.js";
+} from "./runtime-source.js";
 
 export {
   CLOSURE_PLATFORM_TARGETS,
@@ -82,20 +82,20 @@ export {
   resolveClosureArchiveInvocation,
   type ClosureArchiveInvocation,
   type ClosurePlatformTarget,
-} from "./closure-platform.js";
-export { materializeClosureWebPublicHoist } from "./closure-prebundle.js";
+} from "./platform.js";
+export { materializeClosureWebPublicHoist } from "./prebundle.js";
 export {
   standaloneBodySource,
   standaloneBootloaderSource,
   standaloneInnerBootloaderSource,
-} from "./closure-runtime-source.js";
+} from "./runtime-source.js";
 export {
   CLOSURE_DAEMON_EXTERNALS,
   CLOSURE_INTERNAL_PACKAGES,
   CLOSURE_NODE_NATIVE_MODULES,
   pruneClosureNativeRuntime,
   resolveClosureRuntimeDependencies,
-} from "./closure-build-runtime.js";
+} from "./build-runtime.js";
 export type ClosureBuildOptions = {
   artifactUrl: string;
   cacheDir?: string;
@@ -114,8 +114,7 @@ export const CLOSURE_BUILD_SOURCE_PATHS = [
   "packages/host", "packages/platform", "packages/plugin-runtime", "packages/registry-protocol",
   "packages/release", "packages/sidecar",
   "tools/pack/package.json", "tools/pack/resources",
-  "tools/pack/src/closure-build-runtime.ts", "tools/pack/src/closure-prebundle.ts",
-  "tools/pack/src/closure-runtime-source.ts", "tools/pack/src/closure.ts", "tools/pack/src/resources.ts",
+  "tools/pack/src/closure", "tools/pack/src/resources.ts",
   "assets/community-pets", "assets/frames", "craft", "data/plugin-previews",
   "design-systems", "design-templates", "plugins/_official", "plugins/registry",
   "prompt-templates", "skills",
@@ -216,7 +215,7 @@ export async function createClosureBuildCacheKey(options: {
     packageManager: rootPackage.packageManager,
     platform: options.platform,
     pnpmLock: await hashPath(join(options.workspaceRoot, "pnpm-lock.yaml")),
-    schemaVersion: 2,
+    schemaVersion: 3,
     shellDepsDigest,
     sourceHashes,
     version: options.version,
