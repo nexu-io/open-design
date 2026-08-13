@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,6 +17,7 @@ import {
   materializeClosureWebPublicHoist,
   normalizeClosurePlatformTarget,
   probeClosureNodeNativeModules,
+  pruneClosureNativeRuntime,
   resolveClosureArchiveInvocation,
   resolveClosureRuntimeDependencies,
 } from "../src/closure.js";
@@ -180,6 +181,45 @@ describe("tools-pack Closure archive", () => {
     expect(Object.values(dependencies).every(
       (version) => /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(version),
     )).toBe(true);
+  });
+
+  it("keeps only target node-pty binaries and runtime better-sqlite3 files", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-closure-native-prune-"));
+    roots.push(root);
+    const nodePtyRoot = join(root, "node_modules", "node-pty");
+    const targetRoot = join(nodePtyRoot, "prebuilds", "win32-x64");
+    const foreignRoot = join(nodePtyRoot, "prebuilds", "darwin-arm64");
+    const sqliteRoot = join(root, "node_modules", "better-sqlite3");
+    await Promise.all([
+      mkdir(targetRoot, { recursive: true }),
+      mkdir(foreignRoot, { recursive: true }),
+      mkdir(join(nodePtyRoot, "third_party"), { recursive: true }),
+      mkdir(join(sqliteRoot, "deps"), { recursive: true }),
+      mkdir(join(sqliteRoot, "lib"), { recursive: true }),
+    ]);
+    await Promise.all([
+      writeFile(join(targetRoot, "pty.node"), "addon"),
+      writeFile(join(targetRoot, "pty.pdb"), "debug symbols"),
+      writeFile(join(targetRoot, "winpty.dll"), "runtime"),
+      writeFile(join(foreignRoot, "pty.node"), "foreign"),
+      writeFile(join(nodePtyRoot, "third_party", "OpenConsole.exe"), "build input"),
+      writeFile(join(sqliteRoot, "binding.gyp"), "build input"),
+      writeFile(join(sqliteRoot, "deps", "sqlite3.c"), "build input"),
+      writeFile(join(sqliteRoot, "lib", "index.js"), "module.exports = true;\n"),
+    ]);
+
+    await pruneClosureNativeRuntime(root, CLOSURE_PLATFORM_TARGETS.WIN32_X64);
+
+    await expect(stat(join(targetRoot, "pty.node"))).resolves.toMatchObject({});
+    await expect(stat(join(targetRoot, "winpty.dll"))).resolves.toMatchObject({});
+    await expect(stat(join(sqliteRoot, "lib", "index.js"))).resolves.toMatchObject({});
+    for (const removed of [
+      foreignRoot,
+      join(targetRoot, "pty.pdb"),
+      join(nodePtyRoot, "third_party"),
+      join(sqliteRoot, "binding.gyp"),
+      join(sqliteRoot, "deps"),
+    ]) expect(await stat(removed).catch(() => null)).toBeNull();
   });
 
   it("materializes pnpm public-hoist packages required by the archived Next server", async () => {

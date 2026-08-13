@@ -702,26 +702,19 @@ async function verifyClosureDistributionGenerationRoot(
   return Object.freeze({ materializedRoot, plan });
 }
 
-/** Verify the immutable installation identity named by the runtime pointer. */
-export async function verifyStoredClosureDistributionGeneration(
-  paths: ClosureStorePaths,
-  pointerInput: ClosureRuntimePointer,
-): Promise<StoredClosureDistributionVerification> {
+/** Read the digest-bound manifest even when its materialized components need repair. */
+export async function readStoredClosureDistributionManifest(
+  paths: ClosureStorePaths, pointerInput: ClosureRuntimePointer,
+): Promise<ClosureDistributionManifest> {
   const pointer = normalizePointer(pointerInput, paths);
   const storeRoot = resolveDistributionInstallationRoot({
-    digest: pointer.digest, installationsRoot: paths.installationsRoot, root: paths.root,
-    target: pointer.target, version: pointer.version,
+    digest: pointer.digest, installationsRoot: paths.installationsRoot, root: paths.root, target: pointer.target,
+    version: pointer.version,
   });
   const manifest = validateClosureDistributionManifest(
-    await readRequiredJson(join(storeRoot, "closure.json"), "Closure distribution manifest"),
-    sha256CanonicalDistribution,
+    await readRequiredJson(join(storeRoot, "closure.json"), "Closure distribution manifest"), sha256CanonicalDistribution,
   );
-  const plan = planClosureDistributionGeneration(
-    paths,
-    pointer.generation,
-    manifest,
-    pointer.target,
-  );
+  const plan = planClosureDistributionGeneration(paths, pointer.generation, manifest, pointer.target);
   if (
     plan.identity.channel !== pointer.channel
     || plan.identity.digest !== pointer.digest
@@ -730,13 +723,25 @@ export async function verifyStoredClosureDistributionGeneration(
   ) {
     throw new ClosureStoreError("committed Closure distribution identity does not match its installation");
   }
+  return manifest;
+}
+
+/** Verify the immutable installation identity named by the runtime pointer. */
+export async function verifyStoredClosureDistributionGeneration(
+  paths: ClosureStorePaths, pointerInput: ClosureRuntimePointer,
+): Promise<StoredClosureDistributionVerification> {
+  const pointer = normalizePointer(pointerInput, paths);
+  const manifest = await readStoredClosureDistributionManifest(paths, pointer);
+  const plan = planClosureDistributionGeneration(paths, pointer.generation, manifest, pointer.target);
+  const storeRoot = resolveDistributionInstallationRoot({
+    digest: pointer.digest, installationsRoot: paths.installationsRoot, root: paths.root,
+    target: pointer.target, version: pointer.version,
+  });
   return await verifyClosureDistributionGenerationRoot(paths, plan, storeRoot);
 }
 
-/** Select the migration verifier without exposing generation layout to a Shell. */
 export async function hasStoredClosureDistributionGeneration(
-  paths: ClosureStorePaths,
-  pointerInput: ClosureRuntimePointer,
+  paths: ClosureStorePaths, pointerInput: ClosureRuntimePointer,
 ): Promise<boolean> {
   const pointer = normalizePointer(pointerInput, paths);
   const manifestPath = join(resolveDistributionInstallationRoot({

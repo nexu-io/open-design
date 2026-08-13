@@ -60,7 +60,7 @@ import {
   buildClosureDistributionWorkspace,
   buildClosureWorkspace,
   packClosureWorkspaceTarballs,
-  pruneForeignNodePtyPrebuilds,
+  pruneClosureNativeRuntime,
   resolveClosureRuntimeDependencies,
   resolveNodeNpmCliPath,
   runClosureBuildCommand,
@@ -93,6 +93,7 @@ export {
   CLOSURE_DAEMON_EXTERNALS,
   CLOSURE_INTERNAL_PACKAGES,
   CLOSURE_NODE_NATIVE_MODULES,
+  pruneClosureNativeRuntime,
   resolveClosureRuntimeDependencies,
 } from "./closure-build-runtime.js";
 export type ClosureBuildOptions = {
@@ -469,7 +470,7 @@ export async function buildClosureDistributionTarget(
     "--omit=dev",
     "--no-package-lock",
   ], { cwd: nativeRoot });
-  await pruneForeignNodePtyPrebuilds(nativeRoot, target);
+  await pruneClosureNativeRuntime(nativeRoot, target);
   await rm(join(nativeRoot, "node_modules", ".bin"), { force: true, recursive: true });
   await rm(join(nativeRoot, "node_modules", ".package-lock.json"), { force: true });
   await rm(join(nativeRoot, "package.json"), { force: true });
@@ -541,7 +542,7 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
     "--omit=dev",
     "--no-package-lock",
   ], { cwd: appRoot });
-  await pruneForeignNodePtyPrebuilds(appRoot, target);
+  await pruneClosureNativeRuntime(appRoot, target);
   const loadedNativeModules = await probeClosureNodeNativeModules({ appRoot });
   const shellDepsDigest = await resolveShellDepsDigestFromWorkspace({
     workspaceRoot,

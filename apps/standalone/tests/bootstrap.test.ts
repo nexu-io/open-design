@@ -333,4 +333,23 @@ describe("Standalone unresolved bootstrap", () => {
     expect(repaired.handoff.handoff.scope.generation).toBe(1);
     expect(await readFile(repaired.bootloaderPath, "utf8")).toContain("handoff = true");
   });
+
+  it("repairs damaged materialized bytes offline from the committed manifest and blob Store", async () => {
+    const value = await fixture();
+    const first = await resolveStandaloneBootstrap(request(value, "0.19.0-beta.2"), { fetch: value.fetch });
+    await consumeTransition(value, first);
+    await writeFile(first.bootloaderPath, "corrupt\n", "utf8");
+    const fetchCount = vi.mocked(value.fetch).mock.calls.length;
+
+    const repaired = await resolveStandaloneBootstrap(
+      request(value, "0.19.0-beta.1", null),
+      { fetch: value.fetch },
+    );
+    await consumeTransition(value, repaired);
+
+    expect(repaired.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.2");
+    expect(repaired.handoff.handoff.scope.generation).toBe(1);
+    expect(await readFile(repaired.bootloaderPath, "utf8")).toContain("handoff = true");
+    expect(vi.mocked(value.fetch).mock.calls).toHaveLength(fetchCount);
+  });
 });

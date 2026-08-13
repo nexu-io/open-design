@@ -164,16 +164,37 @@ export async function resolveClosureRuntimeDependencies(
   })) as Record<(typeof CLOSURE_DAEMON_EXTERNALS)[number], string>;
 }
 
-export async function pruneForeignNodePtyPrebuilds(
+export async function pruneClosureNativeRuntime(
   appRoot: string,
   target: ClosurePlatformTarget,
 ): Promise<void> {
-  const prebuildsRoot = join(appRoot, "node_modules", "node-pty", "prebuilds");
+  const nodePtyRoot = join(appRoot, "node_modules", "node-pty");
+  const prebuildsRoot = join(nodePtyRoot, "prebuilds");
   for (const entry of await readdir(prebuildsRoot, { withFileTypes: true })) {
     if (entry.name !== target) await rm(join(prebuildsRoot, entry.name), { force: true, recursive: true });
   }
+  const targetRoot = join(prebuildsRoot, target);
+  for (const entry of await readdir(targetRoot, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.toLowerCase().endsWith(".pdb")) {
+      await rm(join(targetRoot, entry.name), { force: true });
+    }
+  }
+  await Promise.all([
+    "deps",
+    "scripts",
+    "src",
+    "third_party",
+    "typings",
+  ].map(async (entry) => await rm(join(nodePtyRoot, entry), { force: true, recursive: true })));
   const nativeEntry = join(prebuildsRoot, target, "pty.node");
   if (!(await stat(nativeEntry).catch(() => null))?.isFile()) {
     throw new Error(`Closure node-pty prebuild is missing for ${target}: ${nativeEntry}`);
   }
+
+  const betterSqliteRoot = join(appRoot, "node_modules", "better-sqlite3");
+  await Promise.all([
+    "binding.gyp",
+    "deps",
+    "src",
+  ].map(async (entry) => await rm(join(betterSqliteRoot, entry), { force: true, recursive: true })));
 }

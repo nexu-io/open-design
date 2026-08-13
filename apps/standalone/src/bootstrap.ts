@@ -2,6 +2,7 @@ import { join } from "node:path";
 
 import {
   readClosureBindingDescriptor,
+  readStoredClosureDistributionManifest,
   resolveClosureStorePaths,
   verifyStoredClosureDistributionGeneration,
 } from "@open-design/closure/store";
@@ -236,13 +237,22 @@ export async function resolveStandaloneBootstrap(
       emitProgress("verifying");
       verification = await verifyStoredClosureDistributionGeneration(paths, committed.standalone);
     } catch (error) {
-      const candidate = await discoverExact(committed.standalone.version).catch((discoveryError) => {
-        throw new StandaloneBootstrapError(
-          "standalone-invalid",
-          "Committed Standalone failed verification and its exact repair candidate is unavailable",
-          { cause: new AggregateError([error, discoveryError]) },
-        );
-      });
+      let candidate: ClosureDistributionReleaseCandidate;
+      try {
+        candidate = {
+          manifest: await readStoredClosureDistributionManifest(paths, committed.standalone),
+          releaseVersion: committed.releaseVersion,
+          target: committed.standalone.target,
+        };
+      } catch (localError) {
+        candidate = await discoverExact(committed.standalone.version).catch((discoveryError) => {
+          throw new StandaloneBootstrapError(
+            "standalone-invalid",
+            "Committed Standalone failed verification and its exact repair candidate is unavailable",
+            { cause: new AggregateError([error, localError, discoveryError]) },
+          );
+        });
+      }
       assertCandidateSupportsShell(candidate);
       const repair = await withTransition("repair-standalone", async () => {
         return await repairCommittedClosureDistribution({
