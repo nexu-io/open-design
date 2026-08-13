@@ -151,6 +151,27 @@ describe('DesignSystemPicker', () => {
     expect(onChange).toHaveBeenCalledWith(null);
   });
 
+  it('clears only the search query and preserves the selected system', async () => {
+    const onChange = vi.fn();
+    renderPicker({ onChange }, 'en');
+
+    fireEvent.click(screen.getByTestId('project-ds-picker-trigger'));
+    const search = screen.getByTestId('project-ds-picker-search');
+
+    expect(screen.queryByTestId('project-ds-picker-search-clear')).toBeNull();
+
+    fireEvent.change(search, { target: { value: 'clay' } });
+    const clearButton = await screen.findByTestId('project-ds-picker-search-clear');
+    expect(clearButton.getAttribute('aria-label')).toBe('Clear search');
+
+    fireEvent.click(clearButton);
+
+    expect(search).toHaveValue('');
+    expect(search).toHaveFocus();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByTestId('project-ds-picker-option-noir').getAttribute('aria-selected')).toBe('true');
+  });
+
   it('uses localized picker copy', async () => {
     renderPicker({}, 'fr');
 

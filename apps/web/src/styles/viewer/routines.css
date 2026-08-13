@@ -3436,6 +3436,26 @@
   border-color: transparent;
   box-shadow: none;
 }
+.project-ds-picker-search-clear {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.project-ds-picker-search-clear:hover,
+.project-ds-picker-search-clear:focus-visible {
+  outline: none;
+  background: var(--bg-subtle);
+  color: var(--text-strong);
+}
 /* Inline Clear / Create actions sit flush against the search field so the
    popover header reads as one row (search + reset + create new system). */
 .project-ds-picker-action {
