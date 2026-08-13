@@ -8,6 +8,7 @@ import {
   amrProfileBadgeLabel,
   amrRechargeUrlForProfile,
   resolveRunFailureUi,
+  runNoticePreviewFromSearch,
   setRuntimeAmrConsoleOrigin,
 } from '../../src/runtime/amr-guidance';
 
@@ -118,6 +119,69 @@ describe('workspace-scoped AMR URLs', () => {
 });
 
 describe('resolveRunFailureUi', () => {
+  it('mounts informational notices in the fixed composer-adjacent slot', () => {
+    const source = readFileSync(
+      join(__dirname, '..', '..', 'src', 'components', 'ChatPane.tsx'),
+      'utf8',
+    );
+    expect(source).toContain('className="chat-run-notice-slot"');
+    expect(source).toContain('displayError && !runFailureUi?.noticeKind');
+    expect(source).toContain('className="chat-run-notice-dismiss"');
+    expect(source).toContain('aria-label={t(\'common.close\')}');
+    expect(source).toContain('setDismissedRunNoticeKey(runNoticeKey)');
+    const styles = readFileSync(
+      join(__dirname, '..', '..', 'src', 'styles', 'chat.css'),
+      'utf8',
+    );
+    expect(styles).toContain('.chat-run-notice-card > div:first-child');
+    expect(styles).toContain('grid-template-columns: 24px minmax(0, 1fr) 26px');
+    expect(styles).toContain('justify-self: end');
+  });
+
+  it('exposes explicit local review modes for both informational notices', () => {
+    expect(runNoticePreviewFromSearch('?runNotice=limit')).toBe('usage-limit');
+    expect(runNoticePreviewFromSearch('?runNotice=queue')).toBe('queue');
+    expect(runNoticePreviewFromSearch('?campaign=deepseek-v4-pro')).toBeNull();
+  });
+
+  it('turns the hosted model 5-hour limit into a localized notice without actions', () => {
+    const ui = resolveRunFailureUi(
+      'RATE_LIMITED',
+      'hard_quota',
+      'amr',
+      'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z. This request was not charged to Wallet Credits.',
+    );
+
+    expect(ui).toMatchObject({
+      primaryAction: 'none',
+      titleKey: 'chat.runNotice.title.fiveHourLimit',
+      messageKey: 'chat.runNotice.fiveHourLimitMessage',
+      messageVars: {
+        model: 'Kimi K2.6',
+        retryAt: '2026-08-12T06:34:47Z',
+      },
+      secondaryRetry: false,
+      showSwitchCard: false,
+    });
+  });
+
+  it('turns a peak-demand queue response into a localized notice without actions', () => {
+    const ui = resolveRunFailureUi(
+      'UPSTREAM_UNAVAILABLE',
+      null,
+      'amr',
+      'Request queued due to high demand. It will start automatically when capacity is available.',
+    );
+
+    expect(ui).toMatchObject({
+      primaryAction: 'none',
+      titleKey: 'chat.runNotice.title.queued',
+      messageKey: 'chat.runNotice.queuedMessage',
+      secondaryRetry: false,
+      showSwitchCard: false,
+    });
+  });
+
   // RATE_LIMITED / UPSTREAM_UNAVAILABLE (non-antigravity): still promote AMR as
   // the steadier hosted alternative, but now also name the failure type and
   // carry actionable recovery copy (#895) instead of leaving the raw upstream

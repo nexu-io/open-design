@@ -301,6 +301,12 @@ For a worked example of one full loop (red e2e spec → fix → green), see `e2e
 
 # Common commands
 
+## DeepSeek V4 Pro campaign integration policy
+
+- Keep the Open Design DeepSeek V4 Pro campaign pull request open for review; do not merge it unless the user explicitly changes this instruction.
+- The Vela counterpart is the only repository authorized to merge, and its pull request must target `feat/go-plan` rather than `main`.
+- Use Odcrew (`odc gh pr ...`) for all pull request creation, push, review, and status operations related to this campaign.
+
 ```bash
 pnpm install
 pnpm nix:update-hash

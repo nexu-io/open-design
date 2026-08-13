@@ -115,6 +115,8 @@ export const zhTW: Dict = {
   "chat.runError.title.connectionDropped": "連線中斷",
   "chat.runError.title.signInRequired": "需要登入",
   "chat.runError.title.rateLimited": "已達用量上限",
+  'chat.runNotice.title.fiveHourLimit': '已達 5 小時模型用量上限',
+  'chat.runNotice.title.queued': '目前使用人數較多，任務已排隊',
   "chat.runError.title.generic": "任務執行失敗",
   "chat.runError.title.artifactMissing": "未產生檔案產物",
   "chat.runError.signInMessage.amr":
@@ -136,6 +138,8 @@ export const zhTW: Dict = {
   "chat.runError.promptTooLargeMessage": "本輪輸入超出了模型的上下文上限。請縮短提示詞、減少附件，或另開對話後重試。",
   "chat.runError.modelUnavailableMessage": "所選模型不可用或不存在。請在設定中切換到其他可用模型後重試。",
   "chat.runError.rateLimitedMessage": "已觸發模型服務的用量上限。請稍後重試，或切換到其他模型／服務。",
+  'chat.runNotice.fiveHourLimitMessage': '{model} 已達 5 小時用量上限，預計 {retryAt} 恢復。本次請求未扣費。',
+  'chat.runNotice.queuedMessage': '目前使用人數較多，你的任務已進入佇列，輪到後會自動開始，無需重複提交。',
   "chat.runError.upstreamUnavailableMessage": "模型服務暫時無法使用，通常是上游波動或網路／代理問題。請稍後重試。",
   "chat.runError.toolLoopMessage": "{agent} 不斷重複同一操作卻沒有進展，已自動停止。請檢查目標檔案或指令後重試。",
   "chat.runError.outputInvalidMessage": "模型輸出了異常內容，本輪已被中斷。通常重試即可恢復。",

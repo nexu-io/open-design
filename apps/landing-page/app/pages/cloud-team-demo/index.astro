@@ -1,0 +1,341 @@
+---
+import { DEEPSEEK_V4_PRO_CAMPAIGN } from '../../_lib/deepseek-v4-pro-campaign';
+import { CLOUD_CONSOLE_URL } from '../../_lib/pricing';
+import { getPricingCampaignContent } from '../../_lib/pricing-campaign-content';
+import { getLocaleDefinition, localeFromPath, localePath } from '../../i18n';
+import SiteAnalytics from '../../_components/site-analytics.astro';
+
+const locale = localeFromPath(Astro.url.pathname);
+const localeDefinition = getLocaleDefinition(locale);
+const campaignCopy = getPricingCampaignContent(locale);
+const campaignBenefitTitle = locale === 'zh'
+  ? 'DeepSeek V4 Pro与DeepSeek V4 Flash 无限使用'
+  : campaignCopy.modelBenefits.join(' · ');
+const campaignPricingHref = `${localePath(locale, '/pricing/')}?campaign=deepseek-v4-pro`;
+
+const benefits = [
+  '项目、设计系统与插件，团队统一共享与管理',
+  '成员均可查看和评论项目，仅项目创建者可以编辑',
+  '按角色管理权限：Owner / Admin / Member',
+  '团队用量面板与计费管理',
+  '自定义网站部署域名',
+];
+
+const teamPlans = [
+  { name: 'Team Basic', original: '$5', price: '$3.50', saving: '年付省 30%', note: '基础团队协作，不含模型额度' },
+  { name: 'Team Plus', original: '$25', price: '$17.50', saving: '年付省 30%', note: '小团队协作入门' },
+  { name: 'Team Pro', original: '$105', price: '$63', saving: '年付省 40%', note: '常规项目协作', featured: true },
+  { name: 'Team Max', original: '$205', price: '$100.63', saving: '年付省 51%', note: '高频生成与评审' },
+];
+
+---
+
+<!doctype html>
+<html lang={localeDefinition.htmlLang} dir={localeDefinition.dir}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Open Design Cloud 团队升级 Demo</title>
+    <SiteAnalytics />
+  </head>
+  <body>
+    <main class="cloud-shell" data-campaign-root data-upgrade-url={CLOUD_CONSOLE_URL} data-campaign-start-at={DEEPSEEK_V4_PRO_CAMPAIGN.startAt} data-campaign-end-at={DEEPSEEK_V4_PRO_CAMPAIGN.endAtExclusive} data-campaign-review-param={DEEPSEEK_V4_PRO_CAMPAIGN.reviewParam} data-campaign-window-label={campaignCopy.windowLabel} data-campaign-day-unit={campaignCopy.dayUnit}>
+      <aside class="sidebar">
+        <div class="brand"><span class="brand-mark">OD</span><strong>Open Design</strong></div>
+        <nav>
+          <a href="#"><span>⌂</span>概览</a>
+          <a href="#"><span>◫</span>用量</a>
+          <a href="#"><span>▤</span>账单</a>
+          <a class="active" href="#"><span>♙</span>成员</a>
+          <a href="#"><span>⚙</span>设置</a>
+        </nav>
+        <div class="sidebar-bottom">
+          <a href="#"><span>◇</span>模型与价格</a>
+          <a href="#"><span>?</span>帮助与文档</a>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <header>
+          <button class="language">简</button>
+          <button class="workspace-switcher">工作空间&nbsp;&nbsp; Huihua Zhang's workspace⌄</button>
+          <a class="campaign-corner-badge" data-campaign-surface data-campaign-pricing-link href={campaignPricingHref} hidden>{campaignCopy.body} <span>→</span></a>
+        </header>
+        <div class="workspace-content">
+          <h1>成员</h1>
+          <section class="seat-card">
+            <div><strong>席位</strong><span>1/1 已用 · 免费版</span></div>
+            <p>免费版仅含 1 个席位，升级团队版可邀请协作。团队版最少 3 个席位，按席位按月计费。</p>
+            <div class="progress"><i></i></div>
+          </section>
+          <section class="members-card">
+            <div class="table-head"><span>成员</span><span>加入时间</span><span>角色</span></div>
+            <div class="member-row"><span class="avatar">H</span><span class="person"><b>Huihua Zhang</b><small>z***@refly.ai</small></span><span>2026年8月3日</span><span>所有者</span></div>
+          </section>
+        </div>
+      </section>
+
+      <div class="backdrop" aria-hidden="true"></div>
+      <section class="upgrade-modal" role="dialog" aria-modal="true" aria-labelledby="upgrade-title">
+        <header class="modal-header">
+          <div>
+            <h2 id="upgrade-title">升级更高版本，获得更多模型额度</h2>
+            <p data-modal-subtitle>团队版按席位按月计费，最少 3 席。</p>
+          </div>
+          <button class="close" data-modal-action="close" aria-label="关闭">×</button>
+        </header>
+
+        <div class="modal-body">
+          <div class="modal-tabs">
+            <div class="billing-tabs" aria-label="计费周期">
+              <button>月付</button>
+              <button class="selected">年付</button>
+            </div>
+          </div>
+
+          <div class="plan-area">
+            <div class="seat-selector">
+              <div>
+                <strong>席位数</strong>
+                <span>按年计费 · $2268/年 · 每年省 $1512</span>
+                <em>首年实付 $2268，次年续费 $3780（优惠仅首期）</em>
+              </div>
+              <div class="stepper"><button>−</button><b>3 席位</b><button>＋</button></div>
+            </div>
+
+            <div class="plan-grid team-plan-grid">
+              {teamPlans.map((plan) => (
+                <article class:list={['plan-card', { featured: plan.featured }]}>
+                  <div class="plan-title"><strong>{plan.name}</strong>{plan.featured && <span>推荐</span>}</div>
+                  <div class="price-line"><del>{plan.original}</del><b>{plan.price}</b><small>/ 席 / 月</small></div>
+                  <em>{plan.saving}</em>
+                  <p>{plan.note}</p>
+                </article>
+              ))}
+            </div>
+
+            <div class="campaign-banner" data-campaign-surface hidden>
+              <div class="campaign-benefit">
+                <span class="campaign-icon">✦</span>
+                <div>
+                  <strong>{campaignBenefitTitle}</strong>
+                  <span>{campaignCopy.teamBenefitNote}</span>
+                </div>
+                <b data-campaign-countdown>{campaignCopy.windowLabel} 14{campaignCopy.dayUnit} 00:00:00</b>
+              </div>
+              <p class="campaign-disclaimer">{campaignCopy.disclaimer}</p>
+            </div>
+
+            <div class="benefits">
+              {benefits.map((benefit) => <p><span>✓</span>{benefit}</p>)}
+            </div>
+          </div>
+        </div>
+
+        <footer class="modal-footer">
+          <button class="secondary" data-modal-action="later">暂不升级</button>
+          <button class="primary" data-modal-action="upgrade"><span>✦</span><span data-upgrade-label>升级 Team Pro</span></button>
+        </footer>
+      </section>
+    </main>
+  </body>
+</html>
+
+<script>
+  const campaignRoot = document.querySelector<HTMLElement>('[data-campaign-root]');
+  const campaignSurfaces = document.querySelectorAll<HTMLElement>('[data-campaign-surface]');
+  const campaignCountdown = document.querySelector<HTMLElement>('[data-campaign-countdown]');
+  const campaignStartAt = Date.parse(campaignRoot?.dataset.campaignStartAt || '');
+  const campaignEndAt = Date.parse(campaignRoot?.dataset.campaignEndAt || '');
+  const campaignReviewParam = campaignRoot?.dataset.campaignReviewParam;
+  const campaignPreview = new URLSearchParams(window.location.search).get('campaign') === campaignReviewParam;
+  const campaignWindowLabel = campaignRoot?.dataset.campaignWindowLabel || '';
+  const campaignDayUnit = campaignRoot?.dataset.campaignDayUnit || '';
+  const campaignPreviewEndAt = Date.now() + 14 * 24 * 60 * 60 * 1000;
+  let trackedPlanSurface = false;
+  let trackedCampaignBenefit = false;
+  let campaignActive = false;
+
+  function track(name: 'surface_view' | 'ui_click', props: Record<string, unknown>) {
+    window.__odTrack?.(name, {
+      page_name: 'cloud_team_demo',
+      area: 'upgrade_modal',
+      campaign_id: 'deepseek_v4_pro',
+      ...props,
+    });
+  }
+
+  function recordTeamSurfaces() {
+    if (!trackedPlanSurface) {
+      trackedPlanSurface = true;
+      track('surface_view', {
+        element: 'plan_options',
+        plan_audience: 'team',
+      });
+    }
+    if (campaignActive && !trackedCampaignBenefit) {
+      trackedCampaignBenefit = true;
+      track('surface_view', {
+        element: 'deepseek_v4_pro_benefit',
+        plan_audience: 'team',
+      });
+    }
+  }
+
+  function updateCampaignCountdown() {
+    const now = Date.now();
+    campaignActive = campaignPreview || (now >= campaignStartAt && now < campaignEndAt);
+    campaignSurfaces.forEach((surface) => { surface.hidden = !campaignActive; });
+    recordTeamSurfaces();
+    if (!campaignActive || !campaignCountdown) return;
+    const countdownEndsAt = campaignPreview ? campaignPreviewEndAt : campaignEndAt;
+    const totalSeconds = Math.max(0, Math.ceil((countdownEndsAt - now) / 1000));
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    campaignCountdown.textContent = `${campaignWindowLabel} ${days}${campaignDayUnit} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  document.querySelectorAll<HTMLButtonElement>('[data-modal-action]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const action = button.dataset.modalAction || 'unknown';
+      if (action !== 'upgrade') {
+        track('ui_click', {
+          element: action,
+          plan_audience: 'team',
+        });
+        return;
+      }
+      const source = 'landing_pricing_team_plan';
+      const attribution = window.__odRecordCampaignEntry?.(source, 'deepseek_v4_pro');
+      track('ui_click', {
+        element: 'upgrade',
+        plan_audience: 'team',
+        plan_tier: 'team_pro',
+        ...(attribution || {}),
+      });
+      const upgradeUrl = campaignRoot?.dataset.upgradeUrl;
+      if (upgradeUrl) window.location.assign(window.__odAttributedUrl?.(upgradeUrl, attribution) || upgradeUrl);
+    });
+  });
+  document.querySelector<HTMLAnchorElement>('[data-campaign-pricing-link]')?.addEventListener('click', (event) => {
+    event.preventDefault();
+    const link = event.currentTarget as HTMLAnchorElement;
+    const source = 'landing_pricing_team_plan';
+    const attribution = window.__odRecordCampaignEntry?.(source, 'deepseek_v4_pro');
+    track('ui_click', {
+      area: 'campaign_badge',
+      element: 'open_pricing',
+      plan_audience: 'team',
+      ...(attribution || {}),
+    });
+    window.location.assign(window.__odAttributedUrl?.(link.href, attribution) || link.href);
+  });
+  updateCampaignCountdown();
+  window.setInterval(updateCampaignCountdown, 1000);
+</script>
+
+<style>
+  :global(*) { box-sizing: border-box; }
+  :global(html), :global(body) { margin: 0; min-height: 100%; font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; color: #171916; }
+  :global(body) { background: #f4f5f3; }
+  button, a { font: inherit; }
+  .cloud-shell { min-height: 100vh; display: flex; position: relative; overflow: hidden; }
+  .sidebar { width: 218px; min-height: 100vh; padding: 26px 18px 20px; background: #f7f8f6; border-right: 1px solid #e6e8e4; display: flex; flex-direction: column; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 10px 28px; font-size: 16px; }
+  .brand-mark { width: 29px; height: 29px; border-radius: 9px; background: #111; color: #fff; display: grid; place-items: center; font-size: 10px; font-weight: 800; }
+  nav, .sidebar-bottom { display: grid; gap: 8px; }
+  nav a, .sidebar-bottom a { text-decoration: none; color: #555951; display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 9px; font-size: 14px; }
+  nav a span, .sidebar-bottom a span { width: 17px; text-align: center; color: #6c7168; }
+  nav a.active { background: #e7f8df; color: #1d6519; font-weight: 600; }
+  .sidebar-bottom { margin-top: auto; border-top: 1px solid #e3e5e1; padding-top: 14px; }
+  .workspace { flex: 1; min-width: 0; background: #fff; }
+  .workspace > header { height: 68px; border-bottom: 1px solid #eceeeb; display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 0 32px; }
+  [data-campaign-surface][hidden] { display: none !important; }
+  .campaign-corner-badge { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid #9fe995; border-radius: 999px; background: linear-gradient(120deg, #efffec, #dcffd5); color: #176d24; text-decoration: none; font-size: 12px; font-weight: 750; box-shadow: 0 5px 16px rgba(43, 176, 53, .12); }
+  .campaign-corner-badge span { font-size: 14px; }
+  .language, .workspace-switcher { border: 1px solid #e0e3de; background: #fff; border-radius: 8px; padding: 9px 13px; color: #4c504a; }
+  .workspace-content { padding: 38px 46px; }
+  h1 { font-size: 24px; margin: 0 0 25px; }
+  .seat-card, .members-card { border: 1px solid #e3e6e1; border-radius: 12px; padding: 22px; margin-bottom: 20px; }
+  .seat-card > div:first-child { display: flex; align-items: center; gap: 16px; }
+  .seat-card p { color: #777b75; font-size: 13px; }
+  .progress { height: 7px; background: #eef0ed; border-radius: 5px; }
+  .progress i { display: block; width: 70%; height: 100%; border-radius: inherit; background: #67d752; }
+  .table-head { display: grid; grid-template-columns: 2fr 1fr 1fr; color: #8a8e87; font-size: 13px; padding-bottom: 16px; }
+  .member-row { border-top: 1px solid #edf0eb; padding-top: 18px; display: grid; grid-template-columns: 42px 1.7fr 1fr 1fr; align-items: center; font-size: 14px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #111; color: #fff; }
+  .person { display: grid; gap: 4px; }
+  .person small { color: #8c9089; }
+  .backdrop { position: fixed; inset: 0; background: rgba(20, 24, 18, .34); backdrop-filter: blur(3.2px); z-index: 5; }
+  .upgrade-modal { position: fixed; z-index: 6; width: min(820px, calc(100vw - 32px)); left: 50%; top: 50%; transform: translate(-50%, -50%); background: #fff; border-radius: 14px; box-shadow: 0 28px 80px rgba(18, 24, 16, .26); overflow: hidden; }
+  .modal-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 22px 24px 18px; border-bottom: 1px solid #e5e7e3; }
+  .modal-header h2 { font-size: 18px; margin: 0 0 5px; letter-spacing: -.2px; }
+  .modal-header p { margin: 0; color: #73776f; font-size: 13px; }
+  .close { border: 0; background: transparent; color: #626760; font-size: 22px; cursor: pointer; }
+  .modal-body { display: grid; grid-template-columns: 108px 1fr; padding: 18px 24px 0; max-height: calc(100vh - 190px); overflow: auto; }
+  .modal-tabs { display: grid; align-content: start; gap: 15px; padding-right: 16px; }
+  .billing-tabs { display: grid; gap: 7px; }
+  .billing-tabs button { border: 0; border-radius: 7px; text-align: left; padding: 10px 12px; background: transparent; color: #555a53; }
+  .billing-tabs button.selected { background: #edf0eb; font-weight: 650; color: #242822; }
+  .seat-selector { border: 1px solid #dfe3dc; border-radius: 11px; padding: 14px 16px; display: flex; justify-content: space-between; gap: 16px; align-items: center; }
+  .seat-selector > div:first-child { display: grid; gap: 5px; }
+  .seat-selector strong { font-size: 14px; }
+  .seat-selector span { color: #6d726a; font-size: 12px; }
+  .seat-selector em { color: #239f36; font-size: 12px; font-style: normal; font-weight: 600; }
+  .stepper { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+  .stepper button { width: 30px; height: 30px; border-radius: 50%; background: #fff; border: 1px solid #dfe3dc; color: #6e746b; }
+  .stepper b { font-size: 13px; }
+  .plan-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 13px; }
+  .plan-card { min-height: 136px; border: 1px solid #dfe3dc; border-radius: 11px; padding: 13px; display: flex; flex-direction: column; }
+  .plan-card.featured { border: 1.5px solid #41c54b; background: #efffec; box-shadow: inset 0 0 0 1px rgba(65, 197, 75, .1); }
+  .plan-title { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+  .plan-title span { border-radius: 12px; padding: 2px 6px; color: #fff; background: #20b936; font-size: 10px; }
+  .price-line { display: flex; align-items: baseline; gap: 5px; margin-top: 10px; }
+  .price-line del { font-size: 11px; color: #7f847d; }
+  .price-line b { font-size: 18px; }
+  .price-line small { color: #7c8179; font-size: 10px; }
+  .plan-card > em { color: #209c33; font-style: normal; font-size: 11px; margin-top: 7px; font-weight: 600; }
+  .plan-card > p { color: #72776f; font-size: 11px; margin: auto 0 0; }
+  .plan-card:nth-child(4) { grid-column: auto; }
+  .campaign-banner { margin-top: 14px; border: 0; border-radius: 12px; padding: 13px 14px 10px; background: radial-gradient(circle at 90% 10%, rgba(109, 240, 87, .2), transparent 34%), linear-gradient(135deg, #f4fff2, #e9ffe5); }
+  .campaign-benefit { display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center; }
+  .campaign-icon { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; color: #145f20; background: #bffcb5; font-weight: 800; }
+  .campaign-benefit > div { display: grid; gap: 2px; }
+  .campaign-benefit strong { font-size: 13px; font-weight: 760; color: #1a361d; }
+  .campaign-benefit > div > span { color: #58705a; font-size: 11px; }
+  .campaign-benefit > b { color: #1d7c2a; padding: 5px 0; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .campaign-disclaimer { margin: 9px 0 0 44px; padding-top: 8px; border-top: 1px solid rgba(86, 179, 74, .2); color: #667166; font-size: 10px; line-height: 1.5; }
+  .benefits { padding: 9px 0 18px; }
+  .benefits > p { display: flex; align-items: center; gap: 8px; margin: 7px 0; font-size: 12px; color: #555a53; }
+  .benefits > p span { color: #31362f; font-weight: 700; }
+  [hidden] { display: none !important; }
+  .modal-footer { border-top: 1px solid #e4e7e2; padding: 14px 24px; display: flex; justify-content: flex-end; gap: 10px; }
+  .modal-footer button { border-radius: 20px; padding: 9px 18px; font-weight: 650; cursor: pointer; }
+  .secondary { border: 1px solid #d8dcd5; color: #5e635b; background: #fff; }
+  .primary { border: 0; color: #5aff43; background: #151715; }
+  .primary span { margin-right: 7px; }
+  @media (max-width: 760px) {
+    .sidebar { display: none; }
+    .modal-body { grid-template-columns: 1fr; }
+    .modal-tabs { padding: 0 0 12px; }
+    .billing-tabs { grid-template-columns: 1fr 1fr; }
+    .billing-tabs button { text-align: center; }
+    .plan-grid { grid-template-columns: 1fr 1fr; }
+    .plan-card:nth-child(4) { grid-column: auto; }
+    .campaign-benefit { grid-template-columns: 34px 1fr; }
+    .campaign-benefit > b { grid-column: 2; justify-self: start; }
+    .campaign-disclaimer { margin-left: 0; }
+  }
+  @media (max-width: 520px) {
+    .workspace > header { padding: 0 14px; }
+    .workspace-switcher { display: none; }
+    .upgrade-modal { width: calc(100vw - 16px); }
+    .modal-header, .modal-footer { padding-left: 16px; padding-right: 16px; }
+    .modal-body { padding-left: 16px; padding-right: 16px; }
+    .seat-selector { align-items: flex-start; flex-direction: column; }
+    .plan-grid { grid-template-columns: 1fr; }
+  }
+</style>

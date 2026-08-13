@@ -115,6 +115,8 @@ export const zhCN: Dict = {
   "chat.runError.title.connectionDropped": "连接中断",
   "chat.runError.title.signInRequired": "需要登录",
   "chat.runError.title.rateLimited": "已达用量上限",
+  'chat.runNotice.title.fiveHourLimit': '已达 5 小时模型用量上限',
+  'chat.runNotice.title.queued': '当前使用人数较多，任务已排队',
   "chat.runError.title.generic": "任务执行失败",
   "chat.runError.title.artifactMissing": "未生成文件产物",
   "chat.runError.signInMessage.amr":
@@ -136,6 +138,8 @@ export const zhCN: Dict = {
   "chat.runError.promptTooLargeMessage": "本轮输入超出了模型的上下文上限。请缩短提示词、减少附件，或新建对话后重试。",
   "chat.runError.modelUnavailableMessage": "所选模型不可用或不存在。请在设置中切换到其他可用模型后重试。",
   "chat.runError.rateLimitedMessage": "已触发模型服务的用量限制。请稍后重试，或切换到其他模型/服务。",
+  'chat.runNotice.fiveHourLimitMessage': '{model} 已达 5 小时用量上限，预计 {retryAt} 恢复。本次请求未扣费。',
+  'chat.runNotice.queuedMessage': '当前使用人数较多，你的任务已进入队列，轮到后会自动开始，无需重复提交。',
   "chat.runError.upstreamUnavailableMessage": "模型服务暂时不可用，通常是上游波动或网络/代理问题。请稍后重试。",
   "chat.runError.toolLoopMessage": "{agent} 在重复执行同一操作但没有进展，已自动停止。请检查目标文件或命令后重试。",
   "chat.runError.outputInvalidMessage": "模型输出了异常内容，本轮已被中断。通常重试即可恢复。",

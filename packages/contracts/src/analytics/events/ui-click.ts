@@ -5,7 +5,7 @@
 import type { DesignSystemEnrichClickProps, TrackingDesignSystemEditSurface } from './design-systems.js';
 import type { TrackingPageName, TrackingSettingsPage } from './event-names.js';
 import type { OnboardingClickProps, TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
-import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
+import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCampaignConversionSource, TrackingCampaignId, TrackingCampaignUserState, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
 import type { AccountMenuClickProps, CommunityTemplateClickProps, EntryNavigationClickProps, ExtensionMarketplaceClickProps, ProjectCollectionClickProps, TrackingWorkspaceScope, WorkspaceInviteClickProps, WorkspaceSwitcherClickProps } from './workspace.js';
 // ---- ui_click ------------------------------------------------------------
 //
@@ -940,6 +940,24 @@ export interface AmrEntryClickProps {
   source_product: 'open_design';
   source_detail: TrackingAmrEntrySource;
   entry_occurred_at: string;
+  campaign_id?: TrackingCampaignId;
+  conversion_source?: TrackingCampaignConversionSource;
+}
+
+export interface DeepSeekCampaignModalClickProps {
+  page_name: 'home';
+  area: 'deepseek_campaign_modal';
+  element: 'close' | 'later' | 'use_now' | 'upgrade';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
+}
+
+export interface DeepSeekCampaignBadgeClickProps {
+  page_name: 'home';
+  area: 'campaign_badge';
+  element: 'open_pricing';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
 }
 
 // Terminal outcome of one AMR (vela) sign-in attempt, fired exactly once
@@ -1617,6 +1635,8 @@ export type UiClickProps =
   | QuestionsFormClickProps
   | RunFailedToastClickProps
   | AmrEntryClickProps
+  | DeepSeekCampaignModalClickProps
+  | DeepSeekCampaignBadgeClickProps
   | ChatPanelResourcesPopoverClickProps
   | ChatPanelMessageQueueClickProps
   | FileManagerClickProps

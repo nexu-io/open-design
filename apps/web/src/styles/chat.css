@@ -1252,6 +1252,52 @@
 .chat-composer-slot {
   flex: 0 0 auto;
 }
+.chat-run-notice-slot {
+  flex: 0 0 auto;
+  padding: 0 var(--chat-composer-inline-inset) 6px;
+}
+.chat-run-notice-card {
+  margin: 0;
+  box-shadow: none;
+}
+.chat-run-notice-card > div:first-child {
+  grid-template-columns: 24px minmax(0, 1fr) 26px;
+  align-items: center;
+}
+.chat-run-notice-card > div:first-child > div:last-child {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: center;
+  justify-self: end;
+  width: 26px;
+}
+.chat-run-notice-card .run-error__description {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.chat-run-notice-dismiss {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.chat-run-notice-dismiss:hover {
+  background: var(--bg-subtle);
+  color: var(--text);
+}
+.chat-run-notice-dismiss:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .chat-composer-fixed-layer {
   position: fixed;
   z-index: 45;

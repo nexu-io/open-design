@@ -132,6 +132,8 @@ import { RecentProjectsStrip } from './RecentProjectsStrip';
 import type { Recommendation } from '../onboarding/recommendation';
 import type { OnboardingEntry } from '../onboarding/onboarding-entry';
 import { AnimatePresence } from 'motion/react';
+import { DeepSeekV4ProCampaign } from './DeepSeekV4ProCampaign';
+import type { DeepSeekV4ProCampaignAudience } from '../campaigns/deepseek-v4-pro';
 
 export interface ActivePlugin {
   record: InstalledPluginRecord;
@@ -284,6 +286,7 @@ interface Props {
   onRecommendationDismiss?: () => void;
   executionSwitcher?: ReactNode;
   artifactUpgradeSlot?: ReactNode;
+  deepSeekV4ProCampaignAudience?: DeepSeekV4ProCampaignAudience;
 }
 
 const EMPTY_DESIGN_SYSTEMS: DesignSystemSummary[] = [];
@@ -427,6 +430,7 @@ export function HomeView({
   onRecommendationDismiss,
   executionSwitcher,
   artifactUpgradeSlot,
+  deepSeekV4ProCampaignAudience = 'unknown',
 }: Props) {
   const { locale, t } = useI18n();
   const analytics = useAnalytics();
@@ -2510,6 +2514,7 @@ export function HomeView({
       data-testid="home-view"
       ref={homeViewRef}
     >
+      <DeepSeekV4ProCampaign audience={deepSeekV4ProCampaignAudience} />
       {isActive ? <AppWashKineticGrid clipBottomTo=".home-hero" /> : null}
       <HomeHero
         workspaceContext={workspaceContext}

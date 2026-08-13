@@ -2975,6 +2975,14 @@
     width: 36px;
     max-width: 36px;
   }
+  /* Campaign review URLs represent a signed-in user. Keep the selected model
+     visible at tablet review widths instead of collapsing back to an icon-only
+     control, so the fixture communicates the user's existing entitlement. */
+  .home-hero__execution-switcher .inline-switcher[data-campaign-review],
+  .home-hero__execution-switcher .inline-switcher[data-campaign-review] .inline-switcher__chip {
+    width: auto;
+    max-width: 220px;
+  }
 }
 
 @media (max-width: 560px) {
@@ -3814,4 +3822,3 @@
   color: var(--text-faint);
   font-size: 12px;
 }
-

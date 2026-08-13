@@ -342,7 +342,7 @@ describe('GET /api/integrations/vela/wallet', () => {
     process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
       source: 'remote',
       data: [
-        { id: 'public_model_deepseek_v4_flash', enabled: false },
+        { id: 'public_model_deepseek_v4_pro', enabled: false },
       ],
     });
     seedLogin('local', {
@@ -354,7 +354,7 @@ describe('GET /api/integrations/vela/wallet', () => {
     try {
       const warmed = await waitForAmrModels('remote');
       expect(warmed.body.models).toEqual([
-        { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: false },
+        { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', enabled: false },
       ]);
 
       const refresh = await getJson<{ status: string; balanceUsd: string | null }>(
@@ -372,7 +372,7 @@ describe('GET /api/integrations/vela/wallet', () => {
       expect(afterRefresh.body.source).toBe('preset');
       expect(afterRefresh.body.refreshing).toBe(true);
       expect(afterRefresh.body.models.map((model) => model.id)).toEqual([
-        'deepseek-v4-flash',
+        'deepseek-v4-pro',
         'deepseek-v3.2',
         'gemini-2.5-flash',
         'glm-5.1',
@@ -388,7 +388,7 @@ describe('GET /api/integrations/vela/wallet', () => {
     process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
       source: 'remote',
       data: [
-        { id: 'public_model_deepseek_v4_flash', enabled: false },
+        { id: 'public_model_deepseek_v4_pro', enabled: false },
       ],
     });
     seedLogin('local', {
@@ -405,7 +405,7 @@ describe('GET /api/integrations/vela/wallet', () => {
 
     const warmed = await waitForAmrModels('remote');
     expect(warmed.body.models).toEqual([
-      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: false },
+      { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', enabled: false },
     ]);
 
     process.env.FAKE_VELA_BILLING_TIER = 'pro';
@@ -431,7 +431,7 @@ describe('GET /api/integrations/vela/wallet', () => {
     process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
       source: 'remote',
       data: [
-        { id: 'public_model_deepseek_v4_flash', enabled: false },
+        { id: 'public_model_deepseek_v4_pro', enabled: false },
       ],
     });
     seedLogin('local', {
@@ -446,7 +446,7 @@ describe('GET /api/integrations/vela/wallet', () => {
 
     const warmed = await waitForAmrModels('remote');
     expect(warmed.body.models).toEqual([
-      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: false },
+      { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', enabled: false },
     ]);
 
     clearAllVelaLiveAccounts();
@@ -473,7 +473,7 @@ describe('GET /api/integrations/vela/wallet', () => {
     process.env.FAKE_VELA_MODEL_LIST_JSON = JSON.stringify({
       source: 'remote',
       data: [
-        { id: 'public_model_deepseek_v4_flash', enabled: false },
+        { id: 'public_model_deepseek_v4_pro', enabled: false },
       ],
     });
     seedLogin('local', {
@@ -490,7 +490,7 @@ describe('GET /api/integrations/vela/wallet', () => {
 
     const warmed = await waitForAmrModels('remote');
     expect(warmed.body.models).toEqual([
-      { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: false },
+      { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', enabled: false },
     ]);
 
     const accountCacheKey = velaLiveAccountCacheKey(
@@ -781,7 +781,7 @@ describe('GET /api/integrations/vela/status', () => {
 
       const modelsResponse = await waitForAmrModels('remote');
       expect(modelsResponse.status).toBe(200);
-      expect(modelsResponse.body.models.map((model) => model.id)).toContain('deepseek-v4-flash');
+      expect(modelsResponse.body.models.map((model) => model.id)).toContain('deepseek-v4-pro');
       expect(modelsResponse.body.models.map((model) => model.id)).toContain('gpt-5.4');
     } finally {
       await writeAppConfig(dataDir, previous as unknown as Record<string, unknown>);
@@ -2876,7 +2876,7 @@ describe('POST /api/integrations/vela/logout', () => {
       refreshing: true,
     });
     expect(first.body.models.map((model) => model.id)).toEqual([
-      'deepseek-v4-flash',
+      'deepseek-v4-pro',
       'deepseek-v3.2',
       'gemini-2.5-flash',
       'glm-5.1',
@@ -2885,7 +2885,7 @@ describe('POST /api/integrations/vela/logout', () => {
     const warmed = await waitForAmrModels('remote');
     expect(warmed.status).toBe(200);
     expect(warmed.body.source).toBe('remote');
-    expect(warmed.body.models.map((model) => model.id)).toContain('deepseek-v4-flash');
+    expect(warmed.body.models.map((model) => model.id)).toContain('deepseek-v4-pro');
     expect(warmed.body.models.map((model) => model.id)).toContain('gpt-5.4');
 
     const logout = await postJson<{ ok?: boolean }>(`${baseUrl}/api/integrations/vela/logout`);
@@ -2904,7 +2904,7 @@ describe('POST /api/integrations/vela/logout', () => {
       refreshing: true,
     });
     expect(afterLogout.body.models.map((model) => model.id)).toEqual([
-      'deepseek-v4-flash',
+      'deepseek-v4-pro',
       'deepseek-v3.2',
       'gemini-2.5-flash',
       'glm-5.1',
@@ -3156,6 +3156,9 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     const cases: Array<[string, string]> = [
       ['settings_amr_upgrade', 'settings'],
       ['inline_amr_upgrade', 'chat_panel'],
+      ['deepseek_unpaid_modal', 'home'],
+      ['deepseek_workbench_badge', 'home'],
+      ['deepseek_model_switcher_upgrade', 'chat_panel'],
       ['avatar_amr_upgrade', 'chat_panel'],
       ['avatar_amr_agent_card', 'chat_panel'],
       ['artifact_success_upgrade', 'artifact'],

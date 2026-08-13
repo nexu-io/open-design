@@ -4,7 +4,7 @@
 // the clicked model.
 //
 // The reported bug: the owner clicked `claude-opus-4.6` in the compact list and
-// the chip stayed on `deepseek-v4-flash`. The list offered a model that is above
+// the chip stayed on `deepseek-v4-pro`. The list offered a model that is above
 // the caller's plan (`enabled: false` from `vela model list --json`) as a plain
 // selectable row; the click was accepted, written to config, and then coerced
 // straight back by `normalizeAgentModelChoice` + the re-normalization effect in
@@ -56,8 +56,8 @@ const amrAgent: AgentInfo = {
   available: true,
   version: '1.0.0',
   models: [
-    { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: true, default: true },
-    { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', enabled: true },
+    { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', enabled: true, default: true },
+    { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: true },
     { id: 'claude-fable-5', label: 'claude-fable-5', enabled: false },
     { id: 'claude-opus-4.6', label: 'claude-opus-4.6', enabled: false },
     { id: 'claude-opus-4.7', label: 'claude-opus-4.7', enabled: false },
@@ -142,6 +142,7 @@ function isOffered(row: HTMLElement): boolean {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  window.history.replaceState({}, '', '/');
 });
 
 describe('compact home model list — a clicked model reaches the chip', () => {
@@ -150,10 +151,10 @@ describe('compact home model list — a clicked model reaches the chip', () => {
     // clickable must move the chip; a row it will not honor must be presented
     // as unavailable with a reason. Today `claude-opus-4.6` (and the other
     // off-plan Claude tiers) are offered as plain rows and clicking them leaves
-    // the chip on `deepseek-v4-flash`.
+    // the chip on `deepseek-v4-pro`.
     for (const model of amrAgent.models ?? []) {
       render(<StatefulSwitcher agents={[amrAgent]} />);
-      expect(chipText()).toContain('deepseek-v4-flash');
+      expect(chipText()).toContain('deepseek-v4-pro');
 
       openSwitcher();
       const row = compactRow(model.id);
@@ -171,7 +172,7 @@ describe('compact home model list — a clicked model reaches the chip', () => {
             .textContent,
           `${model.id} was refused without a reason`,
         ).toBeTruthy();
-        expect(chipText()).toContain('deepseek-v4-flash');
+        expect(chipText()).toContain('deepseek-v4-pro');
       }
       cleanup();
     }
@@ -183,7 +184,7 @@ describe('compact home model list — a clicked model reaches the chip', () => {
     // were unmounting the list before the option's click fired, this case would
     // fail too.
     render(<StatefulSwitcher agents={[amrAgentAllEnabled]} />);
-    expect(chipText()).toContain('deepseek-v4-flash');
+    expect(chipText()).toContain('deepseek-v4-pro');
 
     openSwitcher();
     fireEvent.click(compactRow('deepseek-v4-pro'));
@@ -201,7 +202,7 @@ describe('compact home model list — a clicked model reaches the chip', () => {
       ...amrAgent,
       models: [
         { id: 'claude-opus-4.8', label: 'claude-opus-4.8', enabled: false },
-        { id: 'deepseek-v4-flash', label: 'deepseek-v4-flash', enabled: true, default: true },
+        { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', enabled: true, default: true },
         { id: 'claude-opus-4.6', label: 'claude-opus-4.6', enabled: false },
         { id: 'deepseek-v4-pro', label: 'deepseek-v4-pro', enabled: true },
       ],
@@ -212,7 +213,7 @@ describe('compact home model list — a clicked model reaches the chip', () => {
       .getAllByRole('radio')
       .map((row) => row.textContent ?? '');
 
-    expect(labels[0]).toContain('deepseek-v4-flash');
+    expect(labels[0]).toContain('deepseek-v4-pro');
     expect(labels[1]).toContain('deepseek-v4-pro');
     expect(labels.slice(2).join('\n')).not.toContain('deepseek');
   });
@@ -228,16 +229,117 @@ describe('compact home model list — a clicked model reaches the chip', () => {
     fireEvent.click(compactRow('claude-opus-4.6'));
 
     expect(persisted).not.toHaveBeenCalled();
-    expect(chipText()).toContain('deepseek-v4-flash');
+    expect(chipText()).toContain('deepseek-v4-pro');
   });
 
   it('re-selecting the already active model closes the list without changing the chip', () => {
     render(<StatefulSwitcher agents={[amrAgentAllEnabled]} />);
     openSwitcher();
-    fireEvent.click(compactRow('deepseek-v4-flash'));
+    fireEvent.click(compactRow('deepseek-v4-pro'));
 
-    expect(chipText()).toContain('deepseek-v4-flash');
+    expect(chipText()).toContain('deepseek-v4-pro');
     expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+  });
+
+  it('shows the unlimited badge on both DeepSeek V4 models and keeps it in the selected chip', () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/?campaign=deepseek-v4-pro&campaignAudience=paid',
+    );
+    render(<StatefulSwitcher agents={[amrAgentAllEnabled]} />);
+
+    expect(chipText()).toContain('deepseek-v4-pro');
+    expect(within(screen.getByTestId('inline-model-switcher-chip')).getByText('无限使用'))
+      .toBeInTheDocument();
+
+    const popover = openSwitcher();
+    expect(within(compactRow('deepseek-v4-pro')).getByText('无限使用'))
+      .toBeInTheDocument();
+    expect(within(compactRow('deepseek-v4-flash')).getByText('无限使用'))
+      .toBeInTheDocument();
+    expect(within(popover).getAllByText('无限使用')).toHaveLength(2);
+  });
+
+  it('keeps the provider icon on every compact model row', () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/?campaign=deepseek-v4-pro&campaignAudience=paid',
+    );
+    render(<StatefulSwitcher agents={[amrAgentAllEnabled]} />);
+
+    openSwitcher();
+
+    expect(compactRow('deepseek-v4-pro').querySelector('img')).toHaveAttribute(
+      'src',
+      '/agent-icons/deepseek.svg?v=20260813-model-picker-icons',
+    );
+    expect(compactRow('deepseek-v4-flash').querySelector('img')).toHaveAttribute(
+      'src',
+      '/agent-icons/deepseek.svg?v=20260813-model-picker-icons',
+    );
+    expect(compactRow('claude-opus-4.8').querySelector('img')).toHaveAttribute(
+      'src',
+      '/agent-icons/claude.svg?v=20260813-model-picker-icons',
+    );
+  });
+
+  it('puts the explicit paid review URL on the Cloud agent and Pro model', () => {
+    window.history.replaceState({}, '', '/?campaignAudience=paid');
+    const codexAgent: AgentInfo = {
+      id: 'codex',
+      name: 'Codex CLI',
+      bin: 'codex',
+      available: true,
+      version: '1.0.0',
+      models: [{ id: 'default', label: 'Default', enabled: true, default: true }],
+    };
+    const onAgentChange = vi.fn();
+    const onAgentModelChange = vi.fn();
+
+    const { rerender } = render(
+      <InlineModelSwitcher
+        config={{ ...baseConfig, agentId: 'codex' }}
+        agents={[codexAgent, amrAgentAllEnabled]}
+        providerModelsCache={{}}
+        compact
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={onAgentChange}
+        onAgentModelChange={onAgentModelChange}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    expect(onAgentChange).toHaveBeenCalledWith('amr');
+
+    rerender(
+      <InlineModelSwitcher
+        config={{
+          ...baseConfig,
+          agentId: 'amr',
+          agentModels: { amr: { model: 'deepseek-v4-pro' } },
+        }}
+        agents={[codexAgent, amrAgentAllEnabled]}
+        providerModelsCache={{}}
+        compact
+        daemonLive
+        onModeChange={vi.fn()}
+        onAgentChange={onAgentChange}
+        onAgentModelChange={onAgentModelChange}
+        onApiProtocolChange={vi.fn()}
+        onApiModelChange={vi.fn()}
+        onOpenSettings={vi.fn()}
+      />,
+    );
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('amr', {
+      model: 'deepseek-v4-pro',
+    });
+    window.history.replaceState({}, '', '/');
   });
 
   it('still closes on a click genuinely outside the switcher', () => {

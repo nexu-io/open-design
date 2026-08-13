@@ -204,6 +204,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.sessionExpiredMessage'
   | 'chat.runError.gitBashMissingMessage'
   | 'chat.runError.cpuUnsupportedMessage'
+  | 'chat.runNotice.fiveHourLimitMessage'
+  | 'chat.runNotice.queuedMessage'
   | null;
 
 // i18n keys for the unified error card's TITLE (the "error type" line above the
@@ -231,6 +233,8 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.gitBashMissing'
   | 'chat.runError.title.artifactMissing'
   | 'chat.runError.title.cpuUnsupported'
+  | 'chat.runNotice.title.fiveHourLimit'
+  | 'chat.runNotice.title.queued'
   | 'chat.runError.title.generic';
 
 export interface RunFailureUi {
@@ -240,11 +244,27 @@ export interface RunFailureUi {
   // Override the gray error card's text (e.g. AMR auth / balance get a clearer
   // explanation than the raw upstream string).
   messageKey: RunFailureMessageKey;
+  // Optional interpolation values extracted from a structured provider notice.
+  // ChatPane formats date-like values for the active locale before translating.
+  messageVars?: Record<string, string | number>;
+  // Informational notices stay visible in the compact card and do not expose a
+  // recovery CTA. Raw provider output remains available under error details.
+  noticeKind?: 'usage-limit' | 'queue';
   // Show a secondary plain "retry" button alongside the primary action (used
   // by the recharge case, where retry is manual after topping up).
   secondaryRetry: boolean;
   // Show the AMR promotion card under the gray error card.
   showSwitchCard: boolean;
+}
+
+export function runNoticePreviewFromSearch(
+  search: string | null | undefined,
+): RunFailureUi['noticeKind'] | null {
+  if (!search) return null;
+  const value = new URLSearchParams(search).get('runNotice');
+  if (value === 'limit') return 'usage-limit';
+  if (value === 'queue') return 'queue';
+  return null;
 }
 
 // Small helper for the common shape: a named failure type + actionable copy,
@@ -422,7 +442,38 @@ export function resolveRunFailureUi(
   code: string | null | undefined,
   detail: string | null | undefined,
   agentId: string | null | undefined,
+  rawMessage?: string | null,
 ): RunFailureUi {
+  const fiveHourLimit = rawMessage?.match(
+    /reached the 5-hour usage limit for (.+?)\.\s*Try again after\s+([0-9T:.+-]+Z)/i,
+  );
+  if (fiveHourLimit) {
+    return {
+      primaryAction: 'none',
+      titleKey: 'chat.runNotice.title.fiveHourLimit',
+      messageKey: 'chat.runNotice.fiveHourLimitMessage',
+      messageVars: { model: fiveHourLimit[1]!.trim(), retryAt: fiveHourLimit[2]! },
+      noticeKind: 'usage-limit',
+      secondaryRetry: false,
+      showSwitchCard: false,
+    };
+  }
+
+  if (
+    rawMessage &&
+    (/\bqueued\b.*\b(?:high demand|capacity|peak)\b/i.test(rawMessage) ||
+      /\b(?:high demand|peak)\b.*\bqueued\b/i.test(rawMessage))
+  ) {
+    return {
+      primaryAction: 'none',
+      titleKey: 'chat.runNotice.title.queued',
+      messageKey: 'chat.runNotice.queuedMessage',
+      noticeKind: 'queue',
+      secondaryRetry: false,
+      showSwitchCard: false,
+    };
+  }
+
   // Agent-agnostic codes resolve first so an AMR/Antigravity run that hits one
   // of them still gets the specific guidance instead of the generic fallback.
   const agnostic = typeof code === 'string' ? AGENT_AGNOSTIC_FAILURE_UI[code] : undefined;

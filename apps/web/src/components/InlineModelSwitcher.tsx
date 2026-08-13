@@ -20,7 +20,7 @@ import {
 } from 'react';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
 import { VisuallyHidden } from '@open-design/components';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import {
   agentIdToTracking,
   byokProtocolToTracking,
@@ -35,7 +35,10 @@ import {
 } from '../analytics/amr-attribution';
 import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import { getResolvedDeviceId } from '../analytics/client';
-import { trackExecutionSettingsPopoverClick } from '../analytics/events';
+import {
+  trackDeepSeekCampaignModelBenefitSurfaceView,
+  trackExecutionSettingsPopoverClick,
+} from '../analytics/events';
 import {
   beginAmrAuthTracking,
   confirmAmrAuthTracking,
@@ -91,6 +94,38 @@ import {
   providerModelsCacheKey,
   type ProviderModelsCache,
 } from './providerModelsCache';
+import {
+  DEEPSEEK_V4_PRO_CAMPAIGN,
+  deepSeekV4ProCampaignAudienceOverride,
+  isDeepSeekV4ProCampaignModel,
+} from '../campaigns/deepseek-v4-pro';
+import { useDeepSeekV4ProCampaignVisibility } from '../campaigns/use-deepseek-v4-pro-campaign';
+import { getDeepSeekV4ProCopy } from '../campaigns/deepseek-v4-pro-copy';
+
+function deepSeekCampaignUsageRestricted(): boolean {
+  if (typeof window === 'undefined') return false;
+  const value = new URLSearchParams(window.location.search).get('campaignUsage');
+  return value === 'restricted' || value === 'exhausted';
+}
+
+const DEEPSEEK_CAMPAIGN_REVIEW_MODELS: NonNullable<AgentInfo['models']> = [
+  { id: 'claude-opus-4.8', label: 'Claude Opus 4.8' },
+  { id: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro' },
+  { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
+  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { id: 'glm-5.1', label: 'GLM 5.1' },
+];
+
+const DEEPSEEK_UNPAID_REVIEW_DEFAULT_MODEL_ID = 'claude-opus-4.8';
+const DEEPSEEK_CAMPAIGN_REVIEW_AGENT: AgentInfo = {
+  id: 'amr',
+  name: 'Open Design',
+  bin: 'amr',
+  available: true,
+  version: null,
+  models: DEEPSEEK_CAMPAIGN_REVIEW_MODELS,
+  modelsSource: 'fallback',
+};
 
 interface Props {
   config: AppConfig;
@@ -181,7 +216,29 @@ export function InlineModelSwitcher({
   onOpenSettings,
 }: Props) {
   const t = useT();
+  const { locale } = useI18n();
+  const campaignCopy = getDeepSeekV4ProCopy(locale);
   const analytics = useAnalytics();
+  const campaignUsageRestricted = deepSeekCampaignUsageRestricted();
+  const campaignAudienceOverride = typeof window === 'undefined'
+    ? null
+    : deepSeekV4ProCampaignAudienceOverride(window.location.search);
+  const campaignVisibility = useDeepSeekV4ProCampaignVisibility(
+    typeof window === 'undefined' ? null : window.location.search,
+  );
+  const campaignReviewActive = compact && campaignAudienceOverride !== null;
+  const campaignNeedsUpgrade = campaignAudienceOverride === 'unpaid';
+  const campaignModelBadge = campaignUsageRestricted
+    ? campaignCopy.restrictedBadge
+    : campaignCopy.badge;
+  const campaignModelTooltip = campaignUsageRestricted
+    ? campaignCopy.restrictedTooltip
+    : campaignNeedsUpgrade
+      ? campaignCopy.unpaidTooltip
+      : campaignCopy.paidTooltip;
+  const campaignBadgeStateClass = campaignUsageRestricted
+    ? ' is-restricted'
+    : '';
   // recvqfYKutwWlQ: gate the AMR upgrade entry on billing permission below,
   // not just plan tier — a team member without `canManageBilling` (owner-only)
   // can't act on an upgrade even when the tier itself is upgradeable.
@@ -191,8 +248,10 @@ export function InlineModelSwitcher({
   } = useWorkspaceContext();
   const workspaceBillingResponse = useWorkspaceBillingResponse();
   const [open, setOpen] = useState(false);
+  const [campaignReviewModelId, setCampaignReviewModelId] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  const campaignBenefitTrackedForOpenRef = useRef(false);
   // Viewport clamp for the popover (issue #99): the anchor chip can sit
   // anywhere on screen (home hero mid-page, chat composer at the bottom), so
   // a fixed downward placement runs past the screen edge once the model list
@@ -667,8 +726,10 @@ export function InlineModelSwitcher({
     [agents],
   );
   const currentAgent = useMemo(
-    () => agents.find((a) => a.id === config.agentId) ?? null,
-    [agents, config.agentId],
+    () => campaignReviewActive
+      ? agents.find((a) => a.id === 'amr') ?? DEEPSEEK_CAMPAIGN_REVIEW_AGENT
+      : agents.find((a) => a.id === config.agentId) ?? null,
+    [agents, campaignReviewActive, config.agentId],
   );
   const amrInstalled = installedAgents.some((a) => a.id === 'amr');
   const shouldOfferAmrReminder =
@@ -683,29 +744,75 @@ export function InlineModelSwitcher({
   const normalizedCurrentModelId = normalizedCurrentChoice?.model ?? null;
   const normalizedCurrentReasoning = normalizedCurrentChoice?.reasoning;
   const normalizedCurrentServiceTier = normalizedCurrentChoice?.serviceTier;
-  const currentAgentModelIds = currentAgent?.models?.map((m) => m.id) ?? [];
+  const currentAgentModels =
+    compact &&
+    campaignAudienceOverride !== null &&
+    currentAgent?.id === 'amr' &&
+    !currentAgent.models?.length
+      ? DEEPSEEK_CAMPAIGN_REVIEW_MODELS
+      : currentAgent?.models ?? [];
+  const currentAgentModelIds = currentAgentModels.map((m) => m.id);
   const configuredModelId =
     typeof effectiveCurrentChoice.model === 'string' && effectiveCurrentChoice.model
       ? effectiveCurrentChoice.model
       : null;
+  const campaignReviewDefaultModelId = campaignAudienceOverride === 'paid'
+    ? DEEPSEEK_V4_PRO_CAMPAIGN.modelId
+    : campaignAudienceOverride === 'unpaid'
+      ? DEEPSEEK_UNPAID_REVIEW_DEFAULT_MODEL_ID
+      : null;
   const currentModelId =
-    currentAgent?.id === 'amr' &&
-    configuredModelId &&
-    configuredModelId !== 'default' &&
-    !currentAgentModelIds.includes(configuredModelId)
-      ? defaultAgentModelId(currentAgent)
-      : configuredModelId ?? defaultAgentModelId(currentAgent);
+    compact && campaignReviewDefaultModelId && currentAgent?.id === 'amr'
+      ? campaignReviewModelId ?? campaignReviewDefaultModelId
+      : currentAgent?.id === 'amr' &&
+          configuredModelId &&
+          configuredModelId !== 'default' &&
+          !currentAgentModelIds.includes(configuredModelId)
+        ? defaultAgentModelId(currentAgent)
+        : configuredModelId ?? defaultAgentModelId(currentAgent);
   const currentModelOption =
-    currentAgent?.models?.find((m) => m.id === currentModelId) ?? null;
+    currentAgentModels.find((m) => m.id === currentModelId) ?? null;
+
+  // The explicit campaign URLs are product-review fixtures. Both audiences
+  // represent signed-in users, so keep them on the Cloud agent and expose its
+  // existing model list. Paid review selects DeepSeek; unpaid review keeps an
+  // included model selected while DeepSeek remains the upgrade row. This never
+  // changes normal user state without the explicit review query.
+  useEffect(() => {
+    if (!compact || campaignAudienceOverride === null) return;
+    const cloudAgent = agents.find((agent) => agent.id === 'amr');
+    if (!cloudAgent) return;
+    // `currentAgent` is intentionally projected to AMR while a campaign review
+    // URL is active. Compare the persisted config instead, otherwise the UI
+    // looks like AMR while the selected agent remains the previous CLI.
+    if (config.agentId !== cloudAgent.id) {
+      onAgentChange(cloudAgent.id);
+      return;
+    }
+  }, [
+    agents,
+    campaignAudienceOverride,
+    compact,
+    config.agentId,
+    onAgentChange,
+  ]);
 
   useEffect(() => {
-    if (!currentAgentId || !normalizedCurrentModelId) return;
+    setCampaignReviewModelId(null);
+  }, [campaignAudienceOverride]);
+
+  useEffect(() => {
+    const modelToPersist =
+      campaignReviewActive && currentAgentId === 'amr' && currentModelId
+        ? currentModelId
+        : normalizedCurrentModelId;
+    if (!currentAgentId || !modelToPersist) return;
     const nextChoice: {
       model: string;
       reasoning?: string;
       serviceTier?: string;
     } = {
-      model: normalizedCurrentModelId,
+      model: modelToPersist,
       reasoning: normalizedCurrentReasoning,
     };
     if (normalizedCurrentServiceTier !== undefined) {
@@ -713,7 +820,9 @@ export function InlineModelSwitcher({
     }
     onAgentModelChange(currentAgentId, nextChoice);
   }, [
+    campaignReviewActive,
     currentAgentId,
+    currentModelId,
     normalizedCurrentModelId,
     normalizedCurrentReasoning,
     normalizedCurrentServiceTier,
@@ -723,10 +832,10 @@ export function InlineModelSwitcher({
   const currentModelLabel =
     currentModelOption?.label ?? null;
   const inlineAgentModelOptions = useMemo(() => {
-    const models = currentAgent?.models ?? [];
+    const models = currentAgentModels;
     if (currentAgent?.id !== 'amr') return models;
     return orderModelOptionsByAvailability(models);
-  }, [currentAgent]);
+  }, [currentAgent?.id, currentAgentModels]);
 
   /**
    * The ONLY path from a model row to `onAgentModelChange` in this component.
@@ -740,11 +849,35 @@ export function InlineModelSwitcher({
     (modelId: string, extra?: { serviceTier?: string }) => {
       const agentId = currentAgent?.id;
       if (!agentId) return false;
-      if (!agentModelIsSelectable(currentAgent, modelId)) return false;
+      const selectableInCampaign =
+        compact &&
+        campaignVisibility.visible &&
+        !campaignUsageRestricted &&
+        currentAgent.id === 'amr' &&
+        isDeepSeekV4ProCampaignModel(modelId);
+      const selectableInPaidReview =
+        compact && campaignAudienceOverride === 'paid' && currentAgent.id === 'amr';
+      if (
+        !selectableInCampaign &&
+        !selectableInPaidReview &&
+        !agentModelIsSelectable(currentAgent, modelId)
+      ) {
+        return false;
+      }
+      if (selectableInCampaign || selectableInPaidReview) {
+        setCampaignReviewModelId(modelId);
+      }
       onAgentModelChange?.(agentId, { model: modelId, ...extra });
       return true;
     },
-    [currentAgent, onAgentModelChange],
+    [
+      campaignAudienceOverride,
+      campaignUsageRestricted,
+      campaignVisibility.visible,
+      compact,
+      currentAgent,
+      onAgentModelChange,
+    ],
   );
 
   /**
@@ -756,19 +889,88 @@ export function InlineModelSwitcher({
     () =>
       inlineAgentModelOptions.map((model) => ({
         model,
-        selectable: agentModelIsSelectable(currentAgent, model.id),
+        selectable:
+          compact &&
+          campaignVisibility.visible &&
+          !campaignUsageRestricted &&
+          isDeepSeekV4ProCampaignModel(model.id)
+            ? true
+            : compact && campaignAudienceOverride === 'paid'
+              ? true
+            : agentModelIsSelectable(currentAgent, model.id),
       })),
-    [currentAgent, inlineAgentModelOptions],
+    [
+      campaignAudienceOverride,
+      campaignUsageRestricted,
+      campaignVisibility.visible,
+      compact,
+      currentAgent,
+      inlineAgentModelOptions,
+    ],
   );
+
+  useEffect(() => {
+    if (!open) {
+      campaignBenefitTrackedForOpenRef.current = false;
+      return;
+    }
+    if (
+      !compact
+      || !campaignVisibility.visible
+      || campaignBenefitTrackedForOpenRef.current
+      || !compactModelRows.some(({ model }) => isDeepSeekV4ProCampaignModel(model.id))
+    ) {
+      return;
+    }
+    campaignBenefitTrackedForOpenRef.current = true;
+    const userState = campaignNeedsUpgrade ? 'unpaid' : 'paid';
+    if (compactModelRows.some(({ model }) => model.id === 'deepseek-v4-pro')) {
+      trackDeepSeekCampaignModelBenefitSurfaceView(analytics.track, {
+        page_name: 'home',
+        area: 'execution_settings_popover',
+        element: 'deepseek_v4_pro_benefit',
+        campaign_id: 'deepseek_v4_pro',
+        user_state: userState,
+        model_id: 'deepseek-v4-pro',
+      });
+    }
+    if (compactModelRows.some(({ model }) => model.id === 'deepseek-v4-flash')) {
+      trackDeepSeekCampaignModelBenefitSurfaceView(analytics.track, {
+        page_name: 'home',
+        area: 'execution_settings_popover',
+        element: 'deepseek_v4_flash_benefit',
+        campaign_id: 'deepseek_v4_flash',
+        user_state: userState,
+        model_id: 'deepseek-v4-flash',
+      });
+    }
+  }, [
+    analytics.track,
+    campaignNeedsUpgrade,
+    campaignVisibility.visible,
+    compact,
+    compactModelRows,
+    open,
+  ]);
 
   /** Where a refused model pick sends the user instead — the same plans
    *  destination the settings picker's upgrade lock already opens. */
   const openAmrModelUpgrade = useCallback(() => {
     const attribution = recordAmrEntry(
       analytics.track,
-      'inline_amr_upgrade',
+      campaignNeedsUpgrade
+        ? 'deepseek_model_switcher_upgrade'
+        : 'inline_amr_upgrade',
       new Date(),
-      { metricsConsent: config.telemetry?.metrics === true },
+      {
+        metricsConsent: config.telemetry?.metrics === true,
+        ...(campaignNeedsUpgrade
+          ? {
+              campaignId: 'deepseek_v4_pro' as const,
+              conversionSource: 'deepseek_model_switcher_upgrade' as const,
+            }
+          : {}),
+      },
     );
     const deviceId = amrHandoffDeviceId({
       metricsConsent: config.telemetry?.metrics === true,
@@ -789,6 +991,7 @@ export function InlineModelSwitcher({
   }, [
     amrStatus?.profile,
     analytics.track,
+    campaignNeedsUpgrade,
     config.agentCliEnv?.amr?.OPEN_DESIGN_AMR_PROFILE,
     config.installationId,
     config.telemetry?.metrics,
@@ -991,9 +1194,11 @@ export function InlineModelSwitcher({
       : apiProtocolLabel(apiProtocol);
   const chipModel =
     config.mode === 'daemon'
-      ? currentModelLabel && currentModelId !== 'default'
-        ? currentModelLabel
-        : t('inlineSwitcher.modelDefault')
+      ? isDeepSeekV4ProCampaignModel(currentModelId)
+        ? currentModelLabel ?? 'DeepSeek V4 Pro'
+        : currentModelLabel && currentModelId !== 'default'
+          ? currentModelLabel
+          : t('inlineSwitcher.modelDefault')
       : config.model.trim() || t('inlineSwitcher.modelDefault');
 
   // Compact home chip surfaces the selected model name + a connection-status
@@ -1029,6 +1234,7 @@ export function InlineModelSwitcher({
       className={`inline-switcher${compact ? ' inline-switcher--compact' : ''}`}
       ref={wrapRef}
       data-testid="inline-model-switcher"
+      data-campaign-review={campaignReviewActive ? campaignAudienceOverride : undefined}
     >
       <button
         ref={chipRef}
@@ -1085,6 +1291,16 @@ export function InlineModelSwitcher({
               aria-hidden="true"
             />
             <span className="inline-switcher__chip-model-name">{chipModel}</span>
+            {campaignVisibility.visible && isDeepSeekV4ProCampaignModel(currentModelId) ? (
+              <span
+                className={`inline-switcher__campaign-badge od-tooltip${campaignBadgeStateClass}`}
+                data-tooltip={campaignModelTooltip}
+                data-tooltip-placement="top"
+                aria-label={campaignModelTooltip}
+              >
+                {campaignModelBadge}
+              </span>
+            ) : null}
           </>
         ) : (
           <>
@@ -1202,6 +1418,8 @@ export function InlineModelSwitcher({
                     // A model above the caller's plan is shown, but honestly:
                     // disabled with the reason the settings picker already uses,
                     // never as a normal row whose click gets reverted.
+                    const campaignModel = campaignVisibility.visible
+                      && isDeepSeekV4ProCampaignModel(m.id);
                     const lockedHint = selectable
                       ? null
                       : t('settings.amrModelUpgradeHint');
@@ -1225,7 +1443,9 @@ export function InlineModelSwitcher({
                             // the settings picker's lock) instead of writing a
                             // choice the config would revert.
                             if (!applyAgentModel(m.id)) {
-                              if (amrCanUpgrade) openAmrModelUpgrade();
+                              if (amrCanUpgrade || campaignNeedsUpgrade) {
+                                openAmrModelUpgrade();
+                              }
                               return;
                             }
                             trackExecutionSettingsPopoverClick(analytics.track, {
@@ -1246,7 +1466,7 @@ export function InlineModelSwitcher({
                               const src = modelProviderIconSrc(m.id);
                               return src ? (
                                 <img
-                                  src={src}
+                                  src={`${src}?v=20260813-model-picker-icons`}
                                   alt=""
                                   width={16}
                                   height={16}
@@ -1259,6 +1479,16 @@ export function InlineModelSwitcher({
                           <span className="inline-switcher__agent-name">
                             {m.label}
                           </span>
+                          {campaignModel ? (
+                            <span
+                              className={`inline-switcher__campaign-badge od-tooltip${campaignBadgeStateClass}`}
+                              data-tooltip={campaignModelTooltip}
+                              data-tooltip-placement="top"
+                              aria-label={campaignModelTooltip}
+                            >
+                              {campaignModelBadge}
+                            </span>
+                          ) : null}
                           {lockedHint ? (
                             <span
                               className="inline-switcher__agent-lock"

@@ -19,7 +19,7 @@ import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
 import { trackChatPanelClick, trackMessageQueueClick, trackRunFailedToastSurfaceView } from '../analytics/events';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import { startersForProduct, type ProductType } from '../onboarding/recommendation';
 import { starterCopyFor } from '../onboarding/starter-copy';
 import {
@@ -76,6 +76,7 @@ import {
   amrPlansUrlForProfile,
   amrRechargeUrlForProfile,
   resolveRunFailureUi,
+  runNoticePreviewFromSearch,
 } from '../runtime/amr-guidance';
 import {
   fetchVelaLoginStatus,
@@ -981,7 +982,7 @@ export function ChatPane({
   config,
 }: Props) {
   const { workspaceContext } = useProjectCollabContext();
-  const t = useT();
+  const { t, locale } = useI18n();
   const analytics = useAnalytics();
   const displayMessages = useMemo(
     () => messages.filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata)),
@@ -1249,6 +1250,7 @@ export function ChatPane({
   } | null>(null);
   const [composerSlotHeight, setComposerSlotHeight] = useState(0);
   const [editingQueuedSendId, setEditingQueuedSendId] = useState<string | null>(null);
+  const [dismissedRunNoticeKey, setDismissedRunNoticeKey] = useState<string | null>(null);
   // Reverse scan (no array copy) + memo so this and the maps below don't
   // recompute on every non-`messages` render (scroll, hover, toggles).
   const lastAssistantId = useMemo(() => {
@@ -1272,15 +1274,42 @@ export function ChatPane({
     }
     return null;
   })();
+  const runNoticePreview = typeof window === 'undefined'
+    ? null
+    : runNoticePreviewFromSearch(window.location.search);
+  const previewRunFailureUi = runNoticePreview === 'usage-limit'
+    ? {
+        primaryAction: 'none' as const,
+        titleKey: 'chat.runNotice.title.fiveHourLimit' as const,
+        messageKey: 'chat.runNotice.fiveHourLimitMessage' as const,
+        messageVars: {
+          model: 'DeepSeek V4 Pro',
+          retryAt: new Date(Date.now() + 5 * 60 * 60 * 1000).toISOString(),
+        },
+        noticeKind: 'usage-limit' as const,
+        secondaryRetry: false,
+        showSwitchCard: false,
+      }
+    : runNoticePreview === 'queue'
+      ? {
+          primaryAction: 'none' as const,
+          titleKey: 'chat.runNotice.title.queued' as const,
+          messageKey: 'chat.runNotice.queuedMessage' as const,
+          noticeKind: 'queue' as const,
+          secondaryRetry: false,
+          showSwitchCard: false,
+        }
+      : null;
   // Per-case failure UI (button + copy + whether to promote AMR). Only
   // meaningful for a failed run (retryAssistant present).
-  const runFailureUi = retryAssistant
+  const runFailureUi = previewRunFailureUi ?? (retryAssistant
     ? resolveRunFailureUi(
         failedRunErrorEvent?.code,
         failedRunErrorEvent?.failureDetail,
         retryAssistant.agentId,
+        failedRunErrorEvent?.detail,
       )
-    : null;
+    : null);
   const hasInlineAmrAuthorizeFailure = Boolean(
     retryAssistant && onRetry && runFailureUi?.primaryAction === 'authorize',
   );
@@ -1445,15 +1474,38 @@ export function ChatPane({
   // Prefer a case-specific message (AMR auth / balance) over the raw upstream
   // string; fall back to the live global error (also covers conversation-load
   // / audio errors) then the persisted run error so a reload still shows it.
-  const rawError = error ?? failedRunErrorEvent?.detail ?? null;
+  const previewRawError = runNoticePreview === 'usage-limit'
+    ? 'You have reached the 5-hour usage limit for DeepSeek V4 Pro. Try again after 2026-08-13T22:30:00+08:00. This request was not charged to Wallet Credits.'
+    : runNoticePreview === 'queue'
+      ? 'Request queued due to high demand. It will start automatically when capacity is available.'
+      : null;
+  const rawError = previewRawError ?? error ?? failedRunErrorEvent?.detail ?? null;
   // Friendly agent name for {agent} interpolation in failure copy (e.g. the
   // sign-in messages). Falls back to a neutral word when unreadable, never null.
   const failedAgentLabel =
     agentDisplayName(retryAssistant?.agentId, retryAssistant?.agentName) ??
     t('chat.runError.agentFallback');
+  const runFailureMessageVars = runFailureUi?.messageVars
+    ? {
+        ...runFailureUi.messageVars,
+        ...(typeof runFailureUi.messageVars.retryAt === 'string'
+          ? {
+              retryAt: new Intl.DateTimeFormat(locale, {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              }).format(new Date(runFailureUi.messageVars.retryAt)),
+            }
+          : {}),
+      }
+    : {};
   const displayError = runFailureUi?.messageKey
-    ? t(runFailureUi.messageKey, { agent: failedAgentLabel })
+    ? t(runFailureUi.messageKey, { agent: failedAgentLabel, ...runFailureMessageVars })
     : rawError;
+  const runNoticeKey = runFailureUi?.noticeKind
+    ? `${runFailureUi.noticeKind}:${displayError ?? ''}`
+    : null;
   const errorDiagnosticText = displayError
     ? buildRunErrorDiagnosticText({
         message: displayError,
@@ -1470,13 +1522,17 @@ export function ChatPane({
   // connection drop, danger for everything else. The shared action card only
   // tints its icon; the surface itself stays neutral.
   const runErrorTone: UserActionCardTone =
-    runFailureUi?.primaryAction === 'authorize' ||
-    runFailureUi?.primaryAction === 'recharge' ||
-    runFailureUi?.primaryAction === 'upgrade'
-      ? 'brand'
-      : failedRunErrorEvent?.code === 'AGENT_CONNECTION_DROPPED'
+    runFailureUi?.noticeKind === 'queue'
+      ? 'neutral'
+      : runFailureUi?.noticeKind === 'usage-limit'
         ? 'warning'
-        : 'danger';
+        : runFailureUi?.primaryAction === 'authorize' ||
+            runFailureUi?.primaryAction === 'recharge' ||
+            runFailureUi?.primaryAction === 'upgrade'
+          ? 'brand'
+          : failedRunErrorEvent?.code === 'AGENT_CONNECTION_DROPPED'
+            ? 'warning'
+            : 'danger';
   const [copiedErrorDiagnostic, setCopiedErrorDiagnostic] = useState(false);
   // Collapsed by default: the error source area shows one line until expanded.
   const [errorSourceOpen, setErrorSourceOpen] = useState(false);
@@ -2629,14 +2685,21 @@ export function ChatPane({
                 scrollContainerRef={logRef}
                 highlightedUserMessageId={chatRailHighlightedMessageId}
               />
-              {displayError ? (
+              {displayError && !runFailureUi?.noticeKind ? (
                 <UserActionCard
                   dataKind="run-recovery"
                   icon="alert-triangle"
                   tone={runErrorTone}
                   title={
                     runFailureUi
-                      ? t(runFailureUi.titleKey)
+                      ? (
+                          <div>
+                            <div>{t(runFailureUi.titleKey, runFailureMessageVars)}</div>
+                            {runFailureUi.noticeKind && displayError ? (
+                              <p className="run-error__description">{displayError}</p>
+                            ) : null}
+                          </div>
+                        )
                       : t('chat.runError.title.generic')
                   }
                   open={errorSourceOpen}
@@ -2644,7 +2707,9 @@ export function ChatPane({
                   detailsLabel={t('brand.viewDetails')}
                   details={
                     <div className="run-error__details">
-                      <p className="run-error__description">{displayError}</p>
+                      {!runFailureUi?.noticeKind ? (
+                        <p className="run-error__description">{displayError}</p>
+                      ) : null}
                       {errorDiagnosticText ? (
                         <div className="run-error__diagnostic">
                           <div className="run-error__diagnostic-head">
@@ -2930,6 +2995,35 @@ export function ChatPane({
                 }
               : undefined}
           />
+          {displayError
+          && runFailureUi?.noticeKind
+          && dismissedRunNoticeKey !== runNoticeKey ? (
+            <div className="chat-run-notice-slot" role="status" aria-live="polite">
+              <UserActionCard
+                className="chat-run-notice-card"
+                dataKind={`run-notice-${runFailureUi.noticeKind}`}
+                icon={runFailureUi.noticeKind === 'usage-limit' ? 'history' : 'info'}
+                tone={runErrorTone}
+                actions={(
+                  <button
+                    type="button"
+                    className="chat-run-notice-dismiss"
+                    aria-label={t('common.close')}
+                    title={t('common.close')}
+                    onClick={() => setDismissedRunNoticeKey(runNoticeKey)}
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                )}
+                title={(
+                  <div>
+                    <div>{t(runFailureUi.titleKey, runFailureMessageVars)}</div>
+                    <p className="run-error__description">{displayError}</p>
+                  </div>
+                )}
+              />
+            </div>
+          ) : null}
           <div
             className="chat-composer-slot"
             ref={composerSlotRef}
