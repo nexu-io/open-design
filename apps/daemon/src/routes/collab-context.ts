@@ -196,6 +196,35 @@ export interface RegisterCollabContextRoutesDeps {
 
 const ASSIGNABLE_ROLES = new Set<WorkspaceInviteRole>(['admin', 'member']);
 
+/**
+ * Enrichment may add billing and display metadata, but it must not rewrite the
+ * exact Workspace authority already proven by the membership directory.
+ */
+function enrichVerifiedWorkspaceContext(
+  verified: WorkspaceCollabContext,
+  enriched: WorkspaceCollabContext | null | undefined,
+): WorkspaceCollabContext {
+  if (
+    !enriched
+    || enriched.workspaceId !== verified.workspaceId
+    || enriched.workspaceMemberId !== verified.workspaceMemberId
+  ) {
+    return verified;
+  }
+  const { teamId: _enrichedTeamId, ...enrichedMetadata } = enriched;
+  return {
+    ...enrichedMetadata,
+    workspaceId: verified.workspaceId,
+    workspaceType: verified.workspaceType,
+    workspaceMemberId: verified.workspaceMemberId,
+    role: verified.role,
+    memberStatus: verified.memberStatus,
+    lifecycleState: verified.lifecycleState,
+    permissions: verified.permissions,
+    ...(verified.teamId ? { teamId: verified.teamId } : {}),
+  };
+}
+
 function workspaceGroupProperties(
   context: WorkspaceCollabContext,
 ): Record<string, unknown> {
@@ -382,12 +411,7 @@ export function registerCollabContextRoutes(app: Express, deps: RegisterCollabCo
       authorization,
       workspaceId: verified.context.workspaceId,
     }).catch(() => null);
-    const context =
-      enriched
-      && enriched.workspaceId === verified.context.workspaceId
-      && enriched.workspaceMemberId === verified.context.workspaceMemberId
-        ? enriched
-        : verified.context;
+    const context = enrichVerifiedWorkspaceContext(verified.context, enriched);
     const body: WorkspaceContextResponse = { context };
     void deps.observeWorkspace?.(req, context, workspaceGroupProperties(context));
     res.json(body);

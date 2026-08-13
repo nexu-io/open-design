@@ -3350,8 +3350,9 @@ export async function startServer({
       : null;
   };
   const verifyWorkspaceContextReadAuthority = async (req: unknown) => {
-    const cached = cachedWorkspaceContextForRequest(req);
-    if (cached) return { ok: true as const, context: cached };
+    // `resolveExact` is enrichment, including when its strict-SSE lease is
+    // healthy. Only the membership directory can supply authority-bearing
+    // type, role, lifecycle, and permissions for the context response.
     return verifyWorkspaceReadAuthority(req);
   };
   /**

@@ -169,6 +169,47 @@ describe('collab context routes', () => {
     expect(fetchWorkspaceDirectory).not.toHaveBeenCalled();
   });
 
+  it('does not let exact-context enrichment downgrade directory-verified Team authority', async () => {
+    const verifiedTeamContext: WorkspaceCollabContext = {
+      ...TEAM_CONTEXT_PARSED,
+      role: 'admin',
+      permissions: buildWorkspacePermissions({ role: 'admin', lifecycleState: 'active' }),
+    };
+    const api = await startContextServer({
+      verifyWorkspaceReadAuthority: async () => ({
+        ok: true as const,
+        context: verifiedTeamContext,
+      }),
+    });
+    await api.req('/api/workspace/context', {
+      method: 'PUT',
+      body: {
+        workspaceId: verifiedTeamContext.workspaceId,
+        workspaceType: 'personal',
+        workspaceMemberId: verifiedTeamContext.workspaceMemberId,
+        role: 'member',
+        memberStatus: 'active',
+        lifecycleState: 'active',
+        planId: 'team_pro',
+      },
+    });
+
+    const response = await api.req('/api/workspace/context', {
+      headers: TEAM_HEADERS,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.context).toMatchObject({
+      workspaceId: verifiedTeamContext.workspaceId,
+      workspaceMemberId: verifiedTeamContext.workspaceMemberId,
+      workspaceType: 'team',
+      role: 'admin',
+      permissions: verifiedTeamContext.permissions,
+      planId: 'team_pro',
+      teamId: verifiedTeamContext.workspaceId,
+    });
+  });
+
   it.skip('observes authoritative workspace size without sending names or member identity', async () => {
     const observeWorkspace = vi.fn();
     const api = await startContextServer({
