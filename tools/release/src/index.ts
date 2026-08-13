@@ -111,7 +111,7 @@ cli
   });
 
 cli
-  .command("merge-closure-distribution <shared> <targets...>", "Merge validated Closure job contributions")
+  .command("merge-closure-distribution <shared> <...targets>", "Merge validated Closure job contributions")
   .option("--output <path>", "write the canonical version-wide Closure manifest")
   .action(async (shared: string, targets: string | string[], options: { output?: string }) => {
     if (options.output == null || options.output.length === 0) {
