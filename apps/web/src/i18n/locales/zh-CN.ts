@@ -424,6 +424,7 @@ export const zhCN: Dict = {
   "settings.cloudCalloutBody": "登录云端版本后可启用团队空间、共享项目、成员权限和审计大盘。",
   "settings.cloudCalloutButton": "登录 / 注册",
   "settings.modeApiMeta": "API 提供商",
+  "settings.retiredGeminiCliGuidance": "Gemini CLI 已不再是受支持的 Local CLI 运行时。请改用 API 提供商中的 Google Gemini，并使用你自己的 API 密钥。",
   "settings.byokNoFileToolsNotice":
     "BYOK 无法读写或修改项目文件；需要改代码时请使用本机 CLI。",
   "settings.byokDraftNotice":

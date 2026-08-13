@@ -434,6 +434,7 @@ export const ko: Dict = {
   'settings.cloudCalloutBody': '클라우드 버전에 로그인하면 팀 스페이스, 공유 프로젝트, 멤버 권한, 감사 대시보드를 사용할 수 있습니다.',
   'settings.cloudCalloutButton': '로그인 / 가입',
   'settings.modeApiMeta': 'API 제공업체',
+  'settings.retiredGeminiCliGuidance': 'Gemini CLI는 더 이상 지원되는 Local CLI 런타임이 아닙니다. 대신 API 제공업체의 Google Gemini를 개인 API 키로 사용하세요.',
   'settings.byokNoFileToolsNotice': 'BYOK는 프로젝트 파일을 읽거나 쓰거나 편집할 수 없습니다. 코드 변경이 필요한 경우 Local CLI를 사용하세요.',
   'settings.byokDraftNotice': '필수 항목을 입력하면 이 제공업체를 저장할 수 있습니다. 현재 설정은 계속 활성 상태로 유지됩니다.',
   'settings.codeAgent': '코드 에이전트',

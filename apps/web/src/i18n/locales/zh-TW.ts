@@ -424,6 +424,7 @@ export const zhTW: Dict = {
   "settings.cloudCalloutBody": "登入雲端版本後可啟用團隊空間、共享專案、成員權限和稽核儀表板。",
   "settings.cloudCalloutButton": "登入 / 註冊",
   "settings.modeApiMeta": "API 供應商",
+  "settings.retiredGeminiCliGuidance": "Gemini CLI 已不再是受支援的 Local CLI 執行階段。請改用 API 提供商中的 Google Gemini，並使用你自己的 API 金鑰。",
   "settings.byokNoFileToolsNotice":
     "BYOK 無法讀取、寫入或編輯專案檔案。需要變更程式碼時，請使用 Local CLI。",
   "settings.byokDraftNotice":

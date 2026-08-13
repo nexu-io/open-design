@@ -2792,6 +2792,69 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     );
   });
 
+  it('redirects legacy Gemini CLI settings to Google Gemini BYOK without install guidance', () => {
+    const retiredGemini: AgentInfo = {
+      id: 'gemini',
+      name: 'Gemini CLI',
+      bin: 'gemini',
+      available: false,
+      version: null,
+      models: [],
+      installUrl: 'https://github.com/google-gemini/gemini-cli',
+      docsUrl: 'https://github.com/google-gemini/gemini-cli/blob/main/README.md',
+      diagnostics: [
+        {
+          reason: 'not-on-path',
+          severity: 'error',
+          message: 'Gemini (`gemini`) was not found on your PATH.',
+          fixActions: [{ kind: 'openInstall' }, { kind: 'rescan' }],
+        },
+      ],
+    };
+    const unavailableKimi: AgentInfo = {
+      id: 'kimi',
+      name: 'Kimi CLI',
+      bin: 'kimi',
+      available: false,
+      version: null,
+      models: [],
+      installUrl: 'https://github.com/MoonshotAI/kimi-cli',
+    };
+
+    renderSettingsDialog(
+      { mode: 'daemon', agentId: 'gemini' },
+      { agents: [retiredGemini, unavailableKimi] },
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: /Local CLI/i }));
+
+    expect(screen.queryByRole('group', { name: /Gemini CLI/i })).toBeNull();
+    expect(
+      screen.queryByText('Gemini (`gemini`) was not found on your PATH.'),
+    ).toBeNull();
+    expect(screen.getByText('Available CLIs (1)')).toBeTruthy();
+    const kimiGroup = screen.getByRole('group', { name: /Kimi CLI/i });
+    expect(
+      within(kimiGroup).getByRole('link', {
+        name: en['settings.agentInstall.install'],
+      }),
+    ).toBeTruthy();
+
+    expect(
+      screen.getByText(/Gemini CLI is no longer a supported Local CLI runtime/i),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole('button', { name: /Google Gemini.*Bring Your Own Key/i }),
+    );
+
+    expect(
+      screen.getByRole('tab', { name: /API providers/i }).getAttribute('aria-selected'),
+    ).toBe('true');
+    expect(
+      screen.getByRole('tab', { name: 'Google Gemini' }).getAttribute('aria-selected'),
+    ).toBe('true');
+  });
+
   it('filters long Local CLI model lists in Settings without hiding the current selection', () => {
     renderSettingsDialog(
       { mode: 'daemon', agentId: 'codex', agentModels: { codex: { model: 'gpt-4.1-mini' } } },

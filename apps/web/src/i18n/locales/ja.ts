@@ -434,6 +434,7 @@ export const ja: Dict = {
   'settings.cloudCalloutBody': 'クラウド版にサインインすると、チームスペース、共有プロジェクト、メンバー権限、監査ダッシュボードが利用できます。',
   'settings.cloudCalloutButton': 'ログイン / 登録',
   'settings.modeApiMeta': 'API プロバイダー',
+  'settings.retiredGeminiCliGuidance': 'Gemini CLI は Local CLI ランタイムとしてサポートされなくなりました。代わりに API プロバイダーの Google Gemini を独自の API キーで使用してください。',
   'settings.byokNoFileToolsNotice': 'BYOK ではプロジェクトファイルの読み取り、書き込み、編集はできません。コードを変更する場合は Local CLI を使用してください。',
   'settings.byokDraftNotice': '必須項目を入力すると、このプロバイダーを保存できます。現在の設定は引き続き有効です。',
   'settings.codeAgent': 'コードエージェント',

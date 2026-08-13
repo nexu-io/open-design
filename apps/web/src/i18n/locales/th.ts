@@ -434,6 +434,7 @@ export const th: Dict = {
   'settings.cloudCalloutBody': 'Sign in to the cloud version to enable team spaces, shared projects, member permissions, and the audit dashboard.',
   'settings.cloudCalloutButton': 'Sign in / Register',
   'settings.modeApiMeta': 'ผู้ให้บริการ API',
+  'settings.retiredGeminiCliGuidance': 'Gemini CLI ไม่ได้รับการรองรับเป็นรันไทม์ Local CLI อีกต่อไป โปรดใช้ Google Gemini ในผู้ให้บริการ API ด้วยคีย์ API ของคุณแทน',
   'settings.byokNoFileToolsNotice': 'BYOK ไม่สามารถอ่าน เขียน หรือแก้ไขไฟล์โปรเจกต์ได้ ใช้ Local CLI เมื่อคุณต้องการเปลี่ยนแปลงโค้ด',
   'settings.byokDraftNotice': 'กรอกช่องที่จำเป็นเพื่อบันทึกผู้ให้บริการนี้ การตั้งค่าปัจจุบันจะยังคงใช้งานอยู่',
   'settings.codeAgent': 'เอเจนต์โค้ด',

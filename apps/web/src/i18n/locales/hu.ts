@@ -434,6 +434,7 @@ export const hu: Dict = {
   'settings.cloudCalloutBody': 'Sign in to the cloud version to enable team spaces, shared projects, member permissions, and the audit dashboard.',
   'settings.cloudCalloutButton': 'Sign in / Register',
   'settings.modeApiMeta': 'API-szolgáltatók',
+  'settings.retiredGeminiCliGuidance': 'A Gemini CLI már nem támogatott Local CLI-futtatókörnyezet. Helyette használd a Google Gemini szolgáltatást az API-szolgáltatók között, saját API-kulccsal.',
   'settings.byokNoFileToolsNotice': 'A BYOK nem tud projektfájlokat olvasni, írni vagy szerkeszteni. Ha kódmódosításra van szüksége, használja a Local CLI-t.',
   'settings.byokDraftNotice': 'Töltsd ki a kötelező mezőket a szolgáltató mentéséhez. A jelenlegi beállítás aktív marad.',
   'settings.codeAgent': 'Kód Agent',

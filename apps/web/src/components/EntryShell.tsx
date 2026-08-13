@@ -225,6 +225,7 @@ import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { isMacPlatform } from '../utils/platform';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { summarizeProjectNameFromPrompt } from '../utils/projectName';
+import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import {
   providerModelsCacheKey,
@@ -2201,7 +2202,12 @@ function OnboardingView({
         (apiProtocol === 'azure' && provider.baseUrl === '' && Boolean(config.baseUrl?.trim()))
       ),
   ) ?? null;
-  const availableCliAgents = agents.filter((agent) => agent.available && agent.id !== 'amr');
+  const availableCliAgents = agents.filter(
+    (agent) =>
+      agent.available &&
+      agent.id !== 'amr' &&
+      isVisibleLocalCliAgent(agent),
+  );
   const visibleAgents = availableCliAgents.filter((agent) => visibleAgentIds.includes(agent.id));
   const amrSignedIn = isAmrSessionAuthenticated(amrStatus);
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
@@ -2255,7 +2261,12 @@ function OnboardingView({
       : config.agentId === 'amr'
         || Boolean(
           config.agentId
-          && agents.some((agent) => agent.id === config.agentId && agent.available),
+          && agents.some(
+            (agent) =>
+              agent.id === config.agentId &&
+              agent.available &&
+              isVisibleLocalCliAgent(agent),
+          ),
         );
 
   useEffect(() => {
@@ -2271,7 +2282,10 @@ function OnboardingView({
     const scanToken = cliScanTokenRef.current;
     if (cliRefreshPendingTokenRef.current === scanToken) return;
     const currentAvailableAgents = agents.filter(
-      (agent) => agent.available && agent.id !== 'amr',
+      (agent) =>
+        agent.available &&
+        agent.id !== 'amr' &&
+        isVisibleLocalCliAgent(agent),
     );
     if (currentAvailableAgents.length > 0) {
       const selectedCliAgent = selectDefaultCliAgent(currentAvailableAgents);
@@ -2981,7 +2995,10 @@ function OnboardingView({
   async function scanCliAgents(options: { preferExisting?: boolean } = {}) {
     const scanToken = beginCliScan({ clearVisible: !options.preferExisting });
     const currentAvailableAgents = agents.filter(
-      (agent) => agent.available && agent.id !== 'amr',
+      (agent) =>
+        agent.available &&
+        agent.id !== 'amr' &&
+        isVisibleLocalCliAgent(agent),
     );
     if (options.preferExisting && currentAvailableAgents.length > 0) {
       const selectedCliAgent = selectDefaultCliAgent(currentAvailableAgents);
@@ -3004,7 +3021,12 @@ function OnboardingView({
       const nextAgents = await onRefreshAgents();
       if (cliScanTokenRef.current !== scanToken) return;
       cliRefreshPendingTokenRef.current = null;
-      const availableAgents = nextAgents.filter((agent) => agent.available && agent.id !== 'amr');
+      const availableAgents = nextAgents.filter(
+        (agent) =>
+          agent.available &&
+          agent.id !== 'amr' &&
+          isVisibleLocalCliAgent(agent),
+      );
       const selectedCliAgent = selectDefaultCliAgent(availableAgents);
       // Scan-result semantics: zero available CLIs is a `failed` outcome
       // because the user's runtime path is blocked, even though the

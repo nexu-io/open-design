@@ -434,6 +434,7 @@ export const ar: Dict = {
   'settings.cloudCalloutBody': 'Sign in to the cloud version to enable team spaces, shared projects, member permissions, and the audit dashboard.',
   'settings.cloudCalloutButton': 'Sign in / Register',
   'settings.modeApiMeta': 'موفرو API',
+  'settings.retiredGeminiCliGuidance': 'لم يعد Gemini CLI وقت تشغيل Local CLI مدعومًا. استخدم Google Gemini ضمن موفري API باستخدام مفتاح API الخاص بك بدلًا من ذلك.',
   'settings.byokNoFileToolsNotice': 'لا يمكن لـ BYOK قراءة ملفات المشروع أو الكتابة فيها أو تعديلها. استخدم Local CLI عندما تحتاج إلى تغييرات في الكود.',
   'settings.byokDraftNotice': 'أكمل الحقول المطلوبة لحفظ هذا الموفر. سيظل إعدادك الحالي نشطًا.',
   'settings.codeAgent': 'وكيل الكود',

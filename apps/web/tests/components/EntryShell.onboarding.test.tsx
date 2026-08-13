@@ -1006,6 +1006,36 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(localPanel?.textContent).not.toContain('AMR');
   });
 
+  it('excludes retired Gemini CLI payloads from the Local CLI agent list', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({
+        loggedIn: true,
+        profile: 'prod',
+        user: { id: 'u', email: 'user@example.com' },
+        configPath: '/x',
+      }),
+    ) as typeof fetch;
+    const claude = cliAgent();
+    const retiredGemini = cliAgent({
+      id: 'gemini',
+      name: 'Gemini CLI',
+      bin: 'gemini',
+      models: [{ id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' }],
+    });
+    const props = renderOnboarding({
+      config: baseConfig({ agentId: 'gemini' }),
+      agents: [amrAgent(), retiredGemini, claude],
+      onRefreshAgents: vi.fn(() => [amrAgent(), retiredGemini, claude]),
+    });
+
+    await openLocalRuntimeSetup();
+
+    const localPanel = screen.getByText('Local CLI').closest('.onboarding-view__setup-panel');
+    expect(localPanel?.textContent).toContain('Claude Code');
+    expect(localPanel?.textContent).not.toContain('Gemini CLI');
+    expect(props.onAgentChange).not.toHaveBeenCalledWith('gemini');
+  });
+
   it('tests the selected Local CLI agent from onboarding', async () => {
     const fetchMock = vi.fn(async (input, init) => {
       const url = String(input);

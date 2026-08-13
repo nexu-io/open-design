@@ -385,6 +385,7 @@ export interface Dict {
   'settings.cloudCalloutBody': string;
   'settings.cloudCalloutButton': string;
   'settings.modeApiMeta': string;
+  'settings.retiredGeminiCliGuidance': string;
   'settings.byokNoFileToolsNotice': string;
   'settings.byokDraftNotice': string;
   'settings.codeAgent': string;
