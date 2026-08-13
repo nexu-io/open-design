@@ -1898,6 +1898,7 @@ process.stdin.on("end", () => {
     expect(releaseBetaWorkflow).toContain("namespace: release-beta-x64");
     expect(betaMacAction).toContain("RELEASE_NAMESPACE: ${{ inputs.namespace }}");
     expect(betaMacAction).toContain("RELEASE_TARGET: ${{ inputs.target }}");
+    expect(betaMacAction).not.toMatch(/^\s+description:.*\$\{\{/mu);
     expect(betaWinAction).toContain("RELEASE_NAMESPACE: release-beta-win");
     expect(betaWinAction).toContain("RELEASE_TARGET: win_x64");
 

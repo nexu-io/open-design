@@ -30,7 +30,7 @@ inputs:
     description: tools-pack namespace
     required: true
   platform:
-    description: ${{ inputs.platform }} or darwin-x64 Closure platform
+    description: darwin-arm64 or darwin-x64 Closure platform
     required: true
   publish:
     description: Publish versioned platform artifacts
@@ -58,7 +58,7 @@ inputs:
     description: skip, core, or full
     required: true
   target:
-    description: ${{ inputs.target }} or mac_x64
+    description: mac_arm64 or mac_x64 release target
     required: true
   update-metadata-url:
     description: Optional external updater metadata URL
