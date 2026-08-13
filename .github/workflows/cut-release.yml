@@ -142,7 +142,7 @@ jobs:
       # Post an immediate "branch cut" card so the team is notified the moment the
       # release branch exists, without waiting ~20-40 min for notify-release-feishu
       # to finish the prerelease build. The download card still follows from that
-      # build. feishu-notice.ts only imports node:crypto, so the setup-node above
+      # build. feishu-notice.ts and its local transport use only Node built-ins, so setup-node above
       # is all it needs.
       - name: Notify Feishu that the branch was cut
         if: steps.gate.outputs.ready == 'true'

@@ -140,7 +140,7 @@ jobs:
           echo "published=$published" >> "$GITHUB_OUTPUT"
 
       # ---- Skip path: minor not published yet -> no branch/release build; notify and stop ----
-      # feishu-notice.ts imports only node:crypto (no workspace deps), so the
+      # feishu-notice.ts and its local transport use only Node built-ins, so the
       # setup-node above is all it needs — no pnpm install, same as feishu.ts.
       - name: Notify Feishu that the patch cut was skipped
         if: steps.guard.outputs.published != 'true'
@@ -209,7 +209,7 @@ jobs:
       # Post an immediate "branch cut" card so the team is notified the moment the
       # patch branch exists, without waiting ~20-40 min for notify-release-feishu to
       # finish the prerelease build. The download card still follows from that build.
-      # feishu-notice.ts only imports node:crypto, so the setup-node above suffices.
+      # feishu-notice.ts and its local transport use only Node built-ins, so setup-node suffices.
       - name: Notify Feishu that the branch was cut
         if: steps.guard.outputs.published == 'true'
         env:

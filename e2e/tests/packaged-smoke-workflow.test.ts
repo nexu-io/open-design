@@ -88,6 +88,7 @@ const notifyReleaseFeishuWorkflowPath = join(workspaceRoot, ".github", "workflow
 const cutReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-release.yml");
 const cutPatchReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "cut-patch-release.yml");
 const feishuCardScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu.ts");
+const feishuClientScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-client.ts");
 const feishuNoticeScriptPath = join(workspaceRoot, "tools", "release", "src", "notifications", "feishu-notice.ts");
 const landingPageDailyFeishuWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-daily-feishu.yml");
 const landingPageCiWorkflowPath = join(workspaceRoot, ".github", "workflows", "landing-page-ci.yml");
@@ -2426,9 +2427,10 @@ process.stdin.on("end", () => {
     //      a branch or launch the prerelease publication; it posts a notice and stops.
     //   3. The happy path still cuts from main and pushes with the App token, so the
     //      existing notify-release-feishu push trigger produces the prerelease + card.
-    const [workflow, notice] = await Promise.all([
+    const [workflow, notice, client] = await Promise.all([
       readFile(cutPatchReleaseWorkflowPath, "utf8"),
       readFile(feishuNoticeScriptPath, "utf8"),
+      readFile(feishuClientScriptPath, "utf8"),
     ]);
 
     // Thursday cron, and a patch (not minor) bump.
@@ -2474,7 +2476,8 @@ process.stdin.on("end", () => {
     expect(workflow).toContain('git commit --allow-empty -am "chore(release): v$VERSION"');
 
     // The notice card is a standalone poster with the same signed-webhook contract.
-    expect(notice).toContain("msg_type: \"interactive\"");
+    expect(notice).toContain("createFeishuSignedEnvelope(buildCard(), signSecret)");
+    expect(client).toContain("msg_type: \"interactive\"");
     expect(notice).toContain('required("NOTICE_TITLE")');
     expect(notice).toContain('required("NOTICE_BODY")');
   });

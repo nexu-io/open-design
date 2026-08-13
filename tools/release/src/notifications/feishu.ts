@@ -23,24 +23,17 @@
 //   MAC_INTEL_URL         macOS x64 (Intel) download URL (optional)
 //   WIN_URL               Windows x64 download URL (optional)
 
-import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 
+import {
+  createFeishuSignedEnvelope,
+  optionalEnv as optional,
+  postFeishuWebhook,
+  requiredEnv as required,
+  type FeishuCard,
+} from "./feishu-client.ts";
+
 type FeishuElement = Record<string, unknown>;
-type FeishuCard = Record<string, unknown>;
-
-function required(name: string): string {
-  const value = process.env[name];
-  if (value == null || value.length === 0) {
-    throw new Error(`${name} is required`);
-  }
-  return value;
-}
-
-function optional(name: string, fallback = ""): string {
-  const value = process.env[name];
-  return value == null || value.length === 0 ? fallback : value;
-}
 
 const webhook = required("FEISHU_WEBHOOK");
 const signSecret = optional("FEISHU_SIGN_SECRET");
@@ -189,57 +182,4 @@ function buildCard(): FeishuCard {
   };
 }
 
-function signedEnvelope(card: FeishuCard): Record<string, unknown> {
-  const body = { msg_type: "interactive", card };
-  if (signSecret.length === 0) return body;
-  // Feishu signing: HMAC-SHA256 over empty bytes, keyed by `${timestamp}\n${secret}`.
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const stringToSign = `${timestamp}\n${signSecret}`;
-  const sign = createHmac("sha256", stringToSign).update("").digest("base64");
-  return { timestamp, sign, ...body };
-}
-
-function sleep(attempt: number): Promise<void> {
-  const ms = Math.min(1000 * 2 ** (attempt - 1), 15000);
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function post(body: Record<string, unknown>): Promise<void> {
-  const attempts = 5;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    let res;
-    try {
-      res = await fetch(webhook, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    } catch (error) {
-      console.warn(`[feishu] POST attempt ${attempt}/${attempts} threw: ${error instanceof Error ? error.message : String(error)}`);
-      if (attempt === attempts) throw error;
-      await sleep(attempt);
-      continue;
-    }
-    const text = await res.text();
-    let code = null;
-    try {
-      const parsed = JSON.parse(text);
-      code = parsed.code ?? parsed.StatusCode ?? null;
-    } catch {
-      // non-JSON body
-    }
-    if (res.ok && (code === 0 || code === null)) {
-      console.log(`[feishu] delivered (HTTP ${res.status}, code ${code ?? "n/a"})`);
-      return;
-    }
-    console.warn(`[feishu] POST attempt ${attempt}/${attempts} HTTP ${res.status} code ${code}: ${text.slice(0, 500)}`);
-    // Bot rate-limit (code 9499) and 5xx are retryable; a 4xx config error is not.
-    const retryable = res.status === 429 || res.status >= 500 || code === 9499;
-    if (!retryable || attempt === attempts) {
-      throw new Error(`Feishu webhook failed: HTTP ${res.status} code ${code}`);
-    }
-    await sleep(attempt);
-  }
-}
-
-await post(signedEnvelope(buildCard()));
+await postFeishuWebhook(webhook, createFeishuSignedEnvelope(buildCard(), signSecret));
