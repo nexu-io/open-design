@@ -280,6 +280,31 @@ describe('compact home model list — a clicked model reaches the chip', () => {
     expect(within(popover).queryByText('Unlimited')).toBeNull();
   });
 
+  it('never applies the AMR campaign badge to a BYOK model', () => {
+    // BYOK deliberately retains the last local-agent model in `agentModels` so
+    // switching back to local execution restores it. That dormant AMR choice
+    // must not decorate the visible BYOK model: BYOK usage is charged by the
+    // user's own provider and is outside this hosted-model campaign.
+    mockNow(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
+    render(
+      <StatefulSwitcher
+        agents={[amrAgentAllEnabled]}
+        initialConfig={{
+          mode: 'api',
+          model: 'grok-4.5',
+          agentId: 'amr',
+          agentModels: {
+            amr: { model: DEEPSEEK_V4_FLASH_CAMPAIGN.modelId },
+          },
+        }}
+      />,
+    );
+
+    const chip = screen.getByTestId('inline-model-switcher-chip');
+    expect(chip).toHaveTextContent('grok-4.5');
+    expect(within(chip).queryByText('Unlimited')).toBeNull();
+  });
+
   it('still closes on a click genuinely outside the switcher', () => {
     render(
       <div>
