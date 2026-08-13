@@ -18,7 +18,7 @@ import {
   readStringField,
   setGitHubOutput as setOutput,
   validateHttpsUrl,
-} from "../lib/release-script.js";
+} from "../lib/release-script.ts";
 
 const execFile = promisify(execFileCallback);
 
