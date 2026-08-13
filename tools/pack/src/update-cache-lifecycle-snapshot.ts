@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
-import type { DesktopUpdateCacheLifecycleSummary } from "@open-design/sidecar-proto";
+import type { DesktopUpdateCacheLifecycleSummary } from "@open-design/sidecar/protocol";
 
 import type { ToolPackConfig } from "./config.js";
 

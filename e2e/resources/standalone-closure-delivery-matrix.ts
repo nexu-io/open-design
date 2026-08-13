@@ -29,7 +29,6 @@ export const standaloneClosureDeliveryMatrix = {
     {
       "id": "shell-shim",
       "owners": [
-        "packages/standalone-proto",
         "apps/standalone",
         "shells/electron"
       ],
@@ -60,7 +59,7 @@ export const standaloneClosureDeliveryMatrix = {
       "evidence": [
         {
           "role": "boundary-proof",
-          "path": "packages/standalone-proto/tests/index.test.ts"
+          "path": "apps/standalone/tests/protocol.test.ts"
         },
         {
           "role": "boundary-proof",
@@ -109,7 +108,6 @@ export const standaloneClosureDeliveryMatrix = {
     {
       "id": "process-lifecycle",
       "owners": [
-        "packages/standalone-runtime",
         "packages/sidecar",
         "apps/standalone"
       ],
@@ -127,7 +125,7 @@ export const standaloneClosureDeliveryMatrix = {
         {
           "level": "component",
           "state": "proven",
-          "witness": "packages/standalone-runtime/tests/lifecycle.test.ts"
+          "witness": "apps/standalone/tests/runtime-lifecycle.test.ts"
         },
         {
           "level": "local-real",
@@ -155,8 +153,7 @@ export const standaloneClosureDeliveryMatrix = {
     {
       "id": "update-lifecycle",
       "owners": [
-        "packages/closure-store",
-        "packages/closure-update",
+        "packages/closure",
         "shells/electron"
       ],
       "coordinates": [
@@ -174,7 +171,7 @@ export const standaloneClosureDeliveryMatrix = {
         {
           "level": "component",
           "state": "proven",
-          "witness": "packages/closure-update/tests/index.test.ts"
+          "witness": "packages/closure/tests/update.test.ts"
         },
         {
           "level": "platform-product",
@@ -186,7 +183,7 @@ export const standaloneClosureDeliveryMatrix = {
       "evidence": [
         {
           "role": "reusable-substrate",
-          "path": "packages/closure-store/tests/index.test.ts"
+          "path": "packages/closure/tests/store.test.ts"
         },
         {
           "role": "reusable-substrate",
@@ -347,7 +344,7 @@ export const standaloneClosureDeliveryMatrix = {
       ],
       "ownerPaths": [
         "shells/electron",
-        "packages/closure-update"
+        "packages/closure"
       ]
     },
     {

@@ -6,7 +6,7 @@ import {
   validateClosureDistributionSharedContribution,
   validateClosureDistributionTargetContribution,
   type ClosureDistributionBlob,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { parseReleaseVersion, releaseChannelDescriptor, type ReleaseChannel } from "@open-design/release";
 
 import { normalizePublicUrl, publicUrl, required, storageConfigFromEnv, writeJson } from "./common.ts";

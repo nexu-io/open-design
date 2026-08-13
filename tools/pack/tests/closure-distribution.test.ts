@@ -10,7 +10,7 @@ import {
   type ClosureDigest,
   type ClosureDistributionManifest,
   type ClosureDistributionManifestDraft,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -21,7 +21,7 @@ import {
 } from "../src/closure-distribution.js";
 
 const fixturePath = fileURLToPath(
-  new URL("../../../packages/closure-proto/fixtures/distribution-v2.json", import.meta.url),
+  new URL("../../../packages/closure/fixtures/distribution-v2.json", import.meta.url),
 );
 const roots: string[] = [];
 

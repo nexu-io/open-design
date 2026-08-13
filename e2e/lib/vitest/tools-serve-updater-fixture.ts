@@ -24,8 +24,8 @@ export async function startToolsServeUpdaterFixture(options: {
   artifactPath?: string;
   channel: ReleaseChannel;
   closureManifestPath?: string;
-  controlLauncherVersionMin?: string;
-  controlLauncherVersionUrl?: string;
+  controlInstallationVersionMin?: string;
+  controlInstallationVersionUrl?: string;
   payloadPath?: string;
   platform: Exclude<ReleasePlatform, 'linux'>;
   port?: number;
@@ -49,11 +49,11 @@ export async function startToolsServeUpdaterFixture(options: {
   ];
   if (options.artifactPath != null) pnpmArgs.push('--artifact-path', options.artifactPath);
   if (options.closureManifestPath != null) pnpmArgs.push('--closure-manifest-path', options.closureManifestPath);
-  if (options.controlLauncherVersionMin != null) {
-    pnpmArgs.push('--control-launcher-version-min', options.controlLauncherVersionMin);
+  if (options.controlInstallationVersionMin != null) {
+    pnpmArgs.push('--control-installation-version-min', options.controlInstallationVersionMin);
   }
-  if (options.controlLauncherVersionUrl != null) {
-    pnpmArgs.push('--control-launcher-version-url', options.controlLauncherVersionUrl);
+  if (options.controlInstallationVersionUrl != null) {
+    pnpmArgs.push('--control-installation-version-url', options.controlInstallationVersionUrl);
   }
   if (options.payloadPath != null) pnpmArgs.push('--include-payload', '--payload-path', options.payloadPath);
   if (options.port != null) pnpmArgs.push('--port', String(options.port));

@@ -22,7 +22,7 @@ import {
 } from "@open-design/download";
 import {
   LAUNCHER_SCHEMA_VERSION,
-} from "@open-design/launcher-proto";
+} from "@open-design/host/shell-update";
 import { createProcessStampArgs } from "@open-design/platform";
 import { resolveAppIpcPath } from "@open-design/sidecar";
 import {
@@ -41,7 +41,7 @@ import {
   type DesktopUpdateReinstallSnapshot,
   type DesktopUpdateStatusSnapshot,
   type DesktopUpdateState,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import {
   markInstallerObservationOpenFailed,
   writePendingInstallerObservation,

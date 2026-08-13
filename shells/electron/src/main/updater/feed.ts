@@ -7,7 +7,7 @@ import {
   compareLauncherVersions,
   validateLauncherRuntimeDescriptor,
   type LauncherRuntimeDescriptor,
-} from "@open-design/launcher-proto";
+} from "@open-design/host/shell-update";
 import {
   DESKTOP_UPDATE_CHANNELS,
   DESKTOP_UPDATE_MODES,
@@ -18,7 +18,7 @@ import {
   type DesktopUpdateErrorSnapshot,
   type DesktopUpdateReinstallSnapshot,
   type DesktopUpdateState,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 
 import { isDesktopUpdateChannel, type DesktopUpdaterConfig } from "./config.js";
 import type { ResolvedChecksumSnapshot, UpdateReleaseRef } from "./store.js";
@@ -301,19 +301,20 @@ export function selectUpdateCandidateWithFallback(
   return selectUpdateCandidate(metadata, config);
 }
 
-export function controlLauncherVersion(metadata: Record<string, unknown>): Record<string, unknown> | null {
+export function controlInstallationVersion(metadata: Record<string, unknown>): Record<string, unknown> | null {
   const control = objectField(metadata, "control");
-  const launcher = control == null ? null : objectField(control, "launcher");
-  return launcher == null ? null : objectField(launcher, "version");
+  const shell = control == null ? null : objectField(control, "shell");
+  const installation = shell == null ? null : objectField(shell, "installation");
+  return installation == null ? null : objectField(installation, "version");
 }
 
-export function controlLauncherVersionMin(metadata: Record<string, unknown>): string | null {
-  const version = controlLauncherVersion(metadata);
+export function controlInstallationVersionMin(metadata: Record<string, unknown>): string | null {
+  const version = controlInstallationVersion(metadata);
   return version == null ? null : stringField(version, "min");
 }
 
-export function controlLauncherVersionUrl(metadata: Record<string, unknown>): string | null {
-  const version = controlLauncherVersion(metadata);
+export function controlInstallationVersionUrl(metadata: Record<string, unknown>): string | null {
+  const version = controlInstallationVersion(metadata);
   return version == null ? null : stringField(version, "url");
 }
 
@@ -351,7 +352,7 @@ export async function resolveInstalledOuterVersion(config: DesktopUpdaterConfig)
  *  - `launcher.schema` (ABI axis): the release declares a launcher-contract schema
  *    number this build cannot interpret (`feed.launcher.schema >
  *    LAUNCHER_SCHEMA_VERSION`). This is the reseed boundary — a pure int compare.
- *  - `control.launcher.version.min` (recency axis): the release requires a
+ *  - `control.shell.installation.version.min` (recency axis): the release requires a
  *    physically installed outer package at least this new (`min >
  *    installedOuterVersion`). Payload updates never touch the outer bundle, so
  *    the comparison basis is the installed outer version, NOT the running
@@ -369,8 +370,8 @@ export function remoteRequiresReinstall(
   config: DesktopUpdaterConfig,
   installedOuterVersion: string | null,
 ): DesktopUpdateReinstallSnapshot | null {
-  const minVersion = controlLauncherVersionMin(metadata);
-  const url = controlLauncherVersionUrl(metadata);
+  const minVersion = controlInstallationVersionMin(metadata);
+  const url = controlInstallationVersionUrl(metadata);
   const shared = {
     ...(minVersion == null ? {} : { minVersion }),
     ...(url == null ? {} : { url }),

@@ -1,4 +1,4 @@
-import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from "@open-design/sidecar-proto";
+import { APP_KEYS, OPEN_DESIGN_SIDECAR_CONTRACT } from "@open-design/sidecar/protocol";
 import { bootstrapSidecarRuntime } from "@open-design/sidecar";
 import { readProcessStamp } from "@open-design/platform";
 

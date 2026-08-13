@@ -11,7 +11,7 @@ import {
   type StandaloneRuntimeStatus,
   type StandaloneRuntimeTerminalStatus,
   type StandaloneShellCapabilityRequest,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 import { bootstrapSidecarLifecycle } from "@open-design/sidecar/lifecycle";
 import { afterEach, describe, expect, it } from "vitest";
 

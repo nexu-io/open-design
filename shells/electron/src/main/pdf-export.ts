@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 
 import { BrowserWindow, dialog } from "electron";
-import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar-proto";
+import type { DesktopExportPdfInput, DesktopExportPdfResult } from "@open-design/sidecar/protocol";
 
 export type PageSize = { height: number; width: number };
 

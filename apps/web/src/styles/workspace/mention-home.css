@@ -439,7 +439,7 @@
   line-height: 1.35;
 }
 
-/* Operator-supplied reinstall explanation link (control.launcher.version.url). */
+/* Operator-supplied reinstall explanation link (control.shell.installation.version.url). */
 .updater-popup__link {
   display: inline-flex;
   align-items: center;

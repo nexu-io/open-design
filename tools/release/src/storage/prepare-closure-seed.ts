@@ -9,7 +9,7 @@ import {
   type ClosureDigest,
   type ClosureDistributionBlob,
   type ClosureDistributionManifest,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { parseReleaseVersion, type ReleaseChannel } from "@open-design/release";
 
 type ClosureSeedMode = "metadata" | "required";

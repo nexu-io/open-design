@@ -311,7 +311,6 @@ jobs:
           pnpm --filter @open-design/host test
           pnpm --filter @open-design/platform test
           pnpm --filter @open-design/sidecar test
-          pnpm --filter @open-design/sidecar-proto test
           if [ "${{ needs.scopes.outputs.tools_dev_tests_required }}" = "true" ]; then
             pnpm --filter @open-design/tools-dev test
           fi

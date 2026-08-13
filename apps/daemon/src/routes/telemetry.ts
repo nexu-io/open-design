@@ -1,5 +1,5 @@
 import express, { type Express } from 'express';
-import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { SIDECAR_DEFAULTS, SIDECAR_ENV } from '@open-design/sidecar/protocol';
 import { randomUUID } from 'node:crypto';
 import {
   type McpAnalyticsEventRequest,

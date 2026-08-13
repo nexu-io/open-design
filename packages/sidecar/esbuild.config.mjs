@@ -4,6 +4,7 @@ await build({
   bundle: true,
   entryPoints: {
     index: "./src/index.ts",
+    protocol: "./src/protocol.ts",
     "control/index": "./src/control/index.ts",
     "lifecycle/index": "./src/lifecycle/index.ts",
   },

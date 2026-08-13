@@ -15,13 +15,12 @@
   "dependencies": {
     "@electron/notarize": "3.1.1",
     "@electron/rebuild": "4.0.4",
-    "@open-design/closure-proto": "workspace:*",
-    "@open-design/launcher-proto": "workspace:*",
+    "@open-design/closure": "workspace:*",
+    "@open-design/host": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/release": "workspace:*",
     "@open-design/sidecar": "workspace:*",
-    "@open-design/sidecar-proto": "workspace:*",
-    "@open-design/standalone-proto": "workspace:*",
+    "@open-design/standalone": "workspace:*",
     "cac": "6.7.14",
     "electron-builder": "26.8.1",
     "resedit": "1.7.2"

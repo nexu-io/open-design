@@ -19,7 +19,7 @@ import {
   type ClosureShellCompatibility,
   type ClosureDistributionSharedContribution,
   type ClosureDistributionTargetContribution,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import type { ReleaseChannel } from "@open-design/release";
 
 export type ClosureDistributionArtifactSource = Readonly<{
@@ -36,7 +36,7 @@ export type ClosureDistributionResourceSource = ClosureDistributionArtifactSourc
 export type {
   ClosureDistributionSharedContribution,
   ClosureDistributionTargetContribution,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 
 export type CreateClosureDistributionSharedContributionOptions = Readonly<{
   blobOrigin: string;

@@ -22,7 +22,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { APP_KEYS, type DaemonStatusSnapshot, type WebStatusSnapshot } from "@open-design/sidecar-proto";
+import { APP_KEYS, type DaemonStatusSnapshot, type WebStatusSnapshot } from "@open-design/sidecar/protocol";
 
 import {
   ensureDaemonGateForDesktop,

@@ -80,13 +80,11 @@ describe("release workflows", () => {
 
     expect(mac).not.toContain("bash tools/release/scripts/build-platform.sh");
     expect(macX64).not.toContain("bash tools/release/scripts/build-platform.sh");
-    expect(selfHostedMac).toContain("fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh");
-    expect(countOccurrences(mac, "--require-vela-cli")).toBe(4);
-    expect(countOccurrences(macX64, "--require-vela-cli")).toBe(4);
-    expect(countOccurrences(win, "--require-vela-cli")).toBe(4);
-    for (const lane of [mac, macX64, win]) {
-      expect(lane).toMatch(/closure build-distribution-target[\s\S]*?--require-vela-cli/u);
-    }
+    expect(selfHostedMac).toContain("fnm exec --using=24.18.0 -- bash tools/release/scripts/build-platform.sh");
+    expect(countOccurrences(mac, "--require-vela-cli")).toBe(3);
+    expect(countOccurrences(macX64, "--require-vela-cli")).toBe(3);
+    expect(countOccurrences(win, "--require-vela-cli")).toBe(3);
+    expect(beta).not.toMatch(/closure build-distribution-target(?:.|\n){0,400}--require-vela-cli/u);
     expect(selfHostedMac).toContain("REQUIRE_VELA_CLI: \"true\"");
     expect(selfHostedWin).toContain("-RequireVelaCli");
     expect(mac.match(/RELEASE_ARTIFACT_MODE: dmg-and-payload/g)?.length ?? 0).toBe(2);
@@ -103,8 +101,8 @@ describe("release workflows", () => {
     expect(beta).toContain("CLOSURE_MIN_SHELL_VERSION: 0.19.0-beta.4");
     expect(mac).toContain("Materialize legacy mac_arm64 migration fixture");
     expect(beta).toContain("LEGACY_MAC_ARM64_VERSION: 0.16.2-beta.155");
-    expect(betaMetadata).toContain('RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}');
-    expect(betaMetadata).toContain('RELEASE_LAUNCHER_VERSION_MIN_BETA" != "$CLOSURE_MIN_SHELL_VERSION');
+    expect(beta).toContain('RELEASE_INSTALLATION_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}');
+    expect(beta).not.toContain('RELEASE_INSTALLATION_VERSION_MIN_BETA" != "$CLOSURE_MIN_SHELL_VERSION');
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH: ${{ steps.mac_arm64_legacy_fixture.outputs.dmg_path }}");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_arm64_update_fixture.outputs.update_build_json_path }}");
@@ -114,6 +112,7 @@ describe("release workflows", () => {
     expect(mac).not.toContain("RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: sha256:${{ hashFiles(");
     expect(mac).toContain('RELEASE_STANDALONE_PROTOCOL_VERSION: "1"');
     expect(mac).toMatch(/Build beta mac_arm64 update fixture[\s\S]*?--to app/);
+    expect(mac).toMatch(/Build beta mac_arm64 update fixture[\s\S]*?--release-version "\$version"[\s\S]*?--shell-version "\$update_version"[\s\S]*?--launcher-version "\$update_version"/);
     expect(mac).toContain("steps.mac_arm64_shell_resolution.outputs.smoke_proof != 'hit'");
     expect(mac).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}");
     expect(mac).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_arm64_shell_resolution.outputs.smoke_proof }}");
@@ -136,6 +135,7 @@ describe("release workflows", () => {
     expect(macX64).toContain("steps.mac_x64_shell_resolution.outputs.smoke_proof != 'hit'");
     expect(macX64).toContain("Build beta mac_x64 update fixture");
     expect(macX64).toMatch(/Build beta mac_x64 update fixture[\s\S]*?--to app/);
+    expect(macX64).toMatch(/Build beta mac_x64 update fixture[\s\S]*?--release-version "\$version"[\s\S]*?--shell-version "\$update_version"[\s\S]*?--launcher-version "\$update_version"/);
     expect(macX64).not.toContain("Materialize legacy mac_x64 migration fixture");
     expect(macX64).toContain("OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH: ${{ steps.mac_x64_update_fixture.outputs.update_build_json_path }}");
     expect(macX64).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_x64_smoke_mode == 'full' && (steps.mac_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || 'shell,standalone') || '' }}");
@@ -146,6 +146,9 @@ describe("release workflows", () => {
     expect(buildMac).toContain("update_args+=(--require-vela-cli)");
     expect(buildMac).toContain('--cache-dir "$TOOLS_PACK_CACHE_DIR"');
     expect(buildMac).toContain('tools-pack mac build update fixture');
+    expect(buildMac).toContain('--release-version "$RELEASE_VERSION"');
+    expect(buildMac).toContain('--shell-version "$update_version"');
+    expect(buildMac).toContain('--launcher-version "$update_version"');
     expect(buildMac).toContain('OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH="$update_build_json_path"');
     expect(buildMac).toContain('OD_PACKAGED_E2E_MAC_UPDATE_VERSION="${OD_PACKAGED_E2E_MAC_UPDATE_VERSION:-$update_version}"');
     expect(buildMac).not.toContain("::warning::Expected Electron framework symlink");
@@ -263,6 +266,7 @@ describe("release workflows", () => {
     expect(betaSelfHosted).not.toContain("tools-release summary-metadata");
     expect(betaSelfHosted).toContain("release-beta-s publishes to an internal S3 namespace; public metadata fetch verification is intentionally skipped.");
     expect(win).toContain("-IncludeZip $${{ inputs.win_x64_target == 'all' || inputs.win_x64_target == 'zip' }}");
+    expect(win).toContain('"--release-version", "${{ needs.metadata.outputs.beta_version }}", "--shell-version", $updateVersion, "--launcher-version", $updateVersion');
     expect(selfHostedWin).toContain("OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin }}/betas/latest/metadata.json");
     expect(selfHostedWin).toContain("RELEASE_CHANNEL: betas");
     expect(selfHostedWin).toContain("-IncludeZip $${{ inputs.win_x64_target == 'all' || inputs.win_x64_target == 'zip' }}");
@@ -284,6 +288,9 @@ describe("release workflows", () => {
     expect(winLifecycle).toContain("removedLauncherNamespaceRoot");
     expect(buildWin).toContain('Measure-Step "validate launcher payload artifact"');
     expect(buildWin).toContain('Measure-Step "validate launcher payload update fixture"');
+    expect(buildWin).toContain('"--release-version", $ReleaseVersion');
+    expect(buildWin).toContain('"--shell-version", $localUpdateVersion');
+    expect(buildWin).toContain('"--launcher-version", $localUpdateVersion');
     expect(buildWin).toContain('Test-JsonString $manifest.entry.executable "entry.executable" "payload/Open Design.exe"');
     for (const workspaceBuild of [winApp, macWorkspace]) {
       expect(workspaceBuild).toContain(
@@ -516,7 +523,7 @@ describe("release workflows", () => {
     }
   });
 
-  it("passes launcher version floor repo vars through to metadata publish and verify verbatim", async () => {
+  it("maps existing repo vars into the installation floor for metadata publish and verify", async () => {
     const [beta, betaSelfHosted, preview, prerelease, stable] = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-beta-s.yml", import.meta.url), "utf8"),
@@ -526,14 +533,14 @@ describe("release workflows", () => {
     ]);
 
     const passthrough = (suffix: string): string[] => [
-      `RELEASE_LAUNCHER_VERSION_MIN_${suffix}: \${{ vars.RELEASE_LAUNCHER_VERSION_MIN_${suffix} }}`,
-      `RELEASE_LAUNCHER_VERSION_MIN_URL_${suffix}: \${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_${suffix} }}`,
+      `RELEASE_INSTALLATION_VERSION_MIN_${suffix}: \${{ vars.RELEASE_LAUNCHER_VERSION_MIN_${suffix} }}`,
+      `RELEASE_INSTALLATION_VERSION_MIN_URL_${suffix}: \${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_${suffix} }}`,
     ];
 
     // Each channel workflow forwards its own repo-vars pair plus the STABLE
     // fallback pair verbatim; channel policy (pair-level stable fallback,
     // format/https/floor validation) lives only in
-    // tools/release/src/storage/launcher-version-floor.ts, never in YAML.
+    // tools/release/src/storage/installation-version-floor.ts, never in YAML.
     const lanes: Array<{ minSteps: number; suffix: string; workflow: string }> = [
       { minSteps: 2, suffix: "BETA", workflow: beta },
       { minSteps: 1, suffix: "BETAS", workflow: betaSelfHosted },

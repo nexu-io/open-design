@@ -8,8 +8,8 @@ import {
   type LauncherPaths,
   type LauncherRuntimeDescriptor,
   type LauncherVersionPaths,
-} from "@open-design/launcher-proto";
-import { SIDECAR_DEFAULTS } from "@open-design/sidecar-proto";
+} from "@open-design/host/shell-update";
+import { SIDECAR_DEFAULTS } from "@open-design/sidecar/protocol";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 
 import type { ToolPackConfig, ToolPackPlatform } from "./config.js";

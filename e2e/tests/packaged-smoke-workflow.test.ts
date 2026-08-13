@@ -7,7 +7,7 @@ import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { STANDALONE_PROTOCOL_VERSION } from "@open-design/standalone-proto";
+import { STANDALONE_PROTOCOL_VERSION } from "@open-design/standalone/protocol";
 import { describe, expect, it } from "vitest";
 
 import { T } from "@/timeouts";
@@ -1260,12 +1260,12 @@ process.stdin.on("end", () => {
     await expect(validateGatePasses(workflow, needsWithFailedWeb)).resolves.toBe(false);
   });
 
-  it("[P1] includes launcher protocol in the Nix daemon workspace build", async () => {
+  it("[P1] includes Shell update host protocol in the Nix daemon workspace build", async () => {
     const flake = await readFile(flakePath, "utf8");
     const daemonWorkspaces = sectionBetween(flake, "      daemonWorkspacePaths = [", "      ];");
 
-    expect(daemonWorkspaces).toContain('"packages/launcher-proto"');
-    expect(daemonWorkspaces.indexOf('"packages/launcher-proto"')).toBeLessThan(
+    expect(daemonWorkspaces).toContain('"packages/host"');
+    expect(daemonWorkspaces.indexOf('"packages/host"')).toBeLessThan(
       daemonWorkspaces.indexOf('"apps/daemon"'),
     );
   });
@@ -1774,7 +1774,7 @@ process.stdin.on("end", () => {
       betaMacArm64Job,
       "      - name: Build beta mac_arm64 update fixture",
       "      - name: Materialize legacy mac_arm64 migration fixture",
-    )).toContain("--to app");
+    )).toMatch(/--release-version "\$version"[\s\S]*--shell-version "\$update_version"[\s\S]*--launcher-version "\$update_version"[\s\S]*--to app/);
     expect(betaMacArm64Job).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}");
     expect(betaMacArm64Job).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_arm64_shell_resolution.outputs.smoke_proof }}");
     expect(betaMacArm64Job).toContain("Register mac_arm64 Electron Shell full-smoke proof");
@@ -1791,7 +1791,7 @@ process.stdin.on("end", () => {
       betaMacX64Job,
       "      - name: Build beta mac_x64 update fixture",
       "      - name: Smoke beta mac_x64 packaged runtime",
-    )).toContain("--to app");
+    )).toMatch(/--release-version "\$version"[\s\S]*--shell-version "\$update_version"[\s\S]*--launcher-version "\$update_version"[\s\S]*--to app/);
     expect(betaMacX64Job).not.toContain("Materialize legacy mac_x64 migration fixture");
     expect(betaMacX64Job).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_x64_smoke_mode == 'full' && (steps.mac_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || 'shell,standalone') || '' }}");
     expect(betaMacX64Job).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_x64_shell_resolution.outputs.smoke_proof }}");
@@ -1826,6 +1826,7 @@ process.stdin.on("end", () => {
     );
     expect(betaWinUpdateFixtureStep).toContain("OD_TOOLS_PACK_WIN_NSIS_TEST_HOOKS: faults");
     expect(betaWinUpdateFixtureStep).toContain('"--portable"');
+    expect(betaWinUpdateFixtureStep).toContain('"--release-version", "${{ needs.metadata.outputs.beta_version }}", "--shell-version", $updateVersion, "--launcher-version", $updateVersion');
     expect(sectionBetween(
       betaWinJob,
       "      - name: Build beta win_x64\n",
@@ -2748,8 +2749,8 @@ process.stdin.on("end", () => {
     expect(sharedJob).toContain("cache: pnpm");
     expect(macJob).toContain("Materialize legacy mac_arm64 migration fixture");
     expect(workflow).toContain("LEGACY_MAC_ARM64_VERSION: 0.16.2-beta.155");
-    expect(workflow).toContain('RELEASE_LAUNCHER_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}');
-    expect(workflow).toContain('RELEASE_LAUNCHER_VERSION_MIN_BETA" != "$CLOSURE_MIN_SHELL_VERSION');
+    expect(workflow).toContain('RELEASE_INSTALLATION_VERSION_MIN_BETA: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETA }}');
+    expect(workflow).not.toContain('RELEASE_LAUNCHER_VERSION_MIN_BETA" != "$CLOSURE_MIN_SHELL_VERSION');
     expect(macJob).toContain("OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH:");
     expect(macJob).toContain("OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}");
     expect(workflow).toContain("POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}");
@@ -2784,7 +2785,7 @@ process.stdin.on("end", () => {
       ),
     ]) {
       expect(targetContributionStep).toContain("tools-pack closure build-distribution-target");
-      expect(targetContributionStep).toContain("--require-vela-cli");
+      expect(targetContributionStep).not.toContain("--require-vela-cli");
     }
     expect(macJob).toContain("cache: pnpm");
     expect(macJob).toContain("Build beta mac_arm64 Standalone native contribution");
@@ -2973,15 +2974,15 @@ process.stdin.on("end", () => {
     expect(workflow).toContain("runs-on: [self-hosted, macOS, ARM64, nexu-mac, release-beta]");
     expect(workflow).toContain("path: _release-build");
     expect(workflow).toContain("working-directory: _release-build");
-    expect(workflow).toContain("fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh");
+    expect(workflow).toContain("fnm exec --using=24.18.0 -- bash tools/release/scripts/build-platform.sh");
     expect(workflow).toContain("MAC_TOOLS_PACK_CACHE_DIR: /Users/runner/.tmp/runner/od-beta/mac_arm64/tools-pack-cache");
     expect(workflow).toContain("MAC_TOOLS_PACK_DIR: /Users/runner/.tmp/runner/od-beta/mac_arm64/tools-pack");
     expect(workflow).toContain("TOOLS_PACK_CACHE_DIR: ${{ env.MAC_TOOLS_PACK_CACHE_DIR }}");
     expect(workflow).toContain("TOOLS_PACK_DIR: ${{ env.MAC_TOOLS_PACK_DIR }}");
     expect(workflow).toContain("Write mac_arm64 release report");
-    expect(workflow).toContain("fnm exec --using=24 -- pnpm exec tools-release write-report");
-    expect(workflow).toContain("fnm.exe\" exec --using=24 -- pnpm.cmd exec tools-release write-report");
-    expect(workflow).toContain("fnm.exe\" exec --using=24 -- pnpm.cmd exec tools-release publish-platform");
+    expect(workflow).toContain("fnm exec --using=24.18.0 -- pnpm exec tools-release write-report");
+    expect(workflow).toContain("fnm.exe\" exec --using=24.18.0 -- pnpm.cmd exec tools-release write-report");
+    expect(workflow).toContain("fnm.exe\" exec --using=24.18.0 -- pnpm.cmd exec tools-release publish-platform");
     expect(workflow).toContain("Prepare mac_arm64 assets");
     expect(workflow).toContain("RELEASE_TARGET: mac_arm64");
     expect(workflow).toContain("RELEASE_SIGNED: ${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && 'true' || 'false' }}");
@@ -3522,8 +3523,8 @@ process.stdin.on("end", () => {
       readFile(releaseBetaWindowsBuildScriptPath, "utf8"),
     ]);
 
-    expect(workflow).toContain("fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh");
-    expect(workflow).toContain('& "C:\\Users\\runner\\.cargo\\bin\\fnm.exe" exec --using=24 -- pwsh -NoProfile -File tools\\release\\scripts\\build-platform.ps1');
+    expect(workflow).toContain("fnm exec --using=24.18.0 -- bash tools/release/scripts/build-platform.sh");
+    expect(workflow).toContain('& "C:\\Users\\runner\\.cargo\\bin\\fnm.exe" exec --using=24.18.0 -- pwsh -NoProfile -File tools\\release\\scripts\\build-platform.ps1');
     expect(workflow).toContain("corepack prepare pnpm@10.33.2 --activate");
     expect(workflow).toContain('pnpm.cmd install --frozen-lockfile --prefer-offline');
     expect(workflow).toContain("sudo -n \"$OPEN_DESIGN_MAC_SIGNING_HELPER\" \"$cert_path\" \"$password_path\"");

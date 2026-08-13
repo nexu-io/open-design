@@ -5,7 +5,7 @@ import {
   STANDALONE_PROTOCOL_VERSION,
   createStandaloneHandoffEnvelope,
   type StandaloneHandle,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 import {
   OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND,

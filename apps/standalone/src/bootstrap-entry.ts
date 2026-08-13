@@ -5,7 +5,7 @@ import {
   validateStandaloneBootstrapDescriptor,
   type StandaloneBootstrapProgress,
   type StandaloneBootstrapResult,
-} from "@open-design/standalone-proto";
+} from "./protocol/index.js";
 
 import { StandaloneBootstrapError, resolveStandaloneBootstrap } from "./bootstrap.js";
 

@@ -12,9 +12,11 @@ export type ToolPackShellBuildPlan = Readonly<{
   profileDigest: `sha256:${string}`;
   releaseVersion: string | null;
   runtimeNamespaceRoot: string;
-  schemaVersion: 2;
+  schemaVersion: 3;
   shell: Readonly<{
     buildDigest: `sha256:${string}`;
+    capabilityDigest: `sha256:${string}`;
+    carrierDigest: `sha256:${string}`;
     depsDigest: `sha256:${string}`;
     sourceDigest: `sha256:${string}`;
     type: ToolPackConfig["shell"];
@@ -60,7 +62,7 @@ export async function resolveToolPackShellBuildPlan(config: ToolPackConfig): Pro
       profileDigest,
       releaseVersion: config.releaseVersion ?? null,
       runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
-      schemaVersion: 2,
+      schemaVersion: 3,
       shell,
       target: process.arch === "arm64" ? "darwin-arm64" : "darwin-x64",
       to: config.to,
@@ -79,7 +81,7 @@ export async function resolveToolPackShellBuildPlan(config: ToolPackConfig): Pro
     profileDigest,
     releaseVersion: config.releaseVersion ?? null,
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
-    schemaVersion: 2,
+    schemaVersion: 3,
     shell,
     target: "win32-x64",
     to: config.to,

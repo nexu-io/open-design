@@ -9,7 +9,7 @@ import {
   type StandaloneRenderSlidesInput,
   type StandaloneShellCapabilityPort,
   type StandaloneShellCapabilityResult,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 export type ElectronShellCapabilityHandlers = Readonly<{
   exportArtifact(input: StandaloneExportArtifactInput): Promise<unknown>;

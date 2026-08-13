@@ -131,6 +131,25 @@ describe("writePackagedConfigFile", () => {
     }
   });
 
+  it("writes product, Shell, and launcher versions independently", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-manifest-"));
+    try {
+      const filePath = join(root, "config", "open-design-config.json");
+      await writePackagedConfigFile(filePath, makeConfig({
+        launcherVersion: "1.2.3-beta.3",
+        releaseVersion: "1.2.3-beta.2",
+        shellVersion: "1.2.3-beta.1",
+      }), "1.2.3-beta.1");
+      expect(JSON.parse(await readFile(filePath, "utf8"))).toMatchObject({
+        launcherVersion: "1.2.3-beta.3",
+        releaseVersion: "1.2.3-beta.2",
+        shellVersion: "1.2.3-beta.1",
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("includes namespaceBaseRoot for non-portable builds", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-config-"));
     try {

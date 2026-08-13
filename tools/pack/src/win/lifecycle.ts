@@ -15,7 +15,7 @@ import {
   type DesktopUpdateAction,
   type SidecarStamp,
   type WebStatusSnapshot,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 import {
   collectProcessTreePids,
@@ -314,6 +314,11 @@ async function pinInstalledPackagedConfigNamespace(
   }
   const pinned = {
     ...raw,
+    launcherVersion: config.launcherVersion
+      ?? (typeof raw.launcherVersion === "string" ? raw.launcherVersion : undefined)
+      ?? config.releaseVersion
+      ?? (typeof raw.releaseVersion === "string" ? raw.releaseVersion : undefined)
+      ?? (typeof raw.shellVersion === "string" ? raw.shellVersion : undefined),
     namespace: config.namespace,
     namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
     releaseVersion: config.releaseVersion

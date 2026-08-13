@@ -42,7 +42,13 @@ type CrossAppImportAllowlistEntry = {
 
 // Only deliberate, documented exceptions belong here. Prefer promoting the
 // shared logic to packages/ instead.
-const crossAppImportAllowlist: CrossAppImportAllowlistEntry[] = [];
+const crossAppImportAllowlist: CrossAppImportAllowlistEntry[] = [
+  {
+    pathPattern: /^apps\/daemon\/src\/sidecar\/standalone-control\.ts$/u,
+    specifierPattern: /^@open-design\/standalone\/protocol$/u,
+    reason: "the daemon sidecar is a Standalone body adapter and consumes only its public protocol subpath",
+  },
+];
 
 function appDirectoryForRepositoryPath(repositoryPath: string): string | null {
   const [scope, appDirectory] = repositoryPath.split("/");

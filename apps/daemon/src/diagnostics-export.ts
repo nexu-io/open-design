@@ -18,7 +18,7 @@ import {
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   type SidecarStamp,
-} from '@open-design/sidecar-proto';
+} from '@open-design/sidecar/protocol';
 import {
   resolveLogFilePath,
   resolveRuntimeNamespaceRoot,

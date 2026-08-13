@@ -10,7 +10,7 @@ import {
   STANDALONE_PROTOCOL_VERSION,
   createStandaloneHandoffEnvelope,
   type StandaloneHandoffRequest,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 import { resolveStandaloneGenerationLaunch } from "../src/generation-bootloader.js";
 
@@ -75,21 +75,21 @@ describe("Standalone generation bootloader", () => {
 
   it("projects target-native Vela and OpenCode binaries without replacing explicit overrides", async () => {
     const generationRoot = await mkdtemp(join(tmpdir(), "od-generation-tools-"));
-    const nativeRoot = join(generationRoot, "native");
-    const velaPath = join(nativeRoot, "bin", process.platform === "win32" ? "vela.exe" : "vela");
+    const resourceRoot = join(generationRoot, "shell-resources");
+    const velaPath = join(resourceRoot, "bin", process.platform === "win32" ? "vela.exe" : "vela");
     const openCodePath = join(
-      nativeRoot,
+      resourceRoot,
       "bin",
       "libexec",
       "opencode",
       process.platform === "win32" ? "opencode.exe" : "opencode",
     );
-    await mkdir(join(nativeRoot, "bin", "libexec", "opencode"), { recursive: true });
+    await mkdir(join(resourceRoot, "bin", "libexec", "opencode"), { recursive: true });
     await writeFile(velaPath, "vela");
     await writeFile(openCodePath, "opencode");
     const input = {
       ...request(),
-      paths: { ...request().paths, installationRoot: generationRoot },
+      paths: { ...request().paths, installationRoot: generationRoot, resourceRoot },
     };
     try {
       expect(resolveStandaloneGenerationLaunch(input).env).toMatchObject({

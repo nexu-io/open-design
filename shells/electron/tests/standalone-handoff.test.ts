@@ -10,7 +10,7 @@ import {
   type StandaloneHandoffRequest,
   type StandaloneRuntimeTerminalStatus,
   type StandaloneShellCapabilityPort,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 import {
   createElectronStandaloneLauncher,

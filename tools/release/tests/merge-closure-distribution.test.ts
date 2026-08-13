@@ -15,7 +15,7 @@ import {
   CLOSURE_PROTOCOL_VERSION,
   type ClosureDistributionBlob,
   type ClosureDistributionManifest,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { mergeClosureDistributionFiles } from "../src/storage/merge-closure-distribution.js";

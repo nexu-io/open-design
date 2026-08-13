@@ -46,7 +46,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6.4.0
         with:
-          node-version: 24
+          node-version: 24.18.0
 
       - name: Evaluate and approve low-risk fork PR workflows
         env:

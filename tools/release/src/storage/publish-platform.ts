@@ -6,7 +6,7 @@ import {
   validateClosureCandidateManifest,
   validateClosureFileInventory,
   type ClosureCandidateManifest,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import {
   bool,
   contentType,
@@ -50,6 +50,8 @@ type ShellBuildReport = {
   };
   shell: {
     buildDigest: `sha256:${string}`;
+    capabilityDigest: `sha256:${string}`;
+    carrierDigest: `sha256:${string}`;
     depsDigest: `sha256:${string}`;
     sourceDigest: `sha256:${string}`;
     type: string;
@@ -124,8 +126,13 @@ function readShellBuildReport(): ShellBuildReport | null {
   if (!/^sha256:[0-9a-f]{64}$/.test(String(shell.sourceDigest))) {
     throw new Error("Shell build report sourceDigest must be a lowercase sha256 digest");
   }
-  if (!/^sha256:[0-9a-f]{64}$/.test(String(shell.buildDigest)) || !/^sha256:[0-9a-f]{64}$/.test(String(shell.depsDigest))) {
-    throw new Error("Shell build report buildDigest/depsDigest must be lowercase sha256 digests");
+  if (
+    !/^sha256:[0-9a-f]{64}$/.test(String(shell.buildDigest))
+    || !/^sha256:[0-9a-f]{64}$/.test(String(shell.capabilityDigest))
+    || !/^sha256:[0-9a-f]{64}$/.test(String(shell.carrierDigest))
+    || !/^sha256:[0-9a-f]{64}$/.test(String(shell.depsDigest))
+  ) {
+    throw new Error("Shell build report identity fields must be lowercase sha256 digests");
   }
   if (report.artifacts == null || typeof report.artifacts !== "object") {
     throw new Error("Shell build report must contain artifact descriptors");
@@ -266,12 +273,9 @@ function closurePublication(): {
       throw new Error(`Closure does not declare a ${shellBuild.shell.type} Shell compatibility floor`);
     }
     parseReleaseVersion(shellFloor, releaseChannel);
-    if (compareReleaseVersions(shellFloor, closureVersion, releaseChannel) > 0) {
-      throw new Error(`Closure ${shellBuild.shell.type} minVersion ${shellFloor} exceeds Closure ${closureVersion}`);
-    }
-    if (shellFloor !== shellBuild.shell.version) {
+    if (compareReleaseVersions(shellFloor, shellBuild.shell.version, releaseChannel) > 0) {
       throw new Error(
-        `Closure ${shellBuild.shell.type} minVersion ${shellFloor} is not proven by selected Shell ${shellBuild.shell.version}`,
+        `Closure ${shellBuild.shell.type} minVersion ${shellFloor} exceeds selected Shell ${shellBuild.shell.version}`,
       );
     }
   }
@@ -597,6 +601,8 @@ const manifest = {
         resolution: shellBuild.resolution.state,
       }),
       buildDigest: shellBuild.shell.buildDigest,
+      capabilityDigest: shellBuild.shell.capabilityDigest,
+      carrierDigest: shellBuild.shell.carrierDigest,
       depsDigest: shellBuild.shell.depsDigest,
       sourceDigest: shellBuild.shell.sourceDigest,
       type: shellBuild.shell.type,
@@ -631,6 +637,8 @@ if (closure != null) {
 }
 if (shellBuild != null && shellVersionPrefix != null) {
   outputs.shell_build_digest = shellBuild.shell.buildDigest;
+  outputs.shell_capability_digest = shellBuild.shell.capabilityDigest;
+  outputs.shell_carrier_digest = shellBuild.shell.carrierDigest;
   outputs.shell_deps_digest = shellBuild.shell.depsDigest;
   outputs.shell_source_digest = shellBuild.shell.sourceDigest;
   outputs.shell_version = shellBuild.shell.version;

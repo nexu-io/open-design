@@ -7,7 +7,7 @@ import {
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_SOURCES,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import {
   resolveAppIpcPath,
   resolveAppRuntimePath,

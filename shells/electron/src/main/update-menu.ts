@@ -1,4 +1,4 @@
-import type { DesktopUpdateStatusSnapshot } from "@open-design/sidecar-proto";
+import type { DesktopUpdateStatusSnapshot } from "@open-design/sidecar/protocol";
 
 export type DesktopUpdateMenuLabels = {
   check: string;

@@ -6,9 +6,9 @@ import { join } from "node:path";
 import {
   validateClosureDistributionManifest,
   type ClosureDistributionBlob,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { releaseChannelFromVersion } from "@open-design/release";
-import { compareStandaloneVersions } from "@open-design/standalone-proto";
+import { compareStandaloneVersions } from "@open-design/standalone/protocol";
 
 import { hashPath } from "./cache.js";
 import type { ToolPackConfig } from "./config.js";

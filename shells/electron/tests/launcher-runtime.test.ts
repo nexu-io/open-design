@@ -6,7 +6,7 @@ import {
   LAUNCHER_SCHEMA_VERSION,
   resolveLauncherVersionPaths,
   type LauncherDesktopHandoffDescriptor,
-} from "@open-design/launcher-proto";
+} from "@open-design/host/shell-update";
 import { describe, expect, it } from "vitest";
 
 import type { PackagedConfig } from "../src/config.js";
@@ -21,9 +21,11 @@ function fakeConfig(
   root: string,
   shellVersion = "1.2.3-beta.4",
   releaseVersion = shellVersion,
+  launcherVersion = releaseVersion,
 ): PackagedConfig {
   return {
     amrProfile: null,
+    launcherVersion,
     releaseVersion,
     shellVersion,
     daemonCliEntry: null,
@@ -91,6 +93,26 @@ describe("resolvePackagedLauncherRuntime", () => {
       expect(JSON.parse(await readFile(runtime.launcherPaths.runtimePath, "utf8"))).toMatchObject({
         active: { generation: 0, version: "1.2.3-beta.5" },
         lastSuccessful: { generation: 0, version: "1.2.3-beta.5" },
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("uses an explicit launcher version without changing release or reusable Shell identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-packaged-launcher-explicit-binding-"));
+    try {
+      const config = fakeConfig(root, "1.2.3-beta.4", "1.2.3-beta.5", "1.2.3-beta.6");
+      const paths = resolvePackagedNamespacePaths(config);
+
+      const runtime = await resolvePackagedLauncherRuntime(config, paths);
+
+      expect(runtime.config.shellVersion).toBe("1.2.3-beta.4");
+      expect(runtime.config.releaseVersion).toBe("1.2.3-beta.5");
+      expect(runtime.config.launcherVersion).toBe("1.2.3-beta.6");
+      expect(JSON.parse(await readFile(runtime.launcherPaths.runtimePath, "utf8"))).toMatchObject({
+        active: { generation: 0, version: "1.2.3-beta.6" },
+        lastSuccessful: { generation: 0, version: "1.2.3-beta.6" },
       });
     } finally {
       await rm(root, { force: true, recursive: true });

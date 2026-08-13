@@ -7,12 +7,12 @@ import { promisify } from "node:util";
 import {
   LAUNCHER_SCHEMA_VERSION,
   resolveLauncherVersionPaths,
-} from "@open-design/launcher-proto";
+} from "@open-design/host/shell-update";
 
 import { hashJson, hashPath, type ToolPackCache } from "../cache.js";
 import type { ToolPackConfig } from "../config.js";
 import { winResources } from "../resources.js";
-import { electronBuilderVersionForShellVersion, readReleaseBindingVersion } from "../versions.js";
+import { electronBuilderVersionForShellVersion, readLauncherBindingVersion } from "../versions.js";
 import {
   resolveToolPackLauncherChannel,
   resolveToolPackLauncherRoot,
@@ -74,14 +74,14 @@ export async function buildWinLauncherPayloadArchive(
   if (process.platform !== "win32") throw new Error("Windows launcher payload build must run on Windows");
   const timings: WinPackTiming[] = [];
   const packagedVersion = await readPackagedVersion(config);
-  const releaseVersion = await readReleaseBindingVersion(config);
+  const launcherVersion = await readLauncherBindingVersion(config);
   const channel = resolveToolPackLauncherChannel(config);
   const launcherRoot = resolveToolPackLauncherRoot(config);
   resolveLauncherVersionPaths({
     channel,
     namespace: config.namespace,
     root: launcherRoot,
-    version: releaseVersion,
+    version: launcherVersion,
   });
   const stageRoot = join(dirname(paths.launcherPayloadPath), "stage");
   const payloadRoot = join(stageRoot, "payload");
@@ -89,7 +89,7 @@ export async function buildWinLauncherPayloadArchive(
   const manifest = buildWinLauncherPayloadManifest({
     channel,
     namespace: config.namespace,
-    version: releaseVersion,
+    version: launcherVersion,
   });
 
   const runSegment = async <T>(phase: string, task: () => Promise<T>): Promise<T> => {

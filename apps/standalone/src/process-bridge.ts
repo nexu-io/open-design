@@ -38,7 +38,7 @@ import {
   type StandaloneShellCapabilityRequest,
   type StandaloneShellCapabilityResult,
   type StandaloneShellHandle,
-} from "@open-design/standalone-proto";
+} from "./protocol/index.js";
 
 import { createStandaloneLauncherBootstrapEnv } from "./launcher-bootstrap.js";
 

@@ -4,7 +4,7 @@ import {
   type DesktopUpdateAction,
   type DesktopUpdateResult,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import { requestJsonIpc } from "@open-design/sidecar";
 
 const UPDATE_ACTION_TIMEOUT_MS = 10 * 60 * 1000;

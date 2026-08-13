@@ -491,9 +491,9 @@ describe("packaged launcher payload update loop", () => {
  * publishes a payload archive that an installed outer adopts in place, and the
  * outer bundle on disk keeps its install-time version forever. So a release
  * whose SHELL changed cannot reach an old install as a payload update — the
- * only mechanism that can is `control.launcher.version.{min,url}`, the floor an
- * operator configures with the `RELEASE_LAUNCHER_VERSION_MIN_<CHANNEL>` /
- * `RELEASE_LAUNCHER_VERSION_MIN_URL_<CHANNEL>` repo-vars pair.
+ * only mechanism that can is `control.shell.installation.version.{min,url}`, the floor an
+ * operator configures with the `RELEASE_INSTALLATION_VERSION_MIN_<CHANNEL>` /
+ * `RELEASE_INSTALLATION_VERSION_MIN_URL_<CHANNEL>` repo-vars pair.
  *
  * The two version axes these specs drive are deliberately distinct, and the
  * distinction IS the mechanism (see `resolveInstalledOuterVersion` in
@@ -534,18 +534,18 @@ const RELEASE_VERSION = "0.17.0";
 const FLOOR_URL = "https://example.test/open-design/download";
 
 const CONFIGURED_FLOOR: NodeJS.ProcessEnv = {
-  RELEASE_LAUNCHER_VERSION_MIN_STABLE: RELEASE_VERSION,
-  RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: FLOOR_URL,
+  RELEASE_INSTALLATION_VERSION_MIN_STABLE: RELEASE_VERSION,
+  RELEASE_INSTALLATION_VERSION_MIN_URL_STABLE: FLOOR_URL,
 };
 
 
 
 
-type LauncherVersionFloor = { min: string; url?: string };
+type InstallationVersionFloor = { min: string; url?: string };
 
-type LauncherVersionFloorModule = {
-  assertLauncherVersionFloorSatisfiable: (floor: LauncherVersionFloor, releaseVersion: string) => void;
-  resolveLauncherVersionFloor: (channel: string, env: NodeJS.ProcessEnv) => LauncherVersionFloor | null;
+type InstallationVersionFloorModule = {
+  assertInstallationVersionFloorSatisfiable: (floor: InstallationVersionFloor, releaseVersion: string) => void;
+  resolveInstallationVersionFloor: (channel: string, env: NodeJS.ProcessEnv) => InstallationVersionFloor | null;
 };
 
 
@@ -553,10 +553,10 @@ type LauncherVersionFloorModule = {
 
 
 
-async function loadLauncherVersionFloorModule(): Promise<LauncherVersionFloorModule> {
+async function loadInstallationVersionFloorModule(): Promise<InstallationVersionFloorModule> {
   return await import(
-    new URL("../../tools/release/src/storage/launcher-version-floor.ts", import.meta.url).href
-  ) as LauncherVersionFloorModule;
+    new URL("../../tools/release/src/storage/installation-version-floor.ts", import.meta.url).href
+  ) as InstallationVersionFloorModule;
 }
 
 
@@ -570,11 +570,11 @@ async function loadLauncherVersionFloorModule(): Promise<LauncherVersionFloorMod
 async function publishableFloor(
   env: NodeJS.ProcessEnv,
   releaseVersion: string,
-): Promise<LauncherVersionFloor | null> {
-  const { assertLauncherVersionFloorSatisfiable, resolveLauncherVersionFloor } =
-    await loadLauncherVersionFloorModule();
-  const floor = resolveLauncherVersionFloor(CHANNEL, env);
-  if (floor != null) assertLauncherVersionFloorSatisfiable(floor, releaseVersion);
+): Promise<InstallationVersionFloor | null> {
+  const { assertInstallationVersionFloorSatisfiable, resolveInstallationVersionFloor } =
+    await loadInstallationVersionFloorModule();
+  const floor = resolveInstallationVersionFloor(CHANNEL, env);
+  if (floor != null) assertInstallationVersionFloorSatisfiable(floor, releaseVersion);
   return floor;
 }
 
@@ -591,7 +591,7 @@ async function publishableFloor(
  * regression in the other's selection branch.
  */
 async function createFloorMetadataFixture(options: {
-  floor: LauncherVersionFloor | null;
+  floor: InstallationVersionFloor | null;
   launcherSchema?: number;
   target: FloorPlatformTarget;
 }): Promise<FixtureServer> {
@@ -610,7 +610,9 @@ async function createFloorMetadataFixture(options: {
       response.setHeader("content-type", "application/json");
       response.end(JSON.stringify({
         channel: CHANNEL,
-        ...(options.floor == null ? {} : { control: { launcher: { version: options.floor } } }),
+        ...(options.floor == null
+          ? {}
+          : { control: { shell: { installation: { version: options.floor } } } }),
         ...(options.launcherSchema == null ? {} : { launcher: { schema: options.launcherSchema } }),
         platforms: {
           [target.fixturePlatformKey]: {
@@ -1045,8 +1047,8 @@ describe("packaged installer-reinstall floor publication policy", () => {
     // release version would nag every client to reinstall forever.
     await expect(publishableFloor(
       {
-        RELEASE_LAUNCHER_VERSION_MIN_STABLE: "0.18.0",
-        RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: FLOOR_URL,
+        RELEASE_INSTALLATION_VERSION_MIN_STABLE: "0.18.0",
+        RELEASE_INSTALLATION_VERSION_MIN_URL_STABLE: FLOOR_URL,
       },
       RELEASE_VERSION,
     )).rejects.toThrow(/exceeds release version/);

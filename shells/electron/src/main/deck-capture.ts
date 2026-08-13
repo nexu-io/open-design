@@ -5,7 +5,7 @@ import { gunzip } from "node:zlib";
 import { promisify } from "node:util";
 
 import { BrowserWindow, nativeImage } from "electron";
-import type { DesktopRenderSlidesInput, DesktopRenderSlidesResult } from "@open-design/sidecar-proto";
+import type { DesktopRenderSlidesInput, DesktopRenderSlidesResult } from "@open-design/sidecar/protocol";
 
 import { waitForPrintableContent } from "./pdf-export.js";
 

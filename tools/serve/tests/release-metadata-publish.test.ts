@@ -139,16 +139,16 @@ describe("shared release metadata publisher", () => {
           STATE_SOURCE: "local-tools-serve",
           WIN_X64_RESULT: "success",
           ...(channel === "beta" ? { RELEASE_LATEST_CAS_REQUIRED: "true" } : {}),
-          // The launcher version floor rides through publish + verify on one
+          // The installation version floor rides through publish + verify on one
           // channel via its channel-suffixed repo-vars pair; the others must
           // publish without a control block (their pairs and the stable
           // fallback pair stay unset).
-          RELEASE_LAUNCHER_VERSION_MIN_STABLE: "",
-          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: "",
+          RELEASE_INSTALLATION_VERSION_MIN_STABLE: "",
+          RELEASE_INSTALLATION_VERSION_MIN_URL_STABLE: "",
           ...(channel === "beta"
             ? {
-                RELEASE_LAUNCHER_VERSION_MIN_BETA: "1.2.3-beta.4",
-                RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: "https://example.test/reinstall-help",
+                RELEASE_INSTALLATION_VERSION_MIN_BETA: "1.2.3-beta.4",
+                RELEASE_INSTALLATION_VERSION_MIN_URL_BETA: "https://example.test/reinstall-help",
               }
             : {}),
         };
@@ -244,7 +244,7 @@ describe("shared release metadata publisher", () => {
     }
   });
 
-  it("rejects a launcher version floor above the release version", async () => {
+  it("rejects a installation version floor above the release version", async () => {
     // A floor the published release cannot satisfy would make the updater's
     // same-version reinstall offer nag forever; publication must refuse it.
     const repoRoot = resolve(import.meta.dirname, "../../..");
@@ -254,7 +254,7 @@ describe("shared release metadata publisher", () => {
       env: {
         ...process.env,
         RELEASE_CHANNEL: "beta",
-        RELEASE_LAUNCHER_VERSION_MIN_BETA: "9.9.9",
+        RELEASE_INSTALLATION_VERSION_MIN_BETA: "9.9.9",
         RELEASE_MANIFEST_DIR: root,
         RELEASE_METADATA_DIR: root,
         RELEASE_OUTPUTS_PATH: join(root, "outputs.json"),

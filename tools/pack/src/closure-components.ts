@@ -21,7 +21,7 @@ import {
   type ClosureComponentTreeFile,
   type ClosureDigest,
   type ClosureShellCompatibility,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import type { ReleaseChannel } from "@open-design/release";
 
 import {
@@ -84,6 +84,24 @@ export type ClosurePreparedNodeRuntime = ClosurePreparedTree & Readonly<{
   entryPath: "bin/node" | "node.exe";
   identity: ClosureNodeRuntimeIdentity;
 }>;
+
+/** Source maps are build diagnostics, never Standalone distribution bytes. */
+export async function stripClosureSourceMaps(root: string): Promise<number> {
+  let removed = 0;
+  const pending = [resolve(root)];
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      const path = join(current, entry.name);
+      if (entry.isDirectory()) pending.push(path);
+      else if (entry.isFile() && entry.name.endsWith(".map")) {
+        await rm(path, { force: true });
+        removed += 1;
+      }
+    }
+  }
+  return removed;
+}
 
 /** Materialize the two fossil entries that every launcher archive must carry. */
 export async function prepareClosureLauncherComponent(options: Readonly<{
@@ -257,39 +275,38 @@ export async function validateClosureBodyComponent(root: string): Promise<Closur
   return tree;
 }
 
-const CLOSURE_NATIVE_RUNTIME_FILES = new Set([
-  "bin/vela",
-  "bin/vela.exe",
-  "bin/libexec/opencode/opencode",
-  "bin/libexec/opencode/opencode.exe",
-]);
-
-function closureNativeRuntimeFiles(target: ClosurePlatformTarget): ReadonlySet<string> {
-  return target === "win32-x64"
-    ? new Set(["bin/vela.exe", "bin/libexec/opencode/opencode.exe"])
-    : new Set(["bin/vela", "bin/libexec/opencode/opencode"]);
-}
+const CLOSURE_NATIVE_MODULES = new Set(["better-sqlite3", "blake3-wasm", "node-pty"]);
 
 /** Require native addons and approved target-native tools to stay isolated. */
 export async function validateClosureNativeComponent(
   root: string,
-  target?: ClosurePlatformTarget,
+  _target?: ClosurePlatformTarget,
 ): Promise<ClosurePreparedTree> {
   const tree = await inspectPreparedTree(root);
-  const approvedRuntimeFiles = target == null
-    ? CLOSURE_NATIVE_RUNTIME_FILES
-    : closureNativeRuntimeFiles(target);
   const outsideNodeModules = tree.files.filter((file) => (
     !file.path.startsWith("node_modules/")
-    && !approvedRuntimeFiles.has(file.path)
   ));
   if (outsideNodeModules.length > 0) {
     throw new Error(
-      `Closure native pack may only contain node_modules and approved bin runtimes; found ${outsideNodeModules[0]?.path ?? "unknown"}`,
+      `Closure native pack may only contain allowlisted node_modules; found ${outsideNodeModules[0]?.path ?? "unknown"}`,
     );
   }
   if (!tree.files.some((file) => file.path.endsWith(".node"))) {
     throw new Error("Closure native pack must contain at least one Node addon");
+  }
+  const nativeAddons = tree.files.filter((file) => file.path.endsWith(".node"));
+  for (const addon of nativeAddons) {
+    const match = /(?:^|\/)node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?([^/]+)\//u.exec(addon.path);
+    if (match?.[1] == null || !CLOSURE_NATIVE_MODULES.has(match[1])) {
+      throw new Error(`Closure native addon is outside the module allowlist: ${addon.path}`);
+    }
+  }
+  for (const moduleName of CLOSURE_NATIVE_MODULES) {
+    if (!nativeAddons.some((file) => file.path.includes(`/node_modules/${moduleName}/`) || file.path.startsWith(`node_modules/${moduleName}/`))) continue;
+    if (!tree.files.some((file) => (
+      file.path.startsWith(`node_modules/${moduleName}/`)
+      && /(?:^|\/)(?:licen[cs]e|copying)(?:\.[^/]*)?$/iu.test(file.path)
+    ))) throw new Error(`Closure native module ${moduleName} must retain its license`);
   }
   return tree;
 }
@@ -539,6 +556,7 @@ export async function buildClosureDistributionSharedContribution(options: Readon
   version: string;
 }>): Promise<ClosureDistributionSharedContribution> {
   const outputRoot = resolve(options.outputRoot);
+  await stripClosureSourceMaps(options.bodyRoot);
   await validateClosureBodyComponent(options.bodyRoot);
   const body = await archiveClosureComponent({
     entryPath: CLOSURE_ARCHIVE_ENTRY_PATH,
@@ -591,9 +609,9 @@ export async function buildClosureDistributionTargetContribution(options: Readon
   version: string;
 }>): Promise<ClosureDistributionTargetContribution> {
   const outputRoot = resolve(options.outputRoot);
+  await stripClosureSourceMaps(options.nativeRoot);
   await validateClosureNativeComponent(options.nativeRoot, options.target);
   const native = await archiveClosureComponent({
-    executablePaths: [...closureNativeRuntimeFiles(options.target)],
     outputPath: join(outputRoot, "targets", options.target, "native.zip"),
     run: options.run,
     sourceRoot: options.nativeRoot,

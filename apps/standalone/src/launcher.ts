@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 import {
   STANDALONE_BOOTLOADER_EXPORT_NAME,
   type StandaloneHandoff,
-} from "@open-design/standalone-proto";
+} from "./protocol/index.js";
 
 import {
   readStandaloneLauncherBootstrap,

@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 
-import type { DesktopUpdateChannel } from "@open-design/sidecar-proto";
+import type { DesktopUpdateChannel } from "@open-design/sidecar/protocol";
 
 export const INSTALLER_OBSERVATION_SCHEMA_VERSION = 1;
 export const INSTALLER_OBSERVATION_KIND = "installer_apply_observation";

@@ -246,6 +246,24 @@ describe("copyMacPrebundleRuntimeDependencies", () => {
 });
 
 describe("renderMacPackagedConfig", () => {
+  it("writes product, Shell, and launcher versions independently", () => {
+    const packagedConfig = JSON.parse(renderMacPackagedConfig({
+      config: makeConfig("/work", {
+        launcherVersion: "1.2.3-beta.3",
+        releaseVersion: "1.2.3-beta.2",
+        shellVersion: "1.2.3-beta.1",
+      }),
+      shellVersion: "1.2.3-beta.1",
+      usePrebundledStandaloneWeb: true,
+    })) as Record<string, unknown>;
+
+    expect(packagedConfig).toMatchObject({
+      launcherVersion: "1.2.3-beta.3",
+      releaseVersion: "1.2.3-beta.2",
+      shellVersion: "1.2.3-beta.1",
+    });
+  });
+
   it("omits nodeCommandRelative so packaged mac uses the fossil Shell Node path", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
@@ -494,6 +512,7 @@ describe("writeLaunchPackagedConfig", () => {
 
       expect(launchConfigPath).toBe(join(config.roots.runtime.namespaceRoot, "runtime", "open-design-config.json"));
       expect(launchConfig).toMatchObject({
+        launcherVersion: "0.5.1-beta.3",
         releaseVersion: "0.5.1-beta.3",
         shellVersion: "0.5.1-beta.2",
         namespace: "release-beta",

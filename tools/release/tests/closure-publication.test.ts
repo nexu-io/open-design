@@ -11,7 +11,7 @@ import {
   CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   createClosureDistributionManifest,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
@@ -128,6 +128,8 @@ async function writeFixture(root: string, options: { closureVersion?: string; mi
     },
     shell: {
       buildDigest: digest("electron shell build"),
+      capabilityDigest: digest("standalone capability"),
+      carrierDigest: digest("darwin arm64 carrier"),
       depsDigest: digest("electron shell deps"),
       sourceDigest: digest("electron shell source"),
       type: "electron",
@@ -215,6 +217,8 @@ async function writeResolvedWindowsShellFixture(root: string): Promise<{
     },
     shell: {
       buildDigest: digest("electron shell build"),
+      capabilityDigest: digest("standalone capability"),
+      carrierDigest: digest("win32 x64 carrier"),
       depsDigest: digest("electron shell deps"),
       sourceDigest: digest("electron shell source"),
       type: "electron",
@@ -229,7 +233,7 @@ afterEach(async () => {
 });
 
 describe("Standalone Closure release publication", () => {
-  it("rejects a Shell floor that the selected immutable build does not prove", async () => {
+  it("accepts a selected immutable Shell above the Closure capability floor", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-shell-floor-proof-"));
     temporaryRoots.push(root);
     const fixture = await writeFixture(root, { minShellVersion: "0.18.0-beta.2" });
@@ -241,9 +245,7 @@ describe("Standalone Closure release publication", () => {
         RELEASE_SHELL_BUILD_JSON_PATH: fixture.shellBuildJsonPath,
         RELEASE_SHELL_ENABLED: "true",
       },
-    })).rejects.toMatchObject({
-      stderr: expect.stringContaining("minVersion 0.18.0-beta.2 is not proven by selected Shell 0.18.0-beta.3"),
-    });
+    })).resolves.toMatchObject({ stdout: expect.stringContaining("planned") });
   });
 
   it("publishes and verifies the sole version-wide Closure graph at release root", async () => {
@@ -386,6 +388,8 @@ describe("Standalone Closure release publication", () => {
     const platform = JSON.parse(await readFile(join(fixture.manifestRoot, "mac_arm64.json"), "utf8"));
     expect(platform.releaseVersion).toBe("0.18.0-beta.4");
     expect(platform.shell).toMatchObject({
+      capabilityDigest: digest("standalone capability"),
+      carrierDigest: digest("darwin arm64 carrier"),
       sourceDigest: digest("electron shell source"),
       type: "electron",
       version: "0.18.0-beta.3",

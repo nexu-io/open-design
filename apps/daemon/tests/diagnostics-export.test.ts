@@ -11,7 +11,7 @@ import {
   SIDECAR_MODES,
   SIDECAR_SOURCES,
   type SidecarStamp,
-} from '@open-design/sidecar-proto';
+} from '@open-design/sidecar/protocol';
 import type { SidecarRuntimeContext } from '@open-design/sidecar';
 
 import {

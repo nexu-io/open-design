@@ -29,20 +29,25 @@ export const WIN_PREBUNDLE_RUNTIME_DEPENDENCIES = {
 } as const;
 
 export const WIN_STANDALONE_PREBUNDLE_EXCLUDED_INTERNAL_PACKAGES = [
-  "@open-design/closure-proto",
-  "@open-design/closure-store",
-  "@open-design/closure-update",
+  "@open-design/closure/protocol",
+  "@open-design/closure/store",
+  "@open-design/closure/update",
   "@open-design/daemon",
   "@open-design/shell-electron",
-  "@open-design/launcher-proto",
+  "@open-design/host/shell-update",
   "@open-design/sidecar",
-  "@open-design/sidecar-proto",
+  "@open-design/sidecar/protocol",
   "@open-design/web",
 ] as const;
 
 export const WIN_PREBUNDLE_POLICIES = {
   packagedMain: {
     externals: ["electron"],
+    allowedInputs: [
+      "/apps/standalone/dist/protocol/",
+      "/apps/standalone/src/protocol/",
+      "/node_modules/@open-design/standalone/dist/protocol/",
+    ],
     forbiddenInputs: [
       "/apps/daemon/",
       "/apps/standalone/",
@@ -119,12 +124,14 @@ export function shouldInstallInternalPackageForWinPrebundle(options: {
 }
 
 export function findForbiddenWinPrebundleInputs(options: {
+  allowedInputs?: readonly string[];
   forbiddenInputs: readonly string[];
   inputs: readonly string[];
 }): string[] {
   return options.inputs
     .map(toPosixPath)
-    .filter((input) => options.forbiddenInputs.some((forbidden) => input.includes(forbidden)));
+    .filter((input) => options.forbiddenInputs.some((forbidden) => input.includes(forbidden)))
+    .filter((input) => !options.allowedInputs?.some((allowed) => input.includes(allowed)));
 }
 
 export async function assertWinPrebundleMetafile(options: {
@@ -134,6 +141,7 @@ export async function assertWinPrebundleMetafile(options: {
   const policy = WIN_PREBUNDLE_POLICIES[options.policyName];
   const metafile = JSON.parse(await readFile(options.metafilePath, "utf8")) as { inputs?: Record<string, unknown> };
   const matched = findForbiddenWinPrebundleInputs({
+    ...( "allowedInputs" in policy ? { allowedInputs: policy.allowedInputs } : {}),
     forbiddenInputs: policy.forbiddenInputs,
     inputs: Object.keys(metafile.inputs ?? {}),
   });

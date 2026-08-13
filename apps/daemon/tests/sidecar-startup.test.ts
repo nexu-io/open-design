@@ -9,7 +9,7 @@ import {
   SIDECAR_MESSAGES,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
-} from '@open-design/sidecar-proto';
+} from '@open-design/sidecar/protocol';
 import { requestJsonIpc } from '@open-design/sidecar';
 
 const stopRuntime = vi.fn(async () => undefined);

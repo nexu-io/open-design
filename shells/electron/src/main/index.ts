@@ -23,8 +23,8 @@ import {
   type RegisterDesktopAuthResult,
   type SidecarStamp,
   type WebStatusSnapshot,
-} from "@open-design/sidecar-proto";
-import type { StandaloneLifecyclePort, StandaloneRuntimeStatus } from "@open-design/standalone-proto";
+} from "@open-design/sidecar/protocol";
+import type { StandaloneLifecyclePort, StandaloneRuntimeStatus } from "@open-design/standalone/protocol";
 import { dirname, join } from "node:path";
 
 import {

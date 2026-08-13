@@ -12,7 +12,7 @@ import {
   type StandaloneUpdaterProviderPort,
   type StandaloneUpdaterSnapshot,
   type StandaloneUpdaterWaitRequest,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 import { describe, expect, it } from "vitest";
 
 const handoff = createStandaloneHandoffEnvelope({

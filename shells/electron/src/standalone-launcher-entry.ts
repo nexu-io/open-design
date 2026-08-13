@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_DEFAULTS,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 
 import {
   PACKAGED_NAMESPACE_ENV,
@@ -52,6 +52,7 @@ function resolveStandaloneConfig(): PackagedConfig {
 
   return {
     amrProfile: resolveStandaloneAmrProfile(),
+    launcherVersion: null,
     releaseVersion: null,
     shellVersion: null,
     daemonCliEntry: null,

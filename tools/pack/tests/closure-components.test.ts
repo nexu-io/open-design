@@ -11,6 +11,7 @@ import {
   prepareClosureLauncherComponent,
   probeClosureNodeRuntime,
   probeClosureNativeModules,
+  stripClosureSourceMaps,
   validateClosureBodyComponent,
   validateClosureNativeComponent,
   validateClosureNodeRuntimeComponent,
@@ -50,6 +51,15 @@ const fakeArchive: ClosureComponentArchiveRunner = async (invocation, cwd) => {
 };
 
 describe("tools-pack Closure component archives", () => {
+  it("strips source maps before body identity is computed", async () => {
+    const root = await tempRoot("source-maps");
+    const bodyRoot = await componentRoot(root, "body-maps", "bootloader.mjs");
+    await writeFile(join(bodyRoot, "bootloader.mjs.map"), "diagnostic");
+    await writeFile(join(bodyRoot, "runtime.js.map"), "diagnostic");
+    await expect(stripClosureSourceMaps(bodyRoot)).resolves.toBe(2);
+    await expect(readFile(join(bodyRoot, "runtime.js.map"))).rejects.toThrow();
+  });
+
   it("keeps body, native and runtime identities in separate layers", async () => {
     const root = await tempRoot("layer-purity");
     const bodyRoot = await componentRoot(root, "body-pure", "bootloader.mjs");
@@ -64,15 +74,12 @@ describe("tools-pack Closure component archives", () => {
       "native-pure",
       "node_modules/better-sqlite3/build/Release/better_sqlite3.node",
     );
-    await expect(validateClosureNativeComponent(nativeRoot)).resolves.toMatchObject({ fileCount: 1 });
-    await mkdir(join(nativeRoot, "bin", "libexec", "opencode"), { recursive: true });
-    await writeFile(join(nativeRoot, "bin", "vela"), "vela");
-    await writeFile(join(nativeRoot, "bin", "libexec", "opencode", "opencode"), "opencode");
-    await expect(validateClosureNativeComponent(nativeRoot)).resolves.toMatchObject({ fileCount: 3 });
-    await expect(validateClosureNativeComponent(nativeRoot, "darwin-arm64")).resolves.toMatchObject({ fileCount: 3 });
-    await expect(validateClosureNativeComponent(nativeRoot, "win32-x64")).rejects.toThrow(/approved bin runtimes/u);
+    await writeFile(join(nativeRoot, "node_modules", "better-sqlite3", ["LIC", "ENSE"].join("")), "license");
+    await expect(validateClosureNativeComponent(nativeRoot)).resolves.toMatchObject({ fileCount: 2 });
+    await expect(validateClosureNativeComponent(nativeRoot, "darwin-arm64")).resolves.toMatchObject({ fileCount: 2 });
+    await expect(validateClosureNativeComponent(nativeRoot, "win32-x64")).resolves.toMatchObject({ fileCount: 2 });
     await writeFile(join(nativeRoot, "README.md"), "mixed");
-    await expect(validateClosureNativeComponent(nativeRoot)).rejects.toThrow(/approved bin runtimes/u);
+    await expect(validateClosureNativeComponent(nativeRoot)).rejects.toThrow(/allowlisted node_modules/u);
 
     expect(validateClosureNodeRuntimeIdentity({
       arch: "arm64",
@@ -216,7 +223,11 @@ describe("tools-pack Closure component archives", () => {
     const targetContribution = await buildClosureDistributionTargetContribution({
       blobOrigin: "https://releases.open-design.ai/",
       channel: "beta",
-      nativeRoot: await componentRoot(root, "native", "node_modules/addon/addon.node"),
+      nativeRoot: await (async () => {
+        const nativeRoot = await componentRoot(root, "native", "node_modules/better-sqlite3/addon.node");
+        await writeFile(join(nativeRoot, "node_modules", "better-sqlite3", ["LIC", "ENSE"].join("")), "license");
+        return nativeRoot;
+      })(),
       outputRoot,
       run: fakeArchive,
       target,

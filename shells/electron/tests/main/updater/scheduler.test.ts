@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { DESKTOP_UPDATE_CHANNELS, DESKTOP_UPDATE_STATES } from "@open-design/sidecar-proto";
+import { DESKTOP_UPDATE_CHANNELS, DESKTOP_UPDATE_STATES } from "@open-design/sidecar/protocol";
 
 import { createDesktopUpdaterScheduler } from "../../../src/main/updater/scheduler.js";
 import { DesktopUpdateTransitionOwner } from "../../../src/main/update-preflight.js";

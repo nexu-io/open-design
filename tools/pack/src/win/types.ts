@@ -5,7 +5,7 @@ import type {
   DesktopStatusSnapshot,
   DesktopUpdateResult,
   WebStatusSnapshot,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import type { ToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import type { ToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
 import type { CacheReport } from "../cache.js";
@@ -124,6 +124,8 @@ export type WinPackResult = {
   sizeReport: WinSizeReport;
   shell: {
     buildDigest: `sha256:${string}`;
+    capabilityDigest: `sha256:${string}`;
+    carrierDigest: `sha256:${string}`;
     depsDigest: `sha256:${string}`;
     sourceDigest: `sha256:${string}`;
     type: ToolPackConfig["shell"];

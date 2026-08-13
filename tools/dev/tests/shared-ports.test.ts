@@ -3,7 +3,7 @@ import { createServer } from "node:net";
 import { describe, it } from "node:test";
 
 import type { PortAllocation, PortRequest } from "@open-design/sidecar";
-import { APP_KEYS } from "@open-design/sidecar-proto";
+import { APP_KEYS } from "@open-design/sidecar/protocol";
 
 import { ensureSharedPortsResolved, resolveSharedPortsFromRunningState } from "../src/shared-ports.js";
 

@@ -32,7 +32,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | not-available / available / downloaded-stays-visible | U, P | desktop unit; specs |
 | Silent startup payload update (allowSilentUpdates) | U, P | desktop unit silent group; mac/win spec `applies a downloaded payload silently on the next cold start` |
 | Artifact selection (payload vs installer, context validity) | U, P | desktop unit routing group; specs |
-| Installer-reinstall floor (`control.launcher.version.min`): three reasons, same-version offer, clamp | U, P | desktop unit reseed group; spec recovery segment |
+| Installer-reinstall floor (`control.shell.installation.version.min`): three reasons, same-version offer, clamp | U, P | desktop unit reseed group; spec recovery segment |
 | Installed-outer version read (bundle config, env override) | U, P | desktop unit `resolveInstalledOuterVersion`; spec recovery segment reads the real outer |
 
 ## C. Download and integrity
@@ -82,7 +82,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | --- | --- | --- |
 | metadata.json composition + CAS latest publish | U, P, F | tools-release publication/public-acceptance tests; staged release-beta activation and blocking public readback |
 | Public immutable Windows installer + online Closure feedback | P, F | release-beta `public_win_x64_acceptance`; exact commit/release/artifact/Closure/smoke credential |
-| Launcher version floor channel policy (vars pairs, stable fallback, validation) | U | tools-release `launcher-version-floor.test.ts`; publish integration |
+| Installation version floor channel policy (vars pairs, stable fallback, validation) | U | tools-release `installation-version-floor.test.ts`; publish integration |
 | Workflow env passthrough (no YAML fallback) | U | tools-pack `release-workflows.test.ts` floor passthrough test |
 | verify-metadata / summary-metadata wiring | U | publish integration test |
 | Fixture bridge (control knobs, port pinning) | U | e2e `tests/updater-fixture.test.ts`; tools-serve fixture tests |

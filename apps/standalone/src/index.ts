@@ -1,4 +1,4 @@
-export * from "@open-design/standalone-runtime";
+export * from "./runtime/index.js";
 export * from "./bootstrap.js";
 export * from "./bootloader.js";
 export * from "./process-bridge.js";

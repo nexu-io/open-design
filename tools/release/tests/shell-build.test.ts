@@ -21,6 +21,8 @@ import {
 const sourceDigest = `sha256:${"a".repeat(64)}` as const;
 const depsDigest = `sha256:${"b".repeat(64)}` as const;
 const buildDigest = `sha256:${"c".repeat(64)}` as const;
+const capabilityDigest = `sha256:${"f".repeat(64)}` as const;
+const carrierDigest = `sha256:${"1".repeat(64)}` as const;
 const acceptanceDigest = `sha256:${"e".repeat(64)}` as const;
 const temporaryRoots: string[] = [];
 
@@ -34,8 +36,16 @@ const plan = {
   profileDigest: `sha256:${"d".repeat(64)}` as const,
   releaseVersion: "0.19.0-beta.2",
   runtimeNamespaceRoot: "/tmp/runtime",
-  schemaVersion: 2 as const,
-  shell: { buildDigest, depsDigest, sourceDigest, type: "electron", version: "0.19.0-beta.2" },
+  schemaVersion: 3 as const,
+  shell: {
+    buildDigest,
+    capabilityDigest,
+    carrierDigest,
+    depsDigest,
+    sourceDigest,
+    type: "electron",
+    version: "0.19.0-beta.2",
+  },
   target: "darwin-arm64" as const,
   to: "dmg",
 };
@@ -78,7 +88,7 @@ describe("immutable Shell build storage", () => {
       createdAt: "2026-08-09T00:00:00.000Z",
       provenance: {},
       profileDigest: plan.profileDigest,
-      schemaVersion: 2,
+      schemaVersion: 3,
       shell: { ...plan.shell, version: "0.19.0-beta.1" },
       target: "darwin-arm64",
     }, validatedPlan, "beta");
@@ -93,7 +103,7 @@ describe("immutable Shell build storage", () => {
       createdAt: "2026-08-09T00:00:00.000Z",
       provenance: {},
       profileDigest: plan.profileDigest,
-      schemaVersion: 2,
+      schemaVersion: 3,
       shell: { ...plan.shell, sourceDigest: `sha256:${"c".repeat(64)}` },
       target: "darwin-arm64",
     }, plan, "beta")).toThrow(/identity/);
@@ -116,7 +126,7 @@ describe("immutable Shell build storage", () => {
         "win-native-install-boundaries",
         "win-legacy-migration",
       ],
-      schemaVersion: 2,
+      schemaVersion: 3,
       shell: windowsPlan.shell,
       standaloneProtocolVersion: 1,
       target: "win32-x64",

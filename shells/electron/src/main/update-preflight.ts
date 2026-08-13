@@ -2,7 +2,7 @@ import type {
   StandaloneLifecycleOccupant,
   StandaloneLifecyclePort,
   StandaloneLifecycleTransition,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 export type UpdateRestartSafety =
   | { occupantCount: 0; state: "clear" }

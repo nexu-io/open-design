@@ -10,7 +10,7 @@ import {
   type StandaloneBootstrapDescriptor,
   type StandaloneBootstrapProgress,
   type StandaloneBootstrapResolution,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 import { ElectronStandaloneLaunchError } from "./standalone-handoff.js";
 

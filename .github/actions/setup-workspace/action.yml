@@ -5,7 +5,7 @@ inputs:
   node-version:
     description: Node.js version to install
     required: false
-    default: '24'
+    default: '24.18.0'
   pnpm-version:
     description: pnpm version to install
     required: false

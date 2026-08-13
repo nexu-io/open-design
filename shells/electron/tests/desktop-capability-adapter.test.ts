@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { SIDECAR_MESSAGES } from "@open-design/sidecar-proto";
+import { SIDECAR_MESSAGES } from "@open-design/sidecar/protocol";
 
 import { createDesktopCapabilityAdapter } from "../src/desktop-capability-adapter.js";
 

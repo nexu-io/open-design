@@ -7,7 +7,7 @@ import {
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import { resolveAppIpcPath } from "@open-design/sidecar";
 import { describe, expect, it } from "vitest";
 
@@ -19,7 +19,7 @@ import {
   STANDALONE_HANDOFF_SCHEMA_VERSION,
   STANDALONE_PROTOCOL_VERSION,
   createStandaloneHandoffEnvelope,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 import type { PackagedNamespacePaths } from "../src/paths.js";
 
 async function pathExists(path: string): Promise<boolean> {

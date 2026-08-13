@@ -16,7 +16,7 @@ import {
   type StandaloneRuntimeTerminalStatus,
   type StandaloneShellCapabilityPort,
   type StandaloneShellCapabilityRequest,
-} from "@open-design/standalone-proto";
+} from "./protocol/index.js";
 
 export type StandaloneBootloaderErrorCode =
   | "attachment-conflict"

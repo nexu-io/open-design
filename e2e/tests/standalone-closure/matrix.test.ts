@@ -143,31 +143,30 @@ function expectAcyclicTasks(tasks: Task[]): void {
 }
 
 describe("Standalone Closure delivery matrix", () => {
-  it("keeps Standalone product code distinct from the shell-side launcher", async () => {
+  it("keeps Standalone protocol and runtime behind product-owned subpaths", async () => {
     await Promise.all([
       expectPath("apps/standalone"),
-      expectPath("packages/standalone-runtime"),
+      expectPath("apps/standalone/src/protocol"),
+      expectPath("apps/standalone/src/runtime"),
     ]);
     await Promise.all([
       expect(stat(absoluteWorkspacePath("apps/headless"))).rejects.toMatchObject({ code: "ENOENT" }),
       expect(stat(absoluteWorkspacePath("packages/headless-runtime"))).rejects.toMatchObject({ code: "ENOENT" }),
+      expect(stat(absoluteWorkspacePath("packages/standalone-runtime/package.json"))).rejects.toMatchObject({ code: "ENOENT" }),
     ]);
 
     const standalonePackage = JSON.parse(await readFile(
       absoluteWorkspacePath("apps/standalone/package.json"),
       "utf8",
-    )) as { name: string };
-    const runtimePackage = JSON.parse(await readFile(
-      absoluteWorkspacePath("packages/standalone-runtime/package.json"),
-      "utf8",
-    )) as { name: string };
+    )) as { exports: Record<string, { default: string }>; name: string };
     const packagedPackage = JSON.parse(await readFile(
       absoluteWorkspacePath("shells/electron/package.json"),
       "utf8",
     )) as { exports: Record<string, { default: string }> };
 
     expect(standalonePackage.name).toBe("@open-design/standalone");
-    expect(runtimePackage.name).toBe("@open-design/standalone-runtime");
+    expect(standalonePackage.exports["./protocol"]?.default).toBe("./dist/protocol/index.mjs");
+    expect(standalonePackage.exports["./runtime"]?.default).toBe("./dist/runtime/index.mjs");
     expect(packagedPackage.exports["./standalone-launcher"]?.default)
       .toBe("./dist/standalone-launcher.mjs");
     expect(packagedPackage.exports).not.toHaveProperty("./headless");

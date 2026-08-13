@@ -14,7 +14,7 @@ import type {
   DesktopExportArtifactResult,
   DesktopRenderSlidesInput,
   DesktopRenderSlidesResult,
-} from '@open-design/sidecar-proto';
+} from '@open-design/sidecar/protocol';
 import {
   closeDatabase,
   ensureWorkspaceProject,

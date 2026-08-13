@@ -122,7 +122,6 @@ describe("tools-pack Closure archive", () => {
   it("keeps shell applications outside the Closure install set", () => {
     const names = CLOSURE_INTERNAL_PACKAGES.map((entry) => entry.name);
     expect(names).toContain("@open-design/standalone");
-    expect(names).toContain("@open-design/standalone-proto");
     expect(names).toContain("@open-design/sidecar");
     expect(names).not.toContain("@open-design/daemon");
     expect(names).not.toContain("@open-design/shell-electron");
@@ -134,6 +133,7 @@ describe("tools-pack Closure archive", () => {
     roots.push(root);
     await writeFile(join(root, "package.json"), JSON.stringify({ packageManager: "pnpm@10.33.2" }));
     await writeFile(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
+    await writeFile(join(root, ".node-version"), "24.18.0\n");
     for (const sourcePath of CLOSURE_BUILD_SOURCE_PATHS) {
       const absolutePath = join(root, sourcePath);
       if (sourcePath.endsWith(".json") || sourcePath.endsWith(".ts")) {

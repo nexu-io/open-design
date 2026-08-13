@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DesktopUpdateStatusSnapshot } from "@open-design/sidecar-proto";
+import type { DesktopUpdateStatusSnapshot } from "@open-design/sidecar/protocol";
 
 import {
   DEFAULT_DESKTOP_UPDATE_MENU_LABELS,

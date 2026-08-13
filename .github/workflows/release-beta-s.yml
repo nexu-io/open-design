@@ -396,7 +396,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- pnpm install --frozen-lockfile --prefer-offline
+          fnm exec --using=24.18.0 -- pnpm install --frozen-lockfile --prefer-offline
 
       - name: Validate self-hosted beta inputs
         run: |
@@ -455,7 +455,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- pnpm exec tools-release prepare betas
+          fnm exec --using=24.18.0 -- pnpm exec tools-release prepare betas
 
       - name: Reserve betas version
         if: ${{ inputs.publish }}
@@ -482,7 +482,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- pnpm exec tools-release reserve-version betas
+          fnm exec --using=24.18.0 -- pnpm exec tools-release reserve-version betas
 
   unsupported_mac_x64:
     name: Reject unsupported self-hosted mac_x64
@@ -522,8 +522,8 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- corepack prepare pnpm@10.33.2 --activate
-          fnm exec --using=24 -- pnpm install --frozen-lockfile
+          fnm exec --using=24.18.0 -- corepack prepare pnpm@10.33.2 --activate
+          fnm exec --using=24.18.0 -- pnpm install --frozen-lockfile
 
       - name: Build betas mac_arm64
         working-directory: _release-build
@@ -574,7 +574,7 @@ jobs:
             export CSC_KEYCHAIN="${OPEN_DESIGN_MAC_SIGNING_KEYCHAIN:-/Library/Keychains/open-design-release-signing.keychain}"
             security list-keychains -d user -s "$CSC_KEYCHAIN" /Library/Keychains/System.keychain
           fi
-          fnm exec --using=24 -- bash tools/release/scripts/build-platform.sh
+          fnm exec --using=24.18.0 -- bash tools/release/scripts/build-platform.sh
 
       - name: Write mac_arm64 release report
         if: ${{ always() }}
@@ -600,7 +600,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- pnpm exec tools-release write-report
+          fnm exec --using=24.18.0 -- pnpm exec tools-release write-report
 
       - name: Publish mac_arm64 report summary
         if: ${{ always() }}
@@ -652,7 +652,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- pnpm exec tools-release publish-platform
+          fnm exec --using=24.18.0 -- pnpm exec tools-release publish-platform
 
       - name: Upload mac_arm64 publish manifest fallback
         if: ${{ inputs.publish && success() }}
@@ -683,7 +683,7 @@ jobs:
       - name: Prepare self-hosted Windows toolchain
         shell: pwsh
         run: |
-          & "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24 -- pnpm.cmd install --frozen-lockfile --prefer-offline
+          & "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24.18.0 -- pnpm.cmd install --frozen-lockfile --prefer-offline
 
       - name: Probe Windows signing capability
         id: sign_probe
@@ -707,7 +707,7 @@ jobs:
           OD_PACKAGED_E2E_WIN_UPDATE_VERSION: ${{ inputs.win_x64_update_target_version }}
           RELEASE_CHANNEL: betas
         run: |
-          & "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24 -- pwsh -NoProfile -File tools\release\scripts\build-platform.ps1 `
+          & "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24.18.0 -- pwsh -NoProfile -File tools\release\scripts\build-platform.ps1 `
             -ReleaseTarget win_x64 `
             -ReleaseNamespace release-betas-win `
             -ReleaseVersion "${{ needs.metadata.outputs.release_version }}" `
@@ -739,7 +739,7 @@ jobs:
           RELEASE_TARGET: win_x64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           REPORT_TITLE: self-hosted win_x64 betas build
-        run: '& "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24 -- pnpm.cmd exec tools-release write-report'
+        run: '& "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24.18.0 -- pnpm.cmd exec tools-release write-report'
 
       - name: Publish win_x64 report summary
         if: ${{ always() }}
@@ -783,7 +783,7 @@ jobs:
           RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
           RELEASE_VERSION_LOCK_REQUIRED: "true"
         shell: pwsh
-        run: '& "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24 -- pnpm.cmd exec tools-release publish-platform'
+        run: '& "C:\Users\runner\.cargo\bin\fnm.exe" exec --using=24.18.0 -- pnpm.cmd exec tools-release publish-platform'
 
       - name: Upload win_x64 publish manifest fallback
         if: ${{ inputs.publish && success() }}
@@ -842,7 +842,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- pnpm install --frozen-lockfile --prefer-offline
+          fnm exec --using=24.18.0 -- pnpm install --frozen-lockfile --prefer-offline
 
       - name: Download mac_arm64 publish manifest fallback
         if: ${{ inputs.enable_mac_arm64 && needs.build_mac_arm64.result == 'success' }}
@@ -873,7 +873,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- pnpm exec tools-release download-platform-manifest
+          fnm exec --using=24.18.0 -- pnpm exec tools-release download-platform-manifest
 
       - name: Download win_x64 publish manifest fallback
         if: ${{ inputs.enable_win_x64 && needs.build_win_x64.result == 'success' }}
@@ -904,7 +904,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- pnpm exec tools-release download-platform-manifest
+          fnm exec --using=24.18.0 -- pnpm exec tools-release download-platform-manifest
 
       - name: Prepare and publish betas release notes
         env:
@@ -926,9 +926,9 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- pnpm exec tools-release prepare-release-note
-          fnm exec --using=24 -- pnpm exec tools-release publish-release-note
-          fnm exec --using=24 -- pnpm exec tools-release verify-release-note
+          fnm exec --using=24.18.0 -- pnpm exec tools-release prepare-release-note
+          fnm exec --using=24.18.0 -- pnpm exec tools-release publish-release-note
+          fnm exec --using=24.18.0 -- pnpm exec tools-release verify-release-note
 
       - name: Publish betas metadata
         env:
@@ -942,10 +942,10 @@ jobs:
           RELEASE_LATEST_CAS_REQUIRED: "true"
           RELEASE_ASSET_SUFFIX: auto
           RELEASE_CHANNEL: betas
-          RELEASE_LAUNCHER_VERSION_MIN_BETAS: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETAS }}
-          RELEASE_LAUNCHER_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
-          RELEASE_LAUNCHER_VERSION_MIN_URL_BETAS: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_BETAS }}
-          RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
+          RELEASE_INSTALLATION_VERSION_MIN_BETAS: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_BETAS }}
+          RELEASE_INSTALLATION_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
+          RELEASE_INSTALLATION_VERSION_MIN_URL_BETAS: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_BETAS }}
+          RELEASE_INSTALLATION_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_DIR: ${{ runner.temp }}/release-metadata
           RELEASE_NOTE_MANIFEST_PATH: ${{ runner.temp }}/release-metadata/release-note-publication.json
@@ -970,7 +970,7 @@ jobs:
           fi
           # shellcheck disable=SC1090
           source "$OPEN_DESIGN_RELEASE_PROFILE"
-          fnm exec --using=24 -- pnpm exec tools-release publish-metadata
+          fnm exec --using=24.18.0 -- pnpm exec tools-release publish-metadata
 
       - name: Read metadata outputs
         id: outputs

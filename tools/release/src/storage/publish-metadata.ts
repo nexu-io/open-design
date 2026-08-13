@@ -12,9 +12,9 @@ import { assertCurrentVersionReservation, versionLockObjectKey } from "./beta-ve
 import { putStorageObject } from "./s3-upload.ts";
 import { publishLatestPlatformObjects, publishLatestRelease } from "./latest-publication.ts";
 import {
-  assertLauncherVersionFloorSatisfiable,
-  resolveLauncherVersionFloor,
-} from "./launcher-version-floor.ts";
+  assertInstallationVersionFloorSatisfiable,
+  resolveInstallationVersionFloor,
+} from "./installation-version-floor.ts";
 import {
   parseReleaseVersion,
   releaseChannelDescriptor,
@@ -60,6 +60,8 @@ type PlatformManifest = {
   shell?: {
     artifacts?: Record<string, { digest?: string; url?: string }>;
     buildDigest?: string;
+    capabilityDigest?: string;
+    carrierDigest?: string;
     depsDigest?: string;
     sourceDigest?: string;
     type?: string;
@@ -103,25 +105,23 @@ const closureDistributionManifestPath = optional("RELEASE_CLOSURE_DISTRIBUTION_M
 const shellRequired = process.env.RELEASE_SHELL_REQUIRED === "true";
 const storage = publishSideEffectsEnabled || versionLockRequired ? storageConfigFromEnv() : null;
 
-// Operator-supplied installer-reinstall floor: one repo-vars pair per channel,
-// resolved with pair-level stable fallback by the shared channel-policy
-// resolver. Published as control.launcher.version.{min,url}; the desktop
-// updater compares min against the physically installed outer package version
-// and forces the installer route — including a same-version reinstall — when
-// the outer is below it.
-const launcherVersionFloor = resolveLauncherVersionFloor(releaseChannel);
-if (launcherVersionFloor != null) {
-  assertLauncherVersionFloorSatisfiable(launcherVersionFloor, releaseVersion);
+const installationVersionFloor = resolveInstallationVersionFloor(releaseChannel);
+if (installationVersionFloor != null) {
+  assertInstallationVersionFloorSatisfiable(installationVersionFloor, releaseVersion);
 }
-const controlBlock = launcherVersionFloor == null
+const installationVersion = installationVersionFloor == null ? null : {
+  min: installationVersionFloor.min,
+  ...(installationVersionFloor.url == null ? {} : { url: installationVersionFloor.url }),
+};
+const controlBlock = installationVersion == null
   ? {}
   : {
       control: {
+        shell: { installation: { version: installationVersion } },
+        // One migration epoch for historical beta readers. New readers consume
+        // only control.shell.installation.version.
         launcher: {
-          version: {
-            min: launcherVersionFloor.min,
-            ...(launcherVersionFloor.url == null ? {} : { url: launcherVersionFloor.url }),
-          },
+          version: installationVersion,
         },
       },
     };
@@ -232,6 +232,12 @@ function validateManifest(target: string, manifest: PlatformManifest): string | 
     if (!/^sha256:[0-9a-f]{64}$/.test(String(manifest.shell.buildDigest))) {
       return `shell.buildDigest=${String(manifest.shell.buildDigest)}`;
     }
+    if (!/^sha256:[0-9a-f]{64}$/.test(String(manifest.shell.capabilityDigest))) {
+      return `shell.capabilityDigest=${String(manifest.shell.capabilityDigest)}`;
+    }
+    if (!/^sha256:[0-9a-f]{64}$/.test(String(manifest.shell.carrierDigest))) {
+      return `shell.carrierDigest=${String(manifest.shell.carrierDigest)}`;
+    }
     if (!/^sha256:[0-9a-f]{64}$/.test(String(manifest.shell.depsDigest))) {
       return `shell.depsDigest=${String(manifest.shell.depsDigest)}`;
     }
@@ -313,6 +319,12 @@ else if (readyTargets.length > 0) releaseState = "partial";
 
 let assetVersionSuffix = requestedAssetVersionSuffix;
 const readyManifests = readyTargets.map((target) => releaseTargets[target]).filter((manifest) => manifest != null);
+const shellCapabilityDigests = new Set(readyManifests.flatMap((manifest) => (
+  manifest.shell?.capabilityDigest == null ? [] : [manifest.shell.capabilityDigest]
+)));
+if (shellRequired && shellCapabilityDigests.size !== 1) {
+  throw new Error(`enabled Shell targets must prove one capability digest; got ${[...shellCapabilityDigests].join(", ") || "none"}`);
+}
 const allReadyTargetsSigned = readyManifests.length > 0 && readyManifests.every((manifest) => manifest.signed === true);
 if (assetVersionSuffix === "auto") {
   assetVersionSuffix = allReadyTargetsSigned ? ".signed" : ".unsigned";

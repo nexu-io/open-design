@@ -4,7 +4,7 @@ import {
   STANDALONE_BOOTLOADER_ENTRY_PATH,
   validateStandaloneHandoffDescriptor,
   type StandaloneHandoffDescriptor,
-} from "@open-design/standalone-proto";
+} from "./protocol/index.js";
 
 const STANDALONE_LAUNCHER_BOOTSTRAP_ENV = "OD_STANDALONE_LAUNCHER_BOOTSTRAP_V1";
 const STANDALONE_LAUNCHER_BOOTSTRAP_SCHEMA_VERSION = 1 as const;

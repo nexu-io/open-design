@@ -14,7 +14,7 @@ import {
   type StandaloneShellCapabilityResult,
   validateStandaloneShellCapabilityInput,
   validateStandaloneShellCapabilityOutput,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 import { startDaemonRuntime } from "../daemon-startup.js";
 import { setDesktopAuthSecret } from "../desktop-auth.js";

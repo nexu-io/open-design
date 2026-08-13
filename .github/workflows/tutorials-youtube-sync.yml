@@ -44,7 +44,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '24.18.0'
 
       - name: Discover candidates and post Feishu digest
         working-directory: apps/landing-page

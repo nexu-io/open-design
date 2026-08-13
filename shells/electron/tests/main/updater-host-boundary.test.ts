@@ -144,10 +144,10 @@ describe("desktop updater host boundary", () => {
     expect(scheduler).toContain("startupSilentPayloadUpdate.transition.acquire()");
   });
 
-  it("uses the committed release version for updater and user-facing version truth", () => {
+  it("keeps product telemetry on the committed release while updater tracks the launcher payload", () => {
     const entry = source("src/index.ts");
     expect(entry).toContain("startupTelemetryContext.appVersion = binding.descriptor.release.version");
-    expect(entry).toContain("currentVersion: binding.descriptor.release.version");
+    expect(entry).toContain("currentVersion: launcherVersion");
     expect(entry).not.toContain("currentVersion: shellVersion");
   });
 

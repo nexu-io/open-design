@@ -20,6 +20,11 @@ export type PackagedSecondInstanceControls = {
   dispatchDeeplink: (url: string | null) => void;
   show: () => void;
 };
+export type PackagedSingleInstanceClaimOptions = {
+  attempts?: number;
+  retryIntervalMs?: number;
+  wait?: (delayMs: number) => Promise<void>;
+};
 type PathDiagnostic = {
   exists: boolean;
   mode?: number;
@@ -130,11 +135,23 @@ export function applyPackagedElectronPathOverrides(
   app.setPath("logs", paths.desktopLogsRoot);
 }
 
-export function claimPackagedSingleInstanceLock(
+export async function claimPackagedSingleInstanceLock(
   electronApp: PackagedSingleInstanceApp,
   onSecondInstance: (argv: readonly string[]) => void,
-): boolean {
-  if (!electronApp.requestSingleInstanceLock()) {
+  options: PackagedSingleInstanceClaimOptions = {},
+): Promise<boolean> {
+  const attempts = Math.max(1, Math.floor(options.attempts ?? 51));
+  const retryIntervalMs = Math.max(0, Math.floor(options.retryIntervalMs ?? 100));
+  const wait = options.wait ?? ((delayMs: number) => new Promise<void>((resolveWait) => {
+    setTimeout(resolveWait, delayMs);
+  }));
+  let acquired = false;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    acquired = electronApp.requestSingleInstanceLock();
+    if (acquired) break;
+    if (attempt < attempts) await wait(retryIntervalMs);
+  }
+  if (!acquired) {
     electronApp.quit();
     return false;
   }

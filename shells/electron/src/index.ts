@@ -8,12 +8,12 @@ import {
   SIDECAR_MODES,
   SIDECAR_SOURCES,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import {
   parseLauncherAfterQuitArgs,
   parseLauncherDelegatedArgs,
   parseLauncherHandoffResumeArgs,
-} from "@open-design/launcher-proto";
+} from "@open-design/host/shell-update";
 import {
   bootstrapSidecarRuntime,
   createSidecarLaunchEnv,
@@ -184,8 +184,10 @@ async function main(): Promise<void> {
   const paths = shellRuntime.paths;
   const shellVersion = shellConfig.shellVersion;
   const releaseVersion = shellConfig.releaseVersion;
+  const launcherVersion = shellConfig.launcherVersion;
   if (shellVersion == null) throw new Error("Electron Shell version is unavailable");
   if (releaseVersion == null) throw new Error("Standalone release version is unavailable");
+  if (launcherVersion == null) throw new Error("Electron launcher version is unavailable");
   const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
     installedLaunchPath: shellRuntime.installedLaunchPath,
   });
@@ -221,7 +223,7 @@ async function main(): Promise<void> {
   });
   applyPackagedElectronPathOverrides(paths);
   applyShellUpdateEnv(shellConfig.updateMetadataUrl);
-  if (!claimPackagedSingleInstanceLock(app, (argv) => {
+  if (!await claimPackagedSingleInstanceLock(app, (argv) => {
     secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
   })) return;
   // A normal tools-pack launch already carries this projection, but a real
@@ -370,7 +372,7 @@ async function main(): Promise<void> {
     },
     standaloneLifecycle: standalone.lifecycle,
     update: {
-      currentVersion: binding.descriptor.release.version,
+      currentVersion: launcherVersion,
       downloadRoot: paths.updateRoot,
       installerObservationRoot: paths.installerObservationRoot,
       launcherLaunchPath: shellRuntime.installedLaunchPath,

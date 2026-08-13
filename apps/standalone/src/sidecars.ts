@@ -20,11 +20,11 @@ import {
   type StandaloneRuntimeStatus,
   type StandaloneShellCapabilityResult,
   type StandaloneRuntimeTerminalStatus,
-} from "@open-design/standalone-proto";
+} from "./protocol/index.js";
 import {
   acquireStandalone,
   type StandaloneRuntimeHandle,
-} from "@open-design/standalone-runtime";
+} from "./runtime/index.js";
 
 type SidecarStatus = Readonly<{
   pid: number;

@@ -1,4 +1,4 @@
-import { SIDECAR_DEFAULTS } from "@open-design/sidecar-proto";
+import { SIDECAR_DEFAULTS } from "@open-design/sidecar/protocol";
 import {
   releaseChannelFromNamespace,
   releaseChannelFromVersion,

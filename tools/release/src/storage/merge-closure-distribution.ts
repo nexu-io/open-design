@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   mergeClosureDistributionContributions,
   type ClosureDistributionManifest,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 
 function readJson(path: string, label: string): unknown {
   try {

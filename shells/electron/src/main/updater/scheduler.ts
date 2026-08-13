@@ -1,7 +1,7 @@
 import {
   DESKTOP_UPDATE_STATES,
   type DesktopUpdateStatusSnapshot,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 
 import type { DesktopUpdater, DesktopUpdaterLogger } from "../updater.js";
 import type { DesktopUpdateTransitionOwner } from "../update-preflight.js";

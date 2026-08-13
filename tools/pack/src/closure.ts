@@ -11,7 +11,7 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import {
   CLOSURE_ARCHIVE_ENTRY_PATH,
@@ -23,8 +23,7 @@ import {
   validateClosureFileInventory,
   type ClosureCandidateManifest,
   type ClosureFileInventory,
-} from "@open-design/closure-proto";
-import { createPackageManagerInvocation } from "@open-design/platform";
+} from "@open-design/closure/protocol";
 import { isReleaseChannel, parseReleaseVersion, type ReleaseChannel } from "@open-design/release";
 
 import { hashJson, hashPath, ToolPackCache, type CacheInvalidation } from "./cache.js";
@@ -51,10 +50,31 @@ import {
   CLOSURE_PLATFORM_TARGETS,
   normalizeClosurePlatformTarget,
   resolveClosureArchiveInvocation,
-  resolveHostClosurePlatformTarget,
   type ClosurePlatformTarget,
 } from "./closure-platform.js";
-import { copyOptionalVelaCliBinary } from "./vela-cli.js";
+import {
+  CLOSURE_DAEMON_EXTERNALS,
+  CLOSURE_INTERNAL_PACKAGES,
+  CLOSURE_NODE_NATIVE_MODULES,
+  assertNativeBuildHost,
+  buildClosureDistributionWorkspace,
+  buildClosureWorkspace,
+  packClosureWorkspaceTarballs,
+  pruneForeignNodePtyPrebuilds,
+  resolveClosureRuntimeDependencies,
+  resolveNodeNpmCliPath,
+  runClosureBuildCommand,
+  runClosurePnpm,
+} from "./closure-build-runtime.js";
+import {
+  buildClosurePrebundles,
+  copyClosureWebRuntime,
+} from "./closure-prebundle.js";
+import {
+  standaloneBodySource,
+  standaloneBootloaderSource,
+  standaloneInnerBootloaderSource,
+} from "./closure-runtime-source.js";
 
 export {
   CLOSURE_PLATFORM_TARGETS,
@@ -63,30 +83,18 @@ export {
   type ClosureArchiveInvocation,
   type ClosurePlatformTarget,
 } from "./closure-platform.js";
-
-export const CLOSURE_INTERNAL_PACKAGES = [
-  { directory: "packages/release", name: "@open-design/release" },
-  { directory: "packages/closure-proto", name: "@open-design/closure-proto" },
-  { directory: "packages/closure-store", name: "@open-design/closure-store" },
-  { directory: "packages/closure-update", name: "@open-design/closure-update" },
-  { directory: "packages/download", name: "@open-design/download" },
-  { directory: "packages/platform", name: "@open-design/platform" },
-  { directory: "packages/sidecar", name: "@open-design/sidecar" },
-  { directory: "packages/sidecar-proto", name: "@open-design/sidecar-proto" },
-  { directory: "packages/standalone-proto", name: "@open-design/standalone-proto" },
-  { directory: "packages/standalone-runtime", name: "@open-design/standalone-runtime" },
-  { directory: "apps/standalone", name: "@open-design/standalone" },
-] as const;
-
-export const CLOSURE_DAEMON_EXTERNALS = ["better-sqlite3", "blake3-wasm", "node-pty"] as const;
-export const CLOSURE_NODE_NATIVE_MODULES = [...CLOSURE_DAEMON_EXTERNALS] as const;
-const CLOSURE_FORBIDDEN_BUNDLE_INPUTS = [
-  "/shells/electron/",
-  "/payload-desktop-handoff.",
-] as const;
-const CLOSURE_ESBUILD_BANNER =
-  'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);';
-
+export { materializeClosureWebPublicHoist } from "./closure-prebundle.js";
+export {
+  standaloneBodySource,
+  standaloneBootloaderSource,
+  standaloneInnerBootloaderSource,
+} from "./closure-runtime-source.js";
+export {
+  CLOSURE_DAEMON_EXTERNALS,
+  CLOSURE_INTERNAL_PACKAGES,
+  CLOSURE_NODE_NATIVE_MODULES,
+  resolveClosureRuntimeDependencies,
+} from "./closure-build-runtime.js";
 export type ClosureBuildOptions = {
   artifactUrl: string;
   cacheDir?: string;
@@ -100,37 +108,16 @@ export type ClosureBuildOptions = {
 };
 
 export const CLOSURE_BUILD_SOURCE_PATHS = [
-  "apps/daemon",
-  "apps/standalone",
-  "apps/web",
-  "packages/agui-adapter",
-  "packages/components",
-  "packages/contracts",
-  "packages/diagnostics",
-  "packages/standalone-proto",
-  "packages/standalone-runtime",
-  "packages/host",
-  "packages/launcher-proto",
-  "packages/platform",
-  "packages/plugin-runtime",
-  "packages/registry-protocol",
-  "packages/release",
-  "packages/sidecar",
-  "packages/sidecar-proto",
-  "tools/pack/package.json",
-  "tools/pack/resources",
-  "tools/pack/src/closure.ts",
-  "tools/pack/src/resources.ts",
-  "assets/community-pets",
-  "assets/frames",
-  "craft",
-  "data/plugin-previews",
-  "design-systems",
-  "design-templates",
-  "plugins/_official",
-  "plugins/registry",
-  "prompt-templates",
-  "skills",
+  "apps/daemon", "apps/standalone", "apps/web",
+  "packages/agui-adapter", "packages/components", "packages/contracts", "packages/diagnostics",
+  "packages/host", "packages/platform", "packages/plugin-runtime", "packages/registry-protocol",
+  "packages/release", "packages/sidecar",
+  "tools/pack/package.json", "tools/pack/resources",
+  "tools/pack/src/closure-build-runtime.ts", "tools/pack/src/closure-prebundle.ts",
+  "tools/pack/src/closure-runtime-source.ts", "tools/pack/src/closure.ts", "tools/pack/src/resources.ts",
+  "assets/community-pets", "assets/frames", "craft", "data/plugin-previews",
+  "design-systems", "design-templates", "plugins/_official", "plugins/registry",
+  "prompt-templates", "skills",
 ] as const;
 
 export type ClosureBuildProvenanceV1 = {
@@ -190,7 +177,6 @@ export type ClosureDistributionTargetBuildOptions = {
   channel: string;
   dir?: string;
   platform?: string;
-  requireVelaCli?: boolean;
   skipWorkspaceBuild?: boolean;
   version: string;
   workspaceRoot?: string;
@@ -277,502 +263,6 @@ export async function probeClosureNodeNativeModules(options: {
   return Object.freeze(modules);
 }
 
-function assertNativeBuildHost(target: ClosurePlatformTarget): void {
-  const current = resolveHostClosurePlatformTarget();
-  if (current !== target) {
-    throw new Error(
-      `Closure ${target} artifacts must be built on a ${target} host; current host is ${process.platform}-${process.arch}`,
-    );
-  }
-}
-
-function run(command: string, args: readonly string[], options: {
-  cwd: string;
-  env?: NodeJS.ProcessEnv;
-  capture?: boolean;
-  windowsVerbatimArguments?: boolean;
-}): Promise<string> {
-  return new Promise<string>((resolveRun, rejectRun) => {
-    let stdout = "";
-    let stderr = "";
-    const child = spawn(command, [...args], {
-      cwd: options.cwd,
-      env: options.env ?? process.env,
-      // Keep the Closure CLI stdout machine-readable: internal build output is
-      // diagnostic and belongs on stderr, while the command's final --json
-      // report is written by the CLI entrypoint itself.
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-      windowsVerbatimArguments: options.windowsVerbatimArguments,
-    });
-    child.stdout?.setEncoding("utf8");
-    child.stderr?.setEncoding("utf8");
-    child.stdout?.on("data", (chunk: string) => {
-      if (options.capture === true) stdout += chunk;
-      else process.stderr.write(chunk);
-    });
-    child.stderr?.on("data", (chunk: string) => {
-      if (options.capture === true) stderr += chunk;
-      else process.stderr.write(chunk);
-    });
-    child.once("error", rejectRun);
-    child.once("close", (code, signal) => {
-      if (code === 0 && signal == null) {
-        resolveRun(stdout.trim());
-        return;
-      }
-      rejectRun(new Error(
-        `${command} failed with ${signal == null ? `exit code ${code ?? "unknown"}` : `signal ${signal}`}${
-          stderr.trim().length === 0 ? "" : `: ${stderr.trim()}`
-        }`,
-      ));
-    });
-  });
-}
-
-async function runPnpm(
-  workspaceRoot: string,
-  args: readonly string[],
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<void> {
-  const invocation = createPackageManagerInvocation([...args], env);
-  await run(invocation.command, invocation.args, {
-    cwd: workspaceRoot,
-    env,
-    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
-  });
-}
-
-async function buildWorkspace(workspaceRoot: string): Promise<void> {
-  await runPnpm(workspaceRoot, ["--filter", "@open-design/daemon...", "build"]);
-  await runPnpm(workspaceRoot, ["--filter", "@open-design/standalone", "build"]);
-  await runPnpm(
-    workspaceRoot,
-    ["--filter", "@open-design/web...", "build"],
-    { ...process.env, NODE_ENV: "production", OD_WEB_OUTPUT_MODE: "standalone" },
-  );
-  await runPnpm(workspaceRoot, ["--filter", "@open-design/web", "build:sidecar"]);
-}
-
-async function buildDistributionWorkspace(workspaceRoot: string): Promise<void> {
-  await runPnpm(workspaceRoot, ["--filter", "@open-design/daemon...", "build"]);
-  await runPnpm(workspaceRoot, ["--filter", "@open-design/standalone", "build"]);
-  await runPnpm(
-    workspaceRoot,
-    ["--filter", "@open-design/web...", "build"],
-    { ...process.env, NODE_ENV: "production", OD_WEB_OUTPUT_MODE: "" },
-  );
-  await runPnpm(workspaceRoot, ["--filter", "@open-design/web", "build:sidecar"]);
-}
-
-async function resolveNodeNpmCliPath(nodeExecutable = process.execPath): Promise<string> {
-  const executableRoot = dirname(nodeExecutable);
-  const candidates = process.platform === "win32"
-    ? [join(executableRoot, "node_modules", "npm", "bin", "npm-cli.js")]
-    : [
-        join(dirname(executableRoot), "lib", "node_modules", "npm", "bin", "npm-cli.js"),
-        join(executableRoot, "node_modules", "npm", "bin", "npm-cli.js"),
-      ];
-  for (const candidate of candidates) {
-    const metadata = await stat(candidate).catch(() => null);
-    if (metadata?.isFile()) return candidate;
-  }
-  throw new Error(`Closure build could not resolve npm-cli.js beside ${nodeExecutable}`);
-}
-
-async function packWorkspaceTarballs(
-  workspaceRoot: string,
-  tarballsRoot: string,
-): Promise<Record<string, string>> {
-  await rm(tarballsRoot, { force: true, recursive: true });
-  await mkdir(tarballsRoot, { recursive: true });
-  const packed: Record<string, string> = {};
-  for (const packageInfo of CLOSURE_INTERNAL_PACKAGES) {
-    const before = new Set(await readdir(tarballsRoot));
-    await runPnpm(workspaceRoot, [
-      "-C",
-      packageInfo.directory,
-      "pack",
-      "--pack-destination",
-      tarballsRoot,
-    ]);
-    const created = (await readdir(tarballsRoot)).filter((entry) => !before.has(entry));
-    if (created.length !== 1 || created[0] == null) {
-      throw new Error(`expected one Closure tarball for ${packageInfo.name}; got ${created.length}`);
-    }
-    packed[packageInfo.name] = join(tarballsRoot, created[0]);
-  }
-  return packed;
-}
-
-export async function resolveClosureRuntimeDependencies(
-  workspaceRoot: string,
-): Promise<Record<(typeof CLOSURE_DAEMON_EXTERNALS)[number], string>> {
-  const daemonPackagePath = join(workspaceRoot, "apps", "daemon", "package.json");
-  const daemonPackage = JSON.parse(await readFile(daemonPackagePath, "utf8")) as {
-    dependencies?: Record<string, unknown>;
-  };
-  return Object.fromEntries(CLOSURE_DAEMON_EXTERNALS.map((name) => {
-    const version = daemonPackage.dependencies?.[name];
-    if (typeof version !== "string" || version.trim().length === 0) {
-      throw new Error(`Closure external ${name} is missing from ${daemonPackagePath}`);
-    }
-    if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(version)) {
-      throw new Error(`Closure external ${name} must use an exact version; got ${version}`);
-    }
-    return [name, version];
-  })) as Record<(typeof CLOSURE_DAEMON_EXTERNALS)[number], string>;
-}
-
-async function pruneForeignNodePtyPrebuilds(
-  appRoot: string,
-  target: ClosurePlatformTarget,
-): Promise<void> {
-  const prebuildsRoot = join(appRoot, "node_modules", "node-pty", "prebuilds");
-  const entries = await readdir(prebuildsRoot, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.name === target) continue;
-    await rm(join(prebuildsRoot, entry.name), { force: true, recursive: true });
-  }
-  const nativeEntry = join(prebuildsRoot, target, "pty.node");
-  if (!(await stat(nativeEntry).catch(() => null))?.isFile()) {
-    throw new Error(`Closure node-pty prebuild is missing for ${target}: ${nativeEntry}`);
-  }
-}
-
-export function standaloneBootloaderSource(options: { minShellVersion: string }): string {
-  return `import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-
-import { createStandaloneBootloader } from "@open-design/standalone";
-import { startStandaloneBody } from "./standalone/body.mjs";
-
-const root = dirname(fileURLToPath(import.meta.url));
-const innerPath = join(root, "standalone", "bootloader.mjs");
-let registeredBootloader = null;
-if (existsSync(innerPath)) {
-  const inner = await import(pathToFileURL(innerPath).href);
-  if (typeof inner.handoff !== "function") {
-    throw new Error("registered Standalone bootloader must export handoff()");
-  }
-  registeredBootloader = inner.handoff;
-}
-
-export const handoff = createStandaloneBootloader({
-  shellCompatibility: {
-    electron: { version: { min: ${JSON.stringify(options.minShellVersion)} } },
-  },
-  resolveRegisteredBootloader: () => registeredBootloader,
-  start: startStandaloneBody,
-});
-
-export default handoff;
-`;
-}
-
-export function standaloneBodySource(): string {
-  return `import { existsSync } from "node:fs";
-import { mkdir, realpath, symlink, unlink } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
-import { startSidecarStandalone } from "@open-design/standalone";
-
-const root = dirname(dirname(fileURLToPath(import.meta.url)));
-
-function sameWindowsPath(left, right) {
-  const normalize = (value) => value.replaceAll("/", "\\\\").replace(/[\\\\]+$/, "").toLowerCase();
-  return normalize(left) === normalize(right);
-}
-
-/**
- * Node's Windows chdir still rejects paths beyond MAX_PATH even when file I/O
- * and the Electron manifest are long-path aware. Enter the verified Closure
- * through a generation-bound junction under the namespace runtime root so the
- * Next standalone server and native module resolution stay below that limit.
- */
-export async function resolveOpenDesignClosureRuntimeRoot(request) {
-  if (process.platform !== "win32") return root;
-  const scope = request.handoff.scope;
-  const digest = request.handoff.descriptor.standalone.digest.slice("sha256:".length, "sha256:".length + 16);
-  const aliasParent = join(request.paths.runtimeRoot, "closure-aliases");
-  const aliasRoot = join(aliasParent, [scope.channel, "g" + String(scope.generation), digest].join("-"));
-  await mkdir(aliasParent, { recursive: true });
-  const expectedRoot = await realpath(root);
-  const currentRoot = await realpath(aliasRoot).catch(() => null);
-  if (currentRoot != null && sameWindowsPath(currentRoot, expectedRoot)) return aliasRoot;
-  if (currentRoot != null) await unlink(aliasRoot);
-  await symlink(expectedRoot, aliasRoot, "junction").catch(async (error) => {
-    const racedRoot = await realpath(aliasRoot).catch(() => null);
-    if (racedRoot != null && sameWindowsPath(racedRoot, expectedRoot)) return;
-    throw error;
-  });
-  const linkedRoot = await realpath(aliasRoot);
-  if (!sameWindowsPath(linkedRoot, expectedRoot)) {
-    throw new Error("Closure runtime alias does not resolve to the selected generation");
-  }
-  return aliasRoot;
-}
-
-export function resolveOpenDesignClosureLayout(runtimeRoot = root) {
-  const webStaticRoot = join(runtimeRoot, "web", "static");
-  if (!existsSync(join(webStaticRoot, "index.html"))) throw new Error("Closure static Web entry is missing");
-  return Object.freeze({
-    daemonCliEntry: join(runtimeRoot, "daemon", "daemon-cli.mjs"),
-    daemonSidecarEntry: join(runtimeRoot, "daemon", "daemon-sidecar.mjs"),
-    daemonStandaloneSidecarEntry: join(runtimeRoot, "daemon", "daemon-standalone-sidecar.mjs"),
-    webSidecarEntry: join(runtimeRoot, "web", "web-sidecar.mjs"),
-    webStandaloneSidecarEntry: join(runtimeRoot, "web", "web-standalone-sidecar.mjs"),
-    webStaticRoot,
-  });
-}
-
-export async function startStandaloneBody(request) {
-  const layout = resolveOpenDesignClosureLayout(await resolveOpenDesignClosureRuntimeRoot(request));
-  // Windows can spend more than the control plane's generic five-second
-  // default loading a freshly materialized Electron-as-Node sidecar while
-  // Defender scans its Closure tree. Keep readiness event-driven, but give the
-  // child a bounded platform allowance before declaring it unavailable.
-  const sidecarReadyTimeoutMs = process.platform === "win32" ? 120_000 : undefined;
-  const childEnv = {
-    ...process.env,
-    OD_DAEMON_CLI_PATH: layout.daemonCliEntry,
-    OD_NODE_BIN: process.execPath,
-    // The normalized Standalone control plane supplies this channel-scoped
-    // resource CAS root. Trust exactly that verified boundary; it is a sibling
-    // of namespace generations by design, not part of one body component.
-    OD_RESOURCE_TRUST_ROOT: request.paths.resourceRoot,
-    OD_STANDALONE_ATTACHMENT_ID: request.attachment.id,
-  };
-  return await startSidecarStandalone(request, {
-    daemon: {
-      args: [layout.daemonStandaloneSidecarEntry],
-      env: childEnv,
-      executable: process.execPath,
-      output: "inherit",
-      readyTimeoutMs: sidecarReadyTimeoutMs,
-    },
-    web: {
-      args: [layout.webStandaloneSidecarEntry],
-      env: {
-        ...childEnv,
-        OD_WEB_STATIC_ROOT: layout.webStaticRoot,
-      },
-      executable: process.execPath,
-      output: "inherit",
-      readyTimeoutMs: sidecarReadyTimeoutMs,
-    },
-  });
-}
-`;
-}
-
-export function standaloneInnerBootloaderSource(options: { minShellVersion: string }): string {
-  return `import { createStandaloneBootloader } from "@open-design/standalone";
-import { startStandaloneBody } from "./body.mjs";
-
-export const handoff = createStandaloneBootloader({
-  shellCompatibility: {
-    electron: { version: { min: ${JSON.stringify(options.minShellVersion)} } },
-  },
-  start: startStandaloneBody,
-});
-
-export default handoff;
-`;
-}
-
-async function runEsbuild(workspaceRoot: string, args: readonly string[]): Promise<void> {
-  await runPnpm(workspaceRoot, ["--filter", "@open-design/tools-pack", "exec", "esbuild", ...args]);
-}
-
-async function assertClosureBundleMetafile(path: string): Promise<void> {
-  const metafile = JSON.parse(await readFile(path, "utf8")) as { inputs?: Record<string, unknown> };
-  const forbidden = Object.keys(metafile.inputs ?? {})
-    .map((input) => input.replaceAll("\\", "/"))
-    .filter((input) => CLOSURE_FORBIDDEN_BUNDLE_INPUTS.some((fragment) => input.includes(fragment)));
-  if (forbidden.length > 0) {
-    throw new Error(`Closure prebundle included shell compatibility inputs: ${forbidden.join(", ")}`);
-  }
-}
-
-async function buildClosurePrebundles(
-  workspaceRoot: string,
-  stageRoot: string,
-  appRoot: string,
-  _target: ClosurePlatformTarget,
-  minShellVersion: string,
-): Promise<void> {
-  const entryRoot = join(stageRoot, "entries");
-  const metadataRoot = join(stageRoot, "metadata");
-  const daemonEntry = join(entryRoot, "daemon-cli.mjs");
-  const daemonSidecarEntry = join(
-    workspaceRoot,
-    "apps",
-    "daemon",
-    "src",
-    "sidecar",
-    "daemon-sidecar.ts",
-  );
-  const daemonStandaloneSidecarEntry = join(
-    workspaceRoot,
-    "apps",
-    "daemon",
-    "src",
-    "sidecar",
-    "daemon-standalone-sidecar.ts",
-  );
-  const daemonOutputRoot = join(appRoot, "daemon");
-  const daemonMetafile = join(metadataRoot, "daemon.json");
-  const bodyEntry = join(entryRoot, "body.mjs");
-  const bootloaderEntry = join(entryRoot, CLOSURE_ARCHIVE_ENTRY_PATH);
-  const bodyMetafile = join(metadataRoot, "body.json");
-  const webOutput = join(appRoot, "web", "web-sidecar.mjs");
-  const webStandaloneOutput = join(appRoot, "web", "web-standalone-sidecar.mjs");
-  const webMetafile = join(metadataRoot, "web.json");
-  const webStandaloneMetafile = join(metadataRoot, "web-standalone.json");
-  await mkdir(entryRoot, { recursive: true });
-  await mkdir(metadataRoot, { recursive: true });
-  await writeFile(
-    daemonEntry,
-    [
-      'import { fileURLToPath } from "node:url";',
-      "const selfPath = fileURLToPath(import.meta.url);",
-      "process.env.OD_BIN ??= selfPath;",
-      "process.env.OD_DAEMON_CLI_PATH ??= selfPath;",
-      `await import(${JSON.stringify(join(workspaceRoot, "apps", "daemon", "dist", "cli.js"))});`,
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-  await writeFile(bodyEntry, standaloneBodySource(), "utf8");
-  await writeFile(
-    bootloaderEntry,
-    standaloneInnerBootloaderSource({ minShellVersion }),
-    "utf8",
-  );
-  await runEsbuild(workspaceRoot, [
-    daemonEntry,
-    daemonSidecarEntry,
-    daemonStandaloneSidecarEntry,
-    "--bundle",
-    "--splitting",
-    "--platform=node",
-    "--format=esm",
-    "--target=node24",
-    `--banner:js=${CLOSURE_ESBUILD_BANNER}`,
-    ...[
-      ...CLOSURE_DAEMON_EXTERNALS,
-      "fsevents",
-    ].map((dependency) => `--external:${dependency}`),
-    `--outdir=${daemonOutputRoot}`,
-    "--entry-names=[name]",
-    "--chunk-names=chunks/[name]-[hash]",
-    "--out-extension:.js=.mjs",
-    `--metafile=${daemonMetafile}`,
-  ]);
-  await runEsbuild(workspaceRoot, [
-    bootloaderEntry,
-    bodyEntry,
-    "--bundle",
-    "--splitting",
-    "--platform=node",
-    "--format=esm",
-    "--target=node24",
-    `--banner:js=${CLOSURE_ESBUILD_BANNER}`,
-    ...[...CLOSURE_DAEMON_EXTERNALS, "fsevents"].map((dependency) => `--external:${dependency}`),
-    `--outdir=${appRoot}`,
-    "--entry-names=[name]",
-    "--chunk-names=chunks/[name]-[hash]",
-    "--out-extension:.js=.mjs",
-    `--metafile=${bodyMetafile}`,
-  ]);
-  await runEsbuild(workspaceRoot, [
-    join(workspaceRoot, "apps", "web", "dist", "sidecar", "index.js"),
-    "--bundle",
-    "--platform=node",
-    "--format=esm",
-    "--target=node24",
-    `--outfile=${webOutput}`,
-    `--metafile=${webMetafile}`,
-  ]);
-  await runEsbuild(workspaceRoot, [
-    join(workspaceRoot, "apps", "web", "sidecar", "web-standalone-sidecar.ts"),
-    "--bundle",
-    "--platform=node",
-    "--format=esm",
-    "--target=node24",
-    `--outfile=${webStandaloneOutput}`,
-    `--metafile=${webStandaloneMetafile}`,
-  ]);
-  await assertClosureBundleMetafile(daemonMetafile);
-  await assertClosureBundleMetafile(bodyMetafile);
-  await assertClosureBundleMetafile(webMetafile);
-  await assertClosureBundleMetafile(webStandaloneMetafile);
-}
-
-async function copyWebRuntime(workspaceRoot: string, appRoot: string): Promise<void> {
-  const standaloneSource = join(workspaceRoot, "apps", "web", ".next", "standalone");
-  const standaloneTarget = join(appRoot, "web", "standalone");
-  if (!(await stat(standaloneSource)).isDirectory()) {
-    throw new Error(`Closure Web standalone output is missing: ${standaloneSource}`);
-  }
-  await cp(standaloneSource, standaloneTarget, { dereference: true, recursive: true });
-  await materializeClosureWebPublicHoist(standaloneTarget);
-
-  const appRelativeRoot = await stat(join(standaloneTarget, "apps", "web", "server.js"))
-    .then(() => join(standaloneTarget, "apps", "web"))
-    .catch(() => standaloneTarget);
-  await mkdir(join(appRelativeRoot, ".next"), { recursive: true });
-  await cp(
-    join(workspaceRoot, "apps", "web", ".next", "static"),
-    join(appRelativeRoot, ".next", "static"),
-    { dereference: true, recursive: true },
-  );
-  const publicRoot = join(workspaceRoot, "apps", "web", "public");
-  if ((await stat(publicRoot).catch(() => null))?.isDirectory()) {
-    await cp(publicRoot, join(appRelativeRoot, "public"), { dereference: true, recursive: true });
-  }
-}
-
-/**
- * Next's pnpm standalone output resolves transitive packages through
- * `node_modules/.pnpm/node_modules`, with public entries represented as
- * symlinks. Closure archives intentionally contain no symlinks, and the broad
- * dereferenced copy above does not reliably recreate those public entries on
- * every host. Materialize each hoisted package explicitly so the archived
- * server has the same Node resolution surface as the Desktop after-pack copy.
- */
-export async function materializeClosureWebPublicHoist(standaloneRoot: string): Promise<string[]> {
-  const nodeModulesRoot = join(standaloneRoot, "node_modules");
-  const hoistRoot = join(nodeModulesRoot, ".pnpm", "node_modules");
-  const entries = await readdir(hoistRoot, { withFileTypes: true }).catch(() => []);
-  const materialized: string[] = [];
-
-  const materialize = async (sourcePath: string, destinationPath: string): Promise<void> => {
-    await rm(destinationPath, { force: true, recursive: true });
-    await mkdir(dirname(destinationPath), { recursive: true });
-    await cp(sourcePath, destinationPath, { dereference: true, recursive: true });
-    materialized.push(toPosixPath(relative(standaloneRoot, destinationPath)));
-  };
-
-  for (const entry of entries) {
-    const sourcePath = join(hoistRoot, entry.name);
-    if (entry.name.startsWith("@") && entry.isDirectory()) {
-      for (const scopedEntry of await readdir(sourcePath)) {
-        await materialize(
-          join(sourcePath, scopedEntry),
-          join(nodeModulesRoot, entry.name, scopedEntry),
-        );
-      }
-      continue;
-    }
-    await materialize(sourcePath, join(nodeModulesRoot, entry.name));
-  }
-  return materialized.sort();
-}
-
 function toPosixPath(value: string): string {
   return value.split(sep).join("/");
 }
@@ -813,11 +303,11 @@ async function resolveGitProvenance(workspaceRoot: string): Promise<{
   sourceRevision: string | null;
   workspaceDirty: boolean | null;
 }> {
-  const sourceRevision = await run("git", ["rev-parse", "HEAD"], {
+  const sourceRevision = await runClosureBuildCommand("git", ["rev-parse", "HEAD"], {
     capture: true,
     cwd: workspaceRoot,
   }).catch(() => null);
-  const status = await run("git", ["status", "--porcelain"], {
+  const status = await runClosureBuildCommand("git", ["status", "--porcelain"], {
     capture: true,
     cwd: workspaceRoot,
   }).catch(() => null);
@@ -886,17 +376,18 @@ export async function buildClosureDistributionShared(
   const blobRoot = join(outputRoot, "blobs");
   const contributionPath = join(outputRoot, "shared-contribution.json");
 
-  if (options.skipWorkspaceBuild !== true) await buildDistributionWorkspace(workspaceRoot);
+  if (options.skipWorkspaceBuild !== true) await buildClosureDistributionWorkspace(workspaceRoot);
   await rm(stageRoot, { force: true, recursive: true });
   await rm(outputRoot, { force: true, recursive: true });
   await mkdir(bodyRoot, { recursive: true });
-  await buildClosurePrebundles(
+  await buildClosurePrebundles({
+    appRoot: bodyRoot,
+    daemonExternals: CLOSURE_DAEMON_EXTERNALS,
+    minShellVersion: options.minShellVersion,
+    runPnpm: runClosurePnpm,
+    stageRoot: join(stageRoot, "build"),
     workspaceRoot,
-    join(stageRoot, "build"),
-    bodyRoot,
-    archiveTarget,
-    options.minShellVersion,
-  );
+  });
   const staticSource = join(workspaceRoot, "apps", "web", "out");
   if (!(await stat(staticSource).catch(() => null))?.isDirectory()) {
     throw new Error(`Closure static Web output is missing: ${staticSource}`);
@@ -972,7 +463,7 @@ export async function buildClosureDistributionTarget(
     version: options.version,
     ...(target.startsWith("darwin-") ? { optionalDependencies: { fsevents: "2.3.3" } } : {}),
   }, null, 2)}\n`, "utf8");
-  await run(process.execPath, [
+  await runClosureBuildCommand(process.execPath, [
     await resolveNodeNpmCliPath(),
     "install",
     "--omit=dev",
@@ -986,11 +477,6 @@ export async function buildClosureDistributionTarget(
     executable: process.execPath,
     modules: CLOSURE_NODE_NATIVE_MODULES,
     nativeRoot,
-  });
-  await copyOptionalVelaCliBinary({
-    platform: target === CLOSURE_PLATFORM_TARGETS.WIN32_X64 ? "win" : "mac",
-    requireBundled: options.requireVelaCli === true,
-    resourceRoot: nativeRoot,
   });
   const contribution = await buildClosureDistributionTargetContribution({
     blobOrigin: options.blobOrigin,
@@ -1025,11 +511,11 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
   const inventoryPath = join(outputRoot, "inventory.json");
   const provenancePath = join(outputRoot, "provenance.json");
 
-  if (options.skipWorkspaceBuild !== true) await buildWorkspace(workspaceRoot);
+  if (options.skipWorkspaceBuild !== true) await buildClosureWorkspace(workspaceRoot);
   await rm(stageRoot, { force: true, recursive: true });
   await rm(outputRoot, { force: true, recursive: true });
   await mkdir(appRoot, { recursive: true });
-  const packed = await packWorkspaceTarballs(workspaceRoot, tarballsRoot);
+  const packed = await packClosureWorkspaceTarballs(workspaceRoot, tarballsRoot);
   const runtimeDependencies = await resolveClosureRuntimeDependencies(workspaceRoot);
   const dependencies = Object.fromEntries(
     Object.entries(packed).map(([name, path]) => [name, `file:${relative(appRoot, path)}`]),
@@ -1049,7 +535,7 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
     }, null, 2)}\n`,
     "utf8",
   );
-  await run(process.execPath, [
+  await runClosureBuildCommand(process.execPath, [
     await resolveNodeNpmCliPath(),
     "install",
     "--omit=dev",
@@ -1077,8 +563,15 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
     "utf8",
   );
 
-  await copyWebRuntime(workspaceRoot, appRoot);
-  await buildClosurePrebundles(workspaceRoot, stageRoot, appRoot, target, options.minShellVersion);
+  await copyClosureWebRuntime(workspaceRoot, appRoot);
+  await buildClosurePrebundles({
+    appRoot,
+    daemonExternals: CLOSURE_DAEMON_EXTERNALS,
+    minShellVersion: options.minShellVersion,
+    runPnpm: runClosurePnpm,
+    stageRoot,
+    workspaceRoot,
+  });
   await copyBundledResourceTrees({
     resourceRoot: join(appRoot, "resources", "open-design"),
     workspaceRoot,
@@ -1114,7 +607,7 @@ async function buildClosureArchiveUncached(options: ClosureBuildOptions): Promis
   });
   const inventoryDigest = digestInventory(files);
   const archiveInvocation = resolveClosureArchiveInvocation({ artifactPath: archivePath, target });
-  await run(archiveInvocation.command, archiveInvocation.args, { cwd: appRoot });
+  await runClosureBuildCommand(archiveInvocation.command, archiveInvocation.args, { cwd: appRoot });
   const archiveBytes = await readFile(archivePath);
   const digest = `sha256:${createHash("sha256").update(archiveBytes).digest("hex")}` as const;
   const manifest = validateClosureCandidateManifest({

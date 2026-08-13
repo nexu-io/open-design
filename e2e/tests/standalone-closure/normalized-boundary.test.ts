@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { CLOSURE_PROTOCOL_VERSION } from "@open-design/closure-proto";
-import { STANDALONE_PROTOCOL_VERSION } from "@open-design/standalone-proto";
+import { CLOSURE_PROTOCOL_VERSION } from "@open-design/closure/protocol";
+import { STANDALONE_PROTOCOL_VERSION } from "@open-design/standalone/protocol";
 
 const workspaceRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 
@@ -39,7 +39,7 @@ describe("normalized Standalone boundary", () => {
     expect(source).toContain("handoff-conflict");
   });
 
-  it("keeps both sides on standalone-proto without private cross-app imports", async () => {
+  it("exposes the owner-local Standalone protocol without private path imports", async () => {
     const shell = await readFile(
       join(workspaceRoot, "shells", "electron", "src", "standalone-handoff.ts"),
       "utf8",
@@ -49,8 +49,8 @@ describe("normalized Standalone boundary", () => {
       "utf8",
     );
 
-    expect(shell).toContain('from "@open-design/standalone-proto"');
-    expect(body).toContain('from "@open-design/standalone-proto"');
+    expect(shell).toContain('from "@open-design/standalone/protocol"');
+    expect(body).toContain('from "./protocol/index.js"');
     expect(shell).not.toMatch(/apps\/standalone|@open-design\/standalone["']/u);
     expect(body).not.toMatch(/shells\/electron|@open-design\/shell-electron/u);
   });

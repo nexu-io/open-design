@@ -21,7 +21,7 @@ import {
   validateLauncherRuntimeDescriptor,
   type LauncherAttemptDescriptor,
   type LauncherTargetSelection,
-} from "@open-design/launcher-proto";
+} from "@open-design/host/shell-update";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 
 import {
@@ -332,6 +332,7 @@ async function resolvePayloadConfig(
   return {
     config: {
       ...config,
+      launcherVersion: manifest.version,
       releaseVersion: raw.releaseVersion?.trim() || manifest.version,
       shellVersion: raw.shellVersion?.trim() || manifest.version,
       daemonSidecarEntry: await resolveOptionalPayloadEntry(resourcesPath, raw.daemonSidecarEntryRelative),
@@ -347,7 +348,7 @@ async function resolvePayloadConfig(
 }
 
 function initialRuntimeDescriptor(config: PackagedConfig, channel: LauncherChannel): LauncherRuntimeDescriptor {
-  const boundVersion = config.releaseVersion ?? config.shellVersion;
+  const boundVersion = config.launcherVersion ?? config.releaseVersion ?? config.shellVersion;
   const current = boundVersion == null
     ? null
     : { generation: 0, version: normalizeLauncherVersion(boundVersion) };
@@ -421,7 +422,7 @@ async function reconcileRuntimeWithBoundPackage(
   launcherPaths: LauncherPaths,
   channel: LauncherChannel,
 ): Promise<LauncherRuntimeDescriptor> {
-  const configuredVersion = config.releaseVersion ?? config.shellVersion;
+  const configuredVersion = config.launcherVersion ?? config.releaseVersion ?? config.shellVersion;
   const boundVersion = configuredVersion == null ? null : normalizeLauncherVersion(configuredVersion);
   if (boundVersion == null) return descriptor;
   const maxPersistedVersion = maxRuntimePointer(descriptor);

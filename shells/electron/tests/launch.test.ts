@@ -109,7 +109,7 @@ describe("verifyPackagedDataRootWritable", () => {
 });
 
 describe("claimPackagedSingleInstanceLock", () => {
-  it("registers a second-instance focus callback when the lock is acquired", () => {
+  it("registers a second-instance focus callback when the lock is acquired", async () => {
     const listeners = new Map<string, (event: unknown, argv: string[]) => void>();
     const app = {
       on: vi.fn((event: string, listener: (event: unknown, argv: string[]) => void) => {
@@ -121,7 +121,7 @@ describe("claimPackagedSingleInstanceLock", () => {
     };
     const focusExisting = vi.fn();
 
-    expect(claimPackagedSingleInstanceLock(app, focusExisting)).toBe(true);
+    await expect(claimPackagedSingleInstanceLock(app, focusExisting)).resolves.toBe(true);
     listeners.get("second-instance")?.({}, ["Open Design.exe", "--from-protocol"]);
 
     expect(app.requestSingleInstanceLock).toHaveBeenCalledTimes(1);
@@ -158,9 +158,9 @@ describe("claimPackagedSingleInstanceLock", () => {
         }),
       })).resolves.toEqual({ action: "continue", reason: "inspect-failed" });
 
-      expect(claimPackagedSingleInstanceLock(app, (argv) => {
+      await expect(claimPackagedSingleInstanceLock(app, (argv) => {
         handoff.handle(findPackagedDeeplinkArg(argv));
-      })).toBe(true);
+      })).resolves.toBe(true);
       listeners.get("second-instance")?.({}, ["Open Design.exe", deeplinkUrl]);
 
       expect(show).not.toHaveBeenCalled();
@@ -175,16 +175,43 @@ describe("claimPackagedSingleInstanceLock", () => {
     }
   });
 
-  it("quits the duplicate process before packaged sidecars start when the lock is held", () => {
+  it("waits for a shutting-down desktop to release the single-instance lock", async () => {
+    const app = {
+      on: vi.fn(),
+      quit: vi.fn(),
+      requestSingleInstanceLock: vi.fn()
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(false)
+        .mockReturnValueOnce(true),
+    };
+    const wait = vi.fn(async () => undefined);
+
+    await expect(claimPackagedSingleInstanceLock(app, vi.fn(), {
+      attempts: 3,
+      retryIntervalMs: 25,
+      wait,
+    })).resolves.toBe(true);
+
+    expect(app.requestSingleInstanceLock).toHaveBeenCalledTimes(3);
+    expect(wait).toHaveBeenCalledTimes(2);
+    expect(wait).toHaveBeenCalledWith(25);
+    expect(app.quit).not.toHaveBeenCalled();
+  });
+
+  it("quits the duplicate process before packaged sidecars start when the lock stays held", async () => {
     const app = {
       on: vi.fn(),
       quit: vi.fn(),
       requestSingleInstanceLock: vi.fn(() => false),
     };
 
-    expect(claimPackagedSingleInstanceLock(app, vi.fn())).toBe(false);
+    await expect(claimPackagedSingleInstanceLock(app, vi.fn(), {
+      attempts: 3,
+      retryIntervalMs: 0,
+      wait: async () => undefined,
+    })).resolves.toBe(false);
 
-    expect(app.requestSingleInstanceLock).toHaveBeenCalledTimes(1);
+    expect(app.requestSingleInstanceLock).toHaveBeenCalledTimes(3);
     expect(app.quit).toHaveBeenCalledTimes(1);
     expect(app.on).not.toHaveBeenCalled();
   });

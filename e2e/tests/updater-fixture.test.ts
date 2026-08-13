@@ -19,8 +19,8 @@ describe('packaged updater fixture bridge', () => {
     const port = await reserveLoopbackPort();
     fixture = await startToolsServeUpdaterFixture({
       channel: 'stable',
-      controlLauncherVersionMin: '0.16.0',
-      controlLauncherVersionUrl: 'https://example.test/updater-recovery',
+      controlInstallationVersionMin: '0.16.0',
+      controlInstallationVersionUrl: 'https://example.test/updater-recovery',
       platform: 'win',
       port,
       version: '0.16.0',

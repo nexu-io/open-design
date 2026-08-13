@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { LAUNCHER_SCHEMA_VERSION } from "@open-design/launcher-proto";
+import { LAUNCHER_SCHEMA_VERSION } from "@open-design/host/shell-update";
 import { describe, expect, it } from "vitest";
 
 import type { ToolPackConfig, ToolPackPlatform } from "../src/config.js";
@@ -283,6 +283,26 @@ describe("tools-pack launcher payload archives", () => {
         shellVersion: string;
       };
       expect(packagedConfig.shellVersion).toBe("0.9.0-beta.1");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it.skipIf(process.platform !== "darwin")("uses the explicit launcher version for a synthetic update payload", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-tools-pack-mac-payload-version-"));
+    try {
+      const config = makeConfig(root, "mac", "release-beta", "0.9.0-beta.2", "0.9.0-beta.1");
+      config.launcherVersion = "0.9.0-beta.3";
+      const paths = await writeFakeMacApp(config);
+      const archivePath = await createMacLauncherPayloadArchive(config, paths);
+      const extractRoot = join(root, "extracted");
+      await mkdir(extractRoot, { recursive: true });
+      await execFileAsync("ditto", ["-x", "-k", archivePath, extractRoot]);
+
+      const manifest = JSON.parse(await readFile(join(extractRoot, "manifest.json"), "utf8")) as {
+        version: string;
+      };
+      expect(manifest.version).toBe("0.9.0-beta.3");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

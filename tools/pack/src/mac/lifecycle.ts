@@ -15,7 +15,7 @@ import {
   type DesktopStatusSnapshot,
   type DesktopUpdateAction,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import { createSidecarLaunchEnv, requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 import {
   collectProcessTreePids,

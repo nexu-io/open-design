@@ -315,7 +315,9 @@ else
       --cache-dir "$TOOLS_PACK_CACHE_DIR"
       --namespace "$RELEASE_NAMESPACE"
       --portable
-      --release-version "$update_version"
+      --release-version "$RELEASE_VERSION"
+      --shell-version "$update_version"
+      --launcher-version "$update_version"
       --mac-compression "${MAC_COMPRESSION:-normal}"
       --to dmg
       --json

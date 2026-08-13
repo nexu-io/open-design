@@ -2,14 +2,14 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { stopProcesses, waitForProcessExit, type StopProcessesResult } from "@open-design/platform";
-import { compareLauncherVersions, type LauncherAfterQuitRequest } from "@open-design/launcher-proto";
+import { compareLauncherVersions, type LauncherAfterQuitRequest } from "@open-design/host/shell-update";
 import {
   APP_KEYS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MESSAGES,
   type AppKey,
   type DesktopStatusSnapshot,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import { requestJsonIpc, resolveAppIpcPath } from "@open-design/sidecar";
 
 import type { PackagedNamespacePaths } from "./paths.js";

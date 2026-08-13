@@ -15,7 +15,7 @@ import {
   type DesktopRenderSlidesResult,
   type MintImportTokenResult,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import {
   createJsonIpcServer,
   requestJsonIpc,

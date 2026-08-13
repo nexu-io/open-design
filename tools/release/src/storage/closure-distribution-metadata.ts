@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   validateClosureDistributionManifest,
   type ClosureDistributionManifest,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { parseReleaseVersion, type ReleaseChannel } from "@open-design/release";
 
 function digestCanonical(value: string): `sha256:${string}` {

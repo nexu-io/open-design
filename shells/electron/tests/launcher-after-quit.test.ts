@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it, vi } from "vitest";
-import { SIDECAR_MESSAGES } from "@open-design/sidecar-proto";
+import { SIDECAR_MESSAGES } from "@open-design/sidecar/protocol";
 import type { StopProcessesResult, stopProcesses, waitForProcessExit } from "@open-design/platform";
 
 import {

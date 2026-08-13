@@ -7,7 +7,7 @@ import {
   STANDALONE_SHELL_CAPABILITIES,
   createStandaloneHandoffEnvelope,
   type StandaloneProtocolJsonValue,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 import { createElectronShellCapabilityPort } from "../src/shell-capabilities.js";
 

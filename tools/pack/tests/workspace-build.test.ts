@@ -15,27 +15,23 @@ import {
 const SHELL_PACKAGE_DIRS = [
   "packages/release",
   "packages/contracts",
-  "packages/sidecar-proto",
-  "packages/launcher-proto",
   "packages/sidecar",
   "packages/platform",
   "packages/download",
   "packages/host",
   "packages/diagnostics",
-  "packages/standalone-runtime",
-  "packages/standalone-proto",
+  "apps/standalone",
   "shells/electron",
 ] as const;
 
 const STANDALONE_BOOTSTRAP_PACKAGE_DIRS = [
-  "packages/closure-proto",
-  "packages/closure-store",
-  "packages/closure-update",
+  "packages/closure",
 ] as const;
 
-const BODY_PACKAGE_DIRS = ["apps/daemon", "apps/standalone", "apps/web"] as const;
+const BODY_PACKAGE_DIRS = ["apps/daemon", "apps/web"] as const;
 
 async function writeWorkspace(root: string): Promise<void> {
+  await writeFile(join(root, ".node-version"), "24.18.0\n");
   await writeFile(join(root, "package.json"), `${JSON.stringify({ packageManager: "pnpm@10.33.2" })}\n`);
   await writeFile(join(root, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
   for (const directory of [...SHELL_PACKAGE_DIRS, ...STANDALONE_BOOTSTRAP_PACKAGE_DIRS, ...BODY_PACKAGE_DIRS]) {
@@ -52,17 +48,55 @@ async function writeWorkspace(root: string): Promise<void> {
     })}\n`);
     await writeFile(join(root, directory, "src", "index.ts"), "export const value = 1;\n");
   }
+  await writeFile(join(root, "apps/standalone/esbuild.config.ts"), "export {};\n");
+  await writeFile(join(root, "apps/standalone/tsconfig.json"), "{}\n");
+  for (const directory of ["protocol", "runtime"]) {
+    await mkdir(join(root, "apps/standalone/src", directory), { recursive: true });
+    await writeFile(join(root, "apps/standalone/src", directory, "index.ts"), "export const value = 1;\n");
+  }
+  for (const source of [
+    "bootloader.ts",
+    "generation-bootloader.ts",
+    "launcher-bootstrap.ts",
+    "launcher.ts",
+    "native-loader.ts",
+    "process-bridge.ts",
+  ]) {
+    await writeFile(join(root, "apps/standalone/src", source), "export const value = 1;\n");
+  }
   await writeFile(join(root, "apps/standalone/src/bootstrap.ts"), "export const bootstrap = 1;\n");
   await writeFile(join(root, "apps/standalone/src/bootstrap-entry.ts"), "export const entry = 1;\n");
   await writeFile(join(root, "apps/standalone/src/fossil-bootloader.ts"), "export const handoff = 1;\n");
+  for (const source of [
+    "desktop-capability-adapter.ts",
+    "shell-capabilities.ts",
+    "standalone-bootstrap.ts",
+    "standalone-commands.ts",
+    "standalone-handoff.ts",
+    "standalone-launcher-entry.ts",
+    "standalone-launcher.ts",
+  ]) {
+    await writeFile(join(root, "shells/electron/src", source), "export const value = 1;\n");
+  }
+  await mkdir(join(root, "packages/closure/src/update"), { recursive: true });
+  await writeFile(join(root, "packages/closure/src/update/index.ts"), "export const value = 1;\n");
+  await mkdir(join(root, "packages/closure/src/store"), { recursive: true });
+  await writeFile(join(root, "packages/closure/src/store/index.ts"), "export const value = 1;\n");
   await mkdir(join(root, "tools/pack/resources/mac"), { recursive: true });
   await mkdir(join(root, "tools/pack/resources/win"), { recursive: true });
   await mkdir(join(root, "tools/pack/src/mac"), { recursive: true });
   await mkdir(join(root, "tools/pack/src/win"), { recursive: true });
   await writeFile(join(root, "tools/pack/package.json"), `${JSON.stringify({ name: "@open-design/tools-pack" })}\n`);
   await writeFile(join(root, "tools/pack/src/index.ts"), "export const pack = 1;\n");
+  for (const source of ["closure-components.ts", "closure-distribution.ts", "shell-build-plan.ts", "standalone-seed.ts", "closure-platform.ts"]) {
+    await writeFile(join(root, "tools/pack/src", source), "export const value = 1;\n");
+  }
   await writeFile(join(root, "tools/pack/src/mac/index.ts"), "export const mac = 1;\n");
   await writeFile(join(root, "tools/pack/src/win/index.ts"), "export const win = 1;\n");
+  for (const platform of ["mac", "win"]) {
+    await writeFile(join(root, "tools/pack/src", platform, "payload.ts"), "export const payload = 1;\n");
+    await writeFile(join(root, "tools/pack/src", platform, "paths.ts"), "export const paths = 1;\n");
+  }
   await writeFile(join(root, "tools/pack/resources/mac/entitlements.plist"), "mac-1\n");
   await writeFile(join(root, "tools/pack/resources/win/icon.ico"), "win-1\n");
 }
@@ -154,9 +188,9 @@ describe("Electron Shell workspace build cache", () => {
       expect(builds).toBe(1);
       await writeFile(join(root, "apps/standalone/src/bootstrap.ts"), "export const bootstrap = 2;\n");
       await ensureWorkspaceBuildArtifacts(config, cache, build);
-      await writeFile(join(root, "packages/closure-update/src/index.ts"), "export const value = 2;\n");
+      await writeFile(join(root, "packages/closure/src/update/index.ts"), "export const value = 2;\n");
       await ensureWorkspaceBuildArtifacts(config, cache, build);
-      await writeFile(join(root, "packages/standalone-proto/src/index.ts"), "export const value = 2;\n");
+      await writeFile(join(root, "apps/standalone/src/protocol/index.ts"), "export const value = 2;\n");
       await ensureWorkspaceBuildArtifacts(config, cache, build);
 
       expect(builds).toBe(4);
@@ -225,8 +259,23 @@ describe("Electron Shell workspace build cache", () => {
       const after = await resolveShellBuildIdentity(config);
 
       expect(after.sourceDigest).toBe(before.sourceDigest);
+      expect(after.capabilityDigest).toBe(before.capabilityDigest);
+      expect(after.carrierDigest).toBe(before.carrierDigest);
       expect(after.depsDigest).not.toBe(before.depsDigest);
       expect(after.buildDigest).not.toBe(before.buildDigest);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps capability target-neutral while binding carriers to their target", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-shell-capability-"));
+    try {
+      await writeWorkspace(root);
+      const mac = await resolveShellBuildIdentity(createConfig(root, join(root, ".cache-mac"), "mac"));
+      const win = await resolveShellBuildIdentity(createConfig(root, join(root, ".cache-win"), "win"));
+      expect(mac.capabilityDigest).toBe(win.capabilityDigest);
+      expect(mac.carrierDigest).not.toBe(win.carrierDigest);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

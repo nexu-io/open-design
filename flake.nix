@@ -50,8 +50,7 @@
         "packages/registry-protocol"
         "packages/agui-adapter"
         "packages/plugin-runtime"
-        "packages/sidecar-proto"
-        "packages/launcher-proto"
+        "packages/host"
         "packages/sidecar"
         "packages/platform"
         "packages/diagnostics"
@@ -66,7 +65,6 @@
         "packages/host"
         "packages/platform"
         "packages/sidecar"
-        "packages/sidecar-proto"
         "apps/web"
       ];
       daemonSrc = filterProjectSource ([

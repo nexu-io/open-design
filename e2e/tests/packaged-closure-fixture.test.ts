@@ -9,7 +9,7 @@ import {
   CLOSURE_INVENTORY_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
-} from '@open-design/closure-proto';
+} from '@open-design/closure/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {

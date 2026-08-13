@@ -23,11 +23,9 @@ This file is the single source of truth for agents entering this repository. Rea
 - `apps/standalone` owns the shell-neutral Web + daemon product composition, the fixed `bootloader.mjs` handoff-once entry, and composition over the normalized sidecar control plane. It does not own Desktop IPC, windows, artifact selection, or update UI.
 - `apps/landing-page` is the standalone static Astro marketing and public catalog site. It reads repository content at build time and is not part of the daemon/web product runtime.
 - `packages/contracts` is the pure TypeScript web/daemon app contract layer.
-- `packages/standalone-proto` owns the minimal Shell↔Standalone handoff: exact generation identity, resolved roots, Shell identity/capability exchange, runtime status, min-version comparison, and the fixed `bootloader.mjs` name.
-- `packages/closure-proto` owns namespace-neutral release candidate, artifact integrity, inventory, signature, and Shell compatibility metadata. Do not add a second live handoff protocol here.
-- `packages/closure-store` and `packages/closure-update` are Standalone Closure materialization and committed-binding substrate. The Store persists one release-to-Standalone binding without attempt/history recovery; `bootloader.mjs` and the body must not consume selection or policy APIs.
-- `packages/standalone-runtime` owns reusable Standalone Web + daemon lifecycle primitives shared by host adapters; it stays independent from the Shell handoff protocol.
-- `packages/sidecar` is the sole target public sidecar control plane: it owns canonical control identity, hidden launch/connect/stop mechanics, fencing, transport, and process convergence while callers retain executable and product policy. `packages/sidecar-proto` is transitional and must disappear after business DTO migration; `packages/platform` retains only generic OS primitives.
+- `apps/standalone` owns the minimal Shell↔Standalone handoff and reusable Web + daemon lifecycle through its `./protocol` and `./runtime` subpaths. Protocol stays transport- and persistence-free; runtime stays adapter-driven and shell-neutral.
+- `packages/closure` owns namespace-neutral release protocol, immutable Store, and update orchestration through `./protocol`, `./store`, and `./update`. Protocol must not import implementation subpaths; `bootloader.mjs` and the body must not consume selection policy APIs.
+- `packages/sidecar` is the sole public sidecar control plane: it owns canonical control identity, hidden launch/connect/stop mechanics, fencing, transport, process convergence, and generic protocol primitives while callers retain executable and product policy. `packages/platform` retains only generic OS primitives.
 - `tools/dev` is the local development lifecycle control plane.
 - `tools/pack` is the local packaged build/start/stop/logs control plane, packaged updater harness, installer identity/registry validation surface, and mac beta release artifact preparation surface.
 - `tools/serve` is the local fixture-service control plane; first service is `tools-serve start updater` for deterministic updater metadata and artifacts.
@@ -362,7 +360,7 @@ Desktop queries runtime status through sidecar IPC. The web URL comes from `tool
 
 ## How are sidecar, product contracts, and platform split?
 
-`@open-design/sidecar` owns the business-neutral mechanical control plane and hides endpoint, launch metadata, fencing incarnation, transport, and process matching. Callers own executable choice, timing, restart/update/UX policy, roots, and business handlers. Shared product DTOs belong in `@open-design/contracts`, Desktop host/updater DTOs in `@open-design/host`, and Shell/Closure meaning in `@open-design/closure-proto`. `@open-design/platform` may provide generic OS primitives internally but is not a second sidecar protocol. `@open-design/sidecar-proto` is legacy migration surface, not a destination for new code.
+`@open-design/sidecar` owns the business-neutral mechanical control plane and hides endpoint, launch metadata, fencing incarnation, transport, and process matching. Callers own executable choice, timing, restart/update/UX policy, roots, and business handlers. Shared product DTOs belong in `@open-design/contracts`, Desktop host/updater DTOs in `@open-design/host`, and Shell/Closure meaning in `@open-design/closure/protocol`. `@open-design/platform` may provide generic OS primitives internally but is not a second sidecar protocol.
 
 ## When is `pnpm install` required?
 

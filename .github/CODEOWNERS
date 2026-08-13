@@ -6,6 +6,7 @@
 /tools/serve/ @nexu-io/core-maintainers
 /shells/electron/ @nexu-io/core-maintainers
 /apps/standalone/ @nexu-io/core-maintainers
+/packages/closure/ @nexu-io/core-maintainers
+/packages/host/ @nexu-io/core-maintainers
 /packages/platform/ @nexu-io/core-maintainers
 /packages/sidecar/ @nexu-io/core-maintainers
-/packages/sidecar-proto/ @nexu-io/core-maintainers

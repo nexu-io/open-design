@@ -38,7 +38,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 24.18.0
 
       - name: Check landing Feishu summary script
         run: node --experimental-strip-types .github/scripts/landing-page-daily-feishu.ts self-check

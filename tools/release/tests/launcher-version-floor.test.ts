@@ -1,17 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  assertLauncherVersionFloorSatisfiable,
-  resolveLauncherVersionFloor,
-} from "../src/storage/launcher-version-floor.js";
+  assertInstallationVersionFloorSatisfiable,
+  resolveInstallationVersionFloor,
+} from "../src/storage/installation-version-floor.js";
 
-describe("launcher version floor channel policy", () => {
+describe("installation version floor channel policy", () => {
   it("resolves the channel-specific pair when the channel min is set", () => {
-    const floor = resolveLauncherVersionFloor("beta", {
-      RELEASE_LAUNCHER_VERSION_MIN_BETA: "1.2.0-beta.3",
-      RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: "https://example.test/beta-help",
-      RELEASE_LAUNCHER_VERSION_MIN_STABLE: "1.1.0",
-      RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: "https://example.test/stable-help",
+    const floor = resolveInstallationVersionFloor("beta", {
+      RELEASE_INSTALLATION_VERSION_MIN_BETA: "1.2.0-beta.3",
+      RELEASE_INSTALLATION_VERSION_MIN_URL_BETA: "https://example.test/beta-help",
+      RELEASE_INSTALLATION_VERSION_MIN_STABLE: "1.1.0",
+      RELEASE_INSTALLATION_VERSION_MIN_URL_STABLE: "https://example.test/stable-help",
     });
     expect(floor).toEqual({ min: "1.2.0-beta.3", url: "https://example.test/beta-help" });
   });
@@ -19,9 +19,9 @@ describe("launcher version floor channel policy", () => {
   it("falls back to the stable pair as a unit when the channel pair is unset", () => {
     // Pair-level fallback: a channel never mixes its own fields with stable's —
     // channel policy is one coherent pair.
-    const floor = resolveLauncherVersionFloor("preview", {
-      RELEASE_LAUNCHER_VERSION_MIN_STABLE: "1.1.0",
-      RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: "https://example.test/stable-help",
+    const floor = resolveInstallationVersionFloor("preview", {
+      RELEASE_INSTALLATION_VERSION_MIN_STABLE: "1.1.0",
+      RELEASE_INSTALLATION_VERSION_MIN_URL_STABLE: "https://example.test/stable-help",
     });
     expect(floor).toEqual({ min: "1.1.0", url: "https://example.test/stable-help" });
   });
@@ -31,61 +31,61 @@ describe("launcher version floor channel policy", () => {
     // misconfiguration; hiding it behind the stable fallback would silently
     // drop their intent.
     expect(() =>
-      resolveLauncherVersionFloor("preview", {
-        RELEASE_LAUNCHER_VERSION_MIN_URL_PREVIEW: "https://example.test/preview-only-url",
-        RELEASE_LAUNCHER_VERSION_MIN_STABLE: "1.1.0",
+      resolveInstallationVersionFloor("preview", {
+        RELEASE_INSTALLATION_VERSION_MIN_URL_PREVIEW: "https://example.test/preview-only-url",
+        RELEASE_INSTALLATION_VERSION_MIN_STABLE: "1.1.0",
       }),
-    ).toThrow(/URL_PREVIEW requires RELEASE_LAUNCHER_VERSION_MIN_PREVIEW/);
+    ).toThrow(/URL_PREVIEW requires RELEASE_INSTALLATION_VERSION_MIN_PREVIEW/);
   });
 
   it("resolves stable from its own pair only", () => {
     expect(
-      resolveLauncherVersionFloor("stable", {
-        RELEASE_LAUNCHER_VERSION_MIN_STABLE: "1.1.0",
+      resolveInstallationVersionFloor("stable", {
+        RELEASE_INSTALLATION_VERSION_MIN_STABLE: "1.1.0",
       }),
     ).toEqual({ min: "1.1.0" });
   });
 
   it("returns null when neither the channel nor stable defines a floor", () => {
-    expect(resolveLauncherVersionFloor("betas", {})).toBeNull();
-    expect(resolveLauncherVersionFloor("stable", {})).toBeNull();
+    expect(resolveInstallationVersionFloor("betas", {})).toBeNull();
+    expect(resolveInstallationVersionFloor("stable", {})).toBeNull();
   });
 
   it("treats empty-string vars as unset (GitHub passes unset vars as empty)", () => {
     expect(
-      resolveLauncherVersionFloor("beta", {
-        RELEASE_LAUNCHER_VERSION_MIN_BETA: "",
-        RELEASE_LAUNCHER_VERSION_MIN_STABLE: "",
+      resolveInstallationVersionFloor("beta", {
+        RELEASE_INSTALLATION_VERSION_MIN_BETA: "",
+        RELEASE_INSTALLATION_VERSION_MIN_STABLE: "",
       }),
     ).toBeNull();
   });
 
   it("rejects a channel url without a channel min at the source pair", () => {
     expect(() =>
-      resolveLauncherVersionFloor("stable", {
-        RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: "https://example.test/orphan",
+      resolveInstallationVersionFloor("stable", {
+        RELEASE_INSTALLATION_VERSION_MIN_URL_STABLE: "https://example.test/orphan",
       }),
-    ).toThrow(/URL_STABLE requires RELEASE_LAUNCHER_VERSION_MIN_STABLE/);
+    ).toThrow(/URL_STABLE requires RELEASE_INSTALLATION_VERSION_MIN_STABLE/);
   });
 
   it("rejects malformed versions and non-http urls", () => {
     expect(() =>
-      resolveLauncherVersionFloor("beta", { RELEASE_LAUNCHER_VERSION_MIN_BETA: "not-a-version" }),
+      resolveInstallationVersionFloor("beta", { RELEASE_INSTALLATION_VERSION_MIN_BETA: "not-a-version" }),
     ).toThrow(/not a valid version/);
     expect(() =>
-      resolveLauncherVersionFloor("beta", {
-        RELEASE_LAUNCHER_VERSION_MIN_BETA: "1.0.0",
-        RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: "ftp://example.test/help",
+      resolveInstallationVersionFloor("beta", {
+        RELEASE_INSTALLATION_VERSION_MIN_BETA: "1.0.0",
+        RELEASE_INSTALLATION_VERSION_MIN_URL_BETA: "ftp://example.test/help",
       }),
     ).toThrow(/http\(s\) URL/);
   });
 
   it("rejects a floor above the release version", () => {
     expect(() =>
-      assertLauncherVersionFloorSatisfiable({ min: "2.0.0" }, "1.2.3-beta.4"),
+      assertInstallationVersionFloorSatisfiable({ min: "2.0.0" }, "1.2.3-beta.4"),
     ).toThrow(/exceeds release version/);
     expect(() =>
-      assertLauncherVersionFloorSatisfiable({ min: "1.2.3-beta.4" }, "1.2.3-beta.4"),
+      assertInstallationVersionFloorSatisfiable({ min: "1.2.3-beta.4" }, "1.2.3-beta.4"),
     ).not.toThrow();
   });
 });
@@ -108,18 +108,18 @@ describe("launcher version floor channel policy", () => {
  * that avoids it: one explicit pair per active lane, each in its own lane's
  * version format.
  */
-describe("launcher version floor operational configuration", () => {
+describe("installation version floor operational configuration", () => {
   const STABLE_RELEASE = "0.17.0";
   const HELP_URL = "https://example.test/download";
 
   const stableOnly: NodeJS.ProcessEnv = {
-    RELEASE_LAUNCHER_VERSION_MIN_STABLE: STABLE_RELEASE,
-    RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE: HELP_URL,
+    RELEASE_INSTALLATION_VERSION_MIN_STABLE: STABLE_RELEASE,
+    RELEASE_INSTALLATION_VERSION_MIN_URL_STABLE: HELP_URL,
   };
 
-  function publish(channel: Parameters<typeof resolveLauncherVersionFloor>[0], env: NodeJS.ProcessEnv, releaseVersion: string): void {
-    const floor = resolveLauncherVersionFloor(channel, env);
-    if (floor != null) assertLauncherVersionFloorSatisfiable(floor, releaseVersion);
+  function publish(channel: Parameters<typeof resolveInstallationVersionFloor>[0], env: NodeJS.ProcessEnv, releaseVersion: string): void {
+    const floor = resolveInstallationVersionFloor(channel, env);
+    if (floor != null) assertInstallationVersionFloorSatisfiable(floor, releaseVersion);
   }
 
   it("lets a bare stable floor publish its own lane", () => {
@@ -149,12 +149,12 @@ describe("launcher version floor operational configuration", () => {
   it("publishes every lane when each carries its own explicit pair", () => {
     const perChannel: NodeJS.ProcessEnv = {
       ...stableOnly,
-      RELEASE_LAUNCHER_VERSION_MIN_BETA: "0.17.0-beta.1",
-      RELEASE_LAUNCHER_VERSION_MIN_URL_BETA: HELP_URL,
-      RELEASE_LAUNCHER_VERSION_MIN_PREVIEW: "0.17.0-preview.1",
-      RELEASE_LAUNCHER_VERSION_MIN_URL_PREVIEW: HELP_URL,
-      RELEASE_LAUNCHER_VERSION_MIN_PRERELEASE: "0.17.0-prerelease.1",
-      RELEASE_LAUNCHER_VERSION_MIN_URL_PRERELEASE: HELP_URL,
+      RELEASE_INSTALLATION_VERSION_MIN_BETA: "0.17.0-beta.1",
+      RELEASE_INSTALLATION_VERSION_MIN_URL_BETA: HELP_URL,
+      RELEASE_INSTALLATION_VERSION_MIN_PREVIEW: "0.17.0-preview.1",
+      RELEASE_INSTALLATION_VERSION_MIN_URL_PREVIEW: HELP_URL,
+      RELEASE_INSTALLATION_VERSION_MIN_PRERELEASE: "0.17.0-prerelease.1",
+      RELEASE_INSTALLATION_VERSION_MIN_URL_PRERELEASE: HELP_URL,
     };
     for (const [channel, releaseVersion] of [
       ["stable", STABLE_RELEASE],

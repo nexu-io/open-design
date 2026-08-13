@@ -6,7 +6,7 @@ import {
   validateStandaloneHandoffRequest,
   type StandaloneHandoff,
   type StandaloneHandoffRequest,
-} from "@open-design/standalone-proto";
+} from "./protocol/index.js";
 
 import {
   launchStandaloneBodyBridge,
@@ -15,12 +15,12 @@ import {
 
 export type StandaloneGenerationLaunch = StandaloneBodyProcessLaunchSpec;
 
-function bundledStandaloneToolEnv(nativeRoot: string): NodeJS.ProcessEnv {
+function bundledStandaloneToolEnv(resourceRoot: string): NodeJS.ProcessEnv {
   const binaryName = process.platform === "win32" ? "vela.exe" : "vela";
   const openCodeName = process.platform === "win32" ? "opencode.exe" : "opencode";
   const candidates = {
-    VELA_BIN: join(nativeRoot, "bin", binaryName),
-    VELA_OPENCODE_BIN: join(nativeRoot, "bin", "libexec", "opencode", openCodeName),
+    VELA_BIN: join(resourceRoot, "bin", binaryName),
+    VELA_OPENCODE_BIN: join(resourceRoot, "bin", "libexec", "opencode", openCodeName),
   } as const;
   const env: NodeJS.ProcessEnv = {};
   for (const [name, path] of Object.entries(candidates)) {
@@ -51,7 +51,7 @@ export function resolveStandaloneGenerationLaunch(
     cwd: join(installationRoot, "body"),
     env: {
       ...process.env,
-      ...bundledStandaloneToolEnv(nativeRoot),
+      ...bundledStandaloneToolEnv(request.paths.resourceRoot),
       NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${nativeLoader}`].filter(Boolean).join(" "),
       NODE_PATH: join(nativeRoot, "node_modules"),
       OD_STANDALONE_NATIVE_ROOT: nativeRoot,

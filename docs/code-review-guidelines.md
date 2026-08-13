@@ -151,7 +151,7 @@ For TypeScript source, package/tool/app behavior, tests, command surfaces, runti
 
 ### 4.2 Contract and protocol changes
 
-For any change to `packages/contracts`, `packages/sidecar-proto`, persisted SQLite schema, or other public seams (HTTP routes, SSE event unions, IPC message shapes, on-disk resource formats).
+For any change to `packages/contracts`, `packages/sidecar`, persisted SQLite schema, or other public seams (HTTP routes, SSE event unions, IPC message shapes, on-disk resource formats).
 
 **Accept when:**
 

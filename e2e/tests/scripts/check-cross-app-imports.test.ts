@@ -158,6 +158,25 @@ test("cross-app import check allows packages, same-app relatives, and externals"
   assert.deepEqual(violations, []);
 });
 
+test("cross-app import check allows only the daemon body adapter to consume the Standalone protocol", () => {
+  const standaloneRegistry: AppDirectoryRegistry = {
+    packageNameByDirectory: new Map([
+      ...registry.packageNameByDirectory,
+      ["standalone", "@open-design/standalone"],
+    ]),
+  };
+  assert.deepEqual(collectCrossAppImportViolationsFromSource(
+    "apps/daemon/src/sidecar/standalone-control.ts",
+    "import type { StandaloneShellCapability } from '@open-design/standalone/protocol';",
+    standaloneRegistry,
+  ), []);
+  assert.equal(collectCrossAppImportViolationsFromSource(
+    "apps/daemon/src/server.ts",
+    "import { boot } from '@open-design/standalone';",
+    standaloneRegistry,
+  ).length, 1);
+});
+
 test("cross-app import check ignores quoted snippets and comments", () => {
   const violations = collectCrossAppImportViolationsFromSource(
     "apps/web/tests/import-boundary-fixture.test.ts",

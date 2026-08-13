@@ -20,12 +20,19 @@
     "./lifecycle": {
       "types": "./dist/lifecycle/index.d.ts",
       "default": "./dist/lifecycle/index.mjs"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "default": "./dist/protocol.mjs"
     }
   },
   "scripts": {
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/release": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

@@ -12,7 +12,7 @@ import {
   type ClosureCandidateManifest,
   type ClosureDigest,
   type ClosureDistributionManifest,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 
 import {
   isReleaseChannel,
@@ -43,8 +43,8 @@ export type UpdaterFixtureOptions = {
   closureBlobDir?: string;
   closureDistributionManifestPath?: string;
   closureManifestPath?: string;
-  controlLauncherVersionMin?: string;
-  controlLauncherVersionUrl?: string;
+  controlInstallationVersionMin?: string;
+  controlInstallationVersionUrl?: string;
   host?: string;
   includePayload?: boolean;
   launcherSchema?: number;
@@ -442,13 +442,21 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
               },
             }),
         ...(options.launcherSchema != null ? { launcher: { schema: options.launcherSchema } } : {}),
-        ...(options.controlLauncherVersionMin != null || options.controlLauncherVersionUrl != null
+        ...(options.controlInstallationVersionMin != null || options.controlInstallationVersionUrl != null
           ? {
               control: {
+                shell: {
+                  installation: {
+                    version: {
+                      ...(options.controlInstallationVersionMin != null ? { min: options.controlInstallationVersionMin } : {}),
+                      ...(options.controlInstallationVersionUrl != null ? { url: options.controlInstallationVersionUrl } : {}),
+                    },
+                  },
+                },
                 launcher: {
                   version: {
-                    ...(options.controlLauncherVersionMin != null ? { min: options.controlLauncherVersionMin } : {}),
-                    ...(options.controlLauncherVersionUrl != null ? { url: options.controlLauncherVersionUrl } : {}),
+                    ...(options.controlInstallationVersionMin != null ? { min: options.controlInstallationVersionMin } : {}),
+                    ...(options.controlInstallationVersionUrl != null ? { url: options.controlInstallationVersionUrl } : {}),
                   },
                 },
               },

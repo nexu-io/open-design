@@ -6,19 +6,19 @@ import { isAbsolute, join, resolve } from 'node:path';
 import {
   validateClosureDistributionManifest,
   type ClosureDistributionManifest,
-} from '@open-design/closure-proto';
+} from '@open-design/closure/protocol';
 import {
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
   type ClosureBindingDescriptor,
   type ClosureRuntimePointer,
   type ClosureStorePaths,
-} from '@open-design/closure-store';
+} from '@open-design/closure/store';
 import {
   applyClosureDistributionUpdate,
   ensureClosureResource,
   type ClosureDistributionReleaseCandidate,
-} from '@open-design/closure-update';
+} from '@open-design/closure/update';
 
 export type PackagedStandaloneDistributionFixture = {
   ensuredResource: Readonly<{ id: string; path: string; reused: boolean; title: string }> | null;
@@ -153,8 +153,14 @@ export async function readPackagedStandaloneDistributionFixture(input: {
 export async function damagePackagedStandaloneDistributionFixture(
   fixture: PackagedStandaloneDistributionFixture,
 ): Promise<void> {
+  const storeRoot = join(
+    fixture.storePaths.installationsRoot,
+    fixture.pointer.version,
+    fixture.pointer.digest.slice('sha256:'.length),
+    fixture.pointer.target,
+  );
   await writeFile(
-    join(fixture.storePaths.generationsRoot, String(fixture.pointer.generation), 'body', 'bootloader.mjs'),
+    join(storeRoot, 'body', 'bootloader.mjs'),
     'throw new Error("release smoke damaged Standalone generation");\n',
     'utf8',
   );

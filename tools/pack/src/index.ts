@@ -82,6 +82,7 @@ function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
   return command
     .option("--release-version <version>", "product release bound to this build; never baked into reusable Shell bytes")
     .option("--shell-version <version>", "Shell compatibility version; defaults to release-version for a new Shell")
+    .option("--launcher-version <version>", "launcher payload version; defaults to the bound release")
     .option("--standalone-seed-dir <path>", "validated baseline index/blob repository carried as a Shell resource")
     .option("--portable", "do not bake local tools-pack runtime roots into the packaged config")
     .option("--require-vela-cli", "fail packaging when the bundled Vela CLI cannot be resolved")
@@ -122,7 +123,6 @@ cli.command("closure <action>", "Standalone Closure commands: build-distribution
   .option("--json", "print JSON")
   .option("--min-shell-version <version>", "minimum compatible shell version")
   .option("--platform <target>", "closure target: darwin-arm64|darwin-x64|win32-x64 (default: current host)")
-  .option("--require-vela-cli", "fail when the target-native Vela and OpenCode runtime cannot be bundled")
   .option("--skip-workspace-build", "reuse workspace outputs built earlier in the same release job")
   .option("--version <version>", "Closure release version")
   .action(async (action: string, options: CliOptions) => {
@@ -164,7 +164,6 @@ cli.command("closure <action>", "Standalone Closure commands: build-distribution
         channel: options.channel,
         ...(options.dir == null ? {} : { dir: options.dir }),
         ...(options.platform == null ? {} : { platform: options.platform }),
-        requireVelaCli: options.requireVelaCli === true,
         skipWorkspaceBuild: options.skipWorkspaceBuild === true,
         version: options.version,
       }));

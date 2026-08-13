@@ -4,7 +4,7 @@ import {
   STANDALONE_HANDOFF_SCHEMA_VERSION,
   type StandaloneHandle,
   type StandaloneHandoffEnvelope,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 export const OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND =
   "open-design.register-desktop-auth.v1" as const;

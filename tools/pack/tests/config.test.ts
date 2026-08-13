@@ -127,12 +127,25 @@ describe("resolveToolPackConfig namespace defaults", () => {
     });
     expect(config.releaseVersion).toBe("0.19.0-beta.2");
     expect(config.shellVersion).toBe("0.19.0-beta.1");
+    expect(config.launcherVersion).toBe("0.19.0-beta.2");
     expect(config.namespace).toBe("release-beta");
+  });
+
+  it("keeps an explicit launcher payload version independent", () => {
+    const config = resolveToolPackConfig("mac", {
+      launcherVersion: "0.19.0-beta.3",
+      releaseVersion: "0.19.0-beta.2",
+      shellVersion: "0.19.0-beta.1",
+    });
+    expect(config.launcherVersion).toBe("0.19.0-beta.3");
+    expect(config.releaseVersion).toBe("0.19.0-beta.2");
+    expect(config.shellVersion).toBe("0.19.0-beta.1");
   });
 
   it("assigns a new Shell the release version when no reusable Shell is selected", () => {
     const config = resolveToolPackConfig("mac", { releaseVersion: "0.19.0-beta.1" });
     expect(config.shellVersion).toBe("0.19.0-beta.1");
+    expect(config.launcherVersion).toBe("0.19.0-beta.1");
   });
 
   it("keeps ordinary local builds on the default namespace", () => {

@@ -48,7 +48,7 @@ describe("mac standalone prebundle policy", () => {
       "@open-design/daemon",
       "@open-design/shell-electron",
       "@open-design/sidecar",
-      "@open-design/sidecar-proto",
+      "@open-design/sidecar/protocol",
       "@open-design/web",
     ]) {
       expect(
@@ -223,6 +223,23 @@ describe("assertMacPrebundleMetafile", () => {
       await expect(
         assertMacPrebundleMetafile({ metafilePath, policyName: "packagedMain" }),
       ).rejects.toThrow(/packaged main prebundle included forbidden inputs/);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("accepts only the Standalone owner-local public protocol in packaged main", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-mac-prebundle-"));
+    const metafilePath = join(root, "standalone-protocol.json");
+    try {
+      await writeFile(
+        metafilePath,
+        JSON.stringify({ inputs: { "/repo/apps/standalone/dist/protocol/index.mjs": {} } }),
+        "utf8",
+      );
+      await expect(
+        assertMacPrebundleMetafile({ metafilePath, policyName: "packagedMain" }),
+      ).resolves.toBeUndefined();
     } finally {
       await rm(root, { force: true, recursive: true });
     }

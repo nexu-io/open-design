@@ -24,7 +24,7 @@ product body.
 
 ## Rules
 
-- Consume `@open-design/standalone-proto`; never invent a second Shell-to-
+- Consume `@open-design/standalone/protocol`; never invent a second Shell-to-
   Standalone handoff shape.
 - The Shell never discovers, selects, downloads, materializes, commits, retries,
   or rolls back Closure generations. It supplies identity, roots, discovery

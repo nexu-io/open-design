@@ -6,7 +6,7 @@ import {
   CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   createClosureDistributionManifest,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { compareCountedReleaseVersions, sha256Digest } from "../src/storage/latest-publication.js";

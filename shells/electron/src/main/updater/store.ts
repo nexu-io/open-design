@@ -7,7 +7,7 @@ import type {
   DesktopUpdateChecksumSnapshot,
   DesktopUpdateErrorSnapshot,
   DesktopUpdateStatusSnapshot,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 
 import {
   isDesktopUpdateChannel,

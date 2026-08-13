@@ -1,7 +1,7 @@
 import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
-import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar-proto";
+import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar/protocol";
 
 import {
   projectPackagedColdLaunchConfig,
@@ -37,6 +37,8 @@ export type RawPackagedConfig = {
   namespaceBaseRoot?: string;
   nodeCommandRelative?: string;
   resourceRoot?: string;
+  /** Package-launcher lifecycle version; independent from product release and reusable Shell bytes. */
+  launcherVersion?: string;
   /** Release binding selected by the launcher; independent from Shell bytes. */
   releaseVersion?: string;
   shellVersion?: string;
@@ -72,6 +74,7 @@ export type PackagedConfig = {
   namespaceBaseRoot: string;
   nodeCommand: string | null;
   resourceRoot: string;
+  launcherVersion: string | null;
   releaseVersion: string | null;
   shellVersion: string | null;
   telemetryRelayUrl: string | null;
@@ -249,6 +252,9 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     namespaceBaseRoot,
     nodeCommand,
     resourceRoot,
+    launcherVersion: cleanOptionalString(raw.launcherVersion)
+      ?? cleanOptionalString(raw.releaseVersion)
+      ?? cleanOptionalString(raw.shellVersion),
     releaseVersion: cleanOptionalString(raw.releaseVersion) ?? cleanOptionalString(raw.shellVersion),
     shellVersion: cleanOptionalString(raw.shellVersion),
     telemetryRelayUrl: cleanOptionalString(raw.telemetryRelayUrl),

@@ -317,20 +317,12 @@ describe("postinstall script contract", () => {
     const sandbox = createSandbox();
     try {
       writeTarget(sandbox, "packages/release", { name: "@fixture/release" });
-      writeTarget(sandbox, "packages/closure-proto", {
+      writeTarget(sandbox, "packages/closure", {
         dependencies: { "@fixture/release": "workspace:*" },
-        name: "@fixture/closure-proto",
-      });
-      writeTarget(sandbox, "packages/closure-store", {
-        dependencies: { "@fixture/closure-proto": "workspace:*" },
-        name: "@fixture/closure-store",
-      });
-      writeTarget(sandbox, "packages/closure-update", {
-        dependencies: { "@fixture/closure-store": "workspace:*" },
-        name: "@fixture/closure-update",
+        name: "@fixture/closure",
       });
       writeTarget(sandbox, "tools/pack", {
-        dependencies: { "@fixture/closure-proto": "workspace:*" },
+        dependencies: { "@fixture/closure": "workspace:*" },
         name: "@fixture/tools-pack",
       });
       writeTarget(sandbox, "tools/release", {
@@ -355,7 +347,7 @@ describe("postinstall script contract", () => {
         .map((event) => event.target);
       expect(prepareTargets).toEqual([
         "packages/release",
-        "packages/closure-proto",
+        "packages/closure",
         "tools/pack",
         "tools/release",
       ]);
@@ -381,9 +373,7 @@ describe("postinstall script contract", () => {
         .map((event) => event.target);
       expect(smokeTargets).toEqual([
         "packages/release",
-        "packages/closure-proto",
-        "packages/closure-store",
-        "packages/closure-update",
+        "packages/closure",
         "tools/pack",
         "tools/release",
         "tools/serve",

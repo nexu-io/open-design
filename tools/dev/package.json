@@ -15,7 +15,6 @@
   "dependencies": {
     "@open-design/platform": "workspace:*",
     "@open-design/sidecar": "workspace:*",
-    "@open-design/sidecar-proto": "workspace:*",
     "cac": "6.7.14"
   },
   "devDependencies": {

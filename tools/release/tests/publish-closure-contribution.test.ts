@@ -6,7 +6,7 @@ import { join } from "node:path";
 import {
   CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createClosureContributionPublicationPlan } from "../src/storage/publish-closure-contribution.js";

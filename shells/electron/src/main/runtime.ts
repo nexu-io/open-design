@@ -18,8 +18,8 @@ import {
   type DesktopRenderSlidesInput,
   type DesktopRenderSlidesResult,
   type DesktopUpdateStatusSnapshot,
-} from "@open-design/sidecar-proto";
-import type { StandaloneBootstrapProgress } from "@open-design/standalone-proto";
+} from "@open-design/sidecar/protocol";
+import type { StandaloneBootstrapProgress } from "@open-design/standalone/protocol";
 import type {
   OpenDesignHostActionResult,
   OpenDesignHostCaptureResult,

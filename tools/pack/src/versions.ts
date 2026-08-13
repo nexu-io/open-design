@@ -21,6 +21,11 @@ export async function readReleaseBindingVersion(config: ToolPackConfig): Promise
   return readRuntimeShellVersion(config);
 }
 
+export async function readLauncherBindingVersion(config: ToolPackConfig): Promise<string> {
+  if (config.launcherVersion != null) return config.launcherVersion;
+  return readReleaseBindingVersion(config);
+}
+
 export function versionCoreForShellVersion(shellVersion: string): string {
   const match = /^(\d+\.\d+\.\d+)(?:[-.].*)?$/.exec(shellVersion);
   return match?.[1] ?? shellVersion;

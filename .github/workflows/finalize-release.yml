@@ -114,7 +114,7 @@ jobs:
       - uses: actions/setup-node@v4
         if: steps.ver.outputs.skip != 'true'
         with:
-          node-version: 24
+          node-version: 24.18.0
 
       - name: Delete the shipped release's backport label
         if: steps.ver.outputs.skip != 'true'

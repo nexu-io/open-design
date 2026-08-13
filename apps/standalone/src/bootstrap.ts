@@ -4,7 +4,7 @@ import {
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
   verifyStoredClosureDistributionGeneration,
-} from "@open-design/closure-store";
+} from "@open-design/closure/store";
 import {
   applyClosureDistributionUpdate,
   discoverClosureDistributionVersionCandidate,
@@ -14,7 +14,7 @@ import {
   type ClosureDistributionReleaseCandidate,
   type ClosureDistributionUpdateProgress,
   type ClosureResourceRepositoryConfig,
-} from "@open-design/closure-update";
+} from "@open-design/closure/update";
 import {
   STANDALONE_PROTOCOL_VERSION,
   STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION,
@@ -25,7 +25,7 @@ import {
   type StandaloneBootstrapErrorCode,
   type StandaloneBootstrapProgress,
   type StandaloneBootstrapResolution,
-} from "@open-design/standalone-proto";
+} from "./protocol/index.js";
 import {
   bootstrapSidecarLifecycle,
   type SidecarTransitionCredential,

@@ -287,7 +287,9 @@ try {
       "--dir", $fixtureDir,
       "--cache-dir", $CacheDir,
       "--namespace", $ReleaseNamespace,
-      "--release-version", $localUpdateVersion,
+      "--release-version", $ReleaseVersion,
+      "--shell-version", $localUpdateVersion,
+      "--launcher-version", $localUpdateVersion,
       "--to", "nsis",
       "--json"
     )

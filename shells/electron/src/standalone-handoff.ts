@@ -18,7 +18,7 @@ import {
   type StandalonePaths,
   type StandaloneRuntimeDescriptor,
   type StandaloneShellCapabilityPort,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 export type ElectronStandaloneBinding = Readonly<{
   attachment: StandaloneAttachmentDescriptor;

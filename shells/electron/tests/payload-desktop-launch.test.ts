@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { parseLauncherAfterQuitArgs, parseLauncherDelegatedArgs } from "@open-design/launcher-proto";
+import { parseLauncherAfterQuitArgs, parseLauncherDelegatedArgs } from "@open-design/host/shell-update";
 import { readProcessStamp } from "@open-design/platform";
 import {
   APP_KEYS,
@@ -11,7 +11,7 @@ import {
   SIDECAR_MODES,
   SIDECAR_SOURCES,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PackagedLauncherRuntime } from "../src/launcher-runtime.js";

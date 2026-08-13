@@ -5,7 +5,7 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the deploy
 ## Owns
 
 - The public Standalone application boundary and future executable entry.
-- The protocol-fixed `bootloader.mjs` handoff-once entry over `@open-design/standalone-proto`.
+- The protocol-fixed `bootloader.mjs` handoff-once entry over `@open-design/standalone/protocol`.
 - Composition of Web and daemon adapters into one product closure.
 - Product lifecycle composition over semantic `@open-design/sidecar` launch/connect/stop operations.
 - Initial Closure discovery, layered local/remote resource resolution,
@@ -27,11 +27,11 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the deploy
 ## Rules
 
 - Consume body runtime behavior through launch specifications and semantic sidecar methods; do not import another app's private source tree.
-- Reuse `@open-design/standalone-runtime`; do not duplicate its lifecycle state machine.
+- Reuse the package-local `./runtime` subpath; do not duplicate its lifecycle state machine.
 - Keep the root `bootloader.mjs` fossil handoff-only: it may enter the adjacent
   Standalone-owned baseline launcher once, but must not select a version,
   interpret a component graph, or fall back to a second target. The baseline
   launcher owns initial candidate resolution and Store commit.
 - Never infer or normalize product paths. The launcher adapter supplies already-resolved roots.
 - Always attempt shutdown in reverse startup order, even when one runtime fails to close.
-- Keep live handoff validation in `@open-design/standalone-proto` and release candidate/integrity parsing in `@open-design/closure-proto`.
+- Keep live handoff validation in `@open-design/standalone/protocol` and release candidate/integrity parsing in `@open-design/closure/protocol`.

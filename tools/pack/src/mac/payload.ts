@@ -4,14 +4,14 @@ import { dirname, join } from "node:path";
 import {
   LAUNCHER_SCHEMA_VERSION,
   resolveLauncherVersionPaths,
-} from "@open-design/launcher-proto";
+} from "@open-design/host/shell-update";
 
 import type { ToolPackConfig } from "../config.js";
 import {
   resolveToolPackLauncherChannel,
   resolveToolPackLauncherRoot,
 } from "../launcher-layout.js";
-import { readReleaseBindingVersion } from "../versions.js";
+import { readLauncherBindingVersion } from "../versions.js";
 import { execFileAsync } from "./commands.js";
 import { resolveMacInstallIdentity } from "./identity.js";
 import type { MacPaths } from "./types.js";
@@ -56,14 +56,14 @@ export async function createMacLauncherPayloadArchive(
   config: ToolPackConfig,
   paths: MacPaths,
 ): Promise<string> {
-  const releaseVersion = await readReleaseBindingVersion(config);
+  const launcherVersion = await readLauncherBindingVersion(config);
   const channel = resolveToolPackLauncherChannel(config);
   const launcherRoot = resolveToolPackLauncherRoot(config);
   resolveLauncherVersionPaths({
     channel,
     namespace: config.namespace,
     root: launcherRoot,
-    version: releaseVersion,
+    version: launcherVersion,
   });
 
   const identity = resolveMacInstallIdentity(config);
@@ -75,7 +75,7 @@ export async function createMacLauncherPayloadArchive(
     executableName: identity.executableName,
     namespace: config.namespace,
     publicAppBundleName: identity.publicAppBundleName,
-    version: releaseVersion,
+    version: launcherVersion,
   });
 
   await rm(stageRoot, { force: true, recursive: true });

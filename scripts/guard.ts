@@ -26,6 +26,7 @@ import { checkCraftReferences } from "./lint-craft-references.ts";
 import { collectCssHardcodedColorMatches, cssWideAndSpecialColorKeywords, realNamedColors } from "./style-policy.ts";
 import { checkScriptsLibraryArchitecture } from "./lib/guard/architecture.ts";
 import { runGuardChecks, type GuardCheck, type GuardContext } from "./lib/guard/core.ts";
+import { checkStandaloneClosureSourceSize } from "./lib/guard/source-size.ts";
 import {
   checkDaemonCoreBoundary as checkDaemonCoreScopeBoundary,
   checkUiP0ShadowContract,
@@ -73,13 +74,11 @@ const residualAllowedExactPaths = new Set([
   "packages/diagnostics/esbuild.config.mjs",
   "packages/download/esbuild.config.mjs",
   "packages/host/esbuild.config.mjs",
-  "packages/launcher-proto/esbuild.config.mjs",
   "packages/metatool/esbuild.config.mjs",
   "packages/platform/esbuild.config.mjs",
   "packages/plugin-runtime/esbuild.config.mjs",
   "packages/registry-protocol/esbuild.config.mjs",
   "packages/sidecar/esbuild.config.mjs",
-  "packages/sidecar-proto/esbuild.config.mjs",
   // Maintainer utility scripts ported from the media branch. They are
   // executed directly by Node and are not loaded by the app runtime.
   "scripts/import-prompt-templates.mjs",
@@ -818,7 +817,7 @@ const webImportIsolationSkippedDirectories = new Set([
 const webImportIsolationForbiddenPackages = [
   "@open-design/platform",
   "@open-design/sidecar",
-  "@open-design/sidecar-proto",
+  "@open-design/sidecar/protocol",
 ];
 const webImportIsolationForbiddenDaemonRoots = [
   "apps/daemon/src",
@@ -827,7 +826,6 @@ const webImportIsolationForbiddenDaemonRoots = [
 const webImportIsolationForbiddenPackageRoots = [
   "packages/platform",
   "packages/sidecar",
-  "packages/sidecar-proto",
 ];
 
 type WebImportIsolationViolation = {
@@ -1353,6 +1351,7 @@ const checks: GuardCheck[] = [
   { name: "test layout", run: checkTestLayout },
   { name: "scripts test-free", run: checkScriptsTestFree },
   { name: "scripts library architecture", run: checkScriptsLibraryArchitecture },
+  { name: "Standalone Closure source size", run: checkStandaloneClosureSourceSize },
   { name: "e2e layout", run: checkE2eLayout },
   { name: "web test layout", run: checkWebTestLayout },
   { name: "web import isolation", run: checkWebImportIsolation },

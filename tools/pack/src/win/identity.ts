@@ -2,7 +2,7 @@ import {
   SIDECAR_DEFAULTS,
   resolveWindowsReleaseNamespaceToken,
   resolveWindowsUninstallRegistryKey,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import {
   releaseChannelFromNamespace,
   releaseChannelFromVersion,

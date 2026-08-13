@@ -5,11 +5,11 @@ import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DesktopStatusSnapshot } from "@open-design/sidecar-proto";
+import type { DesktopStatusSnapshot } from "@open-design/sidecar/protocol";
 import {
   createStandaloneHandoffEnvelope,
   type StandaloneRuntimeStatus,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 import type { ToolPackConfig } from "../src/config.js";
 import { resolveMacPaths } from "../src/mac/paths.js";

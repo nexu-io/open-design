@@ -14,6 +14,14 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
+    "./protocol": {
+      "types": "./dist/protocol/index.d.ts",
+      "default": "./dist/protocol/index.mjs"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.mjs"
+    },
     "./bootloader": {
       "types": "./dist/bootloader.d.ts",
       "default": "./dist/bootloader.mjs"
@@ -32,19 +40,16 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter @open-design/closure-update... build && pnpm --filter @open-design/standalone-proto build && pnpm --filter @open-design/standalone-runtime build && tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
+    "build": "pnpm --filter @open-design/closure build && tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
     "test": "pnpm build && vitest run",
-    "typecheck": "pnpm --filter @open-design/closure-update... build && pnpm --filter @open-design/standalone-proto build && pnpm --filter @open-design/standalone-runtime build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+    "typecheck": "pnpm --filter @open-design/closure build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
-    "@open-design/closure-store": "workspace:*",
-    "@open-design/closure-update": "workspace:*",
-    "@open-design/sidecar": "workspace:*",
-    "@open-design/standalone-proto": "workspace:*",
-    "@open-design/standalone-runtime": "workspace:*"
+    "@open-design/closure": "workspace:*",
+    "@open-design/release": "workspace:*",
+    "@open-design/sidecar": "workspace:*"
   },
   "devDependencies": {
-    "@open-design/closure-proto": "workspace:*",
     "@types/node": "24.12.2",
     "esbuild": "0.28.0",
     "jszip": "3.10.1",

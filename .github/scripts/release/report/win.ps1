@@ -27,7 +27,7 @@ function Invoke-ReportNode {
 
   $fnm = "C:\Users\runner\.cargo\bin\fnm.exe"
   if (Test-Path -LiteralPath $fnm) {
-    & $fnm exec --using=24 -- node @Arguments
+    & $fnm exec --using=24.18.0 -- node @Arguments
   } else {
     & node @Arguments
   }

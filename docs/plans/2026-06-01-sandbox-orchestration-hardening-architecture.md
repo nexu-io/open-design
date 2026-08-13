@@ -117,7 +117,7 @@ daemon data. The useful hardening targets are:
 - process matching must not classify a foreign process tree as an Open Design
   sidecar just because command text looks similar.
 
-These are primitive tests against `packages/sidecar-proto`,
+These are primitive tests against `packages/sidecar`,
 `packages/sidecar`, `packages/platform`, and `tools/dev`, not broad e2e user
 flows.
 

@@ -7,7 +7,7 @@ import {
   CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   createClosureDistributionManifest,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { prepareClosureSeed } from "../src/storage/prepare-closure-seed.js";

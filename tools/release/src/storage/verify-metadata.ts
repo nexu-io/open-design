@@ -1,8 +1,8 @@
 import { optional, required } from "./common.ts";
 import {
-  assertLauncherVersionFloorSatisfiable,
-  resolveLauncherVersionFloor,
-} from "./launcher-version-floor.ts";
+  assertInstallationVersionFloorSatisfiable,
+  resolveInstallationVersionFloor,
+} from "./installation-version-floor.ts";
 import { parseReleaseVersion, releaseChannelDescriptor } from "@open-design/release";
 import { readFile } from "node:fs/promises";
 import { parseReleaseNotePublication, releaseNoteMetadataFromPublication } from "../release-note/publication.ts";
@@ -29,7 +29,10 @@ const metadata = (metadataPath.length > 0
     })()) as {
   channel?: string;
   closure?: unknown;
-  control?: { launcher?: { version?: { min?: string; url?: string } } };
+  control?: {
+    launcher?: { version?: { min?: string; url?: string } };
+    shell?: { installation?: { version?: { min?: string; url?: string } } };
+  };
   releaseState?: string;
   r2?: { publicOrigin?: string };
   releaseTargets?: Record<string, {
@@ -44,6 +47,8 @@ const metadata = (metadataPath.length > 0
     shell?: {
       artifacts?: Record<string, { digest?: string; url?: string }>;
       buildDigest?: string;
+      capabilityDigest?: string;
+      carrierDigest?: string;
       depsDigest?: string;
       sourceDigest?: string;
       type?: string;
@@ -67,28 +72,33 @@ if (metadata[versionField] !== releaseVersion) {
   throw new Error(`metadata ${versionField} mismatch: expected ${releaseVersion}, got ${String(metadata[versionField])}`);
 }
 
-// The published control.launcher.version block must match the channel policy
+// The published control.shell.installation.version block must match the channel policy
 // resolved from the same repo-vars pairs the publish step consumed; unknown
 // fields would otherwise pass silently.
-const expectedLauncherVersionFloor = resolveLauncherVersionFloor(releaseChannel);
-if (expectedLauncherVersionFloor != null) {
-  assertLauncherVersionFloorSatisfiable(expectedLauncherVersionFloor, releaseVersion);
+const expectedInstallationVersionFloor = resolveInstallationVersionFloor(releaseChannel);
+if (expectedInstallationVersionFloor != null) {
+  assertInstallationVersionFloorSatisfiable(expectedInstallationVersionFloor, releaseVersion);
 }
-const publishedControlVersion = metadata.control?.launcher?.version;
-if (expectedLauncherVersionFloor == null) {
+const publishedControlVersion = metadata.control?.shell?.installation?.version;
+const migrationControlVersion = metadata.control?.launcher?.version;
+if (expectedInstallationVersionFloor == null) {
   if (publishedControlVersion != null) {
-    throw new Error("metadata unexpectedly contains a control.launcher.version block");
+    throw new Error("metadata unexpectedly contains a control.shell.installation.version block");
   }
+  if (migrationControlVersion != null) throw new Error("metadata unexpectedly contains the legacy installation floor");
 } else {
-  if (publishedControlVersion?.min !== expectedLauncherVersionFloor.min) {
+  if (publishedControlVersion?.min !== expectedInstallationVersionFloor.min) {
     throw new Error(
-      `metadata control.launcher.version.min mismatch: expected ${expectedLauncherVersionFloor.min}, got ${String(publishedControlVersion?.min)}`,
+      `metadata installation version min mismatch: expected ${expectedInstallationVersionFloor.min}, got ${String(publishedControlVersion?.min)}`,
     );
   }
-  if (publishedControlVersion.url !== expectedLauncherVersionFloor.url) {
+  if (publishedControlVersion.url !== expectedInstallationVersionFloor.url) {
     throw new Error(
-      `metadata control.launcher.version.url mismatch: expected ${String(expectedLauncherVersionFloor.url)}, got ${String(publishedControlVersion.url)}`,
+      `metadata installation version url mismatch: expected ${String(expectedInstallationVersionFloor.url)}, got ${String(publishedControlVersion.url)}`,
     );
+  }
+  if (JSON.stringify(migrationControlVersion) !== JSON.stringify(publishedControlVersion)) {
+    throw new Error("metadata legacy installation floor does not match control.shell.installation.version");
   }
 }
 
@@ -160,6 +170,8 @@ for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {
     if (
       shell.type !== "electron"
       || !/^sha256:[0-9a-f]{64}$/.test(String(shell.buildDigest))
+      || !/^sha256:[0-9a-f]{64}$/.test(String(shell.capabilityDigest))
+      || !/^sha256:[0-9a-f]{64}$/.test(String(shell.carrierDigest))
       || !/^sha256:[0-9a-f]{64}$/.test(String(shell.depsDigest))
       || !/^sha256:[0-9a-f]{64}$/.test(String(shell.sourceDigest))
     ) {
@@ -212,6 +224,17 @@ for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {
       throw new Error(`metadata target ${target} Closure archive URL does not match its manifest`);
     }
   }
+}
+
+const verifiedCapabilityDigests = new Set(
+  Object.values(metadata.releaseTargets ?? {}).flatMap((target) => (
+    target.status === "published" && target.shell?.capabilityDigest != null
+      ? [target.shell.capabilityDigest]
+      : []
+  )),
+);
+if (shellRequired && verifiedCapabilityDigests.size !== 1) {
+  throw new Error(`published Shell targets do not share one capability digest: ${[...verifiedCapabilityDigests].join(", ") || "none"}`);
 }
 
 console.log(`verified ${releaseChannel} metadata ${metadataUrl} (${metadata.releaseState ?? "unknown"})`);

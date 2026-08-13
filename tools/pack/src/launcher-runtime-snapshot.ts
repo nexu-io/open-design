@@ -7,7 +7,7 @@ import {
   type LauncherDesktopHandoffDescriptor,
   type LauncherRuntimeDescriptor,
   type LauncherVersionPointer,
-} from "@open-design/launcher-proto";
+} from "@open-design/host/shell-update";
 
 import type { ToolPackConfig } from "./config.js";
 import { resolveToolPackLauncherLayout } from "./launcher-layout.js";

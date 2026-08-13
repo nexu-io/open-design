@@ -13,7 +13,7 @@ import {
   LAUNCHER_AFTER_QUIT_TIMEOUT_MS_ARG,
   LAUNCHER_SCHEMA_VERSION,
   resolveLauncherPaths,
-} from "@open-design/launcher-proto";
+} from "@open-design/host/shell-update";
 import { readProcessStamp } from "@open-design/platform";
 import { resolveAppIpcPath } from "@open-design/sidecar";
 import {
@@ -23,7 +23,7 @@ import {
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import type { ReleaseChannel } from "@open-design/release";
 
 import {
@@ -92,8 +92,8 @@ function channelMetadata(channel: FixtureChannel, version: string): Record<strin
 async function createUpdaterFixture(options: {
   artifactBody?: string;
   channel?: FixtureChannel;
-  controlLauncherVersionMin?: string;
-  controlLauncherVersionUrl?: string;
+  controlInstallationVersionMin?: string;
+  controlInstallationVersionUrl?: string;
   failArtifactAttempts?: number;
   failFirstArtifactWithTerminated?: boolean;
   includePayload?: boolean;
@@ -132,13 +132,15 @@ async function createUpdaterFixture(options: {
         channel,
         ...channelMetadata(channel, version),
         ...(options.launcherSchema != null ? { launcher: { schema: options.launcherSchema } } : {}),
-        ...(options.controlLauncherVersionMin != null || options.controlLauncherVersionUrl != null
+        ...(options.controlInstallationVersionMin != null || options.controlInstallationVersionUrl != null
           ? {
               control: {
-                launcher: {
-                  version: {
-                    ...(options.controlLauncherVersionMin != null ? { min: options.controlLauncherVersionMin } : {}),
-                    ...(options.controlLauncherVersionUrl != null ? { url: options.controlLauncherVersionUrl } : {}),
+                shell: {
+                  installation: {
+                    version: {
+                      ...(options.controlInstallationVersionMin != null ? { min: options.controlInstallationVersionMin } : {}),
+                      ...(options.controlInstallationVersionUrl != null ? { url: options.controlInstallationVersionUrl } : {}),
+                    },
                   },
                 },
               },
@@ -1014,8 +1016,8 @@ describe("desktop updater", () => {
     }
   });
 
-  it("routes to the installer when control.launcher.version.min exceeds this build", async () => {
-    const { snapshot, close } = await runLauncherReseedCheck({ controlLauncherVersionMin: "9.9.9" });
+  it("routes to the installer when control.shell.installation.version.min exceeds this build", async () => {
+    const { snapshot, close } = await runLauncherReseedCheck({ controlInstallationVersionMin: "9.9.9" });
     try {
       expect(snapshot.artifact?.type).toBe("installer");
       expect(snapshot.capabilities.canApplyInPlace).toBe(false);
@@ -1028,7 +1030,7 @@ describe("desktop updater", () => {
   it("still applies the payload in place when schema is supported and min-version is met", async () => {
     const { snapshot, close } = await runLauncherReseedCheck({
       launcherSchema: LAUNCHER_SCHEMA_VERSION,
-      controlLauncherVersionMin: "0.9.0-beta.1",
+      controlInstallationVersionMin: "0.9.0-beta.1",
     });
     try {
       expect(snapshot.artifact?.type).toBe("payload");
@@ -1044,9 +1046,9 @@ describe("desktop updater", () => {
   // package version, not the running payload version. After a payload update the
   // running version is the payload's; a broken outer generation would otherwise
   // slip through the gate exactly when the installer recovery path matters most.
-  it("compares control.launcher.version.min against the installed outer version, not the running version", async () => {
+  it("compares control.shell.installation.version.min against the installed outer version, not the running version", async () => {
     const { snapshot, close } = await runLauncherReseedCheck(
-      { controlLauncherVersionMin: "1.0.0-beta.1" },
+      { controlInstallationVersionMin: "1.0.0-beta.1" },
       "1.0.0-beta.1",
       { installedOuterVersion: "1.0.0-beta.0" },
     );
@@ -1065,7 +1067,7 @@ describe("desktop updater", () => {
 
   it("offers a same-version installer reinstall when the outer is below min and no newer release exists", async () => {
     const { snapshot, close } = await runLauncherReseedCheck(
-      { controlLauncherVersionMin: "1.0.0-beta.1", version: "1.0.0-beta.1" },
+      { controlInstallationVersionMin: "1.0.0-beta.1", version: "1.0.0-beta.1" },
       "1.0.0-beta.1",
       { installedOuterVersion: "1.0.0-beta.0" },
     );
@@ -1082,8 +1084,8 @@ describe("desktop updater", () => {
   it("restores a downloaded same-version installer reinstall after restart", async () => {
     const { restartedSnapshot, close } = await runLauncherReseedCheck(
       {
-        controlLauncherVersionMin: "1.0.0-beta.1",
-        controlLauncherVersionUrl: "https://example.com/reinstall-help",
+        controlInstallationVersionMin: "1.0.0-beta.1",
+        controlInstallationVersionUrl: "https://example.com/reinstall-help",
         version: "1.0.0-beta.1",
       },
       "1.0.0-beta.1",
@@ -1112,7 +1114,7 @@ describe("desktop updater", () => {
     // it would nag forever. Artifact selection still routes to the installer for
     // genuinely newer releases; the same-version bypass alone is suppressed.
     const { snapshot, close } = await runLauncherReseedCheck(
-      { controlLauncherVersionMin: "9.9.9", version: "1.0.0-beta.1" },
+      { controlInstallationVersionMin: "9.9.9", version: "1.0.0-beta.1" },
       "1.0.0-beta.1",
       { installedOuterVersion: "1.0.0-beta.0" },
     );
@@ -1125,7 +1127,7 @@ describe("desktop updater", () => {
 
   it("treats an unreadable installed outer config as requiring the installer when min is set", async () => {
     const { snapshot, close } = await runLauncherReseedCheck(
-      { controlLauncherVersionMin: "0.9.0-beta.1" },
+      { controlInstallationVersionMin: "0.9.0-beta.1" },
       "1.0.0-beta.1",
       { installedOuterVersion: null },
     );
@@ -1143,7 +1145,7 @@ describe("desktop updater", () => {
     // On-disk outer config satisfies min; the env override forces an older
     // outer identity for tests and harnesses.
     const { snapshot, close } = await runLauncherReseedCheck(
-      { controlLauncherVersionMin: "1.0.0-beta.1" },
+      { controlInstallationVersionMin: "1.0.0-beta.1" },
       "1.0.0-beta.1",
       { env: { [DESKTOP_UPDATE_ENV.INSTALLED_VERSION]: "1.0.0-beta.0" } },
     );
@@ -1161,8 +1163,8 @@ describe("desktop updater", () => {
   it("carries the control url into the reinstall snapshot", async () => {
     const { snapshot, close } = await runLauncherReseedCheck(
       {
-        controlLauncherVersionMin: "1.0.0-beta.1",
-        controlLauncherVersionUrl: "https://example.com/reinstall-help",
+        controlInstallationVersionMin: "1.0.0-beta.1",
+        controlInstallationVersionUrl: "https://example.com/reinstall-help",
       },
       "1.0.0-beta.1",
       { installedOuterVersion: "1.0.0-beta.0" },

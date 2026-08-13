@@ -6,7 +6,7 @@ import type {
   DesktopExportPdfResult,
   DesktopRenderSlidesInput,
   DesktopRenderSlidesResult,
-} from '@open-design/sidecar-proto';
+} from '@open-design/sidecar/protocol';
 import express from 'express';
 import multer from 'multer';
 import JSZip from 'jszip';
@@ -188,7 +188,7 @@ export {
 
 export { resolveProjectRoot };
 import { createCommandInvocation } from '@open-design/platform';
-import { SIDECAR_ENV } from '@open-design/sidecar-proto';
+import { SIDECAR_ENV } from '@open-design/sidecar/protocol';
 import {
   buildLiveArtifactsMcpServersForAgent,
   checkPromptArgvBudget,

@@ -9,7 +9,7 @@ import {
   CLOSURE_PROTOCOL_VERSION,
   createClosureDistributionManifest,
   type ClosureDigest,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { describe, expect, it } from "vitest";
 import {
   CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
@@ -151,18 +151,23 @@ describe("updater fixture server", () => {
     }
   });
 
-  it("publishes the control.launcher.version block from fixture knobs", async () => {
+  it("publishes the installation floor and its one-epoch legacy copy", async () => {
     const server = await startUpdaterFixtureServer({
       artifactBody: "fixture artifact",
       channel: "beta",
-      controlLauncherVersionMin: "1.5.0-beta.1",
-      controlLauncherVersionUrl: "https://example.com/reinstall-help",
+      controlInstallationVersionMin: "1.5.0-beta.1",
+      controlInstallationVersionUrl: "https://example.com/reinstall-help",
       version: "2.0.0-beta.1",
     });
     try {
       const metadata = await (await fetch(server.info.metadataUrl)).json() as {
-        control?: { launcher?: { version?: { min?: string; url?: string } } };
+        control?: {
+          launcher?: { version?: { min?: string; url?: string } };
+          shell?: { installation?: { version?: { min?: string; url?: string } } };
+        };
       };
+      expect(metadata.control?.shell?.installation?.version?.min).toBe("1.5.0-beta.1");
+      expect(metadata.control?.shell?.installation?.version?.url).toBe("https://example.com/reinstall-help");
       expect(metadata.control?.launcher?.version?.min).toBe("1.5.0-beta.1");
       expect(metadata.control?.launcher?.version?.url).toBe("https://example.com/reinstall-help");
     } finally {

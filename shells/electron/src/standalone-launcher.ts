@@ -9,13 +9,13 @@ import {
   SIDECAR_SOURCES,
   normalizeDesktopSidecarMessage,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import { createJsonIpcServer, resolveAppIpcPath, type JsonIpcServerHandle } from "@open-design/sidecar";
 import type {
   StandaloneHandle,
   StandaloneRuntimeRunningStatus,
   StandaloneRuntimeStatus,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 import type { PackagedConfig } from "./config.js";
 import {

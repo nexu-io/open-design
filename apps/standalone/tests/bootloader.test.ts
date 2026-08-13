@@ -7,7 +7,7 @@ import {
   type StandaloneHandle,
   type StandaloneHandoffRequest,
   type StandaloneRuntimeTerminalStatus,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 import { createStandaloneBootloader } from "../src/bootloader.js";
 

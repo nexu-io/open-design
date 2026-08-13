@@ -10,14 +10,14 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { describe, expect, test } from 'vitest';
-import { bindClosureCandidateIdentity } from '@open-design/closure-proto';
+import { bindClosureCandidateIdentity } from '@open-design/closure/protocol';
 import {
   commitVerifiedStoredClosureCandidate,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
   verifyStoredClosureCandidate,
   type StoredClosureVerification,
-} from '@open-design/closure-store';
+} from '@open-design/closure/store';
 import extractZip from 'extract-zip';
 
 import {
@@ -1039,8 +1039,8 @@ winDescribe('packaged windows runtime smoke', () => {
           payloadFixture = await startToolsServeUpdaterFixture({
             artifactPath: localUpdateFixture.installerPath,
             channel: updateScenario.channel,
-            controlLauncherVersionMin: expectedPayloadUpdateVersion,
-            controlLauncherVersionUrl: 'https://example.test/updater-recovery',
+            controlInstallationVersionMin: expectedPayloadUpdateVersion,
+            controlInstallationVersionUrl: 'https://example.test/updater-recovery',
             payloadPath: localUpdateFixture.payloadPath,
             platform: 'win',
             ...(updateFixturePort == null ? {} : { port: updateFixturePort }),
@@ -1743,8 +1743,8 @@ winLegacyMigrationDescribe('packaged Windows historical outer migration acceptan
       migrationFixture = await startToolsServeUpdaterFixture({
         artifactPath: currentInstallerPath,
         channel: updateScenario.channel,
-        controlLauncherVersionMin: requiredShellVersion,
-        controlLauncherVersionUrl: 'https://open-design.ai/download',
+        controlInstallationVersionMin: requiredShellVersion,
+        controlInstallationVersionUrl: 'https://open-design.ai/download',
         platform: 'win',
         version: targetReleaseVersion,
         workspaceRoot,

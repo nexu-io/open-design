@@ -12,7 +12,7 @@ import {
   bindClosureCandidateIdentity,
   validateClosureCandidateManifest,
   type ClosureCandidateManifest,
-} from '@open-design/closure-proto';
+} from '@open-design/closure/protocol';
 import {
   commitStoredClosureCandidate,
   readClosureBindingDescriptor,
@@ -21,7 +21,7 @@ import {
   type ClosureRuntimePointer,
   type ClosureStorePaths,
   type ClosureStoreVersionPaths,
-} from '@open-design/closure-store';
+} from '@open-design/closure/store';
 import extractZip from 'extract-zip';
 
 type ClosureBuildReport = {

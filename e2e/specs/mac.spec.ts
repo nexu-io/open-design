@@ -704,8 +704,8 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           payloadFixture = null;
           recoveryFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
-            controlLauncherVersionMin: updaterVersion,
-            controlLauncherVersionUrl: 'https://example.test/updater-recovery',
+            controlInstallationVersionMin: updaterVersion,
+            controlInstallationVersionUrl: 'https://example.test/updater-recovery',
             payloadPath: recoveryPayloadPath,
             platform: packagedMacUpdaterPlatform,
             version: updaterVersion,
@@ -1291,8 +1291,8 @@ macLegacyMigrationDescribe('packaged mac historical outer migration acceptance',
       migrationFixture = await startToolsServeUpdaterFixture({
         artifactPath: currentDmgPath,
         channel: updateScenario.channel,
-        controlLauncherVersionMin: requiredShellVersion,
-        controlLauncherVersionUrl: 'https://open-design.ai/download',
+        controlInstallationVersionMin: requiredShellVersion,
+        controlInstallationVersionUrl: 'https://open-design.ai/download',
         platform: packagedMacUpdaterPlatform,
         version: targetReleaseVersion,
         workspaceRoot,

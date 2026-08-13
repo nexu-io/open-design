@@ -1,11 +1,11 @@
 import { dirname } from "node:path";
 
 import { removeFile, writeJsonFile } from "@open-design/sidecar";
-import type { SidecarStamp } from "@open-design/sidecar-proto";
+import type { SidecarStamp } from "@open-design/sidecar/protocol";
 import type {
   StandaloneHandoffEnvelope,
   StandaloneRuntimeRunningStatus,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 
 import type { PackagedNamespacePaths } from "./paths.js";
 export type ElectronStandaloneRuntimeIdentity = Readonly<{

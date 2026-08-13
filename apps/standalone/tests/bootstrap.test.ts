@@ -9,13 +9,13 @@ import {
   createClosureComponentTreeDigest,
   createClosureDistributionManifest,
   type ClosureDistributionBlob,
-} from "@open-design/closure-proto";
-import { readClosureBindingDescriptor, resolveClosureStorePaths } from "@open-design/closure-store";
+} from "@open-design/closure/protocol";
+import { readClosureBindingDescriptor, resolveClosureStorePaths } from "@open-design/closure/store";
 import { bootstrapSidecarLifecycle } from "@open-design/sidecar/lifecycle";
 import {
   STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
   type StandaloneBootstrapProgress,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -186,7 +186,7 @@ describe("Standalone unresolved bootstrap", () => {
     });
     await consumeTransition(value, resolution);
 
-    expect(resolution.bootloaderPath).toMatch(/generations[\\/]0[\\/]launcher[\\/]bootloader\.mjs$/u);
+    expect(resolution.bootloaderPath).toMatch(/installations[\\/].+[\\/]darwin-arm64[\\/]launcher[\\/]bootloader\.mjs$/u);
     expect(resolution.handoff.handoff.scope).toEqual({ channel: "beta", generation: 0, namespace: "release-beta" });
     expect(resolution.handoff.paths.resourceRoot).toMatch(/channels[\\/]beta[\\/]resources$/u);
     const store = resolveClosureStorePaths({ channel: "beta", namespace: "release-beta", root: value.paths.installationRoot });

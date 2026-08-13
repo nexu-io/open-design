@@ -5,7 +5,7 @@ import {
   SIDECAR_MODES,
   SIDECAR_SOURCES,
   type SidecarStamp,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const requestJsonIpc = vi.hoisted(() => vi.fn());

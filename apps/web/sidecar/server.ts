@@ -21,7 +21,7 @@ import {
   normalizeWebSidecarMessage,
   type SidecarStamp,
   type WebStatusSnapshot,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import {
   createJsonIpcServer,
   type JsonIpcServerHandle,

@@ -17,8 +17,8 @@ type CliOptions = {
   closureBlobDir?: string;
   closureDistributionManifestPath?: string;
   closureManifestPath?: string;
-  controlLauncherVersionMin?: string;
-  controlLauncherVersionUrl?: string;
+  controlInstallationVersionMin?: string;
+  controlInstallationVersionUrl?: string;
   host?: string;
   json?: boolean;
   platform?: UpdaterFixturePlatform;
@@ -103,8 +103,8 @@ async function start(service: string, options: CliOptions): Promise<void> {
     closureBlobDir: options.closureBlobDir,
     closureDistributionManifestPath: options.closureDistributionManifestPath,
     closureManifestPath: options.closureManifestPath,
-    controlLauncherVersionMin: options.controlLauncherVersionMin,
-    controlLauncherVersionUrl: options.controlLauncherVersionUrl,
+    controlInstallationVersionMin: options.controlInstallationVersionMin,
+    controlInstallationVersionUrl: options.controlInstallationVersionUrl,
     host: options.host,
     platform: parsePlatform(options.platform),
     includePayload: options.includePayload,
@@ -144,8 +144,8 @@ cli
   .option("--closure-blob-dir <path>", "Serve content-addressed blobs for a Closure distribution graph")
   .option("--closure-distribution-manifest-path <path>", "Serve a version-wide Closure distribution graph beside updater metadata")
   .option("--closure-manifest-path <path>", "Serve a real Standalone Closure build beside updater metadata")
-  .option("--control-launcher-version-min <version>", "Publish control.launcher.version.min in fixture metadata")
-  .option("--control-launcher-version-url <url>", "Publish control.launcher.version.url in fixture metadata")
+  .option("--control-installation-version-min <version>", "Publish control.shell.installation.version.min in fixture metadata")
+  .option("--control-installation-version-url <url>", "Publish control.shell.installation.version.url in fixture metadata")
   .option("--host <host>", "Host to bind", { default: "127.0.0.1" })
   .option("--json", "Print JSON")
   .option("--include-payload", "Include launcher payload metadata")

@@ -10,6 +10,8 @@ await build({
     "./src/fossil-bootloader.ts",
     "./src/launcher-bootstrap.ts",
     "./src/process-bridge.ts",
+    "./src/protocol/index.ts",
+    "./src/runtime/index.ts",
     "./src/sidecars.ts",
   ],
   format: "esm",

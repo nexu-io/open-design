@@ -138,7 +138,7 @@ function Invoke-Node24([string[]]$Arguments, [string]$WorkingDirectory = $worksp
     try {
       $ErrorActionPreference = "Continue"
       $commandLine = New-CmdCommandLine $Arguments
-      & $fnm exec --using=24 -- cmd.exe /d /s /c $commandLine
+      & $fnm exec --using=24.18.0 -- cmd.exe /d /s /c $commandLine
     } finally {
       $ErrorActionPreference = $previousErrorActionPreference
     }
@@ -158,7 +158,7 @@ function Invoke-ToolsPackWinBuild([string[]]$Arguments) {
   $previousErrorActionPreference = $ErrorActionPreference
   try {
     $ErrorActionPreference = "Continue"
-    $stdout = & $fnm exec --using=24 -- cmd.exe /d /s /c $commandLine 2> $stderrPath
+    $stdout = & $fnm exec --using=24.18.0 -- cmd.exe /d /s /c $commandLine 2> $stderrPath
   } finally {
     $ErrorActionPreference = $previousErrorActionPreference
   }
@@ -618,9 +618,9 @@ try {
     Require-File $makensis "makensis"
     git --version
     git lfs version
-    $script:node24Version = (& $fnm exec --using=24 -- node --version | Select-Object -Last 1).Trim()
+    $script:node24Version = (& $fnm exec --using=24.18.0 -- node --version | Select-Object -Last 1).Trim()
     Write-Host $script:node24Version
-    $script:pnpmVersion = (& $fnm exec --using=24 -- pnpm.cmd --version | Select-Object -Last 1).Trim()
+    $script:pnpmVersion = (& $fnm exec --using=24.18.0 -- pnpm.cmd --version | Select-Object -Last 1).Trim()
     Write-Host $script:pnpmVersion
     & $cargo --version
     & $makensis /VERSION

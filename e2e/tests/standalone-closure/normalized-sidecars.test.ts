@@ -9,7 +9,7 @@ import {
   STANDALONE_PROTOCOL_VERSION,
   createStandaloneHandoffEnvelope,
   type StandaloneHandoffRequest,
-} from "@open-design/standalone-proto";
+} from "@open-design/standalone/protocol";
 import { startSidecarStandalone } from "../../../apps/standalone/src/sidecars.js";
 import { OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND } from "../../../apps/standalone/src/sidecars.js";
 

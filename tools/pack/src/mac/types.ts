@@ -1,4 +1,4 @@
-import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot, DesktopUpdateResult, SidecarStamp } from "@open-design/sidecar-proto";
+import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot, DesktopUpdateResult, SidecarStamp } from "@open-design/sidecar/protocol";
 import type { CacheReport } from "../cache.js";
 import type { ToolPackArtifactDescriptor } from "../artifacts.js";
 import type { ToolPackBuildOutput, ToolPackConfig } from "../config.js";
@@ -67,6 +67,8 @@ export type MacPackResult = {
   releaseVersion: string | null;
   shell: {
     buildDigest: `sha256:${string}`;
+    capabilityDigest: `sha256:${string}`;
+    carrierDigest: `sha256:${string}`;
     depsDigest: `sha256:${string}`;
     sourceDigest: `sha256:${string}`;
     type: ToolPackConfig["shell"];

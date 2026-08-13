@@ -8,7 +8,7 @@
 // Side effects (the fs.existsSync probes, process.execPath, the
 // ELECTRON_RUN_AS_NODE env read, OD_DATA_DIR resolution, sidecar IPC
 // detection) all stay in the caller. This module is intentionally pure
-// and free of @open-design/sidecar-proto so it can be unit-tested
+// and free of @open-design/sidecar/protocol so it can be unit-tested
 // without booting the daemon.
 
 export interface BuildMcpInstallPayloadInputs {

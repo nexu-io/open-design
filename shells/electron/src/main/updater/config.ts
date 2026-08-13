@@ -7,7 +7,7 @@ import {
   type DesktopUpdateChannel,
   type DesktopUpdateMode,
   type SidecarSource,
-} from "@open-design/sidecar-proto";
+} from "@open-design/sidecar/protocol";
 import { releaseChannelFromVersion } from "@open-design/release";
 
 /**

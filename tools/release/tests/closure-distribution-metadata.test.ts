@@ -5,7 +5,7 @@ import {
   CLOSURE_PROTOCOL_VERSION,
   createClosureDistributionManifest,
   type ClosureDistributionManifestDraft,
-} from "@open-design/closure-proto";
+} from "@open-design/closure/protocol";
 import { describe, expect, it } from "vitest";
 
 import { validateClosureDistributionPublication } from "../src/storage/closure-distribution-metadata.js";

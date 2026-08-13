@@ -1,6 +1,6 @@
 import { build } from "esbuild";
 
-const entryPoints = ["./src/index.ts", "./src/testing.ts"];
+const entryPoints = ["./src/index.ts", "./src/testing.ts", "./src/shell-update.ts"];
 
 await Promise.all([
   build({

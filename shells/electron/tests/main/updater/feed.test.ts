@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { SIDECAR_SOURCES } from "@open-design/sidecar-proto";
+import { SIDECAR_SOURCES } from "@open-design/sidecar/protocol";
 import { describe, expect, it } from "vitest";
 
 import { resolveDesktopUpdaterConfig } from "../../../src/main/updater/config.js";

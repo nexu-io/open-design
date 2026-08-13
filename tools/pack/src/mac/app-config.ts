@@ -55,6 +55,11 @@ export async function writeLaunchPackagedConfig(config: ToolPackConfig, appPath:
     `${JSON.stringify(
       {
         ...raw,
+        launcherVersion: config.launcherVersion
+          ?? (typeof raw.launcherVersion === "string" ? raw.launcherVersion : undefined)
+          ?? config.releaseVersion
+          ?? (typeof raw.releaseVersion === "string" ? raw.releaseVersion : undefined)
+          ?? (typeof raw.shellVersion === "string" ? raw.shellVersion : undefined),
         namespace: config.namespace,
         namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
         releaseVersion: config.releaseVersion

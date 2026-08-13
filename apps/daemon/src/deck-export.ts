@@ -4,7 +4,7 @@ import path from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import * as PptxGenJSModule from 'pptxgenjs';
 import { injectDeckStageFallback } from '@open-design/contracts/runtime/deck-stage-fallback';
-import type { DesktopRenderSlidesInput } from '@open-design/sidecar-proto';
+import type { DesktopRenderSlidesInput } from '@open-design/sidecar/protocol';
 
 // pptxgenjs ships a default-export class, but its NodeNext typings resolve the
 // default to the module namespace (no construct signature). At runtime the ESM
