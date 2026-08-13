@@ -1777,6 +1777,8 @@ process.stdin.on("end", () => {
     )).toMatch(/--release-version "\$version"[\s\S]*--shell-version "\$update_version"[\s\S]*--launcher-version "\$update_version"[\s\S]*--to app/);
     expect(betaMacArm64Job).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_arm64_smoke_mode == 'full' && steps.mac_arm64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}");
     expect(betaMacArm64Job).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_arm64_shell_resolution.outputs.smoke_proof }}");
+    expect(betaMacArm64Job).toContain("OD_PACKAGED_E2E_SHELL_VERSION: ${{ needs.metadata.outputs.shell_version }}");
+    expect(betaMacArm64Job).not.toContain("OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.mac_arm64_shell_resolution.outputs.shell_version");
     expect(betaMacArm64Job).toContain("Register mac_arm64 Electron Shell full-smoke proof");
     expect(betaMacArm64Job).toContain("run: pnpm exec tools-release register-shell-smoke");
     expect(betaMacArm64Job).toContain("RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_arm64/summary.json");
@@ -1795,7 +1797,8 @@ process.stdin.on("end", () => {
     expect(betaMacX64Job).not.toContain("Materialize legacy mac_x64 migration fixture");
     expect(betaMacX64Job).toContain("OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.mac_x64_smoke_mode == 'full' && (steps.mac_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || 'shell,standalone') || '' }}");
     expect(betaMacX64Job).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.mac_x64_shell_resolution.outputs.smoke_proof }}");
-    expect(betaMacX64Job).toContain("OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.mac_x64_shell_resolution.outputs.shell_version != '' && steps.mac_x64_shell_resolution.outputs.shell_version || needs.metadata.outputs.shell_version }}");
+    expect(betaMacX64Job).toContain("OD_PACKAGED_E2E_SHELL_VERSION: ${{ needs.metadata.outputs.shell_version }}");
+    expect(betaMacX64Job).not.toContain("OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.mac_x64_shell_resolution.outputs.shell_version");
     expect(betaMacX64Job).toContain("Register mac_x64 Electron Shell full-smoke proof");
     expect(betaMacX64Job).toContain("RELEASE_SHELL_SMOKE_SUMMARY_PATH: ${{ runner.temp }}/release-report/mac_x64/summary.json");
     const betaWinJob = sectionBetween(releaseBetaWorkflow, "  build_win_x64:", "  publish:");
@@ -1818,6 +1821,8 @@ process.stdin.on("end", () => {
     expect(betaWinJob).toContain("Start-Sleep -Seconds $delaySeconds");
     expect(betaWinJob).toContain("OD_PACKAGED_E2E_WIN_SMOKE_LANES: ${{ inputs.win_x64_smoke_mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}");
     expect(betaWinJob).toContain("OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.win_x64_shell_resolution.outputs.smoke_proof }}");
+    expect(betaWinJob).toContain("OD_PACKAGED_E2E_SHELL_VERSION: ${{ needs.metadata.outputs.shell_version }}");
+    expect(betaWinJob).not.toContain("OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.win_x64_shell_resolution.outputs.shell_version");
     expect(betaWinJob).toContain("Materialize legacy win_x64 migration fixture");
     const betaWinUpdateFixtureStep = sectionBetween(
       betaWinJob,
