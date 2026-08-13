@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { decodeReleaseFeishuBot } from "../src/notifications/bot-codec.js";
@@ -55,6 +59,12 @@ function metadata() {
   };
 }
 
+const emptyDetails = {
+  coldStarts: [],
+  failures: [],
+  warnings: [],
+};
+
 describe("release Feishu notification", () => {
   it("decodes one compact secret and rejects ambiguous bot declarations", () => {
     expect(decodeReleaseFeishuBot('["v1","https://open.feishu.cn/open-apis/bot/v2/hook/abc_123",""]'))
@@ -75,7 +85,10 @@ describe("release Feishu notification", () => {
       });
       return new Response(null, { status: 404 });
     };
-    const details = await loadReleaseNotificationDetails(input(), fetchImpl as typeof fetch);
+    const details = await loadReleaseNotificationDetails(
+      input({ releaseState: "partial" }),
+      fetchImpl as typeof fetch,
+    );
     expect(details.coldStarts).toEqual([expect.objectContaining({
       bodyBytes: 19_000_000,
       launcherBytes: 40_000,
@@ -86,6 +99,65 @@ describe("release Feishu notification", () => {
     })]);
   });
 
+  it("keeps successful cards compact and formats a bounded changelog", async () => {
+    const root = mkdtempSync(join(tmpdir(), "release-card-"));
+    const changelogFile = join(root, "changelog.txt");
+    writeFileSync(changelogFile, [
+      "feat: first change (1111111)",
+      "fix: second change (2222222)",
+      "refactor: third change (3333333)",
+      "test: fourth change (4444444)",
+      "docs: fifth change (5555555)",
+      "chore: hidden sixth change (6666666)",
+    ].join("\n"));
+    try {
+      const details = await loadReleaseNotificationDetails(input(), () => {
+        throw new Error("successful notification must not fetch diagnostics");
+      });
+      const card = buildReleaseFeishuCard(input({ changelogFile }), details);
+      const serialized = JSON.stringify(card);
+      expect(card.header).toMatchObject({ template: "green" });
+      expect(details).toEqual(emptyDetails);
+      expect(serialized).toContain("feat/standalone-closure");
+      expect(serialized).toContain("[0123456](https://github.com/nexu-io/open-design/commit/");
+      expect(serialized).not.toContain("`0123456`");
+      expect(serialized).not.toContain("渠道");
+      expect(serialized).not.toContain("触发");
+      expect(serialized).not.toContain("Closure 冷启动");
+      expect(serialized).not.toContain("hidden sixth change");
+      expect(serialized).toContain("Apple 芯片");
+      expect(serialized).toContain("发布详情");
+      expect(serialized).toContain("GitHub Actions");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("loads failed jobs and suppresses unaccepted downloads on failure", async () => {
+    const details = await loadReleaseNotificationDetails(
+      input({ metadataUrl: "", releaseResult: "failure" }),
+      (async (request: string | URL | Request) => {
+        expect(String(request)).toContain("/actions/runs/1/jobs");
+        return Response.json({
+          jobs: [{
+            conclusion: "failure",
+            html_url: "https://github.com/nexu-io/open-design/actions/runs/1/job/2",
+            name: "Distribute beta / Build beta mac_x64",
+            steps: [{ conclusion: "failure", name: "Accept public mac_x64 beta artifacts" }],
+          }],
+        });
+      }) as typeof fetch,
+      "github-token",
+    );
+    const card = buildReleaseFeishuCard(input({ metadataUrl: "", releaseResult: "failure" }), details);
+    const serialized = JSON.stringify(card);
+    expect(card.header).toMatchObject({ template: "red" });
+    expect(serialized).toContain("Accept public mac");
+    expect(serialized).toContain("beta artifacts");
+    expect(serialized).not.toContain("https://releases.example/mac-arm64.dmg");
+    expect(serialized).toContain("https://github.com/nexu-io/open-design/actions/runs/1/job/2");
+  });
+
   it("renders complete, partial, failed, and validation terminal states from one capability", () => {
     expect(releaseNotificationInternals.notificationState(input())).toBe("complete");
     expect(releaseNotificationInternals.notificationState(input({ releaseState: "partial" }))).toBe("partial");
@@ -93,10 +165,13 @@ describe("release Feishu notification", () => {
     expect(releaseNotificationInternals.notificationState(input({ releaseMode: "prepublish" }))).toBe("validation");
     const card = buildReleaseFeishuCard(input({ winX64Smoke: "failure" }), {
       coldStarts: [],
+      failures: [],
       warnings: [],
     });
     expect(card.header).toMatchObject({ template: "orange" });
     expect(JSON.stringify(card)).toContain("Windows x64 smoke 失败");
     expect(JSON.stringify(card)).toContain("https://releases.example/win.exe");
+    expect(buildReleaseFeishuCard(input({ releaseMode: "validation" }), emptyDetails).header)
+      .toMatchObject({ template: "blue" });
   });
 });

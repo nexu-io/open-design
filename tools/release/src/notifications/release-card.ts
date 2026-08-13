@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 
 import type { FeishuCard } from "./feishu-client.ts";
+import { loadReleaseRunFailures, type ReleaseRunFailure } from "./run-diagnostics.ts";
 
 type JsonRecord = Record<string, unknown>;
 type FeishuElement = Record<string, unknown>;
@@ -43,6 +44,7 @@ type ColdStartDetail = {
 
 export type ReleaseNotificationDetails = {
   coldStarts: ColdStartDetail[];
+  failures: ReleaseRunFailure[];
   warnings: string[];
 };
 
@@ -68,6 +70,14 @@ function readChangelog(path: string): string[] {
   } catch {
     return [];
   }
+}
+
+function escapeMarkdown(value: string): string {
+  return value.replace(/([\\`*_[\]])/gu, "\\$1");
+}
+
+function truncate(value: string, maxLength: number): string {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
 function notificationState(input: ReleaseNotificationInput): "complete" | "failed" | "partial" | "validation" {
@@ -130,26 +140,45 @@ async function acceptanceTiming(metadataUrl: string, target: string, fetchImpl: 
 export async function loadReleaseNotificationDetails(
   input: ReleaseNotificationInput,
   fetchImpl: typeof fetch = fetch,
+  githubToken = "",
 ): Promise<ReleaseNotificationDetails> {
-  if (input.metadataUrl.length === 0) return { coldStarts: [], warnings: [] };
-  try {
-    const response = await fetchImpl(input.metadataUrl);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const metadata = record(await response.json());
-    if (metadata == null) throw new Error("metadata is not an object");
-    const coldStarts = coldStartFromMetadata(metadata);
-    if (input.channel === "beta") {
-      await Promise.all(coldStarts.map(async (entry) => {
-        entry.timing = await acceptanceTiming(input.metadataUrl, entry.target, fetchImpl);
-      }));
-    }
-    return { coldStarts, warnings: [] };
-  } catch (error) {
-    return {
-      coldStarts: [],
-      warnings: [`未能读取发布元数据：${error instanceof Error ? error.message : String(error)}`],
-    };
+  const state = notificationState(input);
+  const smokeFailed = [input.macArm64Smoke, input.macX64Smoke, input.winX64Smoke].includes("failure");
+  if (!["failed", "partial"].includes(state) && !smokeFailed) {
+    return { coldStarts: [], failures: [], warnings: [] };
   }
+  const warnings: string[] = [];
+  let coldStarts: ColdStartDetail[] = [];
+  let failures: ReleaseRunFailure[] = [];
+  if (input.metadataUrl.length > 0) {
+    try {
+      const response = await fetchImpl(input.metadataUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const metadata = record(await response.json());
+      if (metadata == null) throw new Error("metadata is not an object");
+      coldStarts = coldStartFromMetadata(metadata);
+      if (input.channel === "beta") {
+        await Promise.all(coldStarts.map(async (entry) => {
+          entry.timing = await acceptanceTiming(input.metadataUrl, entry.target, fetchImpl);
+        }));
+      }
+    } catch (error) {
+      warnings.push(`未能读取发布元数据：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  if (state === "failed") {
+    try {
+      failures = await loadReleaseRunFailures({
+        fetchImpl,
+        repository: input.repository,
+        runUrl: input.runUrl,
+        token: githubToken,
+      });
+    } catch (error) {
+      warnings.push(`未能读取失败步骤：${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return { coldStarts, failures, warnings };
 }
 
 function bytes(value: number): string {
@@ -160,13 +189,50 @@ function seconds(value: number): string {
   return `${(value / 1_000).toFixed(1)}s`;
 }
 
+function targetLabel(target: string): string {
+  return {
+    "darwin-arm64": "Apple 芯片",
+    "darwin-x64": "Intel",
+    "win32-x64": "Windows",
+  }[target] ?? target;
+}
+
 function coldStartMarkdown(details: ReleaseNotificationDetails): string {
   return details.coldStarts.map((entry) => {
     const timing = entry.timing == null
       ? ""
-      : `；ready ${seconds(entry.timing.readinessDurationMs)}/${seconds(entry.timing.readinessBudgetMs)}，total ${seconds(entry.timing.totalDurationMs)}`;
-    return `- ${entry.target}: ${bytes(entry.requiredBytes)} / <${bytes(entry.budgetBytes)} `
-      + `(body ${bytes(entry.bodyBytes)}, launcher ${bytes(entry.launcherBytes)}, native ${bytes(entry.nativeBytes)})${timing}`;
+      : `\n启动 ${seconds(entry.timing.totalDurationMs - entry.timing.readinessDurationMs)}`
+        + ` · 就绪 ${seconds(entry.timing.readinessDurationMs)}/${seconds(entry.timing.readinessBudgetMs)}`
+        + ` · 总计 ${seconds(entry.timing.totalDurationMs)}`;
+    return `**${targetLabel(entry.target)}** · ${bytes(entry.requiredBytes)} / ${bytes(entry.budgetBytes)}`
+      + `\nbody ${bytes(entry.bodyBytes)} · launcher ${bytes(entry.launcherBytes)} · native ${bytes(entry.nativeBytes)}`
+      + timing;
+  }).join("\n\n");
+}
+
+function failureMarkdown(details: ReleaseNotificationDetails): string {
+  return details.failures.map((failure) => {
+    const label = truncate(
+      failure.step.length > 0 ? `${failure.job} · ${failure.step}` : failure.job,
+      100,
+    );
+    return failure.url.length > 0
+      ? `- [${escapeMarkdown(label)}](${failure.url})`
+      : `- ${escapeMarkdown(label)}`;
+  }).join("\n");
+}
+
+function changelogMarkdown(lines: string[], repository: string): string {
+  return lines.slice(0, 5).map((line) => {
+    const match = line.match(/^(.*) \(([0-9a-f]{7,40})\)$/u);
+    const subject = truncate(match?.[1]?.trim() || line, 90);
+    const commit = match?.[2] ?? "";
+    const suffix = commit.length === 0
+      ? ""
+      : repository.length > 0
+        ? ` · [${commit.slice(0, 7)}](https://github.com/${repository}/commit/${commit})`
+        : ` · ${commit.slice(0, 7)}`;
+    return `- ${escapeMarkdown(subject)}${suffix}`;
   }).join("\n");
 }
 
@@ -183,54 +249,81 @@ export function buildReleaseFeishuCard(
   ].filter(([, result]) => result === "failure").map(([label]) => `${label} smoke 失败`);
   const warning = state === "partial" || smokeFailures.length > 0 || details.warnings.length > 0;
   const icon = state === "failed" ? "🚨" : state === "validation" ? "🧪" : warning ? "⚠️" : "🚀";
-  const stateLabel = { complete: "完成", failed: "失败", partial: "部分完成", validation: "验证完成" }[state];
+  const stateLabel = {
+    complete: warning ? "发布完成（有告警）" : "发布完成",
+    failed: "发布失败",
+    partial: "部分完成",
+    validation: "验证完成",
+  }[state];
   const shortCommit = input.commit.slice(0, 7);
-  const fields: FeishuElement[] = [
-    { is_short: true, text: { tag: "lark_md", content: `**渠道**\n${profile.label}` } },
-    { is_short: true, text: { tag: "lark_md", content: `**触发**\n${input.stream || "release"}` } },
-  ];
-  if (input.branch.length > 0) fields.push({ is_short: true, text: { tag: "lark_md", content: `**分支**\n${input.branch}` } });
+  const fields: FeishuElement[] = [];
+  if (input.branch.length > 0) fields.push({
+    is_short: true,
+    text: { tag: "lark_md", content: `**分支**\n${escapeMarkdown(input.branch)}` },
+  });
   if (shortCommit.length > 0) fields.push({
     is_short: true,
     text: {
       tag: "lark_md",
       content: input.repository.length > 0
-        ? `**提交**\n[\`${shortCommit}\`](https://github.com/${input.repository}/commit/${input.commit})`
-        : `**提交**\n\`${shortCommit}\``,
+        ? `**提交**\n[${shortCommit}](https://github.com/${input.repository}/commit/${input.commit})`
+        : `**提交**\n${shortCommit}`,
     },
   });
-  const elements: FeishuElement[] = [{ tag: "div", fields }];
+  const elements: FeishuElement[] = fields.length > 0
+    ? [{ tag: "div", fields }, { tag: "hr" }]
+    : [];
   const notices = [...smokeFailures, ...details.warnings];
-  if (notices.length > 0) elements.push({ tag: "div", text: { tag: "lark_md", content: `**告警**\n${notices.map((line) => `- ${line}`).join("\n")}` } });
-  if (details.coldStarts.length > 0) elements.push({ tag: "div", text: { tag: "lark_md", content: `**Closure 冷启动**\n${coldStartMarkdown(details)}` } });
-  const changelog = readChangelog(input.changelogFile);
-  elements.push({
+  if (details.failures.length > 0) elements.push({
+    tag: "div",
+    text: { tag: "lark_md", content: `**失败位置**\n${failureMarkdown(details)}` },
+  });
+  if (notices.length > 0) elements.push({
     tag: "div",
     text: {
       tag: "lark_md",
-      content: `**变更**\n${input.previousCommit.length === 0 ? "首次发布，无对比基线。" : changelog.length === 0 ? "无新增提交。" : changelog.slice(0, 30).map((line) => `- ${line}`).join("\n")}`,
+      content: `**告警**\n${notices.map((line) => `- ${escapeMarkdown(line)}`).join("\n")}`,
+    },
+  });
+  if (details.coldStarts.length > 0) elements.push({ tag: "div", text: { tag: "lark_md", content: `**Closure 冷启动**\n${coldStartMarkdown(details)}` } });
+  const changelog = readChangelog(input.changelogFile);
+  if (changelog.length > 0) elements.push({
+    tag: "div",
+    text: {
+      tag: "lark_md",
+      content: `**变更**\n${changelogMarkdown(changelog, input.repository)}`,
     },
   });
   const downloads = [
-    ["macOS (Apple Silicon)", input.macArm64Url],
-    ["macOS (Intel)", input.macX64Url],
+    ["Apple 芯片", input.macArm64Url],
+    ["Intel", input.macX64Url],
     ["Windows", input.winX64Url],
   ].filter(([, url]) => url.length > 0);
-  if (downloads.length > 0) elements.push({
+  if (downloads.length > 0 && state !== "failed") elements.push({
     tag: "action",
     actions: downloads.map(([label, url], index) => ({
       tag: "button",
-      text: { tag: "plain_text", content: `下载 ${label}` },
+      text: { tag: "plain_text", content: label },
       type: index === 0 ? "primary" : "default",
       url,
     })),
   });
-  if (input.runUrl.length > 0) elements.push({ tag: "note", elements: [{ tag: "lark_md", content: `[GitHub Actions run](${input.runUrl})` }] });
+  const links = [
+    input.metadataUrl.length > 0 ? `[发布详情](${input.metadataUrl})` : "",
+    input.runUrl.length > 0 ? `[GitHub Actions](${input.runUrl})` : "",
+  ].filter(Boolean);
+  if (links.length > 0) elements.push({
+    tag: "note",
+    elements: [{ tag: "lark_md", content: links.join(" · ") }],
+  });
   return {
     config: { wide_screen_mode: true },
     header: {
-      template: state === "failed" ? "red" : warning ? "orange" : "blue",
-      title: { tag: "plain_text", content: `${icon} Open Design ${profile.label} ${input.version || "(未生成版本)"} · ${stateLabel}` },
+      template: state === "failed" ? "red" : warning ? "orange" : state === "complete" ? "green" : "blue",
+      title: {
+        tag: "plain_text",
+        content: `${icon} ${profile.label} ${input.version || "(未生成版本)"} ${stateLabel}`,
+      },
     },
     elements,
   };

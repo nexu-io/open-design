@@ -47,7 +47,11 @@ if (bot == null) {
     winX64Smoke: optionalEnv("RELEASE_WIN_X64_SMOKE"),
     winX64Url: optionalEnv("RELEASE_WIN_X64_URL"),
   };
-  const details = await loadReleaseNotificationDetails(input);
+  const details = await loadReleaseNotificationDetails(
+    input,
+    fetch,
+    optionalEnv("RELEASE_GITHUB_TOKEN"),
+  );
   const card = buildReleaseFeishuCard(input, details);
   await postFeishuWebhook(bot.webhook, createFeishuSignedEnvelope(card, bot.signSecret));
   summary(`Feishu: delivered ${channel} ${input.version || "validation"}`);

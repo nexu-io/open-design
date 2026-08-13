@@ -72,6 +72,7 @@ on:
         required: false
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -117,6 +118,7 @@ jobs:
           RELEASE_CHANGELOG_FILE: ${{ steps.changelog.outputs.path }}
           RELEASE_COMMIT: ${{ inputs.commit }}
           RELEASE_FEISHU_BOT: ${{ secrets.bot }}
+          RELEASE_GITHUB_TOKEN: ${{ github.token }}
           RELEASE_MAC_ARM64_SMOKE: ${{ inputs.mac_arm64_smoke }}
           RELEASE_MAC_ARM64_URL: ${{ inputs.mac_arm64_url }}
           RELEASE_MAC_X64_SMOKE: ${{ inputs.mac_x64_smoke }}
