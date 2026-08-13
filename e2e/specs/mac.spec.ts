@@ -54,6 +54,7 @@ const shellVersion = process.env.OD_PACKAGED_E2E_SHELL_VERSION;
 const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion, shellVersion });
 const pnpmCommand = process.env.OD_E2E_PNPM_COMMAND ?? 'pnpm';
 const packagedMacClosureTarget = process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64';
+const packagedMacUpdaterPlatform = process.arch === 'x64' ? 'macIntel' : 'mac';
 const screenshotPath = join(toolsPackDir, 'screenshots', `${namespace}.png`);
 const smokeProfile = resolvePackagedSmokeProfile(process.env.OD_PACKAGED_E2E_MAC_SMOKE_PROFILE);
 const smokeLanes = resolvePackagedSmokeLanes(
@@ -438,7 +439,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
             channel: updateScenario.channel,
             ...(closureBuild == null ? {} : { closureManifestPath: closureBuild.manifestPath }),
             payloadPath: localPayload.payloadPath,
-            platform: 'mac',
+            platform: packagedMacUpdaterPlatform,
             rebaseClosureUrl: closureBuild != null,
             version: localPayload.targetVersion,
             workspaceRoot,
@@ -706,7 +707,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
             controlLauncherVersionMin: updaterVersion,
             controlLauncherVersionUrl: 'https://example.test/updater-recovery',
             payloadPath: recoveryPayloadPath,
-            platform: 'mac',
+            platform: packagedMacUpdaterPlatform,
             version: updaterVersion,
             workspaceRoot,
           });
@@ -918,7 +919,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       payloadFixtureLocal = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
         payloadPath: localPayload.payloadPath,
-        platform: 'mac',
+        platform: packagedMacUpdaterPlatform,
         version: targetVersion,
         workspaceRoot,
       });
@@ -1023,7 +1024,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       corruptFixture = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
         payloadPath: corruptPayloadPath,
-        platform: 'mac',
+        platform: packagedMacUpdaterPlatform,
         version: targetVersion,
         workspaceRoot,
       });
@@ -1098,7 +1099,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       goodFixture = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
         payloadPath: healedPayloadPath,
-        platform: 'mac',
+        platform: packagedMacUpdaterPlatform,
         version: healedVersion,
         workspaceRoot,
       });
@@ -1183,7 +1184,7 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       closureFixture = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
         closureManifestPath: closureBuild.manifestPath,
-        platform: 'mac',
+        platform: packagedMacUpdaterPlatform,
         rebaseClosureUrl: true,
         version: closureBuild.manifest.identity.version,
         workspaceRoot,
@@ -1292,7 +1293,7 @@ macLegacyMigrationDescribe('packaged mac historical outer migration acceptance',
         channel: updateScenario.channel,
         controlLauncherVersionMin: requiredShellVersion,
         controlLauncherVersionUrl: 'https://open-design.ai/download',
-        platform: 'mac',
+        platform: packagedMacUpdaterPlatform,
         version: targetReleaseVersion,
         workspaceRoot,
       });

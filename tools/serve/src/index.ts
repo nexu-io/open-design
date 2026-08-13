@@ -6,7 +6,10 @@ import {
   startCollabCloudFixtureServer,
 } from "./collab-cloud-fixture.js";
 import { startReleaseStorageFixtureServer } from "./release-storage-fixture.js";
-import { startUpdaterFixtureServer } from "./updater-fixture.js";
+import {
+  startUpdaterFixtureServer,
+  type UpdaterFixturePlatform,
+} from "./updater-fixture.js";
 
 type CliOptions = {
   artifactPath?: string;
@@ -16,7 +19,7 @@ type CliOptions = {
   controlLauncherVersionUrl?: string;
   host?: string;
   json?: boolean;
-  platform?: "mac" | "win";
+  platform?: UpdaterFixturePlatform;
   port?: string;
   includePayload?: boolean;
   payloadPath?: string;
@@ -38,10 +41,11 @@ function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`);
 }
 
-function parsePlatform(value: string | undefined): "mac" | "win" {
+function parsePlatform(value: string | undefined): UpdaterFixturePlatform {
   if (value == null || value.length === 0 || value === "mac") return "mac";
+  if (value === "macIntel") return "macIntel";
   if (value === "win") return "win";
-  throw new Error("--platform must be mac or win");
+  throw new Error("--platform must be mac, macIntel, or win");
 }
 
 async function start(service: string, options: CliOptions): Promise<void> {
@@ -140,7 +144,7 @@ cli
   .option("--json", "Print JSON")
   .option("--include-payload", "Include launcher payload metadata")
   .option("--payload-path <path>", "Serve launcher payload bytes from a real archive")
-  .option("--platform <platform>", "Updater platform: mac|win", { default: "mac" })
+  .option("--platform <platform>", "Updater platform: mac|macIntel|win", { default: "mac" })
   .option("--token <token>", "collab-cloud: shared bearer token clients must present")
   .option("--port <port>", "Port to bind, 0 for dynamic", { default: "0" })
   .option("--rebase-closure-url", "Re-envelope Closure metadata onto the fixture origin")

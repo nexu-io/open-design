@@ -14,9 +14,11 @@ import {
   isReleaseChannel,
   releaseMetadataVersionFields,
   type ReleaseChannel,
+  type ReleasePlatform,
 } from "@open-design/release";
 
 type UpdaterFixtureChannel = ReleaseChannel;
+export type UpdaterFixturePlatform = Exclude<ReleasePlatform, "linux">;
 
 type ClosureFixtureFile = {
   body?: Buffer;
@@ -42,7 +44,7 @@ export type UpdaterFixtureOptions = {
   host?: string;
   includePayload?: boolean;
   launcherSchema?: number;
-  platform?: "mac" | "win";
+  platform?: UpdaterFixturePlatform;
   payloadBody?: Buffer | string;
   payloadPath?: string;
   port?: number;
@@ -63,7 +65,7 @@ export type UpdaterFixtureInfo = {
   payloadPath: string | null;
   payloadSha256: string | null;
   payloadUrl: string | null;
-  platform: "mac" | "win";
+  platform: UpdaterFixturePlatform;
   sha256: string;
   version: string;
 };
@@ -252,13 +254,15 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
   const platform = options.platform ?? "mac";
   const port = options.port ?? 0;
   const version = options.version ?? "99.0.0";
-  const platformKey = platform === "win" ? "win" : "mac";
+  const platformKey = platform;
+  const releaseTarget = platform === "mac" ? "mac_arm64" : platform === "macIntel" ? "mac_x64" : "win_x64";
+  const targetArch = platform === "mac" ? "arm64" : "x64";
   const artifactKey = platform === "win" ? "installer" : "dmg";
   const artifactName = options.artifactPath != null
     ? basename(options.artifactPath)
     : platform === "win"
     ? `open-design-${version}-win-x64-setup.exe`
-    : `open-design-${version}-mac-arm64.dmg`;
+    : `open-design-${version}-mac-${targetArch}.dmg`;
   const contentType = platform === "win"
     ? "application/vnd.microsoft.portable-executable"
     : "application/x-apple-diskimage";
@@ -276,7 +280,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
   const payloadName = options.payloadPath == null
     ? platform === "win"
       ? `open-design-${version}-win-x64-payload.7z`
-      : `open-design-${version}-mac-arm64-payload.zip`
+      : `open-design-${version}-mac-${targetArch}-payload.zip`
     : basename(options.payloadPath);
   const artifactPathSegment = encodeURIComponent(artifactName);
   const payloadPathSegment = encodeURIComponent(payloadName);
@@ -306,7 +310,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
       };
   let closureFiles: ClosureFixtureFiles | null = null;
   if (closureManifest != null && closureFilePaths != null) {
-    const expectedPlatform = platform === "mac" ? "darwin-arm64" : "win32-x64";
+    const expectedPlatform = platform === "mac" ? "darwin-arm64" : platform === "macIntel" ? "darwin-x64" : "win32-x64";
     if (closureManifest.identity.channel !== channel) {
       throw new Error(`Closure channel ${closureManifest.identity.channel} does not match updater channel ${channel}`);
     }
@@ -346,7 +350,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
           : {
               releaseState: "complete",
               releaseTargets: {
-                [platform === "mac" ? "mac_arm64" : "win_x64"]: {
+                [releaseTarget]: {
                   closure: closureReleaseMetadata(closureManifest, closureFiles!),
                   enabled: true,
                   status: "published",
@@ -368,7 +372,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
           : {}),
         platforms: {
           [platformKey]: {
-            arch: platform === "win" ? "x64" : "arm64",
+            arch: targetArch,
             artifacts: {
               [artifactKey]: {
                 contentType,

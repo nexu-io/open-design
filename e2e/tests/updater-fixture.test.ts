@@ -38,6 +38,21 @@ describe('packaged updater fixture bridge', () => {
       url: 'https://example.test/updater-recovery',
     });
   });
+
+  it('[P1] preserves the macOS Intel platform through the CLI bridge', async () => {
+    fixture = await startToolsServeUpdaterFixture({
+      channel: 'beta',
+      platform: 'macIntel',
+      version: '0.19.0-beta.30',
+      workspaceRoot,
+    });
+
+    const metadata = await (await fetch(fixture.info.metadataUrl)).json() as {
+      platforms?: { macIntel?: { arch?: string; artifacts?: { dmg?: { url?: string } } } };
+    };
+    expect(metadata.platforms?.macIntel?.arch).toBe('x64');
+    expect(metadata.platforms?.macIntel?.artifacts?.dmg?.url).toBe(fixture.info.artifactUrl);
+  });
 });
 
 async function reserveLoopbackPort(): Promise<number> {

@@ -238,6 +238,35 @@ describe("updater fixture server", () => {
     }
   });
 
+  it("serves macOS Intel metadata under the modeled macIntel platform", async () => {
+    const server = await startUpdaterFixtureServer({
+      artifactBody: "fixture Intel disk image",
+      channel: "beta",
+      includePayload: true,
+      payloadBody: "fixture Intel payload",
+      platform: "macIntel",
+      version: "2.0.0-beta.1",
+    });
+    try {
+      const metadata = await (await fetch(server.info.metadataUrl)).json() as {
+        platforms?: {
+          macIntel?: {
+            arch?: string;
+            artifacts?: { dmg?: { name?: string; url?: string }; payload?: { name?: string; url?: string } };
+          };
+        };
+      };
+      expect(server.info.platform).toBe("macIntel");
+      expect(metadata.platforms?.macIntel?.arch).toBe("x64");
+      expect(metadata.platforms?.macIntel?.artifacts?.dmg?.name).toContain("mac-x64.dmg");
+      expect(metadata.platforms?.macIntel?.artifacts?.dmg?.url).toBe(server.info.artifactUrl);
+      expect(metadata.platforms?.macIntel?.artifacts?.payload?.name).toContain("mac-x64-payload.zip");
+      expect(metadata.platforms?.macIntel?.artifacts?.payload?.url).toBe(server.info.payloadUrl);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("serves a local artifact file as the updater installer", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-updater-fixture-"));
     const artifactPath = join(root, "Open Design-release-beta-win-setup.exe");

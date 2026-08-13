@@ -2,7 +2,7 @@ import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { once } from 'node:events';
 import type { Readable } from 'node:stream';
 
-import type { ReleaseChannel } from '@open-design/release';
+import type { ReleaseChannel, ReleasePlatform } from '@open-design/release';
 
 export type ToolsServeUpdaterFixture = {
   close: () => Promise<void>;
@@ -27,7 +27,7 @@ export async function startToolsServeUpdaterFixture(options: {
   controlLauncherVersionMin?: string;
   controlLauncherVersionUrl?: string;
   payloadPath?: string;
-  platform: 'mac' | 'win';
+  platform: Exclude<ReleasePlatform, 'linux'>;
   port?: number;
   rebaseClosureUrl?: boolean;
   version: string;
