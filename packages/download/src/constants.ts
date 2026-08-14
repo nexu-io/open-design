@@ -28,6 +28,10 @@ export const STORE_KIND = "open-design-managed-download-root";
 export const MANIFEST_KIND = "open-design-managed-download";
 /** Default number of download attempts before giving up. */
 export const DEFAULT_MAX_ATTEMPTS = 3;
+/** Maximum wait for response headers before one attempt is aborted. */
+export const DEFAULT_HEADER_TIMEOUT_MS = 15_000;
+/** Maximum interval without a response-body byte before retrying. */
+export const DEFAULT_STALL_TIMEOUT_MS = 15_000;
 /** Default age threshold (ms) above which prune removes stale scratch entries. */
 export const DEFAULT_PRUNE_OLDER_THAN_MS = 24 * 60 * 60 * 1000;
 /** Grace window (ms) tolerated when deciding whether a same-PID lock is ours. */

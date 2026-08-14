@@ -14,6 +14,10 @@ import {
 import { readFile } from "node:fs/promises";
 import { parseReleaseNotePublication, releaseNoteMetadataFromPublication } from "../release-note/publication.ts";
 import { validateClosureDistributionPublication } from "./closure-distribution-metadata.ts";
+import {
+  createClosureDistributionControl,
+  validateClosureDistributionControl,
+} from "@open-design/closure/protocol";
 import { releaseParameterMatrixFromEnv, signModeForTarget } from "../channel/parameter-matrix.ts";
 
 const releaseDescriptor = releaseChannelDescriptor(required("RELEASE_CHANNEL"));
@@ -39,6 +43,7 @@ const metadata = (metadataPath.length > 0
   channel?: string;
   parameterMatrix?: unknown;
   closure?: unknown;
+  closureControl?: unknown;
   control?: {
     launcher?: { version?: { min?: string; url?: string } };
     shell?: { installation?: { version?: { min?: string; url?: string } } };
@@ -165,7 +170,7 @@ if (metadata.closure != null) {
   if (typeof metadata.r2?.publicOrigin !== "string" || metadata.r2.publicOrigin.length === 0) {
     throw new Error("metadata r2.publicOrigin is required for Closure distribution verification");
   }
-  validateClosureDistributionPublication({
+  const validatedClosure = validateClosureDistributionPublication({
     channel: releaseChannel,
     expectedTargets: expectedClosureDistributionTargets,
     publicOrigin: metadata.r2.publicOrigin,
@@ -177,6 +182,10 @@ if (metadata.closure != null) {
     )),
     value: metadata.closure,
   });
+  const publishedClosureControl = validateClosureDistributionControl(metadata.closureControl);
+  if (JSON.stringify(publishedClosureControl) !== JSON.stringify(createClosureDistributionControl(validatedClosure))) {
+    throw new Error("metadata Closure control does not match metadata.closure");
+  }
   const expectedClosureManifestUrl = new URL(
     releaseClosureManifestObjectKey(releaseChannel, releaseVersion),
     `${metadata.r2.publicOrigin.replace(/\/+$/, "")}/`,
@@ -199,6 +208,8 @@ if (metadata.closure != null) {
   if (JSON.stringify(standaloneClosure) !== JSON.stringify(metadata.closure)) {
     throw new Error("standalone Closure manifest does not match metadata.closure");
   }
+} else if (metadata.closureControl != null) {
+  throw new Error("metadata unexpectedly contains Closure control without a distribution");
 }
 
 for (const target of ["mac_arm64", "win_x64", "mac_x64"]) {

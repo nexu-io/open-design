@@ -2776,7 +2776,10 @@ process.stdin.on("end", () => {
     );
     const activationJob = workflow.slice(workflow.indexOf("\n  activate:"));
 
-    expect(workflow).toContain("CLOSURE_MIN_SHELL_VERSION: ${{ inputs.exact_name == 'beta' && '0.19.0-beta.4'");
+    expect(workflow).not.toContain("CLOSURE_MIN_SHELL_VERSION: ${{ inputs.exact_name == 'beta'");
+    expect(sharedJob).toContain("closure_min_shell_version: ${{ steps.exact.outputs.closure_min_shell_version }}");
+    expect(sharedJob).toContain("min-shell-version: ${{ steps.exact.outputs.closure_min_shell_version }}");
+    expect(buildJob).toContain("CLOSURE_MIN_SHELL_VERSION: ${{ needs.metadata.outputs.closure_min_shell_version }}");
     expect(workflow).toContain("OPEN_DESIGN_POSTINSTALL_CONCURRENCY: 2");
     expect(workflow).not.toContain("  closure_shared:");
     expect(workflow).not.toContain("needs.closure_shared");

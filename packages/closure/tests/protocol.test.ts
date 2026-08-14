@@ -17,6 +17,7 @@ import {
   ClosureProtocolError,
   bindClosureCandidateIdentity,
   createClosureComponentTreeDigest,
+  createClosureDistributionControl,
   createClosureDistributionManifest,
   mergeClosureDistributionContributions,
   resolveClosureDistributionColdStartBudget,
@@ -27,6 +28,7 @@ import {
   validateClosureCandidateManifest,
   validateClosureCandidateSignature,
   validateClosureDistributionManifest,
+  validateClosureDistributionControl,
   validateClosureDistributionSharedContribution,
   validateClosureDistributionTargetContribution,
   validateClosureFileInventory,
@@ -350,6 +352,38 @@ describe("closure candidate signatures", () => {
 });
 
 describe("layered Closure distribution manifest", () => {
+  it("accepts the reserved local coordination domain inside Closure only", () => {
+    const localDraft: ClosureDistributionManifestDraft = {
+      ...distributionDraft,
+      identity: {
+        ...distributionDraft.identity,
+        channel: "local",
+        version: "0.19.1-local.1",
+      },
+    };
+    const produced = createClosureDistributionManifest(localDraft, digestCanonical);
+
+    expect(validateClosureDistributionManifest(produced, digestCanonical).identity).toMatchObject({
+      channel: "local",
+      version: "0.19.1-local.1",
+    });
+  });
+
+  it("projects a stable shallow compatibility envelope", () => {
+    const produced = createClosureDistributionManifest(distributionDraft, digestCanonical);
+    const control = createClosureDistributionControl(produced);
+    expect(validateClosureDistributionControl(control)).toEqual(control);
+    expect(control).toMatchObject({
+      distribution: {
+        digest: produced.identity.digest,
+        protocolVersion: CLOSURE_PROTOCOL_VERSION,
+        schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+      },
+      schemaVersion: 1,
+      shellCompatibility: produced.compatibility.shell,
+    });
+  });
+
   it("lets an independent producer seal one version across multiple targets", () => {
     const produced = createClosureDistributionManifest(distributionDraft, digestCanonical);
 

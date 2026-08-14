@@ -43,7 +43,7 @@ describe('packaged updater release scenario', () => {
     expect(scenario.expectedCurrentVersion).not.toBe(scenario.expectedInstalledShellVersion);
   });
 
-  test('derives stable, prerelease, preview, and beta next-version fixtures', () => {
+  test('derives stable, prerelease, generic exact, beta, and local next-version fixtures', () => {
     expect(resolvePackagedUpdateScenario({
       releaseChannel: 'stable',
       releaseVersion: '0.8.0',
@@ -53,13 +53,17 @@ describe('packaged updater release scenario', () => {
       releaseVersion: '0.8.0-prerelease.2',
     }).fixtureVersion).toBe('0.8.0-prerelease.3');
     expect(resolvePackagedUpdateScenario({
-      releaseChannel: 'preview',
-      releaseVersion: '0.8.0-preview.2',
-    }).fixtureVersion).toBe('0.8.0-preview.3');
+      releaseChannel: 'qa2',
+      releaseVersion: '0.8.0-qa2.2',
+    }).fixtureVersion).toBe('0.8.0-qa2.3');
     expect(resolvePackagedUpdateScenario({
       releaseChannel: 'beta',
       releaseVersion: '0.8.0-beta.2',
     }).fixtureVersion).toBe('0.8.0-beta.3');
+    expect(resolvePackagedUpdateScenario({
+      releaseChannel: 'local',
+      releaseVersion: '0.8.0-local.20',
+    }).fixtureVersion).toBe('0.8.0-local.21');
   });
 
   test('does not override current version for release-channel smoke', () => {

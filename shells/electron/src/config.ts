@@ -2,12 +2,14 @@ import { access, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar/protocol";
-
 import {
-  projectPackagedColdLaunchConfig,
-  readPackagedColdLaunchProjection,
-  writePackagedColdLaunchProjection,
-} from "./cold-launch-projection.js";
+  PACKAGED_LAUNCH_CONTEXT_FILE,
+  claimPackagedLaunchContext,
+  createLaunchContextTarget,
+  markPackagedLaunchContextRelaunchable,
+  type PackagedLaunchContext,
+} from "@open-design/shell/launch-context";
+
 
 // `electron` is loaded lazily so this module can also be imported from the
 // standalone entry, which runs in a plain Node process without the electron
@@ -19,6 +21,7 @@ async function loadElectronApp() {
 }
 
 export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
+export const PACKAGED_LAUNCH_CONTEXT_SESSION_ENV = "OD_PACKAGED_LAUNCH_CONTEXT_SESSION";
 export const PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
 export const PACKAGED_NAMESPACE_BASE_ROOT_ENV = "OD_PACKAGED_NAMESPACE_BASE_ROOT";
 export const PACKAGED_STANDALONE_METADATA_URL_ENV = "OD_STANDALONE_METADATA_URL";
@@ -75,6 +78,7 @@ export type PackagedConfig = {
   nodeCommand: string | null;
   resourceRoot: string;
   launcherVersion: string | null;
+  launchContext?: { path: string; sessionId: string } | null;
   releaseVersion: string | null;
   shellVersion: string | null;
   telemetryRelayUrl: string | null;
@@ -105,16 +109,40 @@ function resolveDefaultConfigPath(): string {
   return join(process.resourcesPath, "open-design-config.json");
 }
 
-async function readRawPackagedConfig(electronUserDataRoot: string): Promise<RawPackagedConfig> {
+async function claimLaunchContext(
+  electronUserDataRoot: string,
+  sessionId?: string,
+): Promise<PackagedLaunchContext | null> {
+  return await claimPackagedLaunchContext({
+    path: join(electronUserDataRoot, PACKAGED_LAUNCH_CONTEXT_FILE),
+    ...(sessionId == null ? {} : { sessionId }),
+  });
+}
+
+async function readRawPackagedConfig(electronUserDataRoot: string): Promise<{
+  launchContext: PackagedLaunchContext | null;
+  raw: RawPackagedConfig;
+}> {
   const explicit = process.env[PACKAGED_CONFIG_PATH_ENV];
   if (explicit != null && explicit.length > 0) {
     const config = await readJsonIfExists(resolve(explicit));
     if (config == null) throw new Error(`packaged config not found at ${explicit}`);
-    const projection = projectPackagedColdLaunchConfig(config);
-    if (projection != null) {
-      await writePackagedColdLaunchProjection(electronUserDataRoot, projection);
+    const sessionId = process.env[PACKAGED_LAUNCH_CONTEXT_SESSION_ENV]?.trim();
+    if (sessionId != null && sessionId.length > 0) {
+      const launchContext = await claimLaunchContext(electronUserDataRoot, sessionId);
+      const target = createLaunchContextTarget(config);
+      if (launchContext == null || target == null) {
+        throw new Error("packaged launch context could not be claimed");
+      }
+      if (
+        launchContext.target.namespace !== target.namespace
+        || launchContext.target.namespaceBaseRoot !== target.namespaceBaseRoot
+      ) {
+        throw new Error("packaged launch context target does not match the explicit config");
+      }
+      return { launchContext, raw: config };
     }
-    return config;
+    return { launchContext: null, raw: config };
   }
 
   const electronApp = await loadElectronApp();
@@ -123,8 +151,11 @@ async function readRawPackagedConfig(electronUserDataRoot: string): Promise<RawP
     (await readJsonIfExists(join(electronApp.getAppPath(), "open-design-config.json"))) ??
     {}
   );
-  const projection = await readPackagedColdLaunchProjection(electronUserDataRoot);
-  return projection == null ? embedded : { ...embedded, ...projection };
+  const launchContext = await claimLaunchContext(electronUserDataRoot);
+  return {
+    launchContext,
+    raw: launchContext == null ? embedded : { ...embedded, ...launchContext.target },
+  };
 }
 
 function resolveOptionalPath(value: string | undefined): string | undefined {
@@ -241,7 +272,7 @@ async function resolvePackagedRelativeEntry(value: string | undefined): Promise<
 export async function readPackagedConfig(): Promise<PackagedConfig> {
   const electronApp = await loadElectronApp();
   const electronUserDataRoot = electronApp.getPath("userData");
-  const raw = await readRawPackagedConfig(electronUserDataRoot);
+  const { launchContext, raw } = await readRawPackagedConfig(electronUserDataRoot);
   const namespace = normalizeNamespace(
     process.env[PACKAGED_NAMESPACE_ENV] ?? raw.namespace ?? SIDECAR_DEFAULTS.namespace,
   );
@@ -283,6 +314,10 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     launcherVersion: cleanOptionalString(raw.launcherVersion)
       ?? cleanOptionalString(raw.releaseVersion)
       ?? cleanOptionalString(raw.shellVersion),
+    launchContext: launchContext == null ? null : {
+      path: join(electronUserDataRoot, PACKAGED_LAUNCH_CONTEXT_FILE),
+      sessionId: launchContext.sessionId,
+    },
     releaseVersion: cleanOptionalString(raw.releaseVersion),
     shellVersion: cleanOptionalString(raw.shellVersion),
     telemetryRelayUrl: cleanOptionalString(raw.telemetryRelayUrl),
@@ -294,4 +329,15 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     webStandaloneRoot,
     webOutputMode,
   };
+}
+
+export async function parkPackagedLaunchContext(
+  context: PackagedConfig["launchContext"],
+): Promise<boolean> {
+  if (context == null) return false;
+  return await markPackagedLaunchContextRelaunchable({
+    ownerPid: process.pid,
+    path: context.path,
+    sessionId: context.sessionId,
+  });
 }

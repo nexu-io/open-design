@@ -10,6 +10,7 @@ import {
   type CountedReleaseState,
 } from "../channel/counted-version.ts";
 import { countedReleaseChannelProfile } from "../channel/profiles.ts";
+import { resolveExactClosureMinShellVersion } from "../channel/closure-compatibility.ts";
 import {
   extractStableVersionFromTag,
   fetchGitTags,
@@ -131,6 +132,11 @@ try {
 }
 const releaseNumber = nextExact.releaseNumber;
 const releaseVersion = nextExact.releaseVersion;
+const closureMinShellVersion = resolveExactClosureMinShellVersion({
+  channel,
+  latestMetadataJson,
+  releaseVersion,
+});
 const branch = process.env.GITHUB_REF_NAME ?? "";
 const commit = process.env.GITHUB_SHA ?? "";
 const releaseName = `${releaseChannelDescriptor(channel).productName} ${releaseVersion}`;
@@ -139,6 +145,7 @@ console.log(`[release-exact] name: ${channel}`);
 console.log(`[release-exact] base version: ${packagedVersion}`);
 console.log(`[release-exact] version: ${releaseVersion}`);
 console.log(`[release-exact] state source: ${stateSource}`);
+console.log(`[release-exact] Closure Shell floor: ${closureMinShellVersion}`);
 if (latestStable != null) console.log(`[release-exact] latest stable: ${latestStable.value}`);
 if (latestExact != null) console.log(`[release-exact] latest ${channel}: ${latestExact.releaseVersion}`);
 
@@ -146,6 +153,7 @@ setOutput("asset_version_suffix", "");
 setOutput("base_version", packagedVersion);
 setOutput("branch", branch);
 setOutput("channel", channel);
+setOutput("closure_min_shell_version", closureMinShellVersion);
 setOutput("commit", commit);
 setOutput("latest_stable", latestStable?.value ?? "");
 setOutput("release_number", String(releaseNumber));

@@ -4,6 +4,7 @@ import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import {
+  createClosureDistributionControl,
   resolveClosureDistributionTarget,
   validateClosureDistributionManifest,
   type ClosureDigest,
@@ -103,6 +104,7 @@ export async function prepareClosureSeed(
   await writeFile(indexPath, `${JSON.stringify({
     channel: input.channel,
     closure: manifest,
+    closureControl: createClosureDistributionControl(manifest),
     releaseState: "complete",
     releaseVersion: input.releaseVersion,
   }, null, 2)}\n`, "utf8");

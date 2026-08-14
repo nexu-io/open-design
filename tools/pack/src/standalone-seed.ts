@@ -54,7 +54,10 @@ export async function inspectStandaloneSeed(
   if (rootMetadata == null || rootMetadata.isSymbolicLink() || !rootMetadata.isDirectory()) {
     throw new Error("Standalone seed root must be a regular directory");
   }
-  const channel = releaseChannelFromVersion(config.releaseVersion);
+  const boundVersion = config.runtimeReleaseVersion ?? config.releaseVersion;
+  const channel = config.debugChannel === "local" && config.releaseVersion == null
+    ? "local"
+    : releaseChannelFromVersion(boundVersion);
   if (channel == null) throw new Error("Standalone seed requires a channel release version");
   const shellVersion = config.shellVersion;
   if (shellVersion == null) throw new Error("Standalone seed requires an explicit Shell version");

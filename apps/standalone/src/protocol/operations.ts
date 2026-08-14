@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import { isAbsolute, posix, win32 } from "node:path";
 
-import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
-
 import {
   STANDALONE_HANDOFF_SCHEMA_VERSION,
   STANDALONE_UPDATER_SCHEMA_VERSION,

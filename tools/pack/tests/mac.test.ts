@@ -162,7 +162,8 @@ describe("copyResourceTree", () => {
   it("seeds the Shell with the official Node that tools-pack actually used", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
     try {
-      const config = makeConfig(root);
+      const repositorySeedRoot = join(root, ".tmp", "local-standalone-repository");
+      const config = makeConfig(root, { standaloneRepositorySeedRoot: repositorySeedRoot });
       const paths = resolveMacPaths(config);
       const resourceNames = [
         "skills",
@@ -191,7 +192,7 @@ describe("copyResourceTree", () => {
       expect(await pathExists(join(paths.resourceRoot, "standalone", "bootloader.mjs"))).toBe(true);
       expect(await pathExists(join(paths.resourceRoot, "standalone", "baseline", "launcher.mjs"))).toBe(true);
       expect(JSON.parse(await readFile(join(paths.resourceRoot, "standalone", "repository.json"), "utf8")))
-        .toMatchObject({ localSeeds: [{ root: "seed" }], schemaVersion: 1 });
+        .toMatchObject({ localSeeds: [{ root: repositorySeedRoot }], schemaVersion: 1 });
     } finally {
       await rm(root, { force: true, recursive: true });
     }

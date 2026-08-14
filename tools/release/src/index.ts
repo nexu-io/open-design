@@ -187,6 +187,25 @@ cli
   });
 
 cli
+  .command("verify-closure-preflight", "Accept the merged Closure graph against the N-1 Shell boundary")
+  .option("--channel <channel>", "release channel")
+  .option("--manifest <path>", "merged Closure distribution manifest")
+  .option("--release-version <version>", "current release version")
+  .action(async (options: { channel?: string; manifest?: string; releaseVersion?: string }) => {
+    if (options.channel == null || options.manifest == null || options.releaseVersion == null) {
+      throw new Error("verify-closure-preflight requires --channel, --manifest, and --release-version");
+    }
+    const { releaseChannelDescriptor } = await import("@open-design/release");
+    const { verifyClosureNMinusOnePreflightFile } = await import("./storage/verify-closure-preflight.ts");
+    const result = verifyClosureNMinusOnePreflightFile({
+      channel: releaseChannelDescriptor(options.channel).channel,
+      manifestPath: options.manifest,
+      releaseVersion: options.releaseVersion,
+    });
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  });
+
+cli
   .command("observe-public-feed", "Observe a published release feed without changing publication state")
   .action(async () => {
     await import("./storage/observe-public-feed.ts");

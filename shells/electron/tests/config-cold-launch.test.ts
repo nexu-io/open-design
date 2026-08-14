@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { beginPackagedLaunchContext } from "@open-design/shell/launch-context";
 
 const appPath = vi.hoisted(() => ({ current: "" }));
 const userDataPath = vi.hoisted(() => ({ current: "" }));
@@ -17,15 +18,22 @@ vi.mock("electron", () => ({
   },
 }));
 
-import { PACKAGED_CONFIG_PATH_ENV, readPackagedConfig } from "../src/config.js";
+import {
+  PACKAGED_CONFIG_PATH_ENV,
+  PACKAGED_LAUNCH_CONTEXT_SESSION_ENV,
+  readPackagedConfig,
+} from "../src/config.js";
 
 const roots: string[] = [];
 const originalExplicitConfig = process.env[PACKAGED_CONFIG_PATH_ENV];
+const originalLaunchContextSession = process.env[PACKAGED_LAUNCH_CONTEXT_SESSION_ENV];
 const originalResourcesPath = process.resourcesPath;
 
 afterEach(async () => {
   if (originalExplicitConfig == null) delete process.env[PACKAGED_CONFIG_PATH_ENV];
   else process.env[PACKAGED_CONFIG_PATH_ENV] = originalExplicitConfig;
+  if (originalLaunchContextSession == null) delete process.env[PACKAGED_LAUNCH_CONTEXT_SESSION_ENV];
+  else process.env[PACKAGED_LAUNCH_CONTEXT_SESSION_ENV] = originalLaunchContextSession;
   Object.defineProperty(process, "resourcesPath", {
     configurable: true,
     value: originalResourcesPath,
@@ -34,7 +42,7 @@ afterEach(async () => {
 });
 
 describe("packaged config cold-launch routing", () => {
-  it("reuses the caller projection when a later OS launch has no environment", async () => {
+  it("reuses only a leased caller projection when a later OS launch has no environment", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-electron-config-cold-launch-"));
     roots.push(root);
     appPath.current = join(root, "app");
@@ -58,18 +66,50 @@ describe("packaged config cold-launch routing", () => {
       releaseVersion: "0.19.0-beta.23",
     }), "utf8");
     await mkdir(resourcesRoot, { recursive: true });
+    await mkdir(namespaceBaseRoot, { recursive: true });
     await writeFile(join(resourcesRoot, "open-design-config.json"), JSON.stringify(embedded), "utf8");
 
+    const transaction = await beginPackagedLaunchContext({
+      path: join(userDataPath.current, "open-design-launch-context.json"),
+      target: { namespace: "release-beta-x64", namespaceBaseRoot },
+    });
     process.env[PACKAGED_CONFIG_PATH_ENV] = explicitPath;
+    process.env[PACKAGED_LAUNCH_CONTEXT_SESSION_ENV] = transaction.sessionId;
     const attached = await readPackagedConfig();
     expect(attached.namespace).toBe("release-beta-x64");
     expect(attached.namespaceBaseRoot).toBe(namespaceBaseRoot);
 
     delete process.env[PACKAGED_CONFIG_PATH_ENV];
+    delete process.env[PACKAGED_LAUNCH_CONTEXT_SESSION_ENV];
     const cold = await readPackagedConfig();
     expect(cold.namespace).toBe("release-beta-x64");
     expect(cold.namespaceBaseRoot).toBe(namespaceBaseRoot);
     expect(cold.shellVersion).toBe("0.19.0-beta.23");
     expect(cold.webOutputMode).toBe("standalone");
+  });
+
+  it("does not persist an unleased explicit config", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-electron-config-cold-launch-"));
+    roots.push(root);
+    appPath.current = join(root, "app");
+    userDataPath.current = join(root, "electron-user-data");
+    const resourcesRoot = join(root, "resources");
+    const explicitPath = join(root, "external-config.json");
+    Object.defineProperty(process, "resourcesPath", { configurable: true, value: resourcesRoot });
+    await mkdir(resourcesRoot, { recursive: true });
+    await writeFile(explicitPath, JSON.stringify({
+      namespace: "test-route",
+      namespaceBaseRoot: join(root, "temporary"),
+      shellVersion: "0.19.1",
+    }), "utf8");
+    await writeFile(join(resourcesRoot, "open-design-config.json"), JSON.stringify({
+      namespace: "embedded-default",
+      shellVersion: "0.19.1",
+    }), "utf8");
+
+    process.env[PACKAGED_CONFIG_PATH_ENV] = explicitPath;
+    expect((await readPackagedConfig()).namespace).toBe("test-route");
+    delete process.env[PACKAGED_CONFIG_PATH_ENV];
+    expect((await readPackagedConfig()).namespace).toBe("embedded-default");
   });
 });

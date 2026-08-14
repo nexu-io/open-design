@@ -89,6 +89,8 @@ const { resolveWinPaths } = await import("../src/win/paths.js");
 
 function createConfig(root: string): ToolPackConfig {
   return {
+    debugChannel: "beta",
+    debugProductUserDataRoot: join(root, "product-profile"),
     releaseVersion: "0.10.0-beta.1",
     electronBuilderCliPath: "electron-builder",
     electronDistPath: "electron-dist",
@@ -131,7 +133,7 @@ async function writeFakeUnpackedExe(config: ToolPackConfig): Promise<void> {
 }
 
 describe("installPackedWinApp", () => {
-  it("pins the installed portable config to the tools-pack namespace for bare protocol launches", async () => {
+  it("keeps the installed portable config immutable", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
     const config = { ...createConfig(root), portable: true };
     const paths = resolveWinPaths(config);
@@ -154,18 +156,14 @@ describe("installPackedWinApp", () => {
       const result = await installPackedWinApp(config);
       const installedConfig = JSON.parse(await readFile(installedConfigPath, "utf8")) as Record<string, unknown>;
 
-      expect(installedConfig).toMatchObject({
-        channel: "prerelease",
-        namespace: config.namespace,
-        namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
-      });
-      expect(result.lifecycleTimings.map(({ step }) => step)).toContain("pin installed packaged namespace");
+      expect(installedConfig).toEqual({ channel: "prerelease", namespace: "baked-default" });
+      expect(result.lifecycleTimings.map(({ step }) => step)).not.toContain("pin installed packaged namespace");
     } finally {
       await rm(root, { force: true, recursive: true });
     }
   });
 
-  it("pins a requested runtime root for native public-acceptance launches", async () => {
+  it("does not bake a requested runtime root into a native install", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
     const config = { ...createConfig(root), portable: true };
     const paths = resolveWinPaths(config);
@@ -183,10 +181,7 @@ describe("installPackedWinApp", () => {
       });
 
       await installPackedWinApp(config, { runtimeBaseRoot });
-      expect(JSON.parse(await readFile(installedConfigPath, "utf8"))).toMatchObject({
-        namespace: config.namespace,
-        namespaceBaseRoot: runtimeBaseRoot,
-      });
+      expect(JSON.parse(await readFile(installedConfigPath, "utf8"))).toEqual({});
     } finally {
       await rm(root, { force: true, recursive: true });
     }

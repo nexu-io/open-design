@@ -114,6 +114,9 @@ async function pathExists(path: string): Promise<boolean> {
 
 function inferLauncherChannel(config: Pick<PackagedConfig, "namespace" | "releaseVersion" | "shellVersion">): LauncherChannel {
   return releaseChannelFromVersion(config.releaseVersion)
+    ?? (config.releaseVersion != null && /^\d+\.\d+\.\d+-local\.\d+$/u.test(config.releaseVersion)
+      ? "local"
+      : null)
     ?? releaseChannelFromVersion(config.shellVersion)
     ?? releaseChannelFromNamespace(config.namespace, "default")
     ?? "stable";

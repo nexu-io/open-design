@@ -1,15 +1,13 @@
 import {
   SIDECAR_DEFAULTS,
-  resolveWindowsReleaseNamespaceToken,
   resolveWindowsUninstallRegistryKey,
 } from "@open-design/sidecar/protocol";
 import {
-  releaseChannelFromNamespace,
-  releaseChannelFromVersion,
   releaseInstallIdentity,
 } from "@open-design/release";
 
 import type { ToolPackConfig } from "../config.js";
+import { resolveToolPackProductChannel } from "../local-runtime.js";
 import { PRODUCT_NAME } from "./constants.js";
 
 export type WinInstallIdentity = {
@@ -21,11 +19,22 @@ export type WinInstallIdentity = {
   uninstallerName: string;
 };
 
-export function resolveWinInstallIdentity(config: Pick<ToolPackConfig, "namespace" | "releaseVersion">): WinInstallIdentity {
-  const namespaceToken = resolveWindowsReleaseNamespaceToken(config.namespace);
-  const channel = releaseChannelFromVersion(config.releaseVersion)
-    ?? releaseChannelFromNamespace(config.namespace, SIDECAR_DEFAULTS.namespace);
-  const displayName = channel == null ? `${PRODUCT_NAME} ${namespaceToken}` : releaseInstallIdentity(channel).productName;
+export function resolveWinInstallIdentity(
+  config: Pick<ToolPackConfig, "debugChannel" | "namespace" | "releaseVersion">,
+): WinInstallIdentity {
+  const channel = resolveToolPackProductChannel(config, SIDECAR_DEFAULTS.namespace);
+  if (channel === "local") {
+    const displayName = `${PRODUCT_NAME} Local`;
+    return {
+      appPathsKey: `Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${displayName}.exe`,
+      displayName,
+      exeName: `${PRODUCT_NAME}.exe`,
+      registryKey: resolveWindowsUninstallRegistryKey(config.namespace),
+      shortcutName: `${displayName}.lnk`,
+      uninstallerName: `Uninstall ${displayName}.exe`,
+    };
+  }
+  const displayName = releaseInstallIdentity(channel).productName;
 
   return {
     appPathsKey: `Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\${displayName}.exe`,

@@ -75,7 +75,10 @@ function contentAddressedBlobUrl(
     throw new Error("Closure blob origin must use http(s)");
   }
   if (!base.pathname.endsWith("/")) base.pathname += "/";
-  return new URL(releaseClosureBlobObjectKey(channel, version, digest), base).toString();
+  const objectKey = channel === "local"
+    ? `local/versions/${version}/closure/blobs/${digest.slice("sha256:".length)}`
+    : releaseClosureBlobObjectKey(channel, version, digest);
+  return new URL(objectKey, base).toString();
 }
 
 async function inspectArtifact(

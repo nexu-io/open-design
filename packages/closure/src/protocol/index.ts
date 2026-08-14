@@ -3,6 +3,7 @@ import { normalizeNamespace } from "@open-design/sidecar/protocol";
 
 export const CLOSURE_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_DISTRIBUTION_SCHEMA_VERSION = 3 as const;
+export const CLOSURE_DISTRIBUTION_CONTROL_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION = 2 as const;
 export const CLOSURE_PROTOCOL_VERSION = 1 as const;
 export const CLOSURE_INVENTORY_SCHEMA_VERSION = 1 as const;
@@ -14,10 +15,13 @@ export const CLOSURE_LAUNCHER_HANDOFF_PATH = CLOSURE_ARCHIVE_ENTRY_PATH;
 export const CLOSURE_SIGNATURE_ALGORITHM = "ed25519" as const;
 export const CLOSURE_DISTRIBUTION_MAX_REQUIRED_BYTES = 30_000_000 as const;
 
+/** Reserved coordination domain for transactional local builds. */
+export type ClosureChannel = ReleaseChannel | "local";
+
 export type ClosureDigest = `sha256:${string}`;
 
 export type ClosureCandidateIdentity = {
-  channel: ReleaseChannel;
+  channel: ClosureChannel;
   digest: ClosureDigest;
   platform: string;
   protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
@@ -102,7 +106,7 @@ export type ClosureDistributionResource = ClosureDistributionComponent & {
 };
 
 export type ClosureDistributionIdentityDraft = {
-  channel: ReleaseChannel;
+  channel: ClosureChannel;
   protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
   version: string;
 };
@@ -130,13 +134,23 @@ export type ClosureDistributionManifest = Omit<ClosureDistributionManifestDraft,
   identity: ClosureDistributionIdentity;
 };
 
+export type ClosureDistributionControl = {
+  distribution: {
+    digest: ClosureDigest;
+    protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
+    schemaVersion: number;
+  };
+  schemaVersion: typeof CLOSURE_DISTRIBUTION_CONTROL_SCHEMA_VERSION;
+  shellCompatibility: ClosureShellCompatibility;
+};
+
 export type ClosureDistributionSharedContribution = {
   body: {
     artifact: ClosureDistributionBlob;
     entryPath: typeof CLOSURE_ARCHIVE_ENTRY_PATH;
     treeDigest: ClosureDigest;
   };
-  channel: ReleaseChannel;
+  channel: ClosureChannel;
   launcher: {
     artifact: ClosureDistributionBlob;
     entryPath: typeof CLOSURE_LAUNCHER_ENTRY_PATH;
@@ -156,7 +170,7 @@ export type ClosureDistributionSharedContribution = {
 };
 
 export type ClosureDistributionTargetContribution = {
-  channel: ReleaseChannel;
+  channel: ClosureChannel;
   native: { artifact: ClosureDistributionBlob; treeDigest: ClosureDigest };
   protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
   resources: Array<{
@@ -224,8 +238,12 @@ export function requireKnownKeys(
   }
 }
 
-export function normalizeChannel(value: unknown): ReleaseChannel {
-  if (!isReleaseChannel(value)) {
+export function isClosureChannel(value: unknown): value is ClosureChannel {
+  return value === "local" || isReleaseChannel(value);
+}
+
+export function normalizeChannel(value: unknown): ClosureChannel {
+  if (!isClosureChannel(value)) {
     throw new ClosureProtocolError(`unsupported closure channel: ${String(value)}`);
   }
   return value;

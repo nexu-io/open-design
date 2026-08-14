@@ -88,6 +88,8 @@ export async function resolveStandaloneViaOfficialNode(input: Readonly<{
       throw new ElectronStandaloneLaunchError(
         result.error.code === "installer-required"
           ? "installer-required"
+          : result.error.code === "resource-unavailable"
+            ? "resource-unavailable"
           : result.error.code === "standalone-occupied"
             ? "standalone-occupied"
             : "standalone-start-failed",

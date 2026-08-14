@@ -5,6 +5,10 @@
   "type": "module",
   "description": "Shared Open Design Shell update persistence contract and deterministic layout.",
   "exports": {
+    "./launch-context": {
+      "types": "./dist/launch-context/index.d.ts",
+      "default": "./dist/launch-context/index.mjs"
+    },
     "./update": {
       "types": "./dist/update/index.d.ts",
       "default": "./dist/update/index.mjs"

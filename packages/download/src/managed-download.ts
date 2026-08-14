@@ -9,12 +9,21 @@
  * public option/progress/result types.
  */
 
-import { DEFAULT_MAX_ATTEMPTS } from "./constants.js";
+import {
+  DEFAULT_HEADER_TIMEOUT_MS,
+  DEFAULT_MAX_ATTEMPTS,
+  DEFAULT_STALL_TIMEOUT_MS,
+} from "./constants.js";
 import { MANAGED_DOWNLOAD_ERROR_CODES, ManagedDownloadError } from "./errors.js";
 import { type ActiveTask, activeKey, activeTargets, activeTasks, targetActiveKey, waitForTask } from "./registry.js";
 import { runManagedDownload } from "./run.js";
 import { targetFromOptions } from "./target.js";
-import type { ManagedDownloadOptions, ManagedDownloadProgress, ManagedDownloadResult } from "./types.js";
+import type {
+  ManagedDownloadOptions,
+  ManagedDownloadProgress,
+  ManagedDownloadResult,
+  ManagedDownloadRetry,
+} from "./types.js";
 
 /**
  * Download a file into a managed base, verifying its checksum and reusing or
@@ -35,18 +44,30 @@ export async function managedDownload(options: ManagedDownloadOptions): Promise<
   if (existing != null) return await waitForTask(existing, options);
 
   const listeners = new Set<(progress: ManagedDownloadProgress) => void>();
+  const retryListeners = new Set<(retry: ManagedDownloadRetry) => void>();
+  const controller = new AbortController();
   const emit = (progress: ManagedDownloadProgress) => {
     for (const listener of listeners) listener(progress);
   };
+  const emitRetry = (retry: ManagedDownloadRetry) => {
+    for (const listener of retryListeners) listener(retry);
+  };
   const task: ActiveTask = {
+    controller,
     listeners,
-    targetKey,
     promise: runManagedDownload(target, {
       emit,
       fetchImpl: options.fetch ?? globalThis.fetch,
+      headerTimeoutMs: options.headerTimeoutMs ?? DEFAULT_HEADER_TIMEOUT_MS,
       maxAttempts: options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS,
+      onRetry: emitRetry,
       requestHeaders: options.payload.headers,
+      signal: controller.signal,
+      stallTimeoutMs: options.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT_MS,
     }),
+    retryListeners,
+    targetKey,
+    waiters: 0,
   };
   activeTasks.set(key, task);
   activeTargets.set(targetKey, key);

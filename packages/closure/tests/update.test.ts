@@ -11,6 +11,7 @@ import {
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_SCHEMA_VERSION,
   createClosureComponentTreeDigest,
+  createClosureDistributionControl,
   createClosureDistributionManifest,
   type ClosureCandidateManifest,
   type ClosureDistributionBlob,
@@ -30,6 +31,7 @@ import type {
 } from "@open-design/closure/store";
 
 import {
+  ClosureInstallerRequiredError,
   ClosureUpdateError,
   applyClosureDistributionUpdate,
   applyClosureUpdate,
@@ -126,15 +128,20 @@ describe("Closure resource repository", () => {
   it("materializes one isolated resource lazily and reuses title plus content across versions", async () => {
     const paths = await createStore();
     const fixture = await downloadableDistribution();
+    const progress: string[] = [];
     const first = await ensureClosureResource({
       fetch: fixture.fetch,
       id: "skills",
       manifest: fixture.candidate.manifest,
+      onProgress: (entry) => progress.push(entry.phase),
       paths,
       target: "darwin-arm64",
     });
     expect(first).toMatchObject({ id: "skills", reused: false, title: "Skills" });
     await expect(readFile(join(first.path, "skills", "SKILL.md"), "utf8")).resolves.toBe("# Skill\n");
+    expect(progress[0]).toBe("checking");
+    expect(progress).toEqual(expect.arrayContaining(["downloading", "materializing", "verifying"]));
+    expect(progress.at(-1)).toBe("ready");
     const calls = vi.mocked(fixture.fetch).mock.calls.length;
 
     const nextVersion = createClosureDistributionManifest({
@@ -617,6 +624,54 @@ describe("version-wide Closure distribution selection", () => {
     })).toThrow(/does not contain target win32-x64/u);
   });
 
+  it("gates unsupported schemas and Shell versions before parsing the graph", async () => {
+    const fixture = await downloadableDistribution();
+    const control = createClosureDistributionControl(fixture.candidate.manifest);
+    const invalidGraph = { schemaVersion: 999 };
+    expect(() => selectClosureDistributionReleaseCandidate(metadata({
+      closure: invalidGraph,
+      closureControl: {
+        ...control,
+        distribution: { ...control.distribution, schemaVersion: 4 },
+      },
+      releaseVersion: fixture.candidate.releaseVersion,
+    }), {
+      channel: "beta",
+      consumer: { shellType: "electron", shellVersion: "0.19.1-beta.16" },
+      target: "darwin-arm64",
+    })).toThrow(ClosureInstallerRequiredError);
+
+    expect(() => selectClosureDistributionReleaseCandidate(metadata({
+      closure: invalidGraph,
+      closureControl: {
+        ...control,
+        shellCompatibility: { electron: { version: { min: "0.19.1-beta.17" } } },
+      },
+      releaseVersion: fixture.candidate.releaseVersion,
+    }), {
+      channel: "beta",
+      consumer: { shellType: "electron", shellVersion: "0.19.1-beta.16" },
+      target: "darwin-arm64",
+    })).toThrow(/requires electron Shell 0\.19\.1-beta\.17/u);
+  });
+
+  it("rejects a shallow control projection that drifts from the validated graph", async () => {
+    const fixture = await downloadableDistribution();
+    const control = createClosureDistributionControl(fixture.candidate.manifest);
+    expect(() => selectClosureDistributionReleaseCandidate(metadata({
+      closure: fixture.candidate.manifest,
+      closureControl: {
+        ...control,
+        distribution: { ...control.distribution, digest: OTHER_DIGEST },
+      },
+      releaseVersion: fixture.candidate.releaseVersion,
+    }), {
+      channel: "beta",
+      consumer: { shellType: "electron", shellVersion: "0.19.1-beta.16" },
+      target: "darwin-arm64",
+    })).toThrow(/control does not match/u);
+  });
+
   it("discovers the root graph from the combined metadata endpoint", async () => {
     const fixture = await downloadableDistribution();
     const metadataUrl = "https://releases.open-design.test/beta/metadata.json";
@@ -706,7 +761,7 @@ describe("Closure release update application", () => {
   it("leaves an active updater lock untouched", async () => {
     const paths = await createStore();
     const fixture = await downloadableCandidate();
-    const lockPath = join(paths.stateRoot, "update.lock");
+    const lockPath = join(paths.channelRoot, "maintenance.lock");
     await mkdir(paths.stateRoot, { recursive: true });
     await writeFile(lockPath, `${JSON.stringify({
       createdAt: new Date().toISOString(),

@@ -30,6 +30,7 @@ import {
   releaseNoteMetadataFromPublication,
 } from "../release-note/publication.ts";
 import { readClosureDistributionPublication } from "./closure-distribution-metadata.ts";
+import { createClosureDistributionControl } from "@open-design/closure/protocol";
 import {
   releaseParameterMatrixFromEnv,
   signModeForTarget,
@@ -366,6 +367,9 @@ const closureDistribution = closureDistributionManifestPath.length === 0
           : [{ type: shell.type, version: shell.version }];
       }),
     });
+const closureControl = closureDistribution == null
+  ? null
+  : createClosureDistributionControl(closureDistribution);
 const closureManifestKey = releaseClosureManifestObjectKey(releaseChannel, releaseVersion);
 const closureManifestUrl = publicUrl(publicOrigin, "", closureManifestKey);
 
@@ -377,6 +381,7 @@ const metadata = {
   amrProfile: optional("OPEN_DESIGN_AMR_PROFILE"),
   channel: releaseChannel,
   ...(closureDistribution == null ? {} : { closure: closureDistribution }),
+  ...(closureControl == null ? {} : { closureControl }),
   ...controlBlock,
   expectedPlatforms: expectedTargets,
   expectedTargets,

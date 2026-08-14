@@ -5,7 +5,7 @@ import {
   type ReleaseChannel,
 } from '@open-design/release';
 
-export type PackagedUpdateChannel = ReleaseChannel;
+export type PackagedUpdateChannel = ReleaseChannel | 'local';
 
 export type PackagedUpdateScenario = {
   channel: PackagedUpdateChannel;
@@ -70,6 +70,7 @@ export function applyPackagedUpdateEnv(
 }
 
 function parseChannel(value: string): PackagedUpdateChannel {
+  if (value === 'local') return value;
   if (isReleaseChannel(value)) return value;
   throw new Error(`unsupported release channel for packaged updater smoke: ${value}`);
 }
@@ -88,7 +89,7 @@ function nextStablePatch(version: string): string {
 }
 
 function nextHyphenPrerelease(version: string, label: string): string {
-  if (label !== 'beta' && label !== 'prerelease' && label !== 'preview') {
+  if (label !== 'local' && !isReleaseChannel(label)) {
     throw new Error(`unsupported counted release channel: ${label}`);
   }
   const parsed = parseReleaseVersion(version, label);

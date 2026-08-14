@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
 import { isAbsolute, posix, win32 } from "node:path";
 
-import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
+import type { ClosureChannel } from "@open-design/closure/protocol";
 
 export const STANDALONE_PROTOCOL_VERSION = 1 as const;
 export const STANDALONE_BOOTSTRAP_SCHEMA_VERSION = 1 as const;
-export const STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION = 1 as const;
+export const STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION = 2 as const;
 export const STANDALONE_BOOTSTRAP_RESULT_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_HANDOFF_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_UPDATER_SCHEMA_VERSION = 1 as const;
@@ -15,12 +15,12 @@ export const STANDALONE_BOOTLOADER_EXPORT_NAME = "handoff" as const;
 export type StandaloneDigest = `sha256:${string}`;
 
 export type StandaloneBootstrapScope = Readonly<{
-  channel: ReleaseChannel;
+  channel: ClosureChannel;
   namespace: string;
 }>;
 
 export type StandaloneHandoffScope = Readonly<{
-  channel: ReleaseChannel;
+  channel: ClosureChannel;
   generation: number;
   namespace: string;
 }>;
@@ -94,6 +94,7 @@ export type StandaloneBootstrapResolution = Readonly<{
 
 export const STANDALONE_BOOTSTRAP_PROGRESS_STAGES = Object.freeze([
   "checking",
+  "copying",
   "discovering",
   "downloading",
   "materializing",
@@ -113,6 +114,11 @@ export type StandaloneBootstrapProgress = Readonly<{
   }>;
   schemaVersion: typeof STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION;
   stage: StandaloneBootstrapProgressStage;
+  subject: Readonly<{
+    id: string;
+    kind: "resource" | "standalone";
+    title: string;
+  }>;
 }>;
 
 /** Opaque sidecar-owned handoff-once capability. Product code never decodes it. */
@@ -125,6 +131,7 @@ export type StandaloneLifecycleTransitionCredential = Readonly<{
 export const STANDALONE_BOOTSTRAP_ERROR_CODES = Object.freeze([
   "installer-required",
   "no-standalone",
+  "resource-unavailable",
   "standalone-occupied",
   "standalone-invalid",
 ] as const);

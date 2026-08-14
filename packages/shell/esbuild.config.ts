@@ -2,7 +2,7 @@ import { build } from "esbuild";
 
 await build({
   bundle: true,
-  entryPoints: ["./src/update/index.ts"],
+  entryPoints: ["./src/launch-context/index.ts", "./src/update/index.ts"],
   format: "esm",
   outbase: "./src",
   outdir: "./dist",

@@ -33,6 +33,7 @@ export type ElectronStandaloneBinding = Readonly<{
 export type ElectronStandaloneLaunchErrorCode =
   | "binding-conflict"
   | "installer-required"
+  | "resource-unavailable"
   | "standalone-occupied"
   | "standalone-start-failed";
 

@@ -13,9 +13,9 @@ import {
   type ClosureDistributionIdentity,
   type ClosureDistributionLauncherComponent,
   type ClosureDistributionManifest,
+  type ClosureChannel,
   type ResolvedClosureDistributionTarget,
 } from "../../protocol/index.js";
-import type { ReleaseChannel } from "@open-design/release";
 import { writeJsonFile } from "@open-design/sidecar";
 import {
   ClosureStoreError,
@@ -60,7 +60,7 @@ export type ClosureDistributionResourcePlan = Readonly<{
 }>;
 
 export type ClosureDistributionGenerationPlan = Readonly<{
-  channel: ReleaseChannel;
+  channel: ClosureChannel;
   generation: number;
   storeRoot: string;
   identity: ClosureDistributionIdentity;

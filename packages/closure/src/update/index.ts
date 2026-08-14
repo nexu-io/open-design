@@ -14,13 +14,20 @@ import { dirname, isAbsolute, join } from "node:path";
 
 import {
   bindClosureCandidateIdentity,
+  CLOSURE_DISTRIBUTION_CONTROL_SCHEMA_VERSION,
+  CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  CLOSURE_PROTOCOL_VERSION,
+  createClosureDistributionControl,
   createClosureComponentTreeDigest,
+  isClosureChannel,
+  validateClosureDistributionControl,
   validateClosureCandidateManifest,
   validateClosureDistributionManifest,
   validateClosureFileInventory,
   type ClosureCandidateManifest,
   type ClosureDistributionBlob,
   type ClosureDistributionManifest,
+  type ClosureDistributionControl,
 } from "../protocol/index.js";
 import type { ClosureBindingDescriptor } from "../store/index.js";
 import {
@@ -38,7 +45,6 @@ import {
   type ClosureStoreVersionPaths,
   type StoredClosureVerification,
 } from "../store/index.js";
-import { downloadCopyAndClear } from "@open-design/download";
 import { isProcessAlive } from "@open-design/platform";
 import {
   compareReleaseVersions,
@@ -69,6 +75,11 @@ export type ClosureDistributionReleaseCandidate = Readonly<{
   target: string;
 }>;
 
+export type ClosureDistributionConsumer = Readonly<{
+  shellType: string;
+  shellVersion: string;
+}>;
+
 export type ClosureUpdateCommitReason =
   | "newer-release-binding"
   | "no-committed-closure"
@@ -95,6 +106,16 @@ export class ClosureUpdateError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "ClosureUpdateError";
+  }
+}
+
+export class ClosureInstallerRequiredError extends ClosureUpdateError {
+  readonly minimumShellVersion: string | null;
+
+  constructor(message: string, minimumShellVersion: string | null = null) {
+    super(message);
+    this.name = "ClosureInstallerRequiredError";
+    this.minimumShellVersion = minimumShellVersion;
   }
 }
 
@@ -338,9 +359,9 @@ export async function discoverClosureReleaseCandidate(input: {
 /** Select the sole version-wide v2 graph without consulting platform subtrees. */
 export function selectClosureDistributionReleaseCandidate(
   metadata: unknown,
-  input: Readonly<{ channel: string; target: string }>,
+  input: Readonly<{ channel: string; consumer?: ClosureDistributionConsumer; target: string }>,
 ): ClosureDistributionReleaseCandidate | null {
-  if (!isReleaseChannel(input.channel)) {
+  if (!isClosureChannel(input.channel)) {
     throw new ClosureUpdateError(`unsupported Closure update channel: ${input.channel}`);
   }
   const root = requireRecord(metadata, "release metadata");
@@ -354,6 +375,39 @@ export function selectClosureDistributionReleaseCandidate(
   }
   if (root.closure == null) return null;
   const releaseVersion = requireString(root.releaseVersion, "release metadata version");
+  let control: ClosureDistributionControl | null = null;
+  if (root.closureControl != null) {
+    const rawControl = requireRecord(root.closureControl, "closure distribution control");
+    if (rawControl.schemaVersion !== CLOSURE_DISTRIBUTION_CONTROL_SCHEMA_VERSION) {
+      throw new ClosureInstallerRequiredError("Standalone metadata requires a newer Shell control protocol");
+    }
+    try {
+      control = validateClosureDistributionControl(rawControl);
+    } catch (error) {
+      throw new ClosureUpdateError(
+        `release metadata Closure control is invalid: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (
+      control.distribution.schemaVersion !== CLOSURE_DISTRIBUTION_SCHEMA_VERSION
+      || control.distribution.protocolVersion !== CLOSURE_PROTOCOL_VERSION
+    ) {
+      throw new ClosureInstallerRequiredError(
+        `Standalone distribution protocol ${control.distribution.protocolVersion}/schema ${control.distribution.schemaVersion} requires a newer Shell`,
+      );
+    }
+    if (input.consumer != null) {
+      const minimum = control.shellCompatibility[input.consumer.shellType]?.version.min ?? null;
+      if (minimum == null || compareClosureShellVersions(input.consumer.shellVersion, minimum) < 0) {
+        throw new ClosureInstallerRequiredError(
+          minimum == null
+            ? `Standalone does not support Shell ${input.consumer.shellType}`
+            : `Standalone requires ${input.consumer.shellType} Shell ${minimum} or newer`,
+          minimum,
+        );
+      }
+    }
+  }
   let manifest: ClosureDistributionManifest;
   try {
     manifest = validateClosureDistributionManifest(root.closure, (canonical) => (
@@ -369,6 +423,12 @@ export function selectClosureDistributionReleaseCandidate(
   if (manifest.identity.channel !== input.channel) {
     throw new ClosureUpdateError("Closure distribution channel does not match its release metadata");
   }
+  if (control != null) {
+    const expected = createClosureDistributionControl(manifest);
+    if (JSON.stringify(control) !== JSON.stringify(expected)) {
+      throw new ClosureUpdateError("Closure distribution control does not match its manifest");
+    }
+  }
   if (manifest.required.targets[input.target] == null) {
     throw new ClosureUpdateError(`Closure distribution does not contain target ${input.target}`);
   }
@@ -377,10 +437,14 @@ export function selectClosureDistributionReleaseCandidate(
 
 export async function discoverClosureDistributionReleaseCandidate(input: Readonly<{
   channel: string;
+  consumer?: ClosureDistributionConsumer;
   fetch?: typeof globalThis.fetch;
   metadataUrl: string;
   target: string;
 }>): Promise<ClosureDistributionReleaseCandidate | null> {
+  if (!isReleaseChannel(input.channel)) {
+    throw new ClosureUpdateError(`unsupported public Closure update channel: ${input.channel}`);
+  }
   const metadataUrl = requireHttpUrl(input.metadataUrl, "Closure release metadata URL");
   const metadata = await fetchJsonDocument(
     metadataUrl,
@@ -397,6 +461,7 @@ export async function discoverClosureDistributionReleaseCandidate(input: Readonl
  */
 export async function discoverClosureDistributionBootstrapCandidate(input: Readonly<{
   channel: string;
+  consumer?: ClosureDistributionConsumer;
   fetch?: typeof globalThis.fetch;
   metadataUrl: string | null;
   repository: ClosureResourceRepositoryConfig;
@@ -421,6 +486,7 @@ export async function discoverClosureDistributionBootstrapCandidate(input: Reado
   if (input.metadataUrl != null) {
     return await discoverClosureDistributionReleaseCandidate({
       channel: input.channel,
+      ...(input.consumer == null ? {} : { consumer: input.consumer }),
       ...(input.fetch == null ? {} : { fetch: input.fetch }),
       metadataUrl: input.metadataUrl,
       target: input.target,
@@ -479,6 +545,7 @@ function isExactDistributionCandidate(
  */
 export async function discoverClosureDistributionVersionCandidate(input: Readonly<{
   channel: string;
+  consumer?: ClosureDistributionConsumer;
   fetch?: typeof globalThis.fetch;
   metadataUrl: string | null;
   repository: ClosureResourceRepositoryConfig;
@@ -507,6 +574,7 @@ export async function discoverClosureDistributionVersionCandidate(input: Readonl
   if (input.metadataUrl != null) {
     const candidate = await discoverClosureDistributionReleaseCandidate({
       channel: input.channel,
+      ...(input.consumer == null ? {} : { consumer: input.consumer }),
       ...(input.fetch == null ? {} : { fetch: input.fetch }),
       metadataUrl: versionMetadataUrl(input.metadataUrl, input.version),
       target: input.target,
@@ -695,18 +763,5 @@ export function decideClosureDistributionUpdate(input: {
     : { action: "retain", candidate, reason: "candidate-not-newer" };
 }
 
-export type UpdateLock = {
-  path: string;
-  token: string;
-};
-
-export type UpdateLockRecord = {
-  createdAt: string;
-  pid: number;
-  token: string;
-};
-
-export const INCOMPLETE_UPDATE_LOCK_GRACE_MS = 30_000;
-
-
 export * from "./apply.js";
+export * from "./resource.js";

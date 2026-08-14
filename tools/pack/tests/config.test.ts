@@ -131,6 +131,12 @@ describe("resolveToolPackConfig Standalone seed", () => {
 });
 
 describe("resolveToolPackConfig namespace defaults", () => {
+  it("requires explicit targeted debug channels", () => {
+    expect(resolveToolPackConfig("mac").debugChannel).toBe("local");
+    expect(resolveToolPackConfig("mac", { debugChannel: "exact:beta" }).debugChannel).toBe("beta");
+    expect(() => resolveToolPackConfig("mac", { debugChannel: "exact:local" })).toThrow(/debug-channel/);
+  });
+
   it("keeps release and Shell compatibility versions independently observable", () => {
     const config = resolveToolPackConfig("mac", {
       releaseVersion: "0.19.0-beta.2",
@@ -159,8 +165,8 @@ describe("resolveToolPackConfig namespace defaults", () => {
     expect(config.launcherVersion).toBe("0.19.0-beta.1");
   });
 
-  it("keeps ordinary local builds on the default namespace", () => {
-    expect(resolveToolPackConfig("mac").namespace).toBe("default");
+  it("keeps ordinary local builds on the isolated local namespace", () => {
+    expect(resolveToolPackConfig("mac").namespace).toBe("local");
     expect(resolveToolPackConfig("win", { releaseVersion: "0.8.0" }).namespace).toBe("default");
   });
 

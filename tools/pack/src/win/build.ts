@@ -5,6 +5,7 @@ import { basename, join } from "node:path";
 import { ToolPackCache } from "../cache.js";
 import { describeToolPackArtifact } from "../artifacts.js";
 import type { ToolPackConfig } from "../config.js";
+import { prepareLocalStandaloneSeed } from "../local-standalone.js";
 import {
   collectWorkspaceTarballs,
   createWinPackagedAppCacheKey,
@@ -86,6 +87,7 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
     }
   };
 
+  await runPhase("local-standalone", async () => await prepareLocalStandaloneSeed(config));
   await runPhase("target-artifact-cleanup", async () => {
     if (!hasNsisTarget) {
       await rm(paths.setupPath, { force: true });
@@ -161,7 +163,7 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
     payloadPath,
     portableZipPath,
     resourceRoot: builtApp == null ? paths.resourceRoot : join(builtApp.unpackedRoot, "resources", "open-design"),
-    releaseVersion: config.releaseVersion ?? null,
+    releaseVersion: config.runtimeReleaseVersion ?? config.releaseVersion ?? null,
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
     cacheReport: cache.report(),
     segments,

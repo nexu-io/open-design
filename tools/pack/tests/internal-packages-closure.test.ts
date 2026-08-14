@@ -59,6 +59,30 @@ const LANES: { name: string; packages: readonly PackageEntry[]; isInstalled: (pk
 ];
 
 describe("pack lane INTERNAL_PACKAGES dependency closure", () => {
+  it("keeps resource materialization dependencies out of the launcher fossil", () => {
+    const generationBootloader = readFileSync(
+      join(workspaceRoot, "apps/standalone/src/generation-bootloader.ts"),
+      "utf8",
+    );
+    const resourceHandoff = readFileSync(
+      join(workspaceRoot, "apps/standalone/src/resource-handoff.ts"),
+      "utf8",
+    );
+
+    expect(generationBootloader).toContain('from "./resource-handoff.js"');
+    expect(generationBootloader).not.toContain("resource-runtime");
+    expect(resourceHandoff).not.toContain("@open-design/closure/update");
+    expect(resourceHandoff).not.toContain("ensureClosureResource");
+  });
+
+  it("builds runtime workspace dependencies before sealing the CLI", () => {
+    const manifest = JSON.parse(
+      readFileSync(join(workspaceRoot, "tools/pack/package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+
+    expect(manifest.scripts?.prebuild).toBe("pnpm --filter @open-design/tools-pack^... build");
+  });
+
   for (const lane of LANES) {
     it(`${lane.name}: every installed package's runtime @open-design deps are installed`, () => {
       const installed = lane.packages.filter((pkg) => lane.isInstalled(pkg));

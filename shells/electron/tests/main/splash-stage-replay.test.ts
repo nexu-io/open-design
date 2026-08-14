@@ -1,7 +1,7 @@
 // Review follow-up on the splash boot-stage PR (#4223): the first stage
 // update (the daemon phase) is fired from the packaged entry right after the
 // splash window is created — potentially before the splash data-URL has
-// finished loading and defined `window.__odSplashSetStage`. Without a
+// finished loading and defined `window.__odSplashSetProgress`. Without a
 // load-ready guard that update reaches a renderer that has no setter yet, so
 // the "Starting the local engine" label silently never renders on exactly the
 // slow cold-boot path this feature targets.
@@ -91,50 +91,73 @@ describe('splash boot-stage replay guard', () => {
     expect(splash.executed[0]).toContain('Opening your workspace');
   });
 
-  test('replays the latest independent Standalone progress after the splash loads', () => {
+  test('replays the latest Standalone progress through the canonical surface after load', () => {
     const splash = createMockSplash();
     registerSplashStageTracking(splash.surface);
 
     setSplashStandaloneProgress(splash.surface, {
       initialLoad: true,
-      schemaVersion: 1,
+      schemaVersion: 2,
       stage: 'discovering',
+      subject: { id: 'standalone', kind: 'standalone', title: 'Standalone' },
     });
     setSplashStandaloneProgress(splash.surface, {
       initialLoad: true,
       progress: { completed: 8, total: 16, unit: 'bytes' },
-      schemaVersion: 1,
+      schemaVersion: 2,
       stage: 'downloading',
+      subject: { id: 'standalone', kind: 'standalone', title: 'Standalone' },
     });
     expect(splash.executed).toEqual([]);
 
     splash.emitDidFinishLoad();
     expect(splash.executed).toHaveLength(1);
-    expect(splash.executed[0]).toContain('__odSplashSetStandaloneProgress');
+    expect(splash.executed[0]).toContain('__odSplashSetProgress');
     expect(splash.executed[0]).toContain('First launch · Downloading Standalone');
     expect(splash.executed[0]).toContain('"percent":50');
   });
 
-  test('keeps warm verification hidden while exposing a real warm update', () => {
+  test('uses the same canonical surface for warm verification and updates', () => {
     const splash = createMockSplash();
     registerSplashStageTracking(splash.surface);
     splash.emitDidFinishLoad();
 
     setSplashStandaloneProgress(splash.surface, {
       initialLoad: false,
-      schemaVersion: 1,
+      schemaVersion: 2,
       stage: 'verifying',
+      subject: { id: 'standalone', kind: 'standalone', title: 'Standalone' },
     });
     setSplashStandaloneProgress(splash.surface, {
       initialLoad: false,
       progress: { completed: 1, total: 3, unit: 'components' },
-      schemaVersion: 1,
+      schemaVersion: 2,
       stage: 'materializing',
+      subject: { id: 'standalone', kind: 'standalone', title: 'Standalone' },
     });
 
-    expect(splash.executed[0]).toContain('"visible":false');
-    expect(splash.executed[1]).toContain('"visible":true');
+    expect(splash.executed[0]).toContain('__odSplashSetProgress');
+    expect(splash.executed[0]).toContain('Verifying Standalone');
+    expect(splash.executed[1]).toContain('__odSplashSetProgress');
     expect(splash.executed[1]).toContain('1 / 3 components');
+  });
+
+  test('renders resource-owned byte progress without teaching the Shell about Vela', () => {
+    const splash = createMockSplash();
+    registerSplashStageTracking(splash.surface);
+    splash.emitDidFinishLoad();
+
+    setSplashStandaloneProgress(splash.surface, {
+      initialLoad: false,
+      progress: { completed: 19 * 1024 * 1024, total: 55 * 1024 * 1024, unit: 'bytes' },
+      schemaVersion: 2,
+      stage: 'downloading',
+      subject: { id: 'vela-runtime', kind: 'resource', title: 'Local engine' },
+    });
+
+    expect(splash.executed[0]).toContain('Downloading local engine');
+    expect(splash.executed[0]).toContain('19 MB / 55 MB');
+    expect(splash.executed[0]).not.toContain('vela-runtime');
   });
 
   test('is a no-op on a destroyed splash window', () => {
@@ -147,11 +170,7 @@ describe('splash boot-stage replay guard', () => {
     expect(splash.executed).toEqual([]);
   });
 
-  // Slow-cold-boot UX: the splash must tell the user WHICH step of how many is
-  // underway, not just a bare label, so the wait reads as forward progress. The
-  // stage payload handed to the renderer carries a 1-based step index and the
-  // total stage count alongside the label.
-  test('carries a 1-based step index and total step count for the counter', () => {
+  test('keeps non-quantitative boot phases indeterminate', () => {
     const splash = createMockSplash();
     registerSplashStageTracking(splash.surface);
     splash.emitDidFinishLoad();
@@ -160,20 +179,46 @@ describe('splash boot-stage replay guard', () => {
     setSplashStage(splash.surface, 'finishing');
 
     expect(splash.executed).toHaveLength(2);
-    // `starting` is the first stage; `finishing` is the last. Both report the
-    // same total so the renderer can render "N/total" and fill the bar.
     const [firstCall, lastCall] = splash.executed;
     const firstPayload = JSON.parse(
-      firstCall.match(/__odSplashSetStage\((\{.*\})\);/)?.[1] ?? '{}',
-    ) as { step: number; total: number; label: string };
+      firstCall.match(/__odSplashSetProgress\((\{.*\})\);/)?.[1] ?? '{}',
+    ) as { detail: string; percent: number | null; label: string };
     const lastPayload = JSON.parse(
-      lastCall.match(/__odSplashSetStage\((\{.*\})\);/)?.[1] ?? '{}',
-    ) as { step: number; total: number; label: string };
+      lastCall.match(/__odSplashSetProgress\((\{.*\})\);/)?.[1] ?? '{}',
+    ) as { detail: string; percent: number | null; label: string };
 
-    expect(firstPayload.step).toBe(1);
-    expect(lastPayload.step).toBe(lastPayload.total);
-    expect(firstPayload.total).toBe(lastPayload.total);
-    expect(lastPayload.total).toBeGreaterThan(4);
+    expect(firstPayload).toMatchObject({ detail: '', percent: null });
+    expect(lastPayload).toMatchObject({ detail: '', percent: null });
     expect(lastPayload.label).toBe('Almost ready');
+  });
+
+  test('Standalone owns the single surface until it is ready', () => {
+    const splash = createMockSplash();
+    registerSplashStageTracking(splash.surface);
+    splash.emitDidFinishLoad();
+
+    setSplashStage(splash.surface, 'engine');
+    setSplashStandaloneProgress(splash.surface, {
+      initialLoad: true,
+      progress: { completed: 5, total: 20, unit: 'bytes' },
+      schemaVersion: 2,
+      stage: 'downloading',
+      subject: { id: 'standalone', kind: 'standalone', title: 'Standalone' },
+    });
+    setSplashStage(splash.surface, 'interface');
+    setSplashStandaloneProgress(splash.surface, {
+      initialLoad: true,
+      schemaVersion: 2,
+      stage: 'ready',
+      subject: { id: 'standalone', kind: 'standalone', title: 'Standalone' },
+    });
+    setSplashStage(splash.surface, 'workspace');
+
+    expect(splash.executed).toHaveLength(4);
+    expect(splash.executed[1]).toContain('Downloading Standalone');
+    expect(splash.executed[1]).toContain('"percent":25');
+    expect(splash.executed.some((call) => call.includes('Preparing the interface'))).toBe(false);
+    expect(splash.executed[3]).toContain('Opening your workspace');
+    expect(splash.executed.every((call) => call.includes('__odSplashSetProgress'))).toBe(true);
   });
 });

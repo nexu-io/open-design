@@ -18,6 +18,7 @@ export type {
   ManagedDownloadOptions,
   ManagedDownloadPayload,
   ManagedDownloadProgress,
+  ManagedDownloadRetry,
   ManagedDownloadResult,
   PruneManagedDownloadsOptions,
   PruneManagedDownloadsResult,

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -7,6 +7,7 @@ import {
   CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   createClosureComponentTreeDigest,
+  createClosureDistributionControl,
   createClosureDistributionManifest,
   type ClosureDistributionBlob,
 } from "@open-design/closure/protocol";
@@ -20,6 +21,7 @@ import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { resolveStandaloneBootstrap } from "../src/bootstrap.js";
+import { discardUnreferencedClosureResources } from "../src/resource-garbage.js";
 import { prepareStandaloneVelaRuntime } from "../src/resource-runtime.js";
 
 const roots: string[] = [];
@@ -121,6 +123,7 @@ async function fixture() {
       return new Response(JSON.stringify({
         channel: "beta",
         closure: manifests[version],
+        closureControl: createClosureDistributionControl(manifests[version]),
         releaseState: "complete",
         releaseVersion: version,
       }), { status: 200 });
@@ -132,10 +135,6 @@ async function fixture() {
   }) as typeof globalThis.fetch;
   const seedRoot = join(root, "seed");
   await mkdir(join(seedRoot, "beta", "blobs"), { recursive: true });
-  await writeFile(
-    join(seedRoot, "beta", "blobs", artifacts.vela.digest.slice("sha256:".length)),
-    bytes.vela,
-  );
   const repositoryConfigPath = join(root, "repository.json");
   await writeFile(repositoryConfigPath, JSON.stringify({ localSeeds: [{ root: seedRoot }], remoteOrigins: [], schemaVersion: 1 }));
   const paths = {
@@ -224,6 +223,8 @@ describe("Standalone unresolved bootstrap", () => {
     expect(progress.every((entry) => entry.initialLoad)).toBe(true);
     expect(progress.filter((entry) => entry.stage === "downloading").at(-1)?.progress)
       .toMatchObject({ completed: expect.any(Number), unit: "bytes" });
+    expect(progress.filter((entry) => entry.subject.id === "vela-runtime").map((entry) => entry.stage))
+      .toEqual(["checking", "downloading", "downloading", "verifying", "materializing", "verifying", "ready"]);
 
     const callCount = vi.mocked(value.fetch).mock.calls.length;
     const warmProgress: StandaloneBootstrapProgress[] = [];
@@ -232,14 +233,16 @@ describe("Standalone unresolved bootstrap", () => {
       onProgress: (entry) => warmProgress.push(entry),
     });
     expect(vi.mocked(value.fetch).mock.calls).toHaveLength(callCount);
-    expect(warmProgress).toMatchObject([
-      { initialLoad: false, stage: "checking" },
-      { initialLoad: false, stage: "verifying" },
-      { initialLoad: false, stage: "ready" },
+    expect(warmProgress.map((entry) => [entry.subject.id, entry.stage])).toEqual([
+      ["standalone", "checking"],
+      ["standalone", "verifying"],
+      ["vela-runtime", "checking"],
+      ["vela-runtime", "ready"],
+      ["standalone", "ready"],
     ]);
   });
 
-  it("prewarms the target Vela resource outside the required generation", async () => {
+  it("publishes readiness only after the target Vela resource is materialized", async () => {
     const value = await fixture();
     const resolution = await resolveStandaloneBootstrap(
       request(value, "0.19.0-beta.1"),
@@ -260,6 +263,50 @@ describe("Standalone unresolved bootstrap", () => {
       const materialized = await stat(env.VELA_BIN!).then((entry) => entry.isFile()).catch(() => false);
       expect(materialized).toBe(true);
     });
+  });
+
+  it("discards only unreferenced channel resources after committed graphs are readable", async () => {
+    const value = await fixture();
+    await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), { fetch: value.fetch });
+    const store = resolveClosureStorePaths({
+      channel: "beta",
+      namespace: "release-beta",
+      root: value.paths.installationRoot,
+    });
+    const obsoleteResource = "a".repeat(64);
+    const obsoleteBlob = "b".repeat(64);
+    await mkdir(join(store.resourcesRoot, obsoleteResource), { recursive: true });
+    await writeFile(join(store.resourcesRoot, obsoleteResource, "stale"), "stale");
+    await mkdir(store.blobsRoot, { recursive: true });
+    await writeFile(join(store.blobsRoot, obsoleteBlob), "stale");
+
+    const result = await discardUnreferencedClosureResources(store);
+
+    expect(result).toEqual({ discardedBlobs: 1, discardedResources: 1 });
+    expect(await stat(join(store.resourcesRoot, obsoleteResource)).catch(() => null)).toBeNull();
+    expect(await stat(join(store.blobsRoot, obsoleteBlob)).catch(() => null)).toBeNull();
+    expect(await readdir(store.garbageRoot)).toHaveLength(2);
+    expect((await stat(join(store.blobsRoot, value.artifacts.vela.digest.slice("sha256:".length)))).isFile())
+      .toBe(true);
+  });
+
+  it("rejects readiness with an actionable resource error when Vela is unavailable", async () => {
+    const value = await fixture();
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url === value.artifacts.vela.url) return new Response("offline", { status: 503 });
+      return await value.fetch(input, init);
+    }) as typeof globalThis.fetch;
+    const progress: StandaloneBootstrapProgress[] = [];
+
+    await expect(resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), {
+      fetch,
+      onProgress: (entry) => progress.push(entry),
+    })).rejects.toMatchObject({ code: "resource-unavailable" });
+    expect(progress.some((entry) => entry.subject.id === "standalone" && entry.stage === "ready"))
+      .toBe(false);
+    expect(progress.some((entry) => entry.subject.id === "vela-runtime" && entry.stage === "downloading"))
+      .toBe(true);
   });
 
   it("cold-starts offline from a version index and required local blobs", async () => {
@@ -334,6 +381,14 @@ describe("Standalone unresolved bootstrap", () => {
 
     await expect(resolveStandaloneBootstrap(
       request(value, "0.19.0-beta.2", null),
+      { fetch: value.fetch },
+    )).rejects.toMatchObject({ code: "installer-required" });
+  });
+
+  it("maps shallow metadata incompatibility to installer-required before graph consumption", async () => {
+    const value = await fixture();
+    await expect(resolveStandaloneBootstrap(
+      request(value, "0.19.0-beta.2", value.metadataUrl, "0.19.0-beta.3"),
       { fetch: value.fetch },
     )).rejects.toMatchObject({ code: "installer-required" });
   });

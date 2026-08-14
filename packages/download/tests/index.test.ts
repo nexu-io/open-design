@@ -16,6 +16,7 @@ import {
   pruneManagedDownloads,
   removeManagedDownload,
   type ManagedDownloadProgress,
+  type ManagedDownloadRetry,
 } from "../src/index.js";
 
 type FixtureRequest = {
@@ -66,7 +67,10 @@ function sendBody(response: ServerResponse, body: Buffer, options: { delayMs?: n
     response.end(body);
   };
   if (options.delayMs == null) send();
-  else setTimeout(send, options.delayMs);
+  else {
+    response.flushHeaders();
+    setTimeout(send, options.delayMs);
+  }
 }
 
 async function startFixture(
@@ -262,6 +266,99 @@ describe("managed download package", () => {
       const result = await keeper;
       expect(readFileSync(result.path, "utf8")).toBe(body);
       expect(fixture.requests).toHaveLength(1);
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  it("aborts the transfer when its final waiter cancels", async () => {
+    const body = "cancel underlying transfer";
+    const fixture = await startFixture(body, { delayMs: 1_000 });
+    const root = tmpRoot("abort-transfer");
+    const controller = new AbortController();
+    try {
+      const pending = managedDownload({
+        basePath: join(root, "downloads"),
+        bucket: "shared",
+        fileName: "payload.bin",
+        payload: { checksum: { algorithm: "sha256", value: sha256(body) }, url: fixture.url },
+        signal: controller.signal,
+        stallTimeoutMs: 2_000,
+      });
+      await sleep(20);
+      controller.abort();
+      await expect(pending).rejects.toMatchObject({ code: MANAGED_DOWNLOAD_ERROR_CODES.ABORTED });
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  it("times out response headers and exposes bounded retry diagnostics", async () => {
+    const root = tmpRoot("header-timeout");
+    const retries: ManagedDownloadRetry[] = [];
+    const fetch = ((_input: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    })) as typeof globalThis.fetch;
+
+    await expect(managedDownload({
+      basePath: join(root, "downloads"),
+      bucket: "updates",
+      fetch,
+      fileName: "payload.bin",
+      headerTimeoutMs: 20,
+      maxAttempts: 2,
+      onRetry: (retry) => retries.push(retry),
+      payload: { checksum: { algorithm: "sha256", value: sha256("never") }, url: "https://fixture.invalid/payload" },
+    })).rejects.toMatchObject({ code: MANAGED_DOWNLOAD_ERROR_CODES.NETWORK_EXHAUSTED });
+    expect(retries).toEqual([
+      expect.objectContaining({ attempt: 1, maxAttempts: 2, partialBytes: 0 }),
+    ]);
+    expect(retries[0]?.error).toContain("headers timeout");
+  });
+
+  it("fans retry diagnostics out to every waiter sharing a transfer", async () => {
+    const root = tmpRoot("shared-retry");
+    const firstRetries: ManagedDownloadRetry[] = [];
+    const secondRetries: ManagedDownloadRetry[] = [];
+    const fetch = ((_input: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true });
+    })) as typeof globalThis.fetch;
+    const input = {
+      basePath: join(root, "downloads"),
+      bucket: "updates",
+      fetch,
+      fileName: "payload.bin",
+      headerTimeoutMs: 20,
+      maxAttempts: 2,
+      payload: { checksum: { algorithm: "sha256" as const, value: sha256("never") }, url: "https://fixture.invalid/payload" },
+    };
+
+    const first = managedDownload({ ...input, onRetry: (retry) => firstRetries.push(retry) });
+    const second = managedDownload({ ...input, onRetry: (retry) => secondRetries.push(retry) });
+    await expect(Promise.all([first, second])).rejects.toMatchObject({
+      code: MANAGED_DOWNLOAD_ERROR_CODES.NETWORK_EXHAUSTED,
+    });
+    expect(firstRetries).toHaveLength(1);
+    expect(secondRetries).toEqual(firstRetries);
+  });
+
+  it("retries when a response body stops making progress", async () => {
+    const body = "stalled response body";
+    const fixture = await startFixture(body, { delayMs: 100 });
+    const root = tmpRoot("stall-timeout");
+    const retries: ManagedDownloadRetry[] = [];
+    try {
+      await expect(managedDownload({
+        basePath: join(root, "downloads"),
+        bucket: "updates",
+        fileName: "payload.bin",
+        maxAttempts: 2,
+        onRetry: (retry) => retries.push(retry),
+        payload: { checksum: { algorithm: "sha256", value: sha256(body) }, url: fixture.url },
+        stallTimeoutMs: 20,
+      })).rejects.toMatchObject({ code: MANAGED_DOWNLOAD_ERROR_CODES.NETWORK_EXHAUSTED });
+      expect(retries[0]?.error).toContain("download stall timeout");
+      expect(fixture.requests).toHaveLength(2);
     } finally {
       await fixture.close();
     }

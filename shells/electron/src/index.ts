@@ -1,6 +1,10 @@
 import { join } from "node:path";
 
 import { app, dialog } from "electron";
+import {
+  cleanupClosureChannelGarbage,
+  resolveClosureStorePaths,
+} from "@open-design/closure/store";
 
 import {
   APP_KEYS,
@@ -20,8 +24,10 @@ import {
   resolveAppIpcPath,
 } from "@open-design/sidecar";
 import { readProcessStamp } from "@open-design/platform";
+import type { StandaloneBootstrapProgress } from "@open-design/standalone/protocol";
 
 import {
+  parkPackagedLaunchContext,
   readPackagedConfig,
   resolvePackagedStandaloneMetadataUrl,
   resolvePackagedStandaloneReleaseVersion,
@@ -73,6 +79,7 @@ import { reportStartupFailure, resolveStartupDistinctId } from "./startup-teleme
 import { createElectronShellCapabilityPort } from "./shell-capabilities.js";
 import { digestElectronShellEntry } from "./shell-identity.js";
 import {
+  ElectronStandaloneLaunchError,
   createElectronStandaloneLauncher,
   electronBindingFromBootstrapResolution,
 } from "./standalone-handoff.js";
@@ -212,6 +219,15 @@ async function main(): Promise<void> {
   );
   packagedLogger = createPackagedDesktopLogger(paths);
   attachPackagedDesktopProcessLogging({ logger: packagedLogger, paths, stamp });
+  void cleanupClosureChannelGarbage({
+    paths: resolveClosureStorePaths({
+      channel: shellRuntime.launcherPaths.channel,
+      namespace,
+      root: shellRuntime.launcherPaths.root,
+    }),
+  }).catch((error: unknown) => {
+    packagedLogger?.warn("[open-design closure] Shell garbage cleanup was deferred", { error });
+  });
   const retireObsoleteInstalledOuter = createObsoleteInstalledOuterRetirement({
     currentExecutablePath: process.execPath,
     currentPid: process.pid,
@@ -248,7 +264,7 @@ async function main(): Promise<void> {
   if (target == null) throw new Error(`Standalone is unsupported on ${process.platform}-${process.arch}`);
   const nodeCommand = resolveShellNodeCommand(shellConfig.nodeCommand);
   const shellDigest = await digestElectronShellEntry(import.meta.url);
-  const binding = electronBindingFromBootstrapResolution(await resolveStandaloneViaOfficialNode({
+  const bootstrapInput = {
     bootloaderPath: join(shellConfig.resourceRoot, "standalone", "bootloader.mjs"),
     descriptor: {
       attachment: {
@@ -270,10 +286,38 @@ async function main(): Promise<void> {
       scope: { channel: shellRuntime.launcherPaths.channel, namespace },
     },
     nodeCommand,
-    onProgress(progress) {
+    onProgress(progress: StandaloneBootstrapProgress) {
       setSplashStandaloneProgress(splash?.window ?? null, progress);
     },
-  }));
+  } as const;
+  let bootstrapResolution: Awaited<ReturnType<typeof resolveStandaloneViaOfficialNode>>;
+  for (;;) {
+    try {
+      bootstrapResolution = await resolveStandaloneViaOfficialNode(bootstrapInput);
+      break;
+    } catch (error) {
+      if (
+        headless
+        || !(error instanceof ElectronStandaloneLaunchError)
+        || error.code !== "resource-unavailable"
+      ) throw error;
+      const messageBoxOptions = {
+        buttons: ["Retry", "Quit"],
+        cancelId: 1,
+        defaultId: 0,
+        detail: error.message,
+        message: "The local engine could not be downloaded or verified.",
+        noLink: true,
+        title: "Open Design could not finish starting",
+        type: "warning" as const,
+      };
+      const choice = splash?.window == null
+        ? await dialog.showMessageBox(messageBoxOptions)
+        : await dialog.showMessageBox(splash.window, messageBoxOptions);
+      if (choice.response !== 0) throw error;
+    }
+  }
+  const binding = electronBindingFromBootstrapResolution(bootstrapResolution);
   const desktopControl = bootstrapSidecarRuntime(stamp, process.env, {
     app: APP_KEYS.DESKTOP,
     base: paths.runtimeRoot,
@@ -335,7 +379,11 @@ async function main(): Promise<void> {
         try {
           await standalone.close();
         } finally {
-          await identity.close();
+          try {
+            await identity.close();
+          } finally {
+            await parkPackagedLaunchContext(shellConfig.launchContext);
+          }
         }
       }
     },

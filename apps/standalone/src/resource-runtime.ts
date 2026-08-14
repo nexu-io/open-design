@@ -1,71 +1,46 @@
 import {
+  acquireClosureChannelLock,
   planClosureDistributionGeneration,
-  readClosureBindingDescriptor,
-  readStoredClosureDistributionManifest,
-  resolveClosureStorePaths,
+  releaseClosureChannelLock,
+  type ClosureStorePaths,
 } from "@open-design/closure/store";
 import {
   ensureClosureResource,
-  readClosureResourceRepositoryConfig,
+  type ClosureResourceEnsureProgress,
+  type ClosureResourceRepositoryConfig,
 } from "@open-design/closure/update";
+import type { ClosureDistributionManifest } from "@open-design/closure/protocol";
 
-import {
-  validateStandaloneHandoffRequest,
-  type StandaloneHandoffRequest,
-} from "./protocol/index.js";
-import {
-  bundledStandaloneToolEnv,
-  lazyVelaRuntimeEnv,
-  VELA_RUNTIME_RESOURCE_ID,
-} from "./tool-env.js";
+import { VELA_RUNTIME_RESOURCE_ID } from "./tool-env.js";
+import { discardUnreferencedClosureResources } from "./resource-garbage.js";
+export { prepareStandaloneVelaRuntime } from "./resource-handoff.js";
 
-/**
- * Start target-owned Vela materialization from the selected body process. The
- * launcher fossil only carries the validated context; resource I/O stays in
- * Closure body code and does not enter the Electron Shell bundle.
- */
-export async function prepareStandaloneVelaRuntime(
-  requestInput: StandaloneHandoffRequest,
-): Promise<NodeJS.ProcessEnv> {
-  const request = validateStandaloneHandoffRequest(requestInput);
-  if (request.closure == null) return bundledStandaloneToolEnv(request.paths.resourceRoot);
-  if (process.env.VELA_BIN?.trim() && process.env.VELA_OPENCODE_BIN?.trim()) return {};
-  const paths = resolveClosureStorePaths({
-    channel: request.handoff.scope.channel,
-    namespace: request.handoff.scope.namespace,
-    root: request.closure.storeRoot,
-  });
-  const binding = await readClosureBindingDescriptor(paths);
-  const committed = binding.committed;
-  if (
-    committed == null
-    || committed.standalone.digest !== request.handoff.descriptor.standalone.digest
-    || committed.standalone.target !== request.closure.target
-  ) {
-    throw new Error("Standalone Vela resource context does not match the committed Closure generation");
+export async function ensureStandaloneVelaResource(input: Readonly<{
+  fetch?: typeof globalThis.fetch;
+  manifest: ClosureDistributionManifest;
+  onProgress?: (progress: ClosureResourceEnsureProgress) => void;
+  paths: ClosureStorePaths;
+  repository: ClosureResourceRepositoryConfig;
+  target: string;
+}>): Promise<Readonly<{ id: string; path: string; reused: boolean; title: string }> | null> {
+  if (process.env.VELA_BIN?.trim() && process.env.VELA_OPENCODE_BIN?.trim()) return null;
+  const plan = planClosureDistributionGeneration(input.paths, 0, input.manifest, input.target);
+  if (!plan.resources.some((entry) => entry.id === VELA_RUNTIME_RESOURCE_ID)) return null;
+  const lock = await acquireClosureChannelLock(input.paths, { waitMs: 30_000 });
+  if (lock == null) throw new Error("Closure channel resources are busy");
+  try {
+    const resource = await ensureClosureResource({
+      id: VELA_RUNTIME_RESOURCE_ID,
+      manifest: input.manifest,
+      ...(input.fetch == null ? {} : { fetch: input.fetch }),
+      ...(input.onProgress == null ? {} : { onProgress: input.onProgress }),
+      paths: input.paths,
+      repository: input.repository,
+      target: input.target,
+    });
+    await discardUnreferencedClosureResources(input.paths).catch(() => undefined);
+    return resource;
+  } finally {
+    await releaseClosureChannelLock(lock);
   }
-  const manifest = await readStoredClosureDistributionManifest(paths, committed.standalone);
-  const plan = planClosureDistributionGeneration(
-    paths,
-    committed.standalone.generation,
-    manifest,
-    request.closure.target,
-  );
-  const resource = plan.resources.find((entry) => entry.id === VELA_RUNTIME_RESOURCE_ID);
-  if (resource == null) return bundledStandaloneToolEnv(request.paths.resourceRoot);
-  const repository = await readClosureResourceRepositoryConfig({
-    OD_CLOSURE_RESOURCE_REPOSITORY_V1: request.closure.repositoryConfigPath,
-  });
-  void ensureClosureResource({
-    id: resource.id,
-    manifest,
-    paths,
-    repository,
-    target: request.closure.target,
-  }).catch((error: unknown) => {
-    process.stderr.write(
-      `open-design Vela runtime prewarm failed: ${error instanceof Error ? error.message : String(error)}\n`,
-    );
-  });
-  return lazyVelaRuntimeEnv(resource.resourceRoot);
 }

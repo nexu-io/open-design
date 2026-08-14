@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { isAbsolute, posix, win32 } from "node:path";
 
-import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
+import { isClosureChannel } from "@open-design/closure/protocol";
 
 import {
   STANDALONE_PROTOCOL_VERSION,
@@ -357,7 +357,7 @@ export function validateStandaloneShellCapabilityOutput<
 
 export function validateStandaloneHandoffScope(value: unknown): StandaloneHandoffScope {
   const scope = requireRecord(value, "standalone handoff scope");
-  if (!isReleaseChannel(scope.channel)) {
+  if (!isClosureChannel(scope.channel)) {
     throw new StandaloneProtocolError(`unsupported standalone channel: ${String(scope.channel)}`);
   }
   if (
@@ -424,7 +424,7 @@ export function validateStandaloneAttachmentDescriptor(
 export function validateStandaloneBootstrapScope(value: unknown): StandaloneBootstrapScope {
   const scope = requireRecord(value, "standalone bootstrap scope");
   requireKnownKeys(scope, ["channel", "namespace"], "standalone bootstrap scope");
-  if (!isReleaseChannel(scope.channel)) {
+  if (!isClosureChannel(scope.channel)) {
     throw new StandaloneProtocolError(`unsupported standalone channel: ${String(scope.channel)}`);
   }
   return Object.freeze({
@@ -511,7 +511,7 @@ export function validateStandaloneBootstrapProgress(
   const progress = requireRecord(value, "standalone bootstrap progress");
   requireKnownKeys(
     progress,
-    ["initialLoad", "progress", "schemaVersion", "stage"],
+    ["initialLoad", "progress", "schemaVersion", "stage", "subject"],
     "standalone bootstrap progress",
   );
   if (progress.schemaVersion !== STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION) {
@@ -551,11 +551,21 @@ export function validateStandaloneBootstrapProgress(
     }
     normalizedProgress = Object.freeze({ completed, total, unit: quantitative.unit });
   }
+  const subject = requireRecord(progress.subject, "standalone bootstrap progress subject");
+  requireKnownKeys(subject, ["id", "kind", "title"], "standalone bootstrap progress subject");
+  if (subject.kind !== "resource" && subject.kind !== "standalone") {
+    throw new StandaloneProtocolError("standalone bootstrap progress subject kind is unsupported");
+  }
   return Object.freeze({
     initialLoad: requireBoolean(progress.initialLoad, "standalone bootstrap initialLoad"),
     ...(normalizedProgress == null ? {} : { progress: normalizedProgress }),
     schemaVersion: STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION,
     stage: progress.stage as StandaloneBootstrapProgressStage,
+    subject: Object.freeze({
+      id: requiredString(subject.id, "standalone bootstrap progress subject id"),
+      kind: subject.kind,
+      title: requiredString(subject.title, "standalone bootstrap progress subject title"),
+    }),
   });
 }
 

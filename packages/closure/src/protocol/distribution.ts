@@ -1,7 +1,6 @@
-import type { ReleaseChannel } from "@open-design/release";
-
 import {
   CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  CLOSURE_DISTRIBUTION_CONTROL_SCHEMA_VERSION,
   CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
   CLOSURE_PROTOCOL_VERSION,
   CLOSURE_ARCHIVE_ENTRY_PATH,
@@ -22,6 +21,8 @@ import {
   ClosureDistributionTargetContribution,
   ClosureDistributionDigest,
   ClosureDistributionColdStartBudget,
+  ClosureDistributionControl,
+  ClosureChannel,
   ResolvedClosureDistributionTarget,
   ClosureProtocolError,
   requireRecord,
@@ -40,6 +41,50 @@ import {
   normalizeProtocolVersion,
   normalizeHttpUrl,
 } from "./index.js";
+
+/**
+ * Stable shallow envelope read before a consumer opens the versioned graph.
+ * Keep this schema small: future distribution schemas must remain gateable by
+ * an older Shell without asking that Shell to parse their payload shape.
+ */
+export function createClosureDistributionControl(
+  manifest: ClosureDistributionManifest,
+): ClosureDistributionControl {
+  return {
+    distribution: {
+      digest: manifest.identity.digest,
+      protocolVersion: manifest.identity.protocolVersion,
+      schemaVersion: manifest.schemaVersion,
+    },
+    schemaVersion: CLOSURE_DISTRIBUTION_CONTROL_SCHEMA_VERSION,
+    shellCompatibility: manifest.compatibility.shell,
+  };
+}
+
+export function validateClosureDistributionControl(value: unknown): ClosureDistributionControl {
+  const control = requireRecord(value, "closure distribution control");
+  if (control.schemaVersion !== CLOSURE_DISTRIBUTION_CONTROL_SCHEMA_VERSION) {
+    throw new ClosureProtocolError(
+      `unsupported closure distribution control schema version: ${String(control.schemaVersion)}`,
+    );
+  }
+  const distribution = requireRecord(control.distribution, "closure distribution control payload");
+  const schemaVersion = normalizePositiveInteger(
+    distribution.schemaVersion,
+    "closure distribution control payload schema version",
+  );
+  return {
+    distribution: {
+      digest: normalizeDigest(distribution.digest),
+      protocolVersion: normalizeProtocolVersion(distribution.protocolVersion),
+      schemaVersion,
+    },
+    schemaVersion: CLOSURE_DISTRIBUTION_CONTROL_SCHEMA_VERSION,
+    shellCompatibility: normalizeDistributionShellCompatibility({
+      shell: control.shellCompatibility,
+    }),
+  };
+}
 
 function normalizeDistributionShellCompatibility(value: unknown): ClosureShellCompatibility {
   const compatibility = requireRecord(value, "closure distribution compatibility");
@@ -356,7 +401,7 @@ export function validateClosureDistributionManifest(
 }
 
 function validateContributionIdentity(value: Record<string, unknown>): {
-  channel: ReleaseChannel;
+  channel: ClosureChannel;
   protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
   version: string;
 } {

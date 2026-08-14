@@ -1,4 +1,5 @@
 export const EXACT_RELEASE_NAME_PATTERN = /^[a-z0-9]{1,12}$/;
+export const RESERVED_RELEASE_NAMES = Object.freeze(["local"] as const);
 
 /** Counted lanes are prerelease or a data-defined exact release name. */
 export type CountedReleaseChannel = string;
@@ -85,12 +86,13 @@ const descriptors: Record<"prerelease" | "stable", ReleaseChannelDescriptor> = {
 
 export function isReleaseChannel(value: unknown): value is ReleaseChannel {
   return typeof value === "string"
+    && value !== "local"
     && (value === "stable" || value === "prerelease" || EXACT_RELEASE_NAME_PATTERN.test(value));
 }
 
 export function releaseChannelDescriptor(channel: string): ReleaseChannelDescriptor {
   if (!isReleaseChannel(channel)) {
-    throw new Error(`RELEASE_CHANNEL must be stable, prerelease, or an exact name matching [a-z0-9]{1,12}; got ${channel}`);
+    throw new Error(`RELEASE_CHANNEL must be stable, prerelease, or a non-reserved exact name matching [a-z0-9]{1,12}; got ${channel}`);
   }
   if (channel === "stable" || channel === "prerelease") return descriptors[channel];
   const displayLabel = channel[0]!.toUpperCase() + channel.slice(1);
@@ -111,7 +113,7 @@ export function releaseChannelDescriptor(channel: string): ReleaseChannelDescrip
 export function releaseChannelFromVersion(version: string | null | undefined): ReleaseChannel | null {
   if (version == null || version.length === 0) return null;
   const match = /^\d+\.\d+\.\d+-([a-z0-9]{1,12})\.\d+$/.exec(version);
-  if (match?.[1] != null) return match[1];
+  if (isReleaseChannel(match?.[1])) return match[1];
   // Development builds such as `beta-internal.N` are not public exact
   // versions, but they still inherit the corresponding updater feed.
   if (/(?:^|[-.])beta(?:[-.]|$)/i.test(version)) return "beta";
@@ -122,7 +124,7 @@ export function releaseChannelFromVersion(version: string | null | undefined): R
 export function releaseChannelFromNamespace(namespace: string, defaultNamespace = DEFAULT_NAMESPACE): ReleaseChannel | null {
   if (namespace === defaultNamespace || isReleaseChannelNamespace(namespace, "stable")) return "stable";
   const match = /^release-([a-z0-9]{1,12})(?:$|[-_.])/.exec(namespace);
-  return match?.[1] ?? null;
+  return isReleaseChannel(match?.[1]) ? match[1] : null;
 }
 
 export function isReleaseChannelNamespace(namespace: string, channel: ReleaseChannel): boolean {

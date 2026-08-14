@@ -28,6 +28,11 @@ import {
   stopProcesses,
 } from "@open-design/platform";
 import type { ToolPackConfig } from "../config.js";
+import {
+  beginToolPackDebugSession,
+  parkToolPackDebugSession,
+  restoreToolPackDebugSession,
+} from "../debug-session.js";
 import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import { readToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
 import { requestDesktopUpdateAction } from "../update-action.js";
@@ -546,6 +551,7 @@ export async function startPackedMacApp(
   const launchConfigPath = embeddedConfigOnly
     ? null
     : await writeLaunchPackagedConfig(config, target.appPath);
+  const debugSession = await beginToolPackDebugSession(config);
   await mkdir(dirname(logPath), { recursive: true });
   await writeFile(logPath, "", "utf8");
 
@@ -564,11 +570,15 @@ export async function startPackedMacApp(
           ...process.env,
           [DESKTOP_LOG_ECHO_ENV]: "0",
           ...(launchConfigPath == null ? {} : { [PACKAGED_CONFIG_PATH_ENV]: launchConfigPath }),
+          ...(debugSession == null ? {} : { OD_PACKAGED_LAUNCH_CONTEXT_SESSION: debugSession.sessionId }),
         },
         stamp,
       }),
       logFd: logHandle.fd,
     });
+  } catch (error) {
+    await restoreToolPackDebugSession(config, debugSession?.sessionId).catch(() => undefined);
+    throw error;
   } finally {
     await logHandle.close().catch(() => undefined);
   }
@@ -578,6 +588,7 @@ export async function startPackedMacApp(
   child.unref();
   const cleanLauncherExit = earlyExit?.code === 0 && earlyExit.signal == null;
   if (earlyExit != null && !cleanLauncherExit) {
+    await restoreToolPackDebugSession(config, debugSession?.sessionId).catch(() => undefined);
     throw new Error(await createLaunchFailureMessage(config, target, {
       pid,
       reason: `process exited early ${formatExit(earlyExit)}`,
@@ -586,6 +597,7 @@ export async function startPackedMacApp(
 
   const status = await waitForDesktopStatus(config);
   if (status == null && earlyExit != null) {
+    await restoreToolPackDebugSession(config, debugSession?.sessionId).catch(() => undefined);
     throw new Error(await createLaunchFailureMessage(config, target, {
       pid,
       reason: `launcher exited cleanly before desktop IPC was available ${formatExit(earlyExit)}`,
@@ -593,12 +605,14 @@ export async function startPackedMacApp(
   }
   const delayedExit = exit.current();
   if (status == null && delayedExit != null) {
+    await restoreToolPackDebugSession(config, debugSession?.sessionId).catch(() => undefined);
     throw new Error(await createLaunchFailureMessage(config, target, {
       pid,
       reason: `process exited before desktop IPC was available ${formatExit(delayedExit)}`,
     }));
   }
   if (status == null && !isProcessAlive(pid)) {
+    await restoreToolPackDebugSession(config, debugSession?.sessionId).catch(() => undefined);
     throw new Error(await createLaunchFailureMessage(config, target, {
       pid,
       reason: "process exited before desktop IPC was available without an observed exit event",
@@ -653,7 +667,10 @@ async function waitForNoManagedDesktopProcesses(
   return await findManagedDesktopProcessTree(config);
 }
 
-export async function stopPackedMacApp(config: ToolPackConfig): Promise<MacStopResult> {
+export async function stopPackedMacApp(
+  config: ToolPackConfig,
+  options: { keepDebugSession?: boolean } = {},
+): Promise<MacStopResult> {
   const stamp = desktopStamp(config);
   const before = await findManagedDesktopProcessTree(config);
   let gracefulRequested = false;
@@ -671,6 +688,11 @@ export async function stopPackedMacApp(config: ToolPackConfig): Promise<MacStopR
     if (!unmanaged) {
       await rm(desktopIdentityPath(config), { force: true }).catch(() => undefined);
     }
+    if (options.keepDebugSession === true) {
+      await parkToolPackDebugSession(config).catch(() => undefined);
+    } else {
+      await restoreToolPackDebugSession(config).catch(() => undefined);
+    }
     return {
       ...(before.fallback == null ? {} : { fallback: before.fallback }),
       gracefulRequested,
@@ -684,6 +706,11 @@ export async function stopPackedMacApp(config: ToolPackConfig): Promise<MacStopR
   const stopped = await stopProcesses(remainingAfterGraceful.pids);
   if (stopped.remainingPids.length === 0) {
     await rm(desktopIdentityPath(config), { force: true }).catch(() => undefined);
+    if (options.keepDebugSession === true) {
+      await parkToolPackDebugSession(config).catch(() => undefined);
+    } else {
+      await restoreToolPackDebugSession(config).catch(() => undefined);
+    }
   }
   return {
     ...(remainingAfterGraceful.fallback == null ? {} : { fallback: remainingAfterGraceful.fallback }),

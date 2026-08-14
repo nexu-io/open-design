@@ -7,11 +7,12 @@ export const LAUNCHER_SCHEMA_VERSION = 1 as const;
 
 export const LAUNCHER_CHANNELS = Object.freeze({
   BETA: RELEASE_CHANNELS.BETA,
+  LOCAL: "local",
   PRERELEASE: RELEASE_CHANNELS.PRERELEASE,
   STABLE: RELEASE_CHANNELS.STABLE,
 } as const);
 
-export type LauncherChannel = ReleaseChannel;
+export type LauncherChannel = ReleaseChannel | "local";
 
 export type LauncherRootRequest = {
   channel: string;
@@ -133,7 +134,7 @@ export function normalizeLauncherChannel(value: unknown): LauncherChannel {
   if (typeof value !== "string") throw new LauncherProtocolError("launcher channel must be a string");
   const channel = value.trim();
   if (channel !== value) throw new LauncherProtocolError("launcher channel must not contain leading or trailing whitespace");
-  if (!isReleaseChannel(channel)) {
+  if (channel !== "local" && !isReleaseChannel(channel)) {
     throw new LauncherProtocolError(`unsupported launcher channel: ${value}`);
   }
   return channel as LauncherChannel;

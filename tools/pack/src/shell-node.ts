@@ -33,6 +33,7 @@ export async function copyShellNodeRuntime(options: {
 }
 
 export async function copyStandaloneBootstrapSeed(options: Readonly<{
+  repositorySeedRoot?: string;
   resourceRoot: string;
   seedRoot?: string;
   workspaceRoot: string;
@@ -55,7 +56,10 @@ export async function copyStandaloneBootstrapSeed(options: Readonly<{
     });
   }
   await writeFile(join(targetRoot, "repository.json"), `${JSON.stringify({
-    localSeeds: [{ root: "seed" }],
+    localSeeds: [
+      ...(options.seedRoot == null ? [] : [{ root: "seed" }]),
+      ...(options.repositorySeedRoot == null ? [] : [{ root: options.repositorySeedRoot }]),
+    ],
     // Remote discovery is selected from release metadata supplied by the
     // launcher descriptor. Component bytes remain content-addressed URLs in
     // that graph; the Shell never owns or interprets an origin.

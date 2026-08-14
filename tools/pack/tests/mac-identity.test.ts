@@ -43,6 +43,19 @@ function makeConfig(root: string, namespace: string): ToolPackConfig {
 }
 
 describe("resolveMacInstallIdentity", () => {
+  it("uses an isolated product identity for an explicitly local debug runtime", () => {
+    expect(resolveMacInstallIdentity({
+      debugChannel: "local",
+      namespace: "local-transactional",
+    })).toEqual({
+      appId: "io.open-design.desktop.local",
+      executableName: "Open Design Local",
+      installerTitle: "Open Design Local",
+      productName: "Open Design Local",
+      publicAppBundleName: "Open Design Local.app",
+      systemAppBundleName: "Open Design Local.app",
+    });
+  });
   it("keeps stable builds on the canonical mac identity", () => {
     expect(resolveMacInstallIdentity(makeConfig("/work", "release-stable"))).toMatchObject({
       appId: "io.open-design.desktop",

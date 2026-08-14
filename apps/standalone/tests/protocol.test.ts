@@ -86,29 +86,34 @@ describe("Standalone bootloader protocol", () => {
     expect(validateStandaloneBootstrapProgress({
       initialLoad: true,
       progress: { completed: 8, total: 16, unit: "bytes" },
-      schemaVersion: 1,
+      schemaVersion: 2,
       stage: "downloading",
+      subject: { id: "vela-runtime", kind: "resource", title: "Local engine" },
     })).toEqual({
       initialLoad: true,
       progress: { completed: 8, total: 16, unit: "bytes" },
-      schemaVersion: 1,
+      schemaVersion: 2,
       stage: "downloading",
+      subject: { id: "vela-runtime", kind: "resource", title: "Local engine" },
     });
     expect(validateStandaloneBootstrapProgress({
       initialLoad: false,
-      schemaVersion: 1,
+      schemaVersion: 2,
       stage: "verifying",
+      subject: { id: "standalone", kind: "standalone", title: "Standalone" },
     })).not.toHaveProperty("progress");
     expect(() => validateStandaloneBootstrapProgress({
       initialLoad: true,
       progress: { completed: 17, total: 16, unit: "bytes" },
-      schemaVersion: 1,
+      schemaVersion: 2,
       stage: "downloading",
+      subject: { id: "vela-runtime", kind: "resource", title: "Local engine" },
     })).toThrow(/completed <= total/u);
     expect(() => validateStandaloneBootstrapProgress({
       initialLoad: true,
-      schemaVersion: 1,
+      schemaVersion: 2,
       stage: "guessing",
+      subject: { id: "standalone", kind: "standalone", title: "Standalone" },
     })).toThrow(/stage/u);
   });
 
@@ -154,6 +159,32 @@ describe("Standalone bootloader protocol", () => {
       error: { code: "retry-another-version", message: "unsafe fallback" },
       schemaVersion: 1,
     })).toThrow(/error code/u);
+  });
+
+  it("preserves the reserved local coordination domain across bootstrap and handoff", () => {
+    const full = request();
+    const localHandoff = createStandaloneHandoffEnvelope({
+      descriptor: {
+        release: { version: "0.19.1-local.1" },
+        standalone: {
+          digest,
+          protocolVersion: STANDALONE_PROTOCOL_VERSION,
+          version: "0.19.1-local.1",
+        },
+      },
+      scope: { channel: "local", generation: 0, namespace: "local-test" },
+    });
+
+    expect(validateStandaloneBootstrapDescriptor({
+      attachment: full.attachment,
+      discovery: { metadataUrl: null, target: "darwin-arm64" },
+      paths: full.paths,
+      releaseVersion: "0.19.1-local.1",
+      repositoryConfigPath: "/shell/resources/repository.json",
+      schemaVersion: 1,
+      scope: { channel: "local", namespace: "local-test" },
+    }).scope.channel).toBe("local");
+    expect(validateStandaloneHandoffEnvelope(localHandoff).scope.channel).toBe("local");
   });
 
   it("round-trips the transport-neutral handoff descriptor as JSON", () => {

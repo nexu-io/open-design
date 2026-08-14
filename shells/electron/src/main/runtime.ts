@@ -19,7 +19,6 @@ import {
   type DesktopRenderSlidesResult,
   type DesktopUpdateStatusSnapshot,
 } from "@open-design/sidecar/protocol";
-import type { StandaloneBootstrapProgress } from "@open-design/standalone/protocol";
 import type {
   OpenDesignHostActionResult,
   OpenDesignHostCaptureResult,
@@ -36,6 +35,18 @@ import { exportArtifact as exportArtifactFromHtml } from "./artifact-export.js";
 import { createElectronPdfTarget, exportPdfFromHtml, savePrintReadyDocumentAsPdf } from "./pdf-export.js";
 import { SPLASH_VIDEO_DATA_URL } from "./splash-video.js";
 import { RendererCrashLoopBreaker } from "./renderer-crash-loop.js";
+import {
+  registerSplashStageTracking,
+  setSplashStage,
+  splashBootProgressPayload,
+} from "./splash-progress.js";
+export {
+  registerSplashStageTracking,
+  setSplashStandaloneProgress,
+  setSplashStage,
+  type SplashBootStage,
+  type SplashStageSurface,
+} from "./splash-progress.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
 import { parseDesktopUpdateMenuLabels } from "./update-menu.js";
@@ -908,8 +919,7 @@ const MAC_WINDOW_CHROME_CSS = `
 // the main window is ready. The clip is embedded as a base64 data URL so it
 // renders identically in dev and in packaged builds (see `splash-video.ts`).
 function createPendingHtml(): string {
-  const start = splashStagePayload("starting");
-  const initialPct = Math.max(0, Math.min(100, Math.round((start.step / start.total) * 100)));
+  const start = splashBootProgressPayload("starting");
   return `data:text/html;charset=utf-8,${encodeURIComponent(`<!doctype html>
 <html>
   <head>
@@ -952,10 +962,10 @@ function createPendingHtml(): string {
         opacity: 0;
         transition-duration: 140ms;
       }
-      .boot-stage-step {
+      .boot-stage-detail {
         color: #9aa2a8;
         font-variant-numeric: tabular-nums;
-        margin-right: 7px;
+        margin-left: 12px;
       }
       .boot-progress {
         background: rgba(122, 131, 138, 0.18);
@@ -974,46 +984,8 @@ function createPendingHtml(): string {
         height: 100%;
         transition: width 320ms cubic-bezier(0.23, 1, 0.32, 1);
       }
-      .standalone-progress {
-        bottom: 104px;
-        color: #7a838a;
-        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-        font-size: 11px;
-        left: 50%;
-        opacity: 0;
-        pointer-events: none;
-        position: fixed;
-        transform: translateX(-50%);
-        transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
-        width: 260px;
-      }
-      .standalone-progress-visible { opacity: 1; }
-      .standalone-progress-copy {
-        display: flex;
-        gap: 12px;
-        justify-content: space-between;
-        margin-bottom: 7px;
-      }
-      .standalone-progress-detail {
-        color: #9aa2a8;
-        font-variant-numeric: tabular-nums;
-        white-space: nowrap;
-      }
-      .standalone-progress-track {
-        background: rgba(122, 131, 138, 0.14);
-        border-radius: 999px;
-        height: 3px;
-        overflow: hidden;
-        position: relative;
-      }
-      .standalone-progress-fill {
-        background: #7a838a;
-        border-radius: 999px;
-        height: 100%;
-        transition: width 240ms cubic-bezier(0.23, 1, 0.32, 1);
-      }
-      .standalone-progress-fill-indeterminate {
-        animation: standalone-progress-slide 1.15s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+      .boot-progress-fill-indeterminate {
+        animation: boot-progress-slide 1.15s cubic-bezier(0.65, 0, 0.35, 1) infinite;
         position: absolute;
         width: 38%;
       }
@@ -1027,7 +999,7 @@ function createPendingHtml(): string {
         0%, 60%, 100% { opacity: 0.25; }
         30% { opacity: 1; }
       }
-      @keyframes standalone-progress-slide {
+      @keyframes boot-progress-slide {
         from { transform: translateX(-110%); }
         to { transform: translateX(290%); }
       }
@@ -1042,20 +1014,11 @@ function createPendingHtml(): string {
       disablepictureinpicture
       src="${SPLASH_VIDEO_DATA_URL}"
     ></video>
-    <div class="standalone-progress" id="standalone-progress" aria-live="polite">
-      <div class="standalone-progress-copy">
-        <span id="standalone-progress-label"></span>
-        <span class="standalone-progress-detail" id="standalone-progress-detail"></span>
-      </div>
-      <div class="standalone-progress-track" aria-hidden="true">
-        <div class="standalone-progress-fill" id="standalone-progress-fill"></div>
-      </div>
-    </div>
     <div class="boot-progress" aria-hidden="true">
-      <div class="boot-progress-fill" id="boot-progress-fill" data-pct="${initialPct}" style="width: ${initialPct}%;"></div>
+      <div class="boot-progress-fill boot-progress-fill-indeterminate" id="boot-progress-fill"></div>
     </div>
     <div class="boot-stage" id="boot-stage" aria-live="polite">
-      <span class="boot-stage-step" id="boot-stage-step">${start.step}/${start.total}</span><span id="boot-stage-text">${start.label}</span><span class="boot-dots" aria-hidden="true"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
+      <span id="boot-stage-text">${start.label}</span><span class="boot-stage-detail" id="boot-stage-detail"></span><span class="boot-dots" aria-hidden="true"><span class="dot">.</span><span class="dot">.</span><span class="dot">.</span></span>
     </div>
     <script>
       (function () {
@@ -1069,58 +1032,32 @@ function createPendingHtml(): string {
         video.addEventListener("loadeddata", play);
         play();
       })();
-      // Accepts the structured { step, total, label } payload (and tolerates a
-      // bare label string for back-compat). The step counter + progress bar give
-      // a slow cold boot a sense of how far along it is; the bar only ever grows
-      // so a re-asserted earlier stage cannot make it lurch backwards.
-      window.__odSplashSetStage = function (info) {
-        var data = (typeof info === "string") ? { label: info } : (info || {});
+      window.__odSplashSetProgress = function (info) {
+        var data = info || {};
         var wrap = document.getElementById("boot-stage");
         var text = document.getElementById("boot-stage-text");
-        var stepEl = document.getElementById("boot-stage-step");
+        var detail = document.getElementById("boot-stage-detail");
         var fill = document.getElementById("boot-progress-fill");
-        if (!wrap || !text) return;
-        var step = (typeof data.step === "number") ? data.step : null;
-        var total = (typeof data.total === "number" && data.total > 0) ? data.total : null;
-        if (fill && step != null && total != null) {
-          var pct = Math.max(0, Math.min(100, Math.round((step / total) * 100)));
-          var prev = parseFloat(fill.getAttribute("data-pct")) || 0;
-          if (pct >= prev) {
-            fill.style.width = pct + "%";
-            fill.setAttribute("data-pct", String(pct));
-          }
-        }
-        var label = (typeof data.label === "string") ? data.label : null;
-        var stepText = (step != null && total != null) ? (step + "/" + total) : null;
-        var labelSame = (label == null) || text.textContent === label;
-        var stepSame = (stepText == null) || !stepEl || stepEl.textContent === stepText;
-        if (labelSame && stepSame) return;
-        wrap.classList.add("boot-stage-swapping");
-        setTimeout(function () {
-          if (label != null) text.textContent = label;
-          if (stepEl && stepText != null) stepEl.textContent = stepText;
-          wrap.classList.remove("boot-stage-swapping");
-        }, 140);
-      };
-      window.__odSplashSetStandaloneProgress = function (info) {
-        var data = info || {};
-        var wrap = document.getElementById("standalone-progress");
-        var label = document.getElementById("standalone-progress-label");
-        var detail = document.getElementById("standalone-progress-detail");
-        var fill = document.getElementById("standalone-progress-fill");
-        if (!wrap || !label || !detail || !fill) return;
-        wrap.classList.toggle("standalone-progress-visible", data.visible === true);
-        if (data.visible !== true) return;
-        label.textContent = (typeof data.label === "string") ? data.label : "Preparing Standalone";
-        detail.textContent = (typeof data.detail === "string") ? data.detail : "";
+        if (!wrap || !text || !detail || !fill) return;
         if (typeof data.percent === "number") {
-          fill.classList.remove("standalone-progress-fill-indeterminate");
+          fill.classList.remove("boot-progress-fill-indeterminate");
           fill.style.transform = "none";
           fill.style.width = Math.max(0, Math.min(100, data.percent)) + "%";
         } else {
           fill.style.width = "38%";
-          fill.classList.add("standalone-progress-fill-indeterminate");
+          fill.classList.add("boot-progress-fill-indeterminate");
         }
+        var label = (typeof data.label === "string") ? data.label : null;
+        var detailText = (typeof data.detail === "string") ? data.detail : "";
+        var labelSame = (label == null) || text.textContent === label;
+        var detailSame = detail.textContent === detailText;
+        if (labelSame && detailSame) return;
+        wrap.classList.add("boot-stage-swapping");
+        setTimeout(function () {
+          if (label != null) text.textContent = label;
+          detail.textContent = detailText;
+          wrap.classList.remove("boot-stage-swapping");
+        }, 140);
       };
     </script>
   </body>
@@ -1407,223 +1344,6 @@ function createRendererCrashHtml(ctx: RendererCrashScreenContext): string {
     </script>
   </body>
 </html>`)}`;
-}
-
-/**
- * Boot phases surfaced as a muted status line under the splash logo. The cold
- * boot on a slow machine can hold the splash's settled final frame for many
- * seconds; the stage text, the step counter ("3/7"), the filling progress bar,
- * and the continuously pulsing dots are what tell the user the app is working,
- * not hung. Stage transitions follow the repo animation philosophy: 140ms
- * ease-out fade out, 200ms ease-out fade in.
- *
- * The set is intentionally fine-grained: a slow first run spends most of its
- * time in the two long native waits (daemon coming online, web server coming
- * online), so we mark BOTH the "starting X" edge and the "X ready" edge of each
- * so the counter visibly advances right after each long wait clears. More steps
- * = the wait reads as forward motion instead of one frozen label.
- */
-export type SplashBootStage =
-  | "starting"
-  | "engine"
-  | "engineReady"
-  | "interface"
-  | "interfaceReady"
-  | "workspace"
-  | "finishing";
-
-/**
- * Canonical boot order. The index in this array drives the "N/total" step
- * counter and the progress-bar fill, so keep it in the real chronological order
- * the stages fire. `setSplashStage` clamps progress so a re-asserted earlier
- * stage (e.g. the idempotent "workspace" re-fire at the reveal gate) can never
- * make the bar jump backwards.
- */
-const SPLASH_STAGE_SEQUENCE: readonly SplashBootStage[] = [
-  "starting",
-  "engine",
-  "engineReady",
-  "interface",
-  "interfaceReady",
-  "workspace",
-  "finishing",
-];
-
-const SPLASH_STAGE_LABELS: Record<SplashBootStage, string> = {
-  starting: "Starting Open Design",
-  engine: "Starting the local engine",
-  engineReady: "Local engine ready",
-  interface: "Preparing the interface",
-  interfaceReady: "Interface ready",
-  workspace: "Opening your workspace",
-  finishing: "Almost ready",
-};
-
-const SPLASH_STAGE_TOTAL = SPLASH_STAGE_SEQUENCE.length;
-
-/** Step/label payload handed to the renderer's `__odSplashSetStage`. */
-function splashStagePayload(stage: SplashBootStage): { step: number; total: number; label: string } {
-  const index = SPLASH_STAGE_SEQUENCE.indexOf(stage);
-  return {
-    step: index < 0 ? 1 : index + 1,
-    total: SPLASH_STAGE_TOTAL,
-    label: SPLASH_STAGE_LABELS[stage],
-  };
-}
-
-type SplashStandaloneProgressPayload = Readonly<{
-  detail: string;
-  label: string;
-  percent: number | null;
-  visible: boolean;
-}>;
-
-const SPLASH_STANDALONE_LABELS: Record<StandaloneBootstrapProgress["stage"], string> = {
-  checking: "Checking Standalone",
-  discovering: "Finding Standalone",
-  downloading: "Downloading Standalone",
-  materializing: "Installing Standalone",
-  verifying: "Verifying Standalone",
-  ready: "Standalone ready",
-};
-
-function formatSplashBytes(value: number): string {
-  const mebibytes = value / (1024 * 1024);
-  return `${mebibytes < 10 ? mebibytes.toFixed(1) : Math.round(mebibytes)} MB`;
-}
-
-function splashStandaloneProgressPayload(
-  progress: StandaloneBootstrapProgress,
-): SplashStandaloneProgressPayload {
-  const quantitative = progress.progress;
-  const visible = progress.initialLoad
-    || progress.stage === "downloading"
-    || progress.stage === "materializing";
-  let detail = "";
-  let percent: number | null = progress.stage === "ready" ? 100 : null;
-  if (quantitative != null) {
-    percent = Math.round((quantitative.completed / quantitative.total) * 100);
-    detail = quantitative.unit === "bytes"
-      ? `${formatSplashBytes(quantitative.completed)} / ${formatSplashBytes(quantitative.total)}`
-      : `${quantitative.completed} / ${quantitative.total} components`;
-  }
-  return Object.freeze({
-    detail,
-    label: `${progress.initialLoad ? "First launch · " : ""}${SPLASH_STANDALONE_LABELS[progress.stage]}`,
-    percent,
-    visible,
-  });
-}
-
-/**
- * Narrow view of the splash window that the stage updater needs. A real
- * `BrowserWindow` satisfies this structurally; tests pass a mock so the
- * load-ready/replay logic is exercisable without a live Electron renderer.
- */
-export type SplashStageSurface = {
-  isDestroyed(): boolean;
-  webContents: {
-    executeJavaScript(code: string, userGesture?: boolean): Promise<unknown>;
-    once(event: "did-finish-load", listener: () => void): void;
-  };
-};
-
-type SplashStageState = {
-  pending: SplashBootStage | null;
-  pendingStandaloneProgress: StandaloneBootstrapProgress | null;
-  ready: boolean;
-};
-
-// Per-splash readiness + the latest stage requested before the page finished
-// loading. Keyed weakly so a closed splash is collected without bookkeeping.
-const splashStageState = new WeakMap<SplashStageSurface, SplashStageState>();
-
-function applySplashStage(splash: SplashStageSurface, stage: SplashBootStage): void {
-  void splash.webContents
-    .executeJavaScript(
-      `window.__odSplashSetStage && window.__odSplashSetStage(${JSON.stringify(splashStagePayload(stage))});`,
-      true,
-    )
-    .catch(() => undefined);
-}
-
-function applySplashStandaloneProgress(
-  splash: SplashStageSurface,
-  progress: StandaloneBootstrapProgress,
-): void {
-  void splash.webContents
-    .executeJavaScript(
-      `window.__odSplashSetStandaloneProgress && window.__odSplashSetStandaloneProgress(${JSON.stringify(splashStandaloneProgressPayload(progress))});`,
-      true,
-    )
-    .catch(() => undefined);
-}
-
-/**
- * Arm load-ready tracking for a freshly created splash. MUST be called before
- * `loadURL` so the `did-finish-load` listener cannot miss the event. Until the
- * splash data-URL has loaded (and defined `window.__odSplashSetStage`), stage
- * updates are stashed rather than executed against a renderer that has no
- * setter yet — otherwise the first update (the daemon phase, fired right after
- * window creation on a cold boot) is silently dropped. The latest stashed
- * stage is replayed once the page reports it has loaded.
- */
-export function registerSplashStageTracking(splash: SplashStageSurface): void {
-  const state: SplashStageState = {
-    pending: null,
-    pendingStandaloneProgress: null,
-    ready: false,
-  };
-  splashStageState.set(splash, state);
-  splash.webContents.once("did-finish-load", () => {
-    state.ready = true;
-    if (state.pending != null) {
-      const stage = state.pending;
-      state.pending = null;
-      applySplashStage(splash, stage);
-    }
-    if (state.pendingStandaloneProgress != null) {
-      const progress = state.pendingStandaloneProgress;
-      state.pendingStandaloneProgress = null;
-      applySplashStandaloneProgress(splash, progress);
-    }
-  });
-}
-
-/**
- * Update the splash status line. Safe to call with a destroyed/absent window
- * and idempotent for repeated stages, so callers can fire-and-forget at each
- * boot phase boundary (packaged sidecar spawns, runtime reveal gate). Stage
- * updates that arrive before the splash page has loaded are deferred and
- * replayed on load (see `registerSplashStageTracking`); a window with no
- * tracking registered (e.g. an unmanaged test surface) applies immediately.
- */
-export function setSplashStage(splash: SplashStageSurface | null, stage: SplashBootStage): void {
-  if (splash == null || splash.isDestroyed()) return;
-  const state = splashStageState.get(splash);
-  if (state == null || state.ready) {
-    applySplashStage(splash, stage);
-    return;
-  }
-  state.pending = stage;
-}
-
-/**
- * Update the independent Standalone bootstrap progress surface. Cold installs
- * stay visible across every phase; warm starts only reveal it when an actual
- * update or repair downloads/materializes components.
- */
-export function setSplashStandaloneProgress(
-  splash: SplashStageSurface | null,
-  progress: StandaloneBootstrapProgress,
-): void {
-  if (splash == null || splash.isDestroyed()) return;
-  const state = splashStageState.get(splash);
-  if (state == null || state.ready) {
-    applySplashStandaloneProgress(splash, progress);
-    return;
-  }
-  state.pendingStandaloneProgress = progress;
 }
 
 export type SplashWindowHandle = {

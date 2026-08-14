@@ -53,6 +53,7 @@ const { inspectPackedMacApp, startPackedMacApp, stopPackedMacApp } = await impor
 
 function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): ToolPackConfig {
   return {
+    debugProductUserDataRoot: join(root, "product-profile"),
     electronBuilderCliPath: "/x/electron-builder/cli.js",
     electronDistPath: "/x/electron/dist",
     electronVersion: "41.3.0",
@@ -106,7 +107,7 @@ describe("startPackedMacApp", () => {
     try {
       const config = makeConfig(root);
       const paths = resolveMacPaths(config);
-      const executableName = "Open Design";
+      const executableName = "Open Design Local";
       const builtExecutablePath = join(paths.appPath, "Contents", "MacOS", executableName);
       const installedExecutablePath = join(paths.installedAppPath, "Contents", "MacOS", executableName);
 
@@ -131,7 +132,7 @@ describe("startPackedMacApp", () => {
     try {
       const config = makeConfig(root);
       const paths = resolveMacPaths(config);
-      const executableName = "Open Design";
+      const executableName = "Open Design Local";
       const builtExecutablePath = join(paths.appPath, "Contents", "MacOS", executableName);
       const installedExecutablePath = join(paths.installedAppPath, "Contents", "MacOS", executableName);
 
@@ -156,7 +157,7 @@ describe("startPackedMacApp", () => {
     try {
       const config = makeConfig(root);
       const paths = resolveMacPaths(config);
-      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design");
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design Local");
       const delegatedPid = 5678;
 
       await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
@@ -187,7 +188,7 @@ describe("startPackedMacApp", () => {
     try {
       const config = makeConfig(root);
       const paths = resolveMacPaths(config);
-      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design");
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design Local");
 
       await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
       await writeFile(executablePath, "#!/bin/sh\nexit 1\n", "utf8");
@@ -213,7 +214,7 @@ describe("startPackedMacApp", () => {
     try {
       const config = makeConfig(root);
       const paths = resolveMacPaths(config);
-      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design");
+      const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design Local");
 
       await mkdir(join(paths.installedAppPath, "Contents", "MacOS"), { recursive: true });
       await writeFile(executablePath, "#!/bin/sh\nexit 0\n", "utf8");
@@ -280,7 +281,7 @@ describe("startPackedMacApp", () => {
   it("uses the preview executable name for preview release namespaces", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-lifecycle-"));
     try {
-      const config = makeConfig(root, { namespace: "release-preview" });
+      const config = makeConfig(root, { debugChannel: "preview", namespace: "release-preview" });
       const paths = resolveMacPaths(config);
       const executablePath = join(paths.installedAppPath, "Contents", "MacOS", "Open Design Preview");
 

@@ -4,12 +4,13 @@ import { readFile, stat } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
 
 import {
+  isClosureChannel,
   validateClosureBindingIdentity,
   type ClosureBindingIdentity,
   type ClosureCandidateManifest,
+  type ClosureChannel,
   type ClosureFileInventory,
 } from "../protocol/index.js";
-import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
 import { normalizeNamespace } from "@open-design/sidecar/protocol";
 
 export const CLOSURE_BINDING_SCHEMA_VERSION = 3 as const;
@@ -24,9 +25,10 @@ export type ClosureStoreRequest = {
 export type ClosureStorePaths = {
   bindingPath: string;
   blobsRoot: string;
-  channel: ReleaseChannel;
+  channel: ClosureChannel;
   channelRoot: string;
   closureRoot: string;
+  garbageRoot: string;
   installationsRoot: string;
   namespace: string;
   namespaceRoot: string;
@@ -58,7 +60,7 @@ export type CommittedClosureBinding = {
 };
 
 export type ClosureBindingDescriptor = {
-  channel: ReleaseChannel;
+  channel: ClosureChannel;
   committed: CommittedClosureBinding | null;
   namespace: string;
   nextGeneration: number;
@@ -88,8 +90,8 @@ function normalizeRoot(value: string): string {
   return resolve(value);
 }
 
-function normalizeChannel(value: string): ReleaseChannel {
-  if (!isReleaseChannel(value)) throw new ClosureStoreError(`unsupported Closure store channel: ${value}`);
+function normalizeChannel(value: string): ClosureChannel {
+  if (!isClosureChannel(value)) throw new ClosureStoreError(`unsupported Closure store channel: ${value}`);
   return value;
 }
 
@@ -123,6 +125,7 @@ export function resolveClosureStorePaths(request: ClosureStoreRequest): ClosureS
     channel,
     channelRoot,
     closureRoot,
+    garbageRoot: assertUnderRoot(root, join(channelRoot, "garbage")),
     installationsRoot: assertUnderRoot(root, join(namespaceRoot, "installations")),
     namespace,
     namespaceRoot,

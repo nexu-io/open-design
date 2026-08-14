@@ -8,17 +8,19 @@ import {
   SIDECAR_DEFAULTS,
 } from "@open-design/sidecar/protocol";
 import { resolveNamespace } from "@open-design/sidecar";
-import { releaseChannelFromVersion, releaseNamespace } from "@open-design/release";
+import { isReleaseChannel, releaseChannelFromVersion, releaseNamespace, type ReleaseChannel } from "@open-design/release";
 
 import {
   resolveToolPackShell,
   toolPackShellDefinition,
   type ToolPackShell,
 } from "./shells.js";
+import { TOOL_PACK_LOCAL_NAMESPACE } from "./local-runtime.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export const WORKSPACE_ROOT = resolve(__dirname, "../../..");
+export { TOOL_PACK_LOCAL_NAMESPACE } from "./local-runtime.js";
 
 export type ToolPackPlatform = "mac" | "win";
 export type ToolPackBuildOutput = "all" | "app" | "dir" | "dmg" | "nsis" | "zip";
@@ -26,6 +28,7 @@ export type ToolPackMacCompression = "store" | "normal" | "maximum";
 export type ToolPackSignMode = "unsigned" | "signed" | "notarized";
 export type ToolPackWebOutputMode = "server" | "standalone";
 export type ToolPackAmrProfile = "prod" | "test" | "feature-test" | "local";
+export type ToolPackDebugChannel = "local" | ReleaseChannel;
 
 export type ToolPackCliOptions = {
   allowDaemonFallback?: boolean;
@@ -35,10 +38,12 @@ export type ToolPackCliOptions = {
   channel?: string;
   dir?: string;
   diagnoseAttempts?: string | number;
+  debugChannel?: string;
   expectedVersion?: string;
   expr?: string;
   includeManagedProcesses?: boolean;
   json?: boolean;
+  keepDebugSession?: boolean;
   launcherVersion?: string;
   macCompression?: string;
   minShellVersion?: string;
@@ -85,9 +90,12 @@ export type ToolPackRoots = {
 };
 
 export type ToolPackConfig = {
+  /** Test/harness-only override for the release identity profile root. */
+  debugProductUserDataRoot?: string;
   electronBuilderCliPath: string;
   electronDistPath: string;
   electronVersion: string;
+  debugChannel?: ToolPackDebugChannel;
   macCompression: ToolPackMacCompression;
   /** Build a macOS UIElement agent for local packaged E2E without desktop activation. */
   macBackgroundAgent?: boolean;
@@ -102,12 +110,16 @@ export type ToolPackConfig = {
   /** Version of the packaged launcher payload; defaults to the bound release. */
   launcherVersion?: string;
   releaseVersion?: string;
+  /** Internal product binding synthesized while building the isolated local channel. */
+  runtimeReleaseVersion?: string;
   roots: ToolPackRoots;
   silent: boolean;
   signMode: ToolPackSignMode;
   shell: ToolPackShell;
   shellVersion?: string;
   standaloneSeedRoot?: string;
+  /** Local-only source repository kept outside the distributable Shell. */
+  standaloneRepositorySeedRoot?: string;
   amrProfile?: ToolPackAmrProfile;
   telemetryRelayUrl?: string;
   /**
@@ -206,9 +218,21 @@ function resolveToolPackVersion(
   return normalized;
 }
 
+function resolveToolPackDebugChannel(value: string | undefined): ToolPackDebugChannel {
+  if (value == null || value.trim().length === 0 || value === "local") return "local";
+  const normalized = value.startsWith("exact:") ? value.slice("exact:".length) : value;
+  if (normalized === TOOL_PACK_LOCAL_NAMESPACE || !isReleaseChannel(normalized)) {
+    throw new Error("--debug-channel must be local, stable, prerelease, or exact:<lowercase-name>");
+  }
+  return normalized;
+}
+
 function defaultNamespaceForReleaseVersion(platform: ToolPackPlatform, releaseVersion: string | undefined): string {
+  if (releaseVersion == null) return TOOL_PACK_LOCAL_NAMESPACE;
   const channel = releaseChannelFromVersion(releaseVersion);
-  if (channel == null) return SIDECAR_DEFAULTS.namespace;
+  if (channel == null) return /^\d+\.\d+\.\d+$/.test(releaseVersion)
+    ? SIDECAR_DEFAULTS.namespace
+    : TOOL_PACK_LOCAL_NAMESPACE;
 
   return releaseNamespace(channel, platform);
 }
@@ -403,6 +427,7 @@ export function resolveToolPackConfig(
   const runtimeNamespaceBaseRoot = join(toolPackRoot, "runtime", platform, "namespaces");
 
   return {
+    debugChannel: resolveToolPackDebugChannel(options.debugChannel),
     electronBuilderCliPath: resolveElectronBuilderCliPath(),
     electronDistPath: resolveElectronDistPath(WORKSPACE_ROOT, shell),
     electronVersion: resolveElectronVersion(WORKSPACE_ROOT, shell),

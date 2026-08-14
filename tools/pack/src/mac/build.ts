@@ -1,6 +1,7 @@
 import { ToolPackCache } from "../cache.js";
 import { describeToolPackArtifact } from "../artifacts.js";
 import type { ToolPackConfig } from "../config.js";
+import { prepareLocalStandaloneSeed } from "../local-standalone.js";
 import { collectWorkspaceTarballs, copyResourceTree, writeAssembledApp } from "./app.js";
 import { seedPackagedAppConfig } from "./app-config.js";
 import { finalizeMacArtifacts } from "./artifacts.js";
@@ -44,6 +45,7 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
     }
   };
 
+  await runPhase("local-standalone", async () => await prepareLocalStandaloneSeed(config));
   const shellBuildIdentity = await runPhase("workspace-build", async () =>
     await ensureMacWorkspaceBuild(config, cache));
   await runPhase("seed-app-config", async () => {
@@ -82,7 +84,7 @@ export async function packMac(config: ToolPackConfig): Promise<MacPackResult> {
     payloadPath,
     resourceRoot: paths.resourceRoot,
     runtimeNamespaceRoot: config.roots.runtime.namespaceRoot,
-    releaseVersion: config.releaseVersion ?? null,
+    releaseVersion: config.runtimeReleaseVersion ?? config.releaseVersion ?? null,
     shell: { ...shellBuildIdentity, type: config.shell, version: shellVersion },
     sizeReport,
     timings,

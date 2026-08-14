@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { cp, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
@@ -24,7 +24,9 @@ import {
   commitStoredClosureCandidate,
   commitVerifiedClosureDistributionGeneration,
   commitVerifiedStoredClosureCandidate,
+  cleanupClosureChannelGarbage,
   consumeClosureDistributionTarget,
+  discardClosureStoreEntry,
   hasStoredClosureDistributionGeneration,
   planClosureDistributionGeneration,
   readClosureBindingDescriptor,
@@ -203,11 +205,61 @@ describe("Closure store paths", () => {
     expect(JSON.stringify(beta)).not.toMatch(/port/iu);
   });
 
+  it("isolates the reserved local coordination domain from public channels", async () => {
+    const root = await mkdtemp(join(tmpdir(), "od-closure-store-local-paths-"));
+    roots.push(root);
+    const local = resolveClosureStorePaths({ channel: "local", namespace: "local-transactional", root });
+    const beta = resolveClosureStorePaths({ channel: "beta", namespace: "local-transactional", root });
+
+    expect(local.channelRoot).toBe(join(root, "closure", "channels", "local"));
+    expect(local.namespaceRoot).not.toBe(beta.namespaceRoot);
+  });
+
   it("rejects relative roots and unsafe namespaces", () => {
     expect(() => resolveClosureStorePaths({ channel: "beta", namespace: "release-beta", root: ".tmp" }))
       .toThrow(/absolute path/u);
     expect(() => resolveClosureStorePaths({ channel: "beta", namespace: "../beta", root: "/tmp/od" }))
       .toThrow();
+  });
+});
+
+describe("Closure channel garbage black hole", () => {
+  it("atomically transfers an arbitrary channel entry without preserving its structure", async () => {
+    const paths = await createStore();
+    const sourcePath = join(paths.resourcesRoot, "resource-key", "nested");
+    await mkdir(sourcePath, { recursive: true });
+    await writeFile(join(sourcePath, "payload.bin"), "garbage");
+
+    const discarded = await discardClosureStoreEntry({ paths, sourcePath });
+
+    expect(discarded.state).toBe("discarded");
+    await expect(stat(sourcePath)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(readFile(join(discarded.garbagePath, "payload.bin"), "utf8")).resolves.toBe("garbage");
+    expect(dirname(discarded.garbagePath)).toBe(paths.garbageRoot);
+    expect(discarded.garbagePath).not.toContain("resource-key");
+    await expect(discardClosureStoreEntry({ paths, sourcePath: discarded.garbagePath }))
+      .rejects.toThrow(/already inside/u);
+  });
+
+  it("drains opaque files and directories within a bounded number of entries", async () => {
+    const paths = await createStore();
+    await mkdir(join(paths.garbageRoot, "directory"), { recursive: true });
+    await writeFile(join(paths.garbageRoot, "directory", "nested"), "nested");
+    await writeFile(join(paths.garbageRoot, "file"), "file");
+
+    const first = await cleanupClosureChannelGarbage({
+      maxDurationMs: 10_000,
+      maxEntries: 1,
+      paths,
+    });
+    expect(first).toMatchObject({ attempted: 1, busy: false, remaining: 1, removed: 1 });
+
+    const second = await cleanupClosureChannelGarbage({
+      maxDurationMs: 10_000,
+      maxEntries: 16,
+      paths,
+    });
+    expect(second).toMatchObject({ attempted: 1, busy: false, remaining: 0, removed: 1 });
   });
 });
 

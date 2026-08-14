@@ -83,6 +83,7 @@ describe("@open-design/release", () => {
   it("limits exact names to 1-12 lowercase letters or digits", () => {
     expect(isReleaseChannel("beta")).toBe(true);
     expect(isReleaseChannel("qa1234567890")).toBe(true);
+    expect(isReleaseChannel("local")).toBe(false);
     expect(isReleaseChannel("qa-2")).toBe(false);
     expect(isReleaseChannel("Beta")).toBe(false);
     expect(isReleaseChannel("qa12345678901")).toBe(false);
@@ -95,6 +96,7 @@ describe("@open-design/release", () => {
     expect(releaseChannelFromNamespace("release-preview-linux")).toBe("preview");
     expect(releaseChannelFromNamespace("open-design")).toBe("stable");
     expect(releaseChannelFromNamespace("beta-local-flow")).toBeNull();
+    expect(releaseChannelFromNamespace("release-local")).toBeNull();
   });
 
   it("keeps one release's public distribution below its version root", () => {

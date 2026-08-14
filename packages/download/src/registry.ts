@@ -12,16 +12,24 @@
 
 import { MANAGED_DOWNLOAD_ERROR_CODES, ManagedDownloadError } from "./errors.js";
 import type { NormalizedTarget } from "./target.js";
-import type { ManagedDownloadOptions, ManagedDownloadProgress, ManagedDownloadResult } from "./types.js";
+import type {
+  ManagedDownloadOptions,
+  ManagedDownloadProgress,
+  ManagedDownloadResult,
+  ManagedDownloadRetry,
+} from "./types.js";
 
 /**
  * A download in flight, shared by every caller that requested the same identity:
  * its progress listeners, the settling promise, and the target key it holds.
  */
 export type ActiveTask = {
+  controller: AbortController;
   listeners: Set<(progress: ManagedDownloadProgress) => void>;
   promise: Promise<ManagedDownloadResult>;
+  retryListeners: Set<(retry: ManagedDownloadRetry) => void>;
   targetKey: string;
+  waiters: number;
 };
 
 /** Singleton map of active download identity key → in-flight task. */
@@ -55,7 +63,7 @@ export function targetActiveKey(target: NormalizedTarget): string {
  */
 export function waitForTask(
   task: ActiveTask,
-  options: Pick<ManagedDownloadOptions, "onProgress" | "signal">,
+  options: Pick<ManagedDownloadOptions, "onProgress" | "onRetry" | "signal">,
 ): Promise<ManagedDownloadResult> {
   return new Promise<ManagedDownloadResult>((resolveWait, rejectWait) => {
     if (options.signal?.aborted) {
@@ -63,13 +71,22 @@ export function waitForTask(
       return;
     }
     const listener = options.onProgress;
+    const retryListener = options.onRetry;
+    task.waiters += 1;
+    let settled = false;
     if (listener != null) task.listeners.add(listener);
+    if (retryListener != null) task.retryListeners.add(retryListener);
     const cleanup = () => {
+      if (settled) return;
+      settled = true;
       if (listener != null) task.listeners.delete(listener);
+      if (retryListener != null) task.retryListeners.delete(retryListener);
       options.signal?.removeEventListener("abort", onAbort);
+      task.waiters -= 1;
     };
     const onAbort = () => {
       cleanup();
+      if (task.waiters === 0) task.controller.abort(new Error("all download waiters aborted"));
       rejectWait(new ManagedDownloadError(MANAGED_DOWNLOAD_ERROR_CODES.ABORTED, "download wait was aborted"));
     };
     options.signal?.addEventListener("abort", onAbort, { once: true });

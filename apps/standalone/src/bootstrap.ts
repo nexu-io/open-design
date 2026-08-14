@@ -8,6 +8,7 @@ import {
 } from "@open-design/closure/store";
 import {
   applyClosureDistributionUpdate,
+  ClosureInstallerRequiredError,
   discoverClosureDistributionVersionCandidate,
   readClosureResourceRepositoryConfig,
   repairCommittedClosureDistribution,
@@ -31,6 +32,8 @@ import {
   bootstrapSidecarLifecycle,
   type SidecarTransitionCredential,
 } from "@open-design/sidecar/lifecycle";
+import { ensureStandaloneVelaResource } from "./resource-runtime.js";
+import { VELA_RUNTIME_RESOURCE_ID } from "./tool-env.js";
 
 export class StandaloneBootstrapError extends Error {
   readonly code: StandaloneBootstrapErrorCode;
@@ -65,9 +68,15 @@ export async function resolveStandaloneBootstrap(
   });
   let descriptor = await readClosureBindingDescriptor(paths);
   const initialLoad = descriptor.committed == null;
+  const standaloneSubject = Object.freeze({
+    id: "standalone",
+    kind: "standalone" as const,
+    title: "Standalone",
+  });
   const emitProgress = (
     stage: StandaloneBootstrapProgress["stage"],
     progress?: StandaloneBootstrapProgress["progress"],
+    subject: StandaloneBootstrapProgress["subject"] = standaloneSubject,
   ): void => {
     try {
       options.onProgress?.(Object.freeze({
@@ -75,6 +84,7 @@ export async function resolveStandaloneBootstrap(
         ...(progress == null ? {} : { progress: Object.freeze(progress) }),
         schemaVersion: STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION,
         stage,
+        subject,
       }));
     } catch {
       // Presentation telemetry cannot change bootstrap policy or authority.
@@ -158,14 +168,26 @@ export async function resolveStandaloneBootstrap(
 
   const discoverExact = async (version: string): Promise<ClosureDistributionReleaseCandidate> => {
     emitProgress("discovering");
-    const candidate = await discoverClosureDistributionVersionCandidate({
-      channel: request.scope.channel,
-      ...(options.fetch == null ? {} : { fetch: options.fetch }),
-      metadataUrl: request.discovery.metadataUrl,
-      repository,
-      target: request.discovery.target,
-      version,
-    });
+    let candidate: ClosureDistributionReleaseCandidate | null;
+    try {
+      candidate = await discoverClosureDistributionVersionCandidate({
+        channel: request.scope.channel,
+        consumer: {
+          shellType: request.attachment.shell.type,
+          shellVersion: request.attachment.shell.version,
+        },
+        ...(options.fetch == null ? {} : { fetch: options.fetch }),
+        metadataUrl: request.discovery.metadataUrl,
+        repository,
+        target: request.discovery.target,
+        version,
+      });
+    } catch (error) {
+      if (error instanceof ClosureInstallerRequiredError) {
+        throw new StandaloneBootstrapError("installer-required", error.message, { cause: error });
+      }
+      throw error;
+    }
     if (candidate == null) {
       throw new StandaloneBootstrapError(
         "no-standalone",
@@ -300,6 +322,37 @@ export async function resolveStandaloneBootstrap(
         minimum == null
           ? `Standalone does not support Shell ${request.attachment.shell.type}`
           : `Standalone requires ${request.attachment.shell.type} Shell ${minimum} or newer`,
+      );
+    }
+    const velaSubject = Object.freeze({
+      id: VELA_RUNTIME_RESOURCE_ID,
+      kind: "resource" as const,
+      title: "Local engine",
+    });
+    try {
+      await ensureStandaloneVelaResource({
+        ...(options.fetch == null ? {} : { fetch: options.fetch }),
+        manifest: verification.plan.manifest,
+        onProgress(progress) {
+          if (progress.phase === "copying" || progress.phase === "downloading") {
+            emitProgress(progress.phase, {
+              completed: progress.completedBytes,
+              total: progress.totalBytes,
+              unit: "bytes",
+            }, velaSubject);
+            return;
+          }
+          emitProgress(progress.phase, undefined, velaSubject);
+        },
+        paths,
+        repository,
+        target: verification.plan.target,
+      });
+    } catch (error) {
+      throw new StandaloneBootstrapError(
+        "resource-unavailable",
+        `Local engine could not be prepared: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
       );
     }
     const handoff = Object.freeze({

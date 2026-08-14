@@ -84,11 +84,6 @@ env:
   # at a deliberately conservative, cross-platform fixed width; this keeps the
   # release hot path simple while avoiding the serial workspace rebuild default.
   OPEN_DESIGN_POSTINSTALL_CONCURRENCY: 2
-  # The 0.19 epoch deliberately drops the historical combined package. An exact
-  # Closure requires the first canonical Shell proven across an independent
-  # release binding. Earlier 0.19 beta Shells were never published and do not
-  # satisfy the final releaseVersion/Shell-version projection contract.
-  CLOSURE_MIN_SHELL_VERSION: ${{ inputs.exact_name == 'beta' && '0.19.0-beta.4' || format('0.19.0-{0}.1', inputs.exact_name) }}
   LEGACY_MAC_ARM64_DIGEST: sha256:6d9c2fea2106fc0207acd4ee78bc8d08f9563f967121dbffd399b8d510d0c37f
   LEGACY_MAC_ARM64_VERSION: 0.16.2-beta.155
   LEGACY_WIN_X64_DIGEST: sha256:a0c2ef5d8b0da1ef7f93d375211fff396aa73d90b2cc3c591c27268fe6966330
@@ -136,6 +131,7 @@ jobs:
       release_version: ${{ steps.reservation.outputs.release_version || steps.exact.outputs.release_version }}
       shell_version: ${{ steps.reservation.outputs.release_version || steps.exact.outputs.release_version }}
       closure_version: ${{ steps.reservation.outputs.release_version || steps.exact.outputs.release_version }}
+      closure_min_shell_version: ${{ steps.exact.outputs.closure_min_shell_version }}
       branch: ${{ steps.identity.outputs.branch }}
       commit: ${{ steps.identity.outputs.commit }}
       previous_commit: ${{ steps.prev.outputs.previous_commit }}
@@ -236,8 +232,8 @@ jobs:
           EXACT_NAME: ${{ inputs.exact_name }}
         run: |
           set -euo pipefail
-          if [[ ! "$EXACT_NAME" =~ ^[a-z0-9]{1,12}$ ]] || [ "$EXACT_NAME" = "stable" ] || [ "$EXACT_NAME" = "prerelease" ]; then
-            echo "exact_name must be 1-12 lowercase letters or digits and cannot be stable or prerelease" >&2
+          if [[ ! "$EXACT_NAME" =~ ^[a-z0-9]{1,12}$ ]] || [ "$EXACT_NAME" = "stable" ] || [ "$EXACT_NAME" = "prerelease" ] || [ "$EXACT_NAME" = "local" ]; then
+            echo "exact_name must be 1-12 lowercase letters or digits and cannot be stable, prerelease, or local" >&2
             exit 1
           fi
 
@@ -297,7 +293,7 @@ jobs:
           RELEASE_VERSION_LOCK_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
         with:
           channel: ${{ inputs.exact_name }}
-          min-shell-version: ${{ env.CLOSURE_MIN_SHELL_VERSION }}
+          min-shell-version: ${{ steps.exact.outputs.closure_min_shell_version }}
           publish-enabled: ${{ inputs.publish }}
           release-version: ${{ steps.reservation.outputs.release_version || steps.exact.outputs.release_version }}
 
@@ -321,6 +317,7 @@ jobs:
       CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       CLOUDFLARE_R2_RELEASES_SK: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
       CLOUDFLARE_R2_RELEASES_URL: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+      CLOSURE_MIN_SHELL_VERSION: ${{ needs.metadata.outputs.closure_min_shell_version }}
       OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
       OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/${{ inputs.exact_name }}/latest/metadata.json
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
@@ -532,6 +529,13 @@ jobs:
             "$RUNNER_TEMP/release-closure/targets/darwin-x64/target-contribution.json" \
             "$RUNNER_TEMP/release-closure/targets/win32-x64/target-contribution.json" \
             --output "$RUNNER_TEMP/release-closure/closure-distribution.json"
+
+      - name: Accept the N-1 Shell preflight boundary
+        run: |
+          pnpm exec tools-release verify-closure-preflight \
+            --channel "${{ inputs.exact_name }}" \
+            --manifest "$RUNNER_TEMP/release-closure/closure-distribution.json" \
+            --release-version "${{ needs.metadata.outputs.release_version }}"
 
       - name: Distribute staged exact metadata
         id: distribute

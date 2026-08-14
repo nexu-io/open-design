@@ -1,10 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants as fsConstants, createReadStream } from "node:fs";
 import {
-  copyFile,
   mkdir,
-  readFile,
-  readdir,
   rename,
   rm,
   stat,
@@ -14,32 +10,30 @@ import { dirname, isAbsolute, join } from "node:path";
 
 import {
   bindClosureCandidateIdentity,
-  createClosureComponentTreeDigest,
   validateClosureCandidateManifest,
   validateClosureDistributionManifest,
   validateClosureFileInventory,
   type ClosureCandidateManifest,
-  type ClosureDistributionBlob,
   type ClosureDistributionManifest,
 } from "../protocol/index.js";
 import type { ClosureBindingDescriptor } from "../store/index.js";
 import {
+  acquireClosureChannelLock,
   commitVerifiedClosureDistributionGeneration,
   commitVerifiedStoredClosureCandidate,
   planClosureDistributionGeneration,
   readClosureBindingDescriptor,
   resolveClosureStoreVersionPaths,
-  verifyClosureDistributionBlob,
   verifyMaterializedClosureCandidate,
   verifyMaterializedClosureDistributionGeneration,
   verifyStoredClosureCandidate,
+  releaseClosureChannelLock,
   type ClosureRuntimePointer,
   type ClosureStorePaths,
   type ClosureStoreVersionPaths,
   type StoredClosureVerification,
 } from "../store/index.js";
 import { downloadCopyAndClear } from "@open-design/download";
-import { isProcessAlive } from "@open-design/platform";
 import {
   compareReleaseVersions,
   isReleaseChannel,
@@ -65,74 +59,13 @@ import {
   resolveClosureShellMinimumVersion,
   decideClosureUpdate,
   decideClosureDistributionUpdate,
-  UpdateLock,
-  UpdateLockRecord,
-  INCOMPLETE_UPDATE_LOCK_GRACE_MS,
 } from "./index.js";
+import { ensureDistributionBlob } from "./resource.js";
 
 function errorCode(error: unknown): string | null {
   if (error == null || typeof error !== "object" || !("code" in error)) return null;
   const code = (error as { code?: unknown }).code;
   return code == null ? null : String(code);
-}
-
-function isUpdateLockRecord(value: unknown): value is UpdateLockRecord {
-  if (value == null || typeof value !== "object" || Array.isArray(value)) return false;
-  const lock = value as Partial<UpdateLockRecord>;
-  return typeof lock.createdAt === "string"
-    && typeof lock.pid === "number"
-    && Number.isSafeInteger(lock.pid)
-    && lock.pid > 0
-    && typeof lock.token === "string"
-    && lock.token.length > 0;
-}
-
-async function readUpdateLock(path: string): Promise<UpdateLockRecord | null> {
-  try {
-    const value = JSON.parse(await readFile(path, "utf8")) as unknown;
-    return isUpdateLockRecord(value) ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-async function acquireUpdateLock(paths: ClosureStorePaths): Promise<UpdateLock | null> {
-  const path = join(paths.stateRoot, "update.lock");
-  await mkdir(paths.stateRoot, { recursive: true });
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const token = randomUUID();
-    try {
-      await writeFile(path, `${JSON.stringify({
-        createdAt: new Date().toISOString(),
-        pid: process.pid,
-        token,
-      } satisfies UpdateLockRecord)}\n`, { flag: "wx" });
-      return { path, token };
-    } catch (error) {
-      if (errorCode(error) !== "EEXIST") throw error;
-      const existing = await readUpdateLock(path);
-      const lockStat = existing == null ? await stat(path).catch(() => null) : null;
-      const incompleteLockIsStale = lockStat != null
-        && Date.now() - lockStat.mtimeMs >= INCOMPLETE_UPDATE_LOCK_GRACE_MS;
-      if (
-        attempt === 0
-        && (
-          (existing == null && incompleteLockIsStale)
-          || (existing != null && !isProcessAlive(existing.pid))
-        )
-      ) {
-        await rm(path, { force: true }).catch(() => undefined);
-        continue;
-      }
-      return null;
-    }
-  }
-  return null;
-}
-
-async function releaseUpdateLock(lock: UpdateLock): Promise<void> {
-  const current = await readUpdateLock(lock.path);
-  if (current?.token === lock.token) await rm(lock.path, { force: true }).catch(() => undefined);
 }
 
 function sameCandidate(
@@ -280,206 +213,6 @@ async function ensureCandidateMaterialized(input: {
   }
 }
 
-async function cloneOrCopy(source: string, destination: string): Promise<void> {
-  try {
-    await copyFile(source, destination, fsConstants.COPYFILE_FICLONE);
-  } catch {
-    await rm(destination, { force: true });
-    await copyFile(source, destination);
-  }
-}
-
-async function ensureDistributionBlob(input: {
-  artifact: ClosureDistributionBlob;
-  fetchImpl: typeof globalThis.fetch;
-  onProgress?: (completedBytes: number) => void;
-  paths: ClosureStorePaths;
-  repository?: ClosureResourceRepositoryConfig;
-}): Promise<string> {
-  if (input.artifact.mediaType !== "application/zip") {
-    throw new ClosureUpdateError(
-      `unsupported Closure distribution blob media type: ${input.artifact.mediaType}`,
-    );
-  }
-  try {
-    const verified = await verifyClosureDistributionBlob(input.paths, input.artifact);
-    input.onProgress?.(input.artifact.size);
-    return verified;
-  } catch {
-    const digest = input.artifact.digest.slice("sha256:".length);
-    const outputPath = join(input.paths.blobsRoot, digest);
-    const accept = async (candidatePath: string): Promise<string> => {
-      const metadata = await stat(candidatePath);
-      if (metadata.size !== input.artifact.size) throw new ClosureUpdateError("Closure blob candidate size mismatch");
-      const hash = createHash("sha256");
-      for await (const chunk of createReadStream(candidatePath)) hash.update(chunk as Buffer);
-      if (`sha256:${hash.digest("hex")}` !== input.artifact.digest) {
-        throw new ClosureUpdateError("Closure blob candidate digest mismatch");
-      }
-      await mkdir(input.paths.blobsRoot, { recursive: true });
-      try {
-        await rename(candidatePath, outputPath);
-      } catch (error) {
-        if (!["EEXIST", "ENOTEMPTY", "EPERM"].includes(errorCode(error) ?? "")) throw error;
-        try {
-          const verified = await verifyClosureDistributionBlob(input.paths, input.artifact);
-          input.onProgress?.(input.artifact.size);
-          return verified;
-        } catch {
-          await rm(outputPath, { force: true });
-          await rename(candidatePath, outputPath);
-        }
-      }
-      const verified = await verifyClosureDistributionBlob(input.paths, input.artifact);
-      input.onProgress?.(input.artifact.size);
-      return verified;
-    };
-    const candidatePath = () => join(
-      input.paths.stagingRoot,
-      "blob-downloads",
-      `${digest}-${randomUUID()}.zip`,
-    );
-
-    for (const seed of input.repository?.localSeeds ?? []) {
-      const temporaryPath = candidatePath();
-      try {
-        await mkdir(dirname(temporaryPath), { recursive: true });
-        await cloneOrCopy(join(seed.root, input.paths.channel, "blobs", digest), temporaryPath);
-        return await accept(temporaryPath);
-      } catch {
-        await rm(temporaryPath, { force: true }).catch(() => undefined);
-      }
-    }
-
-    const artifactPath = new URL(input.artifact.url).pathname.replace(/^\/+/, "");
-    const configuredUrls = (input.repository?.remoteOrigins ?? []).map((origin) => {
-      const base = new URL(origin);
-      if (!base.pathname.endsWith("/")) base.pathname += "/";
-      return new URL(artifactPath, base).toString();
-    });
-    const urls = [...new Set([...configuredUrls, input.artifact.url])];
-    let lastError: unknown = null;
-    for (const url of urls) {
-      const temporaryPath = candidatePath();
-      try {
-        await downloadCopyAndClear({
-          basePath: join(input.paths.stagingRoot, "downloads"),
-          bucket: "closure-blobs",
-          fetch: input.fetchImpl,
-          fileName: `${digest}.zip`,
-          outputPath: temporaryPath,
-          onProgress(progress) {
-            input.onProgress?.(Math.min(progress.receivedBytes, input.artifact.size));
-          },
-          payload: {
-            checksum: { algorithm: "sha256", value: digest },
-            url,
-          },
-        });
-        return await accept(temporaryPath);
-      } catch (error) {
-        lastError = error;
-        await rm(temporaryPath, { force: true }).catch(() => undefined);
-      }
-    }
-    const detail = lastError instanceof Error ? `: ${lastError.message}` : "";
-    throw new ClosureUpdateError(`Closure blob is unavailable from every configured source${detail}`, {
-      cause: lastError,
-    });
-  }
-}
-
-export async function ensureClosureDistributionBlob(input: Readonly<{
-  artifact: ClosureDistributionBlob;
-  fetch?: typeof globalThis.fetch;
-  paths: ClosureStorePaths;
-  repository?: ClosureResourceRepositoryConfig;
-}>): Promise<string> {
-  return await ensureDistributionBlob({
-    artifact: input.artifact,
-    fetchImpl: input.fetch ?? globalThis.fetch,
-    paths: input.paths,
-    ...(input.repository == null ? {} : { repository: input.repository }),
-  });
-}
-
-async function inspectResourceFiles(root: string, current = root): Promise<Array<{
-  digest: `sha256:${string}`;
-  path: string;
-  size: number;
-}>> {
-  const files: Array<{ digest: `sha256:${string}`; path: string; size: number }> = [];
-  for (const entry of await readdir(current, { withFileTypes: true })) {
-    const path = join(current, entry.name);
-    if (entry.isSymbolicLink()) throw new ClosureUpdateError("Closure resource must not contain symlinks");
-    if (entry.isDirectory()) files.push(...await inspectResourceFiles(root, path));
-    else if (entry.isFile()) {
-      const metadata = await stat(path);
-      const hash = createHash("sha256");
-      for await (const chunk of createReadStream(path)) hash.update(chunk as Buffer);
-      files.push({
-        digest: `sha256:${hash.digest("hex")}`,
-        path: path.slice(root.length + 1).split("\\").join("/"),
-        size: metadata.size,
-      });
-    } else throw new ClosureUpdateError("Closure resource contains an unsupported entry");
-  }
-  return files.sort((left, right) => left.path < right.path ? -1 : left.path > right.path ? 1 : 0);
-}
-
-async function verifyResourceRoot(
-  root: string,
-  expected: `sha256:${string}`,
-): Promise<void> {
-  const files = await inspectResourceFiles(root);
-  if (files.length === 0) throw new ClosureUpdateError("Closure resource is empty");
-  const actual = createClosureComponentTreeDigest(files, (canonical) => (
-    `sha256:${createHash("sha256").update(canonical).digest("hex")}`
-  ));
-  if (actual !== expected) throw new ClosureUpdateError("Closure resource tree does not match its manifest");
-}
-
-export async function ensureClosureResource(input: Readonly<{
-  fetch?: typeof globalThis.fetch;
-  id: string;
-  manifest: ClosureDistributionManifest;
-  paths: ClosureStorePaths;
-  repository?: ClosureResourceRepositoryConfig;
-  target: string;
-}>): Promise<Readonly<{ id: string; path: string; reused: boolean; title: string }>> {
-  const plan = planClosureDistributionGeneration(input.paths, 0, input.manifest, input.target);
-  const resource = plan.resources.find((entry) => entry.id === input.id);
-  if (resource == null) throw new ClosureUpdateError(`Closure resource is not locked by this version: ${input.id}`);
-  try {
-    await verifyResourceRoot(resource.resourceRoot, resource.treeDigest);
-    return Object.freeze({ id: resource.id, path: resource.resourceRoot, reused: true, title: resource.title });
-  } catch {
-    // Continue through the same repository resolver as required components.
-  }
-  const blobPath = await ensureClosureDistributionBlob({
-    artifact: resource.artifact,
-    ...(input.fetch == null ? {} : { fetch: input.fetch }),
-    paths: input.paths,
-    ...(input.repository == null ? {} : { repository: input.repository }),
-  });
-  const stageRoot = join(input.paths.stagingRoot, `resource-${resource.id}-${randomUUID()}`);
-  try {
-    await mkdir(stageRoot, { recursive: true });
-    await extractZip(blobPath, { dir: stageRoot });
-    await verifyResourceRoot(stageRoot, resource.treeDigest);
-    await mkdir(dirname(resource.resourceRoot), { recursive: true });
-    try {
-      await rename(stageRoot, resource.resourceRoot);
-    } catch (error) {
-      if (!["EEXIST", "ENOTEMPTY", "EPERM"].includes(errorCode(error) ?? "")) throw error;
-      await verifyResourceRoot(resource.resourceRoot, resource.treeDigest);
-    }
-    return Object.freeze({ id: resource.id, path: resource.resourceRoot, reused: false, title: resource.title });
-  } finally {
-    await rm(stageRoot, { force: true, recursive: true }).catch(() => undefined);
-  }
-}
-
 async function stageClosureDistributionGeneration(input: {
   candidate: ClosureDistributionReleaseCandidate;
   descriptor: ClosureBindingDescriptor;
@@ -509,7 +242,10 @@ async function stageClosureDistributionGeneration(input: {
     await ensureDistributionBlob({
       artifact: component.artifact,
       fetchImpl: input.fetchImpl,
-      onProgress(artifactBytes) {
+      onProgress(progress) {
+        const artifactBytes = progress.phase === "copying" || progress.phase === "downloading"
+          ? progress.completedBytes
+          : progress.phase === "ready" ? component.artifact.size : reportedArtifactBytes;
         reportedArtifactBytes = Math.max(
           reportedArtifactBytes,
           Math.min(artifactBytes, component.artifact.size),
@@ -576,7 +312,7 @@ export async function applyClosureDistributionUpdate(input: {
   shellType: string;
   shellVersion: string;
 }): Promise<ApplyClosureDistributionUpdateResult> {
-  const lock = await acquireUpdateLock(input.paths);
+  const lock = await acquireClosureChannelLock(input.paths, { waitMs: 250 });
   if (lock == null) {
     return { candidate: input.candidate, reason: "another-updater-active", state: "busy" };
   }
@@ -615,7 +351,7 @@ export async function applyClosureDistributionUpdate(input: {
       await rm(verification.materializedRoot, { force: true, recursive: true }).catch(() => undefined);
     }
   } finally {
-    await releaseUpdateLock(lock);
+    await releaseClosureChannelLock(lock);
   }
 }
 
@@ -631,7 +367,7 @@ export async function repairCommittedClosureDistribution(input: {
   shellType: string;
   shellVersion: string;
 }): Promise<ApplyClosureDistributionUpdateResult> {
-  const lock = await acquireUpdateLock(input.paths);
+  const lock = await acquireClosureChannelLock(input.paths, { waitMs: 250 });
   if (lock == null) {
     return { candidate: input.candidate, reason: "another-updater-active", state: "busy" };
   }
@@ -677,7 +413,7 @@ export async function repairCommittedClosureDistribution(input: {
       await rm(verification.materializedRoot, { force: true, recursive: true }).catch(() => undefined);
     }
   } finally {
-    await releaseUpdateLock(lock);
+    await releaseClosureChannelLock(lock);
   }
 }
 
@@ -688,7 +424,7 @@ export async function applyClosureUpdate(input: {
   shellType: string;
   shellVersion: string;
 }): Promise<ApplyClosureUpdateResult> {
-  const lock = await acquireUpdateLock(input.paths);
+  const lock = await acquireClosureChannelLock(input.paths, { waitMs: 250 });
   if (lock == null) {
     return { candidate: input.candidate, reason: "another-updater-active", state: "busy" };
   }
@@ -732,7 +468,7 @@ export async function applyClosureUpdate(input: {
       state: "committed",
     };
   } finally {
-    await releaseUpdateLock(lock);
+    await releaseClosureChannelLock(lock);
   }
 }
 

@@ -21,7 +21,7 @@ import { ensureManagedBase, resetOwnedBase } from "./store.js";
 import type { NormalizedTarget } from "./target.js";
 import { downloadWithRetries } from "./transfer.js";
 import type { DownloadManifest } from "./manifest.js";
-import type { ManagedDownloadProgress, ManagedDownloadResult } from "./types.js";
+import type { ManagedDownloadProgress, ManagedDownloadResult, ManagedDownloadRetry } from "./types.js";
 
 /**
  * @internal Snapshot of reusable state resolved before a transfer: an existing
@@ -96,8 +96,12 @@ export async function runManagedDownload(
   options: {
     emit: (progress: ManagedDownloadProgress) => void;
     fetchImpl: typeof globalThis.fetch;
+    headerTimeoutMs: number;
     maxAttempts: number;
+    onRetry?: (retry: ManagedDownloadRetry) => void;
     requestHeaders?: Record<string, string>;
+    signal: AbortSignal;
+    stallTimeoutMs: number;
   },
 ): Promise<ManagedDownloadResult> {
   await ensureManagedBase(target.basePath);

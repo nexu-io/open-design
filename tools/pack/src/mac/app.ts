@@ -79,6 +79,9 @@ export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths):
   });
   await copyStandaloneBootstrapSeed({
     resourceRoot: paths.resourceRoot,
+    ...(config.standaloneRepositorySeedRoot == null
+      ? {}
+      : { repositorySeedRoot: config.standaloneRepositorySeedRoot }),
     ...(config.standaloneSeedRoot == null ? {} : { seedRoot: config.standaloneSeedRoot }),
     workspaceRoot: config.workspaceRoot,
   });
@@ -95,8 +98,10 @@ export function renderMacPackagedConfig(options: {
       ...(options.config.amrProfile == null ? {} : { amrProfile: options.config.amrProfile }),
       launcherVersion: options.shellVersion,
       namespace: options.config.namespace,
-      ...(!options.config.portable && options.config.releaseVersion != null
-        ? { releaseVersion: options.config.releaseVersion }
+      ...(options.config.runtimeReleaseVersion != null
+        ? { releaseVersion: options.config.runtimeReleaseVersion }
+        : !options.config.portable && options.config.releaseVersion != null
+          ? { releaseVersion: options.config.releaseVersion }
         : {}),
       shellVersion: options.shellVersion,
       ...(options.config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: options.config.telemetryRelayUrl }),

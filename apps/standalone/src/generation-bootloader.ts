@@ -1,5 +1,9 @@
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  cleanupClosureChannelGarbage,
+  resolveClosureStorePaths,
+} from "@open-design/closure/store";
 
 import {
   validateStandaloneHandoffRequest,
@@ -12,6 +16,7 @@ import {
   type StandaloneBodyProcessLaunchSpec,
 } from "./process-bridge.js";
 import { bundledStandaloneToolEnv } from "./tool-env.js";
+import { prepareStandaloneVelaRuntime } from "./resource-handoff.js";
 
 export type StandaloneGenerationLaunch = StandaloneBodyProcessLaunchSpec;
 
@@ -23,6 +28,7 @@ export type StandaloneGenerationLaunch = StandaloneBodyProcessLaunchSpec;
 export function resolveStandaloneGenerationLaunch(
   requestInput: StandaloneHandoffRequest,
   executable: string = process.env.OD_NODE_BIN ?? process.execPath,
+  resourceEnv: NodeJS.ProcessEnv = {},
 ): StandaloneGenerationLaunch {
   const request = validateStandaloneHandoffRequest(requestInput);
   const installationRoot = request.paths.installationRoot;
@@ -33,6 +39,7 @@ export function resolveStandaloneGenerationLaunch(
     env: {
       ...process.env,
       ...bundledStandaloneToolEnv(request.paths.resourceRoot),
+      ...resourceEnv,
       NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${nativeLoader}`].filter(Boolean).join(" "),
       NODE_PATH: join(nativeRoot, "node_modules"),
       OD_STANDALONE_NATIVE_ROOT: nativeRoot,
@@ -45,6 +52,20 @@ export function resolveStandaloneGenerationLaunch(
 
 export const handoff: StandaloneHandoff = async (value) => {
   const request = validateStandaloneHandoffRequest(value);
+  if (request.closure != null) {
+    void cleanupClosureChannelGarbage({
+      paths: resolveClosureStorePaths({
+        channel: request.handoff.scope.channel,
+        namespace: request.handoff.scope.namespace,
+        root: request.closure.storeRoot,
+      }),
+    }).catch((error: unknown) => {
+      process.stderr.write(
+        `open-design Standalone garbage cleanup was deferred: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+    });
+  }
+  const resourceEnv = await prepareStandaloneVelaRuntime(request);
   return await launchStandaloneBodyBridge({
     capabilities: request.capabilities,
     descriptor: {
@@ -54,7 +75,11 @@ export const handoff: StandaloneHandoff = async (value) => {
       paths: request.paths,
       transition: request.transition,
     },
-    launch: resolveStandaloneGenerationLaunch(request),
+    launch: resolveStandaloneGenerationLaunch(
+      request,
+      process.env.OD_NODE_BIN ?? process.execPath,
+      resourceEnv,
+    ),
   });
 };
 

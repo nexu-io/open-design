@@ -29,6 +29,11 @@ import {
 } from "@open-design/platform";
 
 import type { ToolPackConfig } from "../config.js";
+import {
+  beginToolPackDebugSession,
+  parkToolPackDebugSession,
+  restoreToolPackDebugSession,
+} from "../debug-session.js";
 import { resolveToolPackLauncherLayout } from "../launcher-layout.js";
 import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import { readToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
@@ -262,13 +267,6 @@ export async function installPackedWinApp(
     await invokeNsis(paths, paths.setupPath, installArgs(config, paths), "install");
   }));
   if (!(await pathExists(paths.installedExePath))) throw new Error(`installer completed but executable is missing at ${paths.installedExePath}`);
-  // Portable shipping builds omit namespaceBaseRoot so end users fall back to
-  // Electron userData. Pin the root selected by this lifecycle invocation so
-  // ordinary tools-pack installs retain isolation while public acceptance can
-  // deliberately prove a native AppData OS-protocol cold launch.
-  await measureLifecycleStep(lifecycleTimings, "pin installed packaged namespace", async () => {
-    if (!embeddedConfigOnly()) await pinInstalledPackagedConfigNamespace(runtimeConfig, paths.installedExePath);
-  });
   const registryEntries = await measureLifecycleStep(lifecycleTimings, "query registry", async () => queryPreferredWinRegistryEntries(config, paths));
   const installPayload = await measureLifecycleStep(lifecycleTimings, "collect payload report", async () => collectInstallPayloadReport(paths));
   await measureLifecycleStep(lifecycleTimings, "write install marker", async () => writeJsonMarker(paths.installMarkerPath, {
@@ -297,18 +295,16 @@ export async function installPackedWinApp(
 }
 
 /**
- * Pin the tools-pack runtime namespace into the installed app's packaged config
- * and write the launch override used by `tools-pack win start`.
+ * Create the process-scoped launch override used by `tools-pack win start`.
  *
- * The installed config is the only source available to a bare executable
- * launched through the Windows protocol registry. Keeping both copies
- * identical prevents that cold launch from resolving a different daemon data
- * root than the process started by tools-pack.
+ * The installed config remains immutable. A bare executable launched through
+ * the Windows protocol registry resolves an explicitly parked launch-context
+ * transaction instead of inheriting a mutation from an earlier test run.
  */
-async function pinInstalledPackagedConfigNamespace(
+async function writeInstalledLaunchPackagedConfig(
   config: ToolPackConfig,
   executablePath: string,
-): Promise<{ installedConfigPath: string; launchConfigPath: string }> {
+): Promise<string> {
   const installedConfigPath = join(dirname(executablePath), "resources", "open-design-config.json");
   if (!(await pathExists(installedConfigPath))) {
     throw new Error(`installed packaged config missing at ${installedConfigPath}`);
@@ -331,15 +327,9 @@ async function pinInstalledPackagedConfigNamespace(
       ?? (typeof raw.shellVersion === "string" ? raw.shellVersion : undefined),
   };
   const body = `${JSON.stringify(pinned, null, 2)}\n`;
-  await writeFile(installedConfigPath, body, "utf8");
   const launchConfigPath = join(config.roots.runtime.namespaceRoot, "runtime", "launch-open-design-config.json");
   await mkdir(dirname(launchConfigPath), { recursive: true });
   await writeFile(launchConfigPath, body, "utf8");
-  return { installedConfigPath, launchConfigPath };
-}
-
-async function writeInstalledLaunchPackagedConfig(config: ToolPackConfig, executablePath: string): Promise<string> {
-  const { launchConfigPath } = await pinInstalledPackagedConfigNamespace(config, executablePath);
   return launchConfigPath;
 }
 
@@ -347,9 +337,7 @@ async function resolveStartTarget(config: ToolPackConfig): Promise<{ configPath:
   const paths = resolveWinPaths(config);
   if (await pathExists(paths.installedExePath)) {
     return {
-      configPath: embeddedConfigOnly()
-        ? null
-        : await writeInstalledLaunchPackagedConfig(config, paths.installedExePath),
+      configPath: null,
       executablePath: paths.installedExePath,
       source: "installed",
     };
@@ -366,12 +354,13 @@ export async function startPackedWinApp(
 ): Promise<WinStartResult> {
   const resolvedTarget = await resolveStartTarget(config);
   const runtimeConfig = withWinRuntimeBaseRoot(config, options.runtimeBaseRoot);
-  const target = embeddedConfigOnly() || options.runtimeBaseRoot == null || resolvedTarget.source !== "installed"
+  const target = embeddedConfigOnly() || resolvedTarget.source !== "installed"
     ? resolvedTarget
     : {
         ...resolvedTarget,
         configPath: await writeInstalledLaunchPackagedConfig(runtimeConfig, resolvedTarget.executablePath),
       };
+  const debugSession = await beginToolPackDebugSession(runtimeConfig);
   const stamp = desktopStamp(runtimeConfig);
   const logPath = desktopLogPath(runtimeConfig);
   await mkdir(dirname(logPath), { recursive: true });
@@ -390,17 +379,24 @@ export async function startPackedWinApp(
           ...process.env,
           [DESKTOP_LOG_ECHO_ENV]: "0",
           ...(target.configPath == null ? {} : { [PACKAGED_CONFIG_PATH_ENV]: target.configPath }),
+          ...(debugSession == null ? {} : { OD_PACKAGED_LAUNCH_CONTEXT_SESSION: debugSession.sessionId }),
         },
         stamp,
       }),
       logFd: logHandle.fd,
     });
+  } catch (error) {
+    await restoreToolPackDebugSession(config, debugSession?.sessionId).catch(() => undefined);
+    throw error;
   } finally {
     await logHandle.close().catch(() => undefined);
   }
   const statusWait = options.waitForStatus === false
     ? { durationMs: 0, pollCount: 0, processExited: false, status: null }
     : await waitForDesktopStatus(runtimeConfig, spawned.pid);
+  if (statusWait.processExited) {
+    await restoreToolPackDebugSession(runtimeConfig, debugSession?.sessionId).catch(() => undefined);
+  }
   return {
     executablePath: target.executablePath,
     logPath,
@@ -442,7 +438,7 @@ async function waitForNoManagedDesktopProcesses(config: ToolPackConfig, timeoutM
 
 export async function stopPackedWinApp(
   config: ToolPackConfig,
-  options: { runtimeBaseRoot?: string } = {},
+  options: { keepDebugSession?: boolean; runtimeBaseRoot?: string } = {},
 ): Promise<WinStopResult> {
   const runtimeConfig = withWinRuntimeBaseRoot(config, options.runtimeBaseRoot);
   const stamp = desktopStamp(runtimeConfig);
@@ -457,10 +453,22 @@ export async function stopPackedWinApp(
   const remainingAfterGraceful = gracefulRequested ? await waitForNoManagedDesktopProcesses(runtimeConfig) : before;
   if (remainingAfterGraceful.length === 0) {
     await rm(desktopIdentityPath(runtimeConfig), { force: true }).catch(() => undefined);
+    if (options.keepDebugSession === true) {
+      await parkToolPackDebugSession(runtimeConfig).catch(() => undefined);
+    } else {
+      await restoreToolPackDebugSession(runtimeConfig).catch(() => undefined);
+    }
     return { gracefulRequested, namespace: config.namespace, remainingPids: [], status: before.length === 0 ? "not-running" : "stopped", stoppedPids: before };
   }
   const stopped = await stopProcesses(remainingAfterGraceful);
   if (stopped.remainingPids.length === 0) await rm(desktopIdentityPath(runtimeConfig), { force: true }).catch(() => undefined);
+  if (stopped.remainingPids.length === 0) {
+    if (options.keepDebugSession === true) {
+      await parkToolPackDebugSession(runtimeConfig).catch(() => undefined);
+    } else {
+      await restoreToolPackDebugSession(runtimeConfig).catch(() => undefined);
+    }
+  }
   return {
     gracefulRequested,
     namespace: config.namespace,

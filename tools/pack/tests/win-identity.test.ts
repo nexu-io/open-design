@@ -23,8 +23,19 @@ async function readInstallerImplementation(): Promise<string> {
 }
 
 describe("resolveWinInstallIdentity", () => {
-  it("keeps the default namespace on the canonical Windows display name", () => {
-    expect(resolveWinInstallIdentity({ namespace: "default" })).toMatchObject({
+  it("uses an isolated product identity for an explicitly local debug runtime", () => {
+    expect(resolveWinInstallIdentity({
+      debugChannel: "local",
+      namespace: "local-transactional",
+    })).toMatchObject({
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Local.exe",
+      displayName: "Open Design Local",
+      shortcutName: "Open Design Local.lnk",
+      uninstallerName: "Uninstall Open Design Local.exe",
+    });
+  });
+  it("uses the canonical Windows display name only for targeted stable debugging", () => {
+    expect(resolveWinInstallIdentity({ debugChannel: "stable", namespace: "default" })).toMatchObject({
       displayName: "Open Design",
       shortcutName: "Open Design.lnk",
       uninstallerName: "Uninstall Open Design.exe",
@@ -51,13 +62,13 @@ describe("resolveWinInstallIdentity", () => {
     });
   });
 
-  it("keeps non-release beta-like namespaces isolated from the real beta channel identity", () => {
-    expect(resolveWinInstallIdentity({ namespace: "beta-local-flow" })).toMatchObject({
-      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design beta-local-flow.exe",
-      displayName: "Open Design beta-local-flow",
+  it("keeps local beta-like namespaces isolated from the real beta channel identity", () => {
+    expect(resolveWinInstallIdentity({ debugChannel: "local", namespace: "beta-local-flow" })).toMatchObject({
+      appPathsKey: "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\Open Design Local.exe",
+      displayName: "Open Design Local",
       registryKey: "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Open Design-beta-local-flow",
-      shortcutName: "Open Design beta-local-flow.lnk",
-      uninstallerName: "Uninstall Open Design beta-local-flow.exe",
+      shortcutName: "Open Design Local.lnk",
+      uninstallerName: "Uninstall Open Design Local.exe",
     });
   });
 

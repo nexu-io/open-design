@@ -27,16 +27,26 @@ export type ManagedDownloadProgress = {
   totalBytes?: number;
 };
 
+export type ManagedDownloadRetry = {
+  attempt: number;
+  error: string;
+  maxAttempts: number;
+  partialBytes: number;
+};
+
 /** Options accepted by {@link managedDownload}. */
 export type ManagedDownloadOptions = {
   basePath: string;
   bucket: string;
   fileName: string;
   fetch?: typeof globalThis.fetch;
+  headerTimeoutMs?: number;
   maxAttempts?: number;
   onProgress?: (progress: ManagedDownloadProgress) => void;
+  onRetry?: (retry: ManagedDownloadRetry) => void;
   payload: ManagedDownloadPayload;
   signal?: AbortSignal;
+  stallTimeoutMs?: number;
 };
 
 /** Result returned by {@link managedDownload} once the file is complete. */

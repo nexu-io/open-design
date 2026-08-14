@@ -28,6 +28,7 @@
     "typecheck": "pnpm --filter @open-design/standalone build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
   },
   "dependencies": {
+    "@open-design/closure": "workspace:*",
     "@open-design/contracts": "workspace:*",
     "@open-design/diagnostics": "workspace:*",
     "@open-design/download": "workspace:*",
@@ -39,7 +40,6 @@
     "@open-design/standalone": "workspace:*"
   },
   "devDependencies": {
-    "@open-design/closure": "workspace:*",
     "@types/node": "24.12.2",
     "electron": "41.3.0",
     "esbuild": "0.28.0",

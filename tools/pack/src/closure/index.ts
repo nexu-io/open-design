@@ -275,7 +275,9 @@ async function resolveGitProvenance(workspaceRoot: string): Promise<{
 }
 
 function resolveChannel(channel: string, version: string): ReleaseChannel {
-  if (!isReleaseChannel(channel)) throw new Error(`unsupported Closure channel: ${channel}`);
+  if (channel !== "local" && !isReleaseChannel(channel)) {
+    throw new Error(`unsupported Closure channel: ${channel}`);
+  }
   parseReleaseVersion(version, channel);
   return channel;
 }
@@ -323,7 +325,13 @@ export async function buildClosureDistributionShared(
   // selecting the host archive implementation and never enters the protocol.
   const archiveTarget: ClosurePlatformTarget = process.platform === "win32" ? "win32-x64" : "darwin-arm64";
   const channel = resolveChannel(options.channel, options.version);
-  parseReleaseVersion(options.minShellVersion, channel);
+  if (channel === "local") {
+    if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(options.minShellVersion)) {
+      throw new Error(`local Closure minimum Shell version is invalid: ${options.minShellVersion}`);
+    }
+  } else {
+    parseReleaseVersion(options.minShellVersion, channel);
+  }
   const toolRoot = resolve(workspaceRoot, options.dir ?? ".tmp/tools-pack");
   const outputRoot = resolveDistributionOutputRoot(toolRoot, channel, "shared", options.version);
   const stageRoot = join(toolRoot, "stage", "closure-distribution", `${channel}-shared-${options.version}`);

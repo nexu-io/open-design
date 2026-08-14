@@ -7,6 +7,7 @@
     "tools-pack": "./bin/tools-pack.mjs"
   },
   "scripts": {
+    "prebuild": "pnpm --filter @open-design/tools-pack^... build",
     "build": "node ./esbuild.config.mjs && tsc -p tsconfig.json --emitDeclarationOnly && node --experimental-strip-types ../../packages/metatool/src/cli.ts write .",
     "dev": "tsx ./src/index.ts",
     "test": "vitest run",

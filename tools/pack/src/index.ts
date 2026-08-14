@@ -57,12 +57,14 @@ type CacCommand = ReturnType<CAC["command"]>;
 function addSharedOptions(command: CacCommand) {
   return command
     .option("--cache-dir <path>", "advanced escape hatch for relocating tools-pack cache")
+    .option("--debug-channel <channel>", "runtime debug channel: local|stable|prerelease|exact:<name> (default: local)")
     .option("--dir <path>", "tools-pack output/runtime root directory")
     .option("--diagnose-attempts <count>", "diagnose-ipc: start/poll/stop attempts")
     .option("--json", "print JSON")
     .option("--namespace <name>", "runtime namespace")
     .option("--expr <expression>", "desktop inspect eval expression")
     .option("--include-managed-processes", "inspect: enumerate processes owned by this namespace")
+    .option("--keep-debug-session", "stop: preserve the transactional release-profile binding for an immediate native relaunch")
     .option("--path <path>", "desktop inspect screenshot path")
     .option("--shell <shell>", "launcher shell (default: electron)")
     .option("--status-poll-count <count>", "inspect: poll the shell-owned runtime status projection this many times")
@@ -214,7 +216,7 @@ addMacBuildOptions(addSharedOptions(cli.command("mac <action>", "Mac packaging c
         printJson(await startPackedMacApp(config, { source: options.startSource }));
         return;
       case "stop":
-        printJson(await stopPackedMacApp(config));
+        printJson(await stopPackedMacApp(config, { keepDebugSession: options.keepDebugSession === true }));
         return;
       case "logs":
         printLogs(await readPackedMacLogs(config), options);
@@ -260,7 +262,10 @@ addWinLifecycleOptions(
       printJson(await startPackedWinApp(config, { runtimeBaseRoot: options.runtimeBaseRoot }));
       return;
     case "stop":
-      printJson(await stopPackedWinApp(config, { runtimeBaseRoot: options.runtimeBaseRoot }));
+      printJson(await stopPackedWinApp(config, {
+        keepDebugSession: options.keepDebugSession === true,
+        runtimeBaseRoot: options.runtimeBaseRoot,
+      }));
       return;
     case "logs":
       printLogs(await readPackedWinLogs(config, { runtimeBaseRoot: options.runtimeBaseRoot }), options);

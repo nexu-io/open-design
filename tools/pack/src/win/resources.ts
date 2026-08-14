@@ -64,6 +64,9 @@ export async function prepareResourceTree(
       await copyShellNodeRuntime({ target: join(resourceRoot, "bin", "node.exe") });
       await copyStandaloneBootstrapSeed({
         resourceRoot,
+        ...(config.standaloneRepositorySeedRoot == null
+          ? {}
+          : { repositorySeedRoot: config.standaloneRepositorySeedRoot }),
         ...(config.standaloneSeedRoot == null ? {} : { seedRoot: config.standaloneSeedRoot }),
         workspaceRoot: config.workspaceRoot,
       });

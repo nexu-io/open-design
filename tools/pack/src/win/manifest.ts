@@ -26,7 +26,11 @@ function createPackagedConfig(
     ...entrypoints,
     launcherVersion: packagedVersion,
     namespace: config.namespace,
-    ...(!config.portable && config.releaseVersion != null ? { releaseVersion: config.releaseVersion } : {}),
+    ...(config.runtimeReleaseVersion != null
+      ? { releaseVersion: config.runtimeReleaseVersion }
+      : !config.portable && config.releaseVersion != null
+        ? { releaseVersion: config.releaseVersion }
+        : {}),
     shellVersion: packagedVersion,
     ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
     ...(config.updateMetadataUrl == null ? {} : { updateMetadataUrl: config.updateMetadataUrl }),

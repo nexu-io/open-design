@@ -64,6 +64,7 @@ import {
   seedPackagedClosureFixture,
   type PackagedClosureFixture,
 } from '@/vitest/packaged-closure-fixture';
+import { packagedDebugChannelArgs } from '@/vitest/packaged-debug-channel';
 import { releaseAppVersionArgs, resolvePackagedWinInstallIdentity } from '@/vitest/packaged-win-identity';
 import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
 import { startToolsServeUpdaterFixture, type ToolsServeUpdaterFixture } from '@/vitest/tools-serve-updater-fixture';
@@ -917,7 +918,7 @@ winDescribe('packaged windows runtime smoke', () => {
         const protocolStop = await measureSmokeStep(
           timings,
           'stop before invite protocol cold delivery',
-          async () => runToolsPackJson<WinStopResult>('stop'),
+          async () => runToolsPackJson<WinStopResult>('stop', ['--keep-debug-session']),
         );
         started = false;
         expect(protocolStop.status).not.toBe('partial');
@@ -2405,6 +2406,7 @@ async function runToolsPackJsonForVersion<T>(
     toolsPackDir,
     '--namespace',
     namespace,
+    ...packagedDebugChannelArgs(releaseChannel),
     ...releaseAppVersionArgs(appVersion),
     '--json',
     ...runtimeBaseArgs,
@@ -2979,7 +2981,7 @@ async function buildVersionBumpedWinPayloadFixture(
 }
 
 function bumpCountedVersion(version: string): string {
-  const match = /^(.*[.-](?:beta|prerelease|preview))\.(\d+)$/.exec(version);
+  const match = /^(\d+\.\d+\.\d+-[a-z0-9]{1,12})\.(\d+)$/.exec(version);
   if (match?.[1] == null || match[2] == null) {
     throw new Error(`rollback acceptance requires a counted version to bump: ${version}`);
   }

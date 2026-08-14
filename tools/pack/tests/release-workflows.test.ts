@@ -153,6 +153,14 @@ describe("release workflow topology", () => {
     expect(stable).toContain("RELEASE_INSTALLATION_VERSION_MIN_STABLE:");
   });
 
+  it("derives one Closure compatibility epoch and accepts its N-1 boundary", async () => {
+    const exact = await read(".github/workflows/release-beta.yml");
+    expect(exact).toContain("steps.exact.outputs.closure_min_shell_version");
+    expect(exact).toContain("needs.metadata.outputs.closure_min_shell_version");
+    expect(exact).toContain("tools-release verify-closure-preflight");
+    expect(exact).not.toMatch(/CLOSURE_MIN_SHELL_VERSION:\s+[^$\n]/u);
+  });
+
   it("retains only the newest outer tools-pack cache", async () => {
     const cache = await read(".github/actions/release/platform/cache/save/action.yml");
     expect(cache).toContain(".[1:] | .[].id");

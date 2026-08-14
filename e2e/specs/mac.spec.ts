@@ -30,6 +30,7 @@ import {
   assertPackagedPtySmokeResult,
   packagedPtySmokeExpression,
 } from '@/vitest/packaged-pty-smoke';
+import { packagedDebugChannelArgs } from '@/vitest/packaged-debug-channel';
 import { releaseAppVersionArgs } from '@/vitest/packaged-release-version';
 import {
   assertPackagedVelaRuntimeStatus,
@@ -588,7 +589,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       expect(protocolHotInspect.status?.pid).toBe(protocolHotPid);
 
       if (verifyCoreOnly) {
-        const protocolStop = await runToolsPackJson<MacStopResult>('stop');
+        const protocolStop = await runToolsPackJson<MacStopResult>('stop', ['--keep-debug-session']);
         started = false;
         expect(protocolStop.status).not.toBe('partial');
         expect(protocolStop.remainingPids).toEqual([]);
@@ -2135,6 +2136,7 @@ async function runToolsPackJson<T>(
     toolsPackDir,
     '--namespace',
     namespace,
+    ...packagedDebugChannelArgs(releaseChannel),
     ...releaseAppVersionArgs(releaseVersionOverride),
     '--json',
     ...startSourceArgs,
@@ -2885,7 +2887,7 @@ async function buildVersionBumpedMacPayloadFixture(
 }
 
 function bumpCountedVersion(version: string): string {
-  const match = /^(.*[.-](?:beta|prerelease|preview))\.(\d+)$/.exec(version);
+  const match = /^(\d+\.\d+\.\d+-[a-z0-9]{1,12})\.(\d+)$/.exec(version);
   if (match?.[1] == null || match[2] == null) {
     throw new Error(`rollback acceptance requires a counted version to bump: ${version}`);
   }

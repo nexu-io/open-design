@@ -2,13 +2,15 @@
 
 Follow the root `AGENTS.md` and `packages/AGENTS.md` first.
 
-This package owns only the Shell update persistence contract shared across
-artifact construction and Shell runtime consumption.
+This package owns Shell persistence contracts shared across artifact tooling
+and Shell runtime consumption.
 
 ## Owns
 
 - The `./update` subpath: launcher payload pointers and
   `runtime/attempt/handoff/cleanup` descriptor schemas.
+- The `./launch-context` subpath: transactional, leased local debug routing
+  shared by tools-pack and Shell startup.
 - Validation of those persisted descriptors.
 - Deterministic channel/namespace/version layout below an explicit root.
 
