@@ -2,7 +2,6 @@
 
 import { execFile } from 'node:child_process';
 import { access, chmod, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -891,7 +890,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
             channel: updateScenario.channel,
             label: 'packaged macOS',
             namespace,
-            root: join(homedir(), 'Library', 'Application Support', basename(install.installedAppPath, '.app')),
+            root: join(toolsPackDir, 'runtime', 'mac'),
             expected: {
               channel: updateScenario.channel,
               namespace,

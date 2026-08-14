@@ -2257,6 +2257,8 @@ process.stdin.on("end", () => {
       expect(spec, platform).toContain("...(coldStart == null ? {} : { coldStart })");
       expect(spec, platform).toContain("expected:");
     }
+    expect(mac).toContain("root: join(toolsPackDir, 'runtime', 'mac')");
+    expect(mac).not.toContain("root: join(homedir(), 'Library', 'Application Support'");
     expect(distribution).toContain("target: mac_arm64");
     expect(distribution).toContain("target: mac_x64");
     expect(distribution).toContain("target: win_x64");
