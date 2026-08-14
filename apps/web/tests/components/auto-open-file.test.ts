@@ -590,6 +590,41 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     expect(decision).toEqual({ openFileName: null, keepWatching: false });
   });
 
+  it('still upgrades when focus sits on a file the turn itself auto-opened', () => {
+    // The completion continuation can open a recovered same-turn write before
+    // the watcher is ever armed, so that file is neither the handoff witness nor
+    // `requestedFileName`. Reading it as "the user moved on" would retire the
+    // watch on the turn's own activation and strand index.html unopened.
+    const decision = reevaluateAutoOpenOnFilesSettled(
+      request({
+        requestedFileName: null,
+        activeFileNameAtTurnEnd: null,
+        turnOwnedFileNames: ['recovered.md'],
+      }),
+      [PLAN, INDEX, { name: 'recovered.md', path: 'recovered.md', kind: 'text', mtime: 1 }],
+      { now: TURN_END + 500, activeFileName: 'recovered.md' },
+    );
+
+    expect(decision).toEqual({ openFileName: 'index.html', keepWatching: false });
+  });
+
+  it('retires the watch when focus is on a file the turn never opened', () => {
+    // Same shape as above, except the focused tab is one the turn never touched
+    // — the user's own choice. Recording auto activations must not widen the
+    // guard into accepting everything.
+    const decision = reevaluateAutoOpenOnFilesSettled(
+      request({
+        requestedFileName: null,
+        activeFileNameAtTurnEnd: null,
+        turnOwnedFileNames: ['recovered.md'],
+      }),
+      [PLAN, INDEX, { name: 'notes.md', path: 'notes.md', kind: 'text', mtime: 1 }],
+      { now: TURN_END + 500, activeFileName: 'notes.md' },
+    );
+
+    expect(decision).toEqual({ openFileName: null, keepWatching: false });
+  });
+
   it('keeps waiting while the selected name is not yet an openable entry', () => {
     // Produced-file name known from the turn diff, but the settled list has
     // not caught up — a tab now would be filtered straight back out.

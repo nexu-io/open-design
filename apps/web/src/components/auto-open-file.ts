@@ -244,7 +244,18 @@ export interface AutoOpenSettleRequest<F extends CandidateFile = CandidateFile> 
   // Active workspace tab as of the turn-end pass, before its own open request
   // landed. Together with `requestedFileName` this distinguishes "auto-open
   // never landed" from "the user has since chosen a different tab".
+  //
+  // MUST be sampled at terminal handoff, before the post-run file refresh and
+  // artifact persistence are awaited. Sampling it after those awaits lets a tab
+  // the USER selected while they ran become this turn's baseline, which turns
+  // the focus-move guard below into its own opposite: the user's choice reads
+  // as "where the turn put focus", and the watcher yanks them out of it.
   readonly activeFileNameAtTurnEnd: string | null;
+  // Every file the turn's own auto-open moved focus to while the completion
+  // continuation ran. Those activations are the turn's, not the user's, so they
+  // must not read as "the user moved on" — but they cannot be known at the
+  // moment `activeFileNameAtTurnEnd` is sampled, because they happen after it.
+  readonly turnOwnedFileNames?: ReadonlyArray<string>;
   // Epoch ms after which the turn stops being re-evaluated.
   readonly deadline: number;
 }
@@ -296,15 +307,21 @@ export function reevaluateAutoOpenOnFilesSettled<F extends CandidateFile>(
   // pass settled for, and the deliverable can land in a later list. The
   // deadline, not this round, ends the watch.
   if (context.activeFileName === resolved) return { openFileName: null, keepWatching: true };
-  // Focus is somewhere neither the pre-turn state nor the turn-end request put
-  // it: the user (or another flow) moved on. Re-opening now would yank them
-  // out of what they chose.
-  if (
-    context.activeFileName !== request.activeFileNameAtTurnEnd
-    && context.activeFileName !== request.requestedFileName
-  ) {
-    return { openFileName: null, keepWatching: false };
-  }
+  // Focus is somewhere the turn did not put it: the user (or another flow)
+  // moved on. Re-opening now would yank them out of what they chose.
+  //
+  // "The turn put it there" is the union of where focus sat at terminal handoff
+  // and every file the turn's own auto-open opened afterwards — the completion
+  // continuation can open a recovered same-turn write before this watcher is
+  // ever armed, and that is an auto activation, not the user's.
+  const turnOwnsFocus =
+    context.activeFileName === request.activeFileNameAtTurnEnd
+    || context.activeFileName === request.requestedFileName
+    || (
+      context.activeFileName !== null
+      && (request.turnOwnedFileNames?.includes(context.activeFileName) ?? false)
+    );
+  if (!turnOwnsFocus) return { openFileName: null, keepWatching: false };
   return { openFileName: resolved, keepWatching: false };
 }
 
