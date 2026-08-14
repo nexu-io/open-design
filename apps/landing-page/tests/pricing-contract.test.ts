@@ -227,6 +227,21 @@ describe("pricing contract", () => {
     assert.doesNotMatch(page, /\{L\.videoGeneration\}<span class="pr-soon-tag">/);
   });
 
+  it("renders exactly one Open Design Cloud capability section", async () => {
+    const page = await readFile(PRICING_PAGE_PATH, "utf8");
+
+    assert.doesNotMatch(
+      page,
+      /data-pricing-cloud-capability/,
+      "the superseded duplicate capability block must stay removed",
+    );
+    assert.equal(
+      page.match(/<section class="pr-multimodal"/g)?.length,
+      1,
+      "the retained Cloud capability section must render exactly once",
+    );
+  });
+
   it("points the public pricing URL at the landing-page JSON contract", () => {
     assert.equal(PLANS_JSON_URL, "/pricing/plans.json");
   });
