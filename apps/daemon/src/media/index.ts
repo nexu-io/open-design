@@ -1119,7 +1119,7 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
 }
 
 async function renderComfyUIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
-  const baseUrl = (credentials.baseUrl || '').trim();
+  const baseUrl = (credentials.baseUrl || '').trim().replace(/\/+$/, '');
   if (!baseUrl) {
     throw new Error(`ComfyUI base URL required — configure in ${SETTINGS_MEDIA_PROVIDERS_PATH} (default: http://127.0.0.1:8188)`);
   }
@@ -1127,7 +1127,13 @@ async function renderComfyUIImage(ctx: MediaContext, credentials: ProviderConfig
     credentials.model
     || (ctx.wireModel !== 'comfyui-sdxl' ? ctx.wireModel : '')
   ).trim();
-  const customModel = wireModel || 'sd_xl_base_1.0.safetensors';
+  const checkpoint = wireModel || 'sd_xl_base_1.0.safetensors';
+
+  const [widthStr, heightStr] = imageRouterSizeFor(ctx.aspect, 'image').split('x');
+  const width = Number(widthStr);
+  const height = Number(heightStr);
+  const prompt = ctx.prompt || 'A high-quality image.';
+  const seed = Math.floor(Math.random() * 0x7fffffff);
 
   const headers: Record<string, string> = {
     'content-type': 'application/json',
@@ -1136,27 +1142,93 @@ async function renderComfyUIImage(ctx: MediaContext, credentials: ProviderConfig
     headers.authorization = `Bearer ${credentials.apiKey}`;
   }
 
-  const body: Record<string, unknown> = {
-    prompt: ctx.prompt || 'A high-quality image.',
-    model: customModel,
-    width: openaiSizeFor('gpt-image-1', ctx.aspect).split('x')[0],
-    height: openaiSizeFor('gpt-image-1', ctx.aspect).split('x')[1],
-    n: 1,
+  // Minimal SDXL txt2img workflow. Node ids are arbitrary; the rendered image
+  // lands in the SaveImage node ("9"), whose outputs we read from /history.
+  const workflow: Record<string, unknown> = {
+    '3': {
+      class_type: 'KSampler',
+      inputs: {
+        seed,
+        steps: 25,
+        cfg: 7.0,
+        sampler_name: 'euler',
+        scheduler: 'normal',
+        denoise: 1.0,
+        model: ['4', 0],
+        positive: ['6', 0],
+        negative: ['7', 0],
+        latent_image: ['5', 0],
+      },
+    },
+    '4': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: checkpoint } },
+    '5': { class_type: 'EmptyLatentImage', inputs: { width, height, batch_size: 1 } },
+    '6': { class_type: 'CLIPTextEncode', inputs: { text: prompt, clip: ['4', 1] } },
+    '7': { class_type: 'CLIPTextEncode', inputs: { text: '', clip: ['4', 1] } },
+    '8': { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['4', 2] } },
+    '9': { class_type: 'SaveImage', inputs: { filename_prefix: 'open-design-comfyui', images: ['8', 0] } },
   };
 
-  const resp = await fetchImageGenerationWithResponseRetry(
-    () => fetch(`${baseUrl}/v1/images/generations`, withMediaRequestInit(ctx, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-    })),
-  );
+  const clientId = `od-${Math.random().toString(36).slice(2)}`;
 
-  const data = await parseOpenAICompatibleJson(resp, 'comfyui');
-  const bytes = await bytesFromOpenAICompatibleData(data, 'comfyui', ctx.requestInit);
+  // 1. Submit the workflow to ComfyUI's native /prompt endpoint.
+  const submitResp = await fetch(`${baseUrl}/prompt`, withMediaRequestInit(ctx, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ prompt: workflow, client_id: clientId }),
+  }));
+  if (!submitResp.ok) {
+    throw new Error(`comfyui submit ${submitResp.status}: ${truncate(await submitResp.text(), 240)}`);
+  }
+  const submitBody = (await submitResp.json()) as { prompt_id?: string };
+  const promptId = submitBody && typeof submitBody.prompt_id === 'string' ? submitBody.prompt_id : '';
+  if (!promptId) {
+    throw new Error('comfyui submit response had no prompt_id');
+  }
+
+  // 2. Poll /history until the job finishes or the timeout elapses.
+  const timeoutMs = 4 * 60 * 1000;
+  const deadline = Date.now() + timeoutMs;
+  let output: { filename: string; subfolder: string; type: string } | null = null;
+  while (Date.now() < deadline) {
+    const historyResp = await fetch(`${baseUrl}/history/${encodeURIComponent(promptId)}`, withMediaRequestInit(ctx, { headers }));
+    if (!historyResp.ok) {
+      throw new Error(`comfyui history ${historyResp.status}: ${truncate(await historyResp.text(), 240)}`);
+    }
+    const history = (await historyResp.json()) as Record<string, any>;
+    const entry = history && history[promptId];
+    if (entry) {
+      const images = entry.outputs && entry.outputs['9'] && entry.outputs['9'].images;
+      if (Array.isArray(images) && images.length > 0) {
+        output = images[0];
+        break;
+      }
+      const statusStr = entry.status && entry.status.status_str;
+      if (statusStr === 'error') {
+        throw new Error(`comfyui workflow failed: ${truncate(JSON.stringify(entry.status), 240)}`);
+      }
+    }
+    await sleep(1000);
+  }
+  if (!output) {
+    throw new Error('ComfyUI generation timed out — no output after 4 minutes');
+  }
+
+  // 3. Fetch the rendered image from /view.
+  const viewUrl =
+    `${baseUrl}/view?filename=${encodeURIComponent(output.filename)}` +
+    `&subfolder=${encodeURIComponent(output.subfolder)}&type=${encodeURIComponent(output.type)}`;
+  const viewResp = await fetch(viewUrl, withMediaRequestInit(ctx, { headers }));
+  if (!viewResp.ok) {
+    throw new Error(`comfyui view ${viewResp.status}: ${truncate(await viewResp.text(), 240)}`);
+  }
+  const bytes = Buffer.from(await viewResp.arrayBuffer());
+  if (bytes.length === 0) {
+    throw new Error('comfyui view returned an empty image');
+  }
+
   return {
     bytes,
-    providerNote: `comfyui/${customModel} · ${body.width}x${body.height} · ${bytes.length} bytes`,
+    providerNote: `comfyui/${checkpoint} · ${width}x${height} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
 }
