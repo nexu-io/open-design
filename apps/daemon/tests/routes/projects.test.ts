@@ -19,6 +19,7 @@ import path from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../../src/server.js';
+import { installImportTokenAutoMint } from '../import-token-shim.js';
 
 describe('GET /api/projects/:id resolvedDir', () => {
   let server: http.Server;
@@ -32,6 +33,7 @@ describe('GET /api/projects/:id resolvedDir', () => {
     };
     baseUrl = started.url;
     server = started.server;
+    installImportTokenAutoMint();
   });
 
   afterEach(() => {
