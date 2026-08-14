@@ -223,14 +223,13 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       }
       const normalizedOrchestratorWorkspace = parsedOrchestratorWorkspace.value;
       let trustedPickerImport = false;
-      // When the desktop auth gate is active, require a valid HMAC import
-      // token (not a forgeable Origin header) to authorise folder import
-      // (issue #5480). When the gate is inactive (CLI/server mode), folder
-      // import is allowed without a token — the security boundary is the
-      // daemon's local-only bind address.
-      if (isDesktopAuthGateActive()) {
-        const secret = desktopAuthSecret();
-        if (secret == null) {
+      // Always require a valid HMAC import token for folder import,
+      // regardless of whether the desktop auth gate is active (issue #5480).
+      // In non-desktop mode, an ephemeral secret is generated at daemon
+      // startup so HMAC verification works without desktop registration.
+      const secret = desktopAuthSecret();
+      if (secret == null) {
+        if (isDesktopAuthGateActive()) {
           return sendApiError(
             res,
             503,
@@ -242,29 +241,36 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
             },
           );
         }
-        const headerValue = req.get('x-od-desktop-import-token');
-        const token = typeof headerValue === 'string' ? headerValue : '';
-        const tokenNow = Date.now();
-        pruneExpiredImportNonces(tokenNow);
-        const verification = verifyDesktopImportToken(
-          secret,
-          baseDir,
-          token,
-          tokenNow,
-          consumedImportNonces,
+        return sendApiError(
+          res,
+          403,
+          'FORBIDDEN',
+          'folder import requires an import token; restart desktop or configure daemon auth',
+          { details: { hint: 'no auth secret configured' } },
         );
-        if (!verification.ok) {
-          return sendApiError(
-            res,
-            403,
-            'FORBIDDEN',
-            'desktop import token rejected',
-            { details: { reason: verification.reason } },
-          );
-        }
-        consumedImportNonces.set(verification.nonce, verification.exp);
-        trustedPickerImport = true;
       }
+      const headerValue = req.get('x-od-desktop-import-token');
+      const token = typeof headerValue === 'string' ? headerValue : '';
+      const tokenNow = Date.now();
+      pruneExpiredImportNonces(tokenNow);
+      const verification = verifyDesktopImportToken(
+        secret,
+        baseDir,
+        token,
+        tokenNow,
+        consumedImportNonces,
+      );
+      if (!verification.ok) {
+        return sendApiError(
+          res,
+          403,
+          'FORBIDDEN',
+          'desktop import token rejected',
+          { details: { reason: verification.reason } },
+        );
+      }
+      consumedImportNonces.set(verification.nonce, verification.exp);
+      trustedPickerImport = true;
 
       const trimmedInput = baseDir.trim();
       if (!path.isAbsolute(path.normalize(trimmedInput))) {
@@ -361,13 +367,11 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       }
       const normalizedOrchestratorWorkspace = parsedOrchestratorWorkspace.value;
       let trustedPickerImport = false;
-      // When the desktop auth gate is active, require a valid HMAC import
-      // token (not a forgeable Origin header) for working-dir rebinding
-      // (issue #5480). When the gate is inactive (CLI/server mode), allow
-      // without a token.
-      if (isDesktopAuthGateActive()) {
-        const secret = desktopAuthSecret();
-        if (secret == null) {
+      // Always require a valid HMAC import token for working-dir rebinding
+      // (issue #5480). Same logic as folder import above.
+      const secret = desktopAuthSecret();
+      if (secret == null) {
+        if (isDesktopAuthGateActive()) {
           return sendApiError(
             res,
             503,
@@ -379,29 +383,36 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
             },
           );
         }
-        const headerValue = req.get('x-od-desktop-import-token');
-        const token = typeof headerValue === 'string' ? headerValue : '';
-        const tokenNow = Date.now();
-        pruneExpiredImportNonces(tokenNow);
-        const verification = verifyDesktopImportToken(
-          secret,
-          baseDir,
-          token,
-          tokenNow,
-          consumedImportNonces,
+        return sendApiError(
+          res,
+          403,
+          'FORBIDDEN',
+          'working-dir rebinding requires an import token; restart desktop or configure daemon auth',
+          { details: { hint: 'no auth secret configured' } },
         );
-        if (!verification.ok) {
-          return sendApiError(
-            res,
-            403,
-            'FORBIDDEN',
-            'desktop import token rejected',
-            { details: { reason: verification.reason } },
-          );
-        }
-        consumedImportNonces.set(verification.nonce, verification.exp);
-        trustedPickerImport = true;
       }
+      const headerValue = req.get('x-od-desktop-import-token');
+      const token = typeof headerValue === 'string' ? headerValue : '';
+      const tokenNow = Date.now();
+      pruneExpiredImportNonces(tokenNow);
+      const verification = verifyDesktopImportToken(
+        secret,
+        baseDir,
+        token,
+        tokenNow,
+        consumedImportNonces,
+      );
+      if (!verification.ok) {
+        return sendApiError(
+          res,
+          403,
+          'FORBIDDEN',
+          'desktop import token rejected',
+          { details: { reason: verification.reason } },
+        );
+      }
+      consumedImportNonces.set(verification.nonce, verification.exp);
+      trustedPickerImport = true;
       const trimmedInput = baseDir.trim();
       if (!path.isAbsolute(path.normalize(trimmedInput))) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');

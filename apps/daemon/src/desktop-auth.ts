@@ -1,10 +1,14 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 let desktopAuthSecret: Buffer | null = null;
 let desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
 export const consumedImportNonces = new Map<string, number>();
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
 const DESKTOP_IMPORT_TOKEN_FIELD_SEP = '~';
+const EPHEMERAL_SECRET_FILENAME = 'import-secret';
+let ephemeralSecretDir: string | null = null;
 
 export function setDesktopAuthSecret(secret: Buffer | null): void {
   desktopAuthSecret = secret;
@@ -15,6 +19,17 @@ export function setDesktopAuthSecret(secret: Buffer | null): void {
 }
 
 export function getDesktopAuthSecret(): Buffer | null {
+  if (desktopAuthSecret !== null) return desktopAuthSecret;
+  // Lazy-load ephemeral secret from file (set up at daemon startup for
+  // non-desktop mode). This also covers the case where
+  // resetDesktopAuthForTests() cleared the in-memory value between tests.
+  if (ephemeralSecretDir !== null) {
+    try {
+      desktopAuthSecret = fs.readFileSync(path.join(ephemeralSecretDir, EPHEMERAL_SECRET_FILENAME));
+    } catch {
+      // File doesn't exist yet
+    }
+  }
   return desktopAuthSecret;
 }
 
@@ -30,6 +45,44 @@ export function resetDesktopAuthForTests(): void {
   desktopAuthSecret = null;
   desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
   consumedImportNonces.clear();
+}
+
+/**
+ * Configure the directory where an ephemeral import secret is stored.
+ * Called once at daemon startup with RUNTIME_DATA_DIR. The secret file
+ * is mode 0600 — only the daemon user can read it, which means the CLI
+ * (running as the same user) can mint HMAC import tokens locally without
+ * sidecar IPC, while other local users cannot.
+ */
+export function configureEphemeralImportSecretDir(dataDir: string): void {
+  ephemeralSecretDir = dataDir;
+}
+
+/**
+ * Ensure an import secret exists. If one is already in memory or on disk,
+ * load it. Otherwise generate a new random secret, persist it to the
+ * ephemeral secret file, and set it in memory. Called at daemon startup.
+ */
+export function ensureEphemeralImportSecret(): void {
+  if (desktopAuthSecret !== null) return;
+  if (ephemeralSecretDir === null) return;
+  const secretPath = path.join(ephemeralSecretDir, EPHEMERAL_SECRET_FILENAME);
+  try {
+    desktopAuthSecret = fs.readFileSync(secretPath);
+    return;
+  } catch {
+    // File doesn't exist — generate new
+  }
+  const newSecret = randomBytes(32);
+  try {
+    fs.mkdirSync(ephemeralSecretDir, { recursive: true });
+    fs.writeFileSync(secretPath, newSecret, { mode: 0o600 });
+    desktopAuthSecret = newSecret;
+  } catch {
+    // Best-effort — if we can't persist, the in-memory secret still works
+    // for this process lifetime.
+    desktopAuthSecret = newSecret;
+  }
 }
 
 export function pruneExpiredImportNonces(now: number): void {

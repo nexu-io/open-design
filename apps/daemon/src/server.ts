@@ -249,6 +249,8 @@ import {
 import { migrateLegacyDataDirSync } from './migration/index.js';
 import {
   consumedImportNonces,
+  configureEphemeralImportSecretDir,
+  ensureEphemeralImportSecret,
   getDesktopAuthSecret,
   isDesktopAuthGateActive,
   isDesktopAuthRegistered,
@@ -1166,6 +1168,11 @@ const RUNTIME_DATA_DIR_CANONICAL = (() => {
     return RUNTIME_DATA_DIR;
   }
 })();
+// Ensure an import secret is always available so directory-binding routes
+// can require HMAC tokens even in non-desktop mode (issue #5480). The
+// ephemeral secret file is mode 0600 in the daemon data dir.
+configureEphemeralImportSecretDir(RUNTIME_DATA_DIR);
+ensureEphemeralImportSecret();
 // One-shot legacy data migration. When OD_LEGACY_DATA_DIR is set and the
 // new data root is fresh (no app.sqlite), copy the 0.3.x .od/ payload
 // across before SQLite opens. Synchronous on purpose: openDatabase below
