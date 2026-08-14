@@ -59,7 +59,7 @@ jobs:
   build:
     name: Build beta from main
     needs: resolve
-    uses: ./.github/workflows/release-exact.yml
+    uses: ./.github/workflows/release-beta.yml
     secrets: inherit
     with:
       notification_stream: daily

@@ -1,4 +1,4 @@
-name: release-exact
+name: release-beta
 
 on:
   workflow_dispatch:
@@ -71,7 +71,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: open-design-release-exact-${{ inputs.exact_name }}
+  group: open-design-release-beta-${{ inputs.exact_name }}
   cancel-in-progress: false
 
 env:
@@ -150,7 +150,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$REQUESTED_REF" =~ ^[0-9a-fA-F]{7,39}$ ]]; then
-            echo "release-exact ref must be a branch, tag, or full 40-character commit SHA; abbreviated SHA '$REQUESTED_REF' is ambiguous" >&2
+            echo "release-beta ref must be a branch, tag, or full 40-character commit SHA; abbreviated SHA '$REQUESTED_REF' is ambiguous" >&2
             exit 1
           fi
 
@@ -201,7 +201,7 @@ jobs:
           set -euo pipefail
           built_sha="$(git rev-parse HEAD)"
           if [ -z "$REQUESTED_REF" ]; then
-            echo "release-exact publish requires an explicit branch, tag, or full commit identity" >&2
+            echo "release-beta publish requires an explicit branch, tag, or full commit identity" >&2
             exit 1
           fi
           if [[ "$REQUESTED_REF" =~ ^[0-9a-fA-F]{40}$ ]]; then
@@ -219,7 +219,7 @@ jobs:
             exit 1
           fi
           if [ "$built_sha" != "$expected_sha" ]; then
-            echo "release-exact publisher ref drifted: expected $expected_sha, built $built_sha" >&2
+            echo "release-beta publisher ref drifted: expected $expected_sha, built $built_sha" >&2
             exit 1
           fi
 

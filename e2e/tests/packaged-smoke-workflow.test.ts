@@ -70,7 +70,7 @@ const bakePreviewsReleaseWorkflowPath = join(
 );
 const finalizeReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "finalize-release.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
-const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-exact.yml");
+const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-beta.yml");
 const distributionBetaWorkflowPath = releaseBetaWorkflowPath;
 const betaMacDistributionActionPath = join(
   workspaceRoot,
@@ -2179,7 +2179,7 @@ process.stdin.on("end", () => {
     expect(existsSync(join(workspaceRoot, ".github", "workflows", "distribution.yml"))).toBe(false);
     expect(existsSync(join(workspaceRoot, ".github", "workflows", "distribution-exact.yml"))).toBe(false);
     expect(existsSync(join(workspaceRoot, ".github", "workflows", "release-preview.yml"))).toBe(false);
-    expect(existsSync(join(workspaceRoot, ".github", "workflows", "release-beta.yml"))).toBe(false);
+    expect(existsSync(join(workspaceRoot, ".github", "workflows", "release-exact.yml"))).toBe(false);
   });
 
   it("[P2] daily beta resolve defaults to main and preserves the ref override", async () => {

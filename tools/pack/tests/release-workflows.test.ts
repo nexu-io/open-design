@@ -26,7 +26,7 @@ describe("release workflow topology", () => {
     const [stable, prerelease, exact] = await Promise.all([
       read(".github/workflows/release-stable.yml"),
       read(".github/workflows/release-prerelease.yml"),
-      read(".github/workflows/release-exact.yml"),
+      read(".github/workflows/release-beta.yml"),
     ]);
 
     for (const entry of [stable, prerelease, exact]) {
@@ -40,7 +40,7 @@ describe("release workflow topology", () => {
     expect(exact).toContain("  metadata:");
     expect(exact).toContain("runs-on:");
     expect(await exists(".github/workflows/release-preview.yml")).toBe(false);
-    expect(await exists(".github/workflows/release-beta.yml")).toBe(false);
+    expect(await exists(".github/workflows/release-exact.yml")).toBe(false);
     expect(await exists(".github/workflows/distribution.yml")).toBe(false);
     expect(await exists(".github/workflows/distribution-beta.yml")).toBe(false);
   });
@@ -49,7 +49,7 @@ describe("release workflow topology", () => {
     const [stable, prerelease, exact] = await Promise.all([
       read(".github/workflows/release-stable.yml"),
       read(".github/workflows/release-prerelease.yml"),
-      read(".github/workflows/release-exact.yml"),
+      read(".github/workflows/release-beta.yml"),
     ]);
 
     expect(stable).toContain("uses: ./.github/workflows/distribution-stable.yml");
@@ -65,7 +65,7 @@ describe("release workflow topology", () => {
 
   it("treats beta as the default exact name instead of a dedicated lane", async () => {
     const [entry, prepare] = await Promise.all([
-      read(".github/workflows/release-exact.yml"),
+      read(".github/workflows/release-beta.yml"),
       read("tools/release/src/metadata/prepare-exact.ts"),
     ]);
 
@@ -83,7 +83,7 @@ describe("release workflow topology", () => {
 
   it("builds all exact platforms by default and activates only after public acceptance", async () => {
     const [entry, acceptance] = await Promise.all([
-      read(".github/workflows/release-exact.yml"),
+      read(".github/workflows/release-beta.yml"),
       read(".github/workflows/distribution-exact-accept.yml"),
     ]);
 
@@ -103,7 +103,7 @@ describe("release workflow topology", () => {
 
   it("uses exact platform composites and dynamic release identity", async () => {
     const [distribution, mac, win] = await Promise.all([
-      read(".github/workflows/release-exact.yml"),
+      read(".github/workflows/release-beta.yml"),
       read(".github/actions/release/platform/mac/exact/action.yml"),
       read(".github/actions/release/platform/win/exact/action.yml"),
     ]);
@@ -138,7 +138,7 @@ describe("release workflow topology", () => {
     const [stable, prerelease, exact] = await Promise.all([
       read(".github/workflows/distribution-stable.yml"),
       read(".github/workflows/distribution-counted.yml"),
-      read(".github/workflows/release-exact.yml"),
+      read(".github/workflows/release-beta.yml"),
     ]);
 
     for (const distribution of [stable, prerelease, exact]) {

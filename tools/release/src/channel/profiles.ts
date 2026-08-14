@@ -64,7 +64,7 @@ function exactProfile(channel: CountedReleaseChannel): CountedReleaseChannelProf
     metadataUrlEnv: "OPEN_DESIGN_EXACT_METADATA_URL",
     releaseNoteRequired: false,
     stableFloor: "stable-metadata-or-tags",
-    workflow: "release-exact",
+    workflow: "release-beta",
   };
 }
 

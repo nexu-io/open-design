@@ -217,13 +217,13 @@ export const standaloneClosureDeliveryMatrix = {
           "level": "platform-product",
           "state": "proven",
           "credential": "https://github.com/nexu-io/open-design/actions/runs/31299133459",
-          "witness": ".github/workflows/release-exact.yml"
+          "witness": ".github/workflows/release-beta.yml"
         }
       ],
       "evidence": [
         {
           "role": "reusable-substrate",
-          "path": ".github/workflows/release-exact.yml"
+          "path": ".github/workflows/release-beta.yml"
         },
         {
           "role": "reusable-substrate",

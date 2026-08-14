@@ -8,12 +8,12 @@ describe("registered release channel profiles", () => {
     expect(releaseChannelProfile("beta")).toMatchObject({
       activation: "accepted-publication",
       counted: true,
-      workflow: "release-exact",
+      workflow: "release-beta",
     });
     expect(releaseChannelProfile("qa2")).toMatchObject({
       activation: "accepted-publication",
       channel: "qa2",
-      workflow: "release-exact",
+      workflow: "release-beta",
     });
     expect(releaseChannelProfile("prerelease")).toMatchObject({ activation: "direct-latest", workflow: "release-prerelease" });
     expect(releaseChannelProfile("stable")).toMatchObject({
