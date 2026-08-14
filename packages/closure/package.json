@@ -1,6 +1,6 @@
 {
   "name": "@open-design/closure",
-  "version": "0.19.2",
+  "version": "0.19.3",
   "type": "module",
   "exports": {
     "./protocol": {
