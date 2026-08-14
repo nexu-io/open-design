@@ -40,4 +40,24 @@ describe("packaged Standalone release selection", () => {
       prepared: null,
     })).toBe("0.19.3-beta.9");
   });
+
+  it("binds a first install from an immutable exact metadata endpoint", () => {
+    expect(selectPackagedStandaloneReleaseVersion(null, {
+      activationAuthorized: false,
+      active: null,
+      lastSuccessful: null,
+      prepared: null,
+    }, "https://releases.example/beta/versions/0.19.4-beta.2/metadata.json"))
+      .toBe("0.19.4-beta.2");
+  });
+
+  it("never derives first-install authority from mutable latest metadata", () => {
+    expect(() => selectPackagedStandaloneReleaseVersion(null, {
+      activationAuthorized: false,
+      active: null,
+      lastSuccessful: null,
+      prepared: null,
+    }, "https://releases.example/beta/latest/metadata.json"))
+      .toThrow("requires an immutable");
+  });
 });

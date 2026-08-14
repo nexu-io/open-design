@@ -24,10 +24,8 @@ import {
 import { downloadCopyAndClear } from "@open-design/download";
 import extractZip from "extract-zip";
 
-import {
-  ClosureUpdateError,
-  type ClosureResourceRepositoryConfig,
-} from "./index.js";
+import type { ClosureResourceRepositoryConfig } from "./index.js";
+import { ClosureUpdateError } from "./errors.js";
 
 export type ClosureBlobEnsureProgress =
   | Readonly<{ phase: "checking" | "verifying" | "ready" }>

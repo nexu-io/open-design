@@ -52,6 +52,17 @@ import {
 import extractZip from "extract-zip";
 
 import { fetchJsonDocument } from "./apply.js";
+import {
+  ClosureInstallerRequiredError,
+  ClosureUpdateError,
+} from "./errors.js";
+import { closureImmutableMetadataVersion } from "./metadata-url.js";
+
+export {
+  ClosureInstallerRequiredError,
+  ClosureUpdateError,
+} from "./errors.js";
+export { resolveClosureImmutableMetadataVersion } from "./metadata-url.js";
 
 export type ClosureReleaseAssetUrls = {
   archive: string;
@@ -101,23 +112,6 @@ export type ClosureUpdateDecision =
       candidate: ClosureReleaseCandidate;
       reason: ClosureUpdateRetainReason;
     };
-
-export class ClosureUpdateError extends Error {
-  constructor(message: string, options?: ErrorOptions) {
-    super(message, options);
-    this.name = "ClosureUpdateError";
-  }
-}
-
-export class ClosureInstallerRequiredError extends ClosureUpdateError {
-  readonly minimumShellVersion: string | null;
-
-  constructor(message: string, minimumShellVersion: string | null = null) {
-    super(message);
-    this.name = "ClosureInstallerRequiredError";
-    this.minimumShellVersion = minimumShellVersion;
-  }
-}
 
 export const CLOSURE_RESOURCE_REPOSITORY_ENV = "OD_CLOSURE_RESOURCE_REPOSITORY_V1" as const;
 export const CLOSURE_RESOURCE_REPOSITORY_SCHEMA_VERSION = 1 as const;
@@ -500,16 +494,8 @@ export async function discoverClosureDistributionBootstrapCandidate(input: Reado
 
 function versionMetadataUrl(latestMetadataUrl: string, version: string): string {
   const latest = new URL(requireHttpUrl(latestMetadataUrl, "Closure release metadata URL"));
-  const immutableMatch = latest.pathname.match(/\/versions\/([^/]+)\/metadata\.json$/u);
-  if (immutableMatch != null) {
-    let immutableVersion: string;
-    try {
-      immutableVersion = decodeURIComponent(immutableMatch[1]!);
-    } catch {
-      throw new ClosureUpdateError(
-        "Closure release metadata URL contains an invalid immutable version endpoint",
-      );
-    }
+  const immutableVersion = closureImmutableMetadataVersion(latest);
+  if (immutableVersion != null) {
     if (immutableVersion !== version) {
       throw new ClosureUpdateError(
         `Closure release metadata URL describes ${immutableVersion}, not exact version ${version}`,

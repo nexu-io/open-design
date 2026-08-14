@@ -45,7 +45,6 @@ import extractZip from "extract-zip";
 import {
   ClosureReleaseCandidate,
   ClosureDistributionReleaseCandidate,
-  ClosureUpdateError,
   ClosureResourceRepositoryConfig,
   ApplyClosureUpdateResult,
   ApplyClosureDistributionUpdateResult,
@@ -60,6 +59,7 @@ import {
   decideClosureUpdate,
   decideClosureDistributionUpdate,
 } from "./index.js";
+import { ClosureUpdateError } from "./errors.js";
 import { ensureDistributionBlob } from "./resource.js";
 
 function errorCode(error: unknown): string | null {

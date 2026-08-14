@@ -260,6 +260,7 @@ async function main(): Promise<void> {
   const releaseVersion = await resolvePackagedStandaloneReleaseBinding({
     channel: shellRuntime.launcherPaths.channel,
     configuredVersion: shellConfig.releaseVersion,
+    metadataUrl,
     namespace,
     root: shellRuntime.launcherPaths.root,
   });

@@ -193,6 +193,7 @@ export async function runPackagedStandalone(
   const releaseVersion = await resolvePackagedStandaloneReleaseBinding({
     channel: launcherRuntime.launcherPaths.channel,
     configuredVersion: shellConfig.releaseVersion,
+    metadataUrl,
     namespace: shellConfig.namespace,
     root: launcherRuntime.launcherPaths.root,
   });

@@ -44,6 +44,7 @@ import {
   discoverClosureDistributionBootstrapCandidate,
   discoverClosureDistributionVersionCandidate,
   readClosureResourceRepositoryConfig,
+  resolveClosureImmutableMetadataVersion,
   selectClosureDistributionReleaseCandidate,
   selectClosureReleaseCandidate,
   updateClosureFromRelease,
@@ -452,6 +453,15 @@ async function downloadableDistribution(): Promise<{
 }
 
 describe("Closure baseline discovery", () => {
+  it("projects first-install authority only from an immutable metadata URL", () => {
+    expect(resolveClosureImmutableMetadataVersion(
+      "https://releases.example.test/beta/versions/0.19.4-beta.2/metadata.json",
+    )).toBe("0.19.4-beta.2");
+    expect(() => resolveClosureImmutableMetadataVersion(
+      "https://releases.example.test/beta/latest/metadata.json",
+    )).toThrow(/requires an immutable/u);
+  });
+
   it("prefers the conventional local index before release discovery", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-closure-bootstrap-index-"));
     roots.push(root);
