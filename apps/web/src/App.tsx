@@ -3854,6 +3854,7 @@ function AppInner() {
       });
     }
     clearLocalProject(id, { deleted: true });
+    removeWorkspaceProjectTabs(id);
     iframeKeepAlivePool.evictProject(id, { includeActive: true });
     setProjects((curr) => curr.filter((p) => p.id !== id));
     if (route.kind === 'project' && route.projectId === id) {
