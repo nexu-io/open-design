@@ -5341,6 +5341,7 @@ export interface Dict {
   'pluginDetail.officialBadge': string;
   'pluginDetail.loadFailed': string;
   'pluginDetail.applyFailed': string;
+  'pluginDetail.applyFailedWithReason': string;
   'pluginDetail.examples': string;
   'skillDetail.providedBy': string;
   'skillDetail.markdownNotice': string;

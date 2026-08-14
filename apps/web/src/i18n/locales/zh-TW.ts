@@ -5628,6 +5628,7 @@ export const zhTW: Dict = {
   'pluginDetail.officialBadge': 'OpenDesign 官方',
   'pluginDetail.loadFailed': '外掛程式載入失敗：{error}',
   'pluginDetail.applyFailed': '套用失敗，請確認守護程式可存取。',
+  'pluginDetail.applyFailedWithReason': '套用失敗：{error}',
   'pluginDetail.examples': '範例',
   'skillDetail.providedBy': '由 {author} 提供',
   'skillDetail.markdownNotice': '以下內容來自該技能的 SKILL.md 原文',

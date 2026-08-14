@@ -5621,6 +5621,7 @@ export const zhCN: Dict = {
   'pluginDetail.officialBadge': 'OpenDesign 官方',
   'pluginDetail.loadFailed': '插件加载失败：{error}',
   'pluginDetail.applyFailed': '应用失败，请确认守护进程可访问。',
+  'pluginDetail.applyFailedWithReason': '应用失败：{error}',
   'pluginDetail.examples': '示例',
   'skillDetail.providedBy': '由 {author} 提供',
   'skillDetail.markdownNotice': '以下内容来自该技能的 SKILL.md 原文',

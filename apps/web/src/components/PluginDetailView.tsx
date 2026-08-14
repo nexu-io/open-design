@@ -260,7 +260,9 @@ export function PluginDetailView(props: Props) {
         <div className="plugin-suite-detail__empty-row" role="alert">
           {error.kind === 'load'
             ? t('pluginDetail.loadFailed', { error: error.message })
-            : t('pluginDetail.applyFailed')}
+            : error.message
+              ? t('pluginDetail.applyFailedWithReason', { error: error.message })
+              : t('pluginDetail.applyFailed')}
         </div>
       </section>
     );

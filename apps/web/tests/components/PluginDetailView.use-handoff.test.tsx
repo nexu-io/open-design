@@ -141,4 +141,25 @@ describe('PluginDetailView Use hands the plugin to Home', () => {
     expect(takeHomePromptHandoff()).toBeNull();
     expect(vi.mocked(navigate)).not.toHaveBeenCalledWith({ kind: 'home', view: 'home' });
   });
+
+  it('shows the preserved backend diagnosis when applying the plugin fails', async () => {
+    vi.mocked(applyPlugin).mockResolvedValue({
+      ok: false,
+      message: 'Plugin manifest is missing a required input.',
+    } as never);
+    await renderDetailAndUse();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Apply failed: Plugin manifest is missing a required input.',
+    );
+  });
+
+  it('keeps the localized fallback when applying fails without a diagnosis', async () => {
+    vi.mocked(applyPlugin).mockResolvedValue({ ok: false, message: '' } as never);
+    await renderDetailAndUse();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Apply failed. Make sure the daemon is reachable.',
+    );
+  });
 });

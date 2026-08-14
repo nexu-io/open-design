@@ -5187,6 +5187,7 @@ export const en: Dict = {
   'pluginDetail.officialBadge': 'OpenDesign official',
   'pluginDetail.loadFailed': 'Failed to load plugin: {error}',
   'pluginDetail.applyFailed': 'Apply failed. Make sure the daemon is reachable.',
+  'pluginDetail.applyFailedWithReason': 'Apply failed: {error}',
   'pluginDetail.examples': 'Examples',
   'skillDetail.providedBy': 'provided by {author}',
   'skillDetail.markdownNotice': 'The following content is taken verbatim from this skill’s SKILL.md',
