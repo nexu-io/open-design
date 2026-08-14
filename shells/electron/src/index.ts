@@ -30,7 +30,6 @@ import {
   parkPackagedLaunchContext,
   readPackagedConfig,
   resolvePackagedStandaloneMetadataUrl,
-  resolvePackagedStandaloneReleaseVersion,
 } from "./config.js";
 import { createDesktopCapabilityAdapter } from "./desktop-capability-adapter.js";
 import {
@@ -96,6 +95,7 @@ import {
   parsePackagedStandaloneRequest,
   runPackagedStandalone,
 } from "./standalone-launcher.js";
+import { resolvePackagedStandaloneReleaseBinding } from "./standalone-release.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
@@ -257,7 +257,12 @@ async function main(): Promise<void> {
   const metadataUrl = resolvePackagedStandaloneMetadataUrl(
     shellConfig.updateMetadataUrl,
   );
-  const releaseVersion = resolvePackagedStandaloneReleaseVersion(shellConfig.releaseVersion);
+  const releaseVersion = await resolvePackagedStandaloneReleaseBinding({
+    channel: shellRuntime.launcherPaths.channel,
+    configuredVersion: shellConfig.releaseVersion,
+    namespace,
+    root: shellRuntime.launcherPaths.root,
+  });
   const target = resolveElectronStandaloneTarget();
   if (target == null) throw new Error(`Standalone is unsupported on ${process.platform}-${process.arch}`);
   const nodeCommand = resolveShellNodeCommand(shellConfig.nodeCommand);

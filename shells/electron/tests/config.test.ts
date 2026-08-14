@@ -77,6 +77,11 @@ describe('resolvePackagedStandaloneReleaseVersion', () => {
       .toBe('0.19.1-beta.6');
   });
 
+  it('accepts an immutable release restored from Closure state', () => {
+    expect(resolvePackagedStandaloneReleaseVersion(null, ' 0.19.1-beta.5 '))
+      .toBe('0.19.1-beta.5');
+  });
+
   it('does not bind an unbound Shell to mutable public metadata', () => {
     expect(() => resolvePackagedStandaloneReleaseVersion(null)).toThrow(
       'Packaged Standalone release binding is unavailable',
