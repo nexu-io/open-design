@@ -17,7 +17,7 @@ on:
         required: true
         type: choice
         options: [prod, test, feature-test]
-        default: prod
+        default: test
       mac_arm64_sign_mode:
         description: "macOS arm64 signing mode."
         required: true
@@ -71,7 +71,7 @@ on:
         description: "AMR profile baked into the build."
         required: false
         type: string
-        default: prod
+        default: test
       mac_arm64_sign_mode:
         required: false
         type: string

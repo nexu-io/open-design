@@ -45,7 +45,7 @@ on:
         description: "AMR profile baked into the build. Only prod can receive stable-promotion qualification."
         required: false
         type: string
-        default: "prod"
+        default: "test"
       mac_arm64_sign_mode:
         description: "macOS arm64 signing mode: unsigned, signed, or notarized."
         required: false
@@ -142,19 +142,17 @@ env:
   # both are required for the packaged daemon to enable the workspace-team
   # transport (see shells/electron/src/workspace-team.ts).
   #
-  # Every profile now resolves an origin, production included: prod's Vela
-  # backend serves the feature (WORKSPACE_TEAM_ENABLED plus a configured
-  # resource-hub blob store), so a prod build ships the transports enabled.
-  # An empty amr_profile still yields no origin, which the packaged gate treats
-  # as dormant — a build that forgets the profile degrades to local-only rather
-  # than pointing at an unknown backend.
+  # Every profile resolves its matching origin. Non-stable publication defaults
+  # to test, including defensive handling for an older caller that passes an
+  # empty string; explicit prod / feature-test inputs remain directional-debug
+  # overrides.
   #
   # Origins stay in repository secrets rather than literals: the non-prod AMR
   # environments are internal deployments and this repository is public.
   # Secrets read here: VELA_WEB_URL_FEATURE_TEST, VELA_WEB_URL_TEST,
   # VELA_WEB_URL_PROD.
-  OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
-  OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || inputs.amr_profile == 'test' && secrets.VELA_WEB_URL_TEST || inputs.amr_profile == 'prod' && secrets.VELA_WEB_URL_PROD || '' }}
+  OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile || 'test' }}
+  OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || (inputs.amr_profile == 'test' || inputs.amr_profile == '') && secrets.VELA_WEB_URL_TEST || inputs.amr_profile == 'prod' && secrets.VELA_WEB_URL_PROD || '' }}
 jobs:
   metadata:
     name: Prepare ${{ inputs.channel }} metadata

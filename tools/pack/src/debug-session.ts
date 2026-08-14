@@ -15,7 +15,7 @@ import {
   releaseInstallIdentity,
   type ReleaseChannel,
 } from "@open-design/release";
-import { SIDECAR_DEFAULTS } from "@open-design/sidecar/protocol";
+import { OPEN_DESIGN_PRODUCT_NAME, SIDECAR_DEFAULTS } from "@open-design/sidecar/protocol";
 
 import type { ToolPackConfig } from "./config.js";
 
@@ -33,7 +33,12 @@ export function resolveToolPackProductUserDataRoot(config: ToolPackConfig): stri
     return join(homedir(), "Library", "Application Support", productName);
   }
   const appDataRoot = process.env.APPDATA ?? join(homedir(), "AppData", "Roaming");
-  return join(appDataRoot, productName);
+  // The reusable Windows Electron Shell deliberately keeps the executable's
+  // productName channel-neutral. Electron therefore resolves userData below
+  // `%APPDATA%/Open Design` before it can read the channel-specific packaged
+  // config. The launch-context producer must use that same bootstrap root;
+  // channel/namespace isolation begins inside the claimed transaction target.
+  return join(appDataRoot, OPEN_DESIGN_PRODUCT_NAME);
 }
 
 export function resolveToolPackLaunchContextPath(config: ToolPackConfig): string {

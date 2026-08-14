@@ -14,10 +14,10 @@ on:
         type: string
         default: ""
       amr_profile:
-        description: "Optional AMR profile; empty uses production."
+        description: "Optional AMR profile override; exact channels default to test."
         required: false
         type: string
-        default: ""
+        default: test
       publish:
         description: "Publish immutable assets and staged metadata."
         required: true
@@ -60,7 +60,7 @@ on:
       amr_profile:
         required: false
         type: string
-        default: ""
+        default: test
       notification_stream:
         required: false
         type: string
@@ -75,7 +75,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
+  OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile || 'test' }}
   RELEASE_MAC_ARM64_SIGN_MODE: notarized
   RELEASE_MAC_X64_SIGN_MODE: notarized
   RELEASE_WIN_X64_SIGN_MODE: unsigned
@@ -105,11 +105,12 @@ env:
   # forwards it to the daemon as OD_VELA_WEB_URL, which is the second half of the
   # workspace-team gate (the first being the AMR profile allowlist). A profile
   # whose secret is not configured therefore ships with workspace-team dormant
-  # rather than pointed at an unknown backend. `prod` never gets an origin — the
-  # packaged gate rejects it regardless.
+  # rather than pointed at an unknown backend. Exact channels default to test;
+  # an explicit profile override selects its matching origin as one transaction.
   #
-  # Secrets read here: VELA_WEB_URL_FEATURE_TEST, VELA_WEB_URL_TEST.
-  OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || inputs.amr_profile == 'test' && secrets.VELA_WEB_URL_TEST || '' }}
+  # Secrets read here: VELA_WEB_URL_FEATURE_TEST, VELA_WEB_URL_TEST,
+  # VELA_WEB_URL_PROD.
+  OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || (inputs.amr_profile == 'test' || inputs.amr_profile == '') && secrets.VELA_WEB_URL_TEST || inputs.amr_profile == 'prod' && secrets.VELA_WEB_URL_PROD || '' }}
   RELEASE_BRANCH: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
   RELEASE_REPOSITORY: ${{ github.repository }}
   RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
@@ -340,7 +341,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           channel: ${{ inputs.exact_name }}
-          amr-profile: ${{ inputs.amr_profile }}
+          amr-profile: ${{ inputs.amr_profile || 'test' }}
           arch: ${{ matrix.target == 'mac_arm64' && 'arm64' || 'x64' }}
           artifact-id: ${{ matrix.target == 'mac_arm64' && 'mac-arm64' || 'mac-x64' }}
           build-target: ${{ matrix.target == 'mac_arm64' && 'dmg' || 'all' }}
@@ -370,7 +371,7 @@ jobs:
           release-version: ${{ needs.metadata.outputs.release_version }}
           closure-version: ${{ needs.metadata.outputs.closure_version }}
           shell-version: ${{ needs.metadata.outputs.shell_version }}
-          amr-profile: ${{ inputs.amr_profile }}
+          amr-profile: ${{ inputs.amr_profile || 'test' }}
           publish: ${{ inputs.publish }}
           release-public-origin: ${{ inputs.release_public_origin }}
           sign-mode: unsigned

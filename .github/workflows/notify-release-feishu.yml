@@ -37,7 +37,7 @@ on:
         type: string
         default: ""
       amr_profile:
-        description: "Optional AMR profile to bake (test / feature-test enable the Workspace Team transport). Empty uses the per-branch default: test on release/v0.18.0, otherwise prod."
+        description: "Optional AMR profile override. Prerelease defaults to test."
         required: false
         type: string
         default: ""
@@ -77,14 +77,9 @@ jobs:
       release_version: ${{ inputs.release_version }}
       # Workspace Team profile baked into the packaged build (see
       # shells/electron/src/workspace-team.ts + release-prerelease.yml). Release
-      # builds ship `prod`: production's Vela backend now serves the feature, so
-      # a release prerelease points users at the production console rather than
-      # an internal test environment. A manual dispatch can still override to
-      # test / feature-test to cut a build against those backends.
-      #
-      # (This replaces a temporary `test` default on release/v0.18.0 that
-      # existed only while prod's resource-hub storage was unconfigured.)
-      amr_profile: ${{ inputs.amr_profile || 'prod' }}
+      # Non-stable channels default to the test backend. Manual dispatch remains
+      # the explicit escape hatch for prod / feature-test directional debugging.
+      amr_profile: ${{ inputs.amr_profile || 'test' }}
       # Windows packaged smoke is advisory to publication: a failed smoke is
       # recorded in the report and annotated on the full download card without
       # blocking platform or metadata publication. The final arm must name a

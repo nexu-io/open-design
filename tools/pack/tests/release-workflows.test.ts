@@ -147,6 +147,9 @@ describe("release workflow topology", () => {
       expect(distribution).toContain("tools-release check-storage");
       expect(distribution).not.toContain(".github/scripts/release/r2/");
     }
+    expect(stable).toContain("OPEN_DESIGN_AMR_PROFILE: prod");
+    expect(prerelease).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile || 'test' }}");
+    expect(exact).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile || 'test' }}");
     expect(exact).toContain("inputs.exact_name == 'beta'");
     expect(exact).toContain("RELEASE_INSTALLATION_VERSION_MIN_BETA:");
     expect(prerelease).toContain("RELEASE_INSTALLATION_VERSION_MIN_PRERELEASE:");

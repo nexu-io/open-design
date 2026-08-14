@@ -1909,6 +1909,29 @@ process.stdin.on("end", () => {
     expectWindowsUpdaterSmokeContract(`${releasePrereleaseWorkflow}\n${winAction}`, "prerelease");
     expectWindowsUpdaterSmokeContract(`${releaseStableWorkflow}\n${winAction}`, "stable");
   });
+
+  it("[P1] binds stable to prod and every non-stable release entry to test by default", async () => {
+    const [stable, prereleaseEntry, prereleaseDistribution, exact] = await Promise.all([
+      readFile(distributionStableWorkflowPath, "utf8"),
+      readFile(releasePrereleaseWorkflowPath, "utf8"),
+      readFile(distributionCountedWorkflowPath, "utf8"),
+      readFile(releaseBetaWorkflowPath, "utf8"),
+    ]);
+
+    expect(stable).toContain("OPEN_DESIGN_AMR_PROFILE: prod");
+    expect(stable).toContain("OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}");
+
+    expect(prereleaseEntry).toContain("default: test");
+    expect(prereleaseDistribution).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile || 'test' }}");
+    expect(prereleaseDistribution).toContain(
+      "(inputs.amr_profile == 'test' || inputs.amr_profile == '') && secrets.VELA_WEB_URL_TEST",
+    );
+
+    expect(exact).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile || 'test' }}");
+    expect(exact).toContain(
+      "(inputs.amr_profile == 'test' || inputs.amr_profile == '') && secrets.VELA_WEB_URL_TEST",
+    );
+  });
   it("[P2] prerelease publishes github.commit so its changelog has a baseline", async () => {
     // The Feishu release card computes its changelog as `git log <previous>..<current>`,
     // where <previous> is read from prerelease/latest/metadata.json's `.github.commit`
@@ -2305,8 +2328,8 @@ process.stdin.on("end", () => {
     expect(canary).toContain("ref: main");
     expect(canary).not.toContain("inputs.ref");
     expect(canary).toContain("runs-on: windows-latest");
-    expect(canary).toContain("OPEN_DESIGN_AMR_PROFILE: prod");
-    expect(canary).toContain("OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}");
+    expect(canary).toContain("OPEN_DESIGN_AMR_PROFILE: test");
+    expect(canary).toContain("OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_TEST }}");
     expect(canary).toContain("--namespace release-prerelease-canary-win");
     expect(canary).toContain('OD_PACKAGED_E2E_RELEASE_CHANNEL: prerelease');
     expect(canary).toContain('OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core');

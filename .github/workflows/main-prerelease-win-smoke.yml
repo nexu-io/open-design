@@ -22,8 +22,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  OPEN_DESIGN_AMR_PROFILE: prod
-  OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}
+  OPEN_DESIGN_AMR_PROFILE: test
+  OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_TEST }}
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
   POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
   POSTHOG_HOST: ${{ vars.POSTHOG_HOST }}
