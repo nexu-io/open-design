@@ -11,6 +11,7 @@ await build({
     "./src/launcher-bootstrap.ts",
     "./src/process-bridge.ts",
     "./src/protocol/index.ts",
+    "./src/resource-runtime.ts",
     "./src/runtime/index.ts",
     "./src/sidecars.ts",
   ],

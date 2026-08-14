@@ -29,7 +29,6 @@ function makeConfig(root: string, platform: ToolPackPlatform, namespace: string,
     removeLogs: false,
     removeProductUserData: false,
     removeSidecars: false,
-    requireVelaCli: false,
     roots: {
       cacheRoot: join(root, ".tmp", "tools-pack", "cache"),
       output: {

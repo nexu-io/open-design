@@ -362,7 +362,6 @@ jobs:
           release-name: Open Design
           release-version: ${{ needs.metadata.outputs.release_version }}
           report-artifact-name: open-design-release-mac-e2e-report
-          require-vela-cli: "true"
           sign-mode: ${{ inputs.mac_arm64_sign_mode }}
           smoke-enabled: "true"
           target: mac_arm64
@@ -411,7 +410,6 @@ jobs:
           namespace: ${{ needs.metadata.outputs.mac_intel_namespace }}
           release-name: Open Design
           release-version: ${{ needs.metadata.outputs.release_version }}
-          require-vela-cli: "true"
           sign-mode: ${{ inputs.mac_x64_sign_mode }}
           smoke-enabled: "false"
           target: mac_x64
@@ -452,7 +450,6 @@ jobs:
           release-name: Open Design
           release-version: ${{ needs.metadata.outputs.release_version }}
           report-artifact-name: open-design-release-win-e2e-report
-          require-vela-cli: "true"
           sign-mode: ${{ inputs.win_x64_sign_mode }}
           smoke-mode: ${{ inputs.win_x64_smoke_mode }}
           update-metadata-url: ${{ inputs.win_x64_update_metadata_url }}

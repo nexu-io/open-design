@@ -710,11 +710,29 @@ export function validateStandaloneHandoffDescriptor(value: unknown): StandaloneH
   const request = requireRecord(value, "standalone handoff descriptor");
   requireKnownKeys(
     request,
-    ["attachment", "handoff", "paths", "transition"],
+    ["attachment", "closure", "handoff", "paths", "transition"],
     "standalone handoff descriptor",
   );
   return {
     attachment: validateStandaloneAttachmentDescriptor(request.attachment),
+    ...(request.closure == null ? {} : {
+      closure: (() => {
+        const closure = requireRecord(request.closure, "standalone Closure resource context");
+        requireKnownKeys(
+          closure,
+          ["repositoryConfigPath", "storeRoot", "target"],
+          "standalone Closure resource context",
+        );
+        return Object.freeze({
+          repositoryConfigPath: normalizePath(
+            closure.repositoryConfigPath,
+            "standalone Closure repositoryConfigPath",
+          ),
+          storeRoot: normalizePath(closure.storeRoot, "standalone Closure storeRoot"),
+          target: normalizeToken(closure.target, "standalone Closure target"),
+        });
+      })(),
+    }),
     handoff: validateStandaloneHandoffEnvelope(request.handoff),
     paths: validateStandalonePaths(request.paths),
     transition: request.transition == null
@@ -727,11 +745,12 @@ export function validateStandaloneHandoffRequest(value: unknown): StandaloneHand
   const request = requireRecord(value, "standalone handoff request");
   requireKnownKeys(
     request,
-    ["attachment", "capabilities", "handoff", "paths", "transition"],
+    ["attachment", "capabilities", "closure", "handoff", "paths", "transition"],
     "standalone handoff request",
   );
   const descriptor = validateStandaloneHandoffDescriptor({
     attachment: request.attachment,
+    closure: request.closure,
     handoff: request.handoff,
     paths: request.paths,
     transition: request.transition,
@@ -745,4 +764,3 @@ export function validateStandaloneHandoffRequest(value: unknown): StandaloneHand
     capabilities: request.capabilities as StandaloneShellCapabilityPort,
   };
 }
-

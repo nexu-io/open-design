@@ -64,7 +64,6 @@ function makeConfig(root: string, overrides: Partial<ToolPackConfig> = {}): Tool
     removeLogs: false,
     removeProductUserData: false,
     removeSidecars: false,
-    requireVelaCli: false,
     roots: {
       output: {
         appBuilderRoot: join(root, ".tmp", "tools-pack", "out", "mac", "namespaces", "local-test", "builder"),

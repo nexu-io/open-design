@@ -63,6 +63,12 @@ export type StandalonePaths = Readonly<{
   runtimeRoot: string;
 }>;
 
+export type StandaloneClosureResourceContext = Readonly<{
+  repositoryConfigPath: string;
+  storeRoot: string;
+  target: string;
+}>;
+
 export type StandaloneBootstrapDescriptor = Readonly<{
   attachment: StandaloneAttachmentDescriptor;
   discovery: Readonly<{
@@ -308,6 +314,7 @@ export type StandaloneRuntimeCommandResult =
 
 export type StandaloneHandoffDescriptor = Readonly<{
   attachment: StandaloneAttachmentDescriptor;
+  closure?: StandaloneClosureResourceContext;
   handoff: StandaloneHandoffEnvelope;
   paths: StandalonePaths;
   transition?: StandaloneLifecycleTransitionCredential | null;

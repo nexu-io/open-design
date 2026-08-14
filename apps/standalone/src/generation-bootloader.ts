@@ -1,4 +1,3 @@
-import { statSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -12,27 +11,9 @@ import {
   launchStandaloneBodyBridge,
   type StandaloneBodyProcessLaunchSpec,
 } from "./process-bridge.js";
+import { bundledStandaloneToolEnv } from "./tool-env.js";
 
 export type StandaloneGenerationLaunch = StandaloneBodyProcessLaunchSpec;
-
-function bundledStandaloneToolEnv(resourceRoot: string): NodeJS.ProcessEnv {
-  const binaryName = process.platform === "win32" ? "vela.exe" : "vela";
-  const openCodeName = process.platform === "win32" ? "opencode.exe" : "opencode";
-  const candidates = {
-    VELA_BIN: join(resourceRoot, "bin", binaryName),
-    VELA_OPENCODE_BIN: join(resourceRoot, "bin", "libexec", "opencode", openCodeName),
-  } as const;
-  const env: NodeJS.ProcessEnv = {};
-  for (const [name, path] of Object.entries(candidates)) {
-    if (process.env[name]?.trim()) continue;
-    try {
-      if (statSync(path).isFile()) env[name] = path;
-    } catch {
-      // Non-strict development contributions may intentionally omit Vela.
-    }
-  }
-  return env;
-}
 
 /**
  * Resolve the three-component generation layout inside the launcher fossil.
@@ -68,6 +49,7 @@ export const handoff: StandaloneHandoff = async (value) => {
     capabilities: request.capabilities,
     descriptor: {
       attachment: request.attachment,
+      closure: request.closure,
       handoff: request.handoff,
       paths: request.paths,
       transition: request.transition,

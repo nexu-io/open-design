@@ -178,7 +178,6 @@ runs:
           --to "${{ inputs.build-target }}"
           --sign-mode "${{ inputs.sign-mode }}"
           --json
-          --require-vela-cli
         )
         if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.log" >&2))"; then
           printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.json"
@@ -213,7 +212,6 @@ runs:
           --to "${{ inputs.build-target }}"
           --sign-mode "${{ inputs.sign-mode }}"
           --json
-          --require-vela-cli
         )
         if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.log" >&2))"; then
           printf '%s\n' "$build_output" | tee "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.json"
@@ -222,7 +220,7 @@ runs:
           printf '%s\n' "$build_output"
           exit "$build_status"
         fi
-    - name: Build exact ${{ inputs.target }} Standalone native contribution
+    - name: Build exact ${{ inputs.target }} Standalone target contribution
       shell: bash
       env:
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -241,8 +239,10 @@ runs:
         blob_root="$(jq -er '.blobRoot' "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json")"
         cp "$contribution_path" "$RUNNER_TEMP/release-build/${{ inputs.target }}/target-contribution.json"
         mkdir -p "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-blobs"
-        digest="$(jq -er '.contribution.native.artifact.digest' "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json")"
-        cp "$blob_root/${digest#sha256:}" "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-blobs/${digest#sha256:}"
+        jq -er '[.contribution.native.artifact, .contribution.resources[].artifact] | .[].digest' \
+          "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json" | while IFS= read -r digest; do
+          cp "$blob_root/${digest#sha256:}" "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-blobs/${digest#sha256:}"
+        done
     - name: Prepare ${{ inputs.target }} Standalone smoke graph
       shell: bash
       run: |
@@ -290,7 +290,7 @@ runs:
         RELEASE_STORAGE_REGION: auto
         RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
       run: pnpm exec tools-release register-shell-build
-    - name: Publish verified ${{ inputs.target }} Standalone native blob
+    - name: Publish verified ${{ inputs.target }} Standalone target blobs
       shell: bash
       if: ${{ inputs.publish == 'true' }}
       env:
@@ -361,7 +361,6 @@ runs:
           --launcher-version "$update_version" \
           --mac-compression normal \
           --to app \
-          --require-vela-cli \
           --json)"
         printf '%s\n' "$update_output" > "$update_build_json_path"
         {

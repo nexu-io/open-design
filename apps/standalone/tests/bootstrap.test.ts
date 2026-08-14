@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -20,6 +20,7 @@ import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { resolveStandaloneBootstrap } from "../src/bootstrap.js";
+import { prepareStandaloneVelaRuntime } from "../src/resource-runtime.js";
 
 const roots: string[] = [];
 
@@ -47,11 +48,16 @@ async function fixture() {
       ["launcher.mjs", "export const launcher = true;\n"],
     ],
     native: [["addon.node", "native\n"]],
+    vela: [
+      ["bin/libexec/opencode/opencode", "opencode\n"],
+      ["bin/vela", "vela\n"],
+    ],
   } satisfies Record<string, Array<readonly [string, string]>>;
   const bytes = {
     body: await zip(source.body),
     launcher: await zip(source.launcher),
     native: await zip(source.native),
+    vela: await zip(source.vela),
   };
   const artifact = (value: Buffer): ClosureDistributionBlob => ({
     digest: digest(value),
@@ -63,6 +69,7 @@ async function fixture() {
     body: artifact(bytes.body),
     launcher: artifact(bytes.launcher),
     native: artifact(bytes.native),
+    vela: artifact(bytes.vela),
   };
   const tree = (files: Array<readonly [string, string]>) => createClosureComponentTreeDigest(
     files.map(([path, contents]) => ({ digest: digest(contents), path, size: Buffer.byteLength(contents) })),
@@ -81,7 +88,17 @@ async function fixture() {
           handoffPath: "bootloader.mjs",
           treeDigest: tree(source.launcher),
         },
-        targets: { "darwin-arm64": { native: { blob: artifacts.native.digest, treeDigest: tree(source.native) } } },
+        targets: {
+          "darwin-arm64": {
+            native: { blob: artifacts.native.digest, treeDigest: tree(source.native) },
+            resources: [{
+              blob: artifacts.vela.digest,
+              id: "vela-runtime",
+              title: "Vela runtime",
+              treeDigest: tree(source.vela),
+            }],
+          },
+        },
       },
       resources: [],
       schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
@@ -114,6 +131,11 @@ async function fixture() {
       : new Response(body, { headers: { "content-length": String(body.byteLength) }, status: 200 });
   }) as typeof globalThis.fetch;
   const seedRoot = join(root, "seed");
+  await mkdir(join(seedRoot, "beta", "blobs"), { recursive: true });
+  await writeFile(
+    join(seedRoot, "beta", "blobs", artifacts.vela.digest.slice("sha256:".length)),
+    bytes.vela,
+  );
   const repositoryConfigPath = join(root, "repository.json");
   await writeFile(repositoryConfigPath, JSON.stringify({ localSeeds: [{ root: seedRoot }], remoteOrigins: [], schemaVersion: 1 }));
   const paths = {
@@ -189,6 +211,11 @@ describe("Standalone unresolved bootstrap", () => {
     expect(resolution.bootloaderPath).toMatch(/installations[\\/].+[\\/]darwin-arm64[\\/]launcher[\\/]bootloader\.mjs$/u);
     expect(resolution.handoff.handoff.scope).toEqual({ channel: "beta", generation: 0, namespace: "release-beta" });
     expect(resolution.handoff.paths.resourceRoot).toMatch(/channels[\\/]beta[\\/]resources$/u);
+    expect(resolution.handoff.closure).toEqual({
+      repositoryConfigPath: value.repositoryConfigPath,
+      storeRoot: value.paths.installationRoot,
+      target: "darwin-arm64",
+    });
     const store = resolveClosureStorePaths({ channel: "beta", namespace: "release-beta", root: value.paths.installationRoot });
     expect((await readClosureBindingDescriptor(store)).committed?.standalone.generation).toBe(0);
     expect(progress.map((entry) => entry.stage)).toEqual(expect.arrayContaining([
@@ -210,6 +237,29 @@ describe("Standalone unresolved bootstrap", () => {
       { initialLoad: false, stage: "verifying" },
       { initialLoad: false, stage: "ready" },
     ]);
+  });
+
+  it("prewarms the target Vela resource outside the required generation", async () => {
+    const value = await fixture();
+    const resolution = await resolveStandaloneBootstrap(
+      request(value, "0.19.0-beta.1"),
+      { fetch: value.fetch },
+    );
+    const env = await prepareStandaloneVelaRuntime({
+      ...resolution.handoff,
+      capabilities: {
+        async invoke(exchange) {
+          return { ...exchange, outcome: "unsupported" as const };
+        },
+      },
+    });
+
+    expect(env.OD_VELA_RUNTIME_LAZY).toBe("1");
+    expect(env.VELA_BIN).toMatch(/resources[\\/][0-9a-f]{64}[\\/]bin[\\/]vela$/u);
+    await vi.waitFor(async () => {
+      const materialized = await stat(env.VELA_BIN!).then((entry) => entry.isFile()).catch(() => false);
+      expect(materialized).toBe(true);
+    });
   });
 
   it("cold-starts offline from a version index and required local blobs", async () => {

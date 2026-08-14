@@ -34,6 +34,10 @@
       "types": "./dist/process-bridge.d.ts",
       "default": "./dist/process-bridge.mjs"
     },
+    "./resource-runtime": {
+      "types": "./dist/resource-runtime.d.ts",
+      "default": "./dist/resource-runtime.mjs"
+    },
     "./sidecars": {
       "types": "./dist/sidecars.d.ts",
       "default": "./dist/sidecars.mjs"

@@ -36,6 +36,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { startSidecarStandalone } from "@open-design/standalone";
+import { prepareStandaloneVelaRuntime } from "@open-design/standalone/resource-runtime";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -88,6 +89,7 @@ export function resolveOpenDesignClosureLayout(runtimeRoot = root) {
 
 export async function startStandaloneBody(request) {
   const layout = resolveOpenDesignClosureLayout(await resolveOpenDesignClosureRuntimeRoot(request));
+  const preparedToolEnv = await prepareStandaloneVelaRuntime(request);
   // Windows can spend more than the control plane's generic five-second
   // default loading a freshly materialized Electron-as-Node sidecar while
   // Defender scans its Closure tree. Hosted and older Intel Macs can likewise
@@ -101,6 +103,7 @@ export async function startStandaloneBody(request) {
       : undefined;
   const childEnv = {
     ...process.env,
+    ...preparedToolEnv,
     OD_DAEMON_CLI_PATH: layout.daemonCliEntry,
     OD_NODE_BIN: process.execPath,
     // The normalized Standalone control plane supplies this channel-scoped

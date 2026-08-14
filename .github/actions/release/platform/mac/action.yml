@@ -48,10 +48,6 @@ inputs:
     description: Workflow artifact name for the smoke report
     required: false
     default: ""
-  require-vela-cli:
-    description: Require Vela CLI while packaging
-    required: false
-    default: "false"
   release-version:
     description: Exact release version
     required: true
@@ -165,13 +161,12 @@ runs:
         namespace: ${{ inputs.namespace }}
         register-enabled: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
         release-version: ${{ inputs.release-version }}
-        require-vela-cli: ${{ inputs.require-vela-cli }}
         shell-version: ${{ inputs.release-version }}
         sign-mode: ${{ inputs.sign-mode }}
         target: ${{ inputs.target }}
         verify-notarization: ${{ inputs.verify-notarization }}
 
-    - name: Build Standalone native contribution
+    - name: Build Standalone target contribution
       shell: bash
       run: |
         set -euo pipefail
@@ -187,14 +182,16 @@ runs:
         blob_root="$(jq -er '.blobRoot' "$build_dir/closure-target.json")"
         cp "$contribution_path" "$build_dir/target-contribution.json"
         mkdir -p "$build_dir/closure-blobs"
-        digest="$(jq -er '.contribution.native.artifact.digest' "$build_dir/closure-target.json")"
-        cp "$blob_root/${digest#sha256:}" "$build_dir/closure-blobs/${digest#sha256:}"
+        jq -er '[.contribution.native.artifact, .contribution.resources[].artifact] | .[].digest' \
+          "$build_dir/closure-target.json" | while IFS= read -r digest; do
+          cp "$blob_root/${digest#sha256:}" "$build_dir/closure-blobs/${digest#sha256:}"
+        done
         pnpm exec tools-release merge-closure-distribution \
           "$RUNNER_TEMP/release-closure/shared/shared-contribution.json" \
           "$build_dir/target-contribution.json" \
           --output "$build_dir/closure-distribution.json"
 
-    - name: Publish verified Standalone native blob
+    - name: Publish verified Standalone target blobs
       if: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
       shell: bash
       env:

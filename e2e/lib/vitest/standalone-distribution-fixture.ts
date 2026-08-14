@@ -16,6 +16,7 @@ import {
 } from '@open-design/closure/store';
 import {
   applyClosureDistributionUpdate,
+  ensureClosureDistributionBlob,
   ensureClosureResource,
   type ClosureDistributionReleaseCandidate,
 } from '@open-design/closure/update';
@@ -84,6 +85,13 @@ export async function commitPackagedStandaloneDistributionFixture(input: {
     const pointer = (await readClosureBindingDescriptor(paths)).committed?.standalone;
     if (pointer == null || pointer.digest !== manifest.identity.digest || pointer.target !== input.target) {
       throw new Error('Standalone distribution fixture committed an unexpected binding');
+    }
+    for (const resource of manifest.required.targets[input.target]!.resources) {
+      await ensureClosureDistributionBlob({
+        artifact: manifest.blobs[resource.blob]!,
+        paths,
+        repository: { localSeeds: [{ root: seedRoot }], remoteOrigins: [], schemaVersion: 1 },
+      });
     }
     const firstResource = manifest.resources[0];
     const ensuredResource = firstResource == null

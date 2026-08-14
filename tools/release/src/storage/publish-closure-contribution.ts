@@ -60,7 +60,10 @@ function contributionArtifacts(kind: ContributionKind, value: unknown): {
   }
   const contribution = validateClosureDistributionTargetContribution(value);
   return {
-    artifacts: [contribution.native.artifact],
+    artifacts: [
+      contribution.native.artifact,
+      ...contribution.resources.map((resource) => resource.artifact),
+    ],
     channel: contribution.channel,
     version: contribution.version,
   };

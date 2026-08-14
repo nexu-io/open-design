@@ -85,7 +85,6 @@ function addBuildOptions(command: CacCommand, platform: ToolPackPlatform) {
     .option("--launcher-version <version>", "launcher payload version; defaults to the bound release")
     .option("--standalone-seed-dir <path>", "validated baseline index/blob repository carried as a Shell resource")
     .option("--portable", "do not bake local tools-pack runtime roots into the packaged config")
-    .option("--require-vela-cli", "fail packaging when the bundled Vela CLI cannot be resolved")
     .option(
       "--sign-mode <mode>",
       platform === "mac"

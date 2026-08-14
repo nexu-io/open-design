@@ -21,7 +21,7 @@ import {
 } from "../src/closure/distribution.js";
 
 const fixturePath = fileURLToPath(
-  new URL("../../../packages/closure/fixtures/distribution-v2.json", import.meta.url),
+  new URL("../../../packages/closure/fixtures/distribution-v3.json", import.meta.url),
 );
 const roots: string[] = [];
 
@@ -173,6 +173,31 @@ describe("tools-pack layered Closure producer", () => {
 
     expect(target).not.toHaveProperty("body");
     expect(target).not.toHaveProperty("launcher");
-    expect(target).not.toHaveProperty("resources");
+    expect(target.resources).toEqual([]);
+  });
+
+  it("seals platform resources without adding them to another target", async () => {
+    const options = await targetContributionOptions("darwin-arm64");
+    const root = await mkdtemp(join(tmpdir(), "od-closure-contribution-vela-"));
+    roots.push(root);
+    const mac = await createClosureDistributionTargetContribution({
+      ...options,
+      resources: [{
+        ...await artifact(root, "vela.zip", "darwin-vela"),
+        id: "vela-runtime",
+        title: "Vela runtime",
+      }],
+    });
+    const win = await createClosureDistributionTargetContribution(
+      await targetContributionOptions("win32-x64"),
+    );
+    const shared = await createClosureDistributionSharedContribution(
+      await sharedContributionOptions(),
+    );
+    const merged = mergeClosureDistributionTargetContributions(shared, [mac, win]);
+
+    expect(merged.required.targets["darwin-arm64"]?.resources).toHaveLength(1);
+    expect(merged.required.targets["win32-x64"]?.resources).toEqual([]);
+    expect(merged.resources.some((resource) => resource.id === "vela-runtime")).toBe(false);
   });
 });

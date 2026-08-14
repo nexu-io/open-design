@@ -55,6 +55,7 @@ export type ClosureComponentEntrypointArchive = ClosureComponentArchive & Readon
 }>;
 
 export type ClosureSharedResourceRoot = Readonly<{
+  executablePaths?: readonly string[];
   id: string;
   root: string;
   title: string;
@@ -604,6 +605,7 @@ export async function buildClosureDistributionTargetContribution(options: Readon
   channel: ReleaseChannel;
   nativeRoot: string;
   outputRoot: string;
+  resources?: readonly ClosureSharedResourceRoot[];
   run?: ClosureComponentArchiveRunner;
   target: ClosurePlatformTarget;
   version: string;
@@ -617,10 +619,26 @@ export async function buildClosureDistributionTargetContribution(options: Readon
     sourceRoot: options.nativeRoot,
     target: options.target,
   });
+  const resources = [];
+  const resourceIds = new Set<string>();
+  for (const resource of options.resources ?? []) {
+    const id = normalizeResourceId(resource.id);
+    if (resourceIds.has(id)) throw new Error(`duplicate Closure target resource id: ${id}`);
+    resourceIds.add(id);
+    const archive = await archiveClosureComponent({
+      executablePaths: resource.executablePaths,
+      outputPath: join(outputRoot, "targets", options.target, "resources", `${id}.zip`),
+      run: options.run,
+      sourceRoot: resource.root,
+      target: options.target,
+    });
+    resources.push({ ...archive, id, title: resource.title });
+  }
   return await createClosureDistributionTargetContribution({
     blobOrigin: options.blobOrigin,
     channel: options.channel,
     native,
+    resources,
     target: options.target,
     version: options.version,
   });

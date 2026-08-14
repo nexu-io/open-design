@@ -40,6 +40,11 @@ function binding(generation = 3): ElectronStandaloneBinding {
       },
     },
     bootloaderPath: "/open-design/standalone/bootloader.mjs",
+    closure: {
+      repositoryConfigPath: "/open-design/standalone/repository.json",
+      storeRoot: "/open-design/closure",
+      target: "darwin-arm64",
+    },
     descriptor: {
       release: { version: "0.18.0-beta.4" },
       standalone: {
@@ -119,6 +124,7 @@ describe("Electron Shell Standalone handoff", () => {
     expect(importBootloader).toHaveBeenCalledOnce();
     expect(importBootloader).toHaveBeenCalledWith(pathToFileURL(binding().bootloaderPath).href);
     expect(handoff).toHaveBeenCalledOnce();
+    expect(handoff).toHaveBeenCalledWith(expect.objectContaining({ closure: binding().closure }));
     expect(first).toBe(second);
   });
 

@@ -67,7 +67,6 @@ function fakeConfig(workspaceRoot: string): ToolPackConfig {
     removeLogs: false,
     removeProductUserData: false,
     removeSidecars: false,
-    requireVelaCli: false,
     roots: {
       output: {
         appBuilderRoot: join(workspaceRoot, "out", "builder"),

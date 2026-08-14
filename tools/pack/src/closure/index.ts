@@ -26,14 +26,13 @@ import {
 } from "@open-design/closure/protocol";
 import { isReleaseChannel, parseReleaseVersion, type ReleaseChannel } from "@open-design/release";
 
-import { hashJson, hashPath, ToolPackCache, type CacheInvalidation } from "../cache.js";
+import { ToolPackCache, type CacheInvalidation } from "../cache.js";
 import { WORKSPACE_ROOT } from "../config.js";
-import { hashPackageSourcePath } from "../package-source-hash.js";
 import { resolveShellDepsDigestFromWorkspace } from "../workspace-build.js";
-import { copyBundledResourceTrees } from "../resources.js";
 import {
   BUNDLED_RESOURCE_GROUPS,
   copyBundledResourceGroup,
+  copyBundledResourceTrees,
 } from "../resources.js";
 import {
   buildClosureDistributionSharedContribution,
@@ -75,6 +74,8 @@ import {
   standaloneBootloaderSource,
   standaloneInnerBootloaderSource,
 } from "./runtime-source.js";
+import { createClosureBuildCacheKey } from "./cache-key.js";
+import { prepareClosureTargetResources } from "./target-resources.js";
 
 export {
   CLOSURE_PLATFORM_TARGETS,
@@ -84,6 +85,7 @@ export {
   type ClosurePlatformTarget,
 } from "./platform.js";
 export { materializeClosureWebPublicHoist } from "./prebundle.js";
+export { CLOSURE_BUILD_SOURCE_PATHS, createClosureBuildCacheKey } from "./cache-key.js";
 export {
   standaloneBodySource,
   standaloneBootloaderSource,
@@ -107,18 +109,6 @@ export type ClosureBuildOptions = {
   version: string;
   workspaceRoot?: string;
 };
-
-export const CLOSURE_BUILD_SOURCE_PATHS = [
-  "apps/daemon", "apps/standalone", "apps/web",
-  "packages/agui-adapter", "packages/components", "packages/contracts", "packages/diagnostics",
-  "packages/host", "packages/platform", "packages/plugin-runtime", "packages/registry-protocol",
-  "packages/release", "packages/sidecar",
-  "tools/pack/package.json", "tools/pack/resources",
-  "tools/pack/src/closure", "tools/pack/src/resources.ts",
-  "assets/community-pets", "assets/frames", "craft", "data/plugin-previews",
-  "design-systems", "design-templates", "plugins/_official", "plugins/registry",
-  "prompt-templates", "skills",
-] as const;
 
 export type ClosureBuildProvenanceV1 = {
   artifact: {
@@ -188,39 +178,6 @@ export type ClosureDistributionTargetBuildReport = {
   contributionPath: string;
   outputRoot: string;
 };
-
-export async function createClosureBuildCacheKey(options: {
-  artifactUrl: string;
-  channel: ReleaseChannel;
-  minShellVersion: string;
-  platform: ClosurePlatformTarget;
-  version: string;
-  workspaceRoot: string;
-}): Promise<string> {
-  const sourceHashes: Record<string, string> = {};
-  for (const sourcePath of CLOSURE_BUILD_SOURCE_PATHS) {
-    sourceHashes[sourcePath] = await hashPackageSourcePath(join(options.workspaceRoot, sourcePath));
-  }
-  const rootPackage = JSON.parse(
-    await readFile(join(options.workspaceRoot, "package.json"), "utf8"),
-  ) as { packageManager?: unknown };
-  const shellDepsDigest = await resolveShellDepsDigestFromWorkspace({
-    workspaceRoot: options.workspaceRoot,
-  });
-  return hashJson({
-    artifactUrl: options.artifactUrl,
-    channel: options.channel,
-    minShellVersion: options.minShellVersion,
-    nodeVersion: process.version,
-    packageManager: rootPackage.packageManager,
-    platform: options.platform,
-    pnpmLock: await hashPath(join(options.workspaceRoot, "pnpm-lock.yaml")),
-    schemaVersion: 3,
-    shellDepsDigest,
-    sourceHashes,
-    version: options.version,
-  });
-}
 
 export async function probeClosureNodeNativeModules(options: {
   appRoot: string;
@@ -478,11 +435,13 @@ export async function buildClosureDistributionTarget(
     modules: CLOSURE_NODE_NATIVE_MODULES,
     nativeRoot,
   });
+  const resources = await prepareClosureTargetResources(stageRoot, target);
   const contribution = await buildClosureDistributionTargetContribution({
     blobOrigin: options.blobOrigin,
     channel,
     nativeRoot,
     outputRoot,
+    resources,
     target,
     version: options.version,
   });
@@ -491,6 +450,11 @@ export async function buildClosureDistributionTarget(
     contribution.native.artifact.digest,
     blobRoot,
   );
+  await Promise.all(contribution.resources.map(async (resource) => await materializeContributionBlob(
+    join(outputRoot, "targets", target, "resources", `${resource.id}.zip`),
+    resource.artifact.digest,
+    blobRoot,
+  )));
   await writeFile(contributionPath, `${JSON.stringify(contribution, null, 2)}\n`, "utf8");
   await rm(stageRoot, { force: true, recursive: true });
   return { blobRoot, contribution, contributionPath, outputRoot };

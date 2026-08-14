@@ -2814,19 +2814,19 @@ process.stdin.on("end", () => {
     for (const targetContributionStep of [
       sectionBetween(
         betaMacAction,
-        "    - name: Build exact ${{ inputs.target }} Standalone native contribution",
+        "    - name: Build exact ${{ inputs.target }} Standalone target contribution",
         "    - name: Prepare ${{ inputs.target }} Standalone smoke graph",
       ),
       sectionBetween(
         betaWinAction,
-        "    - name: Build exact win_x64 Standalone native contribution",
+        "    - name: Build exact win_x64 Standalone target contribution",
         "    - name: Prepare win_x64 Standalone smoke graph",
       ),
     ]) {
       expect(targetContributionStep).toContain("tools-pack closure build-distribution-target");
-      expect(targetContributionStep).not.toContain("--require-vela-cli");
+      expect(targetContributionStep).toContain("contribution.resources");
     }
-    expect(betaMacAction).toContain("Build exact ${{ inputs.target }} Standalone native contribution");
+    expect(betaMacAction).toContain("Build exact ${{ inputs.target }} Standalone target contribution");
     expect(betaMacAction).toContain("Resolve immutable ${{ inputs.target }} Electron Shell");
     expect(betaMacAction).toContain("tools-pack mac identity");
     expect(betaMacAction).toContain("tools-release resolve-shell-build");
@@ -2836,7 +2836,7 @@ process.stdin.on("end", () => {
     expect(betaMacAction).toContain("--platform ${{ inputs.platform }}");
     expect(betaMacAction).toContain("Prepare ${{ inputs.target }} Standalone smoke graph");
     expect(betaMacAction).toContain("tools-release merge-closure-distribution");
-    expect(betaMacAction).toContain("Publish verified ${{ inputs.target }} Standalone native blob");
+    expect(betaMacAction).toContain("Publish verified ${{ inputs.target }} Standalone target blobs");
     expect(betaMacAction).toContain("tools-release publish-closure-contribution");
     expect(betaMacAction).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: target");
     expect(buildJob).toContain("needs.metadata.outputs.closure_version");
@@ -2846,7 +2846,7 @@ process.stdin.on("end", () => {
     expect(betaMacAction).toContain('RELEASE_SHELL_ENABLED: "true"');
     expect(betaMacAction).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
     expect(betaMacAction).toContain("DOGFOOD_BUILD_JSON_KEYS: dmgPath");
-    expect(betaWinAction).toContain("Build exact win_x64 Standalone native contribution");
+    expect(betaWinAction).toContain("Build exact win_x64 Standalone target contribution");
     expect(betaWinAction).toContain("Resolve immutable win_x64 Electron Shell");
     expect(betaWinAction).toContain('"tools-pack", "win", "identity"');
     expect(betaWinAction).toContain("tools-release resolve-shell-build");
@@ -2856,7 +2856,7 @@ process.stdin.on("end", () => {
     expect(betaWinAction).toContain("--platform win32-x64");
     expect(betaWinAction).toContain("Prepare win_x64 Standalone smoke graph");
     expect(betaWinAction).toContain("tools-release merge-closure-distribution");
-    expect(betaWinAction).toContain("Publish verified win_x64 Standalone native blob");
+    expect(betaWinAction).toContain("Publish verified win_x64 Standalone target blobs");
     expect(betaWinAction).toContain("tools-release publish-closure-contribution");
     expect(betaWinAction).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: target");
     expect(buildJob).toContain("closure-version: ${{ needs.metadata.outputs.closure_version }}");

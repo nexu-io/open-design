@@ -185,7 +185,7 @@ function normalizeDistributionTargets(value: unknown): Record<string, ClosureDis
     const components = requireRecord(rawComponents, `closure distribution target ${target}`);
     requireKnownKeys(
       components,
-      ["native"],
+      ["native", "resources"],
       `closure distribution target ${target}`,
     );
     return [target, {
@@ -193,6 +193,7 @@ function normalizeDistributionTargets(value: unknown): Record<string, ClosureDis
         components.native,
         `closure distribution target ${target} native component`,
       ),
+      resources: normalizeDistributionResources(components.resources ?? []),
     }];
   }));
 }
@@ -271,6 +272,9 @@ function normalizeClosureDistributionManifestDraft(value: unknown): ClosureDistr
     normalized.required.launcher.blob,
     ...normalized.resources.map((resource) => resource.blob),
     ...Object.values(normalized.required.targets).map((target) => target.native.blob),
+    ...Object.values(normalized.required.targets).flatMap((target) => (
+      target.resources.map((resource) => resource.blob)
+    )),
   ]);
   for (const digest of referenced) {
     if (normalized.blobs[digest] == null) {
@@ -461,18 +465,41 @@ export function validateClosureDistributionTargetContribution(
   const contribution = requireRecord(value, "closure distribution target contribution");
   requireKnownKeys(
     contribution,
-    ["channel", "native", "protocolVersion", "schemaVersion", "target", "version"],
+    ["channel", "native", "protocolVersion", "resources", "schemaVersion", "target", "version"],
     "closure distribution target contribution",
   );
   const identity = validateContributionIdentity(contribution);
   const native = requireRecord(contribution.native, "closure distribution target native");
   requireKnownKeys(native, ["artifact", "treeDigest"], "closure distribution target native");
+  if (contribution.resources != null && !Array.isArray(contribution.resources)) {
+    throw new ClosureProtocolError("closure distribution target resources must be an array");
+  }
+  const resources = (contribution.resources ?? []).map((value) => {
+    const resource = requireRecord(value, "closure distribution target resource");
+    requireKnownKeys(
+      resource,
+      ["artifact", "id", "title", "treeDigest"],
+      "closure distribution target resource",
+    );
+    return {
+      artifact: normalizeContributionArtifact(resource.artifact, "closure distribution target resource"),
+      id: normalizeProtocolToken(resource.id, "closure distribution target resource id"),
+      title: normalizeDisplayTitle(resource.title, "closure distribution target resource title"),
+      treeDigest: normalizeDigest(resource.treeDigest),
+    };
+  }).sort((left, right) => compareCanonicalStrings(left.id, right.id));
+  for (let index = 1; index < resources.length; index += 1) {
+    if (resources[index - 1]?.id === resources[index]?.id) {
+      throw new ClosureProtocolError("closure distribution target resource ids must be unique");
+    }
+  }
   return {
     ...identity,
     native: {
       artifact: normalizeContributionArtifact(native.artifact, "closure distribution target native"),
       treeDigest: normalizeDigest(native.treeDigest),
     },
+    resources,
     schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
     target: normalizePlatform(contribution.target),
   };
@@ -523,11 +550,25 @@ export function mergeClosureDistributionContributions(
       );
     }
     insertContributionBlob(blobs, contribution.native.artifact);
+    for (const resource of contribution.resources) insertContributionBlob(blobs, resource.artifact);
+    const sharedResourceIds = new Set(shared.resources.map((resource) => resource.id));
+    const duplicateResource = contribution.resources.find((resource) => sharedResourceIds.has(resource.id));
+    if (duplicateResource != null) {
+      throw new ClosureProtocolError(
+        `closure target resource conflicts with shared resource: ${duplicateResource.id}`,
+      );
+    }
     targets[contribution.target] = {
       native: {
         blob: contribution.native.artifact.digest,
         treeDigest: contribution.native.treeDigest,
       },
+      resources: contribution.resources.map((resource) => ({
+        blob: resource.artifact.digest,
+        id: resource.id,
+        title: resource.title,
+        treeDigest: resource.treeDigest,
+      })),
     };
   }
   return createClosureDistributionManifest({
@@ -593,7 +634,9 @@ export function resolveClosureDistributionTarget(
   return {
     required,
     requiredBlobs,
-    resources: manifest.resources.map((resource) => {
+    resources: [...manifest.resources, ...targetComponents.resources]
+      .sort((left, right) => compareCanonicalStrings(left.id, right.id))
+      .map((resource) => {
       const artifact = manifest.blobs[resource.blob];
       if (artifact == null) {
         throw new ClosureProtocolError(
@@ -601,7 +644,7 @@ export function resolveClosureDistributionTarget(
         );
       }
       return { ...resource, artifact };
-    }),
+      }),
     target,
   };
 }

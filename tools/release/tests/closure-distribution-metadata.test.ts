@@ -39,6 +39,7 @@ function fixture(publicOrigin = "https://releases.open-design.test"): ReturnType
       targets: {
         "darwin-arm64": {
           native: { blob: native, treeDigest: digest("native-tree") },
+          resources: [],
         },
       },
     },

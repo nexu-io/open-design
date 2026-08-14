@@ -74,6 +74,8 @@ const distributionDigests = {
   nativeMac: `sha256:${"d".repeat(64)}`,
   nativeWin: `sha256:${"e".repeat(64)}`,
   resource: `sha256:${"f".repeat(64)}`,
+  velaMac: `sha256:${"1".repeat(64)}`,
+  velaWin: `sha256:${"2".repeat(64)}`,
 } as const;
 
 function blob(digestValue: ClosureDigest, mediaType = "application/zip") {
@@ -112,9 +114,21 @@ const distributionDraft: ClosureDistributionManifestDraft = {
     targets: {
       "win32-x64": {
         native: { blob: distributionDigests.nativeWin, treeDigest: distributionDigests.nativeWin },
+        resources: [{
+          blob: distributionDigests.velaWin,
+          id: "vela-runtime",
+          title: "Vela runtime",
+          treeDigest: distributionDigests.velaWin,
+        }],
       },
       "darwin-arm64": {
         native: { blob: distributionDigests.nativeMac, treeDigest: distributionDigests.nativeMac },
+        resources: [{
+          blob: distributionDigests.velaMac,
+          id: "vela-runtime",
+          title: "Vela runtime",
+          treeDigest: distributionDigests.velaMac,
+        }],
       },
     },
   },
@@ -358,7 +372,10 @@ describe("layered Closure distribution manifest", () => {
       launcher: produced.required.launcher,
       native: produced.required.targets["darwin-arm64"]?.native,
     });
-    expect(target.resources).toEqual(produced.resources.map((resource) => ({
+    expect(target.resources).toEqual([
+      ...produced.resources,
+      ...produced.required.targets["darwin-arm64"]!.resources,
+    ].sort((left, right) => left.id.localeCompare(right.id)).map((resource) => ({
       ...resource,
       artifact: produced.blobs[resource.blob],
     })));
@@ -368,6 +385,8 @@ describe("layered Closure distribution manifest", () => {
       distributionDigests.nativeMac,
     ].sort());
     expect(target.requiredBlobs.map((entry) => entry.digest)).not.toContain(distributionDigests.resource);
+    expect(target.requiredBlobs.map((entry) => entry.digest)).not.toContain(distributionDigests.velaMac);
+    expect(target.resources.some((resource) => resource.blob === distributionDigests.velaWin)).toBe(false);
     expect(resolveClosureDistributionColdStartBudget(produced, "darwin-arm64")).toEqual({
       budgetBytes: 30_000_000,
       components: {
@@ -411,6 +430,7 @@ describe("layered Closure distribution manifest", () => {
               blob: distributionDigests.launcher,
               treeDigest: distributionDigests.launcher,
             },
+            resources: distributionDraft.required.targets["darwin-arm64"]!.resources,
           },
         },
       },
@@ -516,6 +536,12 @@ describe("layered Closure cross-job contributions", () => {
       treeDigest: distributionDigests.nativeMac,
     },
     protocolVersion: CLOSURE_PROTOCOL_VERSION,
+    resources: [{
+      artifact: artifact(distributionDigests.velaMac),
+      id: "vela-runtime",
+      title: "Vela runtime",
+      treeDigest: distributionDigests.velaMac,
+    }],
     schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
     target: "darwin-arm64",
     version: "0.19.0-beta.10",
@@ -527,6 +553,7 @@ describe("layered Closure cross-job contributions", () => {
     const merged = mergeClosureDistributionContributions(shared, [mac], digestCanonical);
     expect(merged.required.targets["darwin-arm64"]).toEqual({
       native: distributionDraft.required.targets["darwin-arm64"]?.native,
+      resources: distributionDraft.required.targets["darwin-arm64"]?.resources,
     });
     expect(merged.resources[0]?.blob).toBe(distributionDigests.resource);
   });

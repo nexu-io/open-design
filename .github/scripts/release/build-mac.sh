@@ -239,20 +239,11 @@ namespace="${TOOLS_PACK_NAMESPACE:-release-beta}"
 sign_mode="${MAC_SIGN_MODE:-signed}"
 target="${MAC_BUILD_TARGET:-dmg}"
 compression="${MAC_COMPRESSION:-normal}"
-require_vela_cli="${REQUIRE_VELA_CLI:-true}"
 
 case "$sign_mode" in
   unsigned | signed | notarized) ;;
   *)
     echo "unsupported MAC_SIGN_MODE: $sign_mode" >&2
-    exit 1
-    ;;
-esac
-
-case "$require_vela_cli" in
-  true | false) ;;
-  *)
-    echo "unsupported REQUIRE_VELA_CLI: $require_vela_cli" >&2
     exit 1
     ;;
 esac
@@ -297,10 +288,6 @@ build_args=(
   --to "$target"
   --json
 )
-if [ "$require_vela_cli" = "true" ]; then
-  build_args+=(--require-vela-cli)
-fi
-
 if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "$build_log_path" >&2))"; then
   printf '%s\n' "$build_output" | tee "$build_json_path"
   BUILD_JSON_PATH="$build_json_path" TIMINGS_JSON="[$timings_json]" node --input-type=module <<'NODE'

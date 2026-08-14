@@ -55,6 +55,7 @@ export type CreateClosureDistributionTargetContributionOptions = Readonly<{
   blobOrigin: string;
   channel: ReleaseChannel;
   native: ClosureDistributionArtifactSource;
+  resources?: readonly ClosureDistributionResourceSource[];
   target: string;
   version: string;
 }>;
@@ -157,11 +158,24 @@ export async function createClosureDistributionSharedContribution(
 export async function createClosureDistributionTargetContribution(
   options: CreateClosureDistributionTargetContributionOptions,
 ): Promise<ClosureDistributionTargetContribution> {
-  const native = await inspectArtifact(options.native, options);
+  const [native, ...resources] = await Promise.all([
+    inspectArtifact(options.native, options),
+    ...(options.resources ?? []).map(async (resource) => await inspectArtifact(resource, options)),
+  ]);
   return validateClosureDistributionTargetContribution({
     channel: options.channel,
     native: Object.freeze({ artifact: native, treeDigest: options.native.treeDigest }),
     protocolVersion: CLOSURE_PROTOCOL_VERSION,
+    resources: Object.freeze((options.resources ?? []).map((resource, index) => {
+      const artifact = resources[index];
+      if (artifact == null) throw new Error(`Closure target resource inspection is missing ${resource.id}`);
+      return Object.freeze({
+        artifact,
+        id: resource.id,
+        title: resource.title,
+        treeDigest: resource.treeDigest,
+      });
+    })),
     schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
     target: options.target,
     version: options.version,

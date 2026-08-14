@@ -140,7 +140,6 @@ function createConfig(root: string, cacheRoot: string, platform: "mac" | "win" =
     removeLogs: false,
     removeProductUserData: false,
     removeSidecars: false,
-    requireVelaCli: false,
     roots: {
       cacheRoot,
       output: {

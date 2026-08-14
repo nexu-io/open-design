@@ -29,10 +29,6 @@ inputs:
     description: Optional smoke report artifact name override
     required: false
     default: ""
-  require-vela-cli:
-    description: Require Vela CLI while packaging
-    required: false
-    default: "false"
   sign-mode:
     description: tools-pack Windows sign mode
     required: true
@@ -101,11 +97,10 @@ runs:
         namespace: ${{ inputs.namespace }}
         register-enabled: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
         release-version: ${{ inputs.release-version }}
-        require-vela-cli: ${{ inputs.require-vela-cli }}
         shell-version: ${{ inputs.release-version }}
         sign-mode: ${{ inputs.sign-mode }}
 
-    - name: Build Standalone native contribution
+    - name: Build Standalone target contribution
       shell: pwsh
       run: |
         $ErrorActionPreference = "Stop"
@@ -124,14 +119,17 @@ runs:
         Copy-Item -LiteralPath $report.contributionPath -Destination (Join-Path $buildDir "target-contribution.json")
         $targetBlobRoot = Join-Path $buildDir "closure-blobs"
         New-Item -ItemType Directory -Force -Path $targetBlobRoot | Out-Null
-        $digest = [string]$report.contribution.native.artifact.digest
-        Copy-Item -LiteralPath (Join-Path $report.blobRoot $digest.Substring(7)) -Destination (Join-Path $targetBlobRoot $digest.Substring(7))
+        $artifacts = @($report.contribution.native.artifact) + @($report.contribution.resources | ForEach-Object { $_.artifact })
+        foreach ($artifact in $artifacts) {
+          $digest = [string]$artifact.digest
+          Copy-Item -LiteralPath (Join-Path $report.blobRoot $digest.Substring(7)) -Destination (Join-Path $targetBlobRoot $digest.Substring(7))
+        }
         pnpm.cmd exec tools-release merge-closure-distribution `
           "${{ runner.temp }}\release-closure\shared\shared-contribution.json" `
           (Join-Path $buildDir "target-contribution.json") `
           --output (Join-Path $buildDir "closure-distribution.json")
 
-    - name: Publish verified Standalone native blob
+    - name: Publish verified Standalone target blobs
       if: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
       shell: pwsh
       env:
@@ -176,7 +174,6 @@ runs:
           "--sign-mode", "${{ inputs.sign-mode }}",
           "--json"
         )
-        if ("${{ inputs.require-vela-cli }}" -eq "true") { $buildArgs += "--require-vela-cli" }
         $updateOutput = pnpm.cmd @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
         $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8

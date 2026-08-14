@@ -135,7 +135,6 @@ jobs:
             "--portable",
             "--app-version", "${{ steps.version.outputs.version }}",
             "--to", "all",
-            "--require-vela-cli",
             "--json"
           )
           $buildOutput = pnpm.cmd @buildArgs
@@ -163,7 +162,6 @@ jobs:
             --portable `
             --app-version "${{ steps.version.outputs.version }}" `
             --to all `
-            --require-vela-cli `
             --json
           if ($LASTEXITCODE -ne 0) {
             throw "Windows tools-pack uncached canary build exited with code $LASTEXITCODE"

@@ -44,7 +44,7 @@
     "channel": "beta",
     "protocolVersion": 1,
     "version": "0.19.0-beta.10",
-    "digest": "sha256:1d16ab666d961298ecaf40e4104ec236b51d8471be5026a32e69794bd0eeda1d"
+    "digest": "sha256:12eaf996e5f2dd3f6a8980a2c59e676dcbb5ac5ec1d1ea5e438d794f21ee93f8"
   },
   "required": {
     "body": {
@@ -63,13 +63,15 @@
         "native": {
           "blob": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
           "treeDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
-        }
+        },
+        "resources": []
       },
       "win32-x64": {
         "native": {
           "blob": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
           "treeDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-        }
+        },
+        "resources": []
       }
     }
   },
@@ -81,5 +83,5 @@
       "treeDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     }
   ],
-  "schemaVersion": 2
+  "schemaVersion": 3
 }

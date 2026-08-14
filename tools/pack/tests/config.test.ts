@@ -69,21 +69,6 @@ describe("resolveToolPackConfig AMR profile", () => {
   });
 });
 
-describe("resolveToolPackConfig Vela CLI requirement", () => {
-  it("defaults to optional Vela CLI bundling", () => {
-    const config = resolveToolPackConfig("mac", { namespace: "vela-optional-test" });
-    expect(config.requireVelaCli).toBe(false);
-  });
-
-  it("reads --require-vela-cli from build options", () => {
-    const config = resolveToolPackConfig("mac", {
-      namespace: "vela-required-test",
-      requireVelaCli: true,
-    });
-    expect(config.requireVelaCli).toBe(true);
-  });
-});
-
 describe("resolveToolPackConfig win build target", () => {
   it("accepts the portable zip target and rejects unsupported values", () => {
     expect(resolveToolPackConfig("win", { to: "zip" }).to).toBe("zip");

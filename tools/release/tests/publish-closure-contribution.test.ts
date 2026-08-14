@@ -75,6 +75,43 @@ describe("Closure contribution publication boundary", () => {
     );
   });
 
+  it("publishes target-native and target-scoped resource blobs together", async () => {
+    const value = await fixture();
+    const resourceBytes = Buffer.from("vela-runtime");
+    const resource = digest(resourceBytes);
+    await writeFile(join(value.blobRoot, resource.slice("sha256:".length)), resourceBytes);
+    const native = value.contribution.body.artifact;
+    const contribution = {
+      channel: "beta",
+      native: { artifact: native, treeDigest: digest("native tree") },
+      protocolVersion: CLOSURE_PROTOCOL_VERSION,
+      resources: [{
+        artifact: {
+          digest: resource,
+          mediaType: "application/zip",
+          size: resourceBytes.byteLength,
+          url: `https://releases.open-design.test/beta/versions/0.19.0-beta.9/closure/blobs/${resource.slice("sha256:".length)}`,
+        },
+        id: "vela-runtime",
+        title: "Vela runtime",
+        treeDigest: digest("vela tree"),
+      }],
+      schemaVersion: CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION,
+      target: "darwin-arm64",
+      version: "0.19.0-beta.9",
+    };
+    const plan = createClosureContributionPublicationPlan({
+      blobRoot: value.blobRoot,
+      channel: "beta",
+      contribution,
+      kind: "target",
+      publicOrigin: "https://releases.open-design.test",
+      version: "0.19.0-beta.9",
+    });
+
+    expect(plan.blobs.map((entry) => entry.digest)).toEqual([native.digest, resource]);
+  });
+
   it("rejects cross-release contributions before storage access", async () => {
     const value = await fixture();
     expect(() => createClosureContributionPublicationPlan({

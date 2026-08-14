@@ -39,7 +39,7 @@ import {
 
 const roots: string[] = [];
 const distributionFixturePath = fileURLToPath(
-  new URL("../fixtures/distribution-v2.json", import.meta.url),
+  new URL("../fixtures/distribution-v3.json", import.meta.url),
 );
 
 afterEach(async () => {

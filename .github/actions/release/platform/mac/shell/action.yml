@@ -23,9 +23,6 @@ inputs:
     default: "true"
   release-version:
     required: true
-  require-vela-cli:
-    required: false
-    default: "false"
   shell-smoke-matrix:
     required: false
     default: ""
@@ -143,9 +140,6 @@ runs:
         if [ "${{ inputs.cache-enabled }}" = "true" ]; then
           build_args+=(--cache-dir "$RUNNER_TEMP/tools-pack-cache")
         fi
-        if [ "${{ inputs.require-vela-cli }}" = "true" ]; then
-          build_args+=(--require-vela-cli)
-        fi
         if build_output="$(pnpm "${build_args[@]}" 2> >(tee -a "${{ steps.paths.outputs.build_dir }}/build.log" >&2))"; then
           printf '%s\n' "$build_output" | tee "${{ steps.paths.outputs.build_json_path }}"
         else
@@ -178,9 +172,6 @@ runs:
           --sign-mode "${{ inputs.sign-mode }}"
           --json
         )
-        if [ "${{ inputs.require-vela-cli }}" = "true" ]; then
-          build_args+=(--require-vela-cli)
-        fi
         pnpm "${build_args[@]}" | tee "${{ steps.paths.outputs.build_json_path }}"
 
     - name: Fail a non-cached Shell build

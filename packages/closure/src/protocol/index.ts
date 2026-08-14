@@ -2,8 +2,8 @@ import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
 import { normalizeNamespace } from "@open-design/sidecar/protocol";
 
 export const CLOSURE_SCHEMA_VERSION = 1 as const;
-export const CLOSURE_DISTRIBUTION_SCHEMA_VERSION = 2 as const;
-export const CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION = 1 as const;
+export const CLOSURE_DISTRIBUTION_SCHEMA_VERSION = 3 as const;
+export const CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION = 2 as const;
 export const CLOSURE_PROTOCOL_VERSION = 1 as const;
 export const CLOSURE_INVENTORY_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_SIGNATURE_SCHEMA_VERSION = 1 as const;
@@ -93,6 +93,7 @@ export type ClosureDistributionLauncherComponent = ClosureDistributionEntrypoint
 
 export type ClosureDistributionTarget = {
   native: ClosureDistributionComponent;
+  resources: ClosureDistributionResource[];
 };
 
 export type ClosureDistributionResource = ClosureDistributionComponent & {
@@ -158,6 +159,12 @@ export type ClosureDistributionTargetContribution = {
   channel: ReleaseChannel;
   native: { artifact: ClosureDistributionBlob; treeDigest: ClosureDigest };
   protocolVersion: typeof CLOSURE_PROTOCOL_VERSION;
+  resources: Array<{
+    artifact: ClosureDistributionBlob;
+    id: string;
+    title: string;
+    treeDigest: ClosureDigest;
+  }>;
   schemaVersion: typeof CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION;
   target: string;
   version: string;

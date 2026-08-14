@@ -23,6 +23,7 @@ import {
 export type ElectronStandaloneBinding = Readonly<{
   attachment: StandaloneAttachmentDescriptor;
   bootloaderPath: string;
+  closure: StandaloneHandoffDescriptor["closure"];
   descriptor: StandaloneRuntimeDescriptor;
   paths: StandalonePaths;
   scope: StandaloneHandoffScope;
@@ -54,6 +55,7 @@ export function electronBindingFromBootstrapResolution(
   return Object.freeze({
     attachment: resolution.handoff.attachment,
     bootloaderPath: resolution.bootloaderPath,
+    closure: resolution.handoff.closure,
     descriptor: resolution.handoff.handoff.descriptor,
     paths: resolution.handoff.paths,
     scope: resolution.handoff.handoff.scope,
@@ -81,6 +83,7 @@ function requestFromBinding(
   return validateStandaloneHandoffRequest({
     attachment: binding.attachment,
     capabilities,
+    closure: binding.closure,
     handoff: createStandaloneHandoffEnvelope({
       descriptor: binding.descriptor,
       scope: binding.scope,
@@ -94,6 +97,7 @@ function requestKey(bootloaderPath: string, request: StandaloneHandoffRequest): 
   return JSON.stringify({
     attachment: request.attachment,
     bootloaderPath,
+    closure: request.closure,
     descriptorDigest: request.handoff.descriptorDigest,
     paths: request.paths,
     scope: request.handoff.scope,

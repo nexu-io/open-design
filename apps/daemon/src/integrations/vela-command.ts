@@ -11,6 +11,10 @@ import {
   agentCliEnvForAgent,
   readAppConfigSync,
 } from '../app-config.js';
+import {
+  isLazyVelaRuntime,
+  waitForLazyVelaRuntime,
+} from './vela-runtime.js';
 import { spawnEnvForAgent } from '../runtimes/env.js';
 import {
   applyAgentLaunchEnv,
@@ -141,22 +145,21 @@ function configuredAmrEnv(
  * of spawning a PATH-only `vela` process, otherwise a packaged login can
  * succeed while the collaboration command uses a different or missing CLI.
  */
-export function runVelaCommand(
+export async function runVelaCommand(
   args: string[],
   options: VelaCommandOptions = {},
 ): Promise<string> {
   const env = options.env ?? process.env;
+  if (isLazyVelaRuntime(env)) await waitForLazyVelaRuntime(env);
   const configuredEnv = configuredAmrEnv(env, options.configuredEnv);
   const def = getAgentDef('amr');
   if (!def) {
-    return Promise.reject(new Error('AMR runtime definition is missing'));
+    throw new Error('AMR runtime definition is missing');
   }
   const launch = resolveAgentLaunch(def, configuredEnv);
   const bin = launch.launchPath ?? launch.selectedPath;
   if (!bin) {
-    return Promise.reject(
-      new Error('vela binary not found; install vela or configure VELA_BIN'),
-    );
+    throw new Error('vela binary not found; install vela or configure VELA_BIN');
   }
   const childEnv = applyAgentLaunchEnv(
     spawnEnvForAgent('amr', env, configuredEnv),

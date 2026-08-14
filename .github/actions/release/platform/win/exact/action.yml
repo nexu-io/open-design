@@ -125,7 +125,7 @@ runs:
         $ErrorActionPreference = "Stop"
         New-Item -ItemType Directory -Force -Path "${{ runner.temp }}\release-build\win_x64" | Out-Null
         pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace "release-${{ inputs.channel }}-win" --json
-        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-${{ inputs.channel }}-win", "--portable", "--release-version", "${{ inputs.release-version }}", "--shell-version", "${{ inputs.shell-version }}", "--to", "${{ inputs.build-target }}", "--sign-mode", "${{ inputs.sign-mode }}", "--require-vela-cli", "--json")
+        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-${{ inputs.channel }}-win", "--portable", "--release-version", "${{ inputs.release-version }}", "--shell-version", "${{ inputs.shell-version }}", "--to", "${{ inputs.build-target }}", "--sign-mode", "${{ inputs.sign-mode }}", "--json")
         $buildOutput = pnpm.cmd @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "tools-pack win build failed with exit code $LASTEXITCODE" }
         $buildOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\build.json" -Encoding utf8
@@ -142,7 +142,7 @@ runs:
         Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "${{ runner.temp }}\tools-pack-cache"
         New-Item -ItemType Directory -Force -Path "${{ runner.temp }}\release-build\win_x64" | Out-Null
         pnpm.cmd exec tools-pack win cleanup --dir "${{ runner.temp }}\tools-pack" --namespace "release-${{ inputs.channel }}-win" --json
-        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-${{ inputs.channel }}-win", "--portable", "--release-version", "${{ inputs.release-version }}", "--shell-version", "${{ inputs.shell-version }}", "--to", "${{ inputs.build-target }}", "--sign-mode", "${{ inputs.sign-mode }}", "--require-vela-cli", "--json")
+        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\tools-pack", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-${{ inputs.channel }}-win", "--portable", "--release-version", "${{ inputs.release-version }}", "--shell-version", "${{ inputs.shell-version }}", "--to", "${{ inputs.build-target }}", "--sign-mode", "${{ inputs.sign-mode }}", "--json")
         $buildOutput = pnpm.cmd @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "tools-pack win fallback build failed with exit code $LASTEXITCODE" }
         $buildOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\build.json" -Encoding utf8
@@ -162,7 +162,7 @@ runs:
         RELEASE_STORAGE_REGION: auto
         RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
       run: pnpm exec tools-release register-shell-build
-    - name: Build exact win_x64 Standalone native contribution
+    - name: Build exact win_x64 Standalone target contribution
       shell: pwsh
       env:
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -183,8 +183,11 @@ runs:
         Copy-Item -LiteralPath $report.contributionPath -Destination "${{ runner.temp }}\release-build\win_x64\target-contribution.json"
         $targetBlobRoot = "${{ runner.temp }}\release-build\win_x64\closure-blobs"
         New-Item -ItemType Directory -Force -Path $targetBlobRoot | Out-Null
-        $digest = [string]$report.contribution.native.artifact.digest
-        Copy-Item -LiteralPath (Join-Path $report.blobRoot $digest.Substring(7)) -Destination (Join-Path $targetBlobRoot $digest.Substring(7))
+        $artifacts = @($report.contribution.native.artifact) + @($report.contribution.resources | ForEach-Object { $_.artifact })
+        foreach ($artifact in $artifacts) {
+          $digest = [string]$artifact.digest
+          Copy-Item -LiteralPath (Join-Path $report.blobRoot $digest.Substring(7)) -Destination (Join-Path $targetBlobRoot $digest.Substring(7))
+        }
     - name: Prepare win_x64 Standalone smoke graph
       shell: pwsh
       run: |
@@ -192,7 +195,7 @@ runs:
           "${{ runner.temp }}\release-closure\shared\shared-contribution.json" `
           "${{ runner.temp }}\release-build\win_x64\target-contribution.json" `
           --output "${{ runner.temp }}\release-build\win_x64\closure-distribution.json"
-    - name: Publish verified win_x64 Standalone native blob
+    - name: Publish verified win_x64 Standalone target blobs
       shell: pwsh
       if: ${{ inputs.publish == 'true' }}
       env:
@@ -247,7 +250,7 @@ runs:
         $match = [regex]::Match("${{ inputs.release-version }}", "^(?<base>\d+\.\d+\.\d+)-${{ inputs.channel }}\.(?<number>\d+)$")
         if (-not $match.Success) { throw "full Windows smoke requires a counted exact version; got ${{ inputs.release-version }}" }
         $updateVersion = "{0}-${{ inputs.channel }}.{1}" -f $match.Groups["base"].Value, ([int]$match.Groups["number"].Value + 1)
-        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-${{ inputs.channel }}-win", "--portable", "--release-version", "${{ inputs.release-version }}", "--shell-version", $updateVersion, "--launcher-version", $updateVersion, "--to", "nsis", "--sign-mode", "${{ inputs.sign-mode }}", "--require-vela-cli", "--json")
+        $buildArgs = @("exec", "tools-pack", "win", "build", "--dir", "${{ runner.temp }}\release-work\win_x64\tools-pack-update-fixture", "--cache-dir", "${{ runner.temp }}\tools-pack-cache", "--namespace", "release-${{ inputs.channel }}-win", "--portable", "--release-version", "${{ inputs.release-version }}", "--shell-version", $updateVersion, "--launcher-version", $updateVersion, "--to", "nsis", "--sign-mode", "${{ inputs.sign-mode }}", "--json")
         $updateOutput = pnpm.cmd @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "tools-pack win update fixture failed with exit code $LASTEXITCODE" }
         $updateOutput | Set-Content -Path "${{ runner.temp }}\release-build\win_x64\windows-tools-pack-update-build.json" -Encoding utf8

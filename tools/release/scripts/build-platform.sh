@@ -183,9 +183,6 @@ case "$RELEASE_TARGET" in
       --to "$RELEASE_BUILD_TARGET"
       --json
     )
-    if [ "${REQUIRE_VELA_CLI:-false}" = "true" ]; then
-      build_args+=(--require-vela-cli)
-    fi
     ;;
   *)
     echo "unsupported RELEASE_TARGET for build-platform.sh: $RELEASE_TARGET" >&2
@@ -237,9 +234,6 @@ else
       --to dmg
       --json
     )
-    if [ "${REQUIRE_VELA_CLI:-false}" = "true" ]; then
-      update_args+=(--require-vela-cli)
-    fi
     build_mac_update_fixture() {
       local update_output
       update_output="$(pnpm "${update_args[@]}")"

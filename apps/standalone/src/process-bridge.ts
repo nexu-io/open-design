@@ -117,7 +117,7 @@ function descriptorControl(descriptorInput: StandaloneHandoffDescriptor): Readon
 }
 
 function descriptorKey(descriptor: StandaloneHandoffDescriptor): string {
-  return JSON.stringify({ handoff: descriptor.handoff, paths: descriptor.paths });
+  return JSON.stringify({ closure: descriptor.closure, handoff: descriptor.handoff, paths: descriptor.paths });
 }
 
 function attachmentKey(descriptor: StandaloneHandoffDescriptor): string {

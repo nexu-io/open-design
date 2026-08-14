@@ -304,6 +304,11 @@ export async function resolveStandaloneBootstrap(
     }
     const handoff = Object.freeze({
       attachment: request.attachment,
+      closure: Object.freeze({
+        repositoryConfigPath: request.repositoryConfigPath,
+        storeRoot: paths.root,
+        target: verification.plan.target,
+      }),
       handoff: createStandaloneHandoffEnvelope({
         descriptor: {
           release: { version: committed.releaseVersion },

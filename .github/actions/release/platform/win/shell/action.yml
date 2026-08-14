@@ -17,9 +17,6 @@ inputs:
     default: "true"
   release-version:
     required: true
-  require-vela-cli:
-    required: false
-    default: "false"
   shell-smoke-matrix:
     required: false
     default: ""
@@ -119,7 +116,6 @@ runs:
           "--sign-mode", "${{ inputs.sign-mode }}",
           "--json"
         )
-        if ("${{ inputs.require-vela-cli }}" -eq "true") { $buildArgs += "--require-vela-cli" }
         $buildOutput = pnpm.cmd @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "tools-pack win build failed with exit code $LASTEXITCODE" }
         $buildOutput | Set-Content -Path "${{ steps.paths.outputs.build_json_path }}" -Encoding utf8
@@ -149,7 +145,6 @@ runs:
           "--sign-mode", "${{ inputs.sign-mode }}",
           "--json"
         )
-        if ("${{ inputs.require-vela-cli }}" -eq "true") { $buildArgs += "--require-vela-cli" }
         $buildOutput = pnpm.cmd @buildArgs
         if ($LASTEXITCODE -ne 0) { throw "tools-pack win retry failed with exit code $LASTEXITCODE" }
         $buildOutput | Set-Content -Path "${{ steps.paths.outputs.build_json_path }}" -Encoding utf8

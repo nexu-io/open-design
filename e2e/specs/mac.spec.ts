@@ -32,6 +32,10 @@ import {
 } from '@/vitest/packaged-pty-smoke';
 import { releaseAppVersionArgs } from '@/vitest/packaged-release-version';
 import {
+  assertPackagedVelaRuntimeStatus,
+  packagedVelaStatusExpression,
+} from '@/vitest/packaged-vela-runtime';
+import {
   applyPackagedUpdateEnv,
   resolvePackagedUpdateScenario,
 } from '@/vitest/packaged-update-scenario';
@@ -2709,6 +2713,14 @@ async function waitForHealthyDesktop(
   ].join('\n'));
 }
 
+async function assertPackagedVelaRuntime(): Promise<void> {
+  const inspect = await runToolsPackJson<MacInspectResult>('inspect', [
+    '--expr',
+    packagedVelaStatusExpression,
+  ]);
+  assertPackagedVelaRuntimeStatus(inspect.eval?.value);
+}
+
 async function waitForHealthyDesktopShellVersion(
   expectedShellVersion: string,
   expectedStandaloneVersion: string,
@@ -3445,6 +3457,7 @@ async function runMacStandaloneDistributionAcceptance(): Promise<void> {
     const first = await runToolsPackJson<MacStartResult>('start');
     started = true;
     const firstInspect = await waitForHealthyDesktop();
+    await assertPackagedVelaRuntime();
     await capturePackagedCheckpoint(report, 'closure-first-start', firstInspect);
     fixture ??= await readConfiguredPackagedStandaloneDistribution();
     assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);

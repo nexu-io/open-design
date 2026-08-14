@@ -56,6 +56,7 @@ import {
   fetchVelaRemoteModelsWithRetry,
 } from '../runtimes/defs/amr.js';
 import { classifyAmrAccountFailure } from '../integrations/vela-errors.js';
+import { waitForLazyVelaRuntime } from '../integrations/vela-runtime.js';
 
 const AMR_API_PROXY_PREFIX = '/api/integrations/vela/api-proxy';
 const VELA_MESSAGE_CENTER_PREFIX = '/api/integrations/vela/message-center';
@@ -443,6 +444,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
   }
 
   async function resolveAmrModelProbe(): Promise<AmrModelProbe> {
+    await waitForLazyVelaRuntime(env);
     const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
     const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
     return resolveAmrModelProbeForEnv(configuredEnv);
@@ -516,6 +518,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
 
   app.get('/api/integrations/vela/status', async (_req, res) => {
     try {
+      await waitForLazyVelaRuntime(env);
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
       onCredentialStateObserved();
@@ -665,6 +668,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
       return;
     }
     try {
+      await waitForLazyVelaRuntime(env);
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
       const analyticsContext = readAnalyticsContext(req);
