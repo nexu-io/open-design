@@ -1,4 +1,4 @@
-import type { AppConfigPrefs } from '@open-design/contracts';
+import type { AppConfigPrefs, DaemonDerivedAppConfig } from '@open-design/contracts';
 import { MEDIA_PROVIDERS } from '../media/models';
 import { isOpenAICompatible } from '../providers/openai-compatible';
 import type {
@@ -999,6 +999,9 @@ const DAEMON_OWNED_KEYS = new Set<keyof AppConfig>([
   'telemetry',
   'privacyDecisionAt',
   'allowSilentUpdates',
+  // Derived per request from the daemon's env: caching it would let a stale
+  // copy outlive the operator turning the flag off.
+  'cloudLoginOptional',
 ]);
 
 const AGENT_CLI_SECRET_ENV_KEYS = new Set([
@@ -1066,7 +1069,7 @@ function ratchetOnboardingCompleted(
 
 export function mergeDaemonConfig(
   localConfig: AppConfig,
-  daemonConfig: AppConfigPrefs | null,
+  daemonConfig: (AppConfigPrefs & DaemonDerivedAppConfig) | null,
 ): AppConfig {
   const next = { ...localConfig };
   if (!daemonConfig) return next;
@@ -1147,6 +1150,13 @@ export function mergeDaemonConfig(
     next.allowSilentUpdates = daemonConfig.allowSilentUpdates;
   } else {
     delete next.allowSilentUpdates;
+  }
+  // Delete-on-absent, so an older daemon that does not send the field leaves
+  // the deployment on the default (mandatory) flow rather than a stale true.
+  if (daemonConfig.cloudLoginOptional !== undefined) {
+    next.cloudLoginOptional = daemonConfig.cloudLoginOptional;
+  } else {
+    delete next.cloudLoginOptional;
   }
   if (daemonConfig.customInstructions !== undefined) {
     next.customInstructions = daemonConfig.customInstructions ?? undefined;
@@ -1242,7 +1252,7 @@ export async function syncMediaProvidersToDaemon(
   }
 }
 
-export async function fetchDaemonConfig(): Promise<AppConfigPrefs | null> {
+export async function fetchDaemonConfig(): Promise<(AppConfigPrefs & DaemonDerivedAppConfig) | null> {
   try {
     const res = await fetch('/api/app-config');
     if (!res.ok) return null;

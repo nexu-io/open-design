@@ -74,8 +74,23 @@ export interface AppConfigPrefs {
   recentLinkedDirs?: string[];
 }
 
+/**
+ * Daemon-derived, response-only fields. Computed per request from the daemon's
+ * environment, never persisted to app-config.json and never accepted on PUT —
+ * they are absent from AppConfigPrefs, so they are absent from
+ * UpdateAppConfigRequest by construction.
+ */
+export interface DaemonDerivedAppConfig {
+  /**
+   * Operator has declared Cloud sign-in optional for this deployment
+   * (OD_CLOUD_LOGIN_OPTIONAL). Signing in stays available; it just stops being
+   * the only way through first-run onboarding.
+   */
+  readonly cloudLoginOptional?: boolean;
+}
+
 export interface AppConfigResponse {
-  config: AppConfigPrefs;
+  config: AppConfigPrefs & DaemonDerivedAppConfig;
 }
 
 export type UpdateAppConfigRequest = Partial<AppConfigPrefs>;

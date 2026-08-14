@@ -528,6 +528,20 @@ function inactiveViewProps(active: boolean) {
   };
 }
 
+// A saved local CLI is spawned on this machine and never calls vela, so
+// returning it to the Cloud identity gate strands the user: the gate offers
+// only sign-in, which is not something they can act on. Deliberately narrow —
+// AMR *is* the Cloud runtime, and BYOK keeps its existing reauth flow.
+function hasSignedOutLocalCliSetup(config: AppConfig, agents: AgentInfo[]): boolean {
+  return Boolean(
+    config.onboardingCompleted === true
+    && config.mode === 'daemon'
+    && config.agentId
+    && config.agentId !== 'amr'
+    && agents.some((agent) => agent.id === config.agentId && agent.available),
+  );
+}
+
 export function EntryShell({
   skills,
   designTemplates,
@@ -595,11 +609,18 @@ export function EntryShell({
   const view: EntryViewKind = route.kind === 'home' ? route.view : 'home';
   useEffect(() => {
     // The entry shell is the authenticated Home surface. A definitive
-    // signed-out result returns it to the Cloud identity gate while leaving
-    // the saved model source untouched for passive reauthentication.
+    // signed-out result returns a Cloud-dependent setup to the identity gate
+    // while leaving the saved model source untouched for passive reauthentication.
     if (amrLoggedIn !== false || view === 'onboarding') return;
+    if (config.cloudLoginOptional === true) {
+      // An empty agent list mid-scan reads as "agent unavailable", which would
+      // bounce a saved local CLI before detection lands. Mirrors the
+      // passive-reauth guard in OnboardingView.
+      if (config.onboardingCompleted === true && config.agentId !== 'amr' && agentsLoading) return;
+      if (hasSignedOutLocalCliSetup(config, agents)) return;
+    }
     navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
-  }, [amrLoggedIn, view]);
+  }, [agents, agentsLoading, amrLoggedIn, config, view]);
   // The one shared workspace context. Any non-null context is a real workspace
   // (personal or team); workspace surfaces gate on B's permission bits, not on
   // workspaceType.
@@ -3170,6 +3191,23 @@ function OnboardingView({
                 disabled={amrLoginCancelPending}
               >
                 {t('settings.amrCancelSignIn')}
+              </button>
+            ) : null}
+            {/* Opt-in via OD_CLOUD_LOGIN_OPTIONAL. Local CLI and BYOK never call
+                vela, so on a deployment where the operator has declared sign-in
+                optional this is the only way through the step. Reuses the
+                signed-in continue path so a returning setup is restored rather
+                than re-chosen. */}
+            {config.cloudLoginOptional === true && !cloudBusy ? (
+              <button
+                type="button"
+                className="onboarding-cloud__alternative"
+                onClick={() => {
+                  setModelSource('local');
+                  continueAfterCloudSignIn();
+                }}
+              >
+                {t('settings.onboardingCloudAlternative')}
               </button>
             ) : null}
           </div>

@@ -22,6 +22,7 @@ import {
   type AIHubMixCatalogType,
 } from '../integrations/aihubmix.js';
 import { isSandboxModeEnabled } from '../sandbox-mode.js';
+import { isCloudLoginOptional } from '../app-config.js';
 import {
   MEDIA_TASK_WAIT_TOOL_ENDPOINT,
   type ToolTokenGrant,
@@ -541,7 +542,10 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     }
     try {
       const config = await readAppConfig(RUNTIME_DATA_DIR);
-      res.json({ config });
+      // Env-derived and response-only, composed on the way out so it never
+      // round-trips through app-config.json — doWrite re-reads readAppConfig
+      // and serializes the result straight to disk.
+      res.json({ config: { ...config, cloudLoginOptional: isCloudLoginOptional() } });
     } catch (err: any) {
       res
         .status(500)

@@ -22,6 +22,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { createHash, randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { expandHomePrefix } from './home-expansion.js';
+import { isTruthyEnvFlag } from './api-token-auth.js';
 
 import {
   readInstallationFile,
@@ -30,6 +31,14 @@ import {
   writeInstallationFile,
   type InstallationFilePatch,
 } from './installation.js';
+
+// Read-only deployment flag surfaced to the web through GET /api/app-config.
+// Deliberately absent from AppConfigPrefs and ALLOWED_KEYS: it is derived, not
+// stored, and that omission is what stops a PUT from persisting it. Read per
+// call with an injectable env so tests need no process.env mutation.
+export function isCloudLoginOptional(env: NodeJS.ProcessEnv = process.env): boolean {
+  return isTruthyEnvFlag(env.OD_CLOUD_LOGIN_OPTIONAL);
+}
 
 // Plugin-system env knobs. See docs/plans/plugins-implementation.md F6 / F9.
 // Phase 1 only reads them; the GC worker that enforces snapshot expiry lands

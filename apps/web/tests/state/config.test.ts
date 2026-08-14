@@ -1503,6 +1503,7 @@ describe('saveConfig', () => {
       privacyDecisionAt: 1778244000000,
       telemetry: { metrics: true },
       allowSilentUpdates: true,
+      cloudLoginOptional: true,
     });
 
     const saved = JSON.parse(store.get('open-design:config') ?? '{}');
@@ -1510,6 +1511,20 @@ describe('saveConfig', () => {
     expect(saved.privacyDecisionAt).toBeUndefined();
     expect(saved.telemetry).toBeUndefined();
     expect(saved.allowSilentUpdates).toBeUndefined();
+    // Derived per request from the daemon's env — a cached copy could outlive
+    // the operator turning the flag back off.
+    expect(saved.cloudLoginOptional).toBeUndefined();
+  });
+
+  it('clears cloudLoginOptional when the daemon stops reporting it', () => {
+    // An older daemon, or one restarted without the env var, omits the field
+    // entirely; absence must read as "not opted in", never as "unchanged".
+    expect(
+      mergeDaemonConfig({ ...DEFAULT_CONFIG, cloudLoginOptional: true }, {}).cloudLoginOptional,
+    ).toBeUndefined();
+    expect(
+      mergeDaemonConfig({ ...DEFAULT_CONFIG }, { cloudLoginOptional: true }).cloudLoginOptional,
+    ).toBe(true);
   });
 
   it('keeps CLI API key env values out of localStorage while preserving intent and non-secret env', () => {

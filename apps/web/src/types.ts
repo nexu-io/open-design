@@ -458,6 +458,10 @@ export interface AppConfig {
   // rotate or clear the anonymous id without re-opening the consent banner.
   privacyDecisionAt?: number | null;
   allowSilentUpdates?: boolean;
+  // Daemon-derived from OD_CLOUD_LOGIN_OPTIONAL; read-only here. Absent until
+  // the first successful GET /api/app-config, so branch on `=== true` rather
+  // than `!== false` to keep the pre-hydration render on current behaviour.
+  cloudLoginOptional?: boolean;
   // Privacy preferences governing what (if anything) is shipped to the
   // PostHog / Langfuse telemetry endpoints. `metrics` and `content`
   // default ON (set by `DEFAULT_CONFIG.telemetry` in state/config.ts) so

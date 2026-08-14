@@ -659,6 +659,203 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(props.onAgentChange).not.toHaveBeenCalled();
   });
 
+  it('leaves the identity step untouched when the deployment has not opted in', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    renderOnboarding({ config: baseConfig({ cloudLoginOptional: false }) });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to Open Design' }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: 'Use a local CLI or your own API key' }),
+    ).toBeNull();
+  });
+
+  it('still gates a signed-out local-CLI setup when the deployment has not opted in', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    // Identical to the opted-in case below except for the flag, so this pins
+    // that the flag — not the setup — is what changes the outcome.
+    const config = baseConfig({ onboardingCompleted: true, agentId: 'claude-code' });
+    renderHome({ config, amrLoggedIn: false, agents: [cliAgent()] });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to Open Design' }),
+    ).toBeTruthy();
+    expect(window.location.pathname).toBe('/onboarding');
+  });
+
+  it('keeps a signed-out local-CLI setup on Home instead of stranding it at the gate', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    const config = baseConfig({
+      onboardingCompleted: true,
+      agentId: 'claude-code',
+      cloudLoginOptional: true,
+    });
+    const props = renderHome({ config, amrLoggedIn: false, agents: [cliAgent()] });
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/');
+    });
+    expect(screen.queryByRole('heading', { name: 'Sign in to Open Design' })).toBeNull();
+    expect(props.onConfigPersist).not.toHaveBeenCalled();
+    expect(props.onAgentChange).not.toHaveBeenCalled();
+  });
+
+  it('still gates a signed-out BYOK setup, preserving the passive-reauth flow', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    // Mirrors e2e/ui/amr-onboarding.test.ts:390 — BYOK reauth is deliberately
+    // unchanged by this fix, so pin it here too.
+    const config = baseConfig({
+      onboardingCompleted: true,
+      mode: 'api',
+      apiKey: 'persisted-byok-key',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+      // A stale CLI id must not smuggle an api-mode setup past the gate: the
+      // exemption is keyed on the runtime actually in use, not on leftovers.
+      agentId: 'claude-code',
+      cloudLoginOptional: true,
+    });
+    renderHome({ config, amrLoggedIn: false, agents: [cliAgent()] });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to Open Design' }),
+    ).toBeTruthy();
+    expect(window.location.pathname).toBe('/onboarding');
+  });
+
+  it('still gates a signed-out AMR setup even when the AMR runtime is available', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    // AMR *is* the Cloud runtime, so signing in is exactly the action this user
+    // can take — the gate must keep firing for them.
+    const config = baseConfig({
+      onboardingCompleted: true,
+      agentId: 'amr',
+      cloudLoginOptional: true,
+    });
+    renderHome({ config, amrLoggedIn: false, agents: [amrAgent({ available: true })] });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to Open Design' }),
+    ).toBeTruthy();
+    expect(window.location.pathname).toBe('/onboarding');
+  });
+
+  it('still gates a signed-out local-CLI setup whose agent is no longer available', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    const config = baseConfig({
+      onboardingCompleted: true,
+      agentId: 'claude-code',
+      cloudLoginOptional: true,
+    });
+    renderHome({ config, amrLoggedIn: false, agents: [cliAgent({ available: false })] });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to Open Design' }),
+    ).toBeTruthy();
+    expect(window.location.pathname).toBe('/onboarding');
+  });
+
+  it('still gates a first run whose agent scan has not landed yet', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    // The mid-scan deferral must not apply before onboarding ever completed,
+    // or a genuine first run silently skips the gate.
+    const config = baseConfig({
+      onboardingCompleted: false,
+      agentId: null,
+      cloudLoginOptional: true,
+    });
+    renderHome({ config, amrLoggedIn: false, agents: [], agentsLoading: true });
+
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to Open Design' }),
+    ).toBeTruthy();
+    expect(window.location.pathname).toBe('/onboarding');
+  });
+
+  it('offers a route past the identity step for setups that never call the Cloud', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    renderOnboarding({ config: baseConfig({ cloudLoginOptional: true }) });
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Use a local CLI or your own API key' }),
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Choose your model source' }),
+    ).toBeTruthy();
+    // Arriving here means the user asked for a non-Cloud source, so Hosted must
+    // not stay pre-selected — accepting it would pin them to the runtime they
+    // just declined and loop them back to this gate.
+    expect(screen.getByRole('radio', { name: /Local Agent/i }).getAttribute('aria-checked'))
+      .toBe('true');
+    expect(screen.getByRole('radio', { name: /Open Design Hosted/i }).getAttribute('aria-checked'))
+      .toBe('false');
+  });
+
+  it('restores a finished signed-out setup instead of re-running the chooser', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    const config = baseConfig({
+      onboardingCompleted: true,
+      agentId: 'claude-code',
+      cloudLoginOptional: true,
+    });
+    const props = renderOnboarding({ config, agents: [cliAgent()] });
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Use a local CLI or your own API key' }),
+    );
+
+    // The saved source is restored, not re-chosen: no chooser, and nothing
+    // rewrites the persisted runtime on the way past.
+    await waitFor(() => {
+      expect(props.onCompleteOnboarding).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole('heading', { name: 'Choose your model source' })).toBeNull();
+    expect(props.onAgentChange).not.toHaveBeenCalled();
+    expect(props.onModeChange).not.toHaveBeenCalled();
+  });
+
+  it('hides the non-Cloud route while a sign-in is already in flight', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      jsonResponse({ loggedIn: false, profile: 'prod', configPath: '/x', user: null }),
+    ) as typeof fetch;
+    renderOnboarding({ config: baseConfig({ cloudLoginOptional: true }) });
+
+    // Present first, so this cannot pass vacuously if the control disappears.
+    expect(
+      await screen.findByRole('button', { name: 'Use a local CLI or your own API key' }),
+    ).toBeTruthy();
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Sign in to Open Design' }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: 'Use a local CLI or your own API key' }),
+      ).toBeNull();
+    });
+  });
+
   it('shows the model-source chooser after Cloud sign-in without exposing legacy onboarding steps', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({

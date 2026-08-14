@@ -2682,7 +2682,8 @@
   outline-offset: 2px;
 }
 
-.onboarding-cloud__cancel {
+.onboarding-cloud__cancel,
+.onboarding-cloud__alternative {
   margin-top: 22px;
   border: 0;
   background: transparent;
@@ -2693,7 +2694,8 @@
   transition: color 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.onboarding-cloud__cancel:hover {
+.onboarding-cloud__cancel:hover,
+.onboarding-cloud__alternative:hover {
   color: var(--text-strong);
 }
 
