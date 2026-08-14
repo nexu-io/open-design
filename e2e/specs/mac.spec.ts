@@ -2,6 +2,7 @@
 
 import { execFile } from 'node:child_process';
 import { access, chmod, copyFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -43,7 +44,7 @@ import {
   seedPackagedClosureFixture,
   type PackagedClosureFixture,
 } from '@/vitest/packaged-closure-fixture';
-import { readPackagedClosureBinding } from '@/vitest/packaged-closure-binding';
+import { assertPackagedStandaloneStatus, readPackagedClosureBinding } from '@/vitest/packaged-closure-binding';
 import {
   createPackagedColdStartObservation,
   type PackagedColdStartObservation,
@@ -550,7 +551,10 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       expect(pty.cleanup.terminalStatus).toBe(200);
       expect(pty.cleanup.projectStatus).toBe(200);
       if (verifyPublicImmutableArtifacts) {
-        assertPublicStandaloneBinding(inspect.status?.standalone, updateScenario.expectedCurrentVersion);
+        assertPackagedStandaloneStatus(inspect.status?.standalone, {
+          namespace,
+          releaseVersion: updateScenario.expectedCurrentVersion,
+        });
       } else {
         assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
         assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
@@ -882,7 +886,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
             channel: updateScenario.channel,
             label: 'packaged macOS',
             namespace,
-            root: join(toolsPackDir, 'runtime', 'mac'),
+            root: join(homedir(), 'Library', 'Application Support', basename(install.installedAppPath, '.app')),
             expected: {
               channel: updateScenario.channel,
               namespace,
@@ -3077,23 +3081,6 @@ function assertLauncherPointer(
   });
 }
 
-function assertPublicStandaloneBinding(value: unknown, expectedVersion: string): void {
-  if (!isRecord(value)) {
-    throw new Error(`public mac runtime did not report Standalone status: ${formatUnknown(value)}`);
-  }
-  expect(value).toMatchObject({
-    handoff: {
-      descriptor: {
-        release: { version: expectedVersion },
-        standalone: { protocolVersion: 1, version: expectedVersion },
-      },
-      scope: { generation: 0, namespace },
-    },
-    state: 'running',
-  });
-  expect(value.pid).toEqual(expect.any(Number));
-}
-
 function settledLauncherGeneration(launcher: LauncherSnapshot, expectedVersion: string): number | null {
   const active = launcher.active;
   const lastSuccessful = launcher.lastSuccessful;
@@ -3268,6 +3255,11 @@ async function launchMacAppWithLaunchServices(installedAppPath: string): Promise
     stdoutPath,
     witnessPath,
   };
+  if (verifyPublicImmutableArtifacts) {
+    expect(witness.embeddedConfig?.updateMetadataUrl).toBe(
+      `${process.env.RELEASE_PUBLIC_ORIGIN}/${updateScenario.channel}/latest/metadata.json`,
+    );
+  }
   await writeFile(witnessPath, `${JSON.stringify(witness, null, 2)}\n`, 'utf8');
   console.info(`[mac launch-services witness] ${JSON.stringify(witness)}`);
 }
@@ -3302,6 +3294,7 @@ function projectPackagedConfig(config: Record<string, unknown> | null): Record<s
     'releaseVersion',
     'resourceRoot',
     'shellVersion',
+    'updateMetadataUrl',
     'webOutputMode',
   ].filter((key) => key in config).map((key) => [key, config[key]]));
 }

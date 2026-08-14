@@ -62,8 +62,5 @@ jobs:
     uses: ./.github/workflows/release-exact.yml
     secrets: inherit
     with:
-      enable_mac_arm64: true
-      enable_mac_x64: true
-      enable_win_x64: true
       notification_stream: daily
       ref: ${{ needs.resolve.outputs.ref }}

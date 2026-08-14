@@ -71,7 +71,7 @@ const bakePreviewsReleaseWorkflowPath = join(
 const finalizeReleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "finalize-release.yml");
 const handoffScriptPath = join(workspaceRoot, ".github", "scripts", "handoff.py");
 const releaseBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-exact.yml");
-const distributionBetaWorkflowPath = join(workspaceRoot, ".github", "workflows", "distribution-exact.yml");
+const distributionBetaWorkflowPath = releaseBetaWorkflowPath;
 const betaMacDistributionActionPath = join(
   workspaceRoot,
   ".github",
@@ -169,12 +169,17 @@ const releaseLatestPublicationScriptPath = join(
 );
 
 async function readReleaseWorkflow(ritualPath: string, distributionPath: string): Promise<string> {
+  if (ritualPath === distributionPath) {
+    const [workflow, acceptance] = await Promise.all([
+      readFile(ritualPath, "utf8"),
+      readFile(join(workspaceRoot, ".github", "workflows", "distribution-exact-accept.yml"), "utf8"),
+    ]);
+    return `${workflow}\n${acceptance}`;
+  }
   const [ritual, distribution, acceptance] = await Promise.all([
     readFile(ritualPath, "utf8"),
     readFile(distributionPath, "utf8"),
-    distributionPath === distributionBetaWorkflowPath
-      ? readFile(join(workspaceRoot, ".github", "workflows", "distribution-exact-accept.yml"), "utf8")
-      : Promise.resolve(""),
+    Promise.resolve(""),
   ]);
   return `${ritual}\n${distribution}\n${acceptance}`;
 }
@@ -2128,13 +2133,10 @@ process.stdin.on("end", () => {
     const manualDispatch = sectionBetween(betaWorkflow, "  workflow_dispatch:", "  workflow_call:");
     expect(manualDispatch).toContain("      promote:");
     expect(manualDispatch).toContain("        default: true");
-    expect(betaWorkflow).toContain("value: ${{ jobs.stage.outputs.mac_arm64_smoke_result }}");
-    expect(betaWorkflow).toContain("value: ${{ jobs.stage.outputs.win_x64_smoke_result }}");
-    expect(betaWorkflow).toContain("value: ${{ jobs.stage.outputs.mac_arm64_url }}");
-    expect(betaWorkflow).toContain("value: ${{ jobs.stage.outputs.win_x64_url }}");
-
     const buildJob = sectionBetween(betaWorkflow, "  build:", "  stage:");
-    expect(buildJob).toContain("matrix: ${{ fromJSON(needs.metadata.outputs.build_matrix) }}");
+    expect(buildJob).toContain("target: mac_arm64");
+    expect(buildJob).toContain("target: mac_x64");
+    expect(buildJob).toContain("target: win_x64");
     expect(buildJob).toContain("id: mac");
     expect(buildJob).toContain("id: win");
     expect(buildJob).toContain("open-design-${{ inputs.exact_name }}-${{ matrix.target }}-build-result");
@@ -2152,27 +2154,30 @@ process.stdin.on("end", () => {
 
     const stageJob = betaWorkflow.slice(betaWorkflow.indexOf("  stage:"));
     expect(stageJob).toContain("inputs.promote");
-    expect(dailyWorkflow).toContain("enable_mac_x64: true");
+    expect(dailyWorkflow).not.toContain("enable_mac_x64:");
     expect(dailyWorkflow).toContain("notification_stream: daily");
     expect(dailyWorkflow).not.toContain("force:");
     expect(dailyWorkflow).not.toContain("release_version:");
     expect(dailyWorkflow).not.toContain("tools/release/src/notifications/");
   });
 
-  it("[P1] routes release entries directly to their channel distributions", async () => {
+  it("[P1] keeps exact flat while stable and prerelease use their shared distributions", async () => {
     const [exact, prerelease, stable] = await Promise.all([
       readFile(releaseBetaWorkflowPath, "utf8"),
       readFile(releasePrereleaseWorkflowPath, "utf8"),
       readFile(releaseStableWorkflowPath, "utf8"),
     ]);
 
-    expect(exact).toContain("uses: ./.github/workflows/distribution-exact.yml");
+    expect(exact).toContain("  metadata:");
+    expect(exact).toContain("uses: ./.github/workflows/distribution-exact-accept.yml");
+    expect(exact).not.toContain("uses: ./.github/workflows/distribution-exact.yml");
     expect(prerelease).toContain("uses: ./.github/workflows/distribution-counted.yml");
     expect(stable).toContain("uses: ./.github/workflows/distribution-stable.yml");
     for (const workflow of [exact, prerelease, stable]) {
       expect(workflow).not.toContain("uses: ./.github/workflows/distribution.yml");
     }
     expect(existsSync(join(workspaceRoot, ".github", "workflows", "distribution.yml"))).toBe(false);
+    expect(existsSync(join(workspaceRoot, ".github", "workflows", "distribution-exact.yml"))).toBe(false);
     expect(existsSync(join(workspaceRoot, ".github", "workflows", "release-preview.yml"))).toBe(false);
     expect(existsSync(join(workspaceRoot, ".github", "workflows", "release-beta.yml"))).toBe(false);
   });
@@ -2800,10 +2805,12 @@ process.stdin.on("end", () => {
     expect(sharedClosureAction).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: shared");
     expect(sharedClosureAction).toContain('cp -R "$blob_root"');
     expect(buildJob).toContain("OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke");
-    expect(buildJob).toContain("matrix: ${{ fromJSON(needs.metadata.outputs.build_matrix) }}");
-    expect(sharedJob).toContain("runner\":\"macos-14");
-    expect(sharedJob).toContain("runner\":\"macos-15-intel");
-    expect(sharedJob).toContain("runner\":\"windows-latest");
+    expect(buildJob).toContain("target: mac_arm64");
+    expect(buildJob).toContain("runner: macos-14");
+    expect(buildJob).toContain("target: mac_x64");
+    expect(buildJob).toContain("runner: macos-15-intel");
+    expect(buildJob).toContain("target: win_x64");
+    expect(buildJob).toContain("runner: windows-latest");
     for (const targetContributionStep of [
       sectionBetween(
         betaMacAction,
@@ -2871,7 +2878,7 @@ process.stdin.on("end", () => {
     expect(workflow).toContain("full 40-character commit SHA; abbreviated SHA");
     expect(stageJob).toContain('RELEASE_ACTIVATE_LATEST: "false"');
     expect(stageJob).toContain('RELEASE_LATEST_CAS_REQUIRED: "true"');
-    expect(workflow).toContain("RELEASE_WIN_X64_SIGN_MODE: ${{ inputs.win_x64_sign_mode }}");
+    expect(workflow).toContain("RELEASE_WIN_X64_SIGN_MODE: unsigned");
     expect(stageJob).not.toContain("Observe directly activated beta public feed");
     expect(publicAcceptanceJob).toContain("runs-on: ${{ matrix.runner }}");
     expect(publicAcceptanceJob).toContain("target: mac_arm64");
@@ -2906,7 +2913,7 @@ process.stdin.on("end", () => {
     const publishStep = sectionBetween(betaMacAction, "    - name: Publish ${{ inputs.target }} platform", "    - name: Upload ${{ inputs.target }} publish manifest");
     const artifactMode = "RELEASE_ARTIFACT_MODE: ${{ inputs.build-target == 'all' && 'all' || 'dmg-and-payload' }}";
 
-    expect(buildJob).toContain("build-target: ${{ matrix.target == 'mac_arm64' && inputs.mac_arm64_target || inputs.mac_x64_target }}");
+    expect(buildJob).toContain("build-target: ${{ matrix.target == 'mac_arm64' && 'dmg' || 'all' }}");
     expect(prepareStep).toContain(artifactMode);
     expect(publishStep).toContain(artifactMode);
     expect(macSpec).toContain("const packagedMacClosureTarget = process.arch === 'x64' ? 'darwin-x64' : 'darwin-arm64';");
@@ -3427,10 +3434,15 @@ process.stdin.on("end", () => {
 });
 
 function expectWindowsUpdaterSmokeContract(workflow: string, channel: "beta" | "preview" | "prerelease" | "stable"): void {
-  expect(workflow).toContain("win_x64_smoke_mode:");
-  expect(workflow).toContain("win_x64_update_metadata_url:");
-  expect(workflow).toContain("win_x64_update_target_version:");
-  expect(workflow).toMatch(/win_x64_smoke_mode:[\s\S]*?options:[\s\S]*?- skip[\s\S]*?- core[\s\S]*?- full[\s\S]*?default: core/);
+  if (channel === "beta") {
+    expect(workflow).not.toContain("win_x64_smoke_mode:");
+    expect(workflow).toContain("smoke-mode: core");
+  } else {
+    expect(workflow).toContain("win_x64_smoke_mode:");
+    expect(workflow).toContain("win_x64_update_metadata_url:");
+    expect(workflow).toContain("win_x64_update_target_version:");
+    expect(workflow).toMatch(/win_x64_smoke_mode:[\s\S]*?options:[\s\S]*?- skip[\s\S]*?- core[\s\S]*?- full[\s\S]*?default: core/);
+  }
   const smokeMode = "inputs.smoke-mode";
   const metadataUrl = "inputs.update-metadata-url";
   const targetVersion = "inputs.update-target-version";

@@ -26,7 +26,7 @@ Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a ca
 
 - Do not hand-build `--od-stamp-*` args; use `createProcessStampArgs` with `OPEN_DESIGN_SIDECAR_CONTRACT`.
 - Do not use port numbers in data/log/runtime/cache path decisions. Namespace decides paths; ports are only transient transports.
-- Public release artifacts must use channel-specific app identity: stable uses `Open Design`, beta uses `Open Design Beta`, prerelease uses `Open Design Prerelease`, and preview uses `Open Design Preview`. Local tools-pack installs may still use namespace-scoped install paths only as a developer multi-instance validation convention.
+- Public release artifacts must use channel-specific app identity: stable uses `Open Design`, prerelease uses `Open Design Prerelease`, and exact derives a distinct identity from its name (for example `Open Design Beta`). Local tools-pack installs may still use namespace-scoped install paths only as a developer multi-instance validation convention.
 - Do not let namespace-named `.app` installs change data/log/runtime/cache path conventions.
 - `--dir` controls tools-pack output/runtime/install validation roots only. It must not be treated as the cache root. The default workspace tools-pack cache is the hot path. `--cache-dir` is a special-case escape hatch for cache isolation or cold-cache validation, not a routine QA/build parameter.
 - `tools-pack closure build` is namespace-neutral: neither a component nor its distribution manifest may contain a local namespace, local activation pointer, Desktop IPC state, or shell bytes. The distribution identity is version-wide and target-neutral; target selection belongs in its required component map.
@@ -74,7 +74,7 @@ Channel identity must be stable across install, update install, shortcuts, regis
 - Stable: `Open Design`, namespace `default` or stable release namespace.
 - Beta Windows: `Open Design Beta`, namespace `release-beta-win`, uninstall key `Open Design-release-beta-win`.
 - Prerelease Windows: `Open Design Prerelease`, namespace `release-prerelease-win`, uninstall key `Open Design-release-prerelease-win`.
-- Preview Windows: `Open Design Preview`, namespace `release-preview-win`, uninstall key `Open Design-release-preview-win`.
+- Exact Windows: a name-specific product identity, namespace `release-<name>-win`, and uninstall key `Open Design-release-<name>-win`.
 - Beta-like ad hoc namespaces such as `beta-local-flow` are test namespaces, not the beta channel. They must not be used for user-flow beta validation because they create a different registry key while sharing a confusing display name/path.
 
 If a local release-channel package is meant to be updated by a real feed, build it with the matching release namespace and an older matching `--release-version` such as `--namespace release-beta-win --release-version 0.10.0-beta.1` or `--namespace release-prerelease-win --release-version 0.10.0-prerelease.1`. Otherwise the installed package and the downloaded package can appear as separate registry entries even though they target the same display name.

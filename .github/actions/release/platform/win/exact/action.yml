@@ -58,7 +58,7 @@ runs:
       id: cache
       uses: ./.github/actions/release/platform/cache
       with:
-        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/workflows/release-exact.yml', '.github/workflows/distribution-exact.yml', '.github/scripts/release/cache/win.ps1') }}
+        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/workflows/release-exact.yml', '.github/scripts/release/cache/win.ps1') }}
         prefix: tools-pack-win-v1-${{ inputs.channel }}-${{ runner.os }}-
     - name: Install dependencies
       shell: pwsh

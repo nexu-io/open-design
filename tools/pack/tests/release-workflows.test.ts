@@ -23,26 +23,29 @@ function count(content: string, needle: string): number {
 
 describe("release workflow topology", () => {
   it("exposes only stable, prerelease, and exact release rituals", async () => {
-    const entries = await Promise.all([
+    const [stable, prerelease, exact] = await Promise.all([
       read(".github/workflows/release-stable.yml"),
       read(".github/workflows/release-prerelease.yml"),
       read(".github/workflows/release-exact.yml"),
     ]);
 
-    for (const entry of entries) {
+    for (const entry of [stable, prerelease, exact]) {
       expect(entry).toContain("workflow_dispatch:");
       expect(entry).toContain("workflow_call:");
-      expect(entry).toContain("secrets: inherit");
+    }
+    for (const entry of [stable, prerelease]) {
       expect(entry).not.toContain("runs-on:");
       expect(entry).not.toMatch(/^\s+run:/mu);
     }
+    expect(exact).toContain("  metadata:");
+    expect(exact).toContain("runs-on:");
     expect(await exists(".github/workflows/release-preview.yml")).toBe(false);
     expect(await exists(".github/workflows/release-beta.yml")).toBe(false);
     expect(await exists(".github/workflows/distribution.yml")).toBe(false);
     expect(await exists(".github/workflows/distribution-beta.yml")).toBe(false);
   });
 
-  it("routes each ritual directly to one public distribution template", async () => {
+  it("keeps exact flat while stable and prerelease retain one public distribution", async () => {
     const [stable, prerelease, exact] = await Promise.all([
       read(".github/workflows/release-stable.yml"),
       read(".github/workflows/release-prerelease.yml"),
@@ -51,48 +54,47 @@ describe("release workflow topology", () => {
 
     expect(stable).toContain("uses: ./.github/workflows/distribution-stable.yml");
     expect(prerelease).toContain("uses: ./.github/workflows/distribution-counted.yml");
-    expect(exact).toContain("uses: ./.github/workflows/distribution-exact.yml");
-    for (const entry of [stable, prerelease, exact]) {
+    for (const entry of [stable, prerelease]) {
       expect(count(entry, "\n  distribute:\n")).toBe(1);
     }
+    expect(exact).toContain("\n  metadata:\n");
+    expect(exact).toContain("uses: ./.github/workflows/distribution-exact-accept.yml");
+    expect(exact).not.toContain("uses: ./.github/workflows/distribution-exact.yml");
+    expect(await exists(".github/workflows/distribution-exact.yml")).toBe(false);
   });
 
   it("treats beta as the default exact name instead of a dedicated lane", async () => {
-    const [entry, distribution, prepare] = await Promise.all([
+    const [entry, prepare] = await Promise.all([
       read(".github/workflows/release-exact.yml"),
-      read(".github/workflows/distribution-exact.yml"),
       read("tools/release/src/metadata/prepare-exact.ts"),
     ]);
 
     expect(entry).toContain("exact_name:");
     expect(entry).toContain("default: beta");
-    const declaredInputs = entry.slice(0, entry.indexOf("    outputs:"));
+    const declaredInputs = entry.slice(0, entry.indexOf("permissions:"));
     expect(declaredInputs).not.toMatch(/^\s{6}(force|release_version|shell_version|closure_version):/mu);
-    expect(distribution).toContain('[[ ! "$EXACT_NAME" =~ ^[a-z0-9]{1,12}$ ]]');
-    expect(distribution).toContain('[ "$EXACT_NAME" = "stable" ] || [ "$EXACT_NAME" = "prerelease" ]');
-    expect(distribution).toContain('pnpm exec tools-release prepare "${{ inputs.exact_name }}"');
-    expect(distribution).toContain('pnpm exec tools-release reserve-version "${{ inputs.exact_name }}"');
+    expect(entry).toContain('[[ ! "$EXACT_NAME" =~ ^[a-z0-9]{1,12}$ ]]');
+    expect(entry).toContain('[ "$EXACT_NAME" = "stable" ] || [ "$EXACT_NAME" = "prerelease" ]');
+    expect(entry).toContain('pnpm exec tools-release prepare "${{ inputs.exact_name }}"');
+    expect(entry).toContain('pnpm exec tools-release reserve-version "${{ inputs.exact_name }}"');
     expect(prepare).toContain("OPEN_DESIGN_EXACT_METADATA_URL");
     expect(prepare).not.toContain("OPEN_DESIGN_PREVIEW_METADATA_URL");
   });
 
   it("builds all exact platforms by default and activates only after public acceptance", async () => {
-    const [entry, distribution, acceptance] = await Promise.all([
+    const [entry, acceptance] = await Promise.all([
       read(".github/workflows/release-exact.yml"),
-      read(".github/workflows/distribution-exact.yml"),
       read(".github/workflows/distribution-exact-accept.yml"),
     ]);
 
-    const declaredInputs = entry.slice(0, entry.indexOf("    outputs:"));
-    for (const name of ["enable_mac_arm64", "enable_mac_x64", "enable_win_x64"]) {
-      const sections = declaredInputs.split(`      ${name}:`).slice(1);
-      expect(sections).toHaveLength(2);
-      for (const section of sections) expect(section.split("\n", 6).join("\n")).toContain("default: true");
+    expect(entry).not.toMatch(/^\s{6}enable_(mac_arm64|mac_x64|win_x64):/mu);
+    for (const target of ["mac_arm64", "mac_x64", "win_x64"]) {
+      expect(entry).toContain(`target: ${target}`);
     }
     for (const target of ["mac_arm64", "mac_x64", "win_x64"]) {
       expect(acceptance).toContain(`target: ${target}`);
     }
-    expect(distribution).toContain("uses: ./.github/workflows/distribution-exact-accept.yml");
+    expect(entry).toContain("uses: ./.github/workflows/distribution-exact-accept.yml");
     expect(acceptance).toContain("tools-release prepare-public-acceptance");
     expect(acceptance).toContain("tools-release issue-public-acceptance");
     expect(acceptance).toContain("tools-release activate-public-release");
@@ -101,7 +103,7 @@ describe("release workflow topology", () => {
 
   it("uses exact platform composites and dynamic release identity", async () => {
     const [distribution, mac, win] = await Promise.all([
-      read(".github/workflows/distribution-exact.yml"),
+      read(".github/workflows/release-exact.yml"),
       read(".github/actions/release/platform/mac/exact/action.yml"),
       read(".github/actions/release/platform/win/exact/action.yml"),
     ]);
@@ -136,7 +138,7 @@ describe("release workflow topology", () => {
     const [stable, prerelease, exact] = await Promise.all([
       read(".github/workflows/distribution-stable.yml"),
       read(".github/workflows/distribution-counted.yml"),
-      read(".github/workflows/distribution-exact.yml"),
+      read(".github/workflows/release-exact.yml"),
     ]);
 
     for (const distribution of [stable, prerelease, exact]) {

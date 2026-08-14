@@ -12,6 +12,11 @@ export type PackagedClosureBindingExpectation = {
   version: string;
 };
 
+export type PackagedStandaloneStatusExpectation = {
+  namespace: string;
+  releaseVersion: string;
+};
+
 function record(value: unknown, label: string): JsonRecord {
   if (value == null || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${label} is invalid`);
@@ -43,6 +48,30 @@ export function assertPackagedClosureBinding(
     || standalone.protocolVersion !== 1
   ) throw new Error('packaged Closure standalone identity is invalid');
   return binding;
+}
+
+export function assertPackagedStandaloneStatus(
+  value: unknown,
+  expected: PackagedStandaloneStatusExpectation,
+): JsonRecord {
+  const status = record(value, 'packaged Standalone status');
+  const handoff = record(status.handoff, 'packaged Standalone handoff');
+  const descriptor = record(handoff.descriptor, 'packaged Standalone descriptor');
+  const release = record(descriptor.release, 'packaged Standalone release descriptor');
+  const standalone = record(descriptor.standalone, 'packaged Standalone identity');
+  const scope = record(handoff.scope, 'packaged Standalone scope');
+  for (const [name, actual, wanted] of [
+    ['release version', release.version, expected.releaseVersion],
+    ['Standalone version', standalone.version, expected.releaseVersion],
+    ['protocol version', standalone.protocolVersion, 1],
+    ['generation', scope.generation, 0],
+    ['namespace', scope.namespace, expected.namespace],
+    ['state', status.state, 'running'],
+  ] as const) {
+    if (actual !== wanted) throw new Error(`packaged Standalone ${name} mismatch: ${String(actual)} != ${wanted}`);
+  }
+  if (typeof status.pid !== 'number') throw new Error('packaged Standalone pid is invalid');
+  return status;
 }
 
 export async function readPackagedClosureBinding(input: {

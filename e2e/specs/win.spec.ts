@@ -36,7 +36,7 @@ import {
   readPackagedStandaloneDistributionBinding,
   type PackagedStandaloneDistributionFixture,
 } from '@/vitest/standalone-distribution-fixture';
-import { readPackagedClosureBinding } from '@/vitest/packaged-closure-binding';
+import { assertPackagedStandaloneStatus, readPackagedClosureBinding } from '@/vitest/packaged-closure-binding';
 import {
   createPackagedColdStartObservation,
   type PackagedColdStartObservation,
@@ -286,6 +286,7 @@ const packagedOnboardingExpression = `
 
 type DesktopStatus = {
   pid?: number;
+  standalone?: unknown;
   state?: string;
   title?: string | null;
   url?: string | null;
@@ -884,8 +885,15 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(pty.exitCode, JSON.stringify(pty, null, 2)).toBe(0);
       expect(pty.cleanup.terminalStatus).toBe(200);
       expect(pty.cleanup.projectStatus).toBe(200);
-      assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
-      assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
+      if (verifyPublicImmutableArtifacts) {
+        assertPackagedStandaloneStatus(inspect.status?.standalone, {
+          namespace,
+          releaseVersion: updateScenario.expectedCurrentVersion,
+        });
+      } else {
+        assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
+        assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
+      }
 
       // Runtime registration must preserve the stable installed outer path;
       // pointing at a versioned payload would break the scheme after cleanup.
