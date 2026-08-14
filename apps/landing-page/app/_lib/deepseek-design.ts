@@ -32,7 +32,8 @@ export const DEEPSEEK_GUIDE_HREF = '/agents/deepseek-harness-design/';
 export type DeepseekSkillCategory =
   | 'Vision & Input'
   | 'Canvas & Generative UI'
-  | 'Design Workflow';
+  | 'Design Workflow'
+  | 'Workspace & Preview';
 
 export type DeepseekSkillLink = CuratedLink;
 export type DeepseekInstall = CuratedInstall;
@@ -48,14 +49,14 @@ const noLicense = (repoUrl: string) =>
 export const DEEPSEEK_COLLECTION: DeepseekCollection = {
   eyebrow: 'DeepSeek Harness design',
   heading: 'The design plugins that give DeepSeek Harness eyes and a canvas',
-  lede: '“Everything is a plugin” is the whole DeepSeek Harness architecture — and out of the box it is a text-only coding agent. These are the plugins that make it a design tool: vision bridges that read screenshots, canvases and generative UI it can draw on, and tools that close the design review loop. It also reads the same SKILL.md format as Claude Code and Codex, so your design skill library carries over.',
+  lede: '“Everything is a plugin” is the whole DeepSeek Harness architecture — and out of the box it is a text-only coding agent. These are the dsh plugins that make it a design tool: vision bridges that read screenshots, canvases and generative UI it can draw on, tools that close the design review loop, and workbenches that preview it all. It also reads the same SKILL.md format as Claude Code and Codex, so your design skill library carries over.',
   stats: [
-    { value: '11', label: 'curated plugins' },
-    { value: '11', label: 'source repos' },
+    { value: '13', label: 'curated dsh plugins' },
+    { value: '13', label: 'source repos' },
     { value: 'SKILL.md', label: 'shared with Claude Code & Codex' },
   ],
   intro:
-    'Every plugin below is real, native to DeepSeek Harness, and links to its source. They fall into three jobs: give the text-only harness vision, give it design surfaces to draw on, and wire design review into the loop.',
+    'Every dsh plugin below is real, native to DeepSeek Harness, discoverable through the dsh-plugin topic on GitHub, and links to its source. They fall into four jobs: give the text-only harness vision, give it design surfaces to draw on, wire design review into the loop, and turn its web UI into a design workspace.',
   categories: [
     {
       key: 'Vision & Input',
@@ -68,6 +69,10 @@ export const DEEPSEEK_COLLECTION: DeepseekCollection = {
     {
       key: 'Design Workflow',
       blurb: 'Close the loop: annotate real pages, compile motion assets, carry your skill library over.',
+    },
+    {
+      key: 'Workspace & Preview',
+      blurb: 'Make the harness itself a design workspace: preview panels, workbenches and boards beside the chat.',
     },
   ],
 };
@@ -143,8 +148,12 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
     ],
     tags: ['UI restoration', 'Pixel diff', 'Grounding', 'OCR'],
     agentNote: 'Ships as a DeepSeek Harness Profile Bundle with 136 checked-in tests',
-    social: 'X @anion_ex 24♥ · upstream repo 734★',
+    social: 'X @anion_ex 24♥ · upstream repo 735★',
     repo: 'Anionex/dsh-vision-toolkit',
+    reference: {
+      label: 'Upstream: Anionex/agent-vision-toolkit',
+      url: 'https://github.com/Anionex/agent-vision-toolkit',
+    },
     install: {
       kind: 'installer',
       command: 'dsh plugin --profile web add @dsh-external/dsh-vision-toolkit',
@@ -482,6 +491,87 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
     license: MIT,
     upstreamDescription: 'Bridge Claude Code memory, skills, and config into DeepSeek Harness',
     source: { label: 'YYTbit/dsh-plugin-claude-bridge', url: 'https://github.com/YYTbit/dsh-plugin-claude-bridge' },
+  },
+
+  /* ----------------------------- Workspace & Preview --------------------- */
+  {
+    slug: 'dsh-web-ui',
+    name: 'dsh-web-ui',
+    category: 'Workspace & Preview',
+    badge: 'zhu1090093659',
+    stars: 1274,
+    tagline: 'The ecosystem\u2019s biggest UI kit: task board, preview panel, git graph and a skin center.',
+    image: '/plugins/deepseek-harness-design/skills/dsh-web-ui.webp',
+    whatIsIt:
+      'A plugin and skin collection for the harness web UI: a five-column task board whose cards run real agent sessions, a right-side panel with a file tree and multi-tab previews, a git graph, mobile remote control and a try-before-you-apply skin center.',
+    whyForDesign: [
+      'The right-side panel previews Markdown, HTML, diffs, CSV, PDF, Office files and images next to the conversation.',
+      'The task board turns design todos into cards a real dsh agent session executes and reports back on.',
+      'Panel width is draggable and persists per project, so the workspace stays the way you arranged it.',
+    ],
+    howWithAgent: [
+      'Add the aggregate package to your web profile to install everything at once.',
+      'Open the right-side panel and pin the files and previews you are working against.',
+      'Drop design tasks on the board and let the cards execute in real agent sessions.',
+    ],
+    covers: [
+      'Task board',
+      'Git graph',
+      'Right-side panel',
+      'Mobile remote',
+      'Skin center',
+    ],
+    tags: ['Workbench', 'Preview', 'Task board', 'Web UI'],
+    agentNote: 'The most-starred plugin collection on the dsh-plugin GitHub topic',
+    repo: 'zhu1090093659/dsh-web-ui',
+    install: {
+      kind: 'installer',
+      command: 'dsh plugin --profile web add @linxin666/dsh-web-ui-all@0.1.10',
+    },
+    license: { label: 'BSD-3-Clause', url: 'https://github.com/zhu1090093659/dsh-web-ui' },
+    upstreamDescription:
+      'Plugin and skin collection for DeepSeek Harness (DSH) Web UI - task board, git graph, right-side panel, remote mobile UI, pet, live token stats, and skin center.',
+    source: { label: 'zhu1090093659/dsh-web-ui', url: 'https://github.com/zhu1090093659/dsh-web-ui' },
+  },
+  {
+    slug: 'dsh-better-sidebar',
+    name: 'DSH-better-sidebar',
+    category: 'Workspace & Preview',
+    badge: 'omdsh-dev',
+    stars: 522,
+    tagline: 'A full workbench in the sidebar: file explorer, rich previews, terminal, git and a browser.',
+    image: '/plugins/deepseek-harness-design/skills/dsh-better-sidebar.webp',
+    whatIsIt:
+      'A dual-panel workbench for the harness web UI: a lazy-loading file explorer with CodeMirror editing, inline previews for images, Markdown, HTML, PDF and Office files, a real terminal, a git panel with VS Code-style diffs, an embedded sandboxed browser, and draggable split-pane tabs.',
+    whyForDesign: [
+      'Preview the HTML, images and documents the agent produces without leaving the conversation.',
+      'An embedded sandboxed browser opens your running prototype in a tab beside the chat.',
+      'Third-party plugins can register their own tabs and file previewers through its service API.',
+    ],
+    howWithAgent: [
+      'Install with the one-line script, or add the npm package to your web profile.',
+      'Open the workbench and arrange tabs across the right sidebar and the bottom panel.',
+      'Review what the agent built in place: previews, diffs, terminal and browser tabs.',
+    ],
+    covers: [
+      'File explorer',
+      'Editing & preview',
+      'Terminal',
+      'Git panel',
+      'Embedded browser',
+      'Split-pane workbench',
+    ],
+    tags: ['Sidebar', 'Preview', 'Terminal', 'Git'],
+    agentNote: 'Mounted through the official CLI\u2019s dsh.bundle.patch \u2014 no harness source changes',
+    repo: 'omdsh-dev/DSH-better-sidebar',
+    install: {
+      kind: 'installer',
+      command: 'npx -y --package @deepseek-ai/dsh dsh plugin --profile web add dsh-better-sidebar',
+    },
+    license: MIT,
+    upstreamDescription:
+      '\u4e00\u4e2a\u4fa7\u8fb9\u680f\u7684\u5b8c\u6574\u5de5\u4f5c\u53f0\uff0c\u652f\u6301\u4e09\u65b9\u62d3\u5c55\u6ce8\u518c\u65b0Tab\u9875\u9762\uff0c\u5185\u7f6e\u6587\u4ef6\u6e32\u67d3\u7f16\u8f91/\u7ec8\u7aef/Git/\u5b50\u4ee3\u7406',
+    source: { label: 'omdsh-dev/DSH-better-sidebar', url: 'https://github.com/omdsh-dev/DSH-better-sidebar' },
   },
 ];
 

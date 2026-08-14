@@ -264,7 +264,7 @@ const en: PluginsCopy = {
   hubFeatureDshEyebrow: 'Curated · DeepSeek Harness design',
   hubFeatureDshTitle: 'The design plugins that give DeepSeek Harness eyes and a canvas',
   hubFeatureDshBlurb:
-    'Native harness plugins for design work — vision bridges, editable canvases, generative UI — plus the SKILL.md canon it shares with Claude Code and Codex.',
+    'Native dsh plugins for design work — vision bridges, editable canvases, generative UI — plus the SKILL.md canon it shares with Claude Code and Codex.',
   hubFeatureDshCta: 'Explore the collection',
 
   hubEyebrow: 'Plugin library',
@@ -603,7 +603,7 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     hubFeatureDshEyebrow: '精选 · DeepSeek Harness 设计',
     hubFeatureDshTitle: '给 DeepSeek Harness 装上眼睛和画布的设计插件',
     hubFeatureDshBlurb:
-      '一组原生 Harness 设计插件——视觉桥、可编辑画布、生成式 UI——外加与 Claude Code、Codex 通用的 SKILL.md 技能生态。',
+      '一组原生 dsh 设计插件——视觉桥、可编辑画布、生成式 UI——外加与 Claude Code、Codex 通用的 SKILL.md 技能生态。',
     hubFeatureDshCta: '浏览精选合集',
     hubLabel: 'Agent 设计插件库',
     hubHeading: () => `Agent 设计插件库`,

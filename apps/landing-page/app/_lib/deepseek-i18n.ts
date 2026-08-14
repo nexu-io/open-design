@@ -33,6 +33,7 @@ export interface DeepseekCopy extends CuratedCopyBase {
   readonly categoryVision: string;
   readonly categoryCanvas: string;
   readonly categoryWorkflow: string;
+  readonly categoryWorkspace: string;
 
   /* Crossover band: the SKILL.md-compatibility story, unique to this hub. */
   readonly crossoverEyebrow: string;
@@ -62,6 +63,7 @@ const en: DeepseekCopy = {
   categoryVision: 'Vision & Input',
   categoryCanvas: 'Canvas & Generative UI',
   categoryWorkflow: 'Design Workflow',
+  categoryWorkspace: 'Workspace & Preview',
 
   crossoverEyebrow: 'Already have skills?',
   crossoverHeading: 'Your design skill library already runs here',
@@ -153,6 +155,8 @@ export function deepseekCategoryLabel(
       return copy.categoryCanvas;
     case 'Design Workflow':
       return copy.categoryWorkflow;
+    case 'Workspace & Preview':
+      return copy.categoryWorkspace;
   }
 }
 
