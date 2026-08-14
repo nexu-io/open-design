@@ -12,7 +12,10 @@ function cssBlock(css: string, selector: string): string {
 }
 
 function ruleValue(block: string, property: string): string {
-  const match = new RegExp(`(?:^|;)\\s*${property}:\\s*([^;]+);`).exec(block);
+  // Strip CSS comments before parsing so a leading comment doesn't break the
+  // (?:^|;) prefix requirement on the first property declaration.
+  const stripped = block.replace(/\/\*[\s\S]*?\*\//g, '');
+  const match = new RegExp(`(?:^|;)\\s*${property}:\\s*([^;]+);`).exec(stripped);
   if (!match) throw new Error(`Missing CSS property ${property}`);
   return match[1]!.trim();
 }
