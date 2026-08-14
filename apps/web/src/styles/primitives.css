@@ -24,13 +24,7 @@ button {
     box-shadow var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease);
 }
 button:hover:not(:disabled) { background: var(--bg-subtle); border-color: var(--border-strong); }
-/* Sidebar seam handle: the global `button:active:not(:disabled)` press
-   transform moves the handle off its centered top position and shifts
-   it out from under the pointer mid-press, so the click never completes.
-   Reset the transform for the handle only — every other button keeps
-   its 1px press affordance. */
 button:active:not(:disabled) { transform: translateY(1px); }
-.ds-modal-stage-handle:active:not(:disabled) { transform: none; }
 button:focus-visible { outline: var(--stroke-thin, 1px) solid var(--blue); outline-offset: 2px; }
 
 button.primary {

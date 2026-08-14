@@ -2425,6 +2425,15 @@ button.qf-chip-other:disabled { cursor: default; opacity: 0.6; }
   transition: color 120ms var(--ease-out), background 120ms var(--ease-out);
 }
 .ds-modal-stage-handle:hover { color: var(--text); background: var(--bg-subtle); }
+/* The global `button:active:not(:disabled)` rule writes `transform:
+   translateY(1px)` which would both move the sidebar handle out of its
+   centered top position *and* shift it off the pointer mid-press, so
+   the click never completes. The handle is in a completely different
+   visual context (a sidebar seam handle, not a button) and does not
+   need a press translate — disable it explicitly. */
+.ds-modal-stage-handle:active:not(:disabled) {
+  transform: translateY(-50%) !important;
+}
 .ds-modal-stage-handle.is-expand {
   right: 0;
   border-right: none;
