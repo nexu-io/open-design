@@ -15,27 +15,27 @@ function completeStableMetadata() {
       mac: {
         artifacts: {
           dmg: {
-            name: 'open-design-0.18.0-mac-arm64.dmg',
+            name: 'open-design-v0.18.0-arm64.dmg',
             size: 300_329_080,
-            url: 'https://releases.open-design.ai/stable/versions/0.18.0/open-design-0.18.0-mac-arm64.dmg',
+            url: 'https://releases.open-design.ai/stable/versions/0.18.0/open-design-v0.18.0-arm64.dmg',
           },
         },
       },
       macIntel: {
         artifacts: {
           dmg: {
-            name: 'open-design-0.18.0-mac-x64.dmg',
+            name: 'open-design-v0.18.0-x64.dmg',
             size: 310_378_496,
-            url: 'https://releases.open-design.ai/stable/versions/0.18.0/open-design-0.18.0-mac-x64.dmg',
+            url: 'https://releases.open-design.ai/stable/versions/0.18.0/open-design-v0.18.0-x64.dmg',
           },
         },
       },
       win: {
         artifacts: {
           installer: {
-            name: 'open-design-0.18.0-win-x64-setup.exe',
+            name: 'open-design-v0.18.0-x64.exe',
             size: 326_107_136,
-            url: 'https://releases.open-design.ai/stable/versions/0.18.0/open-design-0.18.0-win-x64-setup.exe',
+            url: 'https://releases.open-design.ai/stable/versions/0.18.0/open-design-v0.18.0-x64.exe',
           },
         },
       },
@@ -94,7 +94,7 @@ test('download build rejects a complete manifest without the required desktop in
 test('download build rejects installer URLs from a different stable version', async () => {
   const metadata = completeStableMetadata();
   metadata.platforms.mac.artifacts.dmg.url =
-    'https://releases.open-design.ai/stable/versions/0.17.0/open-design-0.17.0-mac-arm64.dmg';
+    'https://releases.open-design.ai/stable/versions/0.17.0/open-design-v0.17.0-arm64.dmg';
 
   await assert.rejects(
     fetchLatestStableRelease(async () => jsonResponse(metadata)),

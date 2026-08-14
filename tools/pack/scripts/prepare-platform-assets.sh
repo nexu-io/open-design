@@ -75,7 +75,7 @@ case "$RELEASE_TARGET" in
     source_dmg="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/dmg/Open Design-$RELEASE_NAMESPACE.dmg"
     source_zip="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/zip/Open Design-$RELEASE_NAMESPACE.zip"
     source_payload="$TOOLS_PACK_DIR/out/mac/namespaces/$RELEASE_NAMESPACE/payload/Open Design-$RELEASE_NAMESPACE-payload.zip"
-    versioned_dmg="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch.dmg"
+    versioned_dmg="open-design-v$RELEASE_VERSION-$arch.dmg"
     versioned_zip="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch.zip"
     versioned_payload="open-design-$RELEASE_VERSION$RELEASE_ASSET_SUFFIX-mac-$arch-payload.zip"
 

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, relative, sep } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import {
   bool,
   contentType,
@@ -285,7 +285,7 @@ function targetConfig(): TargetConfig {
   const signMode = signModeForTarget(target, parameterMatrix);
   if (target === "mac_arm64" || target === "mac_x64") {
     const arch = target === "mac_arm64" ? "arm64" : "x64";
-    const dmg = `open-design-${releaseVersion}${assetSuffix}-mac-${arch}.dmg`;
+    const dmg = `open-design-v${releaseVersion}-${arch}.dmg`;
     const zip = `open-design-${releaseVersion}${assetSuffix}-mac-${arch}.zip`;
     const artifactMode = optional("RELEASE_ARTIFACT_MODE", target === "mac_arm64" ? "dmg-only" : "dmg-and-zip");
     const artifacts: Record<string, AssetEntry> = { dmg: assetEntry(dmg) };
@@ -318,7 +318,7 @@ function targetConfig(): TargetConfig {
     };
   }
   if (target === "win_x64") {
-    const installer = `open-design-${releaseVersion}${assetSuffix}-win-x64-setup.exe`;
+    const installer = `open-design-v${releaseVersion}-x64.exe`;
     const payload = `open-design-${releaseVersion}${assetSuffix}-win-x64-payload.7z`;
     const portableZip = `open-design-${releaseVersion}${assetSuffix}-win-x64-portable.zip`;
     const includeZip = optional("WIN_INCLUDE_ZIP", "true") !== "false";
@@ -371,7 +371,10 @@ if (shellBuild != null) {
         || typeof remote.url !== "string"
       ) throw new Error(`Shell build resolution ${name} does not match prepared release asset`);
     }
-    const publishedName = basename(built.path);
+    // Reuse immutable Shell bytes and identity, never its build-time basename.
+    // The public projection belongs to this release and must remain easy to
+    // distinguish in a user's download directory.
+    const publishedName = artifact.name;
     config.artifacts[name] = {
       contentType: contentType(publishedName),
       digest: built.digest,

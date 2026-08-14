@@ -22,7 +22,7 @@ if ($includeZip -and !(Test-Path $sourceZip)) {
   throw "expected portable zip not found at $sourceZip (build with --to all or --to zip, or set WINDOWS_INCLUDE_ZIP=false to skip)"
 }
 
-$versionedInstaller = "open-design-${env:RELEASE_VERSION}$assetSuffix-win-x64-setup.exe"
+$versionedInstaller = "open-design-v${env:RELEASE_VERSION}-x64.exe"
 $versionedZip = "open-design-${env:RELEASE_VERSION}$assetSuffix-win-x64-portable.zip"
 $installerChecksumFile = "$versionedInstaller.sha256"
 $zipChecksumFile = "$versionedZip.sha256"

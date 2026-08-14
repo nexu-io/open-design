@@ -56,7 +56,7 @@ test('download page refreshes the complete stable release snapshot on entry', as
   const page = await readFile(downloadPagePath, 'utf8');
   const enhancer = extractEnhancer(page);
 
-  const hero = element({ href: 'https://releases.open-design.ai/stable/versions/0.17.0/open-design-0.17.0-mac-arm64.dmg' });
+  const hero = element({ href: 'https://releases.open-design.ai/stable/versions/0.17.0/open-design-v0.17.0-arm64.dmg' });
   const notice = element({ hidden: true });
   const osSlot = element({ hidden: true });
   const labelSlot = element({ textContent: 'Download' });
@@ -65,7 +65,7 @@ test('download page refreshes the complete stable release snapshot on entry', as
   const releaseLink = element({ href: 'https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0' });
   const sizeSlot = element({ textContent: '280 MB' });
   const macDownload = element({
-    href: 'https://releases.open-design.ai/stable/versions/0.17.0/open-design-0.17.0-mac-arm64.dmg',
+    href: 'https://releases.open-design.ai/stable/versions/0.17.0/open-design-v0.17.0-arm64.dmg',
   });
   macDownload.setAttribute('data-dl-key', 'mac-arm64-dmg');
   macDownload.querySelector = (selector) => (selector === '[data-dl-size]' ? sizeSlot : null);
@@ -128,9 +128,9 @@ test('download page refreshes the complete stable release snapshot on entry', as
       mac: {
         artifacts: {
           dmg: {
-            name: 'open-design-0.18.0-mac-arm64.dmg',
+            name: 'open-design-v0.18.0-arm64.dmg',
             size: 300_329_080,
-            url: 'https://releases.open-design.ai/stable/versions/0.18.0/open-design-0.18.0-mac-arm64.dmg',
+            url: 'https://releases.open-design.ai/stable/versions/0.18.0/open-design-v0.18.0-arm64.dmg',
           },
         },
       },
@@ -177,7 +177,7 @@ test('download page refreshes the complete stable release snapshot on entry', as
   assert.deepEqual(versionSlots.map((slot) => slot.textContent), ['v0.18.0', 'v0.18.0']);
   assert.equal(dateSlot.textContent, '2026-08-05');
   assert.match(releaseLink.href, /open-design-v0\.18\.0$/);
-  assert.match(macDownload.href, /stable\/versions\/0\.18\.0\/open-design-0\.18\.0-mac-arm64\.dmg$/);
+  assert.match(macDownload.href, /stable\/versions\/0\.18\.0\/open-design-v0\.18\.0-arm64\.dmg$/);
   assert.equal(sizeSlot.textContent, '286 MB');
   assert.equal(hero.href, macDownload.href);
 
@@ -189,9 +189,9 @@ test('download page refreshes the complete stable release snapshot on entry', as
       mac: {
         artifacts: {
           dmg: {
-            name: 'open-design-0.19.0-mac-arm64.dmg',
+            name: 'open-design-v0.19.0-arm64.dmg',
             size: 310_000_000,
-            url: 'https://releases.open-design.ai/stable/versions/0.19.0/open-design-0.19.0-mac-arm64.dmg',
+            url: 'https://releases.open-design.ai/stable/versions/0.19.0/open-design-v0.19.0-arm64.dmg',
           },
         },
       },
@@ -210,9 +210,9 @@ test('download page refreshes the complete stable release snapshot on entry', as
       mac: {
         artifacts: {
           dmg: {
-            name: 'open-design-0.18.0-mac-arm64.dmg',
+            name: 'open-design-v0.18.0-arm64.dmg',
             size: 300_329_080,
-            url: 'https://releases.open-design.ai/stable/versions/0.18.0/open-design-0.18.0-mac-arm64.dmg',
+            url: 'https://releases.open-design.ai/stable/versions/0.18.0/open-design-v0.18.0-arm64.dmg',
           },
         },
       },
@@ -230,7 +230,7 @@ test('download page keeps the static snapshot when stable metadata is incomplete
   const page = await readFile(downloadPagePath, 'utf8');
   const enhancer = extractEnhancer(page);
 
-  const hero = element({ href: 'https://releases.open-design.ai/stable/versions/0.17.0/open-design-0.17.0-mac-arm64.dmg' });
+  const hero = element({ href: 'https://releases.open-design.ai/stable/versions/0.17.0/open-design-v0.17.0-arm64.dmg' });
   const versionSlot = element({ textContent: 'v0.17.0' });
   const dateSlot = element({ textContent: '2026-08-03' });
   const releaseLink = element({ href: 'https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0' });

@@ -40,7 +40,8 @@ async function writeFixture(root: string, options: { closureVersion?: string; mi
 
   const version = "0.18.0-beta.4";
   const closureVersion = options.closureVersion ?? version;
-  const assetBase = `open-design-${version}-mac-arm64`;
+  const dmgName = `open-design-v${version}-arm64.dmg`;
+  const payloadName = `open-design-${version}-mac-arm64-payload.zip`;
   const closureBase = `open-design-${closureVersion}-mac-arm64-closure`;
   const archive = Buffer.from("headless Closure archive fixture");
   const archiveDigest = digest(archive);
@@ -53,10 +54,10 @@ async function writeFixture(root: string, options: { closureVersion?: string; mi
   const archiveUrl = `https://releases.open-design.test/beta/closure/darwin-arm64/versions/${closureVersion}/${closureBase}.zip`;
 
   await Promise.all([
-    writeFile(join(assetsRoot, `${assetBase}.dmg`), "dmg"),
-    writeFile(join(assetsRoot, `${assetBase}.dmg.sha256`), "fixture  dmg\n"),
-    writeFile(join(assetsRoot, `${assetBase}-payload.zip`), "legacy payload"),
-    writeFile(join(assetsRoot, `${assetBase}-payload.zip.sha256`), "fixture  payload\n"),
+    writeFile(join(assetsRoot, dmgName), "dmg"),
+    writeFile(join(assetsRoot, `${dmgName}.sha256`), "fixture  dmg\n"),
+    writeFile(join(assetsRoot, payloadName), "legacy payload"),
+    writeFile(join(assetsRoot, `${payloadName}.sha256`), "fixture  payload\n"),
     writeFile(join(assetsRoot, `${closureBase}.zip`), archive),
     writeFile(join(assetsRoot, `${closureBase}.zip.sha256`), `${archiveDigest.slice("sha256:".length)}  ${closureBase}.zip\n`),
     writeFile(join(assetsRoot, `${closureBase}-inventory.json`), `${JSON.stringify({ files, schemaVersion: 1 }, null, 2)}\n`),
@@ -170,7 +171,7 @@ async function writeResolvedWindowsShellFixture(root: string): Promise<{
   const releaseVersion = "0.18.0-beta.4";
   const shellVersion = "0.18.0-beta.3";
   const suffix = ".unsigned";
-  const installerName = `open-design-${releaseVersion}${suffix}-win-x64-setup.exe`;
+  const installerName = `open-design-v${releaseVersion}-x64.exe`;
   const payloadName = `open-design-${releaseVersion}${suffix}-win-x64-payload.7z`;
   const portableZipName = `open-design-${releaseVersion}${suffix}-win-x64-portable.zip`;
   const bytes = {
@@ -357,10 +358,10 @@ describe("Standalone Closure release publication", () => {
 
     expect(publication.stdout).toContain("would upload immutable");
     expect(publication.stdout).toContain("/latest.yml");
-    expect(publication.stdout).not.toContain("open-design-0.18.0-beta.4.unsigned-win-x64-setup.exe to");
+    expect(publication.stdout).toContain("open-design-v0.18.0-beta.4-x64.exe");
     const feed = await readFile(join(fixture.assetsRoot, "latest.yml"), "utf8");
     expect(feed).toContain('version: "0.18.0-beta.3"');
-    expect(feed).toContain("/beta/versions/0.18.0-beta.4/shells/electron/win_x64/setup.exe");
+    expect(feed).toContain("/beta/versions/0.18.0-beta.4/shells/electron/win_x64/open-design-v0.18.0-beta.4-x64.exe");
     expect(feed).toContain('releaseDate: "2026-08-01T02:03:04.000Z"');
 
     const platform = JSON.parse(await readFile(join(fixture.manifestRoot, "win_x64.json"), "utf8"));
@@ -385,7 +386,7 @@ describe("Standalone Closure release publication", () => {
         RELEASE_SHELL_ENABLED: "true",
       },
     });
-    expect(publication.stdout).not.toContain("open-design-0.18.0-beta.4-mac-arm64.dmg");
+    expect(publication.stdout).toContain("open-design-v0.18.0-beta.4-arm64.dmg");
     const platform = JSON.parse(await readFile(join(fixture.manifestRoot, "mac_arm64.json"), "utf8"));
     expect(platform.releaseVersion).toBe("0.18.0-beta.4");
     expect(platform.shell).toMatchObject({
@@ -399,7 +400,7 @@ describe("Standalone Closure release publication", () => {
     expect(platform.artifacts.dmg.url).toContain(
       "/beta/versions/0.18.0-beta.4/shells/electron/mac_arm64/",
     );
-    expect(platform.artifacts.dmg.name).toBe("Open Design.dmg");
+    expect(platform.artifacts.dmg.name).toBe("open-design-v0.18.0-beta.4-arm64.dmg");
     expect(platform.shell.artifacts).toEqual(platform.artifacts);
     expect(platform.shell).toMatchObject({
       buildRecordUrl: "https://releases.open-design.test/beta/shells/electron/builds/source/artifacts/darwin-arm64.json",

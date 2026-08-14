@@ -53,7 +53,7 @@ if ($IncludeZip -and ([string]::IsNullOrWhiteSpace($sourceZip) -or -not (Test-Pa
   throw "expected portable zip path from build json not found at $sourceZip"
 }
 
-$versionedInstaller = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-setup.exe"
+$versionedInstaller = "open-design-v$ReleaseVersion-x64.exe"
 $versionedPayload = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-payload.7z"
 $versionedZip = "open-design-$ReleaseVersion$ReleaseAssetSuffix-win-x64-portable.zip"
 $installerPath = Join-Path $ReleaseAssetsDir $versionedInstaller

@@ -326,11 +326,11 @@ function buildMatrix(rawAssets: RawAsset[]): ReleaseMatrix {
   };
 
   return {
-    macArm64Dmg: pick((n) => n.endsWith('mac-arm64.dmg')),
+    macArm64Dmg: pick((n) => /(?:mac-)?arm64\.dmg$/.test(n)),
     macArm64Zip: pick((n) => n.endsWith('mac-arm64.zip')),
-    macX64Dmg: pick((n) => n.endsWith('mac-x64.dmg')),
+    macX64Dmg: pick((n) => /(?:mac-)?x64\.dmg$/.test(n)),
     macX64Zip: pick((n) => n.endsWith('mac-x64.zip')),
-    winSetup: pick((n) => /win.*setup\.exe$/.test(n)),
+    winSetup: pick((n) => /(?:win-x64-setup|x64)\.exe$/.test(n)),
     winPortable: pick((n) => /win.*portable\.zip$/.test(n)),
     linux: pick((n) => /\.appimage$/i.test(n)),
   };

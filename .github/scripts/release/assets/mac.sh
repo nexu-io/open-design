@@ -33,7 +33,7 @@ if [ "$mac_artifact_mode" != "dmg-only" ] && [ ! -f "$source_zip" ]; then
   exit 1
 fi
 
-versioned_dmg="open-design-${RELEASE_VERSION}${asset_suffix}-mac-arm64.dmg"
+versioned_dmg="open-design-v${RELEASE_VERSION}-arm64.dmg"
 versioned_zip="open-design-${RELEASE_VERSION}${asset_suffix}-mac-arm64.zip"
 dmg_checksum_file="$versioned_dmg.sha256"
 zip_checksum_file="$versioned_zip.sha256"
