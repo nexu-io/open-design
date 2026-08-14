@@ -142,6 +142,8 @@ describe("public Windows release acceptance", () => {
     });
     expect(await readFile(plan.artifact.path)).toEqual(source.installerBytes);
     expect(JSON.parse(await readFile(buildJsonPath, "utf8"))).toEqual({ installerPath: plan.artifact.path });
+    expect(await readFile(join(root, "download", "Open Design-release-beta-win-setup.exe")))
+      .toEqual(source.installerBytes);
 
     const summaryPath = join(root, "summary.json");
     const suiteResultPath = join(root, "suite-result.json");
@@ -280,5 +282,14 @@ describe("public Windows release acceptance", () => {
     )).toThrow(/immutable version object/);
     expect(compareCountedReleaseVersions("0.19.0-beta.28", "0.19.0-beta.27", "beta")).toBeGreaterThan(0);
     expect(compareCountedReleaseVersions("0.19.0-beta.27", "0.19.0-beta.28", "beta")).toBeLessThan(0);
+  });
+
+  it("adapts concise public names to tools-pack's namespace-oriented install paths", () => {
+    expect(publicAcceptanceInternals.toolsPackArtifactName("mac_arm64", "release-beta"))
+      .toBe("Open Design-release-beta.dmg");
+    expect(publicAcceptanceInternals.toolsPackArtifactName("mac_x64", "release-beta-x64"))
+      .toBe("Open Design-release-beta-x64.dmg");
+    expect(publicAcceptanceInternals.toolsPackArtifactName("win_x64", "release-beta-win"))
+      .toBe("Open Design-release-beta-win-setup.exe");
   });
 });

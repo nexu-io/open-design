@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { link, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -376,6 +376,16 @@ export async function preparePublicAcceptance(input: {
   const artifactName = decodeURIComponent(basename(new URL(artifact.url).pathname));
   const artifactPath = join(input.downloadDir, artifactName);
   await downloadBoundArtifact({ binding: artifact, fetchImpl, path: artifactPath });
+  const toolsPackArtifactPath = join(
+    input.downloadDir,
+    definition.toolsPackArtifactName(input.namespace),
+  );
+  if (toolsPackArtifactPath !== artifactPath) {
+    // Public names are release-oriented while tools-pack paths intentionally
+    // remain namespace-oriented. A hard link preserves both contracts without
+    // duplicating the large installer during clean-slate public acceptance.
+    await link(artifactPath, toolsPackArtifactPath);
+  }
   const metadataPath = join(input.downloadDir, "public-metadata.json");
   const platformPath = join(input.downloadDir, `public-${input.target}.json`);
   await mkdir(input.downloadDir, { recursive: true });
@@ -604,4 +614,7 @@ export const publicAcceptanceInternals = {
   assertPublicImmutableUrl,
   parseCredential,
   parsePlan,
+  toolsPackArtifactName: (target: ReleaseTarget, namespace: string) => {
+    return targetDefinitions[target].toolsPackArtifactName(namespace);
+  },
 };
