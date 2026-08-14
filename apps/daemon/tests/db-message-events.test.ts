@@ -194,4 +194,42 @@ describe('message event persistence', () => {
       { kind: 'text', text: 'done.' },
     ]);
   });
+
+  it('compacts adjacent streamed deltas from whole-message client snapshots', () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    insertProject(db, {
+      id: 'proj-1',
+      name: 'Streaming snapshot project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertConversation(db, {
+      id: 'conv-1',
+      projectId: 'proj-1',
+      title: 'Streaming snapshot run',
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    upsertMessage(db, 'conv-1', {
+      id: 'assistant-stream-1',
+      role: 'assistant',
+      content: '',
+      runId: 'agent-run-1',
+      runStatus: 'running',
+      events: [
+        { kind: 'status', label: 'thinking' },
+        ...Array.from({ length: 1_500 }, () => ({ kind: 'thinking', text: 'x' })),
+        ...Array.from({ length: 1_500 }, () => ({ kind: 'text', text: 'y' })),
+      ],
+      startedAt: now,
+    });
+
+    expect(listMessages(db, 'conv-1')[0]?.events).toEqual([
+      { kind: 'status', label: 'thinking' },
+      { kind: 'thinking', text: 'x'.repeat(1_500) },
+      { kind: 'text', text: 'y'.repeat(1_500) },
+    ]);
+  });
 });

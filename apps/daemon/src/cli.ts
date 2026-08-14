@@ -469,6 +469,8 @@ async function runAgent(args) {
 
 const EXPORT_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'format', 'out', 'output', 'image-format', 'title', 'file',
+  // Backwards-compatible no-ops. Older scripts may still pass these, but
+  // export authority is derived from the project id by the daemon.
   'workspace', 'workspace-member',
 ]);
 const EXPORT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'deck', 'page', 'no-deck']);
@@ -493,8 +495,6 @@ Options:
   --deck                   Treat the artifact as a multi-slide deck
   --page, --no-deck        Treat the artifact as a normal scrollable page
   --title <title>          Title used for metadata / default filename
-  --workspace <id>        Explicit Workspace id for a bound project
-  --workspace-member <id> Explicit Workspace member id for a bound project
   --json                   Print a machine-readable result envelope
   --daemon-url <url>       Override daemon URL
 
@@ -541,7 +541,7 @@ async function runExport(args) {
   const token = process.env.OD_TOOL_TOKEN;
   const requestHeaders = token
     ? { authorization: `Bearer ${token}` }
-    : workspaceHeadersFromExplicitFlags(flags) ?? {};
+    : {};
   // Visual formats rasterize through the desktop screenshot renderer so the
   // CLI matches the UI exactly. In particular `pdf` uses `/export/pdf-image`
   // (one raster page per deck slide / per viewport for a page) — NOT the generic

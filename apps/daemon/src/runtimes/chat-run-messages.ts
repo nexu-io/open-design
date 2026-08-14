@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 import type { PersistedAgentEvent } from '@open-design/contracts';
 import {
-  appendMessageAgentEvent,
+  appendMessageAgentEvents,
   upsertMessage,
 } from '../db.js';
 
@@ -22,6 +22,18 @@ type ChatRunMessageState = {
   failureDetail?: string | null;
 };
 
+type PendingMessageEvents = {
+  db: SqliteDb;
+  messageId: string;
+  events: PersistedAgentEvent[];
+  bytes: number;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+
+export const RUN_MESSAGE_EVENT_FLUSH_INTERVAL_MS = 250;
+const RUN_MESSAGE_EVENT_FLUSH_BYTES = 64 * 1024;
+const pendingMessageEvents = new WeakMap<ChatRunMessageState, PendingMessageEvents>();
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
@@ -34,9 +46,67 @@ export function persistRunEventToAssistantMessage(
 ): void {
   if (!run.assistantMessageId) return;
   const persisted = runSseEventToPersistedAgentEvent(event, data);
-  if (!persisted) return;
+  if (!persisted) {
+    if (event === 'end' || event === 'close') flushRunMessageEvents(run);
+    return;
+  }
+
+  let pending = pendingMessageEvents.get(run);
+  if (pending && (pending.db !== db || pending.messageId !== run.assistantMessageId)) {
+    flushRunMessageEvents(run);
+    pending = undefined;
+  }
+  if (!pending) {
+    pending = {
+      db,
+      messageId: run.assistantMessageId,
+      events: [],
+      bytes: 0,
+      timer: null,
+    };
+    pendingMessageEvents.set(run, pending);
+  }
+  appendPendingMessageEvent(pending, persisted);
+
+  const isDelta = persisted.kind === 'text' || persisted.kind === 'thinking';
+  if (!isDelta || pending.bytes >= RUN_MESSAGE_EVENT_FLUSH_BYTES) {
+    flushRunMessageEvents(run);
+    return;
+  }
+  if (!pending.timer) {
+    pending.timer = setTimeout(() => {
+      flushRunMessageEvents(run);
+    }, RUN_MESSAGE_EVENT_FLUSH_INTERVAL_MS);
+    pending.timer.unref?.();
+  }
+}
+
+function appendPendingMessageEvent(
+  pending: PendingMessageEvents,
+  event: PersistedAgentEvent,
+): void {
+  const last = pending.events[pending.events.length - 1];
+  if (
+    (event.kind === 'text' || event.kind === 'thinking') &&
+    last?.kind === event.kind
+  ) {
+    last.text += event.text;
+  } else {
+    pending.events.push(event);
+  }
+  pending.bytes += event.kind === 'text' || event.kind === 'thinking'
+    ? event.text.length
+    : JSON.stringify(event).length;
+}
+
+export function flushRunMessageEvents(run: ChatRunMessageState): void {
+  const pending = pendingMessageEvents.get(run);
+  if (!pending) return;
+  pendingMessageEvents.delete(run);
+  if (pending.timer) clearTimeout(pending.timer);
+  if (pending.events.length === 0) return;
   try {
-    appendMessageAgentEvent(db, run.assistantMessageId, persisted);
+    appendMessageAgentEvents(pending.db, pending.messageId, pending.events);
   } catch (err) {
     console.warn('[runs] message event persistence failed', err);
   }

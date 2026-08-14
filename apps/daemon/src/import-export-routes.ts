@@ -602,7 +602,11 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   async function authorizeExportRead(
     req: any,
     res: any,
-    options: { allowNavigationQuery?: boolean; toolEndpoint?: string } = {},
+    options: {
+      allowNavigationQuery?: boolean;
+      deriveWorkspaceFromProject?: boolean;
+      toolEndpoint?: string;
+    } = {},
   ): Promise<AuthorizedExportRead | null> {
     const authorization = req.get('authorization');
     if (
@@ -623,6 +627,14 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
       const authority = await ctx.authorizeProjectToolRequest(
         res,
         grant.projectId,
+        { mode: 'read' },
+      );
+      return authority ? { previewWorkspace: authority.workspace } : null;
+    }
+    if (options.deriveWorkspaceFromProject) {
+      const authority = await ctx.authorizeProjectToolRequest(
+        res,
+        req.params.id,
         { mode: 'read' },
       );
       return authority ? { previewWorkspace: authority.workspace } : null;
@@ -1392,7 +1404,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // PNG and assemble a one-image-per-slide .pptx. Replaces the old "send a prompt
   // to the agent and hope it runs python-pptx" path with a deterministic export.
   app.post('/api/projects/:id/export/pptx', async (req, res) => {
-    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    const authority = await authorizeExportRead(req, res, {
+      deriveWorkspaceFromProject: true,
+      toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT,
+    });
     if (!authority) return;
     await handleScreenshotExport(res, 'pptx', req.params.id, { authority, body: req.body });
   });
@@ -1401,7 +1416,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // The print-ready vector PDF stays on POST /export/pdf; this is the "exactly
   // what you see" counterpart that shares the slide renderer with PPTX.
   app.post('/api/projects/:id/export/pdf-image', async (req, res) => {
-    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    const authority = await authorizeExportRead(req, res, {
+      deriveWorkspaceFromProject: true,
+      toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT,
+    });
     if (!authority) return;
     await handleScreenshotExport(res, 'pdf', req.params.id, { authority, body: req.body });
   });
@@ -1411,7 +1429,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // the whole document at natural size. Viewport-independent — unlike the
   // host-compositor snapshot, the size never depends on the preview pane.
   app.post('/api/projects/:id/export/image', async (req, res) => {
-    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    const authority = await authorizeExportRead(req, res, {
+      deriveWorkspaceFromProject: true,
+      toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT,
+    });
     if (!authority) return;
     await handleScreenshotExport(res, 'image', req.params.id, { authority, body: req.body });
   });
@@ -1420,7 +1441,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
   // embedded by the daemon. Remote HTTP(S) dependencies remain external and
   // are listed in a machine-readable manifest inside the output.
   app.post('/api/projects/:id/export/html', async (req, res) => {
-    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    const authority = await authorizeExportRead(req, res, {
+      deriveWorkspaceFromProject: true,
+      toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT,
+    });
     if (!authority) return;
     await handleStandaloneHtmlExport(res, req.params.id, req.body);
   });
@@ -1438,7 +1462,10 @@ export function registerProjectExportRoutes(app: Express, ctx: RegisterProjectEx
     if (!isExportFormat(format)) {
       return sendApiError(res, 400, 'BAD_REQUEST', 'invalid export format');
     }
-    const authority = await authorizeExportRead(req, res, { toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT });
+    const authority = await authorizeExportRead(req, res, {
+      deriveWorkspaceFromProject: true,
+      toolEndpoint: PROJECT_EXPORT_TOOL_ENDPOINT,
+    });
     if (!authority) return;
     if (format === 'html') {
       return handleStandaloneHtmlExport(res, req.params.id, {

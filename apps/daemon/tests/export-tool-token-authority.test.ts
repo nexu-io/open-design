@@ -233,6 +233,37 @@ describe('od export run-scoped project authority', () => {
     expect(existsSync(outputPath)).toBe(true);
   });
 
+  it('derives a bound project workspace without a tool token or workspace flags', async () => {
+    // Given: Harness did not forward the short-lived bearer token into its nested shell tool.
+    const outputPath = path.join(outputDir, 'project-id-bound.png');
+
+    // When: the documented wrapper command identifies only the project and file.
+    const result = await runExportCli(projectId, outputPath);
+
+    // Then: the daemon derives the exact persisted project binding instead of
+    // requiring the caller to know an active/default Workspace.
+    expect(result.code, result.stderr).toBe(0);
+    expect(existsSync(outputPath)).toBe(true);
+  });
+
+  it('accepts legacy workspace flags as ignored compatibility inputs', async () => {
+    // Given: an older caller still supplies stale Workspace flags.
+    const outputPath = path.join(outputDir, 'legacy-workspace-flags.png');
+
+    // When: it exports after the CLI contract has moved to project-id-only addressing.
+    const result = await runExportCli(projectId, outputPath, undefined, [
+      '--workspace',
+      'stale-workspace',
+      '--workspace-member',
+      'stale-member',
+    ]);
+
+    // Then: parsing remains backwards compatible and the stale values do not
+    // override the project's persisted binding.
+    expect(result.code, result.stderr).toBe(0);
+    expect(existsSync(outputPath)).toBe(true);
+  });
+
   it('loads relative renderer assets for a bound project whose HTML already declares a base', async () => {
     // Given: a valid run token bound to a Workspace project whose renderer needs relative assets
     // and whose source HTML already declares an unrelated external base.
@@ -463,6 +494,7 @@ describe('od export run-scoped project authority', () => {
     requestedProjectId: string,
     outputPath: string,
     token?: string,
+    extraArgs: string[] = [],
   ): Promise<{ code: number; stdout: string; stderr: string }> {
     const env: NodeJS.ProcessEnv = {
       ...process.env,
@@ -486,6 +518,7 @@ describe('od export run-scoped project authority', () => {
           'image',
           '--out',
           outputPath,
+          ...extraArgs,
         ],
         {
           cwd: daemonRoot,
