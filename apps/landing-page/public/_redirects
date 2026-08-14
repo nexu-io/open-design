@@ -148,10 +148,12 @@
 /:locale/agents/deepseek-harness/  /:locale/agents/deepseek-harness-design/  301
 
 # Curated DeepSeek Harness design collection: short forms fold to the hub.
-/plugins/deepseek-harness/  /plugins/deepseek-harness-design/  301
-/plugins/deepseek-design/   /plugins/deepseek-harness-design/  301
-/:locale/plugins/deepseek-harness/  /:locale/plugins/deepseek-harness-design/  301
-/:locale/plugins/deepseek-design/   /:locale/plugins/deepseek-harness-design/  301
+/plugins/deepseek-harness/        /plugins/deepseek-harness-design-plugins/  301
+/plugins/deepseek-design/         /plugins/deepseek-harness-design-plugins/  301
+/plugins/deepseek-harness-design/ /plugins/deepseek-harness-design-plugins/  301
+/:locale/plugins/deepseek-harness/        /:locale/plugins/deepseek-harness-design-plugins/  301
+/:locale/plugins/deepseek-design/         /:locale/plugins/deepseek-harness-design-plugins/  301
+/:locale/plugins/deepseek-harness-design/ /:locale/plugins/deepseek-harness-design-plugins/  301
 
 # ---------------------------------------------------------------------------
 # Retired marketing locales (2026-06 GSC review) -> fold to English (or /zh for
