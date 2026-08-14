@@ -103,6 +103,17 @@ describe("pricing contract", () => {
     assert.match(campaign, /body: 'DeepSeek V4 Pro 与 V4 Flash · 两周免费用'/);
     assert.match(campaign, /body: 'DeepSeek V4 Pro and V4 Flash · FREE for two weeks'/);
     assert.match(campaign, /body: 'DeepSeek V4 Pro 與 V4 Flash · 兩週免費用'/);
+    for (const locale of ['en', 'zh', 'zh-tw', 'ja', 'ko', 'de', 'fr', 'ru', 'es', 'pt-br', 'it', 'tr']) {
+      const key = locale.includes('-') ? `'${locale}'` : locale;
+      const start = campaign.indexOf(`  ${key}: {`);
+      const end = campaign.indexOf('\n  },', start);
+      const block = start >= 0 && end >= 0 ? campaign.slice(start, end) : undefined;
+      assert.ok(block, `missing campaign copy for ${locale}`);
+      assert.match(block, /DeepSeek V4 Pro/);
+      assert.match(block, /DeepSeek V4 Flash/);
+      assert.match(block, /headline:/);
+      assert.match(block, /body:/);
+    }
     assert.doesNotMatch(campaign, /body: ['\"][^'\"]*20:00/);
     assert.match(campaign, /paidBenefitNote: '8月13日—8月27日 · 两周免费用'/);
     assert.match(campaign, /teamBenefitNote: '8月13日—8月27日 · 两周免费用'/);
