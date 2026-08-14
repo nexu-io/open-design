@@ -12804,7 +12804,7 @@ export async function startServer({
           ? authFailure.message ?? `${def.name} authentication expired. Please re-authenticate and retry.`
           : isAntigravityQuota
             ? antigravityQuotaGuidance()
-            : `${def.name} returned an empty response. Check the agent logs for an upstream, quota, or permission error, then retry.`;
+            : `${def.name} returned an empty response. Check the agent logs for details, then retry.`;
         send('error', createSseErrorPayload(
           errorCode,
           msg,

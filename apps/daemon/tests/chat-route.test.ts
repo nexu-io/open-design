@@ -2588,7 +2588,7 @@ process.exit(0);
         const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
           signal: eventsController.signal,
         });
-        const eventsBody = await readSseUntil(eventsResponse, 'returned an empty response');
+        const eventsBody = await readSseUntil(eventsResponse, 'event: end');
         eventsController.abort();
         const statusBody = await waitForRunStatus(baseUrl, runId);
 
@@ -2596,6 +2596,13 @@ process.exit(0);
         expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
         expect(eventsBody).not.toContain('AGENT_AUTH_REQUIRED');
         expect(eventsBody).not.toContain('needs to sign in');
+        expect(eventsBody).toContain('event: run_retry_finished');
+        expect(eventsBody).toContain('"failure_category":"empty_output"');
+        expect(eventsBody).toContain('"failure_detail":"empty_output"');
+        expect(eventsBody).not.toContain('"retry_suppressed_reason":"hard_quota"');
+        expect(eventsBody).toContain('event: end');
+        expect(eventsBody).toContain('"failureCategory":"empty_output"');
+        expect(eventsBody).toContain('"failureDetail":"empty_output"');
         expect(statusBody.status).toBe('failed');
       },
     );
