@@ -223,43 +223,40 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       }
       const normalizedOrchestratorWorkspace = parsedOrchestratorWorkspace.value;
       let trustedPickerImport = false;
-      if (isDesktopAuthGateActive()) {
-        const secret = desktopAuthSecret();
-        if (secret == null) {
-          return sendApiError(
-            res,
-            503,
-            'DESKTOP_AUTH_PENDING',
-            'desktop auth required but secret not yet registered',
-            {
-              details: { hint: 'restart desktop or wait for sidecar registration' },
-              retryable: true,
-            },
-          );
-        }
-        const headerValue = req.get('x-od-desktop-import-token');
-        const token = typeof headerValue === 'string' ? headerValue : '';
-        const now = Date.now();
-        pruneExpiredImportNonces(now);
-        const verification = verifyDesktopImportToken(
-          secret,
-          baseDir,
-          token,
-          now,
-          consumedImportNonces,
+      // Always require a valid import token for folder import, regardless of
+      // whether the desktop auth gate is active (issue #5480).
+      const secret = desktopAuthSecret();
+      if (secret == null) {
+        return sendApiError(
+          res,
+          403,
+          'FORBIDDEN',
+          'folder import requires an import token; restart desktop or configure daemon auth',
+          { details: { hint: 'no auth secret configured' } },
         );
-        if (!verification.ok) {
-          return sendApiError(
-            res,
-            403,
-            'FORBIDDEN',
-            'desktop import token rejected',
-            { details: { reason: verification.reason } },
-          );
-        }
-        consumedImportNonces.set(verification.nonce, verification.exp);
-        trustedPickerImport = true;
       }
+      const headerValue = req.get('x-od-desktop-import-token');
+      const token = typeof headerValue === 'string' ? headerValue : '';
+      const tokenNow = Date.now();
+      pruneExpiredImportNonces(tokenNow);
+      const verification = verifyDesktopImportToken(
+        secret,
+        baseDir,
+        token,
+        tokenNow,
+        consumedImportNonces,
+      );
+      if (!verification.ok) {
+        return sendApiError(
+          res,
+          403,
+          'FORBIDDEN',
+          'import token rejected',
+          { details: { reason: verification.reason } },
+        );
+      }
+      consumedImportNonces.set(verification.nonce, verification.exp);
+      trustedPickerImport = true;
 
       const trimmedInput = baseDir.trim();
       if (!path.isAbsolute(path.normalize(trimmedInput))) {
@@ -356,43 +353,40 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       }
       const normalizedOrchestratorWorkspace = parsedOrchestratorWorkspace.value;
       let trustedPickerImport = false;
-      if (isDesktopAuthGateActive()) {
-        const secret = desktopAuthSecret();
-        if (secret == null) {
-          return sendApiError(
-            res,
-            503,
-            'DESKTOP_AUTH_PENDING',
-            'desktop auth required but secret not yet registered',
-            {
-              details: { hint: 'restart desktop or wait for sidecar registration' },
-              retryable: true,
-            },
-          );
-        }
-        const headerValue = req.get('x-od-desktop-import-token');
-        const token = typeof headerValue === 'string' ? headerValue : '';
-        const now = Date.now();
-        pruneExpiredImportNonces(now);
-        const verification = verifyDesktopImportToken(
-          secret,
-          baseDir,
-          token,
-          now,
-          consumedImportNonces,
+      // Always require a valid import token for working-dir rebinding, regardless
+      // of whether the desktop auth gate is active (issue #5480).
+      const secret = desktopAuthSecret();
+      if (secret == null) {
+        return sendApiError(
+          res,
+          403,
+          'FORBIDDEN',
+          'working-dir rebinding requires an import token; restart desktop or configure daemon auth',
+          { details: { hint: 'no auth secret configured' } },
         );
-        if (!verification.ok) {
-          return sendApiError(
-            res,
-            403,
-            'FORBIDDEN',
-            'desktop import token rejected',
-            { details: { reason: verification.reason } },
-          );
-        }
-        consumedImportNonces.set(verification.nonce, verification.exp);
-        trustedPickerImport = true;
       }
+      const headerValue = req.get('x-od-desktop-import-token');
+      const token = typeof headerValue === 'string' ? headerValue : '';
+      const tokenNow = Date.now();
+      pruneExpiredImportNonces(tokenNow);
+      const verification = verifyDesktopImportToken(
+        secret,
+        baseDir,
+        token,
+        tokenNow,
+        consumedImportNonces,
+      );
+      if (!verification.ok) {
+        return sendApiError(
+          res,
+          403,
+          'FORBIDDEN',
+          'import token rejected',
+          { details: { reason: verification.reason } },
+        );
+      }
+      consumedImportNonces.set(verification.nonce, verification.exp);
+      trustedPickerImport = true;
       const trimmedInput = baseDir.trim();
       if (!path.isAbsolute(path.normalize(trimmedInput))) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'baseDir must be absolute');
