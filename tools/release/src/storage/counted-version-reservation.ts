@@ -104,6 +104,25 @@ export async function reserveVersion(options: {
     const releaseNumber = candidate.releaseNumber + offset;
     const releaseVersion = `${options.baseVersion}-${channel}.${releaseNumber}`;
     const objectKey = versionLockObjectKey(releaseVersion, channel);
+    const metadataObjectKey = `${channel}/versions/${releaseVersion}/metadata.json`;
+
+    // Some releases predate version locks, and interrupted migrations can also
+    // leave a complete immutable metadata object without its lock. Metadata is
+    // the authoritative proof that a version number has already shipped: never
+    // create a fresh lock beside it and discover the collision only after every
+    // platform has rebuilt.
+    const publishedMetadata = await getStorageObjectText({
+      ...options.storage,
+      objectKey: metadataObjectKey,
+    });
+    if (publishedMetadata != null) {
+      if (options.manualOverride) {
+        throw new Error(`release_version ${releaseVersion} is already published at ${metadataObjectKey}`);
+      }
+      console.log(`${channel} version ${releaseVersion} is already published; trying next release number`);
+      continue;
+    }
+
     const reservation: CountedVersionReservation = {
       baseVersion: options.baseVersion,
       channel,
