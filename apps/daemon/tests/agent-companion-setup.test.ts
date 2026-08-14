@@ -76,6 +76,14 @@ if (args[0] === '--version') {
   }
 } else if (args[0] === 'plugin' && args[1] === '--profile' && args[2] === 'open-design' && args[3] === 'add') {
   if (process.env.OD_DSH_SETUP_FAKE_MODE === 'install-fail') process.exit(7);
+  if (process.env.OD_DSH_SETUP_FAKE_MODE === 'require-profile-bundle') {
+    const [directory, filename, extra] = args[4].split('/');
+    const digest = filename?.endsWith('.tgz') ? filename.slice(0, -4) : '';
+    const digestIsHex = digest.length === 64 && digest.replace(/[a-f0-9]/g, '') === '';
+    if (directory !== '.open-design' || extra !== undefined || !digestIsHex) process.exit(8);
+    const bundle = await readFile(path.join(profileRoot, args[4]), 'utf8');
+    if (bundle !== 'fixture runtime package') process.exit(9);
+  }
   await mkdir(profileRoot, { recursive: true });
   let count = 0;
   try { count = Number(await readFile(${JSON.stringify(stateFile)}, 'utf8')); } catch {}
@@ -164,6 +172,16 @@ describe('DeepSeek Harness companion setup', () => {
       installDeepSeekHarnessCompanion(probeFailure.options),
       'COMPANION_STILL_INCOMPATIBLE',
     );
+  });
+
+  it('keeps the bundled package path out of the dsh Windows shell boundary', async () => {
+    const test = await fixture();
+    process.env.OD_DSH_SETUP_FAKE_MODE = 'require-profile-bundle';
+
+    await expect(installDeepSeekHarnessCompanion(test.options)).resolves.toMatchObject({
+      action: 'installed',
+      ok: true,
+    });
   });
 
   it('deduplicates concurrent setup requests', async () => {

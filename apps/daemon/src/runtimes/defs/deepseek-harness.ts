@@ -30,11 +30,15 @@ function parseModels(stdout: string) {
 }
 
 export function hasOpenDesignProfile(env: NodeJS.ProcessEnv): boolean {
+  return existsSync(path.join(resolveOpenDesignProfileDir(env), 'package.json'));
+}
+
+export function resolveOpenDesignProfileDir(env: NodeJS.ProcessEnv): string {
   const configuredHome = env.DSH_HOME?.trim();
   const dshHome = configuredHome
     ? path.resolve(configuredHome)
     : path.join(homedir(), '.dsh');
-  return existsSync(path.join(dshHome, 'profiles', 'open-design', 'package.json'));
+  return path.join(dshHome, 'profiles', 'open-design');
 }
 
 const DSH_VERSION_RE = /^v?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$/u;

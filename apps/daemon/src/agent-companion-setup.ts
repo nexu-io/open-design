@@ -16,7 +16,10 @@ import { spawnEnvForAgent } from './runtimes/env.js';
 import { execAgentFile } from './runtimes/invocation.js';
 import { applyAgentLaunchEnv, resolveAgentLaunch } from './runtimes/launch.js';
 import { getAgentDef } from './runtimes/registry.js';
-import { hasOpenDesignProfile } from './runtimes/defs/deepseek-harness.js';
+import {
+  hasOpenDesignProfile,
+  resolveOpenDesignProfileDir,
+} from './runtimes/defs/deepseek-harness.js';
 
 const execFileAsync = promisify(execFile);
 const DSH_AGENT_ID = 'deepseek-harness';
@@ -111,7 +114,7 @@ async function resolveVerifiedBundle(options: {
   projectRoot: string;
   resourceRoot: string;
   runtimeDataDir: string;
-}): Promise<{ manifest: RuntimeManifest; tarballPath: string }> {
+}): Promise<{ bytes: Buffer; manifest: RuntimeManifest }> {
   let directory = path.join(options.resourceRoot, DSH_RUNTIME_RESOURCE_DIRECTORY);
   if (!(await fileExists(path.join(directory, 'manifest.json')))) {
     directory = await materializeDevelopmentBundle(options.projectRoot, options.runtimeDataDir);
@@ -135,11 +138,48 @@ async function resolveVerifiedBundle(options: {
     throw new AgentCompanionSetupError('BUNDLED_COMPANION_INVALID', 'Invalid connection package manifest.');
   }
   const tarballPath = path.join(directory, manifest.file);
-  const actualHash = createHash('sha256').update(await readFile(tarballPath)).digest('hex');
+  const bytes = await readFile(tarballPath);
+  const actualHash = createHash('sha256').update(bytes).digest('hex');
   if (actualHash !== manifest.sha256) {
     throw new AgentCompanionSetupError('BUNDLED_COMPANION_INVALID', 'Connection package integrity check failed.');
   }
-  return { manifest, tarballPath };
+  return { bytes, manifest };
+}
+
+async function stageVerifiedBundleInProfile(
+  env: NodeJS.ProcessEnv,
+  manifest: RuntimeManifest,
+  bytes: Buffer,
+): Promise<string> {
+  const relativeDirectory = '.open-design';
+  const file = `${manifest.sha256}.tgz`;
+  const profileDirectory = resolveOpenDesignProfileDir(env);
+  const bundleDirectory = path.join(profileDirectory, relativeDirectory);
+  await mkdir(bundleDirectory, { recursive: true });
+  await writeFile(path.join(bundleDirectory, file), bytes);
+  // dsh runs pnpm with the profile directory as cwd. Keeping this spec
+  // relative avoids rc.6's Windows shell forwarder splitting an absolute
+  // packaged-app path such as "Open Design" at its spaces.
+  return `${relativeDirectory}/${file}`;
+}
+
+function commandFailureDetail(error: unknown): string | null {
+  if (!error || typeof error !== 'object') return null;
+  const candidate = error as { code?: unknown; signal?: unknown; stderr?: unknown };
+  let stderr = '';
+  if (typeof candidate.stderr === 'string') {
+    stderr = candidate.stderr.trim();
+  } else if (Buffer.isBuffer(candidate.stderr)) {
+    stderr = candidate.stderr.toString('utf8').trim();
+  }
+  const parts = [
+    typeof candidate.code === 'string' || typeof candidate.code === 'number'
+      ? `code=${candidate.code}`
+      : null,
+    typeof candidate.signal === 'string' ? `signal=${candidate.signal}` : null,
+    stderr ? `stderr=${stderr.slice(-4_000)}` : null,
+  ].filter((part): part is string => part !== null);
+  return parts.length > 0 ? parts.join(' ') : null;
 }
 
 let activeSetup: Promise<AgentCompanionSetupResponse> | null = null;
@@ -168,7 +208,7 @@ async function installDeepSeekHarnessCompanionOnce(options: {
   const appConfig = await readAppConfig(options.runtimeDataDir);
   const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, DSH_AGENT_ID);
   const before = await detectAgent(def, configuredEnv);
-  const { manifest, tarballPath } = await resolveVerifiedBundle(options);
+  const { bytes, manifest } = await resolveVerifiedBundle(options);
   if (before.available) {
     return { action: 'already-compatible', agent: before, ok: true, packageVersion: manifest.version };
   }
@@ -185,13 +225,18 @@ async function installDeepSeekHarnessCompanionOnce(options: {
     launch,
   );
   const profileWasPresent = hasOpenDesignProfile(childEnv);
+  const packageSpec = await stageVerifiedBundleInProfile(childEnv, manifest, bytes);
   try {
     await execAgentFile(
       launch.launchPath,
-      ['plugin', '--profile', 'open-design', 'add', tarballPath],
+      ['plugin', '--profile', 'open-design', 'add', packageSpec],
       { env: childEnv, timeout: 120_000, maxBuffer: 2 * 1024 * 1024 },
     );
-  } catch {
+  } catch (error) {
+    console.error(
+      '[od] DeepSeek Harness connection component install failed',
+      commandFailureDetail(error) ?? 'no command diagnostics were available',
+    );
     throw new AgentCompanionSetupError(
       'COMPANION_INSTALL_FAILED',
       'DeepSeek Harness could not install the Open Design connection component. No agent selection was changed.',
