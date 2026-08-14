@@ -130,13 +130,13 @@ describe('MessageCenter', () => {
     await waitFor(() => expect(screen.getByText('All caught up')).toBeTruthy());
   });
 
-  it('expands the whole message row without rendering view actions', async () => {
+  it('expands the whole message row and opens its CTA', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderMessageCenter();
     await openCenter();
     const row = screen.getByRole('button', { name: /Open Design 0\.14 is available/ });
 
     expect(row).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByText('View')).toBeNull();
     expect(screen.queryByRole('button', { name: 'View update' })).toBeNull();
 
     fireEvent.click(row);
@@ -144,7 +144,8 @@ describe('MessageCenter', () => {
     expect(row).toHaveAttribute('aria-expanded', 'true');
     expect(row.closest('article')?.className).toContain('itemExpanded');
     expect(screen.getByText('The new release is ready.')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'View update' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'View update' }));
+    expect(open).toHaveBeenCalledWith('https://open-design.ai/update', '_blank', 'noopener,noreferrer');
   });
 
   it('keeps both anonymous reads when two expands resolve out of order', async () => {
@@ -473,6 +474,16 @@ describe('MessageCenter', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
     expect(readAttempts).toBe(1);
+  });
+
+  it('hides CTA actions for non-http URLs', async () => {
+    mockFetch({
+      messages: [{ ...defaultMessages[0]!, ctaUrl: 'javascript:alert(1)' }],
+    });
+    renderMessageCenter();
+    await openCenter();
+    fireEvent.click(screen.getByRole('button', { name: /Open Design 0\.14 is available/ }));
+    expect(screen.queryByRole('button', { name: 'View update' })).toBeNull();
   });
 
   it('closes with Escape and restores trigger focus', async () => {
