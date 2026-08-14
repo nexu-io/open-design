@@ -251,6 +251,21 @@
         }
         report('Responsive feedback preserves the Compose action', true);
 
+        for (const [width, height] of [[390, 844], [600, 900]]) {
+          await withResponsiveFrame(width, height, async (responsiveDocument, responsiveWindow) => {
+            const triggeringMailItem = responsiveDocument.querySelectorAll('.mail-item')[1];
+            triggeringMailItem.focus();
+            triggeringMailItem.click();
+            await settleWindow(responsiveWindow);
+            const back = responsiveDocument.querySelector('[aria-label="Back to messages"]');
+            assert(responsiveDocument.activeElement === back, `Detail focus did not move to Back at ${width}px.`);
+            back.click();
+            await settleWindow(responsiveWindow);
+            assert(responsiveDocument.activeElement === triggeringMailItem, `List focus did not return to the triggering mail row at ${width}px.`);
+          });
+        }
+        report('Compact and medium list-detail transitions preserve focus', true);
+
         await withResponsiveFrame(667, 375, async (responsiveDocument, responsiveWindow) => {
           await openComposerIn(responsiveDocument);
           const dialog = responsiveDocument.querySelector('.dialog');

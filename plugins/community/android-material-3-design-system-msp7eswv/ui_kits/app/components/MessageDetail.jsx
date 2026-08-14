@@ -1,4 +1,4 @@
-function MessageDetail({ message, mobileHidden, onBack, onArchive, onReply, onToggleStar }) {
+function MessageDetail({ message, mobileHidden, backButtonRef, onBack, onArchive, onReply, onToggleStar }) {
   if (!message) {
     return <section className={`detail-column${mobileHidden ? ' pane-mobile-hidden' : ''}`}><div className="empty-state"><strong>Select a message</strong><p>Choose an item from the list to read it here.</p></div></section>;
   }
@@ -6,7 +6,7 @@ function MessageDetail({ message, mobileHidden, onBack, onArchive, onReply, onTo
   return (
     <section className={`detail-column${mobileHidden ? ' pane-mobile-hidden' : ''}`} aria-label="Selected message">
       <div className="detail-toolbar">
-        <button className="icon-button compact-back" type="button" onClick={onBack} aria-label="Back to messages">←</button>
+        <button ref={backButtonRef} className="icon-button compact-back" type="button" onClick={onBack} aria-label="Back to messages">←</button>
         <div className="detail-actions">
           <button className="icon-button" type="button" aria-label={message.starred ? 'Unstar message' : 'Star message'} aria-pressed={message.starred} onClick={() => onToggleStar(message.id)}>{message.starred ? '★' : '☆'}</button>
           <button className="icon-button" type="button" onClick={() => onArchive(message.id)} aria-label="Archive message">⌁</button>

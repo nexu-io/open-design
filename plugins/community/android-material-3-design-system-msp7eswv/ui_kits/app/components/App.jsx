@@ -17,8 +17,22 @@ function App() {
   const [snackbar, setSnackbar] = React.useState(null);
   const archivedRef = React.useRef(null);
   const snackbarIdRef = React.useRef(0);
+  const triggeringMailItemRef = React.useRef(null);
+  const detailBackRef = React.useRef(null);
+  const restoreMailItemFocusRef = React.useRef(false);
 
   React.useEffect(() => { document.documentElement.dataset.theme = theme; }, [theme]);
+  React.useLayoutEffect(() => {
+    if (!window.matchMedia('(max-width: 839px)').matches) return;
+    if (!showList) {
+      detailBackRef.current?.focus();
+      return;
+    }
+    if (restoreMailItemFocusRef.current) {
+      triggeringMailItemRef.current?.focus();
+      restoreMailItemFocusRef.current = false;
+    }
+  }, [showList]);
 
   const closeComposer = React.useCallback(() => setComposerOpen(false), []);
   const dismissSnackbar = React.useCallback(() => setSnackbar(null), []);
@@ -37,10 +51,16 @@ function App() {
   });
   const selected = messages.find((message) => message.id === selectedId) || visibleMessages[0] || null;
 
-  const selectMessage = (id) => {
+  const selectMessage = (id, triggeringMailItem) => {
+    triggeringMailItemRef.current = triggeringMailItem;
     setSelectedId(id);
     setMessages((current) => current.map((message) => message.id === id ? { ...message, unread: false } : message));
     setShowList(false);
+  };
+
+  const returnToList = () => {
+    restoreMailItemFocusRef.current = true;
+    setShowList(true);
   };
 
   const archive = (id) => {
@@ -82,7 +102,7 @@ function App() {
       <div className="app-background" inert={composerOpen ? '' : undefined} aria-hidden={composerOpen ? 'true' : undefined}>
         <NavigationRail theme={theme} onToggleTheme={() => setTheme((value) => value === 'light' ? 'dark' : 'light')} />
         <MailList messages={visibleMessages} selectedId={selected?.id} query={query} unreadOnly={unreadOnly} mobileHidden={!showList} onQueryChange={setQuery} onUnreadChange={setUnreadOnly} onSelect={selectMessage} />
-        <MessageDetail message={selected} mobileHidden={showList} onBack={() => setShowList(true)} onArchive={archive} onReply={reply} onToggleStar={toggleStar} />
+        <MessageDetail message={selected} mobileHidden={showList} backButtonRef={detailBackRef} onBack={returnToList} onArchive={archive} onReply={reply} onToggleStar={toggleStar} />
         <button className="fab" type="button" onClick={openComposer}>✎ Compose</button>
         {snackbar && <Snackbar key={snackbar.id} notificationId={snackbar.id} message={snackbar.message} actionLabel={snackbar.actionLabel} onAction={undoArchive} onDismiss={dismissSnackbar} />}
       </div>
