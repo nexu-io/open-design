@@ -177,6 +177,7 @@ const packagedOnboardingExpression = `
 
 type DesktopStatus = {
   pid?: number;
+  standalone?: unknown;
   state?: string;
   title?: string | null;
   url?: string | null;
@@ -548,8 +549,12 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       expect(pty.exitCode, JSON.stringify(pty, null, 2)).toBe(0);
       expect(pty.cleanup.terminalStatus).toBe(200);
       expect(pty.cleanup.projectStatus).toBe(200);
-      assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
-      assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
+      if (verifyPublicImmutableArtifacts) {
+        assertPublicStandaloneBinding(inspect.status?.standalone, updateScenario.expectedCurrentVersion);
+      } else {
+        assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
+        assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
+      }
 
       let protocolBaseInspect = inspect;
       if (closureAcceptance != null) {
@@ -3070,6 +3075,23 @@ function assertLauncherPointer(
     generation: expectedGeneration,
     version: expectedVersion,
   });
+}
+
+function assertPublicStandaloneBinding(value: unknown, expectedVersion: string): void {
+  if (!isRecord(value)) {
+    throw new Error(`public mac runtime did not report Standalone status: ${formatUnknown(value)}`);
+  }
+  expect(value).toMatchObject({
+    handoff: {
+      descriptor: {
+        release: { version: expectedVersion },
+        standalone: { protocolVersion: 1, version: expectedVersion },
+      },
+      scope: { generation: 0, namespace },
+    },
+    state: 'running',
+  });
+  expect(value.pid).toEqual(expect.any(Number));
 }
 
 function settledLauncherGeneration(launcher: LauncherSnapshot, expectedVersion: string): number | null {
