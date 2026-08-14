@@ -34,6 +34,7 @@ export const zh: DeepseekCopyOverride = {
 
   ctaDownload: '下载 Open Design',
   ctaStarList: '给 DeepSeek Harness 点 Star',
+  ctaGuide: '了解如何用 DeepSeek Harness 做设计',
   ctaBrowseAll: '浏览全部插件',
   ctaViewSource: '查看源地址',
   ctaOurRepo: 'GitHub 上的 deepseek-harness',

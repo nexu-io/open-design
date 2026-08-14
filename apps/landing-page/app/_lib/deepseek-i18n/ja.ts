@@ -34,6 +34,7 @@ export const ja: DeepseekCopyOverride = {
 
   ctaDownload: 'Open Design をダウンロード',
   ctaStarList: 'DeepSeek Harness に Star を付ける',
+  ctaGuide: 'DeepSeek Harness でデザインする方法を見る',
   ctaBrowseAll: 'すべてのプラグインを見る',
   ctaViewSource: 'ソースを見る',
   ctaOurRepo: 'GitHub の deepseek-harness',

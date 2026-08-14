@@ -34,6 +34,7 @@ export const ru: DeepseekCopyOverride = {
 
   ctaDownload: 'Скачать Open Design',
   ctaStarList: 'Поставить звезду DeepSeek Harness',
+  ctaGuide: 'Как заниматься дизайном с DeepSeek Harness',
   ctaBrowseAll: 'Все плагины',
   ctaViewSource: 'Открыть исходник',
   ctaOurRepo: 'deepseek-harness на GitHub',

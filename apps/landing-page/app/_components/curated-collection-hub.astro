@@ -69,7 +69,11 @@ const jsonLd = [
         <p class="dbdek dbdek-wide">{cc.collectionLede}</p>
         <div class="dbcta-row">
           <a class="dbbtn-p" href={href(binding.downloadUrl)}>{cc.ctaDownload}</a>
-          <a class="dbbtn-g" href={binding.listUrl} target="_blank" rel="noopener">{cc.ctaStarList}</a>
+          {binding.heroGuideHref && cc.ctaGuide ? (
+            <a class="dbbtn-g" href={href(binding.heroGuideHref)}>{cc.ctaGuide}</a>
+          ) : (
+            <a class="dbbtn-g" href={binding.listUrl} target="_blank" rel="noopener">{cc.ctaStarList}</a>
+          )}
         </div>
       </div>
     </section>

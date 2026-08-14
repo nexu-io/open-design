@@ -114,6 +114,8 @@ export interface CuratedCopyBase {
   /* Shared chrome. */
   readonly ctaDownload: string;
   readonly ctaStarList: string;
+  /** Optional hero CTA label for a collection whose hero links a guide page. */
+  readonly ctaGuide?: string;
   readonly ctaBrowseAll: string;
   readonly ctaViewSource: string;
   readonly ctaOurRepo: string;
@@ -182,6 +184,8 @@ export interface CuratedBinding {
   readonly getCopy: (locale: LandingLocaleCode) => CuratedCopyBase;
   /** Optional <title> builder for the hub page; defaults to eyebrow · heading. */
   readonly hubTitle?: (copy: CuratedCopyBase) => string;
+  /** Internal guide route for the hero's secondary CTA; falls back to the star link. */
+  readonly heroGuideHref?: string;
   readonly skillCopy: (copy: CuratedCopyBase, slug: string) => CuratedSkillCopy;
   readonly categoryLabel: (copy: CuratedCopyBase, category: string) => string;
 }

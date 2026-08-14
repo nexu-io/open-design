@@ -34,6 +34,7 @@ export const tr: DeepseekCopyOverride = {
 
   ctaDownload: 'Open Design’ı indir',
   ctaStarList: 'DeepSeek Harness’e yıldız ver',
+  ctaGuide: 'DeepSeek Harness ile tasarım nasıl yapılır',
   ctaBrowseAll: 'Tüm eklentilere göz at',
   ctaViewSource: 'Kaynağı gör',
   ctaOurRepo: 'GitHub’da deepseek-harness',

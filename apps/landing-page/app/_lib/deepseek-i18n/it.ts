@@ -34,6 +34,7 @@ export const it: DeepseekCopyOverride = {
 
   ctaDownload: 'Scarica Open Design',
   ctaStarList: 'Metti una star a DeepSeek Harness',
+  ctaGuide: 'Come fare design con DeepSeek Harness',
   ctaBrowseAll: 'Sfoglia tutti i plugin',
   ctaViewSource: 'Vedi il sorgente',
   ctaOurRepo: 'deepseek-harness su GitHub',

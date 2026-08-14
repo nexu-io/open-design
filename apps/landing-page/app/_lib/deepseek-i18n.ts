@@ -61,6 +61,7 @@ const en: DeepseekCopy = {
 
   ctaDownload: 'Download Open Design',
   ctaStarList: 'Star DeepSeek Harness',
+  ctaGuide: 'See how to design with DeepSeek Harness',
   ctaBrowseAll: 'Browse all plugins',
   ctaViewSource: 'View source',
   ctaOurRepo: 'deepseek-harness on GitHub',
