@@ -149,7 +149,7 @@ describe("public Windows release acceptance", () => {
     const suiteResultPath = join(root, "suite-result.json");
     await writeFile(summaryPath, `${JSON.stringify({
       closureBinding: {
-        committed: {
+        active: {
           releaseVersion,
           standalone: {
             channel: "beta",
@@ -161,6 +161,24 @@ describe("public Windows release acceptance", () => {
             version: closureVersion,
           },
         },
+        activationAuthorized: false,
+        attempt: null,
+        channel: "beta",
+        lastSuccessful: {
+          releaseVersion,
+          standalone: {
+            channel: "beta",
+            digest: source.closure.identity.digest,
+            generation: 0,
+            namespace,
+            target: "win32-x64",
+            protocolVersion: 1,
+            version: closureVersion,
+          },
+        },
+        namespace,
+        prepared: null,
+        schemaVersion: 4,
       },
       plan: { profile: "core", selectedLanes: ["shell"] },
       coldStart: {
@@ -238,7 +256,7 @@ describe("public Windows release acceptance", () => {
     const summaryPath = join(root, "summary.json");
     await writeFile(summaryPath, `${JSON.stringify({
       closureBinding: {
-        committed: {
+        active: {
           releaseVersion,
           standalone: {
             channel: "beta",
@@ -249,6 +267,23 @@ describe("public Windows release acceptance", () => {
             version: closureVersion,
           },
         },
+        activationAuthorized: false,
+        attempt: null,
+        channel: "beta",
+        lastSuccessful: {
+          releaseVersion,
+          standalone: {
+            channel: "beta",
+            digest: source.closure.identity.digest,
+            namespace,
+            protocolVersion: CLOSURE_PROTOCOL_VERSION,
+            target: "win32-x64",
+            version: closureVersion,
+          },
+        },
+        namespace,
+        prepared: null,
+        schemaVersion: 4,
       },
       plan: { profile: "core", selectedLanes: ["shell"] },
       coldStart: {

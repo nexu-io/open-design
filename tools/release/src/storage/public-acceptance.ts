@@ -187,6 +187,45 @@ export function childRecord(record: JsonRecord, name: string, label: string): Js
   return child;
 }
 
+function assertSuccessfulClosureBinding(
+  value: unknown,
+  plan: PublicAcceptancePlan,
+): void {
+  assertRecord(value, "smoke summary.closureBinding");
+  if (
+    value.schemaVersion !== 4
+    || value.channel !== plan.closure.channel
+    || value.namespace !== plan.namespace
+  ) {
+    throw new Error("public smoke Closure store identity mismatch");
+  }
+  if (value.prepared !== null || value.attempt !== null || value.activationAuthorized !== false) {
+    throw new Error("public smoke Closure transaction did not settle");
+  }
+
+  const active = childRecord(value, "active", "smoke summary.closureBinding");
+  const lastSuccessful = childRecord(value, "lastSuccessful", "smoke summary.closureBinding");
+  if (!isDeepStrictEqual(active, lastSuccessful)) {
+    throw new Error("public smoke active and lastSuccessful Closure bindings differ");
+  }
+  if (stringField(active, "releaseVersion", "active Closure binding") !== plan.releaseVersion) {
+    throw new Error("public smoke active Closure releaseVersion mismatch");
+  }
+  const standalone = childRecord(active, "standalone", "active Closure binding");
+  for (const [name, expected] of [
+    ["channel", plan.closure.channel],
+    ["digest", plan.closure.digest],
+    ["protocolVersion", plan.closure.protocolVersion],
+    ["target", plan.closure.target],
+    ["version", plan.closure.version],
+    ["namespace", plan.namespace],
+  ] as const) {
+    if (standalone[name] !== expected) {
+      throw new Error(`public smoke active Closure ${name} mismatch`);
+    }
+  }
+}
+
 export function assertPublicImmutableUrl(url: string, publicOrigin: string, label: string): void {
   const parsed = new URL(normalizePublicUrl(url));
   const origin = new URL(normalizePublicUrl(publicOrigin));
@@ -542,24 +581,7 @@ export async function issuePublicAcceptance(input: {
   assertRecord(lifecycle, "public shell lifecycle timing");
   if (lifecycle.status !== "success") throw new Error(`public ${plan.target} shell lifecycle did not succeed`);
 
-  const closureBinding = childRecord(summary, "closureBinding", "smoke summary");
-  const committed = childRecord(closureBinding, "committed", "smoke summary.closureBinding");
-  if (stringField(committed, "releaseVersion", "closure committed") !== plan.releaseVersion) {
-    throw new Error("public smoke committed Closure releaseVersion mismatch");
-  }
-  const standalone = childRecord(committed, "standalone", "closure committed");
-  for (const [name, expected] of [
-    ["channel", plan.closure.channel],
-    ["digest", plan.closure.digest],
-    ["protocolVersion", plan.closure.protocolVersion],
-    ["target", plan.closure.target],
-    ["version", plan.closure.version],
-    ["namespace", plan.namespace],
-  ] as const) {
-    if (standalone[name] !== expected) {
-      throw new Error(`public smoke committed Closure ${name} mismatch`);
-    }
-  }
+  assertSuccessfulClosureBinding(summary.closureBinding, plan);
 
   const [metadataFile, platformFile, artifactFile] = await Promise.all([
     describeFile(plan.metadata.path),
