@@ -69,7 +69,13 @@ describe('executeGenerateImage', () => {
     const dispatcher = { dispatch: vi.fn() } as unknown as NonNullable<RequestInit['dispatcher']>;
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
-      expect(init?.dispatcher).toBe(dispatcher);
+      // Asset downloads route through assertAndFetchExternalAsset which replaces
+      // the caller's dispatcher with a validating one (issue #5478).
+      if (init?.redirect === 'error') {
+        expect(init.dispatcher).toBeDefined();
+      } else {
+        expect(init?.dispatcher).toBe(dispatcher);
+      }
       if (url === 'https://api.senseaudio.cn/v1/image/sync') {
         expect(init?.method).toBe('POST');
         expect(init?.headers).toMatchObject({
@@ -632,7 +638,13 @@ describe('executeGenerateVideo', () => {
     let pollCount = 0;
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
-      expect(init?.dispatcher).toBe(dispatcher);
+      // Asset downloads route through assertAndFetchExternalAsset which replaces
+      // the caller's dispatcher with a validating one (issue #5478).
+      if (init?.redirect === 'error') {
+        expect(init.dispatcher).toBeDefined();
+      } else {
+        expect(init?.dispatcher).toBe(dispatcher);
+      }
 
       if (url === 'https://api.senseaudio.cn/v1/video/create') {
         expect(init?.method).toBe('POST');
@@ -962,7 +974,13 @@ describe('executeAIHubMixGenerateVideo', () => {
     let pollCount = 0;
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
-      expect(init?.dispatcher).toBe(dispatcher);
+      // Asset downloads route through assertAndFetchExternalAsset which replaces
+      // the caller's dispatcher with a validating one (issue #5478).
+      if (init?.redirect === 'error') {
+        expect(init.dispatcher).toBeDefined();
+      } else {
+        expect(init?.dispatcher).toBe(dispatcher);
+      }
 
       if (url === 'https://aihubmix.com/v1/videos') {
         expect(init?.method).toBe('POST');
