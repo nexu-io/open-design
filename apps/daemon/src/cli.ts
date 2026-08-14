@@ -337,6 +337,8 @@ const BRAND_STRING_FLAGS = new Set([
 const BRAND_BOOLEAN_FLAGS = new Set([
   'help', 'h', 'json',
 ]);
+const AGENT_STRING_FLAGS = new Set(['daemon-url']);
+const AGENT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // Hoisted because `runAutomation` is reachable through the top-of-file
 // SUBCOMMAND_MAP dispatch, which runs during module evaluation —
 // any `const` declared further down would still be in TDZ when
@@ -371,6 +373,7 @@ const PLUGIN_LIST_BOOLEAN_FLAGS = new Set([
 ]);
 
 const SUBCOMMAND_MAP = {
+  agent: runAgent,
   artifacts: runArtifacts,
   media: runMedia,
   mcp: runMcp,
@@ -412,6 +415,57 @@ const SUBCOMMAND_MAP = {
   library: runLibrary,
   figma: runFigma,
 };
+
+function printAgentHelp() {
+  console.log(`Usage: od agent setup deepseek-harness [options]
+
+Install or repair Open Design's bundled connection component in the user's
+official DeepSeek Harness installation. The dsh CLI itself is not installed
+or upgraded by Open Design.
+
+Options:
+  --json                  Print a machine-readable result.
+  --daemon-url <url>      Override daemon URL.`);
+}
+
+async function runAgent(args) {
+  let flags;
+  try {
+    flags = parseFlags(args, { string: AGENT_STRING_FLAGS, boolean: AGENT_BOOLEAN_FLAGS });
+  } catch (error) {
+    console.error(error.message);
+    process.exit(2);
+  }
+  const positional = positionalArgs(args, AGENT_STRING_FLAGS);
+  if (flags.help || flags.h || positional[0] === 'help') {
+    printAgentHelp();
+    return;
+  }
+  if (positional[0] !== 'setup' || positional[1] !== 'deepseek-harness') {
+    printAgentHelp();
+    process.exit(2);
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  let response;
+  try {
+    response = await fetch(`${base}/api/agents/deepseek-harness/companion/install`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+  } catch (error) {
+    surfaceFetchError(error, base);
+    process.exit(3);
+  }
+  if (!response.ok) return structuredHttpFailure(response, 'daemon-not-running');
+  const result = await response.json();
+  if (flags.json) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+  const verb = result.action === 'already-compatible' ? 'already compatible' : result.action;
+  console.log(`DeepSeek Harness connection component ${verb} (${result.packageVersion}).`);
+}
 
 const EXPORT_STRING_FLAGS = new Set([
   'daemon-url', 'project', 'format', 'out', 'output', 'image-format', 'title', 'file',

@@ -310,8 +310,14 @@ export function AvatarMenu({
   const normalizedCurrentChoice = effectiveAgentModelChoice(currentAgent, currentChoice) ?? currentChoice;
   const currentModelId =
     normalizedCurrentChoice.model ?? defaultAgentModelId(currentAgent);
+  const activeReasoningOptions =
+    currentAgent?.models?.find((model) => model.id === currentModelId)?.reasoningOptions ??
+    currentAgent?.reasoningOptions;
   const currentReasoningId =
-    currentChoice.reasoning ?? currentAgent?.reasoningOptions?.[0]?.id ?? null;
+    activeReasoningOptions?.some((option) => option.id === currentChoice.reasoning)
+      ? currentChoice.reasoning!
+      : activeReasoningOptions?.find((option) => option.default)?.id ??
+        activeReasoningOptions?.[0]?.id ?? null;
   const currentModelOption = currentAgent?.models?.find(
     (m) => m.id === currentModelId,
   ) ?? null;
@@ -323,7 +329,7 @@ export function AvatarMenu({
     ? currentChoice.serviceTier!
     : 'default';
   const currentReasoningLabel =
-    currentAgent?.reasoningOptions?.find((option) => option.id === currentReasoningId)?.label ??
+    activeReasoningOptions?.find((option) => option.id === currentReasoningId)?.label ??
     currentReasoningId;
   const apiModelLabel = config.model?.trim() || null;
 
@@ -581,8 +587,8 @@ export function AvatarMenu({
                       </div>
                     </div>
                   ) : null}
-                  {currentAgent.reasoningOptions &&
-                  currentAgent.reasoningOptions.length > 0 &&
+                  {activeReasoningOptions &&
+                  activeReasoningOptions.length > 0 &&
                   currentReasoningLabel ? (
                     <div className="avatar-select-row">
                       <span className="avatar-select-label">

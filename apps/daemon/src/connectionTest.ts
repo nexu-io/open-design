@@ -36,6 +36,7 @@ import {
 } from '@open-design/platform';
 import { attachAcpSession } from './agent-protocol/index.js';
 import { attachPiRpcSession } from './agent-protocol/index.js';
+import { attachDshProfileSession } from './agent-protocol/index.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
 import { diagnoseClaudeCliFailure } from './claude-diagnostics.js';
 import { createCopilotStreamHandler } from './copilot-stream.js';
@@ -2034,6 +2035,15 @@ function attachAgentStreamHandlers(
       mcpServers: [],
       send,
     });
+  } else if (def.streamFormat === 'dsh-profile-jsonl') {
+    acpSession = attachDshProfileSession({
+      child,
+      requestId: `connection-test-${Date.now()}`,
+      prompt,
+      cwd,
+      model: model ?? null,
+      send,
+    });
   } else if (def.streamFormat === 'json-event-stream') {
     const handler = createJsonEventStreamHandler(
       def.eventParser || def.id,
@@ -2439,7 +2449,9 @@ async function testAgentConnectionInternal(
       };
     }
     const stdinMode =
-      def.promptViaStdin || def.streamFormat === 'acp-json-rpc' ? 'pipe' : 'ignore';
+      def.promptViaStdin || def.streamFormat === 'acp-json-rpc' || def.streamFormat === 'dsh-profile-jsonl'
+        ? 'pipe'
+        : 'ignore';
     const baseEnv = spawnEnvForAgent(
       input.agentId,
       {
@@ -2828,7 +2840,12 @@ async function testAgentConnectionInternal(
       };
     };
 
-    if (def.promptViaStdin && child.stdin && def.streamFormat !== 'pi-rpc') {
+    if (
+      def.promptViaStdin &&
+      child.stdin &&
+      def.streamFormat !== 'pi-rpc' &&
+      def.streamFormat !== 'dsh-profile-jsonl'
+    ) {
       child.stdin.on('error', (err: NodeJS.ErrnoException) => {
         if (err.code !== 'EPIPE') {
           sink.send('error', {

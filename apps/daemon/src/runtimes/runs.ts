@@ -1429,8 +1429,8 @@ export function createChatRunService({
     run.cancelOrigin = origin;
     run.updatedAt = Date.now();
     clearPendingRetryRestart(run);
-    closeRunStdin(run);
     if (!run.child) {
+      closeRunStdin(run);
       finish(run, 'canceled', null, 'SIGTERM');
       return statusBody(run);
     }
@@ -1448,6 +1448,7 @@ export function createChatRunService({
       if (await waitForCanceledChildExit(run, graceMs)) {
         return finishCanceledFromChildState(run, 'SIGTERM');
       }
+      closeRunStdin(run);
       killChild(run, 'SIGTERM');
       if (await waitForCanceledChildExit(run, graceMs)) {
         return finishCanceledFromChildState(run, 'SIGTERM');
@@ -1457,6 +1458,7 @@ export function createChatRunService({
       return finishCanceledFromChildState(run, 'SIGKILL');
     }
 
+    closeRunStdin(run);
     killChild(run, 'SIGTERM');
     if (await waitForCanceledChildExit(run, cancelGraceMs())) {
       return finishCanceledFromChildState(run, 'SIGTERM');
@@ -1473,7 +1475,6 @@ export function createChatRunService({
       run.cancelOrigin = 'daemon_shutdown';
       run.updatedAt = Date.now();
       clearPendingRetryRestart(run);
-      closeRunStdin(run);
       if (run.acpSession?.abort) {
         try {
           run.acpSession.abort();
@@ -1481,6 +1482,7 @@ export function createChatRunService({
           // Process signals below are the shutdown fallback.
         }
       }
+      closeRunStdin(run);
       killChild(run, 'SIGTERM');
       finish(run, 'canceled', null, 'SIGTERM');
       if (run.child && !(await waitForChildExit(run.child, graceMs))) {

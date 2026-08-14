@@ -24,6 +24,8 @@ export interface AgentModelOption {
   additionalSpeedTiers?: string[];
   /** Service tiers supported by this model, keyed by Codex config id. */
   serviceTierOptions?: AgentModelOption[];
+  /** Reasoning efforts advertised for this exact model route. */
+  reasoningOptions?: AgentModelOption[];
 }
 
 /**
@@ -73,6 +75,12 @@ export type AgentDiagnosticReason =
   | 'shim-broken'
   /** A user-set `*_BIN` override points at a missing/invalid file. */
   | 'configured-bin-invalid'
+  /** The binary ran, but its version could not be read under a strict policy. */
+  | 'version-probe-failed'
+  /** The installed CLI version is outside this Open Design build's tested set. */
+  | 'untested-version'
+  /** A required external runtime profile or companion failed its handshake. */
+  | 'runtime-profile-incompatible'
   /** Installed and invocable, but the CLI is not authenticated. */
   | 'auth-missing'
   /** Installed, but auth status could not be verified. */
@@ -132,7 +140,8 @@ export interface AgentInfo {
   externalMcpInjection?:
     | 'claude-mcp-json'
     | 'acp-merge'
-    | 'opencode-env-content';
+    | 'opencode-env-content'
+    | 'mimo-env-content';
   /**
    * When `false`, the Settings model picker hides the "Custom (fill below)"
    * option and the free-text input. Use this for agents whose CLI doesn't

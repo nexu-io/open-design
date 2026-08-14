@@ -222,9 +222,13 @@ describe("release workflows", () => {
       const sidecarProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"])';
       const launcherProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"])';
       const sidecarBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar", "build"])';
+      const dshRuntimeBuild = 'await runPnpm(config, ["--filter", "@open-design/dsh-runtime", "build"])';
+      const daemonBuild = 'await runPnpm(config, ["--filter", "@open-design/daemon", "build"])';
       expect(workspaceBuild).toContain(launcherProtoBuild);
+      expect(workspaceBuild).toContain(dshRuntimeBuild);
       expect(workspaceBuild.indexOf(sidecarProtoBuild)).toBeLessThan(workspaceBuild.indexOf(launcherProtoBuild));
       expect(workspaceBuild.indexOf(launcherProtoBuild)).toBeLessThan(workspaceBuild.indexOf(sidecarBuild));
+      expect(workspaceBuild.indexOf(dshRuntimeBuild)).toBeLessThan(workspaceBuild.indexOf(daemonBuild));
     }
     expect(preview).not.toContain(".github/scripts/release/assets/mac.sh");
     expect(preview).not.toContain(".github/scripts/release/assets/mac-intel.sh");

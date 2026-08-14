@@ -112,7 +112,9 @@ import {
 import { LibrarySection } from './LibrarySection';
 import { UpdaterPopup } from './UpdaterPopup';
 import { WhatsNewPopup } from './WhatsNewPopup';
+import { DeepSeekHarnessSetupDialog } from './DeepSeekHarnessSetupDialog';
 import { AmrBalanceDialog } from './AmrBalanceDialog';
+import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
 import { AmrLowBalanceDialog, type AmrLowBalanceDecision } from './AmrLowBalanceDialog';
 import {
   amrBalanceGateScopeForWorkspaceContext,
@@ -229,6 +231,7 @@ import { closeAmrActivationWindowBestEffort } from './AmrLoginPill';
 import { isMacPlatform } from '../utils/platform';
 import { smoothScrollToTop } from '../utils/smoothScrollToTop';
 import { summarizeProjectNameFromPrompt } from '../utils/projectName';
+import { deepSeekHarnessNeedsSetup } from '../utils/visibleAgents';
 import { LIBRARY_UI_VISIBLE } from '../features/libraryUi';
 import {
   providerModelsCacheKey,
@@ -2119,6 +2122,7 @@ function OnboardingView({
     if (!amrLoginPending) setActivationHintClosed(false);
   }, [amrLoginPending]);
   const [visibleAgentIds, setVisibleAgentIds] = useState<string[]>([]);
+  const [dshSetup, setDshSetup] = useState<{ busy: boolean; error: string | null } | null>(null);
   const [providerTestState, setProviderTestState] = useState<
     | { status: 'idle' }
     | { status: 'running'; inputKey: string }
@@ -2212,8 +2216,10 @@ function OnboardingView({
         (apiProtocol === 'azure' && provider.baseUrl === '' && Boolean(config.baseUrl?.trim()))
       ),
   ) ?? null;
-  const availableCliAgents = agents.filter((agent) => agent.available && agent.id !== 'amr');
-  const visibleAgents = availableCliAgents.filter((agent) => visibleAgentIds.includes(agent.id));
+  const candidateCliAgents = agents.filter(
+    (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
+  );
+  const visibleAgents = candidateCliAgents.filter((agent) => visibleAgentIds.includes(agent.id));
   const amrSignedIn = isAmrSessionAuthenticated(amrStatus);
   const selectedAgent = visibleAgents.find((agent) => agent.id === config.agentId) ?? null;
   const selectedAgentChoice = selectedAgent ? (config.agentModels?.[selectedAgent.id] ?? {}) : {};
@@ -2991,12 +2997,13 @@ function OnboardingView({
 
   async function scanCliAgents(options: { preferExisting?: boolean } = {}) {
     const scanToken = beginCliScan({ clearVisible: !options.preferExisting });
-    const currentAvailableAgents = agents.filter(
-      (agent) => agent.available && agent.id !== 'amr',
+    const currentCandidateAgents = agents.filter(
+      (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
     );
-    if (options.preferExisting && currentAvailableAgents.length > 0) {
+    const currentAvailableAgents = currentCandidateAgents.filter((agent) => agent.available);
+    if (options.preferExisting && currentCandidateAgents.length > 0) {
       const selectedCliAgent = selectDefaultCliAgent(currentAvailableAgents);
-      showCliAgents(scanToken, currentAvailableAgents, { stagger: false });
+      showCliAgents(scanToken, currentCandidateAgents, { stagger: false });
       setCliScanStatus('done');
       emitPendingCliScanResult(scanToken, {
         result: 'success',
@@ -3007,8 +3014,8 @@ function OnboardingView({
       return currentAvailableAgents;
     }
     if (options.preferExisting && agentsLoading) {
-      showCliAgents(scanToken, currentAvailableAgents, { stagger: false });
-      return currentAvailableAgents;
+      showCliAgents(scanToken, currentCandidateAgents, { stagger: false });
+      return currentCandidateAgents;
     }
     cliRefreshPendingTokenRef.current = scanToken;
     try {
@@ -3016,13 +3023,16 @@ function OnboardingView({
       if (cliScanTokenRef.current !== scanToken) return;
       cliRefreshPendingTokenRef.current = null;
       const availableAgents = nextAgents.filter((agent) => agent.available && agent.id !== 'amr');
+      const candidateAgents = nextAgents.filter(
+        (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
+      );
       const selectedCliAgent = selectDefaultCliAgent(availableAgents);
       // Scan-result semantics: zero available CLIs is a `failed` outcome
       // because the user's runtime path is blocked, even though the
       // detect call itself returned successfully. `detected_cli_count`
       // separately reports the raw catalog so the dashboard can split
       // "user has no CLI installed" from "detect crashed".
-      if (availableAgents.length === 0) {
+      if (candidateAgents.length === 0) {
         setCliScanStatus('done');
         emitPendingCliScanResult(scanToken, {
           result: 'failed',
@@ -3040,7 +3050,7 @@ function OnboardingView({
           ? { selectedCliId: agentIdToTracking(selectedCliAgent.id) }
           : {}),
       });
-      showCliAgents(scanToken, availableAgents, { stagger: true });
+      showCliAgents(scanToken, candidateAgents, { stagger: true });
     } catch (err) {
       if (cliScanTokenRef.current === scanToken) {
         cliRefreshPendingTokenRef.current = null;
@@ -3114,6 +3124,48 @@ function OnboardingView({
           agentName: agent.name,
           detail: error instanceof Error ? error.message : 'Test request failed',
         },
+      });
+    }
+  }
+
+  async function confirmDshSetup() {
+    if (dshSetup?.busy) return;
+    setDshSetup({ busy: true, error: null });
+    try {
+      await installDeepSeekHarnessCompanion();
+      const nextAgents = await onRefreshAgents();
+      const installed = nextAgents.find(
+        (agent) => agent.id === 'deepseek-harness' && agent.available,
+      );
+      if (!installed) throw new Error(t('settings.dshSetupRequired'));
+      showCliAgents(
+        cliScanTokenRef.current,
+        nextAgents.filter(
+          (agent) => agent.id !== 'amr' && (agent.available || deepSeekHarnessNeedsSetup(agent)),
+        ),
+        { stagger: false },
+      );
+      onModeChange('daemon');
+      onAgentChange(installed.id);
+      setDshSetup(null);
+
+      const choice = config.agentModels?.[installed.id] ?? {};
+      const effectiveChoice = effectiveAgentModelChoice(installed, choice) ?? choice;
+      const model = effectiveChoice.model ?? defaultAgentModelId(installed) ?? '';
+      const reasoning = choice.reasoning ?? '';
+      const inputKey = [installed.id, model, reasoning, JSON.stringify(config.agentCliEnv ?? {})].join('\n');
+      setAgentTestState({ status: 'running', inputKey });
+      const result = await testAgent({
+        agentId: installed.id,
+        model: model || undefined,
+        reasoning: reasoning || undefined,
+        agentCliEnv: config.agentCliEnv ?? {},
+      });
+      setAgentTestState({ status: 'done', inputKey, result });
+    } catch (error) {
+      setDshSetup({
+        busy: false,
+        error: error instanceof Error ? error.message : t('settings.dshSetupRequired'),
       });
     }
   }
@@ -3484,6 +3536,11 @@ function OnboardingView({
                   scanStatus={cliScanStatus}
                   onRefresh={() => void scanCliAgents()}
                   onSelectAgent={(agentId) => {
+                    const agent = visibleAgents.find((candidate) => candidate.id === agentId);
+                    if (agent && deepSeekHarnessNeedsSetup(agent)) {
+                      setDshSetup({ busy: false, error: null });
+                      return;
+                    }
                     onModeChange('daemon');
                     onAgentChange(agentId);
                   }}
@@ -3562,6 +3619,16 @@ function OnboardingView({
           </div>
         </div>
       </div>
+      {dshSetup ? (
+        <DeepSeekHarnessSetupDialog
+          busy={dshSetup.busy}
+          error={dshSetup.error}
+          onCancel={() => {
+            if (!dshSetup.busy) setDshSetup(null);
+          }}
+          onConfirm={() => void confirmDshSetup()}
+        />
+      ) : null}
     </section>
   );
 }
@@ -3653,7 +3720,11 @@ function OnboardingCliSetupPanel({
               <AgentIcon id={agent.id} size={22} />
               <span>
                 <strong>{agent.name}</strong>
-                <small>{agent.version ?? t('common.installed')}</small>
+                <small>
+                  {agent.available
+                    ? agent.version ?? t('common.installed')
+                    : t('settings.dshSetupRequired')}
+                </small>
               </span>
             </button>
           ))}

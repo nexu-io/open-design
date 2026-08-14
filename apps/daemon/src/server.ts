@@ -194,6 +194,7 @@ import {
   detectAgents,
   getAgentDef,
   isKnownModel,
+  isKnownReasoningEffort,
   isKnownServiceTier,
   openDesignAmrRunAttempt,
   openDesignAmrTraceEnv,
@@ -404,6 +405,7 @@ import {
 import { runAutoExtractionCleanup } from './memory-cleanup.js';
 import { attachAcpSession } from './agent-protocol/index.js';
 import { attachPiRpcSession } from './agent-protocol/index.js';
+import { attachDshProfileSession } from './agent-protocol/index.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
@@ -441,6 +443,7 @@ import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
+import { runtimeResumesSessionById } from './runtimes/types.js';
 import {
   createRunLifecycleTracer,
   runLifecycleMarkersForStreamEvent,
@@ -1840,16 +1843,21 @@ export function composeChatUserRequestForAgent(
   currentPrompt,
   options: { skipTranscript?: boolean } = {},
 ) {
-  // When the adapter resumes its own session (today: `agy -c`), the
+  // When the adapter resumes its own session, the
   // daemon-rendered `## user` / `## assistant` transcript is a duplicate
   // of what the upstream CLI already has in memory — and the embedded
   // copy carries the literal `<question-form>` markup the agent emitted
   // on turn 1, which the model then re-emits on turn 2. Send only the
-  // latest user turn (`currentPrompt`) in that case; the upstream
-  // session memory provides the rest. See
-  // `RuntimeAgentDef.resumesSessionViaCli`.
+  // latest user turn (`currentPrompt`) in that case; the external runtime's
+  // native session memory provides the rest.
   const skip = options.skipTranscript === true;
-  const bodySource = skip ? currentPrompt : message;
+  // Native-session clients normally provide `currentPrompt`, but headless
+  // callers such as `od run start --message` only populate `message`. On a
+  // resumed session that value is the latest turn, not a rendered transcript,
+  // so dropping it would send the misleading empty-turn placeholder instead.
+  const bodySource = skip
+    ? (typeof currentPrompt === 'string' ? currentPrompt : message)
+    : message;
   const body =
     typeof bodySource === 'string' && bodySource.trim()
       ? bodySource
@@ -6854,7 +6862,11 @@ export async function startServer({
 
   registerDaemonRoutes(app, {
     db,
-    paths: { RUNTIME_DATA_DIR },
+    paths: {
+      PROJECT_ROOT,
+      RESOURCE_ROOT: DAEMON_RESOURCE_ROOT ?? PROJECT_ROOT,
+      RUNTIME_DATA_DIR,
+    },
     http: { requireLocalDaemonRequest, sendApiError },
     host,
     getResolvedPort: () => resolvedPort,
@@ -9879,7 +9891,7 @@ export async function startServer({
     // prompt-composition skipTranscript choice, the buildArgs flags, and the
     // create-turn persistence below.
     const agentSupportsSessionResume =
-      def.resumesSessionViaCli === true ||
+      runtimeResumesSessionById(def) ||
       def.streamFormat === 'pi-rpc' ||
       def.resumesSessionViaAcpLoad === true;
     // Capture-style adapters (codex) mint their OWN session id and report it on
@@ -9930,8 +9942,9 @@ export async function startServer({
       process.env[def.defaultModelEnvVar]?.trim(),
     );
     const safeReasoning =
-      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
-        ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
+      typeof reasoning === 'string' &&
+      isKnownReasoningEffort(def, safeModel, reasoning, requestedLiveModelScope)
+        ? reasoning
         : null;
     safeModel = resolveModelForServiceTier(
       def,
@@ -10005,7 +10018,7 @@ export async function startServer({
     // directly. Public chat requests cannot reach this branch.
     const forceInternalResume =
       pendingNativeSessionContinue != null &&
-      def.resumesSessionViaCli === true &&
+      runtimeResumesSessionById(def) &&
       pendingNativeSessionContinue.sessionId.length > 0;
     const agentResumeCtx = forceInternalResume
       ? {
@@ -10582,7 +10595,7 @@ export async function startServer({
           run.nativeSessionContinueAttemptCount ?? 0,
         totalRetryAttemptCount: run.retryAttemptCount ?? 0,
         sideEffects,
-        supportsNativeSessionContinue: def.resumesSessionViaCli === true,
+        supportsNativeSessionContinue: runtimeResumesSessionById(def),
         hasNativeSession: !!run.conversationId && !!liveSessionId,
       });
       if (
@@ -10692,7 +10705,7 @@ export async function startServer({
       );
       const resumableFailure =
         result === 'failed' &&
-        def.resumesSessionViaCli === true &&
+        runtimeResumesSessionById(def) &&
         !!run.conversationId &&
         !!liveSessionId &&
         committedWorkSeen &&
@@ -11281,7 +11294,7 @@ export async function startServer({
     }
 
     let persistDeliveredAgentSessionState = () => {};
-    if (def.resumesSessionViaCli === true && run.conversationId) {
+    if (runtimeResumesSessionById(def) && run.conversationId) {
       let persisted = false;
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
@@ -11721,7 +11734,9 @@ export async function startServer({
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
       const stdinMode =
-        def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
+        def.promptViaStdin ||
+        def.streamFormat === 'acp-json-rpc' ||
+        def.streamFormat === 'dsh-profile-jsonl'
           ? 'pipe'
           : 'ignore';
       const env = applyAgentLaunchEnv({
@@ -11873,7 +11888,12 @@ export async function startServer({
           releaseOnce();
         });
       }
-      if (def.promptViaStdin && child.stdin && def.streamFormat !== 'pi-rpc') {
+      if (
+        def.promptViaStdin &&
+        child.stdin &&
+        def.streamFormat !== 'pi-rpc' &&
+        def.streamFormat !== 'dsh-profile-jsonl'
+      ) {
         // EPIPE from a fast-exiting CLI (bad auth, missing model, exit on
         // launch) would otherwise surface as an unhandled stream error and
         // crash the daemon. Swallow it — the regular exit/close handlers
@@ -12558,7 +12578,7 @@ export async function startServer({
           // resume_failed suppression below; the close handler stays the sole
           // authority on how a resume failure ends.
           if (
-            (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
+            (runtimeResumesSessionById(def) || def.resumesSessionViaAcpLoad === true) &&
             agentResumeCtx.isResuming &&
             !run.resumeAutoReseeded &&
             isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
@@ -12825,6 +12845,66 @@ export async function startServer({
         },
         ...(acpStageTimeoutMs !== undefined ? { stageTimeoutMs: acpStageTimeoutMs } : {}),
       });
+    } else if (def.streamFormat === 'dsh-profile-jsonl') {
+      trackingSubstantiveOutput = true;
+      acpSession = attachDshProfileSession({
+        child,
+        requestId: run.id,
+        prompt: composed,
+        cwd: effectiveCwd,
+        model: safeModel,
+        reasoningEffort: safeReasoning,
+        ...(agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
+          ? { resumeSessionId: agentResumeCtx.resumeSessionId }
+          : {}),
+        onReady: () => noteCliReadyAt(),
+        onSession: () => noteSessionInitDoneAt(),
+        onComplete: () => clearFirstOutputWatchdog(),
+        send: (event, data) => {
+          noteAgentActivity();
+          if (event === 'agent') {
+            sendAgentEvent(data);
+            return;
+          }
+          if (event === 'error') {
+            const payload = data as {
+              message?: unknown;
+              error?: { code?: unknown };
+            } | null;
+            const message = String(
+              payload?.message ?? 'DeepSeek Harness profile error',
+            );
+            const code = String(
+              payload?.error?.code ?? 'AGENT_EXECUTION_FAILED',
+            );
+            agentStreamError = message;
+            agentStreamErrorObservedBeforeCancellation = !run.cancelRequested;
+            acpFatalErrorObservedBeforeCancellation = !run.cancelRequested;
+            run.runtimeFailureObservedBeforeCancellation = !run.cancelRequested;
+            agentStdoutTail = `${agentStdoutTail}\n${code}`.slice(-2000);
+            if (
+              agentResumeCtx.isResuming &&
+              !run.resumeAutoReseeded &&
+              /^DSH_PROFILE_RESUME_(?:REJECTED|MISMATCH)$/.test(code)
+            ) {
+              design.runs.emit(run, 'diagnostic', {
+                type: 'agent_resume_failed_suppressed',
+                agent_id: def.id,
+                reason: 'resume_failed',
+                previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+              });
+              return;
+            }
+            if (!run.cancelRequested) {
+              send('error', createSseErrorPayload(code, message, {
+                retryable: code === 'DSH_PROFILE_RESUME_REJECTED',
+              }));
+            }
+            return;
+          }
+          send(event, data);
+        },
+      });
     } else if (def.streamFormat === 'json-event-stream') {
       // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame
       // (now emitted as a real error event by json-event-stream.ts after
@@ -12899,6 +12979,19 @@ export async function startServer({
     ): boolean => {
       if (!run.cancelRequested) return false;
       if (!design.runs.isTerminal(run.status)) {
+        // Harness has already durably established the session by the time its
+        // validated `session` frame reaches `capturedSessionId`. Preserve that
+        // handle when the user cancels the current process so a later OD run
+        // can cold-resume the same conversation. Keep this scoped to the
+        // profile-stdio contract: other capture-style CLIs do not promise that
+        // a session interrupted mid-turn is safe to continue.
+        if (def.resumesSessionViaProfileStdio === true && capturedSessionId) {
+          try {
+            persistDeliveredAgentSessionState();
+          } catch (err) {
+            console.warn('[sessions] canceled profile session persistence failed', err);
+          }
+        }
         markRpcCloseReason('cancel_requested');
         finishWithRetryDecision('canceled', code, signal);
       }
@@ -12945,7 +13038,7 @@ export async function startServer({
       // re-seed the full transcript: one cold turn, never a broken conversation.
       if (
         !run.cancelRequested &&
-        (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
+        (runtimeResumesSessionById(def) || def.resumesSessionViaAcpLoad === true) &&
         agentResumeCtx.isResuming &&
         run.conversationId &&
         isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)

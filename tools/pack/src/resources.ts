@@ -1,7 +1,14 @@
+import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { cp } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
+import { createPackageManagerInvocation } from "@open-design/platform";
+
+const execFileAsync = promisify(execFile);
 
 function resolveToolsPackRoot(startDir: string): string {
   const maxDepth = 6;
@@ -84,4 +91,67 @@ export async function copyBundledResourceTrees({
       recursive: true,
     });
   }
+}
+
+export const DSH_RUNTIME_RESOURCE_DIRECTORY = join("agent-runtimes", "deepseek-harness");
+
+export type BundledDshRuntimeManifest = {
+  file: string;
+  packageName: "@open-design/dsh-runtime";
+  schemaVersion: 1;
+  sha256: string;
+  version: string;
+};
+
+/**
+ * Materializes the OD-owned DSH profile as a fixed, integrity-addressed
+ * package inside the application resources. The user's official `dsh`
+ * installation remains external; this tarball is only the thin bridge that
+ * teaches it Open Design's versioned JSONL stdio protocol.
+ */
+export async function packBundledDshRuntime({
+  workspaceRoot,
+  resourceRoot,
+}: {
+  workspaceRoot: string;
+  resourceRoot: string;
+}): Promise<BundledDshRuntimeManifest> {
+  const packageRoot = join(workspaceRoot, "packages", "dsh-runtime");
+  const packageJson = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")) as {
+    name?: unknown;
+    version?: unknown;
+  };
+  if (packageJson.name !== "@open-design/dsh-runtime" || typeof packageJson.version !== "string") {
+    throw new Error("tools-pack: invalid @open-design/dsh-runtime package metadata");
+  }
+
+  const destination = join(resourceRoot, DSH_RUNTIME_RESOURCE_DIRECTORY);
+  await rm(destination, { force: true, recursive: true });
+  await mkdir(destination, { recursive: true });
+
+  const invocation = createPackageManagerInvocation(
+    ["-C", packageRoot, "pack", "--pack-destination", destination],
+    process.env,
+  );
+  await execFileAsync(invocation.command, invocation.args, {
+    cwd: workspaceRoot,
+    env: process.env,
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
+  });
+
+  const tarballs = (await readdir(destination)).filter((entry) => entry.endsWith(".tgz"));
+  if (tarballs.length !== 1 || tarballs[0] == null) {
+    throw new Error(`tools-pack: expected one DSH runtime tarball, got ${tarballs.length}`);
+  }
+  const file = tarballs[0];
+  const sha256 = createHash("sha256").update(await readFile(join(destination, file))).digest("hex");
+  const manifest: BundledDshRuntimeManifest = {
+    file,
+    packageName: "@open-design/dsh-runtime",
+    schemaVersion: 1,
+    sha256,
+    version: packageJson.version,
+  };
+  await writeFile(join(destination, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return manifest;
 }

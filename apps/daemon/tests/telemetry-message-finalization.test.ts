@@ -299,6 +299,20 @@ describe('Langfuse message finalization gate', () => {
     expect(kept).toBe(transcript);
   });
 
+  it('uses a headless message as the latest native-resume turn when currentPrompt is absent', () => {
+    const message = 'Revise index.html from Arca to Moonleaf.';
+
+    expect(composeChatUserRequestForAgent(message, undefined, {
+      skipTranscript: true,
+    })).toBe(message);
+  });
+
+  it('preserves an explicitly empty currentPrompt on native resume', () => {
+    expect(composeChatUserRequestForAgent('legacy fallback must not leak', '', {
+      skipTranscript: true,
+    })).toBe('(No extra typed instruction.)');
+  });
+
   it('invokes Langfuse reporting once when the final message write is marked', () => {
     const run = {
       id: 'run-1',

@@ -23,7 +23,7 @@ import {
   prepareNodePtyRuntime,
   resolveNodePtyRuntimeArch,
 } from "../node-pty-runtime.js";
-import { copyBundledResourceTrees } from "../resources.js";
+import { copyBundledResourceTrees, packBundledDshRuntime } from "../resources.js";
 import { copyOptionalVelaCliBinary } from "../vela-cli.js";
 import { electronBuilderVersionForAppVersion } from "../versions.js";
 import { runEsbuild, runNpmInstall, runPnpm } from "./commands.js";
@@ -141,6 +141,10 @@ export async function copyResourceTree(config: ToolPackConfig, paths: MacPaths):
   await mkdir(paths.resourceRoot, { recursive: true });
 
   await copyBundledResourceTrees({
+    workspaceRoot: config.workspaceRoot,
+    resourceRoot: paths.resourceRoot,
+  });
+  await packBundledDshRuntime({
     workspaceRoot: config.workspaceRoot,
     resourceRoot: paths.resourceRoot,
   });

@@ -547,6 +547,12 @@ export interface Dict {
   'settings.getStarted': string;
   'settings.envConfigure': string;
   'settings.localCli': string;
+  'settings.dshSetupTitle': string;
+  'settings.dshSetupDescription': string;
+  'settings.dshSetupNote': string;
+  'settings.dshSetupConfirm': string;
+  'settings.dshSetupInstalling': string;
+  'settings.dshSetupRequired': string;
   'settings.anthropicApi': string;
   'settings.noAgentSelected': string;
   'settings.language': string;
