@@ -41,7 +41,6 @@ import { getCatalogCounts } from '../../_lib/catalog';
 import { localeFromPath, localizedHref } from '../../i18n';
 import { DEEPSEEK_V4_PRO_CAMPAIGN } from '../../_lib/deepseek-v4-pro-campaign';
 import { getPricingCampaignContent } from '../../_lib/pricing-campaign-content';
-import { getPricingCloudCapabilityContent } from '../../_lib/pricing-cloud-capability-content';
 
 const locale = localeFromPath(Astro.url.pathname);
 const href = (path: string) => localizedHref(path, locale);
@@ -115,7 +114,10 @@ const FREE_PREMIUM_MODELS = [...PREMIUM_MODELS].sort(
 );
 const renderCatalogLabel = (label: string) => fillTemplate(label, catalogLabelVars);
 const deepSeekCampaign = getPricingCampaignContent(locale);
-const cloudCapability = getPricingCloudCapabilityContent(locale);
+const comingSoonLabel = L.comingSoon
+  .trim()
+  .replace(/^[（(]\s*/, '')
+  .replace(/\s*[）)]$/, '');
 
 // Vela's grant already includes the advertised Pro/Max uplift. The percentage
 // is a presentation badge only; applying it again would inflate $120/$300 to
@@ -474,15 +476,24 @@ const jsonLd = [
       <div class="pr-multimodal-modes" aria-label={L.multimodalTitle}>
         <div class="pr-mode">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M5 9h9M5 13h14M5 17h9" /></svg>
-          <span>{L.designAgent}</span>
+          <span class="pr-mode-copy">
+            <small aria-hidden="true"></small>
+            <strong>{L.designAgent}</strong>
+          </span>
         </div>
         <div class="pr-mode">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4" width="17" height="16" rx="2" /><circle cx="9" cy="9" r="1.5" /><path d="m5.5 17 4-4 3 3 2-2 4 3" /></svg>
-          <span>{L.imageGeneration}</span>
+          <span class="pr-mode-copy">
+            <small aria-hidden="true"></small>
+            <strong>{L.imageGeneration}</strong>
+          </span>
         </div>
         <div class="pr-mode is-soon">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="14" rx="2" /><path d="m10 9 5 3-5 3Z" /></svg>
-          <span>{L.videoGeneration}<span class="pr-soon-tag">{L.comingSoon}</span></span>
+          <span class="pr-mode-copy">
+            <small>{comingSoonLabel}</small>
+            <strong>{L.videoGeneration}</strong>
+          </span>
         </div>
       </div>
     </section>
@@ -625,33 +636,6 @@ const jsonLd = [
         </section>
       </div>
     </div>
-
-    <section class="pr-cloud-capability" data-pricing-cloud-capability aria-labelledby="pr-cloud-capability-title">
-      <div class="pr-cloud-capability-copy">
-        <p class="pr-cloud-capability-eyebrow">{cloudCapability.eyebrow}</p>
-        <h2 id="pr-cloud-capability-title">{cloudCapability.title}</h2>
-        <p class="pr-cloud-capability-body">{cloudCapability.body}</p>
-      </div>
-      <div class="pr-cloud-capability-cards">
-        {cloudCapability.cards.map((card, index) => (
-          <article class:list={['pr-cloud-capability-card', { 'is-upcoming': card.note }]}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              {index === 0 ? (
-                <><path d="M4 6h16M4 12h11M4 18h8" /><path d="m17 15 3 3-3 3" /></>
-              ) : index === 1 ? (
-                <><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="9" r="2" /><path d="m4 17 5-5 4 4 2-2 5 5" /></>
-              ) : (
-                <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m10 9 5 3-5 3Z" /></>
-              )}
-            </svg>
-            <div class="pr-cloud-capability-card-copy">
-              {card.note && <small>{card.note}</small>}
-              <strong>{card.label}</strong>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section>
 
     <p class="pr-foot" set:html={footnoteHtml} />
     <p class="pr-campaign-disclaimer" data-pricing-campaign-surface hidden>{deepSeekCampaign.disclaimer}</p>
@@ -1267,72 +1251,19 @@ const jsonLd = [
     color: inherit;
     background: color-mix(in srgb, #68f22e 7%, transparent);
   }
+  .pr-campaign-model-benefit > div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
   .pr-campaign-model-benefit strong { font-weight: 780; }
   .pr-campaign-model-benefit small { color: var(--muted); font-size: .72rem; font-weight: 500; }
   /* The highlighted row expands 8px beyond the regular list. Offset its
      checkmark back by the same amount so it shares the column below. */
   .pr-campaign-model-benefit::before { left: 8px; }
-  .pr-page .pr-cloud-capability {
-    position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
-    gap: 28px;
-    margin: 32px 0 0;
-    padding: 32px;
-    overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
-    border-radius: 24px;
-    background: color-mix(in srgb, var(--surface, #fff) 82%, transparent);
-  }
-  .pr-cloud-capability::after {
-    content: '';
-    position: absolute;
-    right: 4%;
-    bottom: -100px;
-    width: 280px;
-    height: 280px;
-    border-radius: 50%;
-    background: color-mix(in srgb, #68f22e 14%, transparent);
-    filter: blur(3px);
-    pointer-events: none;
-  }
-  .pr-cloud-capability-copy,
-  .pr-cloud-capability-cards { position: relative; z-index: 1; }
-  .pr-cloud-capability-eyebrow {
-    margin: 0 0 16px;
-    color: var(--olive, #218c00);
-    font-size: .72rem;
-    font-weight: 800;
-    letter-spacing: .12em;
-  }
-  .pr-cloud-capability h2 { margin: 0; max-width: 760px; font-size: clamp(1.6rem, 3vw, 2.5rem); line-height: 1.18; }
-  .pr-cloud-capability-body { margin: 20px 0 0; max-width: 780px; color: var(--muted); line-height: 1.75; }
-  .pr-cloud-capability-cards { display: grid; gap: 10px; }
-  .pr-cloud-capability-card {
-    display: flex;
-    min-height: 112px;
-    align-items: flex-start;
-    gap: 14px;
-    padding: 20px;
-    border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--surface, #fff) 92%, transparent);
-  }
-  .pr-cloud-capability-card svg { width: 24px; height: 24px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-  .pr-cloud-capability-card-copy { display: grid; min-width: 0; gap: 4px; }
-  .pr-cloud-capability-card strong { overflow-wrap: anywhere; }
-  .pr-cloud-capability-card small { color: var(--muted); font-size: .75rem; }
-  .pr-cloud-capability-card.is-upcoming { color: var(--ink-soft, #777); }
   @media (max-width: 760px) {
     .pr-campaign { align-items: flex-start; flex-wrap: wrap; }
     .pr-campaign-window { width: 100%; text-align: left; }
-  }
-  @media (max-width: 980px) {
-    .pr-page .pr-cloud-capability { grid-template-columns: 1fr; }
-  }
-  @media (max-width: 620px) {
-    .pr-page .pr-cloud-capability { margin-top: 24px; padding: 24px 20px; border-radius: 18px; }
-    .pr-cloud-capability-card { min-height: 92px; }
   }
 
   /* ---- Hero ---- */
@@ -1715,11 +1646,29 @@ const jsonLd = [
     line-height: 1.3;
     color: var(--ink);
   }
-  /* Modality that is presented but not yet purchasable. Reads as a
-     parenthetical on the label rather than a badge, so it never competes
-     with the campaign/bonus pills for attention. */
-  .pr-mode.is-soon svg { stroke: color-mix(in srgb, var(--ink, #262626) 48%, transparent); }
-  .pr-mode.is-soon > span { color: color-mix(in srgb, var(--ink, #262626) 48%, transparent); }
+  .pr-mode-copy {
+    display: grid;
+    grid-template-rows: 0.82rem auto;
+    gap: 4px;
+  }
+  .pr-mode-copy small {
+    grid-row: 1;
+    transform: translateY(-2px);
+    color: var(--ink-soft, #777);
+    font-size: 0.68rem;
+    font-weight: 500;
+    line-height: 1.2;
+  }
+  .pr-mode-copy small:empty {
+    visibility: hidden;
+  }
+  .pr-mode-copy strong {
+    grid-row: 2;
+    color: var(--ink);
+    font-size: 0.78rem;
+    font-weight: 650;
+    line-height: 1.3;
+  }
   /* No margin: each locale's string carries its own separator (a leading
      space for Latin/Hangul, the full-width bracket's side bearing for CJK). */
   .pr-soon-tag {

@@ -183,6 +183,11 @@ describe("pricing contract", () => {
   it("aligns the highlighted campaign checkmark with the benefit list below", async () => {
     const page = await readFile(PRICING_PAGE_PATH, "utf8");
 
+    assert.match(
+      page,
+      /\.pr-campaign-model-benefit > div\s*\{[\s\S]*display:\s*grid;[\s\S]*gap:\s*2px;/,
+      "the campaign date note must render on its own line below the model benefit",
+    );
     assert.match(page, /\.pr-campaign-model-benefit::before\s*\{\s*left:\s*8px;\s*\}/);
     assert.match(
       page,
@@ -194,6 +199,32 @@ describe("pricing contract", () => {
       /\.pr-team-feature-list li\.pr-campaign-model-benefit::before\s*\{[\s\S]*left:\s*8px;[\s\S]*top:\s*18px;[\s\S]*transform:\s*translateY\(-50%\);/,
       "the team campaign checkmark must override the later base list rule",
     );
+  });
+
+  it("keeps the multimodal coming-soon note above the video label", async () => {
+    const page = await readFile(PRICING_PAGE_PATH, "utf8");
+
+    assert.match(
+      page,
+      /<span class="pr-mode-copy">\s*<small>\{comingSoonLabel\}<\/small>\s*<strong>\{L\.videoGeneration\}<\/strong>/,
+    );
+    assert.match(
+      page,
+      /<span class="pr-mode-copy">\s*<small aria-hidden="true"><\/small>\s*<strong>\{L\.imageGeneration\}<\/strong>/,
+      "image and video labels must share the same copy grid",
+    );
+    assert.match(
+      page,
+      /<span class="pr-mode-copy">\s*<small aria-hidden="true"><\/small>\s*<strong>\{L\.designAgent\}<\/strong>/,
+      "design and video labels must share the same reserved note row",
+    );
+    assert.match(
+      page,
+      /\.pr-mode-copy\s*\{[\s\S]*display:\s*grid;[\s\S]*grid-template-rows:\s*0\.82rem auto;[\s\S]*gap:\s*4px;/,
+    );
+    assert.match(page, /\.pr-mode-copy strong\s*\{\s*grid-row:\s*2;/);
+    assert.match(page, /\.pr-mode-copy small:empty\s*\{\s*visibility:\s*hidden;/);
+    assert.doesNotMatch(page, /\{L\.videoGeneration\}<span class="pr-soon-tag">/);
   });
 
   it("points the public pricing URL at the landing-page JSON contract", () => {
