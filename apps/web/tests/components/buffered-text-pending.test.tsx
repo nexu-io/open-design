@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createBufferedTextUpdates } from '../../src/components/ProjectView';
+import {
+  checkpointBufferedRunEventId,
+  createBufferedTextUpdates,
+} from '../../src/components/ProjectView';
 import type { ChatMessage } from '../../src/types';
 
 // Covers the mechanism the live-tool `seq` fix relies on: text appended via
@@ -37,6 +40,47 @@ describe('createBufferedTextUpdates pending text accounting', () => {
     expect(buf.hasPendingText()).toBe(false);
     expect(msg.events?.length).toBe(1);
     expect(msg.events?.[0]).toMatchObject({ kind: 'text', text: 'intro preamble' });
+
+    buf.cancel();
+  });
+
+  it('flushes buffered text before advancing the persisted run event checkpoint', () => {
+    // No-op the scheduled flush so only the checkpoint helper can commit text.
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+
+    let msg = { content: '', events: [] } as unknown as ChatMessage;
+    const persisted: ChatMessage[] = [];
+    const persistSoon = () => {
+      persisted.push({ ...msg, events: msg.events ? [...msg.events] : undefined });
+    };
+    const updateMessage = (updater: (prev: ChatMessage) => ChatMessage) => {
+      msg = updater(msg);
+    };
+
+    const buf = createBufferedTextUpdates({
+      updateMessage,
+      persistSoon,
+    });
+
+    buf.appendContent('<artifact>complete prefix');
+    buf.appendTextEvent('<artifact>complete prefix');
+    expect(msg.content).toBe('');
+
+    checkpointBufferedRunEventId({
+      textBuffer: buf,
+      updateMessage,
+      lastRunEventId: '42',
+      persistSoon,
+    });
+
+    expect(msg.content).toBe('<artifact>complete prefix');
+    expect(msg.events?.[0]).toMatchObject({ kind: 'text', text: '<artifact>complete prefix' });
+    expect(msg.lastRunEventId).toBe('42');
+    expect(persisted.at(-1)).toMatchObject({
+      content: '<artifact>complete prefix',
+      lastRunEventId: '42',
+    });
 
     buf.cancel();
   });
