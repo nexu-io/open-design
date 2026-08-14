@@ -91,6 +91,56 @@ describe('diagnostics export handler — non-sidecar launch', () => {
       manifest.files.filter((file) => file.name.startsWith('logs/')),
     ).toEqual([]);
   });
+
+  it('reports the AMR session from the Settings-backed agent environment', async () => {
+    const dataDir = join(tmpdir(), `od-diag-amr-settings-${randomUUID()}`);
+    const runtimeKey = 'settings-only-runtime-key';
+    try {
+      await mkdir(dataDir, { recursive: true });
+      await writeFile(
+        join(dataDir, 'app-config.json'),
+        JSON.stringify({
+          agentCliEnv: {
+            amr: {
+              OPEN_DESIGN_AMR_PROFILE: 'local',
+              VELA_LINK_URL: 'https://settings-only.example.test/link',
+              VELA_RUNTIME_KEY: runtimeKey,
+            },
+          },
+        }),
+        'utf8',
+      );
+
+      const handler = createDiagnosticsExportHandler({
+        runtime: null,
+        projectRoot: '/tmp/test-project',
+        dataDir,
+      });
+      const res = mockResponse();
+      await handler({} as never, res as never, () => undefined);
+
+      expect(res.capturedStatus).toBe(200);
+      const zip = await JSZip.loadAsync(res.capturedPayload!);
+      const runtimeHealthRaw = await zip.file('summary/runtime-health.json')!.async('string');
+      const runtimeHealth = JSON.parse(runtimeHealthRaw) as {
+        amr: {
+          profile?: string;
+          loggedIn?: boolean;
+          sessionState?: string;
+          credentialRevision?: string;
+        };
+      };
+      expect(runtimeHealth.amr).toMatchObject({
+        profile: 'local',
+        loggedIn: true,
+        sessionState: 'authenticated',
+        credentialRevision: expect.any(String),
+      });
+      expect(runtimeHealthRaw).not.toContain(runtimeKey);
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('diagnostics export handler — packaged (runtime) layout', () => {
@@ -360,10 +410,16 @@ describe('diagnostics export handler — run event logs', () => {
 
       const manifest = JSON.parse(await zip.file('summary/manifest.json')!.async('string')) as {
         files: { name: string; bytes: number; error?: string }[];
+        warnings: string[];
       };
       const runFile = manifest.files.find((file) => file.name === 'runs/run-3165/events.jsonl');
       expect(runFile?.error).toBeUndefined();
       expect(runFile?.bytes ?? 0).toBeGreaterThan(0);
+      expect(
+        manifest.warnings.some((warning) =>
+          warning.includes('may contain conversation content and artifact excerpts'),
+        ),
+      ).toBe(true);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

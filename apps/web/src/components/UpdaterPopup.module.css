@@ -9,8 +9,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  /* Same 32px circle as the account avatar chip it rides next to — the two
+     must read as one row of equal-height controls. */
+  width: 32px;
+  height: 32px;
   padding: 0;
   border: none;
   border-radius: var(--radius-pill, 999px);

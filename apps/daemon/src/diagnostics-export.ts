@@ -29,23 +29,27 @@ import { readCurrentAppVersionInfo } from './app-version.js';
 import { agentCliEnvForAgent, readAppConfig } from './app-config.js';
 import { spawnEnvForAgent } from './agents.js';
 import { collectBrowserUseDiscoveryFacts } from './browser/index.js';
+import { readRecentApiFailures } from './http/api-failure-journal.js';
+import { readVelaLoginStatus } from './integrations/vela.js';
 
-interface ResolvedAgentHomes {
+interface ResolvedDiagnosticsAgentEnvironment {
   amrOpenCodeHome: string | null;
+  amrConfiguredEnv: Record<string, string>;
   claudeConfigDir: string | null;
   codexHome: string | null;
   openCodeXdgDataHome: string | null;
 }
 
-// Resolve each agent CLI's effective home (OPENCODE_TEST_HOME / CLAUDE_CONFIG_DIR
-// / CODEX_HOME) exactly as a real run would, by running the live
-// `spawnEnvForAgent` resolver over the user's app-config overrides. This makes
-// the diagnostics sweep honor `agentCliEnv.<agent>.*` relocations instead of
-// only looking under the hardcoded defaults, and cannot drift from the spawn
-// path. Returns nulls on any failure; the collector then falls back to defaults.
-async function resolveAgentHomes(dataDir: string | null | undefined): Promise<ResolvedAgentHomes> {
-  const empty: ResolvedAgentHomes = {
+// Resolve agent diagnostics inputs through the same Settings → spawn-environment
+// helpers used by the daemon's process launcher. This keeps login status and log
+// discovery aligned with the environment that the daemon passes to each agent.
+// Returns empty values on failure so collectors can fall back to their defaults.
+async function resolveDiagnosticsAgentEnvironment(
+  dataDir: string | null | undefined,
+): Promise<ResolvedDiagnosticsAgentEnvironment> {
+  const empty: ResolvedDiagnosticsAgentEnvironment = {
     amrOpenCodeHome: null,
+    amrConfiguredEnv: {},
     claudeConfigDir: null,
     codexHome: null,
     openCodeXdgDataHome: null,
@@ -65,6 +69,7 @@ async function resolveAgentHomes(dataDir: string | null | undefined): Promise<Re
     };
     return {
       amrOpenCodeHome: clean(envFor('amr').OPENCODE_TEST_HOME),
+      amrConfiguredEnv: agentCliEnvForAgent(appConfig.agentCliEnv, 'amr'),
       claudeConfigDir: clean(envFor('claude').CLAUDE_CONFIG_DIR),
       codexHome: clean(envFor('codex').CODEX_HOME),
       // OpenCode resolves its data/log dir from XDG_DATA_HOME; sandbox mode
@@ -104,6 +109,10 @@ export const STANDALONE_LAUNCH_WARNING =
   "Daemon started without a sidecar runtime (plain `od` / standalone launch); " +
   "file-based logs are not captured. Re-run via `pnpm tools-dev` or the packaged " +
   "desktop app to include daemon/web/desktop log files in the bundle.";
+
+export const RUN_EVENT_CONTENT_WARNING =
+  'Per-run event logs may contain conversation content and artifact excerpts. ' +
+  'Review the bundle before sharing it.';
 
 /**
  * Whether an optional log source should be listed at all.
@@ -220,7 +229,7 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
     try {
       const versionInfo = await readCurrentAppVersionInfo().catch(() => null);
       const home = homedir();
-      const agentHomes = await resolveAgentHomes(options.dataDir);
+      const agentEnvironment = await resolveDiagnosticsAgentEnvironment(options.dataDir);
       const browserUse = collectBrowserUseDiscoveryFacts();
       const runEventSources = await buildRunEventLogSources(options.runsDir);
       const sources = [
@@ -229,10 +238,10 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
         ...(await buildAgentCliLogSources({
           homeDir: home,
           dataDir: options.dataDir ?? null,
-          amrOpenCodeHome: agentHomes.amrOpenCodeHome,
-          claudeConfigDir: agentHomes.claudeConfigDir,
-          codexHome: agentHomes.codexHome,
-          xdgDataHome: agentHomes.openCodeXdgDataHome ?? process.env.XDG_DATA_HOME ?? null,
+          amrOpenCodeHome: agentEnvironment.amrOpenCodeHome,
+          claudeConfigDir: agentEnvironment.claudeConfigDir,
+          codexHome: agentEnvironment.codexHome,
+          xdgDataHome: agentEnvironment.openCodeXdgDataHome ?? process.env.XDG_DATA_HOME ?? null,
         })),
       ];
       const username = safeUsername();
@@ -244,6 +253,7 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
       // entries — without this note an empty bundle looks like a clean run.
       const warnings: string[] = [];
       if (options.runtime == null) warnings.push(STANDALONE_LAUNCH_WARNING);
+      if (runEventSources.length > 0) warnings.push(RUN_EVENT_CONTENT_WARNING);
       if (options.runsDir && runEventSources.length === 0) {
         warnings.push(
           `No per-run event logs found under ${options.runsDir}. Either no chat ` +
@@ -273,6 +283,42 @@ export function createDiagnosticsExportHandler(options: DiagnosticsHandlerOption
           warnings: warnings.length > 0 ? warnings : undefined,
         },
         sources,
+        summaries: {
+          'recent-api-failures.json': {
+            retainedLimit: 100,
+            privacy:
+              'Request bodies, query strings, messages, credentials, and resource identifiers are not recorded.',
+            failures: readRecentApiFailures(),
+          },
+          'runtime-health.json': {
+            daemon: { reachable: true },
+            amr: (() => {
+              try {
+                const status = readVelaLoginStatus(
+                  process.env,
+                  agentEnvironment.amrConfiguredEnv,
+                );
+                return {
+                  profile: status.profile,
+                  loggedIn: status.loggedIn,
+                  sessionState: status.sessionState,
+                  credentialRevision: status.credentialRevision,
+                  loginInFlight: status.loginInFlight,
+                };
+              } catch (error) {
+                return {
+                  error: error instanceof Error ? error.message : String(error),
+                };
+              }
+            })(),
+            coverage: {
+              runEventsPresent: runEventSources.length > 0,
+              note: runEventSources.length > 0
+                ? 'Per-run events were included.'
+                : 'The failure may have happened before a run was created; inspect daemon logs and AMR session state.',
+            },
+          },
+        },
         redaction: { username },
         crashReports: {
           // Restrict to Open Design's own process names. A generic "Electron"

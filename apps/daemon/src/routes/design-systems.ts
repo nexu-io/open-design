@@ -107,16 +107,16 @@ export interface RegisterDesignSystemRoutesDeps extends RouteDeps<'db' | 'paths'
     prepareDesignTokenContractRebuild: (root: string, id: string, options?: { force?: boolean }) => Promise<DesignTokenContractRebuildPreparation>;
     readAvailableDesignSystem: (
       id: string,
-      options?: { workspaceId?: string | null; exactTeam?: boolean },
+      options?: { workspaceId?: string | null; workspaceMemberId?: string | null; exactTeam?: boolean },
     ) => Promise<string | null>;
     readAvailableDesignSystemPackageInfo: (
       id: string,
-      options?: { workspaceId?: string | null; exactTeam?: boolean },
+      options?: { workspaceId?: string | null; workspaceMemberId?: string | null; exactTeam?: boolean },
     ) => Promise<DesignSystemPackageInfo | null>;
     readAvailableDesignSystemStaticFile: (
       id: string,
       filePath: string,
-      options?: { workspaceId?: string | null; exactTeam?: boolean },
+      options?: { workspaceId?: string | null; workspaceMemberId?: string | null; exactTeam?: boolean },
     ) => Promise<{
       bytes: Buffer;
       contentType: string;
@@ -702,6 +702,7 @@ export function registerDesignSystemRoutes(
       const projectBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
       const body = projectBody ?? await readAvailableDesignSystem(req.params.id, {
         workspaceId,
+        workspaceMemberId,
         exactTeam: storage.exactTeam,
       });
       if (body === null || !summary) {
@@ -709,6 +710,7 @@ export function registerDesignSystemRoutes(
       }
       const packageInfo = await readAvailableDesignSystemPackageInfo(req.params.id, {
         workspaceId,
+        workspaceMemberId,
         exactTeam: storage.exactTeam,
       });
       // recvqb6mfyqXLD: mirror the exact PATCH/DELETE verdict onto the read
@@ -739,9 +741,14 @@ export function registerDesignSystemRoutes(
         headerValue(req, 'x-od-workspace-id')
         ?? designSystemNavigationWorkspaceQuery(req)?.workspaceId
         ?? null;
+      const workspaceMemberId =
+        headerValue(req, 'x-od-workspace-member-id')
+        ?? designSystemNavigationWorkspaceQuery(req)?.workspaceMemberId
+        ?? null;
       const storage = resolveDesignSystemStorage(req, req.params.id, true);
       const body = await readAvailableDesignSystem(req.params.id, {
         workspaceId,
+        workspaceMemberId,
         exactTeam: storage.exactTeam,
       });
       if (body === null) return res.status(404).type('text/plain').send('not found');
@@ -759,11 +766,15 @@ export function registerDesignSystemRoutes(
         headerValue(req, 'x-od-workspace-id')
         ?? designSystemNavigationWorkspaceQuery(req)?.workspaceId
         ?? null;
+      const workspaceMemberId =
+        headerValue(req, 'x-od-workspace-member-id')
+        ?? designSystemNavigationWorkspaceQuery(req)?.workspaceMemberId
+        ?? null;
       const storage = resolveDesignSystemStorage(req, req.params.id, true);
       const packaged = await readAvailableDesignSystemStaticFile(
         req.params.id,
         PACKAGED_SHOWCASE_PATH,
-        { workspaceId, exactTeam: storage.exactTeam },
+        { workspaceId, workspaceMemberId, exactTeam: storage.exactTeam },
       );
       if (packaged?.contentType.startsWith('text/html')) {
         const workspaceQuery = designSystemNavigationWorkspaceQuery(req);
@@ -780,6 +791,7 @@ export function registerDesignSystemRoutes(
       }
       const body = await readAvailableDesignSystem(req.params.id, {
         workspaceId,
+        workspaceMemberId,
         exactTeam: storage.exactTeam,
       });
       if (body === null) return res.status(404).type('text/plain').send('not found');
@@ -797,12 +809,16 @@ export function registerDesignSystemRoutes(
         headerValue(req, 'x-od-workspace-id')
         ?? designSystemNavigationWorkspaceQuery(req)?.workspaceId
         ?? null;
+      const workspaceMemberId =
+        headerValue(req, 'x-od-workspace-member-id')
+        ?? designSystemNavigationWorkspaceQuery(req)?.workspaceMemberId
+        ?? null;
       const storage = resolveDesignSystemStorage(req, req.params.id, true);
       const requestedPath = typeof req.query.path === 'string' ? req.query.path : '';
       const file = await readAvailableDesignSystemStaticFile(
         req.params.id,
         requestedPath,
-        { workspaceId, exactTeam: storage.exactTeam },
+        { workspaceId, workspaceMemberId, exactTeam: storage.exactTeam },
       );
       if (!file) return res.status(404).type('text/plain').send('not found');
       res.setHeader('Cache-Control', 'no-store');

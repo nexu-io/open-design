@@ -638,6 +638,66 @@ describe('API proxy routes', () => {
     expect(secondBody).not.toHaveProperty('max_tokens');
   });
 
+  it('retries Azure-hosted OpenAI protocol alias requests when max_tokens is rejected', async () => {
+    const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
+      const url = String(input);
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      if ('max_tokens' in body) {
+        return Promise.resolve(new Response(
+          JSON.stringify({
+            error: {
+              message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead.",
+              type: 'invalid_request_error',
+              param: 'max_tokens',
+              code: 'unsupported_parameter',
+            },
+          }),
+          { status: 400, headers: { 'content-type': 'application/json' } },
+        ));
+      }
+      return Promise.resolve(sseResponse('data: [DONE]\n\n'));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const res = await realFetch(`${baseUrl}/api/proxy/openai/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        baseUrl: 'https://resource.services.ai.azure.com/api/projects/project/openai/v1',
+        apiKey: 'azure-key',
+        model: 'gpt-chat-latest',
+        maxTokens: 1234,
+        messages: [{ role: 'user', content: 'hello' }],
+      }),
+    });
+
+    await expect(res.text()).resolves.toContain('event: end');
+    const upstreamCalls = fetchMock.mock.calls.filter(
+      ([input]) => !String(input).startsWith(baseUrl),
+    );
+    expect(upstreamCalls).toHaveLength(2);
+    expect(String(upstreamCalls[0]![0])).toBe(
+      'https://resource.services.ai.azure.com/api/projects/project/openai/v1/chat/completions',
+    );
+    expect(upstreamCalls[0]![1]?.headers).toMatchObject({
+      Authorization: 'Bearer azure-key',
+    });
+    const firstBody = JSON.parse(String(upstreamCalls[0]![1]?.body));
+    const secondBody = JSON.parse(String(upstreamCalls[1]![1]?.body));
+    expect(firstBody).toMatchObject({
+      model: 'gpt-chat-latest',
+      max_tokens: 1234,
+      stream: true,
+    });
+    expect(secondBody).toMatchObject({
+      model: 'gpt-chat-latest',
+      max_completion_tokens: 1234,
+      stream: true,
+    });
+    expect(secondBody).not.toHaveProperty('max_tokens');
+  });
+
   it('retries Azure deployment-mode requests with max_completion_tokens when max_tokens is rejected', async () => {
     const fetchMock = vi.fn((input: FetchInput, init?: FetchInit) => {
       const url = String(input);

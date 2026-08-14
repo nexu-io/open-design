@@ -31,6 +31,9 @@ const PROJECT_KIND = 'project';
 // Give the transport a generous 6x envelope for large snapshots, but never
 // let a wedged Vela child hold the per-project materialization lock forever.
 const RESOURCE_PULL_TIMEOUT_MS = 30_000;
+// One batch may carry up to 128 destinations. Blob work is still bounded
+// inside Vela, but the aggregate can legitimately outlive one small pull.
+const RESOURCE_PULL_BATCH_TIMEOUT_MS = 120_000;
 // A push uploads the author's full member-mirror snapshot; on a slow uplink a
 // large project can legitimately take minutes, so this budget exists only to
 // reap a truly wedged child — it must stay far above any honest upload time.
@@ -45,6 +48,7 @@ const RESOURCE_METADATA_TIMEOUT_MS = 60_000;
 // snapshot-redact) keep their historical unbounded behavior.
 const RESOURCE_COMMAND_TIMEOUTS_MS: Readonly<Record<string, number>> = {
   pull: RESOURCE_PULL_TIMEOUT_MS,
+  'pull-batch': RESOURCE_PULL_BATCH_TIMEOUT_MS,
   push: RESOURCE_PUSH_TIMEOUT_MS,
   head: RESOURCE_METADATA_TIMEOUT_MS,
   shared: RESOURCE_METADATA_TIMEOUT_MS,
@@ -131,6 +135,14 @@ export type RunVelaResource = (
   args: string[],
   workspaceId?: string,
 ) => Promise<string>;
+
+export interface VelaResourcePullBatchRequest {
+  key: string;
+  kind: 'design_system' | 'plugin' | 'skill';
+  resourceId: string;
+  dir: string;
+  ref: string;
+}
 
 export interface VelaCliResourceAdapterOptions {
   /** The project's source directory to publish (managed-project root). */
@@ -371,6 +383,22 @@ export const runVelaResourceCommand: RunVelaResource = (args, workspaceId) => {
     },
   );
 };
+
+/** Run one workspace-scoped batch through stdin to avoid argv size limits. */
+export function runVelaResourceBatchCommand(
+  requests: readonly VelaResourcePullBatchRequest[],
+  workspaceId: string,
+): Promise<string> {
+  const workspaceOptions = velaWorkspaceCommandOptions(workspaceId);
+  return runVelaCommand(
+    ['resource', 'pull-batch', '--requests-file', '-', '--json'],
+    {
+      ...workspaceOptions,
+      timeoutMs: RESOURCE_PULL_BATCH_TIMEOUT_MS,
+      input: JSON.stringify({ requests }),
+    },
+  );
+}
 
 const defaultRunVelaResource: RunVelaResource = runVelaResourceCommand;
 

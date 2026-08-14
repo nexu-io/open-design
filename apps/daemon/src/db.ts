@@ -2528,6 +2528,32 @@ export function listMessages(db: SqliteDb, conversationId: string) {
     .map(normalizeMessage);
 }
 
+export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
+  const row = db
+    .prepare(
+      `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
+              run_id AS runId, run_status AS runStatus,
+              result_delivery_state AS resultDeliveryState,
+              last_run_event_id AS lastRunEventId,
+              events_json AS eventsJson,
+              attachments_json AS attachmentsJson,
+              comment_attachments_json AS commentAttachmentsJson,
+              produced_files_json AS producedFilesJson,
+              trace_object_files_json AS traceObjectFilesJson,
+              feedback_json AS feedbackJson,
+              pre_turn_file_names_json AS preTurnFileNamesJson,
+              session_mode AS sessionMode,
+              run_context_json AS runContextJson,
+              applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
+              created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
+              position
+         FROM messages
+        WHERE id = ?${conversationId ? ' AND conversation_id = ?' : ''}`,
+    )
+    .get(conversationId ? [id, conversationId] : id) as DbRow | undefined;
+  return row ? normalizeMessage(row) : null;
+}
+
 export function conversationTurnIndexForRun(
   db: SqliteDb,
   conversationId: string,

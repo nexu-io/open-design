@@ -1,28 +1,13 @@
 /*
- * Localized customer story + FAQ shown below the /pricing/ plan cards.
+ * Localized FAQ shown below the /pricing/ plan cards.
  *
  * Mirrors the vela subscription modal (`pricing-plans.tsx`:
- * `STORY_BY_LOCALE` + `FAQS_BY_LOCALE`). Same 10 locales as the plan cards;
+ * `FAQS_BY_LOCALE`). Same 10 locales as the plan cards;
  * other landing locales fall back to English. This is static copy — mirror it
  * here when vela revises the story or FAQ.
  */
 import type { LandingLocaleCode } from '../i18n';
 import { TRIAL_CREDIT_PROMO_ENABLED } from './pricing-content';
-
-export interface StoryStat {
-  value: string;
-  label: string;
-}
-export interface StoryCopy {
-  eyebrow: string;
-  more: string;
-  /** Renders as "{lead}{highlight}{tail}"; highlight is the brand-green span. */
-  quote: { lead: string; highlight: string; tail?: string };
-  name: string;
-  role: string;
-  chips: string[];
-  stats: StoryStat[];
-}
 
 export interface FaqItem {
   q: string;
@@ -35,166 +20,6 @@ export interface FaqItem {
    * mentions the limited-time trial credit). */
   aTrialOff?: string;
 }
-
-const STORY_EN: StoryCopy =
-  {
-    eyebrow: "Customer story · Ikigai One",
-    more: "Read more",
-    quote: { lead: "Open Design is our ", highlight: "unfair advantage." },
-    name: "Anthony Reyes",
-    role: "Founder, Ikigai One",
-    chips: ["20 people", "Cybersecurity & IT", "United States"],
-    stats: [
-      { value: "~25×", label: "cheaper per brand book" },
-      { value: "~10 min", label: "a full pitch deck from one logo" },
-      { value: "$1,500/mo", label: "outsourced design spend, gone" },
-      { value: "~$23K/yr", label: "internal tooling it replaced" },
-    ],
-  };
-
-const STORY_ZH: StoryCopy =
-  {
-    eyebrow: "客户故事 · Ikigai One",
-    more: "查看更多",
-    quote: { lead: "Open Design 是我们的", highlight: "不公平优势。" },
-    name: "Anthony Reyes",
-    role: "创始人，Ikigai One",
-    chips: ["20 人", "网络安全 & IT", "美国"],
-    stats: [
-      { value: "~25×", label: "每本品牌手册更便宜" },
-      { value: "~10 分钟", label: "一个 logo 出整份提案" },
-      { value: "$1,500/月", label: "外包设计开销，省了" },
-      { value: "~$23K/年", label: "替代掉的内部工具开销" },
-    ],
-  };
-
-const STORY_ZH_TW: StoryCopy =
-  {
-    eyebrow: "客戶故事 · Ikigai One",
-    more: "查看更多",
-    quote: { lead: "Open Design 是我們的", highlight: "不公平優勢。" },
-    name: "Anthony Reyes",
-    role: "創辦人，Ikigai One",
-    chips: ["20 人", "網路安全 & IT", "美國"],
-    stats: [
-      { value: "~25×", label: "每本品牌手冊更便宜" },
-      { value: "~10 分鐘", label: "一個 logo 出整份提案" },
-      { value: "$1,500/月", label: "外包設計開銷，省了" },
-      { value: "~$23K/年", label: "替代掉的內部工具開銷" },
-    ],
-  };
-
-const STORY_PT_BR: StoryCopy =
-  {
-    eyebrow: "História de cliente · Ikigai One",
-    more: "Ler mais",
-    quote: { lead: "Open Design é nossa ", highlight: "vantagem injusta." },
-    name: "Anthony Reyes",
-    role: "Founder, Ikigai One",
-    chips: ["20 pessoas", "Cibersegurança & TI", "Estados Unidos"],
-    stats: [
-      { value: "~25×", label: "mais barato por brand book" },
-      { value: "~10 min", label: "um pitch deck completo a partir de um logo" },
-      { value: "$1,500/mês", label: "gasto com design terceirizado, eliminado" },
-      { value: "~$23K/ano", label: "ferramentas internas que substituiu" },
-    ],
-  };
-
-const STORY_ES: StoryCopy =
-  {
-    eyebrow: "Historia de cliente · Ikigai One",
-    more: "Leer más",
-    quote: { lead: "Open Design es nuestra ", highlight: "ventaja injusta." },
-    name: "Anthony Reyes",
-    role: "Founder, Ikigai One",
-    chips: ["20 personas", "Ciberseguridad & TI", "Estados Unidos"],
-    stats: [
-      { value: "~25×", label: "más barato por brand book" },
-      { value: "~10 min", label: "un pitch deck completo a partir de un logo" },
-      { value: "$1,500/mes", label: "gasto en diseño externo, eliminado" },
-      { value: "~$23K/año", label: "herramientas internas que reemplazó" },
-    ],
-  };
-
-const STORY_RU: StoryCopy =
-  {
-    eyebrow: "История клиента · Ikigai One",
-    more: "Подробнее",
-    quote: { lead: "Open Design — наше ", highlight: "нечестное преимущество." },
-    name: "Anthony Reyes",
-    role: "Founder, Ikigai One",
-    chips: ["20 человек", "Кибербезопасность и ИТ", "США"],
-    stats: [
-      { value: "~25×", label: "дешевле за бренд-бук" },
-      { value: "~10 мин", label: "полный питч-дек из одного логотипа" },
-      { value: "$1,500/мес", label: "расходы на аутсорс-дизайн — в прошлом" },
-      { value: "~$23K/год", label: "заменённые внутренние инструменты" },
-    ],
-  };
-
-const STORY_FR: StoryCopy =
-  {
-    eyebrow: "Témoignage client · Ikigai One",
-    more: "En savoir plus",
-    quote: { lead: "Open Design est notre ", highlight: "avantage déloyal." },
-    name: "Anthony Reyes",
-    role: "Founder, Ikigai One",
-    chips: ["20 personnes", "Cybersécurité & IT", "États-Unis"],
-    stats: [
-      { value: "~25×", label: "moins cher par brand book" },
-      { value: "~10 min", label: "un pitch deck complet à partir d'un logo" },
-      { value: "$1,500/mois", label: "budget design externalisé, supprimé" },
-      { value: "~$23K/an", label: "outils internes remplacés" },
-    ],
-  };
-
-const STORY_KO: StoryCopy =
-  {
-    eyebrow: "고객 사례 · Ikigai One",
-    more: "자세히 보기",
-    quote: { lead: "Open Design은 우리의 ", highlight: "불공정한 우위입니다." },
-    name: "Anthony Reyes",
-    role: "Founder, Ikigai One",
-    chips: ["20명", "사이버보안 & IT", "미국"],
-    stats: [
-      { value: "~25×", label: "브랜드북 1권당 비용 절감" },
-      { value: "~10분", label: "로고 하나로 완성하는 피치덱" },
-      { value: "$1,500/월", label: "사라진 외주 디자인 비용" },
-      { value: "~$23K/년", label: "대체한 내부 도구 비용" },
-    ],
-  };
-
-const STORY_DE: StoryCopy =
-  {
-    eyebrow: "Kundenstory · Ikigai One",
-    more: "Mehr lesen",
-    quote: { lead: "Open Design ist unser ", highlight: "unfairer Vorteil." },
-    name: "Anthony Reyes",
-    role: "Founder, Ikigai One",
-    chips: ["20 Personen", "Cybersecurity & IT", "USA"],
-    stats: [
-      { value: "~25×", label: "günstiger pro Brand Book" },
-      { value: "~10 Min.", label: "ein komplettes Pitch-Deck aus einem Logo" },
-      { value: "$1,500/Mon.", label: "ausgelagerte Designkosten – weg" },
-      { value: "~$23K/Jahr", label: "ersetzte interne Tools" },
-    ],
-  };
-
-const STORY_JA: StoryCopy =
-  {
-    eyebrow: "顧客事例 · Ikigai One",
-    more: "詳しく見る",
-    quote: { lead: "Open Design は私たちの", highlight: "不公平な優位性。" },
-    name: "Anthony Reyes",
-    role: "Founder, Ikigai One",
-    chips: ["20人", "サイバーセキュリティ & IT", "アメリカ"],
-    stats: [
-      { value: "~25×", label: "ブランドブック1冊あたりのコスト削減" },
-      { value: "~10分", label: "ロゴ1つから完成するピッチデック" },
-      { value: "$1,500/月", label: "なくなった外注デザイン費" },
-      { value: "~$23K/年", label: "置き換えた社内ツール費" },
-    ],
-  };
 
 const FAQ_EN: FaqItem[] =
   [
@@ -346,19 +171,6 @@ const FAQ_JA: FaqItem[] =
     { q: "返金はどのように扱われますか？", a: "サブスクリプション料金は現在返金に対応していません。サブスクリプションはいつでもキャンセルできます。キャンセル後も現在の請求期間中は通常どおり利用でき、期間終了後は一切請求いたしません。" },
   ];
 
-const STORY_BY_LOCALE: Partial<Record<LandingLocaleCode, StoryCopy>> = {
-  "en": STORY_EN,
-  "zh": STORY_ZH,
-  "zh-tw": STORY_ZH_TW,
-  "pt-br": STORY_PT_BR,
-  "es": STORY_ES,
-  "ru": STORY_RU,
-  "fr": STORY_FR,
-  "ko": STORY_KO,
-  "de": STORY_DE,
-  "ja": STORY_JA,
-};
-
 const FAQ_BY_LOCALE: Partial<Record<LandingLocaleCode, FaqItem[]>> = {
   "en": FAQ_EN,
   "zh": FAQ_ZH,
@@ -371,11 +183,6 @@ const FAQ_BY_LOCALE: Partial<Record<LandingLocaleCode, FaqItem[]>> = {
   "de": FAQ_DE,
   "ja": FAQ_JA,
 };
-
-/** Customer story copy, falling back to English. */
-export function getStory(locale: LandingLocaleCode): StoryCopy {
-  return STORY_BY_LOCALE[locale] ?? STORY_BY_LOCALE.en!;
-}
 
 /** Pricing FAQ items, falling back to English. Promo-only entries are dropped
  * and trial-mentioning answers swapped while the trial promo is offline. */

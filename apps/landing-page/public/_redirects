@@ -140,10 +140,12 @@
 /agents/cursor/       /agents/cursor-design/       301
 /agents/claude-code/  /agents/claude-code-design/  301
 /agents/opencode/     /agents/opencode-design/     301
+/agents/deepseek-harness/  /agents/deepseek-harness-design/  301
 /:locale/agents/codex/        /:locale/agents/codex-design/        301
 /:locale/agents/cursor/       /:locale/agents/cursor-design/       301
 /:locale/agents/claude-code/  /:locale/agents/claude-code-design/  301
 /:locale/agents/opencode/     /:locale/agents/opencode-design/     301
+/:locale/agents/deepseek-harness/  /:locale/agents/deepseek-harness-design/  301
 
 # ---------------------------------------------------------------------------
 # Retired marketing locales (2026-06 GSC review) -> fold to English (or /zh for

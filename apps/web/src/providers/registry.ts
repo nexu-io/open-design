@@ -1886,6 +1886,11 @@ export async function fetchProjectFiles(
         const url = `/api/projects/${encodeURIComponent(projectId)}/files`;
         const resp = await fetch(url, {
           signal,
+          // Agent CLIs write directly to the project directory, so the same
+          // URL can change without an HTTP mutation. Keep caching confined to
+          // sharedCancellableGet's explicit one-second window; a forced/fresh
+          // read must reach the daemon instead of reusing a browser/proxy 200.
+          cache: 'no-store',
           ...(options?.workspaceContext
             ? { headers: workspaceProjectHeaders(options.workspaceContext) }
             : {}),

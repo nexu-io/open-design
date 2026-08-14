@@ -357,6 +357,9 @@ describe('AMR chat-run end-to-end', () => {
       const runEvents = await readRunEvents(webUrl, run.runId, {
         headers: { ...AMR_TEST_WORKSPACE_HEADERS },
       });
+      const toolTokenExpiry = runEvents.match(/"toolTokenExpiresAt":"([^"]+)"/)?.[1];
+      expect(toolTokenExpiry, 'run start event exposes the run-scoped tool-token deadline').toBeTruthy();
+      expect(Date.parse(toolTokenExpiry ?? '') - t0).toBeGreaterThanOrEqual(44 * 60 * 1000);
       expect(runEvents).toContain('"type":"usage"');
       expect(runEvents).toContain('input_tokens');
       expect(runEvents).toContain('output_tokens');

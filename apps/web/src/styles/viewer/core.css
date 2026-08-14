@@ -1723,6 +1723,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.comment-popover-view-all {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.comment-popover-view-all:hover {
+  color: var(--text);
+}
 .comment-popover-drag-handle {
   flex: 0 0 auto;
   display: inline-flex;
@@ -2109,6 +2126,16 @@
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
+}
+/* Select-all sits on its own row UNDER the header divider (per product), so
+   the header keeps just the title and the close control. */
+.comment-side-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  /* No bottom inset: the 16px gap down to the first comment is owned by the
+     list's own top padding, so the two never stack into a 22px+ gutter. */
+  padding: 6px 8px 0;
 }
 .comment-side-select-all {
   border: 0;

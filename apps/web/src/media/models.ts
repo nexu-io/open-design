@@ -29,7 +29,6 @@ import type { AudioKind, MediaAspect } from '../types';
  */
 export type MediaProviderId =
   | 'openai'
-  | 'codex'
   | 'vela'
   | 'volcengine'
   | 'grok'
@@ -92,14 +91,6 @@ export const MEDIA_PROVIDERS: MediaProvider[] = [
     integrated: true,
     defaultBaseUrl: 'https://api.openai.com/v1',
     docsUrl: 'https://platform.openai.com/api-keys',
-  },
-  {
-    id: 'codex',
-    label: 'Codex Subscription',
-    hint: 'gpt-image-2 via local Codex CLI login',
-    integrated: true,
-    credentialsRequired: false,
-    docsUrl: 'https://developers.openai.com/codex',
   },
   {
     id: 'vela',
@@ -335,7 +326,7 @@ export interface MediaModel {
  * `packages/model-bank/src/aiModels/openai.ts` and friends in lobehub.
  */
 export const IMAGE_MODELS: MediaModel[] = [
-  { id: 'vela/gpt-image-2', label: 'gpt-image-2 (Cloud)', hint: 'Open Design Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
+  { id: 'vela/gpt-image-2', label: 'gpt-image-2 (Cloud)', hint: 'Open Design Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'], default: true },
   { id: 'vela/nano-banana-2', label: 'nano-banana-2 (Cloud)', hint: 'Open Design Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
   { id: 'vela/nano-banana-2-lite', label: 'nano-banana-2-lite (Cloud)', hint: 'Open Design Cloud · fast managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
   { id: 'vela/seedream-5.0', label: 'seedream-5.0 (Cloud)', hint: 'Open Design Cloud · managed image generation and editing', provider: 'vela', caps: ['t2i', 'i2i'] },
@@ -347,7 +338,6 @@ export const IMAGE_MODELS: MediaModel[] = [
     hint: 'OpenAI · 4K, native multimodal',
     provider: 'openai',
     caps: ['t2i', 'i2i', 'inpaint'],
-    default: true,
   },
   {
     id: 'gpt-image-1.5',
@@ -384,14 +374,6 @@ export const IMAGE_MODELS: MediaModel[] = [
     provider: 'openai',
     caps: ['t2i'],
   },
-  {
-    id: 'codex-gpt-image-2',
-    label: 'gpt-image-2 (Codex)',
-    hint: 'Codex Subscription · local CLI imagegen',
-    provider: 'codex',
-    caps: ['t2i', 'i2i'],
-  },
-
   // Volcengine — Doubao Seedream image generation.
   {
     id: 'doubao-seedream-3-0-t2i-250415',
@@ -710,6 +692,8 @@ const MEDIA_MODEL_ALIASES: Readonly<Record<string, string>> = {
   'nano-banana': 'vela/nano-banana-2',
   'nano-banana-2': 'vela/nano-banana-2',
   'nano-banana-2-lite': 'vela/nano-banana-2-lite',
+  // Preserve existing project metadata while removing the Codex renderer.
+  'codex-gpt-image-2': 'vela/gpt-image-2',
 };
 
 export function canonicalMediaModelId(id: string): string {

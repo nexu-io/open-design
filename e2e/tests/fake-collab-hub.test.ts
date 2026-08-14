@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -79,6 +80,123 @@ describe('fake collaboration hub authorization receipts', () => {
 
     const authorizedAt = Date.parse(receipt.authorizedAt);
     expect(Date.parse(receipt.expiresAt) - authorizedAt).toBe(2_000);
+
+    const inspection = JSON.parse(await command([
+      'team-projects',
+      'pull',
+      projectId,
+      '--authorize-only',
+      '--expected-version',
+      '1',
+      '--json',
+    ], MEMBER.controlKey)) as { manifestEntryCount: number };
+    expect(inspection.manifestEntryCount).toBe(1);
+  });
+
+  it('forwards the resource command workspace instead of the agent trace workspace', async () => {
+    fixtureRoot = await mkdtemp(join(tmpdir(), 'open-design-fake-collab-hub-'));
+    const velaBin = join(fixtureRoot, 'vela');
+    hub = await startFakeCollabHub({
+      root: fixtureRoot,
+      workspaceId: WORKSPACE_ID,
+      workspaceName: 'Workspace header contract',
+      clients: [OWNER],
+    });
+    await hub.writeVelaBin(velaBin);
+
+    const snapshot = JSON.parse(await velaCommand(
+      velaBin,
+      ['billing', 'workspace-snapshot', '--json'],
+      undefined,
+      'ws-selected-by-resource-command',
+    )) as { workspaceId: string };
+
+    expect(snapshot.workspaceId).toBe('ws-selected-by-resource-command');
+  });
+});
+
+describe('fake collaboration hub Vela resource pulls', () => {
+  it('keeps single pull compatibility and isolates batch item failures', async () => {
+    fixtureRoot = await mkdtemp(join(tmpdir(), 'open-design-fake-collab-hub-'));
+    const sourceDir = join(fixtureRoot, 'source');
+    const otherSourceDir = join(fixtureRoot, 'other-source');
+    const singleTarget = join(fixtureRoot, 'single-target');
+    const otherTarget = join(fixtureRoot, 'other-target');
+    const batchTarget = join(fixtureRoot, 'batch-target');
+    const velaBin = join(fixtureRoot, 'vela');
+    await mkdir(sourceDir, { recursive: true });
+    await mkdir(otherSourceDir, { recursive: true });
+    await writeFile(join(sourceDir, 'index.html'), '<h1>resource fixture</h1>', 'utf8');
+    await writeFile(join(otherSourceDir, 'index.html'), '<h1>other workspace</h1>', 'utf8');
+    hub = await startFakeCollabHub({
+      root: fixtureRoot,
+      workspaceId: WORKSPACE_ID,
+      workspaceName: 'Resource pull workspace',
+      clients: [OWNER, MEMBER],
+    });
+    await hub.writeVelaBin(velaBin);
+
+    await velaCommand(velaBin, [
+      'resource', 'push', 'plugin', 'plugin-present', sourceDir, '--json',
+    ]);
+    await velaCommand(
+      velaBin,
+      ['resource', 'push', 'plugin', 'plugin-present', otherSourceDir, '--json'],
+      undefined,
+      'ws-other',
+    );
+
+    const single = JSON.parse(await velaCommand(velaBin, [
+      'resource', 'pull', 'plugin', 'plugin-present', singleTarget, '--json',
+    ])) as { version: number };
+    expect(single.version).toBe(1);
+    await expect(readFile(join(singleTarget, 'index.html'), 'utf8'))
+      .resolves.toContain('resource fixture');
+    await velaCommand(
+      velaBin,
+      ['resource', 'pull', 'plugin', 'plugin-present', otherTarget, '--json'],
+      undefined,
+      'ws-other',
+    );
+    await expect(readFile(join(otherTarget, 'index.html'), 'utf8'))
+      .resolves.toContain('other workspace');
+
+    const batch = JSON.parse(await velaCommand(
+      velaBin,
+      ['resource', 'pull-batch', '--requests-file', '-', '--json'],
+      JSON.stringify({
+        requests: [
+          {
+            key: 'present',
+            kind: 'plugin',
+            resourceId: 'plugin-present',
+            dir: batchTarget,
+            ref: 'published',
+          },
+          {
+            key: 'missing',
+            kind: 'skill',
+            resourceId: 'skill-missing',
+            dir: join(fixtureRoot, 'missing-target'),
+            ref: 'published',
+          },
+        ],
+      }),
+    )) as {
+      results: Array<{ key: string; ok: boolean; errorCode?: string }>;
+      succeeded: number;
+      failed: number;
+    };
+    expect(batch).toMatchObject({
+      succeeded: 1,
+      failed: 1,
+      results: [
+        { key: 'present', ok: true },
+        { key: 'missing', ok: false, errorCode: 'resource_not_found' },
+      ],
+    });
+    await expect(readFile(join(batchTarget, 'index.html'), 'utf8'))
+      .resolves.toContain('resource fixture');
   });
 });
 
@@ -100,4 +218,37 @@ async function command(
   expect(response.ok, raw).toBe(true);
   const body = JSON.parse(raw) as { stdout: string };
   return body.stdout;
+}
+
+async function velaCommand(
+  bin: string,
+  args: string[],
+  input?: string,
+  workspaceId = WORKSPACE_ID,
+): Promise<string> {
+  if (!hub) throw new Error('fake collaboration hub is not running');
+  return await new Promise<string>((resolve, reject) => {
+    const child = spawn(bin, args, {
+      env: {
+        ...process.env,
+        OPEN_DESIGN_WORKSPACE_ID: WORKSPACE_ID,
+        VELA_WORKSPACE_ID: workspaceId,
+        VELA_API_URL: hub!.url,
+        VELA_CONTROL_KEY: OWNER.controlKey,
+      },
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => { stdout += chunk; });
+    child.stderr.on('data', (chunk: string) => { stderr += chunk; });
+    child.once('error', reject);
+    child.once('close', (code) => {
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`fake Vela exited ${String(code)}: ${stderr}`));
+    });
+    child.stdin.end(input);
+  });
 }

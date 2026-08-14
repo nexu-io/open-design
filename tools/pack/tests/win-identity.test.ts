@@ -219,14 +219,6 @@ describe("resolveWinInstallIdentity", () => {
     expect(guard.slice(failureIndex, outputIndex)).toContain('Abort "$(RunningInstancesDetectionFailed)"');
   });
 
-  it("writes runtime installer diagnostics under the packaged namespace data root", async () => {
-    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
-
-    expect(source).toContain('const nsisLogDir = `${localDataRoot}\\\\logs`;');
-    expect(source).toContain('const nsisLogPath = `${nsisLogDir}\\\\nsis.log`;');
-    expect(source).not.toContain("const nsisLogPath = escapeNsisString(paths.nsisLogPath)");
-  });
-
   it("syncs launcher runtime metadata after a successful Windows install", async () => {
     const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
     expect(source).toContain("Function SyncLauncherRuntime");

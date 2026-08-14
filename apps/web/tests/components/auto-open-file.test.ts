@@ -182,6 +182,36 @@ describe('selectAutoOpenProducedArtifact', () => {
     expect(result).toBe('index.html');
   });
 
+  it.each([
+    ['image', 'hero.png'],
+    ['video', 'launch.mp4'],
+    ['audio', 'narration.mp3'],
+  ] as const)('auto-opens a produced %s file when the turn contains only media', (kind, name) => {
+    const result = selectAutoOpenProducedArtifact([
+      { name, path: name, kind, mtime: 30 },
+    ]);
+
+    expect(result).toBe(name);
+  });
+
+  it('prefers html over a newer media file', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'index.html', path: 'index.html', kind: 'html', mtime: 10 },
+      { name: 'hero.png', path: 'hero.png', kind: 'image', mtime: 30 },
+    ]);
+
+    expect(result).toBe('index.html');
+  });
+
+  it('opens the newest file when a turn produces multiple media files', () => {
+    const result = selectAutoOpenProducedArtifact([
+      { name: 'hero.png', path: 'hero.png', kind: 'image', mtime: 10 },
+      { name: 'launch.mp4', path: 'launch.mp4', kind: 'video', mtime: 30 },
+    ]);
+
+    expect(result).toBe('launch.mp4');
+  });
+
   it('leaves a plain .txt file alone (text kind is shared with markdown)', () => {
     // `.md` and `.txt` both arrive as kind: 'text'; only markdown should open.
     const result = selectAutoOpenProducedArtifact([

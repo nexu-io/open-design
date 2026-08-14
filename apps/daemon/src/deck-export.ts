@@ -15,6 +15,7 @@ const PptxGenJS = PptxGenJSModule.default as unknown as { new (): PptxInstance }
 import { readProjectFile } from './projects.js';
 
 export interface BuildDeckRenderInputOptions {
+  baseHref?: string;
   daemonUrl: string;
   // Explicit page-vs-deck signal (the web knows whether the artifact is a deck).
   deck?: boolean;
@@ -52,8 +53,8 @@ export interface DeckRenderRequest {
 /**
  * Reads a deck HTML file and prepares the {@link DesktopRenderSlidesInput} the
  * desktop renderer needs. Mirrors {@link buildDesktopPdfExportInput} in
- * pdf-export.ts: same `<base href>` derivation so the rendered deck resolves
- * its relative CSS/JS/image assets through the daemon's `/raw/` route.
+ * pdf-export.ts: the default `<base href>` resolves relative assets through
+ * `/raw/`; authorized callers can supply a narrower renderer-only base.
  */
 export async function buildDeckRenderInput(
   options: BuildDeckRenderInputOptions,
@@ -69,7 +70,7 @@ export async function buildDeckRenderInput(
     defaultFilename: safeDisplayFilename(title, 'deck'),
     title,
     input: {
-      baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
+      baseHref: options.baseHref ?? rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
       html: injectDeckStageFallback(html),
       ...(options.deck == null ? {} : { deck: options.deck }),
       ...(options.editable == null ? {} : { editable: options.editable }),

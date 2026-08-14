@@ -62,6 +62,10 @@
       "types": "./dist/design-systems/derived-token-outputs.d.ts",
       "default": "./dist/design-systems/derived-token-outputs.mjs"
     },
+    "./design-systems/runtime-schema": {
+      "types": "./dist/design-systems/runtime-schema.d.ts",
+      "default": "./dist/design-systems/runtime-schema.mjs"
+    },
     "./design-systems/token-schema": {
       "types": "./dist/design-systems/token-schema.d.ts",
       "default": "./dist/design-systems/token-schema.mjs"

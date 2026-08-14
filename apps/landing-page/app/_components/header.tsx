@@ -84,6 +84,7 @@ const AGENTS: ReadonlyArray<{ name: string; route: string }> = [
   { name: 'Grok Build', route: 'grok-design' },
   { name: 'Kimi CLI', route: 'kimi-design' },
   { name: 'DeepSeek TUI', route: 'deepseek-design' },
+  { name: 'DeepSeek Harness', route: 'deepseek-harness-design' },
   { name: 'Trae CLI', route: 'trae-cli-design' },
   { name: 'Aider', route: 'aider-design' },
   { name: 'Antigravity', route: 'antigravity-design' },

@@ -144,6 +144,50 @@ export function readToolResultIsError(data: unknown): boolean {
   return (data as { isError?: unknown }).isError === true;
 }
 
+/**
+ * True when a Codex-style shell invocation of the structured design-system
+ * wrapper completed with an error. A clean CLI process exit is not sufficient
+ * evidence of success: Codex can report a failed shell item, continue its
+ * turn, and still exit 0 after explaining that it could not finish.
+ */
+export function runHadFailedDesignSystemWrapper(
+  events: readonly RunEventLike[],
+): boolean {
+  const failedToolUseIds = new Set<string>();
+  for (const rec of events) {
+    if (rec?.event !== 'agent') continue;
+    const data = rec.data as { type?: unknown } | null | undefined;
+    if (data?.type !== 'tool_result' || !readToolResultIsError(rec.data)) {
+      continue;
+    }
+    const id = readToolResultId(rec.data);
+    if (id) failedToolUseIds.add(id);
+  }
+  if (failedToolUseIds.size === 0) return false;
+
+  for (const rec of events) {
+    if (rec?.event !== 'agent') continue;
+    const data = rec.data as
+      | { type?: unknown; name?: unknown; input?: unknown }
+      | null
+      | undefined;
+    if (data?.type !== 'tool_use' || data.name !== 'Bash') continue;
+    const id = readToolUseId(rec.data);
+    if (!id || !failedToolUseIds.has(id)) continue;
+    const command = data.input && typeof data.input === 'object'
+      ? (data.input as { command?: unknown }).command
+      : null;
+    if (typeof command !== 'string') continue;
+    if (
+      /\btools\s+design-systems\s+(?:read|resolve|validate)\b/u.test(command)
+      && /(?:OD_NODE_BIN|OD_BIN)/u.test(command)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Generic write counter shared by all three predicates. Returns the
 // set of distinct paths the run successfully wrote / edited that
 // match `predicate`. Failure-pairing semantics match

@@ -402,6 +402,10 @@ export interface ChatComposerHandle {
 }
 
 export interface ChatSendMeta {
+  /** Stable identity for one confirmed user submission. Queueing and the
+   *  eventual daemon run reuse it so retries of the same UI action are
+   *  idempotent without collapsing separate sends that share the same text. */
+  clientRequestId?: string;
   queueOnly?: boolean;
   research?: ResearchOptions;
   context?: RunContextSelection;
@@ -506,6 +510,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // by handleEditorChange (the editor is the single source for typing) and by
     // the programmatic-set paths below.
     const draftRef = useRef(draft);
+    // Submission admission can cross asynchronous gates before the composer
+    // is cleared. Keep a synchronous latch so a second Enter/click in that
+    // window cannot enqueue the same still-visible payload again.
+    const composedSendPendingRef = useRef(false);
     const previousSessionModeRef = useRef(sessionMode);
 
     useEffect(() => {
@@ -989,7 +997,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           id: 'mcp',
           label: '/mcp',
           insert: '/mcp ',
-          descKey: 'pet.slashPet',
+          descKey: 'pet.slashMcp',
           icon: 'sliders',
           argHint: 'open settings · <server-id> to insert hint',
         });
@@ -999,7 +1007,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
           id: `mcp-${s.id}`,
           label: `/mcp ${s.id}`,
           insert: `Use the \`${s.id}\` MCP server tools. `,
-          descKey: 'pet.slashPet',
+          descKey: 'pet.slashMcp',
           icon: 'sparkles',
           argHint: s.label || s.transport,
         });
@@ -1346,7 +1354,24 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
             pendingSessionModeRef.current = pendingMetadata.sessionMode;
           }
         },
-      );
+      ).finally(() => {
+        composedSendPendingRef.current = false;
+      });
+    }
+
+    function beginComposedSend(
+      send: () => ChatSendOutcome | Promise<ChatSendOutcome>,
+      pendingMetadata?: { entryFrom: ChatSendMeta['entryFrom'] | null; sessionMode: ChatSessionMode | null },
+    ): boolean {
+      if (composedSendPendingRef.current) return false;
+      composedSendPendingRef.current = true;
+      try {
+        finishComposedSend(send(), pendingMetadata);
+        return true;
+      } catch (error) {
+        composedSendPendingRef.current = false;
+        throw error;
+      }
     }
 
     function sendComposedTurn(
@@ -1381,11 +1406,10 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       };
       const effectiveMeta =
         Object.keys(effectiveMetaShape).length > 0 ? effectiveMetaShape : undefined;
-      finishComposedSend(
-        onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta),
+      return beginComposedSend(
+        () => onSend(prompt, nextAttachments, nextCommentAttachments, effectiveMeta),
         { entryFrom: pendingEntryFrom, sessionMode: pendingSessionMode },
       );
-      return true;
     }
 
     function queueMeta(meta?: ChatSendMeta): ChatSendMeta {
@@ -2628,15 +2652,15 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (hatched) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
-        finishComposedSend(onSend(hatched, staged, nextCommentAttachments, contextMeta));
+        beginComposedSend(() => onSend(hatched, staged, nextCommentAttachments, contextMeta));
         return;
       }
       const search = researchAvailable ? expandSearchCommand(prompt) : null;
       if (search) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
-        finishComposedSend(
-          onSend(search.prompt, staged, nextCommentAttachments, {
+        beginComposedSend(
+          () => onSend(search.prompt, staged, nextCommentAttachments, {
             ...contextMeta,
             research: { enabled: true, query: search.query },
           }),

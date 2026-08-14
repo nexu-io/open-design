@@ -83,6 +83,22 @@ function fingerprintFile(full: string, size: number, mtimeMs: number): ArtifactF
   return { size, mtimeMs, hash };
 }
 
+async function fingerprintFileAsync(
+  full: string,
+  size: number,
+  mtimeMs: number,
+): Promise<ArtifactFingerprint> {
+  let hash: string | null = null;
+  if (size <= HASH_MAX_BYTES) {
+    try {
+      hash = createHash('sha1').update(await fs.promises.readFile(full)).digest('hex');
+    } catch {
+      hash = null;
+    }
+  }
+  return { size, mtimeMs, hash };
+}
+
 // path -> fingerprint for every artifact-extension file under the project root.
 export type ArtifactSnapshot = Map<string, ArtifactFingerprint>;
 
@@ -134,6 +150,68 @@ export function snapshotProjectArtifacts(rootDir: string): ArtifactSnapshot {
     }
   };
   walk(rootDir);
+  return snapshot;
+}
+
+// Async counterpart used by the normal run start/finish path. It deliberately
+// preserves the synchronous snapshot's traversal order, cap, filtering, and
+// best-effort error behavior; the only difference is that directory, stat, and
+// content reads yield the daemon event loop instead of pausing unrelated HTTP
+// and SSE traffic while a large project is scanned.
+export async function snapshotProjectArtifactsAsync(rootDir: string): Promise<ArtifactSnapshot> {
+  const snapshot: ArtifactSnapshot = new Map();
+  const trackedFiles: string[] = [];
+  const walk = async (dir: string): Promise<void> => {
+    if (trackedFiles.length >= MAX_FILES) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (trackedFiles.length >= MAX_FILES) return;
+      if (entry.isDirectory()) {
+        if (IGNORED_DIR_NAMES.has(entry.name) || entry.name.startsWith('.')) continue;
+        await walk(path.join(dir, entry.name));
+      } else if (entry.isFile() && isTrackedRunFile(entry.name)) {
+        trackedFiles.push(path.join(dir, entry.name));
+      }
+    }
+  };
+  await walk(rootDir);
+
+  // A small worker pool prevents a 5k-file project from turning the async
+  // safety fix into a long serial tail, while still bounding filesystem load.
+  // Results are committed in traversal order so diff output remains stable.
+  const fingerprints = new Array<readonly [string, ArtifactFingerprint] | null>(trackedFiles.length);
+  let nextIndex = 0;
+  const fingerprintWorker = async (): Promise<void> => {
+    for (;;) {
+      const index = nextIndex;
+      if (index >= trackedFiles.length) return;
+      nextIndex += 1;
+      const full = trackedFiles[index]!;
+      try {
+        const stat = await fs.promises.stat(full);
+        fingerprints[index] = [
+          full,
+          await fingerprintFileAsync(full, stat.size, stat.mtimeMs),
+        ];
+      } catch {
+        fingerprints[index] = null;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(16, trackedFiles.length) },
+      () => fingerprintWorker(),
+    ),
+  );
+  for (const fingerprint of fingerprints) {
+    if (fingerprint) snapshot.set(fingerprint[0], fingerprint[1]);
+  }
   return snapshot;
 }
 

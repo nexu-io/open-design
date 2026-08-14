@@ -72,6 +72,9 @@ export interface RegisterAtomRoutesDeps {
 }
 
 export interface RegisterStaticResourceRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'resources'> {
+  /** Settled, TTL-bounded authority for pure local catalog reads. */
+  verifyWorkspaceReadAuthority?: VerifyWorkspaceRequestAuthority;
+  /** Fresh authority for mutations, materialization, and detail reads. */
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   tokenContractRebuild?: {
     maybeStartForImportedDesignSystem?: (
@@ -263,7 +266,10 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   const resolveWorkspaceAuthority = async (
     req: any,
     res: Response,
-    options: { allowNavigationQuery?: boolean } = {},
+    options: {
+      allowNavigationQuery?: boolean;
+      verifyAuthority?: VerifyWorkspaceRequestAuthority | undefined;
+    } = {},
   ): Promise<WorkspaceCollabContext | null | undefined> => {
     const scopedRequest = options.allowNavigationQuery
       ? requestWithNavigationScope(req)
@@ -279,7 +285,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
     }
     const authority = await resolveOptionalWorkspaceRequestAuthority(
       scopedRequest,
-      ctx.verifyWorkspaceRequestAuthority,
+      options.verifyAuthority ?? ctx.verifyWorkspaceRequestAuthority,
     );
     if (!authority.ok) {
       sendApiError(res, authority.status, authority.code, authority.message, {
@@ -483,7 +489,11 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       // Workspace-scoped (see `skillVisibleFromWorkspace` in skills.ts): a
       // skill imported into a different workspace than the caller's is
       // hidden, same one-way rule `GET /api/plugins` already applies.
-      const authority = await resolveWorkspaceAuthority(req, res);
+      const authority = await resolveWorkspaceAuthority(req, res, {
+        verifyAuthority:
+          ctx.verifyWorkspaceReadAuthority
+          ?? ctx.verifyWorkspaceRequestAuthority,
+      });
       if (authority === undefined) return;
       const workspaceId = authority?.workspaceId ?? null;
       const skills = await listAllSkills({
@@ -778,12 +788,17 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       // share one directory on disk, so without this the systems authored in
       // one workspace also filled a brand-new one. Every other caller of
       // `listAllDesignSystems` resolves a system by id and stays unscoped.
-      const workspaceContext = ctx.verifyWorkspaceRequestAuthority
-        ? await resolveWorkspaceAuthority(req, res)
+      const catalogAuthority =
+        ctx.verifyWorkspaceReadAuthority
+        ?? ctx.verifyWorkspaceRequestAuthority;
+      const workspaceContext = catalogAuthority
+        ? await resolveWorkspaceAuthority(req, res, {
+            verifyAuthority: catalogAuthority,
+          })
         : null;
       if (workspaceContext === undefined) return;
       const workspaceId = workspaceContext?.workspaceId
-        ?? (ctx.verifyWorkspaceRequestAuthority ? null : (await resolveWorkspaceScope?.(req)) ?? null);
+        ?? (catalogAuthority ? null : (await resolveWorkspaceScope?.(req)) ?? null);
       const workspaceMemberId = workspaceContext?.workspaceMemberId ?? null;
       const catalog = await listAllDesignSystems({
         workspaceId,

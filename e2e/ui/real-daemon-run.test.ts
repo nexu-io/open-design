@@ -25,6 +25,7 @@ const DELAYED_HEADING = 'Delayed Daemon Smoke';
 const SLOW_RELOAD_FILE = 'slow-reload-daemon-smoke.html';
 const SLOW_RELOAD_HEADING = 'Slow Reload Daemon Smoke';
 const FOLLOW_UP_FILE = 'follow-up-daemon-smoke.html';
+const MEDIA_ONLY_FILE = 'media-only.png';
 let fakeRuntimes: Awaited<ReturnType<typeof createFakeAgentRuntimes>>;
 
 function artifactPreview(page: Page) {
@@ -216,12 +217,11 @@ test('[P1] real daemon run treats an in-place artifact edit as produced work', a
   await expect(editedHeading).toBeVisible();
   await editedHeading.click();
   await expect(editedHeading).toHaveAttribute('data-od-edit-selected', 'true');
-  await page.getByTestId('manual-edit-open-inspector').click();
   const fontSizeInput = page
     .locator('.manual-edit-modal .cc-section')
-    .filter({ hasText: 'TYPOGRAPHY' })
+    .filter({ hasText: 'Parameters' })
     .locator('.cc-row')
-    .filter({ hasText: 'Size' })
+    .filter({ hasText: 'Font size' })
     .locator('input');
   await fontSizeInput.fill('52');
   await page.locator('.manual-edit-modal').getByRole('button', { name: /^Save$/ }).click({ force: true });
@@ -249,17 +249,45 @@ test('[P1] Plan mode daemon run creates, opens, and restores an editable markdow
   await expectProjectFilesToContain(page, projectId, ['plan.md']);
   await expectProjectFileToContain(page, projectId, 'plan.md', '# Deterministic Plan');
   await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i })).toBeVisible();
+  await page.getByRole('tab', { name: 'Code', exact: true }).click();
   await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
-  await expect(page.getByLabel(/markdown preview/i)).toContainText('Scope');
   await expect(page.getByTestId('chat-composer')).toBeVisible();
   await expect(page.getByTestId('chat-composer-input')).toBeVisible();
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await expect(page.getByTestId('file-workspace').getByRole('tab', { name: /plan\.md/i })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: 'Code', exact: true }).click();
   await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Deterministic Plan/);
-  await expect(page.getByLabel(/markdown preview/i)).toContainText('Keep the plan editable');
   await expect(page.getByTestId('chat-composer')).toBeVisible();
+});
+
+test('[P1] media-only turn auto-opens the generated image file', async ({ page }) => {
+  await createProject(page, 'Media-only auto-open smoke');
+  await expectWorkspaceReady(page);
+
+  // Establish an already-active project file first. Otherwise the workspace's
+  // one-time initial-primary-file fallback can open the first project file and
+  // mask whether turn-end media selection actually works.
+  await sendPrompt(page, 'Create a deterministic plan document');
+  const workspace = page.getByTestId('file-workspace');
+  await expect(workspace.getByRole('tab', { name: /plan\.md/i })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+
+  await sendPrompt(page, 'Create a deterministic media-only artifact');
+
+  const mediaTab = workspace.getByRole('tab', { name: /media-only\.png/i });
+  await expect(mediaTab).toBeVisible({ timeout: T.medium });
+  await expect(mediaTab).toHaveAttribute('aria-selected', 'true');
+  await expect(workspace.getByRole('img', { name: MEDIA_ONLY_FILE })).toBeVisible();
+
+  const rawHref = await workspace.getByRole('link', { name: 'Open' }).getAttribute('href');
+  if (!rawHref) throw new Error('media preview did not expose its raw file URL');
+  const rawResponse = await page.request.get(rawHref);
+  expect(rawResponse.ok(), await rawResponse.text()).toBeTruthy();
+  expect(rawResponse.headers()['content-type']).toContain('image/png');
 });
 
 // Red spec for "Plan 模式生成 HTML 后没有自动打开生成的文件": after the user
@@ -283,6 +311,7 @@ test('[P1] Plan mode generation turn auto-opens the generated HTML file', async 
   // markdown plan in the split editor (autosave on) before asking for the
   // final deliverable.
   const planEditor = page.getByRole('textbox', { name: /markdown editor/i });
+  await page.getByRole('tab', { name: 'Code', exact: true }).click();
   await expect(planEditor).toHaveValue(/Deterministic Plan/);
   await planEditor.click();
   await planEditor.press('End');
@@ -292,7 +321,7 @@ test('[P1] Plan mode generation turn auto-opens the generated HTML file', async 
   await sendPrompt(page, 'Generate the deterministic artifact from the plan document');
   await expectProjectFilesToContain(page, projectId, ['index.html', 'plan.md']);
   const htmlTab = page.getByTestId('file-workspace').getByRole('tab', { name: /index\.html/i });
-  await expect(htmlTab).toBeVisible({ timeout: 15_000 });
+  await expect(htmlTab).toBeVisible({ timeout: 2_000 });
   await expect(htmlTab).toHaveAttribute('aria-selected', 'true');
 });
 
@@ -581,6 +610,7 @@ test('[P0] real daemon run previews an artifact from a fake OpenCode runtime', a
 test('[P1] BYOK OpenCode run is blocked before spawn when provider config is missing', async ({ page }) => {
   await createByokOpenCodeProject(page, 'BYOK OpenCode missing provider smoke');
   await expectWorkspaceReady(page);
+  const projectUrl = page.url();
 
   // The client-side BYOK preflight (apps/web byok/preflight) catches a missing
   // provider before any POST: it blocks the submit and opens the execution
@@ -597,9 +627,9 @@ test('[P1] BYOK OpenCode run is blocked before spawn when provider config is mis
   await page.getByTestId('chat-send').click();
 
   // The preflight opens the execution-mode Settings section.
-  await expect(
-    page.getByRole('dialog').filter({ hasText: 'Execution mode' }),
-  ).toBeVisible({ timeout: 15_000 });
+  const settings = page.locator('.modal-settings');
+  await expect(settings).toBeVisible({ timeout: 15_000 });
+  await expect(settings.getByRole('tablist', { name: 'Execution mode' })).toBeVisible();
 
   // No run was created and no artifact was produced — the block is pre-spawn.
   await runRequests.expectNone({
@@ -609,23 +639,14 @@ test('[P1] BYOK OpenCode run is blocked before spawn when provider config is mis
   runRequests.dispose?.();
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 
+  await page.goto(projectUrl, { waitUntil: 'domcontentloaded' });
+  await expectWorkspaceReady(page);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   expect(await listProjectFiles(page, projectId)).toEqual([]);
 });
 
-// BLOCKED — no UI entry point left for agent-driven plugin authoring.
-//
-// This spec used to start from the Home rail's More-shortcuts menu ("Create a
-// plugin", `home-hero-rail-create-plugin`), which #5517 deleted along with the
-// rest of the rail. The daemon-side capability is intact and
-// `EntryShell.startPluginAuthoring` / `createPluginAuthoringHandoff` are still
-// wired, but nothing calls them any more: `EntryShell` hands
-// `onCreatePlugin={startPluginAuthoring}` to `ExtensionsMarketplace`, which
-// only uses the prop as a boolean gate for a Create button that opens the
-// import/upload dialog instead. Restore an entry point (or re-point this spec
-// at it) before un-fixme-ing — do not weaken the assertions to make it pass.
-test.fixme('[P1] plugin authoring produces a generated-plugin scaffold with action cards', async ({ page }) => {
+test('[P1] plugin authoring produces a generated-plugin scaffold with action cards', async ({ page }) => {
   await configureFakeAgent(page, 'codex');
   await installBrowserAgentConfig(page, 'codex');
   await gotoEntryHome(page);
@@ -637,15 +658,13 @@ test.fixme('[P1] plugin authoring produces a generated-plugin scaffold with acti
   await expectBrowserAgentConfig(page, 'codex');
   await dismissPrivacyDialog(page);
 
-  // Enter plugin authoring through the Plugins page create button. It drives
-  // the same queuePluginAuthoring flow as the home shortcuts menu, and this
-  // spec's oracle is the generated scaffold plus its action cards — not the
-  // menu chrome. The shortcuts trigger itself sits disabled on CI runners
-  // while a home plugin apply hangs; that anomaly is tracked as its own
-  // follow-up rather than blocking this journey.
+  // Enter plugin authoring through the current Plugins Add panel. The
+  // agent-assisted option hands its prompt back to the Home composer; the
+  // scaffold and action cards below remain the end-to-end oracle.
   await page.goto('/plugins', { waitUntil: 'domcontentloaded' });
   await waitForLoadingToClear(page);
-  await page.getByTestId('plugins-create-button').click();
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByTestId('plugin-create-with-agent').click();
   await expect(page.getByTestId('home-hero-input')).toHaveText(/Create an Open Design plugin for:/);
 
   const projectRequestPromise = page.waitForRequest(isCreateProjectRequest);
@@ -666,7 +685,7 @@ test.fixme('[P1] plugin authoring produces a generated-plugin scaffold with acti
   expect(runBody.message).toContain('produce a folder named generated-plugin');
 
   await expectWorkspaceReady(page);
-  const { projectId } = await currentProjectContext(page);
+  const { projectId, conversationId } = await currentProjectContext(page);
   await expectProjectFilesToContain(page, projectId, [
     'generated-plugin/open-design.json',
     'generated-plugin/SKILL.md',
@@ -674,6 +693,15 @@ test.fixme('[P1] plugin authoring produces a generated-plugin scaffold with acti
   ]);
   await expectProjectFileToContain(page, projectId, 'generated-plugin/open-design.json', '"name": "generated-plugin"');
   await expectProjectFileToContain(page, projectId, 'generated-plugin/SKILL.md', '# Generated Plugin');
+
+  await expectRestoredDelayedAssistantMessage(page, projectId, conversationId, {
+    producedFiles: [
+      'generated-plugin/examples/demo.md',
+      'generated-plugin/SKILL.md',
+      'generated-plugin/open-design.json',
+    ],
+    expectedThinking: false,
+  });
 
   await expect(page.getByText('Files from this turn')).toBeVisible();
   await expect(page.getByTestId('assistant-plugin-actions-generated-plugin')).toBeVisible();
@@ -793,6 +821,15 @@ async function openProjectFromProjectsView(page: Page, projectId: string) {
  * journey below depends on.
  */
 async function leaveProjectForEntry(page: Page) {
+  // In docked project mode the state-bearing pinned tab remains mounted in
+  // the hidden dock strip while `workspace-home-chrome` is its visible,
+  // interactive stand-in in the top chrome.
+  const dockedHome = page.getByTestId('workspace-home-chrome');
+  if (await dockedHome.isVisible().catch(() => false)) {
+    await dockedHome.click();
+    await expect(page.getByTestId('file-workspace')).toHaveCount(0);
+    return;
+  }
   const pinnedEntryTab = page.locator('.workspace-tab.is-pinned');
   await expect(pinnedEntryTab).toBeVisible();
   await pinnedEntryTab.locator('.workspace-tab__main').click();

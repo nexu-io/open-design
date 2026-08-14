@@ -952,6 +952,31 @@ describe('a Home auto-send observes a project billing scope that settles after m
     await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalled());
   });
 
+  it('auto-sends a cold unbound local project through the account-scoped Cloud lane', async () => {
+    window.sessionStorage.setItem(`od:auto-send-first:${PROJECT_ID}`, '1');
+    workspaceScopeMocks.ambientContext = null;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'unbound',
+        projectId: PROJECT_ID,
+        workspaceId: null,
+        context: null,
+      },
+    };
+    const stableOverrides: Partial<ComponentProps<typeof ProjectView>> = {
+      project: { ...project(), workspaceId: undefined },
+    };
+    renderProjectView(stableOverrides);
+
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
+    // Home already performed the account-scoped balance gate. ProjectView
+    // must not duplicate it while handing off the accepted first prompt.
+    expect(mockedCheckAmrBalanceGate).not.toHaveBeenCalled();
+    expect(mockedStreamViaDaemon.mock.calls[0]?.[0].workspaceContext).toBeNull();
+    expect(window.sessionStorage.getItem(`od:auto-send-first:${PROJECT_ID}`)).toBeNull();
+  });
+
   it('reconciles files and comments with the exact Team scope when the project event stream becomes ready', async () => {
     window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
     workspaceScopeMocks.projectScope = {

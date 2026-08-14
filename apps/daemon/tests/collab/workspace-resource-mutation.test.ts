@@ -29,9 +29,20 @@ function fakeRes(): any {
 }
 
 function spySendApiError() {
-  const calls: Array<{ status: number; code: string; message: string }> = [];
-  const sendApiError = (_res: unknown, status: number, code: string, message: string) => {
-    calls.push({ status, code, message });
+  const calls: Array<{
+    status: number;
+    code: string;
+    message: string;
+    details?: Record<string, unknown>;
+  }> = [];
+  const sendApiError = (
+    _res: unknown,
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) => {
+    calls.push({ status, code, message, ...(details ? { details } : {}) });
   };
   return { calls, sendApiError };
 }
@@ -629,6 +640,7 @@ describe('authoritative Workspace-bound mutation regression', () => {
     expect(calls.at(-1)).toMatchObject({
       status: 503,
       code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+      details: { retryable: true },
     });
   });
 

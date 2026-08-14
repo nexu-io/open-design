@@ -264,7 +264,7 @@ describe('workspace project routes', () => {
     expect(allB.projects.map((item) => item.id)).not.toContain(projectId);
   });
 
-  it('rejects partial or revoked workspace-aware creates without leaving an unbound project', async () => {
+  it('keeps ordinary local creates independent from partial or stale Workspace identity', async () => {
     const suffix = Date.now();
     const partialId = `workspace-create-partial-${suffix}`;
     const partial = await fetch(`${baseUrl}/api/projects`, {
@@ -280,9 +280,15 @@ describe('workspace project routes', () => {
         designSystemId: null,
       }),
     });
-    expect(partial.status).toBe(400);
-    expect(await fetch(`${baseUrl}/api/projects/${partialId}`).then((response) => response.status))
-      .toBe(404);
+    expect(partial.status).toBe(200);
+    await expect(partial.json()).resolves.toMatchObject({
+      project: { id: partialId },
+    });
+    const partialDetail = await fetch(`${baseUrl}/api/projects/${partialId}`);
+    expect(partialDetail.status).toBe(200);
+    await expect(partialDetail.json()).resolves.toMatchObject({
+      project: { id: partialId, workspaceId: null },
+    });
 
     const revokedId = `workspace-create-revoked-${suffix}`;
     const revoked = await fetch(`${baseUrl}/api/projects`, {
@@ -297,9 +303,28 @@ describe('workspace project routes', () => {
         designSystemId: null,
       }),
     });
-    expect(revoked.status).toBe(403);
-    expect(await fetch(`${baseUrl}/api/projects/${revokedId}`).then((response) => response.status))
-      .toBe(404);
+    expect(revoked.status).toBe(200);
+    await expect(revoked.json()).resolves.toMatchObject({
+      project: {
+        id: revokedId,
+        workspaceId: `${workspaceId}-revoked`,
+      },
+    });
+
+    // PRODUCT INVARIANT: identity headers are optional local attribution on
+    // ordinary creates, never a live Team authorization check. A complete but
+    // stale snapshot remains attributable locally; fresh authority belongs to
+    // the later share/sync/move-to-Team boundary.
+    const revokedDetail = await fetch(`${baseUrl}/api/projects/${revokedId}`, {
+      headers: workspaceHeaders(`${workspaceId}-revoked`, 'member-revoked'),
+    });
+    expect(revokedDetail.status).toBe(200);
+    await expect(revokedDetail.json()).resolves.toMatchObject({
+      project: {
+        id: revokedId,
+        workspaceId: `${workspaceId}-revoked`,
+      },
+    });
   });
 
   it('keeps the persisted workspace binding on the project detail read model', async () => {

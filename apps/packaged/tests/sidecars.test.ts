@@ -45,7 +45,16 @@ function slashPath(value: string): string {
 
 describe('resolveDaemonStatusTimeoutMs', () => {
   it('uses the 35-second baseline budget on platforms without a known slow-cold-start class', () => {
-    expect(resolveDaemonStatusTimeoutMs({}, 'darwin')).toBe(35_000);
+    expect(resolveDaemonStatusTimeoutMs({}, 'freebsd')).toBe(35_000);
+  });
+
+  it('widens the baseline to 90 seconds on darwin for packaged 0.18.1+ Apple Silicon cold starts', () => {
+    // Packaged 0.18.1 macOS launches can exceed the 35s baseline on slower
+    // Apple Silicon cold boots, after which the parent tears the sidecars down
+    // and the desktop falls back to a stale web URL. The wider budget matches
+    // the win32/linux "slow, not dead" safety net.
+    // https://github.com/nexu-io/open-design/issues/6637
+    expect(resolveDaemonStatusTimeoutMs({}, 'darwin')).toBe(90_000);
   });
 
   it('widens the baseline to 90 seconds on linux for AppImage FUSE cold starts', () => {
@@ -67,7 +76,7 @@ describe('resolveDaemonStatusTimeoutMs', () => {
   });
 
   it('treats an empty OD_LEGACY_DATA_DIR as unset', () => {
-    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' }, 'darwin')).toBe(35_000);
+    expect(resolveDaemonStatusTimeoutMs({ OD_LEGACY_DATA_DIR: '' }, 'freebsd')).toBe(35_000);
   });
 
   it('extends the budget to 30 minutes when OD_LEGACY_DATA_DIR is set', () => {
@@ -90,7 +99,7 @@ describe('resolveDaemonStatusTimeoutMs', () => {
     try {
       delete process.env.OD_LEGACY_DATA_DIR;
       expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(90_000);
-      expect(resolveDaemonStatusTimeoutMs(undefined, 'darwin')).toBe(35_000);
+      expect(resolveDaemonStatusTimeoutMs(undefined, 'darwin')).toBe(90_000);
       process.env.OD_LEGACY_DATA_DIR = '/some/legacy/path';
       expect(resolveDaemonStatusTimeoutMs(undefined, 'linux')).toBe(30 * 60 * 1000);
     } finally {
@@ -279,6 +288,17 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.HTTP_PROXY).toBeUndefined();
     expect(env.HTTPS_PROXY).toBeUndefined();
     expect(env.NODE_USE_ENV_PROXY).toBeUndefined();
+  });
+
+  it('forwards OD_ALLOWED_INTERNAL_HOSTS so the daemon can resolve trusted loopback hosts in packaged sidecars', () => {
+    const env = resolvePackagedChildBaseEnv({
+      HOME: '/Users/tester',
+      OD_ALLOWED_INTERNAL_HOSTS: '127.0.0.1,localhost',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env.OD_ALLOWED_INTERNAL_HOSTS).toBe('127.0.0.1,localhost');
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
   });
 
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {

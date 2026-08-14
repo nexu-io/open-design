@@ -1118,6 +1118,10 @@ html:has(main.lw) {
 
 /* ---------- narrow screens ---------- */
 @media (max-width: 900px) {
+  /* A fixed-height hero clips whatever doesn't fit. On a phone the content is
+     the thing that must win, so let the section grow past one screen instead. */
+  .lw .hero { height: auto; min-height: calc(100svh - var(--lw-header, 85px)); }
+
   /* Five day-labels cannot share one row on a phone; they stack and the tape
      marks today the same way it does on desktop. */
   .lw .killticker {

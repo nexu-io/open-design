@@ -107,6 +107,7 @@ import type { RunEventForFailureClassification } from '../run-failure-classifica
 import { classifyRunFailure } from '../run-failure-classification.js';
 import { deriveRunErrorCode, runResultFromStatus } from '../run-result.js';
 import type { RunStatusForAnalytics } from '../run-result.js';
+import type { PinnedRunDesignSystemScope } from '../design-systems/run-scope.js';
 import {
   parseRunToolBundleForRequest,
   validateRunToolBundleForAgent,
@@ -118,13 +119,15 @@ import {
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from '../runtimes/byok-opencode.js';
 import { resolveChatRunInactivityTimeoutMs } from '../runtimes/chat-run-lifecycle.js';
+import { TERMINAL_RUN_STATUSES } from '../runtimes/runs.js';
 import {
   deriveActivationMilestones,
   runAskedUserQuestion,
 } from '../runtimes/run-artifacts.js';
 import {
+  accountScopedRunWorkspaceScopeForProject,
   pinRunWorkspaceScopeForProject,
-  type PinnedRunWorkspaceScope,
+  type RunWorkspaceScope,
 } from '../runtimes/project-amr-trace-env.js';
 import {
   runArtifactCountForRun,
@@ -290,7 +293,8 @@ interface ChatRun {
   clientRequestId?: string | null;
   requestFingerprint?: string | null;
   agentId: string | null;
-  workspaceScope?: PinnedRunWorkspaceScope | null;
+  workspaceScope?: RunWorkspaceScope | null;
+  designSystemScope?: PinnedRunDesignSystemScope | null;
   model?: string | null;
   status: ChatRunStatus;
   createdAt: number;
@@ -379,7 +383,8 @@ interface RunCreateMeta extends JsonRecord {
   message?: string;
   currentPrompt?: string;
   projectMetadata?: ProjectMetadata;
-  workspaceScope?: PinnedRunWorkspaceScope | null;
+  workspaceScope?: RunWorkspaceScope | null;
+  designSystemScope?: PinnedRunDesignSystemScope | null;
 }
 
 interface RunListFilters {
@@ -406,6 +411,8 @@ interface ChatRunService {
     run: ChatRun,
     origin?: NonNullable<ChatRunStatusResponse['cancelOrigin']>,
   ): Promise<ChatRunStatusResponse>;
+  /** Undo an optimistically-created run (e.g. a failed ownership claim). */
+  drop(run: ChatRun): void;
   isTerminal(status: ChatRunStatus): boolean;
   emit?(run: ChatRun, event: string, data: unknown): RunEventRecord;
   setAnalyticsRecovery?(run: ChatRun, recovery: {
@@ -478,6 +485,7 @@ export interface RegisterRunRoutesDeps {
       status: number,
       code: string,
       message: string,
+      details?: Record<string, unknown>,
     ) => Response<unknown> | void;
   };
   paths: {
@@ -533,7 +541,16 @@ export interface RegisterRunRoutesDeps {
     runRetryEventsForAnalytics: (events: RunEventRecord[]) => RunRetryAnalyticsEvent[];
   };
   messages: {
-    pinAssistantMessageOnRunCreate: (db: SqliteDb, run: ChatRun) => void;
+    pinAssistantMessageOnRunCreate: (
+      db: SqliteDb,
+      run: ChatRun,
+      opts?: {
+        status?: string;
+        beforeFreshInsert?: () => void;
+        beforeClaimCommit?: () => void;
+        isRunActive?: (runId: string) => boolean;
+      },
+    ) => { ok: boolean; reason?: 'active' | 'scope' };
     reconcileAssistantMessageOnRunEnd: (
       db: SqliteDb,
       runs: ChatRunService,
@@ -779,6 +796,11 @@ function withoutSensitiveRunInput(body: JsonRecord): JsonRecord {
   delete sanitized.byokProfileId;
   delete sanitized.apiKey;
   delete sanitized.rechargeResumeCapability;
+  // Scope objects are server-issued authorization facts, not request options.
+  // A caller must never be able to persist a forged Workspace or DS binding
+  // that startChatRun and tool-token minting will later treat as pinned.
+  delete sanitized.workspaceScope;
+  delete sanitized.designSystemScope;
   return sanitized;
 }
 
@@ -967,7 +989,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     agentId: unknown,
     authorizedBoundMutation = false,
   ): Promise<
-    | { ok: true; workspaceScope: PinnedRunWorkspaceScope | null }
+    | { ok: true; workspaceScope: RunWorkspaceScope | null }
     | { ok: false }
   > {
     if (!ctx.projectStore) return { ok: true, workspaceScope: null };
@@ -1040,13 +1062,16 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
 
     if (requestContext === null) {
-      sendApiError(
-        res,
-        409,
-        'AMR_WORKSPACE_SCOPE_REQUIRED',
-        'open the project from your Personal Workspace before running AMR Cloud',
-      );
-      return { ok: false };
+      // A headerless, genuinely unbound project is the local/account-scoped
+      // compatibility lane. Home may create it before Workspace discovery
+      // settles, after already running the account balance gate; requiring a
+      // later identity here would turn that accepted first prompt into a 409.
+      // Explicitly bound projects still pin their persisted Workspace above,
+      // and any asserted identity below is freshly verified before adoption.
+      return {
+        ok: true,
+        workspaceScope: accountScopedRunWorkspaceScopeForProject(projectId),
+      };
     }
     if (requestContext === 'missing') {
       sendApiError(
@@ -1061,7 +1086,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const verified =
       await ctx.amrWorkspaceScope.verifyWorkspaceRequestAuthority(req);
     if (!verified.ok) {
-      sendApiError(res, verified.status, verified.code, verified.message);
+      sendApiError(
+        res,
+        verified.status,
+        verified.code,
+        verified.message,
+        verified.retryable ? { retryable: true } : {},
+      );
       return { ok: false };
     }
     if (
@@ -1272,7 +1303,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         console.warn('[runs] agent id fallback failed', err);
       }
     }
-    let preparedWorkspaceScope: PinnedRunWorkspaceScope | null = null;
+    let preparedWorkspaceScope: RunWorkspaceScope | null = null;
     if (typeof requestBody.projectId === 'string' && requestBody.projectId) {
       const prepared = await prepareRunWorkspaceScope(
         req,
@@ -1364,7 +1395,9 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
       ...(effectiveAgentId ? { agentId: effectiveAgentId } : {}),
-      ...(preparedWorkspaceScope ? { workspaceScope: preparedWorkspaceScope } : {}),
+      // Always overwrite the untrusted HTTP field, including for an unbound
+      // project. The absence of a persisted binding is itself authoritative.
+      workspaceScope: preparedWorkspaceScope,
     };
     if (resolvedSnapshot?.ok) {
       meta.appliedPluginSnapshotId = resolvedSnapshot.snapshotId;
@@ -1568,8 +1601,18 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     }
     if (clientUserMessageId && typeof meta.conversationId === 'string') {
       const existingUserPin = db
-        .prepare(`SELECT conversation_id AS conversationId FROM messages WHERE id = ?`)
-        .get(clientUserMessageId) as { conversationId?: unknown } | undefined;
+        .prepare(`SELECT role, conversation_id AS conversationId FROM messages WHERE id = ?`)
+        .get(clientUserMessageId) as
+        | { role?: unknown; conversationId?: unknown }
+        | undefined;
+      if (existingUserPin && existingUserPin.role !== 'user') {
+        return sendApiError(
+          res,
+          409,
+          'INVALID_USER_MESSAGE',
+          'userMessageId must reference a user message',
+        );
+      }
       if (
         existingUserPin
         && existingUserPin.conversationId !== meta.conversationId
@@ -1579,6 +1622,76 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           409,
           'IDEMPOTENCY_CONFLICT',
           'userMessageId belongs to a different conversation',
+        );
+      }
+    }
+    // The run's assistantMessageId must reference an assistant message in THIS
+    // conversation, or the run would pin/append/finalize a row it does not own
+    // (a user row in the same conversation, or an assistant row in another
+    // conversation). Without this check, `pinAssistantMessageOnRunCreate` only
+    // skips the pin and the run still mutates the foreign row via the id-only
+    // writers (#6418 review).
+    const clientAssistantMessageId =
+      typeof meta.assistantMessageId === 'string' && meta.assistantMessageId
+        ? meta.assistantMessageId
+        : null;
+    if (clientAssistantMessageId && !isSafeId(clientAssistantMessageId)) {
+      return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId is invalid');
+    }
+    if (
+      clientUserMessageId
+      && clientAssistantMessageId
+      && clientUserMessageId === clientAssistantMessageId
+    ) {
+      return sendApiError(
+        res,
+        400,
+        'BAD_REQUEST',
+        'userMessageId and assistantMessageId must be distinct',
+      );
+    }
+    if (clientAssistantMessageId) {
+      // Without a resolvable conversation there is nothing to validate the
+      // assistantMessageId against — the run would mutate a row it does not
+      // own via the id-only writers. Reject rather than guess (nettee).
+      if (typeof meta.conversationId !== 'string' || !meta.conversationId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId requires a conversation');
+      }
+      const chatConversation = getConversation(db, meta.conversationId);
+      if (
+        !chatConversation
+        || (
+          typeof meta.projectId === 'string'
+          && meta.projectId
+          && chatConversation.projectId !== meta.projectId
+        )
+      ) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+      }
+      const existingAssistantPin = db
+        .prepare(
+          `SELECT role, conversation_id AS conversationId, run_id AS runId, run_status AS runStatus FROM messages WHERE id = ?`,
+        )
+        .get(clientAssistantMessageId) as
+        | { role?: unknown; conversationId?: unknown; runId?: unknown; runStatus?: unknown }
+        | undefined;
+      if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
+        return sendApiError(
+          res,
+          409,
+          'INVALID_ASSISTANT_MESSAGE',
+          'assistantMessageId must reference an assistant message',
+        );
+      }
+      if (
+        existingAssistantPin
+        && existingAssistantPin.conversationId !== meta.conversationId
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'IDEMPOTENCY_CONFLICT',
+          'assistantMessageId belongs to a different conversation',
         );
       }
     }
@@ -1633,6 +1746,34 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
         };
       }
     }
+    const seedRunUserMessage = () => {
+      if (!runUserSeed) return;
+      const now = Date.now();
+      upsertMessage(db, runUserSeed.conversationId, {
+        id: runUserSeed.id,
+        role: 'user',
+        content: runUserSeed.content,
+        startedAt: now,
+        endedAt: now,
+        // Same turn metadata the web client writes via PUT /messages so
+        // reload/retry keep sessionMode, runContext, and applied plugin.
+        ...runUserSeed.turnMetadata,
+        // Preserve request attachments/commentAttachments on the seeded user
+        // turn so reload/listMessages still show chips and annotation context
+        // for omit-pin / headless clients (same columns as PUT /messages).
+        ...runUserSeed.attachments,
+      });
+      // Bump parent project updatedAt so listProjects reorders (same as
+      // PUT /messages). Headless/API turns that never hit that route would
+      // otherwise leave the project buried under more recent activity.
+      if (typeof meta.projectId === 'string' && meta.projectId) {
+        updateProject(db, meta.projectId, {});
+      }
+    };
+    const isRunActiveForAssistantClaim = (runId: string): boolean => {
+      const existingRun = design.runs.get(runId);
+      return Boolean(existingRun && !TERMINAL_RUN_STATUSES.has(existingRun.status));
+    };
     meta.requestFingerprint = runRequestFingerprint(
       meta,
       resolvedSnapshot?.ok ? resolvedSnapshot.snapshot : null,
@@ -1680,7 +1821,31 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           ...(run.pluginId ? { pluginId: run.pluginId } : {}),
         });
       }
-      if (!rechargeFailure || !design.runs.prepareRestart(run)) {
+      if (!rechargeFailure) {
+        return sendApiError(
+          res,
+          409,
+          'RUN_NOT_RECHARGE_RESUMABLE',
+          'Only a failed Open Design Cloud run waiting for recharge can be resumed with the same request',
+        );
+      }
+      // Claim BEFORE arming the restart. On a conflict the reused run stays
+      // terminal + resumable (never dropped) and the request is rejected —
+      // the claim writes the post-restart `queued` intent so the message row
+      // does not stay terminal while the run is being resumed (#6418).
+      const resumeClaim = pinAssistantMessageOnRunCreate(db, run, {
+        status: 'queued',
+        isRunActive: isRunActiveForAssistantClaim,
+      });
+      if (!resumeClaim.ok) {
+        return sendApiError(
+          res,
+          409,
+          'RUN_IN_PROGRESS',
+          'assistantMessageId is already bound to an active run',
+        );
+      }
+      if (!design.runs.prepareRestart(run)) {
         return sendApiError(
           res,
           409,
@@ -1690,37 +1855,36 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       }
       resumed = true;
     }
-    if (creation.kind === 'created' && runUserSeed) {
+    // Atomic ownership claim runs BEFORE any message seeding: a rejected run
+    // never leaves an orphan user turn (nettee on #6418). Only a freshly
+    // created run is dropped on failure — a resumed loser is the client's own
+    // idempotent run and must survive.
+    if (creation.kind === 'created') {
+      let claimed: { ok: boolean; reason?: 'active' | 'scope' };
       try {
-        const now = Date.now();
-        upsertMessage(db, runUserSeed.conversationId, {
-          id: runUserSeed.id,
-          role: 'user',
-          content: runUserSeed.content,
-          startedAt: now,
-          endedAt: now,
-          // Same turn metadata the web client writes via PUT /messages so
-          // reload/retry keep sessionMode, runContext, and applied plugin.
-          ...runUserSeed.turnMetadata,
-          // Preserve request attachments/commentAttachments on the seeded user
-          // turn so reload/listMessages still show chips and annotation context
-          // for omit-pin / headless clients (same columns as PUT /messages).
-          ...runUserSeed.attachments,
-        });
-        // Bump parent project updatedAt so listProjects reorders (same as
-        // PUT /messages). Headless/API turns that never hit that route would
-        // otherwise leave the project buried under more recent activity.
-        if (typeof meta.projectId === 'string' && meta.projectId) {
-          updateProject(db, meta.projectId, {});
-        }
+        const claimOptions = runUserSeed
+          ? {
+              beforeClaimCommit: () => {
+                seedRunUserMessage();
+              },
+              isRunActive: isRunActiveForAssistantClaim,
+            }
+          : { isRunActive: isRunActiveForAssistantClaim };
+        claimed = pinAssistantMessageOnRunCreate(db, run, claimOptions);
       } catch (err) {
-        console.warn('[runs] api client user message pin failed', err);
+        // Never let an unclaimed run start.
+        design.runs.drop(run);
+        throw err;
       }
-    }
-    try {
-      pinAssistantMessageOnRunCreate(db, run);
-    } catch (err) {
-      console.warn('[runs] message create pin failed', err);
+      if (!claimed.ok) {
+        design.runs.drop(run);
+        return sendApiError(
+          res,
+          409,
+          'RUN_IN_PROGRESS',
+          'assistantMessageId is already bound to an active run',
+        );
+      }
     }
     const declaredClient = String(req.get('x-od-client') ?? '').toLowerCase();
     if (requestAnalyticsContext?.clientType === 'external_mcp') {
@@ -2995,7 +3159,62 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       mediaExecution: mediaExecution.policy,
       toolBundle: toolBundle.bundle,
       ...(chatProject?.metadata ? { projectMetadata: chatProject.metadata } : {}),
+      // `withoutSensitiveRunInput` strips caller scope; initialize the
+      // server-owned value explicitly and replace it below for bound projects.
+      workspaceScope: null,
     };
+    // Mirror the POST /api/runs ownership check: the assistantMessageId must
+    // reference an assistant message in THIS conversation, or the run mutates a
+    // row it does not own via the id-only writers (#6418 review).
+    const chatAssistantMessageId =
+      typeof meta.assistantMessageId === 'string' && meta.assistantMessageId
+        ? meta.assistantMessageId
+        : null;
+    if (chatAssistantMessageId) {
+      // Without a resolvable conversation there is nothing to validate the
+      // assistantMessageId against — the run would mutate a row it does not
+      // own via the id-only writers (nettee on #6418).
+      if (typeof meta.conversationId !== 'string' || !meta.conversationId) {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'assistantMessageId requires a conversation');
+      }
+      const chatConversation = getConversation(db, meta.conversationId);
+      if (
+        !chatConversation
+        || (
+          typeof meta.projectId === 'string'
+          && meta.projectId
+          && chatConversation.projectId !== meta.projectId
+        )
+      ) {
+        return sendApiError(res, 404, 'CONVERSATION_NOT_FOUND', 'conversation not found for project');
+      }
+      const existingAssistantPin = db
+        .prepare(
+          `SELECT role, conversation_id AS conversationId, run_id AS runId, run_status AS runStatus FROM messages WHERE id = ?`,
+        )
+        .get(chatAssistantMessageId) as
+        | { role?: unknown; conversationId?: unknown; runId?: unknown; runStatus?: unknown }
+        | undefined;
+      if (existingAssistantPin && existingAssistantPin.role !== 'assistant') {
+        return sendApiError(
+          res,
+          409,
+          'INVALID_ASSISTANT_MESSAGE',
+          'assistantMessageId must reference an assistant message',
+        );
+      }
+      if (
+        existingAssistantPin
+        && existingAssistantPin.conversationId !== meta.conversationId
+      ) {
+        return sendApiError(
+          res,
+          409,
+          'IDEMPOTENCY_CONFLICT',
+          'assistantMessageId belongs to a different conversation',
+        );
+      }
+    }
     if (typeof meta.projectId === 'string' && meta.projectId) {
       const preparedWorkspaceScope =
         await prepareRunWorkspaceScope(
@@ -3042,10 +3261,29 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       design.runs.stream(run, req, res);
       return;
     }
+    const isRunActiveForAssistantClaim = (runId: string): boolean => {
+      const existingRun = design.runs.get(runId);
+      return Boolean(existingRun && !TERMINAL_RUN_STATUSES.has(existingRun.status));
+    };
+    // Atomic ownership claim (#6418): a created run must acquire the assistant
+    // message before streaming — otherwise drop the run and reject.
+    let claimed: { ok: boolean; reason?: 'active' | 'scope' };
     try {
-      pinAssistantMessageOnRunCreate(db, run);
+      claimed = pinAssistantMessageOnRunCreate(db, run, {
+        isRunActive: isRunActiveForAssistantClaim,
+      });
     } catch (err) {
-      console.warn('[chat] message create pin failed', err);
+      design.runs.drop(run);
+      throw err;
+    }
+    if (!claimed.ok) {
+      design.runs.drop(run);
+      return sendApiError(
+        res,
+        409,
+        'RUN_IN_PROGRESS',
+        'assistantMessageId is already bound to an active run',
+      );
     }
     design.runs.stream(run, req, res);
     reconcileAssistantMessageOnRunEnd(db, design.runs, run);

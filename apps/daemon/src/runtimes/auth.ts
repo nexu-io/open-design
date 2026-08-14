@@ -23,6 +23,9 @@ const CURSOR_AUTH_GUIDANCE =
 const DEEPSEEK_AUTH_GUIDANCE =
   'DeepSeek TUI is installed but is not authenticated. Add or verify your API key in `~/.deepseek/config.toml` as `api_key = "..."`, or expose DEEPSEEK_API_KEY to the Open Design daemon process, then retry. If Open Design is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
 
+const DEEPSEEK_HARNESS_AUTH_GUIDANCE =
+  'DeepSeek Harness is installed and compatible, but its provider credential is missing. Add your DeepSeek API key on the Models page, or expose DEEPSEEK_API_KEY to the Open Design daemon process, then retry.';
+
 // agy's print mode (`-p`) detects a missing OAuth token, prints the
 // Google sign-in URL to stdout, waits 30s for completion, then exits
 // "Error: authentication timed out." That URL points at a callback page
@@ -62,6 +65,10 @@ export function cursorAuthGuidance(): string {
 
 export function deepseekAuthGuidance(): string {
   return DEEPSEEK_AUTH_GUIDANCE;
+}
+
+export function deepseekHarnessAuthGuidance(): string {
+  return DEEPSEEK_HARNESS_AUTH_GUIDANCE;
 }
 
 export function antigravityAuthGuidance(): string {
@@ -186,6 +193,13 @@ export function classifyAgentAuthFailure(
       message: deepseekAuthGuidance(),
     };
   }
+  if (agentId === 'deepseek-harness') {
+    if (!isDeepSeekAuthFailureText(text)) return null;
+    return {
+      status: 'missing',
+      message: deepseekHarnessAuthGuidance(),
+    };
+  }
   if (agentId === 'antigravity') {
     if (!isAntigravityAuthFailureText(text)) return null;
     return {
@@ -234,7 +248,7 @@ const STATUS_CTX =
 
 // Authentication / authorization: a missing, invalid, or expired credential.
 const AGENT_AUTH_FAILURE_RE = new RegExp(
-  `(\\b(unauthor(?:ized|ised)|authenticat(?:e|ed|ion)|invalid[ _-]?(?:api[ _-]?)?key|incorrect api key|x-api-key|not (?:authenticated|logged[ _-]?in)|please (?:sign|log)[ _-]?in|oauth token (?:has )?expired|session expired|credentials? (?:are )?(?:missing|invalid|required))\\b|\\/login\\b|${STATUS_CTX}401\\b)`,
+  `(\\b(unauthor(?:ized|ised)|authenticat(?:e|ed|ion)|invalid[ _-]?(?:api[ _-]?)?key|incorrect api key|no api key|x-api-key|missing[ _-]?credentials?|not (?:authenticated|logged[ _-]?in)|please (?:sign|log)[ _-]?in|oauth token (?:has )?expired|session expired|credentials? (?:are )?(?:missing|invalid|required))\\b|\\/login\\b|${STATUS_CTX}401\\b)`,
   'i',
 );
 
@@ -309,6 +323,7 @@ const TAILORED_AUTH_AGENTS = new Set([
   'claude',
   'cursor-agent',
   'deepseek',
+  'deepseek-harness',
   'antigravity',
   'reasonix',
 ]);

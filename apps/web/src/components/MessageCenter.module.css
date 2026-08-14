@@ -227,6 +227,7 @@
 .item {
   flex: 0 0 auto;
   position: relative;
+  min-width: 0;
 }
 
 .item:not(:last-child)::after {
@@ -243,38 +244,18 @@
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.itemViewHint {
-  position: absolute;
-  top: 10px;
-  right: 13px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
-  border-radius: var(--radius-pill, 999px);
-  background: var(--accent);
-  color: #00ff08;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.3;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 120ms;
-}
-
-.item:hover .itemViewHint {
-  opacity: 1;
-}
-
 .itemSummary {
+  box-sizing: border-box;
   width: 100%;
+  height: auto;
+  min-width: 0;
   min-height: 84px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   justify-content: flex-start;
   gap: 6px;
-  padding: 12px 13px 10px 3px;
+  padding: 12px 13px 10px;
   border: 0;
   background: transparent;
   color: inherit;
@@ -287,6 +268,8 @@
 }
 
 .itemMeta {
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -297,12 +280,14 @@
 }
 
 .itemMeta span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .itemSummary strong {
+  max-width: 100%;
   overflow: hidden;
   color: var(--text);
   font-size: 13.5px;
@@ -317,6 +302,7 @@
 }
 
 .bodyPreview {
+  max-width: 100%;
   overflow: hidden;
   color: var(--text-muted);
   font-size: 12.5px;
@@ -331,35 +317,16 @@
   color: var(--text);
   font-size: 13px;
   line-height: 1.58;
+  overflow-wrap: anywhere;
   text-overflow: clip;
   white-space: normal;
 }
 
-.itemActions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 0 13px 12px 3px;
-}
-
-.itemActions .primaryAction {
-  min-height: 30px;
-  padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 72%, var(--border));
-  border-radius: var(--radius-sm);
-  background: var(--accent);
-  color: var(--accent-contrast, #fff);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14);
-  white-space: nowrap;
-}
-
-.itemActions .primaryAction:hover {
-  border-color: color-mix(in srgb, var(--accent) 72%, var(--border));
-  background: color-mix(in srgb, var(--accent) 86%, var(--text-strong));
-  color: var(--accent-contrast, #fff);
+.itemExpanded .itemSummary strong {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .empty {

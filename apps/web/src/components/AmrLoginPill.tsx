@@ -29,6 +29,7 @@ import {
   AMR_LOGIN_STARTUP_SETTLE_MS,
   amrLoginPollOutcome,
   amrLoginStatusEventReason,
+  isAmrSessionAuthenticated,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
 import {
@@ -352,7 +353,7 @@ export function AmrLoginPill({
     // clear any stale login error/pending the early-stopped poll left behind so
     // `accountStatus`, which ranks `errorMessage` above `loggedIn`, doesn't keep
     // the pill stuck on Authorize.
-    if (initialStatus?.loggedIn) {
+    if (isAmrSessionAuthenticated(initialStatus)) {
       stopPolling();
       loginStartedAtRef.current = null;
       loginPendingRef.current = false;
@@ -485,7 +486,7 @@ export function AmrLoginPill({
       void refresh().then((next) => {
         if (!next) return;
         if (next.authAttemptId) authAttemptIdRef.current = next.authAttemptId;
-        if (next.loggedIn) {
+        if (isAmrSessionAuthenticated(next)) {
           stopPolling();
           loginStartedAtRef.current = null;
           loginPendingRef.current = false;
@@ -771,14 +772,14 @@ export function AmrLoginPill({
     [analytics.track, installationId, metricsConsent, status?.profile],
   );
 
-  const loggedIn = status?.loggedIn === true;
+  const loggedIn = isAmrSessionAuthenticated(status);
   const userEmail = status?.user?.email ?? '';
   const loginInFlight =
-    pending === 'login' || (status?.loggedIn !== true && status?.loginInFlight === true);
+    pending === 'login' || (!loggedIn && status?.loginInFlight === true);
   const logoutInFlight = pending === 'logout';
   const cancelInFlight = pending === 'cancel';
   const activeLoginActivationStatus =
-    showActivationDetails && status?.loggedIn !== true && status?.loginInFlight === true
+    showActivationDetails && !loggedIn && status?.loginInFlight === true
       ? status
       : null;
   const accountStatus: AmrAccountControlStatus = errorMessage

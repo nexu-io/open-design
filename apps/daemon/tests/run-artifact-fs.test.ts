@@ -8,11 +8,27 @@ import {
   diffRunArtifacts,
   primaryArtifactChangeForRun,
   snapshotProjectArtifacts,
+  snapshotProjectArtifactsAsync,
 } from '../src/run-artifact-fs.js';
 
 function tmpProject(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'od-artifact-fs-'));
 }
+
+test('the async snapshot preserves the synchronous snapshot contract', async () => {
+  const root = tmpProject();
+  fs.mkdirSync(path.join(root, 'nested'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'node_modules'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'index.html'), '<html>page</html>');
+  fs.writeFileSync(path.join(root, 'nested', 'styles.css'), 'body {}');
+  fs.writeFileSync(path.join(root, 'nested', 'notes.txt'), 'not tracked');
+  fs.writeFileSync(path.join(root, 'node_modules', 'ignored.html'), '<html>ignored</html>');
+
+  assert.deepEqual(
+    await snapshotProjectArtifactsAsync(root),
+    snapshotProjectArtifacts(root),
+  );
+});
 
 test('a second-round edit of an existing artifact counts as touched, not zero', () => {
   const root = tmpProject();

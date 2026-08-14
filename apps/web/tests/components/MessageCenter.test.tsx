@@ -87,6 +87,23 @@ describe('MessageCenter', () => {
     expect(String(anonymousPull?.[0])).not.toContain('startedAt=');
   });
 
+  it('falls back to the public feed when the AMR runtime is unavailable', async () => {
+    mockFetch({
+      onStatus: async () => Response.json({ error: 'amr-runtime-unavailable' }, { status: 503 }),
+    });
+
+    renderMessageCenter();
+    const dialog = await openCenter();
+
+    expect(within(dialog).getByText('Open Design 0.14 is available')).toBeTruthy();
+    expect(
+      vi.mocked(fetch).mock.calls.some(([url]) =>
+        String(url).includes('/api/integrations/vela/message-center-public/messages?'),
+      ),
+    ).toBe(true);
+    expect(screen.queryByText('Check failed. Please retry.')).toBeNull();
+  });
+
   it('keeps anonymous read state locally and restores it', async () => {
     renderMessageCenter();
     await openCenter();
@@ -113,13 +130,21 @@ describe('MessageCenter', () => {
     await waitFor(() => expect(screen.getByText('All caught up')).toBeTruthy());
   });
 
-  it('opens CTA URLs with the existing external-link behavior', async () => {
-    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+  it('expands the whole message row without rendering view actions', async () => {
     renderMessageCenter();
     await openCenter();
-    fireEvent.click(screen.getByRole('button', { name: /Open Design 0\.14 is available/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'View update' }));
-    expect(open).toHaveBeenCalledWith('https://open-design.ai/update', '_blank', 'noopener,noreferrer');
+    const row = screen.getByRole('button', { name: /Open Design 0\.14 is available/ });
+
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByText('View')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'View update' })).toBeNull();
+
+    fireEvent.click(row);
+
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(row.closest('article')?.className).toContain('itemExpanded');
+    expect(screen.getByText('The new release is ready.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'View update' })).toBeNull();
   });
 
   it('keeps both anonymous reads when two expands resolve out of order', async () => {
@@ -448,16 +473,6 @@ describe('MessageCenter', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
     expect(readAttempts).toBe(1);
-  });
-
-  it('hides CTA actions for non-http URLs', async () => {
-    mockFetch({
-      messages: [{ ...defaultMessages[0]!, ctaUrl: 'javascript:alert(1)' }],
-    });
-    renderMessageCenter();
-    await openCenter();
-    fireEvent.click(screen.getByRole('button', { name: /Open Design 0\.14 is available/ }));
-    expect(screen.queryByRole('button', { name: 'View update' })).toBeNull();
   });
 
   it('closes with Escape and restores trigger focus', async () => {

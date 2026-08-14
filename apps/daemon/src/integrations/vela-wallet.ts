@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import type { AmrWalletSnapshot } from '@open-design/contracts';
 
 import {
+  markVelaAuthorizationExpired,
   readVelaControlApiContext,
   readVelaLoginStatus,
   type VelaUser,
@@ -125,6 +126,8 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
       profile: string;
       timeoutMs: number;
       user: AmrWalletSnapshot['user'];
+      env: NodeJS.ProcessEnv;
+      configuredEnv: Record<string, string>;
     },
   ): Promise<AmrWalletSnapshot> {
     const fetchedAt = now().toISOString();
@@ -140,6 +143,7 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
       });
       if (response.status === 401 || response.status === 403) {
         cache.delete(key);
+        markVelaAuthorizationExpired(input.env, input.configuredEnv);
         return unavailableSnapshot({
           code: 'unauthorized',
           fetchedAt,
@@ -274,6 +278,8 @@ export function createVelaWalletSnapshotReader(options: VelaWalletReaderOptions 
       profile: context.profile,
       timeoutMs,
       user,
+      env,
+      configuredEnv,
     }).finally(() => {
       inflight.delete(key);
     });

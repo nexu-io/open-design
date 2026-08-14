@@ -531,19 +531,28 @@ describe('chat run service shutdown', () => {
         order.push(signal);
         return originalKill(signal);
       });
-      const abort = vi.fn(() => order.push('abort'));
       const run = runs.create();
       run.status = 'running';
+      run.stdinOpen = true;
       (run as any).child = child;
-      (run as any).acpSession = { abort };
+      (run as any).acpSession = {
+        abort: vi.fn(() => {
+          order.push('abort');
+          expect(child.stdin.end).not.toHaveBeenCalled();
+          expect(run.stdinOpen).toBe(true);
+        }),
+      };
 
       const cancelPromise = runs.cancel(run);
 
-      expect(abort).toHaveBeenCalledTimes(1);
+      expect((run as any).acpSession.abort).toHaveBeenCalledTimes(1);
       expect(order).toEqual(['abort']);
+      expect(child.stdin.end).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(30);
       expect(order).toEqual(['abort', 'SIGTERM']);
+      expect(child.stdin.end).toHaveBeenCalledTimes(1);
+      expect(run.stdinOpen).toBe(false);
 
       await vi.advanceTimersByTimeAsync(30);
       expect(order).toEqual(['abort', 'SIGTERM', 'SIGKILL']);
@@ -861,15 +870,21 @@ describe('chat run service shutdown', () => {
   it('uses adapter abort before process signals for ACP-style runs', async () => {
     const runs = createRuns();
     const child = new FakeChildProcess({ closeOn: 'SIGTERM' });
-    const abort = vi.fn();
     const run = runs.create();
     run.status = 'running';
+    run.stdinOpen = true;
     (run as any).child = child;
-    (run as any).acpSession = { abort };
+    (run as any).acpSession = {
+      abort: vi.fn(() => {
+        expect(child.stdin.end).not.toHaveBeenCalled();
+        expect(run.stdinOpen).toBe(true);
+      }),
+    };
 
     await runs.shutdownActive({ graceMs: 10 });
 
-    expect(abort).toHaveBeenCalledTimes(1);
+    expect((run as any).acpSession.abort).toHaveBeenCalledTimes(1);
+    expect(child.lifecycle.slice(0, 2)).toEqual(['stdin.end', 'SIGTERM']);
     expect(child.signals).toEqual(['SIGTERM']);
     expect(run.status).toBe('canceled');
   });
@@ -1109,7 +1124,23 @@ describe('run event log persistence', () => {
         schemaVersion: 1,
         projectId: 'p1',
         workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
         source: 'persisted_project_binding',
+      },
+      designSystemScope: {
+        schemaVersion: 1,
+        kind: 'workspace-resource',
+        projectId: 'p1',
+        designSystemId: 'user:brand-a',
+        workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
+        bindingResourceId: 'user:brand-a',
+        visibility: 'personal',
+        bindingResourceState: 'active',
+        bindingVersion: 1,
+        bindingCreatedAt: 50,
+        bindingUpdatedAt: 100,
+        bindingCreatedByWorkspaceMemberId: 'member-a',
       },
     });
     const statePath = path.join(tmpDir, run.id, 'state.json');
@@ -1123,7 +1154,14 @@ describe('run event log persistence', () => {
         schemaVersion: 1,
         projectId: 'p1',
         workspaceId: 'workspace-a',
+        workspaceMemberId: 'member-a',
         source: 'persisted_project_binding',
+      },
+      designSystemScope: {
+        kind: 'workspace-resource',
+        designSystemId: 'user:brand-a',
+        bindingResourceId: 'user:brand-a',
+        visibility: 'personal',
       },
     });
 

@@ -53,8 +53,11 @@
   flex-direction: column;
   align-items: center;
   gap: var(--spacing-6);
-  /* Trim the large blank band while keeping the hero clear of the tab strip. */
-  padding: 240px 0 var(--spacing-4);
+  /* Trim the large blank band while keeping the hero clear of the tab strip.
+     96px lands the composer card ~300px below the scroll column's top (the
+     logo + type carousel above it add ~204px) — per product: 输入框整块上移，
+     顶距从 446 收到 300。 */
+  padding: 96px 0 var(--spacing-4);
 }
 .home-hero__brand {
   position: relative;
@@ -476,7 +479,7 @@
   z-index: 2;
   box-sizing: border-box;
   width: 100%;
-  max-width: 728px;
+  max-width: 820px;
   display: flex;
   flex-direction: column;
   gap: var(--spacing-8);
@@ -542,8 +545,7 @@
    920). Popover z-indexes inside the card (1503/1701/…) are local to the
    card's stacking context and only order its own children. */
 .home-hero__input-card:has(.inline-switcher__popover),
-.home-hero__input-card:has(.home-hero__plugin-picker),
-.home-hero__input-card:has(.home-hero__template-menu) {
+.home-hero__input-card:has(.home-hero__plugin-picker) {
   z-index: 9;
   overflow: visible;
 }
@@ -554,8 +556,7 @@
    composer-card itself while a composer popover is open so its trapped popover
    clears the rail fades instead of the white gradient floating over it. */
 .home-hero__composer-card:has(.inline-switcher__popover),
-.home-hero__composer-card:has(.home-hero__plugin-picker),
-.home-hero__composer-card:has(.home-hero__template-menu) {
+.home-hero__composer-card:has(.home-hero__plugin-picker) {
   z-index: 40;
 }
 .home-hero__input-card--compact-authoring {
@@ -1545,80 +1546,6 @@
   flex: 0 0 auto;
   opacity: 0.55;
 }
-.home-hero__active-type-chip {
-  appearance: none;
-  height: 32px;
-  max-width: 220px;
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.2;
-  box-shadow: var(--shadow-xs);
-  transition:
-    background-color 120ms var(--ease-out),
-    border-color 120ms var(--ease-out),
-    color 120ms var(--ease-out),
-    box-shadow 120ms var(--ease-out);
-}
-.home-hero__active-type-chip.is-active {
-  border-color: color-mix(in srgb, var(--selected) 42%, var(--border));
-  background: color-mix(in srgb, var(--selected) 10%, var(--bg-panel));
-  color: var(--selected);
-  font-weight: 600;
-  box-shadow:
-    0 0 0 3px color-mix(in srgb, var(--selected-soft) 66%, transparent),
-    var(--shadow-xs);
-}
-.home-hero__active-type-chip-icon {
-  width: 13px;
-  height: 13px;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-pill);
-}
-.home-hero__active-type-chip.is-active .home-hero__active-type-chip-icon {
-  background: color-mix(in srgb, var(--selected) 12%, transparent);
-  color: var(--selected);
-}
-.home-hero__active-type-chip-close {
-  /* Always visible so the chip reads as removable at a glance — it brightens
-     to full opacity on hover/focus rather than appearing from nothing. */
-  flex: 0 0 auto;
-  width: 12px;
-  opacity: 0.55;
-  transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
-}
-.home-hero__active-type-chip span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.home-hero__active-type-chip:hover,
-.home-hero__active-type-chip:focus-visible {
-  outline: none;
-  border-color: color-mix(in srgb, var(--selected) 54%, var(--border-strong));
-  background: color-mix(in srgb, var(--selected) 14%, var(--bg-panel));
-  color: var(--selected);
-  box-shadow:
-    0 0 0 3px var(--selected-soft),
-    var(--shadow-xs);
-}
-.home-hero__active-type-chip:hover .home-hero__active-type-chip-close,
-.home-hero__active-type-chip:focus-visible .home-hero__active-type-chip-close {
-  opacity: 1;
-}
 .home-hero__footer-options {
   display: contents;
 }
@@ -2590,8 +2517,11 @@
   overflow-y: visible;
   overscroll-behavior-x: contain;
   padding: 1px 2px 8px;
-  scrollbar-width: thin;
+  /* No visible scrollbar: trackpad/wheel scrolling and the edge auto-scroll
+     zones (useEdgeAutoScroll) already cover navigation. */
+  scrollbar-width: none;
 }
+.home-hero__plugin-presets::-webkit-scrollbar { display: none; }
 
 /* Each preset is wrapped in a positioning cell so the "Open as project"
    overlay can sit over the thumbnail without nesting a button inside the
@@ -3009,60 +2939,6 @@
 /* Positioning context for the rail so the edge auto-scroll zones can anchor to
    the visible rail box (not the full page width). Carries the centering and
    max-width the scroll container used to own. */
-/* Template starter block: a "Start with a template…" caption above the
-   scenario-card rail, and a "…or start a blank project" escape hatch below it.
-   The section is one flex child of the centered hero column. */
-.home-hero__template-section {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-.home-hero__template-section.is-expanded {
-  min-height: 210px;
-  padding-bottom: var(--spacing-28);
-}
-.home-hero__template-heading {
-  padding: 0 2px;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.3;
-  text-align: center;
-}
-.home-hero__blank-project {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.2;
-  cursor: pointer;
-  transition:
-    color 120ms var(--ease-out),
-    background-color 120ms var(--ease-out);
-}
-.home-hero__blank-project:hover,
-.home-hero__blank-project:focus-visible {
-  outline: none;
-  color: var(--text-strong);
-  background: var(--bg-subtle);
-}
-.home-hero__blank-project svg {
-  opacity: 0.7;
-  transition: transform 120ms var(--ease-out);
-}
-.home-hero__blank-project:hover svg {
-  transform: translateX(2px);
-}
 .home-hero__scenario-cards-wrap {
   position: relative;
   max-width: min(900px, 100%);
@@ -3286,23 +3162,6 @@
   font-weight: 600;
   letter-spacing: 0;
 }
-/* Mini ScenarioArt thumbnail in the trigger so the pill's leading glyph matches
-   the dropdown's illustrative cards (instead of a flat line icon). */
-.home-hero__template-trigger-thumb {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 18px;
-  overflow: hidden;
-  border-radius: var(--radius-xs, 4px);
-  color: var(--accent);
-}
-.home-hero__template-trigger-thumb .home-hero__scenario-art-svg {
-  width: 24px;
-  height: auto;
-}
 .home-hero__template-option.has-selection .home-hero__template-kicker {
   color: var(--text-faint);
 }
@@ -3319,447 +3178,6 @@
 .home-hero__template-option {
   padding: 0 16px;
 }
-/* Hairline between the selected label and the clear × (replaces the
-   dropdown chevron once a template is chosen). The `> span` qualifier +
-   explicit position/clip resets out-specify the footer option's
-   visually-hidden `> span` rule above. */
-.home-hero__footer-option > span.home-hero__template-divider {
-  position: static;
-  flex: 0 0 auto;
-  width: 1px;
-  height: 14px;
-  margin: 0 4px;
-  overflow: visible;
-  clip: auto;
-  background: var(--material-separator, var(--border));
-}
-.home-hero__template-reset {
-  appearance: none;
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: -5px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  opacity: 0.72;
-  transition:
-    opacity 120ms var(--ease-out),
-    color 120ms var(--ease-out);
-}
-.home-hero__template-reset svg {
-  display: block;
-  flex: 0 0 auto;
-  pointer-events: none;
-}
-.home-hero__template-reset:hover,
-.home-hero__template-reset:focus-visible {
-  outline: none;
-  background: transparent;
-  color: var(--text-muted);
-  opacity: 1;
-}
-.home-hero__template-reset:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
-  outline-offset: 2px;
-}
-/* Reset × on the green wash: brand green with a deeper green hover. */
-.home-hero__template-option.has-selection .home-hero__template-reset {
-  color: #2f781d;
-}
-.home-hero__template-option.has-selection .home-hero__template-reset:hover,
-.home-hero__template-option.has-selection .home-hero__template-reset:focus-visible {
-  background: color-mix(in srgb, #2f781d 12%, transparent);
-  color: #1f5711;
-}
-/* Radial template picker — a donut menu centered on the trigger. Wedges are
-   SVG paths (the only way to get true pie-slice hit areas); icons ride on the
-   wedge mid-angles as HTML spans; the hole is the close button. The ring
-   itself is the frosted sheet (same 94%-frost rationale as the old grid menu:
-   Chromium fails backdrop sampling on this ancestor chain, so the frost must
-   hold up without a working sampler). */
-.home-hero__template-radial {
-  position: fixed;
-  left: 50%;
-  top: 50%;
-  z-index: 140;
-  width: 240px;
-  height: 240px;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  /* No hairline ring: the disc edge is feathered (see the ::before mask), so
-     a crisp 1px circle would reintroduce the hard rim. Elevation only. */
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.16);
-  /* Fade-only entrance: a scale transform here makes Chromium stretch the
-     frost layer's stale backdrop snapshot past the rounded clip, hazing the
-     page around the disc. */
-  animation: home-template-radial-in 0.18s cubic-bezier(0.23, 1, 0.32, 1);
-}
-@keyframes home-template-radial-in {
-  from {
-    opacity: 0;
-  }
-}
-/* The frost lives on its own non-animated inner circle: backdrop-filter
-   directly on the (animated, composited) container leaks its blur sampling
-   outside the border-radius on some Chromium builds. */
-.home-hero__template-radial::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  /* Real glass (66% frost + blur + saturate): portaled to <body> the
-     backdrop sampler works, so the near-opaque 90% tint the old in-hero menu
-     needed reads as a solid disc instead of 磨砂玻璃. */
-  background: var(--glass-regular);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  /* Feathered rim: white tint + frost dissolve to transparent over the outer
-     band, so the disc has no hard circular cut — it melts into the page.
-     Solid through 82% keeps the wedge icons on fully frosted ground. */
-  -webkit-mask-image: radial-gradient(circle closest-side, #000 72%, transparent 100%);
-  mask-image: radial-gradient(circle closest-side, #000 72%, transparent 100%);
-}
-/* Frosted halo: the page around the disc blurs too, extending 24% beyond the
-   module and fading out (scrim blur tier, degradation-safe). The solid stop
-   sits at the disc edge (~68% of the halo radius) so the blur is continuous
-   under the feathered rim and rolls off well outside it. */
-.home-hero__template-radial::after {
-  content: '';
-  position: absolute;
-  inset: -24%;
-  z-index: -1;
-  border-radius: 50%;
-  pointer-events: none;
-  -webkit-backdrop-filter: var(--scrim-backdrop);
-  backdrop-filter: var(--scrim-backdrop);
-  -webkit-mask-image: radial-gradient(circle closest-side, #000 66%, transparent 100%);
-  mask-image: radial-gradient(circle closest-side, #000 66%, transparent 100%);
-}
-.home-hero__template-radial-ring {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  /* The svg root's box spans the whole square; only the wedge paths may take
-     hits, or the root intercepts clicks meant for the center button. */
-  pointer-events: none;
-}
-.home-hero__template-radial-wedge {
-  fill: transparent;
-  pointer-events: visiblePainted;
-  cursor: pointer;
-  outline: none;
-  transition: fill 0.14s cubic-bezier(0.23, 1, 0.32, 1);
-}
-.home-hero__template-radial-wedge.is-active {
-  /* Left→right brand gradient — SVG defs live in TemplatePicker.tsx (path
-     fills can't take CSS gradients). */
-  fill: url(#od-template-wedge-grad);
-}
-.home-hero__template-radial-wedge.is-hover {
-  /* Whisper brand tint — the same fill as the nav rail's active (最近)
-     button, so hover here and selection there read as one family. */
-  fill: #f9fff4;
-}
-/* Hovering the already-selected wedge keeps the gradient (two classes
-   outrank the single-class hover rule above). */
-.home-hero__template-radial-wedge.is-active.is-hover {
-  fill: url(#od-template-wedge-grad);
-}
-.home-hero__template-radial-wedge[aria-disabled='true'] {
-  cursor: default;
-}
-/* Arc hugging the center disc over the hovered wedge's angular range — the
-   disc "points" back at the previewed template. Round caps per 形状 spec. */
-.home-hero__template-radial-center-arc {
-  fill: none;
-  stroke: #87ea5c;
-  stroke-width: 5;
-  stroke-linecap: round;
-  pointer-events: none;
-}
-.home-hero__template-radial-icon {
-  position: absolute;
-  display: flex;
-  transform: translate(-50%, -50%);
-  color: var(--text-muted);
-  pointer-events: none;
-  transition: color 0.14s cubic-bezier(0.23, 1, 0.32, 1);
-}
-.home-hero__template-radial-icon.is-active {
-  color: var(--text);
-}
-.home-hero__template-radial-icon.is-hover {
-  /* Deep brand green — mirrors the nav rail's active icon color. */
-  color: #2f781d;
-}
-.home-hero__template-radial-center {
-  outline: none;
-  transition:
-    background 0.14s cubic-bezier(0.23, 1, 0.32, 1),
-    box-shadow 0.14s cubic-bezier(0.23, 1, 0.32, 1);
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  /* Matches the wedge hole (R_IN 72 in a 400 viewBox on a 240px disc). */
-  width: 86px;
-  height: 86px;
-  border: none;
-  border-radius: 50%;
-  background: var(--bg);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 6%, transparent);
-  color: var(--text);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 0 14px;
-  cursor: pointer;
-}
-/* The global button press feedback (primitives.css `button:active` →
-   `transform: translateY(1px)`) REPLACES this button's centering translate,
-   teleporting it a quadrant away mid-press so the mouseup lands on the ring
-   and the click never fires. Re-state the full transform for :active. */
-.home-hero__template-radial-center:active:not(:disabled) {
-  transform: translate(-50%, -50%) translateY(1px);
-}
-.home-hero__template-radial-center:hover,
-.home-hero__template-radial-center:focus-visible {
-  background: color-mix(in srgb, var(--text) 7%, var(--bg));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent);
-}
-/* Previewing a wedge (pointer on a template): the center disc flips to the
-   darkest neutral with the brand green carrying the icon + label, echoing
-   the green gradient on the hovered wedge. Hover/focus keep the dark fill so
-   the disc doesn't flash back to white while a preview is showing. */
-.home-hero__template-radial-center.is-previewing,
-.home-hero__template-radial-center.is-previewing:hover,
-.home-hero__template-radial-center.is-previewing:focus-visible {
-  background: #202020;
-  box-shadow: 0 0 0 1px color-mix(in srgb, #202020 32%, transparent);
-  color: #87ea5c;
-}
-.home-hero__template-radial-center.is-previewing .home-hero__template-radial-center-icon {
-  color: #87ea5c;
-}
-.home-hero__template-radial-center-icon {
-  display: flex;
-  color: var(--text);
-}
-.home-hero__template-radial-center-label {
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.home-hero__template-menu {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 7px);
-  z-index: 140;
-  width: min(380px, calc(100vw - 32px));
-  max-height: min(440px, calc(100vh - 200px));
-  overflow-y: auto;
-  padding: 12px;
-  /* Craft-style frosted sheet: near-opaque frost + the project glass blur.
-     The high opacity is deliberate — Chromium fails to sample the backdrop
-     for this popover's ancestor chain (verified empirically), so a low-alpha
-     glass would show sharp bleed-through. At 94% the panel reads as Craft's
-     frosted sheet with or without a working sampler. */
-  border: 1px solid var(--material-separator);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--bg) 94%, transparent);
-  -webkit-backdrop-filter: var(--glass-backdrop);
-  backdrop-filter: var(--glass-backdrop);
-  box-shadow:
-    0 24px 60px rgba(15, 23, 42, 0.16),
-    0 2px 8px rgba(15, 23, 42, 0.06);
-  isolation: isolate;
-}
-.home-hero__template-menu-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.home-hero__template-search {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  height: 40px;
-  padding: 0 10px;
-  /* Quiet Craft-style row: no boxed field — the input sits directly on the
-     glass; a translucent fill only appears on focus. */
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-muted);
-  transition:
-    background-color 120ms var(--ease-out);
-}
-.home-hero__template-search:focus-within {
-  background: var(--vibrancy-fill-tertiary);
-}
-.home-hero__template-search input {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 0;
-  background: transparent;
-  outline: none;
-  font: inherit;
-  font-size: 15px;
-  color: var(--text);
-}
-.home-hero__template-search input:focus,
-.home-hero__template-search input:focus-visible {
-  outline: none;
-  border-color: transparent;
-  box-shadow: none;
-}
-.home-hero__template-clear {
-  appearance: none;
-  flex: 0 0 auto;
-  height: 34px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition:
-    color 120ms var(--ease-out),
-    background-color 120ms var(--ease-out);
-}
-.home-hero__template-clear:hover,
-.home-hero__template-clear:focus-visible {
-  outline: none;
-  color: var(--text-strong);
-  background: var(--bg-subtle);
-}
-.home-hero__template-group-label {
-  padding: 2px 2px 8px;
-  color: var(--text-faint);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.home-hero__template-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-.home-hero__template-empty {
-  padding: 12px 4px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-.home-hero__template-card {
-  appearance: none;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  min-width: 0;
-  min-height: 136px;
-  padding: 8px 8px 10px;
-  /* Vibrancy fills so the cards read as part of the frosted sheet. */
-  border: 1px solid var(--material-separator);
-  border-radius: var(--radius-md);
-  background: var(--vibrancy-fill-tertiary);
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color 120ms var(--ease-out),
-    background-color 120ms var(--ease-out),
-    transform 120ms var(--ease-out);
-}
-.home-hero__template-card:hover:not(:disabled),
-.home-hero__template-card:focus-visible {
-  outline: none;
-  border-color: var(--border-strong);
-  background: var(--vibrancy-fill-secondary);
-  transform: translateY(-1px);
-}
-.home-hero__template-card:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-.home-hero__template-card.is-active {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: var(--accent-tint);
-}
-.home-hero__template-card-art {
-  display: grid;
-  align-items: center;
-  justify-items: center;
-  flex: 0 0 auto;
-  width: 100%;
-  height: 72px;
-  overflow: hidden;
-  border-radius: var(--radius);
-  /* Same illustrative gradient as the rail's scenario-card art, so the
-     dropdown thumbnails read as the same template set. */
-  background: radial-gradient(
-    120% 120% at 30% 20%,
-    color-mix(in srgb, var(--accent-tint) 78%, var(--bg-panel)),
-    var(--bg-subtle)
-  );
-  color: var(--accent);
-}
-.home-hero__template-card .home-hero__scenario-art-svg {
-  display: block;
-  width: 76px;
-  max-width: 82%;
-  height: auto;
-  max-height: 52px;
-  flex: 0 0 auto;
-  transition: transform 160ms var(--ease-out);
-}
-.home-hero__template-card:hover:not(:disabled) .home-hero__scenario-art-svg {
-  transform: scale(1.05);
-}
-.home-hero__template-card-copy {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  flex: 1 1 auto;
-  min-width: 0;
-  text-align: center;
-}
-.home-hero__template-card-label {
-  color: var(--text-strong);
-  font-size: 12px;
-  font-weight: 600;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
-.home-hero__template-card.is-active .home-hero__template-card-label {
-  color: var(--accent);
-}
-.home-hero__template-card-desc {
-  color: var(--text-muted);
-  font-size: 12px;
-  font-weight: 500;
-  line-height: 1.25;
-  overflow-wrap: anywhere;
-}
 /* Hover-preview value in the trigger reads as transient (lighter) until
    committed by a click. */
 .home-hero__template-option .home-hero__footer-select-label.is-preview {
@@ -3770,47 +3188,191 @@
 .home-hero__template-option.has-selection .home-hero__footer-select-label.is-preview {
   color: color-mix(in srgb, #fafafa 72%, transparent);
 }
-@media (prefers-reduced-motion: reduce) {
-  .home-hero__template-card .home-hero__scenario-art-svg {
-    transition: none;
-  }
+/* ---- Template picker list menu ----------------------------------------- */
+/* List replacement for the former radial (pie) menu: compact icon + name
+   rows (no descriptions, at most 12 kinds — per product), selected row
+   carries a soft fill and a trailing check. Portaled to <body>, fixed at
+   the trigger's captured anchor, normally below and flipped above when the
+   remaining lower viewport cannot fit one complete row. */
+.home-hero__template-list {
+  position: fixed;
+  z-index: 1900;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 340px;
+  /* Exactly 6 rows visible (per product), the rest scroll: 6 × 44px row +
+     5 × 2px flex gap + 12px padding. */
+  max-height: min(286px, calc(100vh - 96px));
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 4%, transparent),
+    0 12px 32px -12px color-mix(in srgb, #000 22%, transparent);
+  transform-origin: top left;
+  animation: pop-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-
-/* Collapsible "Start from a template  or  blank project" single row. */
-.home-hero__template-bar {
+.home-hero__template-list-item {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius-md, 10px);
+  text-align: left;
+  cursor: pointer;
+}
+.home-hero__template-list-item:hover,
+.home-hero__template-list-item.is-active {
+  background: var(--bg-subtle);
+}
+.home-hero__template-list-item[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.55;
+}
+.home-hero__template-list-head {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 10px;
+  min-width: 0;
 }
-.home-hero__template-toggle {
+.home-hero__template-list-icon {
+  display: inline-flex;
+  color: var(--text);
+  flex: 0 0 auto;
+}
+.home-hero__template-list-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.home-hero__template-list-check {
+  display: inline-flex;
+  color: var(--text);
+  flex: 0 0 auto;
+}
+/* ---- Capsule type row (replaces the fanned carousel) ------------------- */
+/* ONE line exactly as wide as the composer card below (820px — keep in sync
+   with .home-hero__composer-card), EVERY gap the same 8px (keep in sync
+   with the component's PILL_GAP): fitting pills inline, then the pinned
+   视频 pill + 全部 button; the remainder lives in the 全部 popover. */
+.home-hero__type-pills-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 820px;
+  /* 8px to the composer card below (per product): .home-hero's own 6px flex
+     gap contributes, so only 2px lives here. */
+  margin: 10px auto 2px;
+  padding: 2px 0;
+}
+.home-hero__type-pill {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+/* Pinned pills + the 全部 trigger, measured as one unit by the fit
+   computation. Same 8px rhythm inside as the row around it. */
+.home-hero__type-pills-tail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.home-hero__type-pills-more {
+  position: relative;
+  flex: 0 0 auto;
+}
+/* Invisible measuring copy of the full pill set: out of flow, unpainted,
+   non-interactive — exists only so the component can read natural widths. */
+.home-hero__type-pills-probe {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  visibility: hidden;
+  pointer-events: none;
+  overflow: hidden;
+}
+.home-hero__type-pills-more-btn.is-open {
+  color: var(--text-strong);
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
+}
+.home-hero__type-pills-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: max-content;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, #000 4%, transparent),
+    0 12px 32px -12px color-mix(in srgb, #000 22%, transparent);
+  animation: pop-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  transform-origin: top right;
+}
+.home-hero__type-pill {
   appearance: none;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  border: 0;
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 4px 6px;
+  gap: 6px;
+  min-height: 32px;
+  padding: 5px 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: var(--radius-pill);
+  background: var(--bg-panel);
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+  transition:
+    color 120ms var(--ease-out),
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out),
+    transform 120ms var(--ease-out);
 }
-.home-hero__template-toggle:hover,
-.home-hero__template-toggle:focus-visible {
-  outline: none;
-  color: var(--text);
-  background: var(--bg-subtle);
+.home-hero__type-pill:hover:not(:disabled) {
+  color: var(--text-strong);
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-panel) 92%, var(--bg-subtle));
+  transform: translateY(-0.5px);
 }
-.home-hero__template-toggle svg {
-  transition: transform 160ms var(--ease-out);
+/* Selected pill mirrors the composer's selected template chip exactly (the
+   `.has-selection` pair above: 极浅品牌背景 #f9fff4, deep brand green
+   #2f781d, inset 1px ring at 22%), so the picked type reads as the same
+   object in both places. */
+.home-hero__type-pill.is-active {
+  background: #f9fff4;
+  border-color: transparent;
+  color: #2f781d;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #2f781d 22%, transparent);
 }
-.home-hero__template-toggle.is-open svg {
-  transform: rotate(180deg);
+.home-hero__type-pill.is-active:hover:not(:disabled) {
+  background: #f9fff4;
+  border-color: transparent;
+  color: #2f781d;
+  transform: none;
 }
-.home-hero__template-or {
-  color: var(--text-faint);
-  font-size: 12px;
+.home-hero__type-pill:disabled {
+  cursor: default;
+  opacity: 0.6;
 }

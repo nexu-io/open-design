@@ -15,6 +15,7 @@ vi.mock('../src/db.js', () => ({
 }));
 
 vi.mock('../src/langfuse-trace.js', () => ({
+  INPUT_MAX_BYTES: 64 * 1024,
   readFeedbackTelemetrySinkConfig: vi.fn(() => ({ kind: 'langfuse' })),
   reportRunCompleted: reportRunCompletedMock,
   reportRunFeedback: vi.fn(),

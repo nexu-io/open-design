@@ -673,7 +673,12 @@ describe('EntryShell team project content readiness', () => {
         }),
       });
     });
-    expect(await screen.findByText('Member B')).toBeTruthy();
+    // Barrier: the member switch must land in the shell before the click
+    // below, or it would capture wm-1. The account name is no longer rendered
+    // as visible text (320a36ac1 made the trigger avatar-only and moved the
+    // name into the hover menu) — it survives as the trigger's aria-label,
+    // which is the same value in the always-mounted chrome.
+    expect(await screen.findByLabelText('Member B')).toBeTruthy();
 
     fireEvent.click(screen.getByTitle('Ready shared project'));
     await waitFor(() => expect(onOpenProject).toHaveBeenCalledWith(
@@ -716,7 +721,10 @@ describe('EntryShell team project content readiness', () => {
     renderAt('/all-projects', { onTeamProjectContentReady });
 
     await waitFor(() => expect(MockWorkspaceEventSource.instances).toHaveLength(1));
-    await screen.findByText('Ma Shu');
+    // Barrier: wait for the workspace context to land before dispatching the
+    // readiness event. Read it off the account trigger's aria-label — the
+    // avatar-only trigger (320a36ac1) no longer prints the name as text.
+    await screen.findByLabelText('Ma Shu');
     act(() => {
       MockWorkspaceEventSource.instances[0]!.dispatch('team-project-content-ready', {
         type: 'team-project-content-ready',

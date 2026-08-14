@@ -959,6 +959,7 @@ export const ZH_CN_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'claymorphism': '柔和圆润、类似 3D 的造型，模拟可塑黏土质感，搭配俏皮蓬松的元素与多彩表面。',
   'clean': '聚焦极简的设计，采用充裕的留白、清晰易读的字体和有限的配色，减少视觉杂乱。',
   'clickhouse': '高速分析数据库。黄色点缀，技术文档风格。',
+  'cloudflare-kumo': 'Cloudflare 面向现代 Web 应用的组件系统：语义化明暗主题令牌、紧凑的 Inter 字体层级、分层中性色表面、无障碍控件与图表配色指南。',
   'cohere': '企业级 AI 平台。鲜艳的渐变，数据丰富的仪表盘美学。',
   'coinbase': '加密货币交易所。简洁的蓝色品牌识别，注重信赖感，带有机构级的质感。',
   'colorful': '鲜艳、高对比的配色与渐变，营造引人入胜、令人难忘的现代用户体验。',

@@ -66,7 +66,7 @@ import {
 const SERVER_NAME = 'open-design';
 const SERVER_VERSION = '0.2.0';
 const MCP_STDIO_IDLE_EXIT_MS = 30 * 60 * 1000;
-const OPEN_DESIGN_BRIEF_APP_RESOURCE =
+export const OPEN_DESIGN_BRIEF_APP_RESOURCE =
   'ui://open-design/artifact-card-v8.html';
 
 export const MCP_SERVER_INSTRUCTIONS = [
@@ -952,6 +952,138 @@ export function createLocalMcpBriefStore() {
   return createBriefStore();
 }
 
+/** Handler body for MCP `resources/list`. Exported so tests can call it
+ * directly without a real server. Mirrors the inline logic in
+ * `runMcpStdio` to keep the test harness cheap. */
+export async function _listMcpResources(
+  daemonTarget: ReturnType<typeof createMcpDaemonTarget>,
+): Promise<{ resources: Array<{ uri: string; name: string; description: string; mimeType: string }> }> {
+  const catalog = await daemonTarget.call(
+    'list_resources',
+    {},
+    async (baseUrl) => {
+      // Resource listings (`/api/skills`, `/api/design-systems`) are scoped
+      // the same way project/run tools are (#6569): a headerless caller reads
+      // the NO-SCOPE catalog, so claimed Personal design systems are filtered
+      // out. Resolve the signed-in workspace once and forward the headers on
+      // both listing calls so the MCP resource catalog matches what the user
+      // sees in the app. See #6770.
+      const workspaceContext = await resolveMcpWorkspaceContext(baseUrl);
+      const headers = workspaceContext?.headers;
+      const [skillsData, dsData] = await Promise.all([
+        getJson<SkillsPayload>(`${baseUrl}/api/skills`, headers).catch((): SkillsPayload => ({ skills: [] })),
+        getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`, headers).catch((): DesignSystemsPayload => ({ designSystems: [] })),
+      ]);
+      return ok({ skillsData, dsData });
+    },
+  );
+  const catalogPayload = parseMcpResult(catalog);
+  const skillsData = (catalogPayload?.skillsData ?? {}) as SkillsPayload;
+  const dsData = (catalogPayload?.dsData ?? {}) as DesignSystemsPayload;
+  const resources = [
+    ...localMcpResourceDefinitions(),
+    {
+      uri: 'od://focus/active',
+      name: 'Active Open Design context',
+      description: 'The project/file the user has open in Open Design right now.',
+      mimeType: 'application/json',
+    },
+  ];
+  for (const s of skillsData?.skills || []) {
+    resources.push({
+      uri: `od://skills/${encodeURIComponent(s.id)}/SKILL.md`,
+      name: `Skill: ${s.name || s.id}`,
+      description: oneLine(s.description) ?? '',
+      mimeType: 'text/markdown',
+    });
+  }
+  for (const d of dsData?.designSystems || []) {
+    resources.push({
+      uri: `od://design-systems/${encodeURIComponent(d.id)}/DESIGN.md`,
+      name: `Design system: ${d.title || d.name || d.id}`,
+      description: oneLine(d.summary) ?? '',
+      mimeType: 'text/markdown',
+    });
+  }
+  return { resources };
+}
+
+/** Handler body for MCP `resources/read`. Exported so tests can call it
+ * directly without a real server. Mirrors the inline logic in
+ * `runMcpStdio` to keep the test harness cheap. */
+export async function _readMcpResource(
+  daemonTarget: ReturnType<typeof createMcpDaemonTarget>,
+  uri: string,
+): Promise<{ contents: Array<{ uri: string; mimeType: string; text: string; _meta?: Record<string, unknown> }> }> {
+  if (uri === OPEN_DESIGN_BRIEF_APP_RESOURCE) {
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'text/html;profile=mcp-app',
+          text: OPEN_DESIGN_BRIEF_APP_HTML,
+          _meta: { version: OPEN_DESIGN_BRIEF_APP_VERSION },
+        },
+      ],
+    };
+  }
+  if (uri === 'od://focus/active') {
+    const result = await daemonTarget.call('read_resource', {}, async (baseUrl) =>
+      ok(await getJson<ActiveContext>(`${baseUrl}/api/active`)),
+    );
+    if (result.isError === true) throw new Error(result.content[0]?.text);
+    const data = parseMcpResult(result);
+    return {
+      contents: [
+        {
+          uri,
+          mimeType: 'application/json',
+          text: JSON.stringify(data, null, 2),
+        },
+      ],
+    };
+  }
+  const m = String(uri || '').match(/^od:\/\/(skills|design-systems)\/([^/]+)\/(.+)$/);
+  if (!m) {
+    throw new Error(`unsupported resource URI: ${uri}`);
+  }
+  const [, kind, id] = m as [string, 'skills' | 'design-systems', string, string];
+  const route = kind === 'skills' ? 'skills' : 'design-systems';
+  // Reading a `od://design-systems/<id>/DESIGN.md` resource resolves the
+  // bound Personal design system. The daemon treats a headerless read as a
+  // NO-SCOPE caller, so the design-system route returns 404 for a Personal
+  // system that the workspace actually owns. Forward the same workspace
+  // headers as the project/run tools (#6569) so the resource read lands on
+  // the binding instead of returning `404 design system not found`. See #6770.
+  const result = await daemonTarget.call('read_resource', {}, async (baseUrl) => {
+    const workspaceContext = await resolveMcpWorkspaceContext(baseUrl);
+    const headers = workspaceContext?.headers;
+    return ok(await getJson<ResourcePayload>(
+      `${baseUrl}/api/${route}/${encodeURIComponent(decodeURIComponent(id))}`,
+      headers,
+    ));
+  });
+  if (result.isError === true) throw new Error(result.content[0]?.text);
+  const data = parseMcpResult(result) as ResourcePayload | null;
+  const text =
+    data?.skill?.body ??
+    data?.skill?.content ??
+    data?.designSystem?.body ??
+    data?.designSystem?.content ??
+    data?.body ??
+    data?.content ??
+    '';
+  return {
+    contents: [
+      {
+        uri,
+        mimeType: 'text/markdown',
+        text,
+      },
+    ],
+  };
+}
+
 interface McpObservedCall {
   attribution: McpPluginAttribution | null;
   attemptNumber: number;
@@ -1778,110 +1910,12 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
   })));
 
   server.setRequestHandler(ListResourcesRequestSchema, withMcpActivity(async () => {
-    const catalog = await daemonTarget.call(
-      'list_resources',
-      {},
-      async (baseUrl) => {
-        const [skillsData, dsData] = await Promise.all([
-          getJson<SkillsPayload>(`${baseUrl}/api/skills`).catch((): SkillsPayload => ({ skills: [] })),
-          getJson<DesignSystemsPayload>(`${baseUrl}/api/design-systems`).catch((): DesignSystemsPayload => ({ designSystems: [] })),
-        ]);
-        return ok({ skillsData, dsData });
-      },
-    );
-    const catalogPayload = parseMcpResult(catalog);
-    const skillsData = (catalogPayload?.skillsData ?? {}) as SkillsPayload;
-    const dsData = (catalogPayload?.dsData ?? {}) as DesignSystemsPayload;
-    const resources = [
-      ...localMcpResourceDefinitions(),
-      {
-        uri: 'od://focus/active',
-        name: 'Active Open Design context',
-        description: 'The project/file the user has open in Open Design right now.',
-        mimeType: 'application/json',
-      },
-    ];
-    for (const s of skillsData?.skills || []) {
-      resources.push({
-        uri: `od://skills/${encodeURIComponent(s.id)}/SKILL.md`,
-        name: `Skill: ${s.name || s.id}`,
-        description: oneLine(s.description) ?? '',
-        mimeType: 'text/markdown',
-      });
-    }
-    for (const d of dsData?.designSystems || []) {
-      resources.push({
-        uri: `od://design-systems/${encodeURIComponent(d.id)}/DESIGN.md`,
-        name: `Design system: ${d.title || d.name || d.id}`,
-        description: oneLine(d.summary) ?? '',
-        mimeType: 'text/markdown',
-      });
-    }
-    return { resources };
+    return await _listMcpResources(daemonTarget);
   }));
 
   server.setRequestHandler(ReadResourceRequestSchema, withMcpActivity(async (req) => {
-    const uri = req.params?.uri;
-    if (uri === OPEN_DESIGN_BRIEF_APP_RESOURCE) {
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: 'text/html;profile=mcp-app',
-            text: OPEN_DESIGN_BRIEF_APP_HTML,
-            _meta: {
-              version: OPEN_DESIGN_BRIEF_APP_VERSION,
-            },
-          },
-        ],
-      };
-    }
-    if (uri === 'od://focus/active') {
-      const result = await daemonTarget.call('read_resource', {}, async (baseUrl) =>
-        ok(await getJson<ActiveContext>(`${baseUrl}/api/active`)),
-      );
-      if (result.isError === true) throw new Error(result.content[0]?.text);
-      const data = parseMcpResult(result);
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: 'application/json',
-            text: JSON.stringify(data, null, 2),
-          },
-        ],
-      };
-    }
-    const m = String(uri || '').match(/^od:\/\/(skills|design-systems)\/([^/]+)\/(.+)$/);
-    if (!m) {
-      throw new Error(`unsupported resource URI: ${uri}`);
-    }
-    const [, kind, id] = m as [string, 'skills' | 'design-systems', string, string];
-    const route = kind === 'skills' ? 'skills' : 'design-systems';
-    const result = await daemonTarget.call('read_resource', {}, async (baseUrl) =>
-      ok(await getJson<ResourcePayload>(
-        `${baseUrl}/api/${route}/${encodeURIComponent(decodeURIComponent(id))}`,
-      )),
-    );
-    if (result.isError === true) throw new Error(result.content[0]?.text);
-    const data = parseMcpResult(result) as ResourcePayload | null;
-    const text =
-      data?.skill?.body ??
-      data?.skill?.content ??
-      data?.designSystem?.body ??
-      data?.designSystem?.content ??
-      data?.body ??
-      data?.content ??
-      '';
-    return {
-      contents: [
-        {
-          uri,
-          mimeType: 'text/markdown',
-          text,
-        },
-      ],
-    };
+    const uri = String(req.params?.uri ?? '');
+    return await _readMcpResource(daemonTarget, uri);
   }));
 
   server.setRequestHandler(CallToolRequestSchema, withMcpActivity(async (req) => {

@@ -39,29 +39,29 @@ not required to use Open Design.
 - For: heavy users and teams
 
 ## Team Basic
-- Standard price: **$20 / seat / month** or **$240 / seat / year**
-- Intro price: **$16 / seat / month** or **$168 / seat / year**
+- Standard price: **$5 / seat / month** or **$60 / seat / year**
+- Intro price: **$4 / seat / month** or **$42 / seat / year**
 - Included model usage credits: none
 - Minimum: 3 seats
 - For: shared projects, design systems, and plugins without bundled model credits
 
 ## Team Plus
-- Standard price: **$40 / seat / month** or **$480 / seat / year**
-- Intro price: **$32 / seat / month** or **$336 / seat / year**
+- Standard price: **$25 / seat / month** or **$300 / seat / year**
+- Intro price: **$20 / seat / month** or **$210 / seat / year**
 - Included model usage credits: $20 / seat / month
 - Minimum: 3 seats
 - For: small teams that want bundled model credits
 
 ## Team Pro — recommended
-- Standard price: **$120 / seat / month** or **$1,440 / seat / year**
-- Intro price: **$84 / seat / month** or **$864 / seat / year**
+- Standard price: **$105 / seat / month** or **$1,260 / seat / year**
+- Intro price: **$73.50 / seat / month** or **$756 / seat / year**
 - Included model usage credits: $100 / seat / month
 - Minimum: 3 seats
 - For: teams collaborating on regular production work
 
 ## Team Max
-- Standard price: **$220 / seat / month** or **$2,640 / seat / year**
-- Intro price: **$132 / seat / month** or **$1,296 / seat / year**
+- Standard price: **$205 / seat / month** or **$2,460 / seat / year**
+- Intro price: **$123 / seat / month** or **$1,207.61 / seat / year**
 - Included model usage credits: $200 / seat / month
 - Minimum: 3 seats
 - For: high-volume teams that need the largest bundled allowance

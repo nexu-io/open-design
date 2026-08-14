@@ -192,6 +192,10 @@ async function emitRun(promptText) {
     await emitPlanArtifactGenerateRun();
     return;
   }
+  if (promptText.includes('Create a deterministic media-only artifact')) {
+    await emitMediaOnlyRun();
+    return;
+  }
   if (promptText.includes('Create a deterministic plan document')) {
     await emitPlanDocumentRun();
     return;
@@ -319,6 +323,17 @@ async function emitPlanDocumentRun() {
     'utf8',
   );
   emitSuccess('Created plan.md with a deterministic planning outline.', false, false);
+  process.exitCode = 0;
+  exitSoon(0);
+}
+
+async function emitMediaOnlyRun() {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO5W6McAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await writeFileFs(join(projectDir(), 'media-only.png'), png);
+  emitSuccess('Created media-only.png as the only file produced by this turn.', false, false);
   process.exitCode = 0;
   exitSoon(0);
 }

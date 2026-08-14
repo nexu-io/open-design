@@ -4264,6 +4264,240 @@ dialog.tpl-share-popover .detail-share-dialog-text {
   line-height: 1.75;
 }
 
+/* ---------------------------------------------------------------------------
+ * DeepSeek Harness single-column tutorial layout.
+ *
+ * Every tutorial element uses the same content rail: headings, prose, lists,
+ * code, figures, captions, and tables share one left and right edge. Page-only
+ * scoping prevents these rhythm changes from leaking into the other agents.
+ * ------------------------------------------------------------------------- */
+.agent-rich--deepseek-harness .agent-hero-banner {
+  width: 100%;
+  max-width: none;
+  margin: 22px 0 54px;
+}
+
+.agent-rich--deepseek-harness .agent-hero-banner > img {
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+
+.agent-rich--deepseek-harness .agent-intro,
+.agent-rich--deepseek-harness .info-section > h2,
+.agent-rich--deepseek-harness .info-section > p,
+.agent-rich--deepseek-harness .info-section > ul,
+.agent-rich--deepseek-harness .info-section > ol {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+}
+
+.agent-rich--deepseek-harness .agent-intro .agent-hero-lead {
+  margin-bottom: 26px;
+  font-size: clamp(20px, 1.8vw, 23px);
+  line-height: 1.55;
+  letter-spacing: -0.012em;
+  text-align: left;
+}
+
+.agent-rich--deepseek-harness .agent-intro > p:not(.agent-hero-lead),
+.agent-rich--deepseek-harness .info-section > p {
+  margin-bottom: 20px;
+  font-size: 17px;
+  line-height: 1.68;
+  text-align: left;
+}
+
+.agent-rich--deepseek-harness .info-section > h2 {
+  margin-bottom: 30px;
+  font-size: clamp(32px, 3vw, 42px);
+  line-height: 1.12;
+  text-wrap: balance;
+}
+
+.agent-rich--deepseek-harness .info-section > ul,
+.agent-rich--deepseek-harness .info-section > ol {
+  margin-bottom: 28px;
+}
+
+.agent-rich--deepseek-harness .info-section > ul li,
+.agent-rich--deepseek-harness .info-section > ol:not(.faq-list) li {
+  margin-bottom: 15px;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .info-section {
+  padding-block: 64px;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .info-section + .info-section {
+  margin-top: 32px;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .info-section:first-of-type {
+  margin-top: 72px;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .agent-section-img {
+  width: 100%;
+  max-width: none;
+  margin: 48px 0 42px;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .agent-section-img figcaption {
+  width: 100%;
+  max-width: none;
+  margin: 16px 0 0;
+  text-align: left;
+  line-height: 1.55;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .agent-section-img img {
+  aspect-ratio: 3 / 2;
+  object-fit: cover;
+}
+
+.agent-rich--deepseek-harness .agent-rich-main .agent-code,
+.agent-rich--deepseek-harness .agent-rich-main .compare-table-wrap {
+  width: 100%;
+  max-width: none;
+  margin-block: 36px 42px;
+}
+
+/* The tutorial is intentionally linear: read, run, inspect, then continue. */
+.agent-rich--deepseek-harness .agent-section--setup {
+  display: block;
+}
+
+.agent-rich--deepseek-harness .agent-section--setup > h2,
+.agent-rich--deepseek-harness .agent-section--setup > p,
+.agent-rich--deepseek-harness .agent-section--setup > .agent-code,
+.agent-rich--deepseek-harness .agent-section--setup > .agent-section-img,
+.agent-rich--deepseek-harness .agent-section--setup > .agent-steps {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+}
+
+.agent-rich--deepseek-harness .agent-section--setup > .agent-section-img img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 3 / 2;
+}
+
+.agent-rich--deepseek-harness .agent-section--setup > .agent-steps {
+  columns: auto;
+}
+
+/* Workflow steps follow the same vertical reading order as the rest of page. */
+.agent-rich--deepseek-harness .agent-section--design-workflow > ol:first-of-type {
+  display: block;
+  width: 100%;
+  max-width: none;
+  margin-top: 34px;
+}
+
+.agent-rich--deepseek-harness .agent-section--design-workflow > ol:first-of-type li {
+  width: 100%;
+  margin: 0 0 16px;
+  padding: 18px 18px 18px 48px;
+  border-top: 1px solid var(--line);
+}
+
+/* Pitfalls remain on the shared rail instead of introducing an inset card. */
+.agent-rich--deepseek-harness .agent-section--pitfalls {
+  padding-inline: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.agent-rich--deepseek-harness .agent-section--pitfalls > h2,
+.agent-rich--deepseek-harness .agent-section--pitfalls > p,
+.agent-rich--deepseek-harness .agent-section--pitfalls > ul {
+  max-width: none;
+}
+
+@media (max-width: 900px) {
+  .agent-rich--deepseek-harness .agent-toc-rail .info-toc {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+    max-height: none;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 16px 0;
+    scrollbar-width: none;
+    white-space: nowrap;
+  }
+
+  .agent-rich--deepseek-harness .agent-toc-rail .info-toc::-webkit-scrollbar {
+    display: none;
+  }
+
+  .agent-rich--deepseek-harness .agent-toc-rail .info-toc span,
+  .agent-rich--deepseek-harness .agent-toc-rail .info-toc a {
+    flex: 0 0 auto;
+    margin: 0;
+    padding: 0;
+  }
+
+  .agent-rich--deepseek-harness .agent-hero-banner {
+    margin-bottom: 46px;
+  }
+
+  .agent-rich--deepseek-harness .agent-section--setup > .agent-code,
+  .agent-rich--deepseek-harness .agent-section--setup > .agent-section-img {
+    margin: 36px 0;
+  }
+
+  .agent-rich--deepseek-harness .agent-section--setup > .agent-section-img img {
+    height: auto;
+    min-height: 0;
+  }
+
+}
+
+@media (max-width: 640px) {
+  .agent-rich--deepseek-harness .agent-hero-banner {
+    margin: 22px 0 40px;
+  }
+
+  .agent-rich--deepseek-harness .agent-intro .agent-hero-lead {
+    margin-bottom: 22px;
+    font-size: 20px;
+  }
+
+  .agent-rich--deepseek-harness .agent-intro > p:not(.agent-hero-lead),
+  .agent-rich--deepseek-harness .info-section > p {
+    font-size: 16.5px;
+    line-height: 1.65;
+  }
+
+  .agent-rich--deepseek-harness .info-section > h2 {
+    margin-bottom: 24px;
+    font-size: 30px;
+    line-height: 1.16;
+  }
+
+  .agent-rich--deepseek-harness .agent-rich-main .info-section {
+    padding-block: 52px;
+  }
+
+  .agent-rich--deepseek-harness .agent-rich-main .info-section + .info-section {
+    margin-top: 16px;
+  }
+
+  .agent-rich--deepseek-harness .agent-rich-main .agent-section-img {
+    margin: 40px 0 36px;
+  }
+
+  .agent-rich--deepseek-harness .agent-section--pitfalls {
+    padding-inline: 0;
+  }
+}
+
 /* Codex design collection — category filter chips. Global (not Astro-scoped)
    because scoped styles are unreliable for these map-generated buttons in this
    app; the same thing bit .codex-skill-grid and .dbjobs. */

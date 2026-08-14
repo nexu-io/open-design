@@ -891,6 +891,7 @@ function AssistantMessageImpl({
             hasConclusion={hasConclusion}
             runStreaming={streaming}
             runSucceeded={runSucceeded}
+            terminalRunSucceeded={message.runStatus === "succeeded"}
             runFailed={
               !streaming &&
               (message.runStatus === "failed" ||
@@ -3633,6 +3634,7 @@ function TaskActivityCard({
   hasConclusion,
   runStreaming,
   runSucceeded,
+  terminalRunSucceeded,
   runFailed,
   startedAt,
   endedAt,
@@ -3646,6 +3648,7 @@ function TaskActivityCard({
   hasConclusion: boolean;
   runStreaming: boolean;
   runSucceeded: boolean;
+  terminalRunSucceeded: boolean;
   runFailed: boolean;
   startedAt: number | undefined;
   endedAt: number | undefined;
@@ -3674,9 +3677,10 @@ function TaskActivityCard({
   const hasError =
     !runStreaming &&
     (runFailed ||
-      settledItems.some(
-        (item) => item.result?.isError || (!item.result && !runSucceeded),
-      ));
+      (!terminalRunSucceeded &&
+        settledItems.some(
+          (item) => item.result?.isError || (!item.result && !runSucceeded),
+        )));
   const stateLabel = running
     ? t("assistant.workingLabel")
     : hasError

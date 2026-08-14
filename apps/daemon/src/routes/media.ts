@@ -200,6 +200,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       task = createMediaTask(taskId, projectId, {
         surface: req.body?.surface,
         model: req.body?.model,
+        runId: options.grant?.runId,
       });
       const requestedProviderId = mediaProviderId(model);
       const diagnosticContext = {

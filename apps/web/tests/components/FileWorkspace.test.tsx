@@ -1319,9 +1319,11 @@ describe('FileWorkspace upload input', () => {
     expect(markup).toContain('class="ws-tabs-shell"');
     expect(markup).toContain('data-testid="workspace-focus-toggle"');
     // The expand control sits before the tabs bar (left side) so its
-    // direction matches where the chat pane re-emerges from.
+    // direction matches where the chat pane re-emerges from. In focus mode
+    // the project tab strip's dock host sits between them (the strip portals
+    // into it — see workspaceTabsDock.ts), so allow it in the order check.
     expect(markup).toMatch(
-      /<div class="ws-tabs-shell">\s*<button[^>]*data-testid="workspace-focus-toggle"[\s\S]*?<\/button>\s*<div class="ws-tabs-bar"/,
+      /<div class="ws-tabs-shell">\s*<button[^>]*data-testid="workspace-focus-toggle"[\s\S]*?<\/button>\s*(?:<div class="ws-tabs-project-dock"[^>]*><\/div>\s*)?<div class="ws-tabs-bar"/,
     );
   });
 
@@ -2478,6 +2480,26 @@ describe('FileWorkspace launcher tab creation', () => {
         absolutePath: '/tmp/open-design/project-1',
       });
     });
+  });
+
+  it('shows Design Files when the persisted active file no longer exists', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['missing.png'], active: 'missing.png' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('design-files-empty')).toBeTruthy();
+    expect(screen.queryByText(/Open a file from/i)).toBeNull();
+    expect(renderedTabLabels()).toEqual(['Design Files']);
   });
 
   it('hides terminal creation while keeping browser creation available', () => {

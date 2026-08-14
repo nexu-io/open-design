@@ -16,6 +16,15 @@ import { fileURLToPath } from "node:url";
 
 import { parseDesignSystemProjectManifest } from "../design-systems/_schema/manifest.schema.ts";
 import type { DesignSystemProjectManifest } from "../design-systems/_schema/manifest.schema.ts";
+import {
+  DesignSystemComponentDefinitionSchema,
+  DesignSystemComponentsIndexSchema,
+  DesignSystemFallbackRulesSchema,
+  DesignSystemIntentMapSchema,
+  DesignSystemLintRulesSchema,
+  validateDesignSystemRuntimeReferences,
+  type LoadedDesignSystemComponent,
+} from "../design-systems/_schema/runtime.schema.ts";
 import { TOKEN_SCHEMA } from "../design-systems/_schema/tokens.schema.ts";
 import { extractComponentsManifest } from "../packages/contracts/src/design-systems/components-manifest.ts";
 import {
@@ -108,6 +117,7 @@ export async function checkDesignSystemManifests(): Promise<boolean> {
       ...(manifest.fonts ?? []).map((font) => font.file),
       ...(manifest.preview?.pages ?? []).map((page) => page.path),
       ...Object.values(manifest.sourceFiles ?? {}),
+      ...Object.values(manifest.runtime ?? {}),
     ];
     for (const fileName of requiredFiles) {
       await requireDeclaredPathExists(violations, repositoryManifestPath, brandRoot, fileName);
@@ -124,6 +134,7 @@ export async function checkDesignSystemManifests(): Promise<boolean> {
     }
 
     await validateDeclaredJsonFiles(violations, repositoryManifestPath, brandRoot, manifest);
+    await validateDesignSystemRuntimeContract(violations, repositoryManifestPath, brandRoot, manifest);
     await validateDesignTokensJson(
       violations,
       repositoryManifestPath,
@@ -507,6 +518,93 @@ async function validateDeclaredJsonFiles(
       );
     }
   }
+}
+
+type RuntimeSchema<T> = {
+  safeParse(value: unknown):
+    | { success: true; data: T }
+    | { success: false; error: { issues: Array<{ path: PropertyKey[]; message: string }> } };
+};
+
+type RuntimeJsonResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; error: string };
+
+export async function validateDesignSystemRuntimeContract(
+  violations: string[],
+  repositoryManifestPath: string,
+  brandRoot: string,
+  manifest: DesignSystemProjectManifest,
+): Promise<void> {
+  const paths = manifest.runtime;
+  if (paths === undefined) return;
+
+  const [componentsIndex, intentMap, lint, fallback] = await Promise.all([
+    parseRuntimeJson(brandRoot, paths.components, DesignSystemComponentsIndexSchema),
+    parseRuntimeJson(brandRoot, paths.intents, DesignSystemIntentMapSchema),
+    parseRuntimeJson(brandRoot, paths.lint, DesignSystemLintRulesSchema),
+    parseRuntimeJson(brandRoot, paths.fallback, DesignSystemFallbackRulesSchema),
+  ]);
+  const primaryResults: Array<readonly [string, RuntimeJsonResult<unknown>]> = [
+    [paths.components, componentsIndex],
+    [paths.intents, intentMap],
+    [paths.lint, lint],
+    [paths.fallback, fallback],
+  ];
+  for (const [filePath, result] of primaryResults) {
+    if (!result.ok) violations.push(`${repositoryManifestPath}: ${filePath}: ${result.error}`);
+  }
+  if (!componentsIndex.ok || !intentMap.ok || !lint.ok || !fallback.ok) return;
+
+  const componentResults = await Promise.all(
+    componentsIndex.value.components.map(async (entry) => ({
+      entry,
+      parsed: await parseRuntimeJson(brandRoot, entry.path, DesignSystemComponentDefinitionSchema),
+    })),
+  );
+  const components: LoadedDesignSystemComponent[] = [];
+  for (const { entry, parsed } of componentResults) {
+    if (!parsed.ok) {
+      violations.push(`${repositoryManifestPath}: ${entry.path}: ${parsed.error}`);
+      continue;
+    }
+    components.push({ path: entry.path, definition: parsed.value });
+  }
+  if (components.length !== componentResults.length) return;
+
+  for (const error of validateDesignSystemRuntimeReferences({
+    componentsIndex: componentsIndex.value,
+    components,
+    intentMap: intentMap.value,
+  })) {
+    violations.push(`${repositoryManifestPath}: ${error}`);
+  }
+}
+
+async function parseRuntimeJson<T>(
+  brandRoot: string,
+  relativePath: string,
+  schema: RuntimeSchema<T>,
+): Promise<RuntimeJsonResult<T>> {
+  let value: unknown;
+  try {
+    value = await readJson(path.join(brandRoot, relativePath));
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+  const parsed = schema.safeParse(value);
+  if (parsed.success) return { ok: true, value: parsed.data };
+  return {
+    ok: false,
+    error: parsed.error.issues
+      .map((issue) => `${formatRuntimeIssuePath(issue.path)} ${issue.message}`)
+      .join("; "),
+  };
+}
+
+function formatRuntimeIssuePath(parts: readonly PropertyKey[]): string {
+  if (parts.length === 0) return "$";
+  return `$${parts.map((part) => typeof part === "number" ? `[${part}]` : `.${String(part)}`).join("")}`;
 }
 
 export async function validateComponentsManifestCache(

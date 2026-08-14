@@ -31,7 +31,9 @@ import {
 import { getCatalogCounts } from '../_lib/catalog';
 import { getGithubRepoMeta } from '../_lib/github';
 import { clampDescription } from '../_lib/clamp-description';
-import { DEEPSEEK_V4_FLASH_CAMPAIGN } from '../_lib/deepseek-v4-flash-campaign';
+import { DEEPSEEK_V4_PRO_CAMPAIGN } from '../_lib/deepseek-v4-pro-campaign';
+import { getPricingCampaignContent } from '../_lib/pricing-campaign-content';
+import { getHomeCampaignContent } from '../_lib/home-campaign-content';
 
 const locale: LandingLocaleCode = localeFromPath(Astro.url.pathname);
 const localeDef = getLocaleDefinition(locale);
@@ -120,21 +122,17 @@ const homepageGraph = {
 };
 const faq = getHomeFaq(locale, { origin, repo: REPO_URL });
 const campaignPricingHref = localePath(locale, '/pricing/');
-const campaignCopy = locale.startsWith('zh')
-  ? {
-      badge: '活动倒计时',
-      title: '这次，别省着用。DeepSeek V4 Flash 无限用。',
-      detail: '8 月 6 日—8 月 13 日，一周免费用',
-      linkLabel: '查看活动权益',
-      closeLabel: '关闭活动横幅',
-    }
-  : {
-      badge: 'Campaign countdown',
-      title: 'Stop rationing. Use DeepSeek V4 Flash without limits.',
-      detail: 'Aug 6—Aug 13 · FREE all week',
-      linkLabel: 'View campaign benefits',
-      closeLabel: 'Dismiss campaign banner',
-    };
+const campaignContent = getPricingCampaignContent(locale);
+const homeCampaignContent = getHomeCampaignContent(locale);
+const campaignCopy = {
+  badge: campaignContent.windowLabel,
+  title: homeCampaignContent.title,
+  detail: homeCampaignContent.detail,
+  windowLabel: campaignContent.windowLabel,
+  dayUnit: campaignContent.dayUnit,
+  linkLabel: campaignContent.linkLabel,
+  closeLabel: campaignContent.closeLabel,
+};
 const pageHtml = renderToStaticMarkup(
   Page({ counts, github, locale, faq }) as ReturnType<typeof createElement>,
 );
@@ -232,7 +230,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
     <script is:inline type="application/ld+json" set:html={JSON.stringify(homepageGraph)} />
   </head>
   <body>
-    <div class="home-campaign-banner" data-home-campaign-banner data-campaign-locale={locale.startsWith('zh') ? 'zh' : 'en'} data-campaign-start-at={DEEPSEEK_V4_FLASH_CAMPAIGN.startAt} data-campaign-end-at={DEEPSEEK_V4_FLASH_CAMPAIGN.endAtExclusive} hidden>
+    <div class="home-campaign-banner" data-home-campaign-banner data-campaign-window-label={campaignCopy.windowLabel} data-campaign-day-unit={campaignCopy.dayUnit} data-campaign-start-at={DEEPSEEK_V4_PRO_CAMPAIGN.startAt} data-campaign-end-at={DEEPSEEK_V4_PRO_CAMPAIGN.endAtExclusive} hidden>
       <a class="home-campaign-banner__link" href={campaignPricingHref} aria-label={`${campaignCopy.title} · ${campaignCopy.linkLabel}`}>
         <span class="home-campaign-banner__badge" data-home-campaign-countdown>{campaignCopy.badge}</span>
         <span class="home-campaign-banner__divider" aria-hidden="true">|</span>
@@ -340,12 +338,13 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
     </style>
     <script is:inline>
       (() => {
-        const dismissKey = 'open-design:home-campaign-banner-dismissed:deepseek-v4-flash-fixed-window-countdown-v2';
+        const dismissKey = 'open-design:home-campaign-banner-dismissed:deepseek-v4-pro-fixed-window-countdown-v1';
         const banner = document.querySelector('[data-home-campaign-banner]');
         const campaignLink = banner?.querySelector('.home-campaign-banner__link');
         const countdown = document.querySelector('[data-home-campaign-countdown]');
         const close = document.querySelector('[data-home-campaign-close]');
-        const isZh = banner?.getAttribute('data-campaign-locale') === 'zh';
+        const windowLabel = banner?.getAttribute('data-campaign-window-label') || 'Ends in';
+        const dayUnit = banner?.getAttribute('data-campaign-day-unit') || 'd';
         const startAt = Date.parse(banner?.getAttribute('data-campaign-start-at') || '');
         const endAt = Date.parse(banner?.getAttribute('data-campaign-end-at') || '');
 
@@ -355,7 +354,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           const hours = Math.floor((totalSeconds % 86400) / 3600);
           const minutes = Math.floor((totalSeconds % 3600) / 60);
           const seconds = totalSeconds % 60;
-          const time = `${days}${isZh ? '天' : 'd'} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+          const time = `${days}${dayUnit} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
           return time;
         };
 
@@ -375,12 +374,12 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           document.documentElement.classList.toggle('home-campaign-banner-active', visible);
           if (!active || !countdown) return active;
           const remainingMs = endAt - now;
-          countdown.textContent = `${isZh ? '活动剩余' : 'Ends in'} ${formatRemaining(remainingMs)}`;
+          countdown.textContent = `${windowLabel} ${formatRemaining(remainingMs)}`;
           if (visible && !impressionTracked && typeof window.__odTrack === 'function') {
             impressionTracked = true;
             window.__odTrack('surface_view', {
               page_name: 'landing_home', area: 'campaign_banner',
-              element: 'deepseek_v4_flash', campaign_id: 'deepseek_v4_flash',
+              element: 'deepseek_v4_pro', campaign_id: 'deepseek_v4_pro',
               user_state: 'unknown',
             });
           }
@@ -390,12 +389,15 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         const campaignTimer = window.setInterval(updateCampaignVisibility, 1000);
         window.addEventListener('pagehide', () => window.clearInterval(campaignTimer), { once: true });
         campaignLink?.addEventListener('click', (event) => {
-          const attribution = window.__odRecordCampaignEntry?.('landing_home_banner', 'deepseek_v4_flash');
+          const eligible = Date.now() >= startAt && Date.now() < endAt;
+          const attribution = eligible
+            ? window.__odRecordCampaignEntry?.('landing_home_banner', 'deepseek_v4_pro')
+            : undefined;
           window.__odTrack?.('ui_click', {
             page_name: 'landing_home',
             area: 'campaign_banner',
             element: 'open_pricing',
-            campaign_id: 'deepseek_v4_flash',
+            ...(eligible ? { campaign_id: 'deepseek_v4_pro' } : {}),
             user_state: 'unknown',
             ...(attribution || {}),
           });
@@ -405,11 +407,12 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
           }
         });
         close?.addEventListener('click', () => {
+          const eligible = Date.now() >= startAt && Date.now() < endAt;
           window.__odTrack?.('ui_click', {
             page_name: 'landing_home',
             area: 'campaign_banner',
             element: 'close',
-            campaign_id: 'deepseek_v4_flash',
+            ...(eligible ? { campaign_id: 'deepseek_v4_pro' } : {}),
             user_state: 'unknown',
           });
           document.documentElement.classList.add('home-campaign-banner-dismissed');

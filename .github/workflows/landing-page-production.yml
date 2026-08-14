@@ -35,7 +35,9 @@ jobs:
     # the main ref so a dispatch from a feature branch/tag is skipped outright
     # (no deploy) instead of recording a non-main production run — which would
     # also dodge blog-indexing's `workflow_run` `branches: [main]` filter.
-    if: github.repository == 'nexu-io/open-design' && github.ref == 'refs/heads/main'
+    if: >
+      github.repository == 'nexu-io/open-design'
+      && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
@@ -204,6 +206,37 @@ jobs:
             pages deploy out
             --project-name=open-design-landing
             --branch=main
+
+  # CF Pages deploy does not reliably invalidate custom-domain HTML across every
+  # POP when `_headers` allows edge caching. Purge by hostname so all locale
+  # paths (`/`, `/zh/pricing/`, …) drop together without purge_everything on
+  # the whole zone (keeps download.open-design.ai etc.).
+  # Token needs Zone → Cache Purge. Optional: set vars.CLOUDFLARE_ZONE_ID.
+  # Only runs after a real deploy. Purging without a rebuild (incident recovery,
+  # token permission check) belongs to the dedicated `landing-edge-cache-purge`
+  # workflow, so a cache-only run never reaches this workflow's `workflow_run`
+  # consumers (notably `blog-indexing-on-deploy`).
+  purge:
+    name: Purge open-design.ai edge cache (hosts)
+    needs: deploy
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Purge open-design.ai edge cache (hosts)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
+          CLOUDFLARE_PURGE_HOSTS: open-design.ai
+        run: node --experimental-strip-types .github/scripts/landing-page-purge-edge-cache.ts
 
   # Post a Feishu card to the landing group once the promotion settles. Runs on
   # BOTH success and failure (a failed production deploy is exactly when people

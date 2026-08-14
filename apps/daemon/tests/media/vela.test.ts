@@ -210,6 +210,21 @@ describe('Vela media provider', () => {
     await expect(stat(tempOutputDirs[0]!)).rejects.toThrow();
   });
 
+  it('routes the removed Codex image model id through Vela for existing projects', async () => {
+    mockReadyImage();
+
+    const result = await generateMedia({
+      ...baseArgs(),
+      surface: 'image',
+      model: 'codex-gpt-image-2',
+      output: 'legacy-project.png',
+      aspect: '1:1',
+    });
+
+    expect(result.providerId).toBe('vela');
+    expect(valueAfter(imageCall()[0], '--model')).toBe('gpt-image-2');
+  });
+
   it('uses image edit with five absolute, independently repeated --image values', async () => {
     mockReadyImage('image/png');
 

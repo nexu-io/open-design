@@ -14,6 +14,7 @@
 
 export const CTA_REPO = 'https://github.com/nexu-io/open-design';
 export const CTA_REPO_RELEASES = `${CTA_REPO}/releases`;
+export const DEEPSEEK_HARNESS_REPO = 'https://github.com/deepseek-ai/deepseek-harness';
 // On-site download page; ctaHref() localizes this per locale.
 export const DOWNLOAD_HREF = '/download/';
 const GET_STARTED_HREF = '/quickstart/';
@@ -37,4 +38,33 @@ export const downloadFirstCtas = (actions: readonly CtaAction[]): CtaAction[] =>
   ];
   if (star) out.push({ ...star, variant: 'ghost' });
   return out;
+};
+
+// DeepSeek Harness translations originally shipped with the generic Open Design
+// CTA trio. Prefer translated labels when the current two-action shape exists;
+// otherwise retain the locale's translated download label and use a
+// language-neutral brand label for the upstream repository. This avoids leaking
+// an English sentence into every legacy locale without fabricating translations.
+export const deepseekHarnessHeroCtas = (
+  actions: readonly CtaAction[],
+): CtaAction[] => {
+  const download = actions.find(
+    (action) => action.href === DOWNLOAD_HREF || action.href === CTA_REPO_RELEASES,
+  );
+  const harness = actions.find((action) => action.href === DEEPSEEK_HARNESS_REPO);
+
+  return [
+    {
+      ...(download ?? { label: 'Open Design' }),
+      href: DOWNLOAD_HREF,
+      external: false,
+      variant: 'primary',
+    },
+    {
+      ...(harness ?? { label: 'DeepSeek Harness · GitHub' }),
+      href: DEEPSEEK_HARNESS_REPO,
+      external: true,
+      variant: 'ghost',
+    },
+  ];
 };

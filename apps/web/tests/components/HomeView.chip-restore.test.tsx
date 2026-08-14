@@ -224,15 +224,18 @@ describe('HomeView chip/plugin selection survives a real unmount+remount', () =>
     await waitFor(() => {
       expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('UI Mockup');
     });
-    // The restore resolves the plugin's snapshot the same way a fresh chip
-    // click does (see the effect's docblock for why it doesn't defer).
-    await waitFor(() => {
-      expect(
-        fetchMock.mock.calls.some(
-          ([url]) => typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply'),
-        ),
-      ).toBe(true);
-    });
+    // Restoring a persisted type is background hydration, not a submit. Keep
+    // the type rail interactive and defer the plugin apply until the user
+    // actually sends; otherwise a slow local apply washes out and disables
+    // every type pill while Home is loading.
+    expect(
+      (screen.getByTestId('home-hero-type-pill-prototype') as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect(
+      fetchMock.mock.calls.some(
+        ([url]) => typeof url === 'string' && url.includes('/api/plugins/example-web-prototype/apply'),
+      ),
+    ).toBe(false);
   });
 
   it('silently drops a persisted chip pointing at a since-uninstalled plugin', async () => {

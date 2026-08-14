@@ -292,23 +292,9 @@ function MessageItem({
   onRead: (id: string) => Promise<void>;
   onError: () => void;
 }) {
-  const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
   const formatted = formatPublishedDate(message.publishedAt, locale);
-  const ctaUrl = safeExternalUrl(message.ctaUrl);
-  return <article className={`${styles.item}${message.readAt ? '' : ` ${styles.itemUnread}`}`}>
-    <span className={styles.itemViewHint} aria-hidden>{t('settings.memoryToastClickHint')}<Icon name="arrow-right" size={14} /></span>
+  return <article className={`${styles.item}${message.readAt ? '' : ` ${styles.itemUnread}`}${expanded ? ` ${styles.itemExpanded}` : ''}`}>
     <button type="button" className={styles.itemSummary} aria-expanded={expanded} onClick={() => { setExpanded((value) => !value); void onRead(message.id).catch(onError); }}><span className={styles.itemMeta}><span>{message.typeName}</span>{formatted ? <time dateTime={message.publishedAt}>{formatted}</time> : null}</span><strong>{message.title}</strong><span className={styles.bodyPreview}>{message.body}</span></button>
-    {expanded && message.ctaLabel && ctaUrl ? <div className={styles.itemActions}><button type="button" className={styles.primaryAction} onClick={() => window.open(ctaUrl, '_blank', 'noopener,noreferrer')}>{message.ctaLabel}</button></div> : null}
   </article>;
-}
-
-function safeExternalUrl(value: string | null): string | null {
-  if (!value) return null;
-  try {
-    const parsed = new URL(value, window.location.href);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.toString() : null;
-  } catch {
-    return null;
-  }
 }

@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "od-design-system-intents/v1",
+  "mappings": [
+    { "intent": "account.settings.section", "component": "Surface", "properties": { "title": "Account settings" }, "states": ["hover"], "priority": 100 },
+    { "intent": "account.settings.field", "component": "Field", "states": ["focus"], "minInstances": 3, "priority": 100 },
+    { "intent": "account.settings.save", "component": "Button", "variant": "primary", "properties": { "label": "Save changes", "disabled": false }, "states": ["hoverPrimary", "activePrimary", "focus"], "priority": 100 },
+    { "intent": "account.settings.cancel", "component": "Button", "variant": "secondary", "properties": { "label": "Cancel", "disabled": false }, "states": ["hoverSecondary", "focus"], "priority": 100 },
+    { "intent": "workspace.delete.dialog", "component": "Surface", "properties": { "title": "Delete workspace", "description": "This action cannot be undone." }, "states": ["hover"], "priority": 100 },
+    { "intent": "workspace.delete.name_field", "component": "Field", "properties": { "label": "Workspace name", "placeholder": "Northstar Studio" }, "states": ["focus"], "priority": 100 },
+    { "intent": "workspace.delete.warning", "component": "Status", "variant": "accent", "properties": { "label": "Irreversible action" }, "priority": 100 },
+    { "intent": "workspace.delete.cancel", "component": "Button", "variant": "secondary", "properties": { "label": "Cancel", "disabled": false }, "states": ["hoverSecondary", "focus"], "priority": 100 },
+    { "intent": "team.directory.surface", "component": "Surface", "properties": { "title": "Team directory" }, "states": ["hover"], "priority": 100 },
+    { "intent": "team.directory.search", "component": "Field", "properties": { "label": "Search members", "placeholder": "Search by name or email" }, "states": ["focus"], "priority": 100 },
+    { "intent": "team.directory.invite", "component": "Button", "variant": "primary", "properties": { "label": "Invite member", "disabled": false }, "states": ["hoverPrimary", "activePrimary", "focus"], "priority": 100 },
+    { "intent": "team.member.row", "component": "Surface", "properties": { "title": "Team member" }, "states": ["hover"], "minInstances": 4, "priority": 100 },
+    { "intent": "team.member.status", "component": "Status", "variant": "success", "properties": { "label": "Active" }, "minInstances": 4, "priority": 100 },
+    { "intent": "team.member.action", "component": "Button", "variant": "secondary", "properties": { "label": "More", "disabled": false }, "states": ["hoverSecondary", "focus"], "minInstances": 4, "priority": 100 }
+  ]
+}

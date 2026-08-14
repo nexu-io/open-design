@@ -95,6 +95,7 @@ import { ContextChipHoverCard } from './ContextChipHoverCard';
 import { workspaceContextDetailLine, workspaceContextKindLabel } from './workspace-context';
 import { FigmaHelpModal } from './FigmaHelpModal';
 import { TemplatePicker } from './home-hero/TemplatePicker';
+import { TypePillRow } from './home-hero/TypePillRow';
 import { LibraryPicker } from './LibraryPicker';
 import { ComposerModePicker } from './ComposerModePicker';
 import { assetTitle } from './LibraryAssetMeta';
@@ -1261,6 +1262,17 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         <PixelScanLogo className="home-hero__logo home-hero__logo--tiles" />
       </span>
 
+      {/* Capsule type row: the 12 create-scenario types as pill chips above
+          the composer (per product — replaces the fanned card carousel); the
+          selected pill carries the accent tint, click switches. */}
+      <TypePillRow
+        chips={templateChips}
+        activeChipId={activeChipId}
+        disabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
+        labelFor={(id) => homeHeroChipLabel(id, t)}
+        onPick={handlePickTaskChip}
+      />
+
       {/* #5517 wraps the input card + workdir row into one visible composer
           card so they read as a single surface. */}
       <div className="home-hero__composer-card">
@@ -1958,15 +1970,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               disabled={pluginsLoading}
               pickDisabled={pluginsLoading || pendingChipId !== null || pendingPluginId !== null}
               labelFor={(id) => homeHeroChipLabel(id, t)}
-              descriptionFor={(id) => homeHeroChipDescription(id, t)}
               onPick={handlePickTaskChip}
-              onClear={() => {
-                // Drop any lingering hover-preview too: when the rail card was
-                // hovered but the active chip is still null, clearing the chip
-                // alone is a no-op and the pill would stay on the preview.
-                setPreviewTemplateId(null);
-                onClearActiveChip();
-              }}
             />
             {footerInputFields.length > 0 ? (
               <div className="home-hero__footer-options" data-testid="home-hero-footer-options">

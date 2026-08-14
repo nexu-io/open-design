@@ -11,6 +11,7 @@ import {
 import {
   AMR_LOGIN_POLL_INTERVAL_MS,
   amrLoginPollOutcome,
+  isAmrSessionAuthenticated,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
 import {
@@ -85,6 +86,23 @@ export function RailAccountSyncTip() {
   );
 }
 
+export function RailAccountRecoveryTip() {
+  const { t } = useI18n();
+  return (
+    <div
+      className="entry-rail-account-recovery"
+      role="status"
+      aria-live="polite"
+      data-testid="entry-rail-account-recovery-tip"
+    >
+      <span className="entry-rail-account-recovery__spinner" aria-hidden />
+      <span className="entry-rail-account-recovery__text">
+        {t('entry.cloudRecovering')}
+      </span>
+    </div>
+  );
+}
+
 /**
  * The signed-out rail's bottom callout (#5517 "Open Design Cloud 版" card).
  * The demo's card jumps to a mock sign-in; the product card IS the sign-in:
@@ -115,7 +133,7 @@ export function CloudSignInTip() {
     setStatus(null);
     const current = await fetchVelaLoginStatus();
     if (cancelledRef.current || !mountedRef.current) return;
-    if (current?.loggedIn) {
+    if (isAmrSessionAuthenticated(current)) {
       finishSignedIn();
       return;
     }

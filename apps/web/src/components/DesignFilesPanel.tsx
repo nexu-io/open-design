@@ -675,6 +675,23 @@ export function DesignFilesPanel({
       />
     ) : null;
 
+  // One pass over the full file list replaces renderDirRow's previous
+  // per-directory `files.filter(...)`. The visible count is unchanged, but a
+  // directory-heavy project now costs O(files + directories), not
+  // O(files * directories), on every panel render.
+  const descendantFileCountByDir = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const file of files) {
+      const parts = file.name.split('/');
+      let dir = '';
+      for (let index = 0; index < parts.length - 1; index += 1) {
+        dir = dir ? `${dir}/${parts[index]}` : parts[index]!;
+        counts.set(dir, (counts.get(dir) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [files]);
+
   // Prune selections that no longer exist in the current file list
   // (e.g. after a refresh or delete within the same project).
   // Cross-project leaks are handled by the parent remounting this
@@ -1193,8 +1210,7 @@ export function DesignFilesPanel({
 
   function renderDirRow(dirName: string) {
     const fullPath = currentDir === '' ? dirName : `${currentDir}/${dirName}`;
-    const prefix = `${fullPath}/`;
-    const count = files.filter((f) => f.name.startsWith(prefix)).length;
+    const count = descendantFileCountByDir.get(fullPath) ?? 0;
     return (
       <div key={`dir:${fullPath}`} className="df-row df-dir-row" onClick={() => setCurrentDir(fullPath)}>
         <span className="df-row-check" aria-hidden />

@@ -959,6 +959,7 @@ export const TR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'claymorphism': 'Eğlenceli, kabarık öğeler ve renkli yüzeylerle, şekillendirilebilir kili andıran yumuşak, yuvarlatılmış 3D benzeri şekiller.',
   'clean': 'Görsel karmaşayı azaltmak için bol beyaz alan, okunaklı tipografi ve sınırlı renk paletiyle sadelik odaklı tasarım.',
   'clickhouse': 'Hızlı analitik veritabanı. Sarı vurgulu, teknik dokümantasyon tarzı.',
+  'cloudflare-kumo': 'Modern web uygulamaları için Cloudflare bileşen sistemi: semantik açık/koyu tema belirteçleri, kompakt Inter tipografisi, katmanlı nötr yüzeyler, erişilebilir kontroller ve grafiklere uygun renk rehberi.',
   'cohere': 'Kurumsal yapay zeka platformu. Canlı degradeler, veri zengini gösterge paneli estetiği.',
   'coinbase': 'Kripto borsası. Temiz mavi kimlik, güven odaklı, kurumsal his.',
   'colorful': 'İlgi çekici, akılda kalıcı ve modern kullanıcı deneyimleri için canlı, yüksek kontrastlı paletler ve degradeler.',

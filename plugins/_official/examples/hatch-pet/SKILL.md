@@ -35,7 +35,7 @@ od:
 > vendored under `skills/hatch-pet/` so any Open Design agent can run it. After
 > the skill finishes packaging, the resulting `spritesheet.webp` (under
 > `${CODEX_HOME:-$HOME/.codex}/pets/<pet-name>/`) can be imported into the
-> floating pet companion via **Settings → Pets → Import Codex sprite**. The
+> floating pet companion via **Settings → General → Pets → Import Codex sprite**. The
 > import flow auto-detects the 8×9 / `192×208` atlas and lets the user pick
 > which animation row to play (idle, running-right, waving, …).
 

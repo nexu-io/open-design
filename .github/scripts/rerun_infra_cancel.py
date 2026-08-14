@@ -30,7 +30,7 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 DEFAULT_MAX_ATTEMPT = 2
 ALLOWED_EVENTS = frozenset({"pull_request", "merge_group"})
@@ -63,7 +63,7 @@ IGNORED_AGGREGATE_JOB_NAMES = frozenset(
 ANNOTATIONS_PER_PAGE = 100
 
 
-GhRequest = Callable[[str, str, dict[str, str] | None, str | None], Any]
+GhRequest = Callable[[str, str, Optional[dict[str, str]], Optional[str]], Any]
 
 
 class Skip(Exception):

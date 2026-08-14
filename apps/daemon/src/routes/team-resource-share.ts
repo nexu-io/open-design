@@ -16,7 +16,7 @@ export type TeamResourceScopeResolution =
   | { ok: true; scope: TeamResourceRequestScope }
   | {
       ok: false;
-      status: 400 | 403 | 503;
+      status: 400 | 401 | 403 | 503;
       code: string;
       message: string;
       retryable?: true;

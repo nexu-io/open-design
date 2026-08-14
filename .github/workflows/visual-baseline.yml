@@ -35,6 +35,7 @@ jobs:
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
+          runner-labels: '["blacksmith-8vcpu-ubuntu-2404"]'
 
       - name: Prebuild workspace type declarations
         run: |

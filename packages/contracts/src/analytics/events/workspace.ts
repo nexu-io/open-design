@@ -17,7 +17,8 @@ export type TrackingWorkspacePage =
   | 'all_projects'
   | 'design_systems'
   | 'plugins'
-  | 'workspace_settings';
+  | 'workspace_settings'
+  | 'project';
 
 export interface TrackingWorkspaceDimensions {
   /** Opaque workspace id. Never a display name. */

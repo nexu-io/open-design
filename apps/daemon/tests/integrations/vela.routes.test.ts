@@ -638,6 +638,60 @@ describe('GET /api/integrations/vela/wallet', () => {
 });
 
 describe('GET /api/integrations/vela/status', () => {
+  it('reports AMR runtime unavailable instead of signed out when the vela binary cannot be resolved', async () => {
+    const previousPath = process.env.PATH;
+    const previousAgentHome = process.env.OD_AGENT_HOME;
+    const previousResourceRoot = process.env.OD_RESOURCE_ROOT;
+    const previousVelaBin = process.env.VELA_BIN;
+    const previousVelaOpenCodeBin = process.env.VELA_OPENCODE_BIN;
+    process.env.PATH = '';
+    process.env.OD_AGENT_HOME = tmpHome;
+    delete process.env.OD_RESOURCE_ROOT;
+    delete process.env.VELA_BIN;
+    delete process.env.VELA_OPENCODE_BIN;
+
+    const isolatedApp = express();
+    isolatedApp.use(express.json());
+    registerVelaRoutes(isolatedApp, {
+      paths: { RUNTIME_DATA_DIR: tmpHome },
+      appConfig: {
+        readAppConfig: async () => ({ agentCliEnv: {} }),
+      },
+      http: {},
+      env: {
+        HOME: tmpHome,
+        OPEN_DESIGN_AMR_PROFILE: 'local',
+        PATH: '',
+      },
+    });
+    const isolatedServer = createServer(isolatedApp);
+    await new Promise<void>((resolve) => isolatedServer.listen(0, '127.0.0.1', resolve));
+    const isolatedAddress = isolatedServer.address() as AddressInfo;
+    const isolatedUrl = `http://127.0.0.1:${isolatedAddress.port}`;
+
+    try {
+      const { status, body } = await getJson<{ error?: string; loggedIn?: boolean }>(
+        `${isolatedUrl}/api/integrations/vela/status`,
+      );
+
+      expect(status).toBe(503);
+      expect(body.error).toBe('amr-runtime-unavailable');
+      expect(body.loggedIn).toBeUndefined();
+    } finally {
+      await new Promise<void>((resolve) => isolatedServer.close(() => resolve()));
+      if (previousPath === undefined) delete process.env.PATH;
+      else process.env.PATH = previousPath;
+      if (previousAgentHome === undefined) delete process.env.OD_AGENT_HOME;
+      else process.env.OD_AGENT_HOME = previousAgentHome;
+      if (previousResourceRoot === undefined) delete process.env.OD_RESOURCE_ROOT;
+      else process.env.OD_RESOURCE_ROOT = previousResourceRoot;
+      if (previousVelaBin === undefined) delete process.env.VELA_BIN;
+      else process.env.VELA_BIN = previousVelaBin;
+      if (previousVelaOpenCodeBin === undefined) delete process.env.VELA_OPENCODE_BIN;
+      else process.env.VELA_OPENCODE_BIN = previousVelaOpenCodeBin;
+    }
+  });
+
   it('reports loggedIn=false when ~/.amr/config.json is absent', async () => {
     const { status, body } = await getJson<{
       loggedIn: boolean;
@@ -3288,6 +3342,24 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     });
     expect(parsed).toMatchObject({
       campaignId: 'deepseek_v4_flash',
+      conversionSource: 'deepseek_workbench_badge',
+    });
+  });
+
+  // The ingest allowlist is fail-closed: an unrecognised campaign id voids the
+  // WHOLE entry, not just its campaign field. So a live campaign missing from
+  // the set loses every attributed entry it produces — and the campaign's own
+  // success metrics (活动归因付费人数 / 金额) are defined as payments carrying
+  // its `campaign_id`, which means the campaign would report zero while
+  // converting normally.
+  it('accepts the current campaign id, not only the finished one', () => {
+    const parsed = parseAmrEntryAnalyticsPayload({
+      ...payloadFor('deepseek_workbench_badge', 'home'),
+      campaignId: 'deepseek_v4_pro',
+      conversionSource: 'deepseek_workbench_badge',
+    });
+    expect(parsed).toMatchObject({
+      campaignId: 'deepseek_v4_pro',
       conversionSource: 'deepseek_workbench_badge',
     });
   });

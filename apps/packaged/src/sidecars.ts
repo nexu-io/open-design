@@ -60,6 +60,7 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "http_proxy",
   "https_proxy",
   "no_proxy",
+  "OD_ALLOWED_INTERNAL_HOSTS",
 ] as const;
 
 // The daemon owns the historical-outer compatibility handoff. Preserve the
@@ -248,6 +249,13 @@ const WIN32_STATUS_TIMEOUT_MS = 90_000;
 // widened budget is the safety net for slow devices, mirroring the win32
 // rationale above (same "slow, not dead" failure class as #5515).
 const LINUX_STATUS_TIMEOUT_MS = 90_000;
+// Packaged 0.18.1 macOS cold starts on Apple Silicon can exceed the 35s
+// baseline: the daemon sidecar needs extra time to finish initialization
+// before the desktop's status timeout fires. Widening the darwin budget
+// to 90s matches the win32/linux safety net for "slow, not dead" first
+// launches and prevents the timeout cascade that leaves the desktop on a
+// stale web URL (issue #6637).
+const DARWIN_STATUS_TIMEOUT_MS = 90_000;
 const DAEMON_MIGRATION_STATUS_TIMEOUT_MS = 30 * 60 * 1000;
 
 // Poll cadence for waitForStatus: start tight so a fast daemon is detected
@@ -259,18 +267,21 @@ const STATUS_POLL_MAX_MS = 1500;
 
 // Baseline status wait budget by platform, before the daemon-only legacy
 // migration override. win32 gets the wider AV-scan headroom, linux gets the
-// same headroom for AppImage FUSE cold starts; every other OS keeps the 35s
-// baseline.
+// same headroom for AppImage FUSE cold starts; darwin gets the same headroom
+// for packaged 0.18.1+ cold starts on Apple Silicon; every other OS keeps the
+// 35s baseline.
 function baseStatusTimeoutMs(platform: NodeJS.Platform = process.platform): number {
   if (platform === "win32") return WIN32_STATUS_TIMEOUT_MS;
   if (platform === "linux") return LINUX_STATUS_TIMEOUT_MS;
+  if (platform === "darwin") return DARWIN_STATUS_TIMEOUT_MS;
   return DAEMON_STATUS_TIMEOUT_MS;
 }
 
 /**
  * Daemon status wait budget. The platform baseline (35s, or 90s on win32 for
- * AV-scan headroom and on linux for AppImage FUSE cold starts) is fine for
- * normal cold boots, but the OD_LEGACY_DATA_DIR
+ * AV-scan headroom, on linux for AppImage FUSE cold starts, and on darwin for
+ * packaged 0.18.1+ Apple Silicon cold starts) is fine for normal cold boots,
+ * but the OD_LEGACY_DATA_DIR
  * one-shot recovery flow can synch-copy a multi-GB legacy `.od/` payload before
  * SQLite even opens, and killing the child mid-migration can leave dataDir
  * half-promoted. When the env var is set, use a 30-minute budget so the parent

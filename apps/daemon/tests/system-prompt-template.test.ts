@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   composeSystemPrompt,
-  renderCodexImagegenOverride,
-  resolveCodexImagegenModelId,
 } from '../src/prompts/system.js';
 
 // These tests pin the rendering of metadata.promptTemplate inside the
@@ -258,46 +256,6 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).not.toContain('Source:');
   });
 
-  it('adds a Codex-only built-in imagegen override for gpt-image image projects', () => {
-    const out = composeSystemPrompt({
-      agentId: 'codex',
-      metadata: {
-        kind: 'image',
-        imageModel: 'gpt-image-2',
-        imageAspect: '1:1',
-        promptTemplate: { ...baseSummary },
-      },
-    });
-
-    const mediaContractIdx = out.indexOf('## Media generation contract');
-    const codexOverrideIdx = out.indexOf('## Codex built-in imagegen override');
-    expect(mediaContractIdx).toBeGreaterThan(-1);
-    expect(codexOverrideIdx).toBeGreaterThan(mediaContractIdx);
-    expect(out).toContain('use Codex\'s built-in image generation capability');
-    expect(out).toContain('intentional exception to the media generation contract');
-    expect(out).toContain('Do not require, request, or mention `OPENAI_API_KEY`');
-    expect(out).toContain('Generate the image with Codex built-in imagegen');
-    expect(out).toMatch(
-      /actual\s+output path returned by the built-in imagegen result/,
-    );
-    expect(out).toContain('${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png');
-    expect(out).toContain('When the user asked for one image, produce exactly one final project image');
-    expect(out).toContain('If Codex built-in imagegen returns multiple candidate files, previews, or');
-    expect(out).toContain('select the single best match and import only that file into');
-    expect(out).toContain('Do not copy every generated variant');
-    expect(out).toContain('verify the exact destination file exists under');
-    expect(out).toMatch(
-      /retain the exact source path, destination path, and access\/copy\s+error in the tool trace/,
-    );
-    expect(out).toContain('then use the generic visible image failure sentence');
-    expect(out).toContain('Do not claim success or silently fall back');
-    expect(out).toContain('$OD_PROJECT_DIR');
-    expect(out).toContain('reply exactly\n`图片已生成`');
-    expect(out).toContain('reply exactly\n`图片生成服务暂时不可用`');
-    expect(out).not.toMatch(/ask the user for one-time\s+confirmation/);
-    expect(out).not.toContain('media generate --surface image --model gpt-image-2');
-  });
-
   it('keeps non-Codex image projects on the daemon media dispatcher contract', () => {
     const out = composeSystemPrompt({
       agentId: 'claude',
@@ -317,28 +275,12 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).not.toContain('## Codex built-in imagegen override');
   });
 
-  it('normalizes Codex agent selection before applying the imagegen override', () => {
+  it('keeps Codex image projects on the shared media dispatcher contract', () => {
     const out = composeSystemPrompt({
       agentId: '  CoDeX  ',
       metadata: {
         kind: 'image',
-        imageModel: 'gpt-image-2',
-        imageAspect: '1:1',
-        promptTemplate: { ...baseSummary },
-      },
-    });
-
-    expect(out).toContain('## Codex built-in imagegen override');
-    expect(out).toContain('use Codex\'s built-in image generation capability');
-  });
-
-  it('can omit the Codex imagegen override so live chat appends it after the client system prompt', () => {
-    const out = composeSystemPrompt({
-      agentId: 'codex',
-      includeCodexImagegenOverride: false,
-      metadata: {
-        kind: 'image',
-        imageModel: 'gpt-image-2',
+        imageModel: 'vela/gpt-image-2',
         imageAspect: '1:1',
         promptTemplate: { ...baseSummary },
       },
@@ -367,25 +309,6 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).not.toContain('## Media generation contract');
     expect(out).not.toContain('## Codex built-in imagegen override');
     expect(out).not.toContain('Generate the image with Codex built-in imagegen');
-  });
-
-  it('suppresses the Codex imagegen override when the enabled policy denies the selected model', () => {
-    const out = composeSystemPrompt({
-      agentId: 'codex',
-      metadata: {
-        kind: 'image',
-        imageModel: 'gpt-image-2',
-        imageAspect: '1:1',
-        promptTemplate: { ...baseSummary },
-      },
-      mediaExecution: {
-        mode: 'enabled',
-        allowedModels: ['different-image-model'],
-      },
-    });
-
-    expect(out).toContain('## Media generation contract');
-    expect(out).not.toContain('## Codex built-in imagegen override');
   });
 
   it('renders enabled media allowlists in the media contract', () => {
@@ -582,49 +505,4 @@ describe('composeSystemPrompt — metadata.promptTemplate', () => {
     expect(out).not.toContain('<question-form id="elevenlabs-voice"');
   });
 
-  it('does not add the Codex imagegen override for non-gpt-image models', () => {
-    const out = composeSystemPrompt({
-      agentId: 'codex',
-      metadata: {
-        kind: 'image',
-        imageModel: 'grok-imagine-image',
-        imageAspect: '1:1',
-        promptTemplate: { ...baseSummary, model: 'grok-imagine-image' },
-      },
-    });
-
-    expect(out).toContain('## Media generation contract');
-    expect(out).not.toContain('## Codex built-in imagegen override');
-  });
-
-  it('does not render a Codex override for unrecognized gpt-image-like request metadata', () => {
-    const override = renderCodexImagegenOverride('codex', {
-      kind: 'image',
-      imageModel: 'gpt-image-2-preview-not-whitelisted',
-      imageAspect: '1:1',
-    });
-
-    expect(override).toBe('');
-  });
-
-  it('resolves only known OpenAI gpt-image model ids for the Codex override', () => {
-    expect(
-      resolveCodexImagegenModelId({
-        kind: 'image',
-        imageModel: 'gpt-image-2',
-      }),
-    ).toBe('gpt-image-2');
-    expect(
-      resolveCodexImagegenModelId({
-        kind: 'image',
-        imageModel: 'dall-e-3',
-      }),
-    ).toBe('');
-    expect(
-      resolveCodexImagegenModelId({
-        kind: 'image',
-        imageModel: 'gpt-image-2-preview-not-whitelisted',
-      }),
-    ).toBe('');
-  });
 });

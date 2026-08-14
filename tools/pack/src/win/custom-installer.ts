@@ -451,8 +451,12 @@ async function writeInstallerScript(config: ToolPackConfig, paths: WinPaths, pac
   const localUpdateDownloadsRoot = `${localDataRoot}\\updates\\downloads`;
   const localUpdateReleasesRoot = `${localDataRoot}\\updates\\releases`;
   const localUpdateStagingRoot = `${localDataRoot}\\updates\\staging`;
-  const nsisLogDir = `${localDataRoot}\\logs`;
-  const nsisLogPath = `${nsisLogDir}\\nsis.log`;
+  const nsisLogDirectory = config.portable
+    ? `$TEMP\\${escapeNsisString(PRODUCT_NAME)}\\${escapeNsisString(sanitizeNamespace(config.namespace))}`
+    : escapeNsisString(dirname(paths.nsisLogPath));
+  const nsisLogPath = config.portable
+    ? `${nsisLogDirectory}\\nsis.log`
+    : escapeNsisString(paths.nsisLogPath);
   const runningInstancesScriptPath = join(dirname(paths.installerScriptPath), "running-instances.ps1");
   const launcherRuntimeSyncScriptPath = join(dirname(paths.installerScriptPath), "sync-launcher-runtime.ps1");
 
@@ -569,7 +573,7 @@ Var LX
 Function LogInstallerEvent
   Exch $0
   Push $1
-  CreateDirectory "${nsisLogDir}"
+  CreateDirectory "${nsisLogDirectory}"
   FileOpen $1 "${nsisLogPath}" a
   IfErrors done
   FileSeek $1 0 END
@@ -604,7 +608,7 @@ ${createLauncherRuntimeSyncScript(
 Function un.LogInstallerEvent
   Exch $0
   Push $1
-  CreateDirectory "${nsisLogDir}"
+  CreateDirectory "${nsisLogDirectory}"
   FileOpen $1 "${nsisLogPath}" a
   IfErrors done
   FileSeek $1 0 END

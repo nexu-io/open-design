@@ -88,6 +88,87 @@ Derived files are caches, not competing sources of truth:
   agree with `tokens.css`.
 - `tailwind-v4.css` is regenerated from `tokens.css`.
 
+### Structured runtime files
+
+Packages that need deterministic component selection may add a complete
+machine-readable runtime graph:
+
+```text
+manifests/components.json       component index
+manifests/intent-map.json       intent-to-component mappings
+components/<id>/component.json  implementation, variants, properties, and states
+rules/lint.json                 checks for generated output
+rules/fallback.json             no-match and multiple-match behavior
+```
+
+Declare all four entry paths together in `manifest.json`:
+
+```json
+{
+  "runtime": {
+    "components": "manifests/components.json",
+    "intents": "manifests/intent-map.json",
+    "lint": "rules/lint.json",
+    "fallback": "rules/fallback.json"
+  }
+}
+```
+
+`intent-map.json` references component ids and selects only declared variants,
+properties, and states; it does not repeat selectors or implementation details.
+The prompt receives only a compact list of canonical intent ids. For a listed
+intent, a filesystem agent resolves the full selection on demand:
+
+```bash
+"$OD_NODE_BIN" "$OD_BIN" tools design-systems resolve \
+  --intent account.settings.save
+```
+
+The daemon derives the active design system from the token's run (falling back
+to its project binding), then returns the reusable implementation, selectors,
+variant, properties, required states, and lint policy. It also applies
+`rules/fallback.json`: a unique highest-priority mapping may be selected, while
+ambiguous or missing mappings can require human confirmation instead of letting
+the agent invent a near-copy.
+
+A package has one component-selection authority. When `runtime` is declared,
+the prompt does not also inject `components.manifest.json` or `components.html`
+as an alternate inventory: selection goes through the intent index and resolver.
+The fixture and its derived manifest remain package evidence, preview inputs,
+and authoring checks, but they do not compete with the runtime mapping.
+
+After generation, the filesystem agent validates the files that implement the
+intent. Pass every related source file when markup and styles are split:
+
+```bash
+"$OD_NODE_BIN" "$OD_BIN" tools design-systems validate \
+  --intent account.settings.save \
+  --artifact account-settings.html \
+  --artifact styles/account-settings.css
+```
+
+The adherence report checks mapped component and variant reuse, required state
+coverage, declared token references, and color literals outside token
+definitions. `passed` allows the task to complete; `failed` returns concrete
+remediation and must be fixed and re-run; `confirmation-required` preserves the
+package fallback gate and must be surfaced to the user. Validation is scoped to
+the active run and reads only safe project-relative text files.
+
+The first bundled runtime packages are `hud`, `webflow`, and `uber`. They carry
+the component and intent coverage used by the three-task DS 3.0 regression
+(account settings, delete-workspace confirmation, and team directory). The
+destructive confirmation intent intentionally has no component mapping so its
+human-confirmation fallback remains part of the release signal.
+
+Omitting `runtime` preserves the legacy prompt-based component manifest / fixture
+path.
+Declaring only part of the graph, using unsafe paths, or leaving dangling
+references fails validation and is surfaced to the agent rather than silently
+downgraded to the legacy component path. Text-artifact runtimes that cannot call
+the resolver may use the visible intent-to-component index, but are explicitly
+forbidden from inventing hidden variants, properties, states, or implementation
+details.
+
 ## 2. Catalog metadata precedence
 
 Packaged systems should put stable display metadata in `manifest.json`. The
@@ -242,6 +323,7 @@ localized-content coverage.
 - [ ] `DESIGN.md` has at least seven substantive H2 sections without relying on a fixed numbered template.
 - [ ] `tokens.css` satisfies the shared token schema and agrees with the prose.
 - [ ] Rich-package usage, component, preview, and source-evidence files are complete.
+- [ ] If `runtime` is declared, all runtime files parse and every intent reference resolves.
 - [ ] Derived component, Design Tokens, and Tailwind outputs are regenerated rather than hand-edited.
 - [ ] Component fixtures use declared semantic tokens and include keyboard, focus, contrast, and reduced-motion behavior.
 - [ ] All 17 direct non-English catalog maps are updated for bundled copy changes.

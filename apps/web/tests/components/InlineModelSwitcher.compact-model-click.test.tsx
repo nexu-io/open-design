@@ -248,7 +248,7 @@ describe('compact home model list — a clicked model reaches the chip', () => {
     expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
   });
 
-  it('shows the unlimited badge only on DeepSeek V4 Flash and keeps it in the selected chip', () => {
+  it('shows the unlimited badge on both campaign models and keeps it in the selected chip', () => {
     // Campaign visibility is decided by the real window alone: pin the clock
     // inside the window instead of the removed ?campaign= review parameters.
     mockNow(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
@@ -258,12 +258,15 @@ describe('compact home model list — a clicked model reaches the chip', () => {
     expect(within(screen.getByTestId('inline-model-switcher-chip')).getByText('Unlimited'))
       .toBeInTheDocument();
 
+    // The campaign covers V4 Pro AND V4 Flash on one shared window, so a badge
+    // on only one of them would contradict every surface that advertises the
+    // pair. Exactly two — no other model may pick the promotion up.
     const popover = openSwitcher();
+    expect(within(compactRow('deepseek-v4-pro')).getByText('Unlimited'))
+      .toBeInTheDocument();
     expect(within(compactRow('deepseek-v4-flash')).getByText('Unlimited'))
       .toBeInTheDocument();
-    expect(within(compactRow('deepseek-v4-pro')).queryByText('Unlimited'))
-      .toBeNull();
-    expect(within(popover).getAllByText('Unlimited')).toHaveLength(1);
+    expect(within(popover).getAllByText('Unlimited')).toHaveLength(2);
   });
 
   it('hides the campaign badge entirely outside the real window', () => {
@@ -278,6 +281,31 @@ describe('compact home model list — a clicked model reaches the chip', () => {
 
     const popover = openSwitcher();
     expect(within(popover).queryByText('Unlimited')).toBeNull();
+  });
+
+  it('never applies the AMR campaign badge to a BYOK model', () => {
+    // BYOK deliberately retains the last local-agent model in `agentModels` so
+    // switching back to local execution restores it. That dormant AMR choice
+    // must not decorate the visible BYOK model: BYOK usage is charged by the
+    // user's own provider and is outside this hosted-model campaign.
+    mockNow(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
+    render(
+      <StatefulSwitcher
+        agents={[amrAgentAllEnabled]}
+        initialConfig={{
+          mode: 'api',
+          model: 'grok-4.5',
+          agentId: 'amr',
+          agentModels: {
+            amr: { model: DEEPSEEK_V4_FLASH_CAMPAIGN.modelId },
+          },
+        }}
+      />,
+    );
+
+    const chip = screen.getByTestId('inline-model-switcher-chip');
+    expect(chip).toHaveTextContent('grok-4.5');
+    expect(within(chip).queryByText('Unlimited')).toBeNull();
   });
 
   it('still closes on a click genuinely outside the switcher', () => {

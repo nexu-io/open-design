@@ -47,7 +47,7 @@ export type WorkspaceRequestAuthorityResult =
   | { ok: true; context: WorkspaceCollabContext }
   | {
       ok: false;
-      status: 400 | 403 | 503;
+      status: 400 | 401 | 403 | 503;
       code: string;
       message: string;
       retryable?: true;
@@ -292,9 +292,20 @@ export function withLastKnownMembership(
 }
 
 export type WorkspaceResourceAccessInput = {
+  workspaceId?: string | null;
   visibility?: string | null;
   resourceState?: string | null;
   createdByWorkspaceMemberId?: string | null;
+  resourceHubResourceId?: string | null;
+  syncState?: string | null;
+};
+
+export type WorkspaceMutationAuthorityLease = {
+  verify: VerifyWorkspaceRequestAuthority;
+  allow: (
+    row: WorkspaceResourceAccessInput,
+    context: WorkspaceCollabContext,
+  ) => boolean;
 };
 
 export function headerValue(req: any, name: string): string | null {
@@ -509,7 +520,13 @@ function workspaceResourceMutationAllowed(
 export type BoundWorkspaceResourceMutationGate = (
   req: any,
   res: Response,
-  sendApiError: (res: Response, status: number, code: string, message: string) => unknown,
+  sendApiError: (
+    res: Response,
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) => unknown,
   getWorkspaceResource: (db: unknown, workspaceId: string, resourceId: string) => WorkspaceResourceAccessInput | null | undefined,
   getWorkspaceResourceByResourceId: (db: unknown, resourceId: string) => WorkspaceResourceAccessInput | null | undefined,
   db: unknown,
@@ -601,7 +618,13 @@ export async function enforceVerifiedWorkspaceResourceMutation(
   resourceType: string,
   req: any,
   res: Response,
-  sendApiError: (res: Response, status: number, code: string, message: string) => unknown,
+  sendApiError: (
+    res: Response,
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) => unknown,
   getWorkspaceResource: (
     db: unknown,
     workspaceId: string,
@@ -615,22 +638,51 @@ export async function enforceVerifiedWorkspaceResourceMutation(
   resourceId: string,
   capability: WorkspaceResourceMutationCapability,
   verifyWorkspaceRequestAuthority: VerifyWorkspaceRequestAuthority | undefined,
+  options: { authorityLease?: WorkspaceMutationAuthorityLease } = {},
 ): Promise<boolean> {
   // No persisted Workspace binding means this is a genuine legacy/local
   // resource. Preserve that path without inventing a Workspace from ambient
   // navigation state.
-  if (!getWorkspaceResourceByResourceId(db, resourceId)) return true;
+  const persistedRow = getWorkspaceResourceByResourceId(db, resourceId);
+  if (!persistedRow) return true;
   if (!verifyWorkspaceRequestAuthority) {
     sendApiError(res, 400, 'WORKSPACE_CONTEXT_REQUIRED', 'an explicit workspace context is required');
     return false;
   }
 
-  const verified = await verifyWorkspaceRequestAuthorityForRequest(
+  let verified: Awaited<ReturnType<VerifyWorkspaceRequestAuthority>> | undefined;
+  if (options.authorityLease) {
+    const leased = await verifyWorkspaceRequestAuthorityForRequest(
+      req,
+      options.authorityLease.verify,
+    );
+    const leasedRow = leased.ok
+      ? getWorkspaceResource(
+          db,
+          leased.context.workspaceId,
+          resourceId,
+        )
+      : null;
+    if (
+      leased.ok
+      && leasedRow
+      && options.authorityLease.allow(leasedRow, leased.context)
+    ) {
+      verified = leased;
+    }
+  }
+  verified ??= await verifyWorkspaceRequestAuthorityForRequest(
     req,
     verifyWorkspaceRequestAuthority,
   );
   if (!verified.ok) {
-    sendApiError(res, verified.status, verified.code, verified.message);
+    sendApiError(
+      res,
+      verified.status,
+      verified.code,
+      verified.message,
+      verified.retryable ? { retryable: true } : {},
+    );
     return false;
   }
 
