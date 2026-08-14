@@ -356,6 +356,29 @@ the active-run staging implementation is in
 - Open Design launches the user's official `dsh` installation; it does not
   bundle Harness or Node. Install the tested DSH release first and use
   `DSH_BIN` only when its executable is outside the daemon's PATH.
+  Open Design publishes checksum-verifying bootstrap installers for users who
+  do not already have the compatible Node, DSH, and pnpm toolchain. They place
+  an OD-discoverable launcher in the user's local bin directory and open the
+  Harness Web UI for provider setup after installation:
+
+  ```sh
+  curl -fsSL 'https://open-design.ai/install-dsh.sh?version=1' | sh
+  ```
+
+  ```powershell
+  & ([scriptblock]::Create((irm 'https://open-design.ai/install-dsh.ps1?version=1')))
+  ```
+
+  From Windows Command Prompt, the equivalent bootstrap is:
+
+  ```bat
+  curl -fsSL "https://open-design.ai/install-dsh.cmd?version=1" -o "%TEMP%\install-dsh.cmd" && call "%TEMP%\install-dsh.cmd"
+  ```
+
+  Pass `--no-launch` to the downloaded POSIX script or `-NoLaunch` to the
+  downloaded PowerShell script for unattended installation. The installers
+  pin the exact versions in the adapter's compatibility policy and do not use
+  a global npm install.
 - The adapter also requires an Open Design-owned Harness profile named
   `open-design`. The package source lives at
   [`packages/dsh-runtime`](../packages/dsh-runtime). Packaged OD builds embed

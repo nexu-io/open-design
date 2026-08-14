@@ -51,6 +51,12 @@ cli
   });
 
 cli
+  .command("publish-dsh-bootstrap", "Publish immutable DeepSeek Harness bootstrap installers")
+  .action(async () => {
+    await import("./storage/publish-dsh-bootstrap.ts");
+  });
+
+cli
   .command("prepare-release-note", "Discover and validate release note sources")
   .action(async () => {
     await import("./release-note/prepare.ts");

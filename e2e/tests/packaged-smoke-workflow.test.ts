@@ -2587,6 +2587,17 @@ process.stdin.on("end", () => {
     }
     expect(productionWorkflow).toContain('wranglerVersion: "4.110.0"');
     expect(productionWorkflow).toContain("d1 migrations apply open-design-landing-attribution --remote");
+    expect(productionWorkflow).toContain("Publish immutable DeepSeek Harness bootstrap installers to R2");
+    expect(productionWorkflow).toContain("DSH_BOOTSTRAP_VERSION: v1");
+    expect(productionWorkflow).toContain("DSH_BOOTSTRAP_SOURCE_DIR: apps/landing-page/public");
+    expect(productionWorkflow).toContain("RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}");
+    expect(productionWorkflow).toContain("RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}");
+    expect(productionWorkflow).toContain("RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}");
+    expect(productionWorkflow).toContain("RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}");
+    expect(productionWorkflow).toContain("pnpm exec tools-release publish-dsh-bootstrap");
+    expect(productionWorkflow.indexOf("pnpm exec tools-release publish-dsh-bootstrap")).toBeLessThan(
+      productionWorkflow.indexOf("pages deploy out"),
+    );
 
     expect(script).toContain('const STAGING_URL = "https://staging.open-design.ai"');
     expect(script).toContain('const STAGING_WORKFLOW = "landing-page-staging.yml"');
