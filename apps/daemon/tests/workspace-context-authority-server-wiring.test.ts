@@ -63,16 +63,24 @@ afterEach(async () => {
 }, 30_000);
 
 describe('server workspace context authority wiring', () => {
-  it('keeps directory Team authority after a conflicting exact context cache becomes healthy', async () => {
+  it('keeps directory Team authority and fences an unread A -> B -> A Settings transition', async () => {
     scratch = await mkdtemp(join(tmpdir(), 'od-context-authority-wiring-'));
+    let directoryReads = 0;
     let currentReads = 0;
+    let allowHubReady = true;
     let observeCatchUpCurrent!: () => void;
     const catchUpCurrentObserved = new Promise<void>((resolve) => {
       observeCatchUpCurrent = resolve;
     });
-    const authorityUrl = await startAuthority(() => {
-      currentReads += 1;
-      if (currentReads >= 2) observeCatchUpCurrent();
+    const authorityUrl = await startAuthority({
+      onDirectory: () => {
+        directoryReads += 1;
+      },
+      onCurrent: () => {
+        currentReads += 1;
+        if (currentReads >= 2) observeCatchUpCurrent();
+      },
+      isHubReady: () => allowHubReady,
     });
     const velaBin = await writeVelaStub(scratch);
     setEnv({
@@ -110,15 +118,12 @@ describe('server workspace context authority wiring', () => {
     await catchUpCurrentObserved;
 
     let warmContext: Record<string, unknown> | null = null;
-    for (let attempt = 0; attempt < 100; attempt += 1) {
+    await vi.waitFor(async () => {
       const readsBefore = currentReads;
       const context = await getWorkspaceContext();
-      if (currentReads === readsBefore) {
-        warmContext = context;
-        break;
-      }
-      await new Promise<void>((resolve) => setImmediate(resolve));
-    }
+      expect(currentReads).toBe(readsBefore);
+      warmContext = context;
+    }, { timeout: 10_000, interval: 50 });
 
     expect(warmContext).not.toBeNull();
     expect(warmContext).toMatchObject({
@@ -129,6 +134,32 @@ describe('server workspace context authority wiring', () => {
       teamId: WORKSPACE_ID,
       planId: 'team_pro',
     });
+    const directoryReadsAfterCatchUp = directoryReads;
+    const currentReadsAfterCatchUp = currentReads;
+    await getWorkspaceContext();
+    await getWorkspaceContext();
+    expect(directoryReads).toBe(directoryReadsAfterCatchUp);
+    expect(currentReads).toBe(currentReadsAfterCatchUp);
+
+    // Red spec for the account-identity fence: both Settings writes complete
+    // without any directory/status read. The final credential identity is
+    // byte-for-byte A again, so a cache keyed only by the current identity
+    // would otherwise revive the old five-minute authority lease.
+    allowHubReady = false;
+    const directoryReadsBeforeCredentialRoundTrip = directoryReads;
+    const currentReadsBeforeCredentialRoundTrip = currentReads;
+    await putAmrApiUrl('https://account-b.example');
+    await putAmrApiUrl(authorityUrl);
+    expect(directoryReads).toBe(directoryReadsBeforeCredentialRoundTrip);
+
+    const afterCredentialRoundTrip = await getWorkspaceContext();
+    expect(afterCredentialRoundTrip).toMatchObject({
+      workspaceId: WORKSPACE_ID,
+      workspaceMemberId: MEMBER_ID,
+      role: 'admin',
+    });
+    expect(directoryReads).toBe(directoryReadsBeforeCredentialRoundTrip + 1);
+    expect(currentReads).toBe(currentReadsBeforeCredentialRoundTrip + 1);
   }, 60_000);
 });
 
@@ -162,9 +193,27 @@ async function getWorkspaceContext(): Promise<Record<string, unknown>> {
   return body.context;
 }
 
-async function startAuthority(onCurrent: () => void): Promise<string> {
+async function putAmrApiUrl(apiUrl: string): Promise<void> {
+  const response = await fetch(`${daemon!.url}/api/app-config`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      agentCliEnv: {
+        amr: { VELA_API_URL: apiUrl },
+      },
+    }),
+  });
+  expect(response.status).toBe(200);
+}
+
+async function startAuthority(callbacks: {
+  onDirectory: () => void;
+  onCurrent: () => void;
+  isHubReady?: () => boolean;
+}): Promise<string> {
   authority = createServer((req, res) => {
     if (req.url === '/api/v1/workspaces' && req.method === 'GET') {
+      callbacks.onDirectory();
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({
         items: [{
@@ -180,7 +229,7 @@ async function startAuthority(onCurrent: () => void): Promise<string> {
       return;
     }
     if (req.url?.startsWith('/api/v1/workspaces/current') && req.method === 'GET') {
-      onCurrent();
+      callbacks.onCurrent();
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({
         workspaceId: WORKSPACE_ID,
@@ -202,6 +251,7 @@ async function startAuthority(onCurrent: () => void): Promise<string> {
         connection: 'keep-alive',
         'content-type': 'text/event-stream',
       });
+      if (callbacks.isHubReady?.() === false) return;
       res.write(
         `event: ready\ndata: ${JSON.stringify({
           workspaceId: WORKSPACE_ID,

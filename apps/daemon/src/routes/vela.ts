@@ -146,6 +146,8 @@ export interface RegisterVelaRoutesDeps {
     getPublicBaseUrl?: PublicBaseUrlResolver;
   };
   env?: NodeJS.ProcessEnv;
+  /** Reconcile account-scoped caches/streams after credential observation. */
+  onCredentialStateObserved?: () => void;
 }
 
 interface AmrModelProbe {
@@ -403,6 +405,8 @@ function proxyVelaMessageCenterRequest(
 
 export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): void {
   const env = deps.env ?? process.env;
+  const onCredentialStateObserved =
+    deps.onCredentialStateObserved ?? (() => undefined);
   const { RUNTIME_DATA_DIR } = deps.paths;
   const { readAppConfig } = deps.appConfig;
   const getPublicBaseUrl = deps.http.getPublicBaseUrl ?? ((req: Request) => {
@@ -514,6 +518,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
     try {
       const appConfig = await readAppConfig(RUNTIME_DATA_DIR);
       const configuredEnv = agentCliEnvForAgent(appConfig.agentCliEnv, 'amr');
+      onCredentialStateObserved();
       const amrDef = getAgentDef('amr');
       const amrLaunch = amrDef ? resolveAgentLaunch(amrDef, configuredEnv) : null;
       if (!(amrLaunch?.launchPath ?? amrLaunch?.selectedPath)) {
@@ -833,6 +838,7 @@ export function registerVelaRoutes(app: Express, deps: RegisterVelaRoutesDeps): 
         delete agentCliEnv.amr;
       }
       await writeAppConfig(RUNTIME_DATA_DIR, { agentCliEnv });
+      onCredentialStateObserved();
       res.json({ ok: true });
     } catch (err) {
       res.status(500).json({ error: String(err) });

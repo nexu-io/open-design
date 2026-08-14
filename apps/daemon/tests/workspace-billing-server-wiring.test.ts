@@ -94,11 +94,14 @@ describe('server workspace billing runtime wiring', () => {
     };
     daemon = await serverModule.startServer({ port: 0, returnServer: true });
 
-    const response = await fetch(
-      `${daemon.url}/api/workspace/billing?scope=workspace&workspaceId=${PERSONAL.workspaceId}`,
-      { headers: workspaceHeaders() },
-    );
+    const billingUrl =
+      `${daemon.url}/api/workspace/billing?scope=workspace&workspaceId=${PERSONAL.workspaceId}`;
+    const [response, concurrentResponse] = await Promise.all([
+      fetch(billingUrl, { headers: workspaceHeaders() }),
+      fetch(billingUrl, { headers: workspaceHeaders() }),
+    ]);
     expect(response.status).toBe(200);
+    expect(concurrentResponse.status).toBe(200);
     const body = await response.json() as {
       workspaceBalance: {
         workspaceId: string;
@@ -116,9 +119,15 @@ describe('server workspace billing runtime wiring', () => {
       status: 'fresh',
       errorCode: null,
     });
-    expect(await readFile(process.env.OD_TEST_VELA_LOG!, 'utf8')).toContain(
+    expect((await concurrentResponse.json() as typeof body).workspaceBalance)
+      .toEqual(body.workspaceBalance);
+    const warmResponse = await fetch(billingUrl, { headers: workspaceHeaders() });
+    expect(warmResponse.status).toBe(200);
+    const commandLog = await readFile(process.env.OD_TEST_VELA_LOG!, 'utf8');
+    expect(commandLog).toContain(
       `billing workspace-snapshot --workspace-id ${PERSONAL.workspaceId}`,
     );
+    expect(commandLog.match(/billing summary --format json/g)).toHaveLength(1);
   }, 60_000);
 });
 

@@ -33,7 +33,7 @@ import {
   type Ref,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { coalescedGet } from '../lib/coalesced-get';
+import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import type {
   WorkspaceActiveResponse,
   WorkspaceBillingSummary,
@@ -72,6 +72,7 @@ import {
 } from '../collab/useWorkspaceContext';
 import { canUpgradeFromPlanTier, hasTeamPlan, resolvePlanLabelTier } from '../collab/team-plan';
 import { AMR_CONSOLE_UPGRADE_INTENT, amrPlansUrlForProfile } from '../runtime/amr-guidance';
+import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import type { EntryHomeView } from '../router';
 import type {
   AccountMenuClickProps,
@@ -1273,7 +1274,7 @@ export function EntryNavRail({
           } satisfies WorkspaceDirectoryItem]
         : [];
 
-  async function loadWorkspaceDirectory() {
+  async function loadWorkspaceDirectory(options: { force?: boolean } = {}) {
     // Capture the identity this read is FOR, and compare against `contextRef`
     // (not the closed-over `context`, which is by definition the identity we are
     // reading for) before committing anything — see `beginWorkspaceScopedRead`.
@@ -1289,12 +1290,14 @@ export function EntryNavRail({
       // module cache does: `coalescedGet` shares a settled result for a second,
       // and this read's answer depends on WHO asked.
       const cacheKey = `workspace-directory:${workspaceIdentityCacheKey(read.context)}`;
-      const items = await coalescedGet(cacheKey, async () => {
+      if (options.force) evictCoalescedGet(cacheKey);
+      const readDirectory = async () => {
         const response = await fetch('/api/workspace/directory', { cache: 'no-store' });
         if (!response.ok) throw new Error(`directory ${response.status}`);
         const body = (await response.json()) as WorkspaceDirectoryResponse;
         return body.items ?? [];
-      });
+      };
+      const items = await coalescedGet(cacheKey, readDirectory);
       // The account may have changed while this was in flight. Writing here
       // would repopulate BOTH the module cache and the visible list with the
       // previous account's names, after the identity-change effect below had
@@ -1417,6 +1420,25 @@ export function EntryNavRail({
     if (!teamOpen) return;
     void loadWorkspaceDirectory();
   }, [teamOpen, railIdentity]);
+
+  // The account-directory event is delivered through the already-shared local
+  // Workspace EventSource. It stays mounted while the switcher is closed, so a
+  // remote create/join/rename/removal updates the cached list immediately. A
+  // reconnect/foreground edge also re-reads once to close a missed-event gap;
+  // this is event-driven catch-up, not a timer.
+  useWorkspaceInvalidation(
+    {
+      'workspace-directory-changed': () => {
+        void loadWorkspaceDirectory({ force: true });
+      },
+    },
+    {
+      workspaceContext: context,
+      onActive: () => {
+        void loadWorkspaceDirectory({ force: true });
+      },
+    },
+  );
 
   // This rail can outlive the identity that filled its list: an account swap
   // (sign out, sign in as someone else) does not necessarily unmount it, and

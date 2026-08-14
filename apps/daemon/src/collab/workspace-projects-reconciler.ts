@@ -539,12 +539,12 @@ export async function reconcileWorkspaceProjectMetadataWithRemote(
 export function handleHubTeamProjectsChanged(
   emitTeamProjectsChangedDeduped: () => void,
   reconcileWorkspaceProjects: () => Promise<unknown>,
-): void {
+): Promise<void> {
   // The web treats this signal as permission to re-read the currently open
   // project's scope. Emit only after the authoritative catalog diff has been
   // persisted; an eager signal can race the revoke write, re-confirm the stale
   // Team binding, and then leave the open page with no durable follow-up.
-  void reconcileWorkspaceProjects()
+  return reconcileWorkspaceProjects()
     .then(() => emitTeamProjectsChangedDeduped())
     .catch(() => undefined);
 }
@@ -555,9 +555,9 @@ export function handleHubTeamProjectsChanged(
 export function handleHubProjectMetadataChanged(
   emitProjectMetadataChanged: () => void,
   reconcileProjectMetadata: () => Promise<boolean>,
-): void {
+): Promise<void> {
   emitProjectMetadataChanged();
-  void reconcileProjectMetadata()
+  return reconcileProjectMetadata()
     .then((changed) => {
       if (changed) emitProjectMetadataChanged();
     })
