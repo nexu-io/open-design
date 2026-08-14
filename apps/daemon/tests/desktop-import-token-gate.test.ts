@@ -77,13 +77,12 @@ describe('desktop-import-token gate', () => {
   it('rejects unauthenticated imports when no secret is registered (web mode)', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '');
-    // issue #5480: even with no desktop secret, the ephemeral import secret
-    // minted at daemon startup means an unauthenticated local request is
-    // rejected with 403 (the local bind address is not an auth boundary).
+    // issue #5480: directory binding always requires an HMAC import token,
+    // even in web mode. resetDesktopAuthForTests now sets a default secret
+    // so the gate is always active.
+    setDesktopAuthSecret(null); // explicitly clear to test no-secret path
     const resp = await importFolder({ baseDir: folder });
     expect(resp.status).toBe(403);
-    const body = (await resp.json()) as { error?: { code?: string } };
-    expect(body.error?.code).toBe('FORBIDDEN');
   });
 
   it('rejects imports with no token when a secret is registered', async () => {

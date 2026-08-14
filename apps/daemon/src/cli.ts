@@ -7916,51 +7916,28 @@ async function readStdinUtf8() {
 
 async function mintCliImportToken(baseDir) {
   const socketPath = process.env[SIDECAR_ENV.IPC_PATH];
-  if (typeof socketPath === 'string' && socketPath.length > 0) {
-    let result;
-    try {
-      result = await requestJsonIpc(
-        socketPath,
-        { type: SIDECAR_MESSAGES.MINT_IMPORT_TOKEN, input: { baseDir } },
-        { timeoutMs: 800 },
-      );
-    } catch {
-      // Fall through to file-based fallback below
-    }
-    if (result?.ok === true && typeof result.token === 'string' && result.token.length > 0) {
-      return result.token;
-    }
-    if (result?.ok === false && result.code === 'DESKTOP_AUTH_PENDING') {
-      exitWithStructuredError({
-        code: 'desktop-auth-pending',
-        message: result.message ?? 'desktop auth required but secret not yet registered',
-        data: { retryable: result.retryable === true },
-      });
-    }
-  }
-  // Fallback: read the ephemeral import secret from the daemon data dir
-  // and mint a token locally. This allows CLI folder import in non-desktop
-  // mode where no sidecar IPC is available (issue #5480).
+  if (typeof socketPath !== 'string' || socketPath.length === 0) return null;
+  let result;
   try {
-    const { resolveDataDir } = await import('./daemon-paths.js');
-    const { resolveProjectRoot } = await import('./project-root.js');
-    const { signDesktopImportToken } = await import('./desktop-auth.js');
-    const fs = await import('node:fs');
-    const path = await import('node:path');
-    const crypto = await import('node:crypto');
-    const url = await import('node:url');
-    const moduleDir = path.dirname(url.fileURLToPath(import.meta.url));
-    const projectRoot = resolveProjectRoot(moduleDir);
-    const dataDir = resolveDataDir(process.env.OD_DATA_DIR, projectRoot);
-    const secretPath = path.join(dataDir, 'import-secret');
-    const secret = fs.readFileSync(secretPath);
-    const now = Date.now();
-    const exp = new Date(now + 50_000).toISOString(); // 50s TTL (under the 60s limit)
-    const nonce = crypto.randomBytes(16).toString('base64url');
-    return signDesktopImportToken(secret, baseDir, { nonce, exp });
+    result = await requestJsonIpc(
+      socketPath,
+      { type: SIDECAR_MESSAGES.MINT_IMPORT_TOKEN, input: { baseDir } },
+      { timeoutMs: 800 },
+    );
   } catch {
     return null;
   }
+  if (result?.ok === true && typeof result.token === 'string' && result.token.length > 0) {
+    return result.token;
+  }
+  if (result?.ok === false && result.code === 'DESKTOP_AUTH_PENDING') {
+    exitWithStructuredError({
+      code: 'desktop-auth-pending',
+      message: result.message ?? 'desktop auth required but secret not yet registered',
+      data: { retryable: result.retryable === true },
+    });
+  }
+  return null;
 }
 
 function createUnifiedDiff(leftLabel, rightLabel, leftText, rightText) {

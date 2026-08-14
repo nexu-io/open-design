@@ -1,14 +1,10 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
 
 let desktopAuthSecret: Buffer | null = null;
 let desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
 export const consumedImportNonces = new Map<string, number>();
 const DESKTOP_IMPORT_TOKEN_TTL_MS = 60_000;
 const DESKTOP_IMPORT_TOKEN_FIELD_SEP = '~';
-const EPHEMERAL_SECRET_FILENAME = 'import-secret';
-let ephemeralSecretDir: string | null = null;
 
 export function setDesktopAuthSecret(secret: Buffer | null): void {
   desktopAuthSecret = secret;
@@ -19,19 +15,6 @@ export function setDesktopAuthSecret(secret: Buffer | null): void {
 }
 
 export function getDesktopAuthSecret(): Buffer | null {
-  if (desktopAuthSecret !== null) return desktopAuthSecret;
-  // Lazy-load the ephemeral secret ONLY in non-desktop mode (gate inactive).
-  // In desktop mode a cleared secret means the sidecar has not yet
-  // re-registered, so we must return null and let callers surface the
-  // retryable 503 DESKTOP_AUTH_PENDING — not silently fall back to the
-  // ephemeral secret (which would drop the desktop pairing semantics).
-  if (!desktopAuthEverRegistered && ephemeralSecretDir !== null) {
-    try {
-      desktopAuthSecret = fs.readFileSync(path.join(ephemeralSecretDir, EPHEMERAL_SECRET_FILENAME));
-    } catch {
-      // File doesn't exist yet
-    }
-  }
   return desktopAuthSecret;
 }
 
@@ -44,50 +27,13 @@ export function isDesktopAuthGateActive(): boolean {
 }
 
 export function resetDesktopAuthForTests(): void {
-  desktopAuthSecret = null;
-  desktopAuthEverRegistered = process.env.OD_REQUIRE_DESKTOP_AUTH === '1';
+  // issue #5480: directory-binding routes always require an HMAC token.
+  // Set a default test secret so functional suites that exercise folder
+  // import don't need per-test setup. Tests that explicitly need the
+  // "no secret" state call setDesktopAuthSecret(null) after reset.
+  desktopAuthSecret = randomBytes(32);
+  desktopAuthEverRegistered = true;
   consumedImportNonces.clear();
-}
-
-/**
- * Configure the directory where an ephemeral import secret is stored.
- * Called once at daemon startup with RUNTIME_DATA_DIR. The secret file
- * is mode 0600 — only the daemon user can read it, which means the CLI
- * (running as the same user) can mint HMAC import tokens locally without
- * sidecar IPC, while other local users cannot.
- */
-export function configureEphemeralImportSecretDir(dataDir: string): void {
-  ephemeralSecretDir = dataDir;
-}
-
-/**
- * Ensure an import secret exists. If one is already in memory or on disk,
- * load it. Otherwise generate a new random secret, persist it to the
- * ephemeral secret file, and set it in memory. Called at daemon startup.
- */
-export function ensureEphemeralImportSecret(): void {
-  if (desktopAuthSecret !== null) return;
-  // In desktop mode (OD_REQUIRE_DESKTOP_AUTH=1 or a prior desktop pairing)
-  // the sidecar registers its own secret — do not mint an ephemeral one.
-  if (desktopAuthEverRegistered) return;
-  if (ephemeralSecretDir === null) return;
-  const secretPath = path.join(ephemeralSecretDir, EPHEMERAL_SECRET_FILENAME);
-  try {
-    desktopAuthSecret = fs.readFileSync(secretPath);
-    return;
-  } catch {
-    // File doesn't exist — generate new
-  }
-  const newSecret = randomBytes(32);
-  try {
-    fs.mkdirSync(ephemeralSecretDir, { recursive: true });
-    fs.writeFileSync(secretPath, newSecret, { mode: 0o600 });
-    desktopAuthSecret = newSecret;
-  } catch {
-    // Best-effort — if we can't persist, the in-memory secret still works
-    // for this process lifetime.
-    desktopAuthSecret = newSecret;
-  }
 }
 
 export function pruneExpiredImportNonces(now: number): void {

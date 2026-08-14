@@ -225,8 +225,6 @@ export function registerImportRoutes(app: Express, ctx: RegisterImportRoutesDeps
       let trustedPickerImport = false;
       // Always require a valid HMAC import token for folder import,
       // regardless of whether the desktop auth gate is active (issue #5480).
-      // In non-desktop mode, an ephemeral secret is generated at daemon
-      // startup so HMAC verification works without desktop registration.
       const secret = desktopAuthSecret();
       if (secret == null) {
         if (isDesktopAuthGateActive()) {
