@@ -93,7 +93,7 @@ describe("tools-pack Closure archive", () => {
     expect(root).toContain("export const handoff");
     expect(root).toContain('electron: { version: { min: "0.18.0-beta.1" } }');
     expect(root).not.toContain("resolveOpenDesignClosureLayout");
-    expect(root).not.toContain("prepareStandaloneVelaRuntime");
+    expect(root).not.toContain("prepareStandaloneResourceEnv");
 
     expect(inner).toContain("createStandaloneBootloader");
     expect(inner).toContain("startStandaloneBody");
@@ -102,7 +102,7 @@ describe("tools-pack Closure archive", () => {
 
     expect(body).toContain("resolveOpenDesignClosureLayout");
     expect(body).toContain('from "@open-design/standalone/resource-runtime"');
-    expect(body).toContain("const preparedToolEnv = await prepareStandaloneVelaRuntime(request)");
+    expect(body).toContain("const preparedToolEnv = await prepareStandaloneResourceEnv(request)");
     expect(body).toContain("...preparedToolEnv");
     expect(body).toContain("resolveOpenDesignClosureRuntimeRoot");
     expect(body).toContain('join(request.paths.runtimeRoot, "closure-aliases")');

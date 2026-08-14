@@ -11,35 +11,57 @@ import {
 } from "@open-design/closure/update";
 import type { ClosureDistributionManifest } from "@open-design/closure/protocol";
 
-import { VELA_RUNTIME_RESOURCE_ID } from "./tool-env.js";
+import {
+  STANDALONE_BOOT_RESOURCE_IDS,
+  VELA_RUNTIME_RESOURCE_ID,
+} from "./tool-env.js";
 import { discardUnreferencedClosureResources } from "./resource-garbage.js";
-export { prepareStandaloneVelaRuntime } from "./resource-handoff.js";
+export {
+  prepareStandaloneResourceEnv,
+  prepareStandaloneVelaRuntime,
+} from "./resource-handoff.js";
 
-export async function ensureStandaloneVelaResource(input: Readonly<{
+export type StandalonePreparedResource = Readonly<{
+  id: string;
+  path: string;
+  reused: boolean;
+  title: string;
+}>;
+
+export async function ensureStandaloneBootResources(input: Readonly<{
   fetch?: typeof globalThis.fetch;
   manifest: ClosureDistributionManifest;
-  onProgress?: (progress: ClosureResourceEnsureProgress) => void;
+  onProgress?: (resource: Readonly<{ id: string; title: string }>, progress: ClosureResourceEnsureProgress) => void;
   paths: ClosureStorePaths;
   repository: ClosureResourceRepositoryConfig;
   target: string;
-}>): Promise<Readonly<{ id: string; path: string; reused: boolean; title: string }> | null> {
-  if (process.env.VELA_BIN?.trim() && process.env.VELA_OPENCODE_BIN?.trim()) return null;
+}>): Promise<readonly StandalonePreparedResource[]> {
   const plan = planClosureDistributionGeneration(input.paths, 0, input.manifest, input.target);
-  if (!plan.resources.some((entry) => entry.id === VELA_RUNTIME_RESOURCE_ID)) return null;
+  const requiredIds = new Set<string>(STANDALONE_BOOT_RESOURCE_IDS);
+  if (!(process.env.VELA_BIN?.trim() && process.env.VELA_OPENCODE_BIN?.trim())) {
+    requiredIds.add(VELA_RUNTIME_RESOURCE_ID);
+  }
+  const required = plan.resources.filter((entry) => requiredIds.has(entry.id));
+  if (required.length === 0) return [];
   const lock = await acquireClosureChannelLock(input.paths, { waitMs: 30_000 });
   if (lock == null) throw new Error("Closure channel resources are busy");
   try {
-    const resource = await ensureClosureResource({
-      id: VELA_RUNTIME_RESOURCE_ID,
-      manifest: input.manifest,
-      ...(input.fetch == null ? {} : { fetch: input.fetch }),
-      ...(input.onProgress == null ? {} : { onProgress: input.onProgress }),
-      paths: input.paths,
-      repository: input.repository,
-      target: input.target,
-    });
+    const prepared: StandalonePreparedResource[] = [];
+    for (const planned of required) {
+      prepared.push(await ensureClosureResource({
+        id: planned.id,
+        manifest: input.manifest,
+        ...(input.fetch == null ? {} : { fetch: input.fetch }),
+        ...(input.onProgress == null
+          ? {}
+          : { onProgress: (progress) => input.onProgress?.(planned, progress) }),
+        paths: input.paths,
+        repository: input.repository,
+        target: input.target,
+      }));
+    }
     await discardUnreferencedClosureResources(input.paths).catch(() => undefined);
-    return resource;
+    return Object.freeze(prepared);
   } finally {
     await releaseClosureChannelLock(lock);
   }

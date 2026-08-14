@@ -10,6 +10,21 @@ const require = createRequire(import.meta.url);
 export const DAEMON_CLI_PATH_ENV = 'OD_DAEMON_CLI_PATH';
 export const RESOURCE_ROOT_ENV = 'OD_RESOURCE_ROOT';
 export const RESOURCE_TRUST_ROOT_ENV = 'OD_RESOURCE_TRUST_ROOT';
+export const CLOSURE_RESOURCE_ROOTS_ENV = 'OD_CLOSURE_RESOURCE_ROOTS_V1';
+
+export const DAEMON_CLOSURE_RESOURCE_IDS = Object.freeze([
+  'community-pets',
+  'craft',
+  'design-systems',
+  'design-templates',
+  'frames',
+  'plugin-previews',
+  'plugins',
+  'prompt-templates',
+  'skills',
+] as const);
+
+export type DaemonClosureResourceId = (typeof DAEMON_CLOSURE_RESOURCE_IDS)[number];
 
 function cleanOptionalPath(value: string | undefined): string | null {
   return typeof value === 'string' && value.trim().length > 0
@@ -33,6 +48,51 @@ function isPathWithin(base: string, target: string): boolean {
       !relativePath.startsWith('..') &&
       !path.isAbsolute(relativePath))
   );
+}
+
+export interface ResolveDaemonClosureResourceRootsOptions {
+  configured?: string;
+  safeBases?: Array<string | null | undefined>;
+}
+
+export function resolveDaemonClosureResourceRoots({
+  configured = process.env[CLOSURE_RESOURCE_ROOTS_ENV],
+  safeBases,
+}: ResolveDaemonClosureResourceRootsOptions = {}): Readonly<Partial<Record<DaemonClosureResourceId, string>>> {
+  if (!configured?.trim()) return Object.freeze({});
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(configured);
+  } catch (error) {
+    throw new Error(`${CLOSURE_RESOURCE_ROOTS_ENV} must be valid JSON`, { cause: error });
+  }
+  if (parsed == null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${CLOSURE_RESOURCE_ROOTS_ENV} must be a resource-root object`);
+  }
+  const record = parsed as Record<string, unknown>;
+  const extras = Object.keys(record).filter(
+    (id) => !(DAEMON_CLOSURE_RESOURCE_IDS as readonly string[]).includes(id),
+  );
+  if (extras.length > 0) {
+    throw new Error(`${CLOSURE_RESOURCE_ROOTS_ENV} contains unsupported resources: ${extras.join(', ')}`);
+  }
+  const normalizedSafeBases = (safeBases ?? [])
+    .filter((base): base is string => typeof base === 'string' && base.length > 0)
+    .map((base) => path.resolve(base));
+  const roots: Partial<Record<DaemonClosureResourceId, string>> = {};
+  for (const id of DAEMON_CLOSURE_RESOURCE_IDS) {
+    const value = record[id];
+    if (value == null) continue;
+    if (typeof value !== 'string' || value.trim().length === 0 || !path.isAbsolute(value)) {
+      throw new Error(`${CLOSURE_RESOURCE_ROOTS_ENV}.${id} must be an absolute path`);
+    }
+    const resolved = path.resolve(value);
+    if (!normalizedSafeBases.some((base) => isPathWithin(base, resolved))) {
+      throw new Error(`${CLOSURE_RESOURCE_ROOTS_ENV}.${id} must be under a trusted resource root`);
+    }
+    roots[id] = resolved;
+  }
+  return Object.freeze(roots);
 }
 
 export function resolveProcessResourcesPath(): string | null {
@@ -95,6 +155,19 @@ export function resolveDaemonResourceDir(
   fallback: string,
 ): string {
   return resourceRoot ? path.join(resourceRoot, segment) : fallback;
+}
+
+export function resolveDaemonClosureResourceDir(options: Readonly<{
+  fallback: string;
+  id: DaemonClosureResourceId;
+  resourceRoot: string | null;
+  resourceRoots: Readonly<Partial<Record<DaemonClosureResourceId, string>>>;
+  segment: string;
+}>): string {
+  const groupedRoot = options.resourceRoots[options.id];
+  return groupedRoot
+    ? path.join(groupedRoot, options.segment)
+    : resolveDaemonResourceDir(options.resourceRoot, options.segment, options.fallback);
 }
 
 export interface ResolveDaemonPluginPreviewsDirOptions {

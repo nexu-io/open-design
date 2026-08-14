@@ -184,6 +184,23 @@ const healthExpression = `
     }
   })()
 `;
+const bundledPluginInventoryExpression = `
+  (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    try {
+      const response = await fetch('/api/plugins', { signal: controller.signal });
+      const body = await response.json();
+      const plugins = Array.isArray(body?.plugins) ? body.plugins : [];
+      return {
+        ids: plugins.map((plugin) => plugin?.id ?? plugin?.name).filter(Boolean),
+        status: response.status,
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  })()
+`;
 const pptxExportExpression = `
   (async () => {
     const projectId = 'packaged-payload-pptx-' + Date.now().toString(36);
@@ -841,6 +858,14 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(value.health.ok).toBe(true);
       if (releaseVersion != null && releaseVersion !== '') expect(value.health.version).toBe(releaseVersion);
       else expect(value.health.version).toEqual(expect.any(String));
+
+      const pluginInspect = await measureSmokeStep(timings, 'verify bundled plugin cold-start compensation', async () =>
+        runToolsPackJson<WinInspectResult>('inspect', ['--expr', bundledPluginInventoryExpression]),
+      );
+      expect(pluginInspect.eval?.ok).toBe(true);
+      const pluginInventory = pluginInspect.eval?.value as { ids?: unknown; status?: unknown } | undefined;
+      expect(pluginInventory?.status).toBe(200);
+      expect(pluginInventory?.ids).toEqual(expect.arrayContaining(['od-new-generation']));
 
       // Establish the data-root postcondition before probing unrelated runtime
       // capabilities. A healthy auth-first renderer may already be on

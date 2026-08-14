@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -162,6 +162,20 @@ describe("Closure resource repository", () => {
     });
     expect(second).toEqual({ ...first, reused: true });
     expect(vi.mocked(fixture.fetch).mock.calls).toHaveLength(calls);
+
+    await writeFile(join(first.path, "skills", "SKILL.md"), "corrupt\n");
+    const repaired = await ensureClosureResource({
+      fetch: fixture.fetch,
+      id: "skills",
+      manifest: nextVersion,
+      paths,
+      target: "darwin-arm64",
+    });
+    expect(repaired).toEqual({ ...first, reused: false });
+    await expect(readFile(join(first.path, "skills", "SKILL.md"), "utf8")).resolves.toBe("# Skill\n");
+    expect(await readdir(paths.garbageRoot)).toHaveLength(1);
+    expect(vi.mocked(fixture.fetch).mock.calls).toHaveLength(calls);
+
     await expect(ensureClosureResource({
       fetch: fixture.fetch,
       id: "missing",

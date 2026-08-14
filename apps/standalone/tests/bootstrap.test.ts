@@ -22,7 +22,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { resolveStandaloneBootstrap } from "../src/bootstrap.js";
 import { discardUnreferencedClosureResources } from "../src/resource-garbage.js";
-import { prepareStandaloneVelaRuntime } from "../src/resource-runtime.js";
+import { prepareStandaloneResourceEnv } from "../src/resource-runtime.js";
+import { STANDALONE_RESOURCE_ROOTS_ENV } from "../src/tool-env.js";
 
 const roots: string[] = [];
 
@@ -50,15 +51,22 @@ async function fixture() {
       ["launcher.mjs", "export const launcher = true;\n"],
     ],
     native: [["addon.node", "native\n"]],
+    plugins: [
+      ["plugins/_official/sample/open-design.json", "{}\n"],
+      ["plugins/registry/index.json", "{}\n"],
+    ],
+    skills: [["skills/sample/SKILL.md", "# Sample\n"]],
     vela: [
-      ["bin/libexec/opencode/opencode", "opencode\n"],
-      ["bin/vela", "vela\n"],
+      [`bin/libexec/opencode/${process.platform === "win32" ? "opencode.exe" : "opencode"}`, "opencode\n"],
+      [`bin/${process.platform === "win32" ? "vela.exe" : "vela"}`, "vela\n"],
     ],
   } satisfies Record<string, Array<readonly [string, string]>>;
   const bytes = {
     body: await zip(source.body),
     launcher: await zip(source.launcher),
     native: await zip(source.native),
+    plugins: await zip(source.plugins),
+    skills: await zip(source.skills),
     vela: await zip(source.vela),
   };
   const artifact = (value: Buffer): ClosureDistributionBlob => ({
@@ -71,6 +79,8 @@ async function fixture() {
     body: artifact(bytes.body),
     launcher: artifact(bytes.launcher),
     native: artifact(bytes.native),
+    plugins: artifact(bytes.plugins),
+    skills: artifact(bytes.skills),
     vela: artifact(bytes.vela),
   };
   const tree = (files: Array<readonly [string, string]>) => createClosureComponentTreeDigest(
@@ -102,7 +112,20 @@ async function fixture() {
           },
         },
       },
-      resources: [],
+      resources: [
+        {
+          blob: artifacts.plugins.digest,
+          id: "plugins",
+          title: "Plugin registry",
+          treeDigest: tree(source.plugins),
+        },
+        {
+          blob: artifacts.skills.digest,
+          id: "skills",
+          title: "Skills",
+          treeDigest: tree(source.skills),
+        },
+      ],
       schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
     }, digest)
   );
@@ -217,6 +240,10 @@ describe("Standalone unresolved bootstrap", () => {
     });
     const store = resolveClosureStorePaths({ channel: "beta", namespace: "release-beta", root: value.paths.installationRoot });
     expect((await readClosureBindingDescriptor(store)).committed?.standalone.generation).toBe(0);
+    expect((await stat(join(store.blobsRoot, value.artifacts.plugins.digest.slice("sha256:".length)))).isFile())
+      .toBe(true);
+    expect(await stat(join(store.blobsRoot, value.artifacts.skills.digest.slice("sha256:".length))).catch(() => null))
+      .toBeNull();
     expect(progress.map((entry) => entry.stage)).toEqual(expect.arrayContaining([
       "checking", "discovering", "downloading", "materializing", "verifying", "ready",
     ]));
@@ -225,6 +252,9 @@ describe("Standalone unresolved bootstrap", () => {
       .toMatchObject({ completed: expect.any(Number), unit: "bytes" });
     expect(progress.filter((entry) => entry.subject.id === "vela-runtime").map((entry) => entry.stage))
       .toEqual(["checking", "downloading", "downloading", "verifying", "materializing", "verifying", "ready"]);
+    expect(progress.filter((entry) => entry.subject.id === "plugins").map((entry) => entry.stage))
+      .toEqual(["checking", "downloading", "downloading", "verifying", "materializing", "verifying", "ready"]);
+    expect(progress.some((entry) => entry.subject.id === "skills")).toBe(false);
 
     const callCount = vi.mocked(value.fetch).mock.calls.length;
     const warmProgress: StandaloneBootstrapProgress[] = [];
@@ -236,6 +266,8 @@ describe("Standalone unresolved bootstrap", () => {
     expect(warmProgress.map((entry) => [entry.subject.id, entry.stage])).toEqual([
       ["standalone", "checking"],
       ["standalone", "verifying"],
+      ["plugins", "checking"],
+      ["plugins", "ready"],
       ["vela-runtime", "checking"],
       ["vela-runtime", "ready"],
       ["standalone", "ready"],
@@ -248,7 +280,7 @@ describe("Standalone unresolved bootstrap", () => {
       request(value, "0.19.0-beta.1"),
       { fetch: value.fetch },
     );
-    const env = await prepareStandaloneVelaRuntime({
+    const env = await prepareStandaloneResourceEnv({
       ...resolution.handoff,
       capabilities: {
         async invoke(exchange) {
@@ -258,10 +290,18 @@ describe("Standalone unresolved bootstrap", () => {
     });
 
     expect(env.OD_VELA_RUNTIME_LAZY).toBe("1");
-    expect(env.VELA_BIN).toMatch(/resources[\\/][0-9a-f]{64}[\\/]bin[\\/]vela$/u);
+    expect(env.VELA_BIN).toMatch(new RegExp(
+      `resources[\\\\/][0-9a-f]{64}[\\\\/]bin[\\\\/]vela${process.platform === "win32" ? "\\.exe" : ""}$`,
+      "u",
+    ));
+    const resourceRoots = JSON.parse(env[STANDALONE_RESOURCE_ROOTS_ENV]!) as Record<string, string>;
+    expect(resourceRoots.plugins).toMatch(/resources[\\/][0-9a-f]{64}$/u);
+    expect(resourceRoots.skills).toBeUndefined();
     await vi.waitFor(async () => {
       const materialized = await stat(env.VELA_BIN!).then((entry) => entry.isFile()).catch(() => false);
       expect(materialized).toBe(true);
+      expect((await stat(join(resourceRoots.plugins!, "plugins", "_official", "sample", "open-design.json"))).isFile())
+        .toBe(true);
     });
   });
 
@@ -307,6 +347,25 @@ describe("Standalone unresolved bootstrap", () => {
       .toBe(false);
     expect(progress.some((entry) => entry.subject.id === "vela-runtime" && entry.stage === "downloading"))
       .toBe(true);
+  });
+
+  it("rejects readiness before daemon handoff when the plugin registry is unavailable", async () => {
+    const value = await fixture();
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url === value.artifacts.plugins.url) return new Response("offline", { status: 503 });
+      return await value.fetch(input, init);
+    }) as typeof globalThis.fetch;
+    const progress: StandaloneBootstrapProgress[] = [];
+
+    await expect(resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), {
+      fetch,
+      onProgress: (entry) => progress.push(entry),
+    })).rejects.toMatchObject({ code: "resource-unavailable" });
+    expect(progress.some((entry) => entry.subject.id === "plugins" && entry.stage === "downloading"))
+      .toBe(true);
+    expect(progress.some((entry) => entry.subject.id === "standalone" && entry.stage === "ready"))
+      .toBe(false);
   });
 
   it("cold-starts offline from a version index and required local blobs", async () => {

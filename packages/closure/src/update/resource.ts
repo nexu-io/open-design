@@ -16,6 +16,7 @@ import {
   type ClosureDistributionManifest,
 } from "../protocol/index.js";
 import {
+  discardClosureStoreEntry,
   planClosureDistributionGeneration,
   verifyClosureDistributionBlob,
   type ClosureStorePaths,
@@ -283,6 +284,17 @@ export async function ensureClosureResource(input: Readonly<{
     report(input.onProgress, { phase: "verifying" });
     await verifyResourceRoot(stageRoot, resource.treeDigest);
     await mkdir(dirname(resource.resourceRoot), { recursive: true });
+    try {
+      await verifyResourceRoot(resource.resourceRoot, resource.treeDigest);
+      report(input.onProgress, { phase: "ready" });
+      return Object.freeze({ id: resource.id, path: resource.resourceRoot, reused: true, title: resource.title });
+    } catch {
+      // The existing root is still absent or damaged; replace it transactionally.
+    }
+    await discardClosureStoreEntry({
+      paths: input.paths,
+      sourcePath: resource.resourceRoot,
+    });
     try {
       await rename(stageRoot, resource.resourceRoot);
     } catch (error) {

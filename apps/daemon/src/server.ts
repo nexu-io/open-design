@@ -44,14 +44,17 @@ import { resolveProjectRoot } from './project-root.js';
 import { OPEN_DESIGN_PLUGIN_ID } from './mcp-observability.js';
 import {
   RESOURCE_TRUST_ROOT_ENV,
+  resolveDaemonClosureResourceDir,
+  resolveDaemonClosureResourceRoots,
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
-  resolveDaemonResourceDir,
   resolveDaemonResourceRoot,
   resolveDataDir,
   resolveProcessResourcesPath,
 } from './daemon-paths.js';
 export {
+  resolveDaemonClosureResourceDir,
+  resolveDaemonClosureResourceRoots,
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
   resolveDaemonResourceRoot,
@@ -1052,6 +1055,9 @@ const DAEMON_RESOURCE_ROOT = resolveDaemonResourceRoot({
     process.env[RESOURCE_TRUST_ROOT_ENV],
   ],
 });
+const DAEMON_CLOSURE_RESOURCE_ROOTS = resolveDaemonClosureResourceRoots({
+  safeBases: [process.env[RESOURCE_TRUST_ROOT_ENV]],
+});
 // Built web app lives in `out/` — that's where Next.js writes the static
 // export configured in next.config.ts. The folder name used to be `dist/`
 // when this project shipped with Vite; the daemon serves whatever the
@@ -1060,10 +1066,19 @@ const STATIC_DIR = path.join(PROJECT_ROOT, 'apps', 'web', 'out');
 // Baked plugin preview clips (scripts/bake-plugin-previews.mjs). Served at
 // PLUGIN_PREVIEWS_ROUTE; their manifest rewrites html plugins' previews to a
 // cheap poster + hover-play video in the home gallery.
-const PLUGIN_PREVIEWS_DIR = resolveDaemonPluginPreviewsDir({
+const configuredPluginPreviewsDir = resolveDaemonPluginPreviewsDir({
   resourceRoot: DAEMON_RESOURCE_ROOT,
   projectRoot: PROJECT_ROOT,
 });
+const PLUGIN_PREVIEWS_DIR = process.env.OD_PLUGIN_PREVIEWS_DIR
+  ? configuredPluginPreviewsDir
+  : resolveDaemonClosureResourceDir({
+      fallback: configuredPluginPreviewsDir,
+      id: 'plugin-previews',
+      resourceRoot: DAEMON_RESOURCE_ROOT,
+      resourceRoots: DAEMON_CLOSURE_RESOURCE_ROOTS,
+      segment: path.join('data', 'plugin-previews'),
+    });
 const OD_BIN = resolveDaemonCliPath();
 export function resolveOpenDesignNodeBin({
   env = process.env,
@@ -1091,13 +1106,20 @@ export function resolveOpenDesignNodeBin({
 }
 
 const OD_NODE_BIN = resolveOpenDesignNodeBin();
-const SKILLS_DIR = resolveDaemonResourceDir(
-  DAEMON_RESOURCE_ROOT,
-  'skills',
-  path.join(PROJECT_ROOT, 'skills'),
-);
-const DESIGN_SYSTEMS_DIR = resolveDaemonResourceDir(
-  DAEMON_RESOURCE_ROOT,
+const closureResourceDir = (
+  id: Parameters<typeof resolveDaemonClosureResourceDir>[0]['id'],
+  segment: string,
+  fallback: string,
+): string => resolveDaemonClosureResourceDir({
+  fallback,
+  id,
+  resourceRoot: DAEMON_RESOURCE_ROOT,
+  resourceRoots: DAEMON_CLOSURE_RESOURCE_ROOTS,
+  segment,
+});
+const SKILLS_DIR = closureResourceDir('skills', 'skills', path.join(PROJECT_ROOT, 'skills'));
+const DESIGN_SYSTEMS_DIR = closureResourceDir(
+  'design-systems',
   'design-systems',
   path.join(PROJECT_ROOT, 'design-systems'),
 );
@@ -1105,21 +1127,21 @@ const DESIGN_SYSTEMS_DIR = resolveDaemonResourceDir(
 // split (PR #955) so the EntryView Templates tab gets the large rendering
 // catalogue and Settings → Skills only carries functional skills the agent
 // invokes mid-task. See specs/current/skills-and-design-templates.md.
-const DESIGN_TEMPLATES_DIR = resolveDaemonResourceDir(
-  DAEMON_RESOURCE_ROOT,
+const DESIGN_TEMPLATES_DIR = closureResourceDir(
+  'design-templates',
   'design-templates',
   path.join(PROJECT_ROOT, 'design-templates'),
 );
-const CRAFT_DIR = resolveDaemonResourceDir(
-  DAEMON_RESOURCE_ROOT,
+const CRAFT_DIR = closureResourceDir(
+  'craft',
   'craft',
   path.join(PROJECT_ROOT, 'craft'),
 );
 // User-installed skills and design systems live under the runtime data dir
 // so they respect OD_DATA_DIR overrides (test isolation, packaged runs).
 // Defined after RUNTIME_DATA_DIR is resolved below.
-const FRAMES_DIR = resolveDaemonResourceDir(
-  DAEMON_RESOURCE_ROOT,
+const FRAMES_DIR = closureResourceDir(
+  'frames',
   'frames',
   path.join(PROJECT_ROOT, 'assets', 'frames'),
 );
@@ -1127,23 +1149,23 @@ const FRAMES_DIR = resolveDaemonResourceDir(
 // `listCodexPets` scans this in addition to `~/.codex/pets/` so the
 // "Recently hatched" grid is non-empty out-of-the-box and users do not
 // need to hit the "Download community pets" button to try a few pets.
-const BUNDLED_PETS_DIR = resolveDaemonResourceDir(
-  DAEMON_RESOURCE_ROOT,
+const BUNDLED_PETS_DIR = closureResourceDir(
+  'community-pets',
   'community-pets',
   path.join(PROJECT_ROOT, 'assets', 'community-pets'),
 );
-const PROMPT_TEMPLATES_DIR = resolveDaemonResourceDir(
-  DAEMON_RESOURCE_ROOT,
+const PROMPT_TEMPLATES_DIR = closureResourceDir(
+  'prompt-templates',
   'prompt-templates',
   path.join(PROJECT_ROOT, 'prompt-templates'),
 );
-const BUNDLED_PLUGINS_DIR = resolveDaemonResourceDir(
-  DAEMON_RESOURCE_ROOT,
+const BUNDLED_PLUGINS_DIR = closureResourceDir(
+  'plugins',
   path.join('plugins', '_official'),
   defaultBundledRoot(PROJECT_ROOT),
 );
-const PLUGIN_REGISTRY_DIR = resolveDaemonResourceDir(
-  DAEMON_RESOURCE_ROOT,
+const PLUGIN_REGISTRY_DIR = closureResourceDir(
+  'plugins',
   'plugins/registry',
   path.join(PROJECT_ROOT, 'plugins', 'registry'),
 );

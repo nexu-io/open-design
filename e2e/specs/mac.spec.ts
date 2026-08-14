@@ -113,6 +113,17 @@ const healthExpression = `
     };
   })()
 `;
+const bundledPluginInventoryExpression = `
+  (async () => {
+    const response = await fetch('/api/plugins');
+    const body = await response.json();
+    const plugins = Array.isArray(body?.plugins) ? body.plugins : [];
+    return {
+      ids: plugins.map((plugin) => plugin?.id ?? plugin?.name).filter(Boolean),
+      status: response.status,
+    };
+  })()
+`;
 const upgradePersistenceProjectId = `packaged-upgrade-persistence-${Date.now().toString(36)}`;
 const upgradePersistenceSeedExpression = `
   (async () => {
@@ -526,6 +537,14 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       } else {
         expect(value.health.version).toEqual(expect.any(String));
       }
+      const pluginInspect = await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        bundledPluginInventoryExpression,
+      ]);
+      expect(pluginInspect.eval?.ok).toBe(true);
+      const pluginInventory = pluginInspect.eval?.value as { ids?: unknown; status?: unknown } | undefined;
+      expect(pluginInventory?.status).toBe(200);
+      expect(pluginInventory?.ids).toEqual(expect.arrayContaining(['od-new-generation']));
       if (shellAbsorbsStandaloneAcceptance) {
         closureAcceptance = await readCommittedPackagedClosureFixture({
           buildJsonPath: closureBuildJsonPath!,

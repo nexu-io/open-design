@@ -32,7 +32,7 @@ import {
   bootstrapSidecarLifecycle,
   type SidecarTransitionCredential,
 } from "@open-design/sidecar/lifecycle";
-import { ensureStandaloneVelaResource } from "./resource-runtime.js";
+import { ensureStandaloneBootResources } from "./resource-runtime.js";
 import { VELA_RUNTIME_RESOURCE_ID } from "./tool-env.js";
 
 export class StandaloneBootstrapError extends Error {
@@ -324,25 +324,25 @@ export async function resolveStandaloneBootstrap(
           : `Standalone requires ${request.attachment.shell.type} Shell ${minimum} or newer`,
       );
     }
-    const velaSubject = Object.freeze({
-      id: VELA_RUNTIME_RESOURCE_ID,
-      kind: "resource" as const,
-      title: "Local engine",
-    });
     try {
-      await ensureStandaloneVelaResource({
+      await ensureStandaloneBootResources({
         ...(options.fetch == null ? {} : { fetch: options.fetch }),
         manifest: verification.plan.manifest,
-        onProgress(progress) {
+        onProgress(resource, progress) {
+          const subject = Object.freeze({
+            id: resource.id,
+            kind: "resource" as const,
+            title: resource.id === VELA_RUNTIME_RESOURCE_ID ? "Local engine" : resource.title,
+          });
           if (progress.phase === "copying" || progress.phase === "downloading") {
             emitProgress(progress.phase, {
               completed: progress.completedBytes,
               total: progress.totalBytes,
               unit: "bytes",
-            }, velaSubject);
+            }, subject);
             return;
           }
-          emitProgress(progress.phase, undefined, velaSubject);
+          emitProgress(progress.phase, undefined, subject);
         },
         paths,
         repository,
@@ -351,7 +351,7 @@ export async function resolveStandaloneBootstrap(
     } catch (error) {
       throw new StandaloneBootstrapError(
         "resource-unavailable",
-        `Local engine could not be prepared: ${error instanceof Error ? error.message : String(error)}`,
+        `Standalone startup resources could not be prepared: ${error instanceof Error ? error.message : String(error)}`,
         { cause: error },
       );
     }

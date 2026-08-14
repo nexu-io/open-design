@@ -1,6 +1,8 @@
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  resolveDaemonClosureResourceDir,
+  resolveDaemonClosureResourceRoots,
   resolveDaemonCliPath,
   resolveDaemonPluginPreviewsDir,
   resolveDaemonResourceRoot,
@@ -102,6 +104,50 @@ describe('resolveDaemonResourceRoot', () => {
     expect(() => resolveDaemonResourceRoot({ configured, safeBases: [safeBase] })).toThrow(
       /OD_RESOURCE_ROOT must be under/,
     );
+  });
+});
+
+describe('Closure resource group roots', () => {
+  it('validates CAS roots under the explicit trust root and resolves group-relative paths', () => {
+    const trustRoot = path.resolve(import.meta.dirname, '..', 'fixtures', 'closure');
+    const pluginRoot = path.join(trustRoot, 'channels', 'beta', 'resources', 'a'.repeat(64));
+    const roots = resolveDaemonClosureResourceRoots({
+      configured: JSON.stringify({ plugins: pluginRoot }),
+      safeBases: [trustRoot],
+    });
+
+    expect(roots).toEqual({ plugins: pluginRoot });
+    expect(resolveDaemonClosureResourceDir({
+      fallback: '/repo/plugins/_official',
+      id: 'plugins',
+      resourceRoot: '/legacy/open-design',
+      resourceRoots: roots,
+      segment: path.join('plugins', '_official'),
+    })).toBe(path.join(pluginRoot, 'plugins', '_official'));
+  });
+
+  it('rejects unknown groups and roots outside the trust boundary', () => {
+    const trustRoot = path.resolve(import.meta.dirname, '..', 'fixtures', 'closure');
+    const outside = path.resolve(import.meta.dirname, '..', 'fixtures-other', 'resource');
+
+    expect(() => resolveDaemonClosureResourceRoots({
+      configured: JSON.stringify({ unknown: path.join(trustRoot, 'resource') }),
+      safeBases: [trustRoot],
+    })).toThrow(/unsupported resources/u);
+    expect(() => resolveDaemonClosureResourceRoots({
+      configured: JSON.stringify({ plugins: outside }),
+      safeBases: [trustRoot],
+    })).toThrow(/trusted resource root/u);
+  });
+
+  it('falls back to the legacy monolithic resource root when no group root exists', () => {
+    expect(resolveDaemonClosureResourceDir({
+      fallback: '/repo/skills',
+      id: 'skills',
+      resourceRoot: '/legacy/open-design',
+      resourceRoots: {},
+      segment: 'skills',
+    })).toBe(path.join('/legacy/open-design', 'skills'));
   });
 });
 

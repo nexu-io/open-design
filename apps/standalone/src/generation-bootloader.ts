@@ -16,7 +16,7 @@ import {
   type StandaloneBodyProcessLaunchSpec,
 } from "./process-bridge.js";
 import { bundledStandaloneToolEnv } from "./tool-env.js";
-import { prepareStandaloneVelaRuntime } from "./resource-handoff.js";
+import { prepareStandaloneResourceEnv } from "./resource-handoff.js";
 
 export type StandaloneGenerationLaunch = StandaloneBodyProcessLaunchSpec;
 
@@ -65,7 +65,7 @@ export const handoff: StandaloneHandoff = async (value) => {
       );
     });
   }
-  const resourceEnv = await prepareStandaloneVelaRuntime(request);
+  const resourceEnv = await prepareStandaloneResourceEnv(request);
   return await launchStandaloneBodyBridge({
     capabilities: request.capabilities,
     descriptor: {
