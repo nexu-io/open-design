@@ -75,12 +75,21 @@ describe("pack lane INTERNAL_PACKAGES dependency closure", () => {
     expect(resourceHandoff).not.toContain("ensureClosureResource");
   });
 
-  it("builds runtime workspace dependencies before sealing the CLI", () => {
+  it("keeps the leaf build free of recursive lifecycle orchestration", () => {
     const manifest = JSON.parse(
       readFileSync(join(workspaceRoot, "tools/pack/package.json"), "utf8"),
     ) as { scripts?: Record<string, string> };
+    const metadata = JSON.parse(
+      readFileSync(join(workspaceRoot, "tools/pack/meta.json"), "utf8"),
+    ) as { buildCommand?: string };
 
-    expect(manifest.scripts?.prebuild).toBe("pnpm --filter @open-design/tools-pack^... build");
+    expect(manifest.scripts?.prebuild).toBeUndefined();
+    expect(manifest.scripts?.["build:workspace"]).toBe(
+      "pnpm --filter @open-design/tools-pack^... build && pnpm run build",
+    );
+    expect(metadata.buildCommand).toBe(
+      "pnpm --filter @open-design/tools-pack build:workspace",
+    );
   });
 
   for (const lane of LANES) {
