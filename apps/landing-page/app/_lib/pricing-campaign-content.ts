@@ -17,7 +17,7 @@ export interface PricingCampaignContent {
 export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
   en: {
     badge: 'Unlimited',
-    headline: 'DeepSeek V4 Pro and V4 Flash—top-tier intelligence, without limits.',
+    headline: 'Put top-tier intelligence to work—without limits.',
     body: 'DeepSeek V4 Pro and V4 Flash · FREE for two weeks',
     windowLabel: 'Campaign countdown',
     dayUnit: 'd',
@@ -29,7 +29,7 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
   },
   zh: {
     badge: '无限使用',
-    headline: 'DeepSeek V4 Pro 与 V4 Flash，顶级智能放开用。',
+    headline: '这次，顶级智能放开用。',
     body: 'DeepSeek V4 Pro 与 V4 Flash · 两周免费用',
     windowLabel: '活动倒计时',
     dayUnit: '天',
@@ -41,7 +41,7 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
   },
   'zh-tw': {
     badge: '無限使用',
-    headline: 'DeepSeek V4 Pro 與 V4 Flash，頂級智能放開用。',
+    headline: '這次，頂級智能放開用。',
     body: 'DeepSeek V4 Pro 與 V4 Flash · 兩週免費用',
     windowLabel: '活動倒數',
     dayUnit: '天',
@@ -53,7 +53,7 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
   },
   ja: {
     badge: '無制限',
-    headline: 'DeepSeek V4 Pro と V4 Flash を、思いきり使おう。',
+    headline: '最高峰の知性を、制限なく。',
     body: 'DeepSeek V4 Pro と V4 Flash · 2週間無料',
     windowLabel: 'キャンペーン終了まで',
     dayUnit: '日',
@@ -65,7 +65,7 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
   },
   ko: {
     badge: '무제한 사용',
-    headline: 'DeepSeek V4 Pro와 V4 Flash를 마음껏 사용하세요.',
+    headline: '최고 수준의 지능, 제한 없이.',
     body: 'DeepSeek V4 Pro 및 V4 Flash · 2주 무료',
     windowLabel: '이벤트 남은 시간',
     dayUnit: '일',
@@ -77,7 +77,7 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
   },
   de: {
     badge: 'Unbegrenzt',
-    headline: 'DeepSeek V4 Pro und V4 Flash: Spitzenintelligenz ohne Zurückhaltung.',
+    headline: 'Spitzenintelligenz – ohne Zurückhaltung.',
     body: 'DeepSeek V4 Pro und V4 Flash · zwei Wochen kostenlos',
     windowLabel: 'Aktions-Countdown',
     dayUnit: 'T',
@@ -89,7 +89,7 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
   },
   fr: {
     badge: 'Illimité',
-    headline: 'DeepSeek V4 Pro et V4 Flash : une IA de pointe, sans limites.',
+    headline: 'Libérez une intelligence de premier plan.',
     body: 'DeepSeek V4 Pro et V4 Flash · gratuits pendant deux semaines',
     windowLabel: 'Compte à rebours',
     dayUnit: 'j',
@@ -97,23 +97,23 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
     paidBenefitNote: 'Du 13 au 27 août · gratuits pendant deux semaines',
     teamBenefitNote: 'Du 13 au 27 août · gratuits pendant deux semaines',
     disclaimer: 'Le quota de modèles illimité et les générations gratuites inclus dans le forfait sont utilisables uniquement dans Open Design, et non via MCP/CLI/API ni dans d’autres contextes. Certains modèles peuvent nécessiter une mise en file d’attente aux heures de pointe. L’organisateur se réserve le droit d’interprétation finale.',
-    linkLabel: 'Voir les avantages', closeLabel: 'Fermer la bannière',
+    linkLabel: 'Voir les avantages de la campagne', closeLabel: 'Fermer la bannière',
   },
   ru: {
     badge: 'Без ограничений',
-    headline: 'DeepSeek V4 Pro и V4 Flash — интеллект высшего уровня без ограничений.',
+    headline: 'Используйте интеллект высшего уровня без ограничений.',
     body: 'DeepSeek V4 Pro и V4 Flash · две недели бесплатно',
     windowLabel: 'До конца акции',
     dayUnit: 'д',
     modelBenefits: ['DeepSeek V4 Pro без ограничений', 'DeepSeek V4 Flash без ограничений'],
     paidBenefitNote: '13—27 августа · две недели бесплатно',
     teamBenefitNote: '13—27 августа · две недели бесплатно',
-    disclaimer: 'Безлимитная квота моделей и бесплатные генерации, включённые в тариф, доступны только в Open Design и недоступны через MCP/CLI/API или в других сценариях. Для некоторых моделей в часы пик может потребоваться ожидание в очереди. Организатор оставляет за собой право окончательного толкования.',
+    disclaimer: 'Безлимитная квота моделей и бесплатные генерации, включённые в тариф, доступны только в Open Design. Они недоступны через MCP/CLI/API или в других сценариях. Для некоторых моделей в часы пик может потребоваться ожидание в очереди. Организатор оставляет за собой право окончательного толкования.',
     linkLabel: 'Посмотреть преимущества', closeLabel: 'Закрыть баннер',
   },
   es: {
     badge: 'Uso ilimitado',
-    headline: 'DeepSeek V4 Pro y V4 Flash: inteligencia superior sin límites.',
+    headline: 'Inteligencia de primer nivel, sin límites.',
     body: 'DeepSeek V4 Pro y V4 Flash · gratis durante dos semanas',
     windowLabel: 'Cuenta atrás de la promoción',
     dayUnit: 'd',
@@ -125,7 +125,7 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
   },
   'pt-br': {
     badge: 'Uso ilimitado',
-    headline: 'DeepSeek V4 Pro e V4 Flash: inteligência superior sem limites.',
+    headline: 'Inteligência de ponta, sem limites.',
     body: 'DeepSeek V4 Pro e V4 Flash · grátis por duas semanas',
     windowLabel: 'Contagem regressiva',
     dayUnit: 'd',
@@ -137,7 +137,7 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
   },
   it: {
     badge: 'Uso illimitato',
-    headline: 'DeepSeek V4 Pro e V4 Flash: intelligenza superiore senza limiti.',
+    headline: 'Intelligenza di alto livello, senza limiti.',
     body: 'DeepSeek V4 Pro e V4 Flash · gratis per due settimane',
     windowLabel: 'Conto alla rovescia',
     dayUnit: 'g',
@@ -149,7 +149,7 @@ export const PRICING_CAMPAIGN_CONTENT_BY_LOCALE = {
   },
   tr: {
     badge: 'Sınırsız kullanım',
-    headline: 'DeepSeek V4 Pro ve V4 Flash: üst düzey zekâyı sınırsızca kullanın.',
+    headline: 'Üst düzey zekâyı sınırsızca kullanın.',
     body: 'DeepSeek V4 Pro ve V4 Flash · iki hafta ücretsiz',
     windowLabel: 'Kampanya geri sayımı',
     dayUnit: 'g',
