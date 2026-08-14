@@ -102,7 +102,7 @@
   # the default Nix profile. Darwin gets the standard launchd PATH.
   daemonPathEntries =
     ["${config.home.profileDirectory}/bin"]
-    ++ lib.optionals pkgs.stdenv.isLinux [
+    ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [
       "/run/wrappers/bin"
       "/etc/profiles/per-user/${config.home.username}/bin"
       "/run/current-system/sw/bin"
@@ -111,7 +111,7 @@
       "/usr/bin"
       "/bin"
     ]
-    ++ lib.optionals pkgs.stdenv.isDarwin [
+    ++ lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
       "/usr/local/bin"
       "/usr/bin"
       "/bin"
@@ -200,7 +200,7 @@ in {
     }
 
     # ----- Linux: systemd --user units --------------------------------
-    (lib.mkIf (pkgs.stdenv.isLinux && cfg.autoStart) {
+    (lib.mkIf (pkgs.stdenv.hostPlatform.isLinux && cfg.autoStart) {
       systemd.user.services.open-design = {
         Unit = {
           Description = "Open Design daemon (user service)";
@@ -222,7 +222,7 @@ in {
       };
     })
 
-    (lib.mkIf (pkgs.stdenv.isLinux && cfg.webFrontend.enable) {
+    (lib.mkIf (pkgs.stdenv.hostPlatform.isLinux && cfg.webFrontend.enable) {
       systemd.user.services.open-design-web = {
         Unit = {
           Description = "Open Design web frontend (static file server)";
@@ -240,7 +240,7 @@ in {
     })
 
     # ----- macOS: launchd agents -------------------------------------
-    (lib.mkIf (pkgs.stdenv.isDarwin && cfg.autoStart) (let
+    (lib.mkIf (pkgs.stdenv.hostPlatform.isDarwin && cfg.autoStart) (let
       # launchd has no EnvironmentFile equivalent. When the user supplies
       # one, wrap the daemon exec in a tiny shell that sources the file
       # at runtime — keeps secrets out of the world-readable Nix store
@@ -271,7 +271,7 @@ in {
       };
     }))
 
-    (lib.mkIf (pkgs.stdenv.isDarwin && cfg.webFrontend.enable) {
+    (lib.mkIf (pkgs.stdenv.hostPlatform.isDarwin && cfg.webFrontend.enable) {
       launchd.agents.open-design-web = {
         enable = true;
         config = {
