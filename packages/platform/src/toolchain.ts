@@ -171,17 +171,20 @@ export function wellKnownUserToolchainBins(
   // from launchd and never sources the Nix profile script, so CLIs installed
   // via `environment.systemPackages` or `nix-env -iA` are invisible.
   //
-  // `/run/current-system/sw/bin` — system-wide profile on NixOS and nix-darwin
-  // `/nix/var/nix/profiles/default/bin` — default system profile
-  // `~/.nix-profile/bin` — user's active Nix profile (default symlink target)
-  //
-  // All three are search-path candidates; existence is not required.
-  dirs.push("/run/current-system/sw/bin");
-  dirs.push("/nix/var/nix/profiles/default/bin");
+  // The user-profile path (`~/.nix-profile/bin`) is home-relative and is
+  // always safe to include — it respects the override home used by sandboxed
+  // runs and tests.
   dirs.push(join(home, ".nix-profile", "bin"));
 
+  // The system-wide Nix paths are host-absolute and must only appear when
+  // includeSystemBins is true (same gate as /opt/homebrew/bin), so sandboxed
+  // runs with OD_AGENT_HOME do not reach host-installed tools.
   if (includeSystemBins) {
     dirs.push("/opt/homebrew/bin", "/usr/local/bin");
+    // `/run/current-system/sw/bin` — system-wide profile on NixOS and nix-darwin
+    dirs.push("/run/current-system/sw/bin");
+    // `/nix/var/nix/profiles/default/bin` — default system profile
+    dirs.push("/nix/var/nix/profiles/default/bin");
   }
   // Per-version Node toolchains: scan the install root and surface every
   // version directory's bin folder. Best-effort — missing roots simply
