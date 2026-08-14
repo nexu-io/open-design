@@ -7948,7 +7948,9 @@ async function mintCliImportToken(baseDir) {
     const fs = await import('node:fs');
     const path = await import('node:path');
     const crypto = await import('node:crypto');
-    const projectRoot = resolveProjectRoot(path.resolve(__dirname));
+    const url = await import('node:url');
+    const moduleDir = path.dirname(url.fileURLToPath(import.meta.url));
+    const projectRoot = resolveProjectRoot(moduleDir);
     const dataDir = resolveDataDir(process.env.OD_DATA_DIR, projectRoot);
     const secretPath = path.join(dataDir, 'import-secret');
     const secret = fs.readFileSync(secretPath);

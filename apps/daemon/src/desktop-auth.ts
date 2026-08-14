@@ -20,10 +20,12 @@ export function setDesktopAuthSecret(secret: Buffer | null): void {
 
 export function getDesktopAuthSecret(): Buffer | null {
   if (desktopAuthSecret !== null) return desktopAuthSecret;
-  // Lazy-load ephemeral secret from file (set up at daemon startup for
-  // non-desktop mode). This also covers the case where
-  // resetDesktopAuthForTests() cleared the in-memory value between tests.
-  if (ephemeralSecretDir !== null) {
+  // Lazy-load the ephemeral secret ONLY in non-desktop mode (gate inactive).
+  // In desktop mode a cleared secret means the sidecar has not yet
+  // re-registered, so we must return null and let callers surface the
+  // retryable 503 DESKTOP_AUTH_PENDING — not silently fall back to the
+  // ephemeral secret (which would drop the desktop pairing semantics).
+  if (!desktopAuthEverRegistered && ephemeralSecretDir !== null) {
     try {
       desktopAuthSecret = fs.readFileSync(path.join(ephemeralSecretDir, EPHEMERAL_SECRET_FILENAME));
     } catch {
@@ -65,6 +67,9 @@ export function configureEphemeralImportSecretDir(dataDir: string): void {
  */
 export function ensureEphemeralImportSecret(): void {
   if (desktopAuthSecret !== null) return;
+  // In desktop mode (OD_REQUIRE_DESKTOP_AUTH=1 or a prior desktop pairing)
+  // the sidecar registers its own secret — do not mint an ephemeral one.
+  if (desktopAuthEverRegistered) return;
   if (ephemeralSecretDir === null) return;
   const secretPath = path.join(ephemeralSecretDir, EPHEMERAL_SECRET_FILENAME);
   try {

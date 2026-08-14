@@ -74,14 +74,16 @@ describe('desktop-import-token gate', () => {
     });
   }
 
-  it('accepts unauthenticated imports when no secret is registered (web mode)', async () => {
+  it('rejects unauthenticated imports when no secret is registered (web mode)', async () => {
     const folder = makeFolder();
     await writeFile(path.join(folder, 'index.html'), '');
+    // issue #5480: even with no desktop secret, the ephemeral import secret
+    // minted at daemon startup means an unauthenticated local request is
+    // rejected with 403 (the local bind address is not an auth boundary).
     const resp = await importFolder({ baseDir: folder });
-    expect(resp.status).toBe(200);
-    const body = (await resp.json()) as { project: { metadata?: { fromTrustedPicker?: boolean } } };
-    // PR #974: no secret registered → no `fromTrustedPicker` marker.
-    expect(body.project.metadata?.fromTrustedPicker).toBeUndefined();
+    expect(resp.status).toBe(403);
+    const body = (await resp.json()) as { error?: { code?: string } };
+    expect(body.error?.code).toBe('FORBIDDEN');
   });
 
   it('rejects imports with no token when a secret is registered', async () => {
