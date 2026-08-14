@@ -438,10 +438,18 @@ describe("tools-pack launcher payload archives", () => {
         "resources",
       ], { cwd: paths.unpackedRoot, windowsHide: true });
 
-      await buildWinLauncherPayloadArchive(config, paths, builtApp, cache, { seedFromInstallerPayload: true });
+      await buildWinLauncherPayloadArchive(config, paths, builtApp, cache, {
+        installerSeedCacheVersion: 3,
+        seedFromInstallerPayload: true,
+      });
+      await buildWinLauncherPayloadArchive(config, paths, builtApp, cache, {
+        installerSeedCacheVersion: 4,
+        seedFromInstallerPayload: true,
+      });
 
       expect(cache.report().entries.some((entry) => entry.nodeId === "win.launcher-payload-base")).toBe(false);
-      expect(cache.report().entries.some((entry) => entry.nodeId === "win.launcher-payload")).toBe(true);
+      expect(cache.report().entries.filter((entry) => entry.nodeId === "win.launcher-payload").map((entry) => entry.status))
+        .toEqual(["miss", "miss"]);
 
       const extractRoot = join(root, "extracted");
       await mkdir(extractRoot, { recursive: true });

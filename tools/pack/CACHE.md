@@ -70,6 +70,11 @@ The key also hashes tools-pack in two scopes: common packaging sources/resources
 invalidate both platforms, while `src/mac` + `resources/mac` and `src/win` +
 `resources/win` invalidate only their owning platform. A platform-only input
 must stay in its platform owner rather than being moved into the common scope.
+`src/closure` is excluded from those broad Shell source hashes because Closure
+is independently distributed. The specific Closure files that define the
+Shell capability or carrier remain explicit inputs to their corresponding
+digests in `workspace-build.ts`; their witness proves that exclusion cannot
+hide a Shell-relevant change.
 
 ## Determinant rules
 
@@ -151,11 +156,9 @@ both hold:
 
 Adding a materialization-time parameter without (2) is not permitted.
 
-> Known asymmetry: Shell version satisfies (2). The other regenerated config
-> fields — `namespace`, `amrProfile`, `telemetryRelayUrl`,
-> `updateMetadataUrl`, `posthogKey`, `posthogHost`, `webOutputMode`,
-> `namespaceBaseRoot`, and the packaged entrypoint fields — currently satisfy
-> only (1): they are rewritten but not asserted.
+The complete regenerated `open-design-config.json` is compared byte-for-byte
+with the materialized copy, so namespace, endpoints, analytics settings,
+output mode, runtime root, and packaged entrypoints fail closed together.
 
 ## Signing boundary
 
@@ -187,10 +190,6 @@ extend them.
 
 - `<platform>.workspace-build` — `pnpm-workspace.yaml` is not a key input;
   file mode (executable bit) is not hashed by `hashPackageSourcePath`.
-- `win.launcher-payload` — the `seed: "nsis-base"` branch takes content from
-  the NSIS base payload but carries only the literal `"nsis-base"`, not
-  `WIN_ARCHIVE_CACHE_VERSION`. Bumping that constant without bumping the
-  launcher payload cache versions mismatches.
 
 ## Changing a cache node
 

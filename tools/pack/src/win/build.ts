@@ -12,9 +12,10 @@ import {
   ensureWinWorkspaceBuild,
   prepareWinPackagedApp,
 } from "./app.js";
+import { materializeCachedUnpackedForInstaller, runElectronBuilder } from "./builder.js";
+import { WIN_ARCHIVE_CACHE_VERSION } from "./cache-versions.js";
 import { PRODUCT_NAME } from "./constants.js";
 import { pathExists } from "./fs.js";
-import { materializeCachedUnpackedForInstaller, runElectronBuilder } from "./builder.js";
 import {
   readBuiltAppManifest,
   readPackagedVersion,
@@ -141,6 +142,7 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
     await runPhase("payload-artifact", async () => {
       if (builtApp == null) throw new Error("cannot build Windows launcher payload without a built app manifest");
       segments.push(...await buildWinLauncherPayloadArchive(config, paths, builtApp, cache, {
+        installerSeedCacheVersion: WIN_ARCHIVE_CACHE_VERSION,
         seedFromInstallerPayload: hasNsisTarget,
       }));
     });

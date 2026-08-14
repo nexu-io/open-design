@@ -239,7 +239,10 @@ function defaultNamespaceForReleaseVersion(platform: ToolPackPlatform, releaseVe
 
 function resolveToolPackWebOutputMode(platform: ToolPackPlatform, value: string | undefined): ToolPackWebOutputMode {
   if (value == null || value.length === 0) return "standalone";
-  if (value === "server" || value === "standalone") return value;
+  if (value === "standalone") return value;
+  if (value === "server") {
+    throw new Error(`OD_WEB_OUTPUT_MODE=server is unsupported for packaged ${platform} builds; use standalone`);
+  }
   throw new Error(`unsupported OD_WEB_OUTPUT_MODE value: ${value}`);
 }
 

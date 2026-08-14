@@ -69,7 +69,7 @@ export async function buildWinLauncherPayloadArchive(
   paths: WinPaths,
   builtApp: WinBuiltAppManifest,
   cache?: ToolPackCache,
-  options: { seedFromInstallerPayload?: boolean } = {},
+  options: { installerSeedCacheVersion?: number; seedFromInstallerPayload?: boolean } = {},
 ): Promise<WinPackTiming[]> {
   if (process.platform !== "win32") throw new Error("Windows launcher payload build must run on Windows");
   const timings: WinPackTiming[] = [];
@@ -210,6 +210,9 @@ export async function buildWinLauncherPayloadArchive(
     const configBody = await readFile(paths.packagedConfigPath, "utf8");
     let baseArchivePath: string | null = null;
     const usesInstallerSeed = options.seedFromInstallerPayload === true && await pathExists(paths.installerBasePayloadPath);
+    if (usesInstallerSeed && options.installerSeedCacheVersion == null) {
+      throw new Error("Windows launcher payload NSIS seed requires its archive cache version");
+    }
     if (!usesInstallerSeed) {
       const baseNode = {
         build: async ({ entryRoot }: { entryRoot: string }): Promise<{ createdAt: string; sourceKey: string }> => {
@@ -265,6 +268,7 @@ export async function buildWinLauncherPayloadArchive(
         namespace: config.namespace,
         node: "win.launcher-payload",
         seed: usesInstallerSeed ? "nsis-base" : "launcher-base",
+        seedCacheVersion: usesInstallerSeed ? options.installerSeedCacheVersion : null,
         sourceKey,
       }),
       outputs: ["payload.7z"],

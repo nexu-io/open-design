@@ -95,6 +95,7 @@ async function writeWorkspace(root: string): Promise<void> {
   for (const source of ["components.ts", "distribution.ts", "platform.ts"]) {
     await writeFile(join(root, "tools/pack/src/closure", source), "export const value = 1;\n");
   }
+  await writeFile(join(root, "tools/pack/src/closure/target-resources.ts"), "export const resource = 1;\n");
   for (const source of ["shell-build-plan.ts", "standalone-seed.ts"]) {
     await writeFile(join(root, "tools/pack/src", source), "export const value = 1;\n");
   }
@@ -253,6 +254,34 @@ describe("Electron Shell workspace build cache", () => {
       await writeFile(join(root, "tools/pack/src/index.ts"), "export const pack = 2;\n");
       expect(await resolveShellSourceDigest(mac)).not.toBe(macAfterMacChange);
       expect(await resolveShellSourceDigest(win)).not.toBe(winAfterWinChange);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps Closure-only tooling out of Shell identity while retaining explicit carrier witnesses", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-shell-closure-split-"));
+    try {
+      await writeWorkspace(root);
+      const config = createConfig(root, join(root, ".cache"));
+      const before = await resolveShellBuildIdentity(config);
+
+      await writeFile(
+        join(root, "tools/pack/src/closure/target-resources.ts"),
+        "export const resource = 2;\n",
+      );
+      const afterClosureOnly = await resolveShellBuildIdentity(config);
+      expect(afterClosureOnly).toEqual(before);
+
+      await writeFile(
+        join(root, "tools/pack/src/closure/components.ts"),
+        "export const value = 2;\n",
+      );
+      const afterCarrierChange = await resolveShellBuildIdentity(config);
+      expect(afterCarrierChange.sourceDigest).toBe(before.sourceDigest);
+      expect(afterCarrierChange.capabilityDigest).not.toBe(before.capabilityDigest);
+      expect(afterCarrierChange.carrierDigest).not.toBe(before.carrierDigest);
+      expect(afterCarrierChange.buildDigest).not.toBe(before.buildDigest);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

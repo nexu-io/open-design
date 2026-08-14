@@ -7,7 +7,10 @@ import { promisify } from "node:util";
 import { NtExecutable, NtExecutableResource, Resource } from "resedit";
 import { describe, expect, it } from "vitest";
 
-import { materializeCachedUnpackedForInstaller } from "../src/win/builder.js";
+import {
+  assertMaterializedPackagedConfigConsistency,
+  materializeCachedUnpackedForInstaller,
+} from "../src/win/builder.js";
 import {
   createLauncherRuntimeSyncNsisScript,
   createLauncherRuntimeSyncPowerShellScript,
@@ -72,6 +75,23 @@ function createPaths(root: string): WinPaths {
 }
 
 describe("materializeCachedUnpackedForInstaller", () => {
+  it("fails closed when a materialized packaged config differs from the current namespace config", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-config-assertion-"));
+    try {
+      const unpackedRoot = join(root, "win-unpacked");
+      const expectedConfigPath = join(root, "open-design-config.json");
+      await mkdir(join(unpackedRoot, "resources"), { recursive: true });
+      await writeFile(join(unpackedRoot, "resources", "open-design-config.json"), '{"namespace":"stale"}\n');
+      await writeFile(expectedConfigPath, '{"namespace":"current"}\n');
+
+      await expect(
+        assertMaterializedPackagedConfigConsistency(unpackedRoot, expectedConfigPath),
+      ).rejects.toThrow(/does not match/u);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("overwrites cached packaged config and app package version", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-builder-"));
     const cachedUnpackedRoot = join(root, "cache", "builder", "win-unpacked");

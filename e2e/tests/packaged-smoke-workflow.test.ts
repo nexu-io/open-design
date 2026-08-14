@@ -1904,6 +1904,9 @@ process.stdin.on("end", () => {
     expect(betaMacAction).toContain("Register ${{ inputs.target }} Electron Shell full-smoke proof");
     expect(betaWinAction).toContain("RELEASE_SHELL_SMOKE_MATRIX: win-shell-v2");
     expect(betaWinAction).toContain("Register win_x64 Electron Shell full-smoke proof");
+    expect(betaWinAction).toContain(
+      "OD_PACKAGED_E2E_WIN_SMOKE_LANES: ${{ inputs.smoke-mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}",
+    );
 
     expectWindowsUpdaterSmokeContract(`${releaseBetaWorkflow}\n${betaWinAction}`, "beta");
     expectWindowsUpdaterSmokeContract(`${releasePrereleaseWorkflow}\n${winAction}`, "prerelease");
@@ -2969,6 +2972,12 @@ process.stdin.on("end", () => {
     expect(runner).toContain("build.backgroundAgent !== true");
     expect(runner).not.toContain("mac-launch-services:release-beta");
     expect(runner).toContain("await stopPackagedRuntime(platform, namespace)");
+    expect(runner).toContain("createPackageManagerInvocation");
+    expect(runner).toContain("createCommandInvocation");
+    expect(runner).toContain("windowsVerbatimArguments: invocation.windowsVerbatimArguments");
+    expect(runner).not.toContain("process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'");
+    expect(runner).toContain("result.exitCode === 0 && cleanupError != null ? 1 : result.exitCode");
+    expect(runner).toContain("cleanupError,");
     expect(runner).toContain("const terminationSignals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const");
     expect(builder).toContain("extendInfo: config.macBackgroundAgent === true ? { LSUIElement: true } : undefined");
     expect(shellEntry).not.toContain("setActivationPolicy");

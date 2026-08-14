@@ -19,6 +19,7 @@ import {
   WIN_PREBUNDLED_WEB_SIDECAR_RELATIVE_PATH,
   shouldUseWinStandalonePrebundle,
 } from "../win-prebundle.js";
+import { WIN_ARCHIVE_CACHE_VERSION } from "./cache-versions.js";
 import {
   buildCustomWinNsisInstaller,
   hashWinNsisBasePayloadInputs,
@@ -70,7 +71,6 @@ import type {
 } from "./types.js";
 
 const execFileAsync = promisify(execFile);
-const WIN_ARCHIVE_CACHE_VERSION = 3;
 const WIN_ELECTRON_BUILDER_DIR_CACHE_VERSION = 8;
 const WIN_NSIS_BASE_PAYLOAD_INPUT_HASH_CACHE_VERSION = 2;
 
@@ -426,6 +426,22 @@ async function assertMaterializedUnpackedVersionConsistency(
   }
 }
 
+export async function assertMaterializedPackagedConfigConsistency(
+  unpackedRoot: string,
+  expectedConfigPath: string,
+): Promise<void> {
+  const materializedConfigPath = join(unpackedRoot, "resources", "open-design-config.json");
+  const [actual, expected] = await Promise.all([
+    readFile(materializedConfigPath),
+    readFile(expectedConfigPath),
+  ]);
+  if (!actual.equals(expected)) {
+    throw new Error(
+      `materialized packaged config ${materializedConfigPath} does not match ${expectedConfigPath}`,
+    );
+  }
+}
+
 export async function materializeCachedUnpackedForInstaller(
   sourceUnpackedRoot: string,
   paths: WinPaths,
@@ -459,6 +475,7 @@ export async function materializeCachedUnpackedForInstaller(
     join(paths.unpackedRoot, "resources", "open-design-config.json"),
     await readFile(paths.packagedConfigPath),
   );
+  await assertMaterializedPackagedConfigConsistency(paths.unpackedRoot, paths.packagedConfigPath);
   if (packagedVersion != null) {
     await rewriteUnpackedAppPackageVersion(paths.unpackedRoot, packagedVersion);
     await rewriteWinExecutableVersion(paths.unpackedExePath, packagedVersion);

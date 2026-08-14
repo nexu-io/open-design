@@ -4,6 +4,11 @@ import { readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  createCommandInvocation,
+  createPackageManagerInvocation,
+} from '@open-design/platform';
+
 import { createReport } from '../lib/vitest/report.ts';
 import {
   resolvePackagedSmokeLanes,
@@ -91,9 +96,12 @@ async function main(): Promise<void> {
     exitCode: 1,
     log: formatUnknown(error),
   }));
+  let cleanupError: string | null = null;
   await stopPackagedRuntime(platform, namespace).catch((error: unknown) => {
+    cleanupError = formatUnknown(error);
     console.error(`[release-smoke] failed to stop ${platform} namespace ${namespace}`, error);
   });
+  const exitCode = result.exitCode === 0 && cleanupError != null ? 1 : result.exitCode;
   await report.save('vitest.log', result.log);
   await report.json('summary.json', await resolveSmokeSummary({
     platform,
@@ -103,18 +111,19 @@ async function main(): Promise<void> {
     vitestResultPath,
   }));
   await report.json('suite-result.json', {
+    cleanupError,
     durationMs: Date.now() - startedAt,
-    exitCode: result.exitCode,
+    exitCode,
     namespace,
     platform,
     reportPath: report.root,
     spec,
-    status: result.exitCode === 0 ? 'success' : 'failed',
+    status: exitCode === 0 ? 'success' : 'failed',
     timestamp: new Date().toISOString(),
   });
 
-  if (result.exitCode !== 0) {
-    process.exitCode = result.exitCode;
+  if (exitCode !== 0) {
+    process.exitCode = exitCode;
   }
 }
 
@@ -216,11 +225,10 @@ async function runVitest(spec: string, resultPath: string): Promise<{ exitCode: 
 }
 
 async function stopPackagedRuntime(platform: Platform, namespace: string): Promise<void> {
-  const command = process.env.OD_E2E_PNPM_COMMAND ?? (process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm');
   const toolsPackDir = resolveFromWorkspace(
     process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack',
   );
-  const child = spawn(command, [
+  const args = [
     'exec',
     'tools-pack',
     platform,
@@ -230,10 +238,20 @@ async function stopPackagedRuntime(platform: Platform, namespace: string): Promi
     '--namespace',
     namespace,
     '--json',
-  ], {
+  ];
+  const invocation = process.env.OD_E2E_PNPM_COMMAND == null
+    ? createPackageManagerInvocation(args, process.env)
+    : createCommandInvocation({
+        args,
+        command: process.env.OD_E2E_PNPM_COMMAND,
+        env: process.env,
+      });
+  const child = spawn(invocation.command, invocation.args, {
     cwd: workspaceRoot,
     env: process.env,
     stdio: ['ignore', 'ignore', 'pipe'],
+    windowsHide: process.platform === 'win32',
+    windowsVerbatimArguments: invocation.windowsVerbatimArguments,
   });
   const stderr: Buffer[] = [];
   child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));

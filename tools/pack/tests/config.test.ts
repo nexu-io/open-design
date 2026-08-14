@@ -9,8 +9,14 @@ const savedPosthogHost = process.env.POSTHOG_HOST;
 const savedAmrProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
 const savedVelaWebUrl = process.env.OD_VELA_WEB_URL;
 const savedPackagedHeadless = process.env.OD_PACKAGED_E2E_HEADLESS;
+const savedWebOutputMode = process.env.OD_WEB_OUTPUT_MODE;
 
 afterEach(() => {
+  if (savedWebOutputMode == null) {
+    delete process.env.OD_WEB_OUTPUT_MODE;
+  } else {
+    process.env.OD_WEB_OUTPUT_MODE = savedWebOutputMode;
+  }
   if (savedPackagedHeadless == null) {
     delete process.env.OD_PACKAGED_E2E_HEADLESS;
   } else {
@@ -41,6 +47,25 @@ afterEach(() => {
   } else {
     process.env.OPEN_DESIGN_AMR_PROFILE = savedAmrProfile;
   }
+});
+
+describe("resolveToolPackConfig web output mode", () => {
+  it("rejects the unsupported server topology on packaged macOS and Windows lanes", () => {
+    process.env.OD_WEB_OUTPUT_MODE = "server";
+
+    expect(() => resolveToolPackConfig("mac")).toThrow(
+      /OD_WEB_OUTPUT_MODE=server is unsupported for packaged mac builds/u,
+    );
+    expect(() => resolveToolPackConfig("win")).toThrow(
+      /OD_WEB_OUTPUT_MODE=server is unsupported for packaged win builds/u,
+    );
+  });
+
+  it("keeps standalone as the only accepted packaged web topology", () => {
+    process.env.OD_WEB_OUTPUT_MODE = "standalone";
+    expect(resolveToolPackConfig("mac").webOutputMode).toBe("standalone");
+    expect(resolveToolPackConfig("win").webOutputMode).toBe("standalone");
+  });
 });
 
 describe("resolveToolPackConfig mac background agent", () => {
