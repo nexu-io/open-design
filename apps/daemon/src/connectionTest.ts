@@ -321,6 +321,17 @@ const assetDispatcher = new Agent({
 });
 
 /**
+ * Test-visible accessor for the shared asset-validating dispatcher attached by
+ * `assertAndFetchExternalAsset`. Tests key dispatcher assertions on the asset
+ * URL and compare against this exact instance (`toBe`), so a regression that
+ * reverts to forwarding the caller's turn-proxy dispatcher on the asset hop
+ * fails loudly (issue #5478).
+ */
+export function getAssetValidatingDispatcher(): NonNullable<RequestInit['dispatcher']> {
+  return assetDispatcher as unknown as NonNullable<RequestInit['dispatcher']>;
+}
+
+/**
  * Validate an upstream-controlled asset URL and fetch it with the SSRF guard
  * pinned through redirects and DNS resolution. Runs `assertExternalAssetUrl`
  * on the literal URL (fail-closed on DNS errors), forces `redirect: 'error'`

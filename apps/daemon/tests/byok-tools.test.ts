@@ -14,6 +14,7 @@ import {
   executeAIHubMixGenerateImage,
   executeAIHubMixGenerateSpeech,
 } from '../src/byok-tools.js';
+import { getAssetValidatingDispatcher } from '../src/connectionTest.js';
 
 describe('BYOK_SENSEAUDIO_TOOLS', () => {
   it('exports an OpenAI-shaped generate_image tool definition', () => {
@@ -69,10 +70,13 @@ describe('executeGenerateImage', () => {
     const dispatcher = { dispatch: vi.fn() } as unknown as NonNullable<RequestInit['dispatcher']>;
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
-      // Asset downloads route through assertAndFetchExternalAsset which replaces
-      // the caller's dispatcher with a validating one (issue #5478).
-      if (init?.redirect === 'error') {
-        expect(init.dispatcher).toBeDefined();
+      // Asset downloads route through assertAndFetchExternalAsset which
+      // replaces the caller's dispatcher with the shared validating one
+      // (issue #5478). Keyed on the asset URL — NOT on `redirect: 'error'`,
+      // which other providers also set on submit hops that must keep the
+      // caller dispatcher.
+      if (url === 'https://93.184.216.34/generated/cat.png') {
+        expect(init?.dispatcher).toBe(getAssetValidatingDispatcher());
       } else {
         expect(init?.dispatcher).toBe(dispatcher);
       }
@@ -638,10 +642,12 @@ describe('executeGenerateVideo', () => {
     let pollCount = 0;
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
-      // Asset downloads route through assertAndFetchExternalAsset which replaces
-      // the caller's dispatcher with a validating one (issue #5478).
-      if (init?.redirect === 'error') {
-        expect(init.dispatcher).toBeDefined();
+      // Asset downloads route through assertAndFetchExternalAsset which
+      // replaces the caller's dispatcher with the shared validating one
+      // (issue #5478). Keyed on the asset URL — NOT on `redirect: 'error'`,
+      // because submit/poll hops must keep the caller dispatcher.
+      if (url === 'https://93.184.216.34/video/done.mp4') {
+        expect(init?.dispatcher).toBe(getAssetValidatingDispatcher());
       } else {
         expect(init?.dispatcher).toBe(dispatcher);
       }
@@ -974,10 +980,14 @@ describe('executeAIHubMixGenerateVideo', () => {
     let pollCount = 0;
     const fetchMock = vi.fn(async (input: unknown, init?: RequestInit) => {
       const url = String(input);
-      // Asset downloads route through assertAndFetchExternalAsset which replaces
-      // the caller's dispatcher with a validating one (issue #5478).
-      if (init?.redirect === 'error') {
-        expect(init.dispatcher).toBeDefined();
+      // Asset downloads route through assertAndFetchExternalAsset which
+      // replaces the caller's dispatcher with the shared validating one
+      // (issue #5478). Keyed on the asset URL — NOT on `redirect: 'error'`,
+      // because the AIHubMix submit hop itself sets redirect:'error' and
+      // must still keep the caller dispatcher (this was the gap the
+      // redirect heuristic silently hid).
+      if (url === 'https://93.184.216.34/video/done.mp4') {
+        expect(init?.dispatcher).toBe(getAssetValidatingDispatcher());
       } else {
         expect(init?.dispatcher).toBe(dispatcher);
       }
