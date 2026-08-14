@@ -6,9 +6,9 @@ import type { DeepseekCopyOverride } from './index';
 
 export const fr: DeepseekCopyOverride = {
   collectionEyebrow: 'Sélection éditoriale',
-  collectionHeading: 'Les plugins design qui donnent à DeepSeek Harness des yeux et un canvas',
+  collectionHeading: 'Les plugins DeepSeek Harness pour le design',
   collectionLede:
-    '« Tout est un plugin » : c’est toute l’architecture de DeepSeek Harness — et de base, c’est un agent de code purement textuel. Voici les plugins dsh qui en font un outil de design : des ponts visuels qui lisent les captures d’écran, des canvas et de l’UI générative où dessiner, des outils qui bouclent la revue de design, et des workbenches qui prévisualisent le tout. Il lit aussi le même format SKILL.md que Claude Code et Codex, donc votre bibliothèque de skills design vous suit.',
+    'Une sélection de plugins dsh pour le design : des ponts de vision qui lisent les captures d’écran, des canevas et de l’UI générative où l’agent peut dessiner, des outils de revue de design et des workbenches qui prévisualisent le tout. DeepSeek Harness lit le même format SKILL.md que Claude Code et Codex : votre bibliothèque de skills design vous suit.',
   collectionStats: [
     { value: '13', label: 'plugins dsh sélectionnés' },
     { value: '13', label: 'dépôts sources' },
@@ -31,13 +31,6 @@ export const fr: DeepseekCopyOverride = {
   categoryCanvas: 'Canvas & UI générative',
   categoryWorkflow: 'Workflow de design',
   categoryWorkspace: 'Workspace & aperçu',
-
-  crossoverEyebrow: 'Déjà des skills ?',
-  crossoverHeading: 'Votre bibliothèque de skills design tourne déjà ici',
-  crossoverBody:
-    'DeepSeek Harness lit le même format SKILL.md que Claude Code et Codex, et découvre d’emblée les skills depuis .agents/skills. Les 50 plugins design sélectionnés de notre collection design Codex fonctionnent dans le harness tels quels — et dsh-plugin-claude-bridge emporte toute votre configuration Claude Code sans la moindre migration.',
-  crossoverCta: 'Parcourir la collection design Codex',
-  crossoverSecondaryCta: 'Comment designer avec DeepSeek Harness',
 
   ctaDownload: 'Télécharger Open Design',
   ctaStarList: 'Star DeepSeek Harness',

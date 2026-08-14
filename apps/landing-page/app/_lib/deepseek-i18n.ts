@@ -34,13 +34,6 @@ export interface DeepseekCopy extends CuratedCopyBase {
   readonly categoryCanvas: string;
   readonly categoryWorkflow: string;
   readonly categoryWorkspace: string;
-
-  /* Crossover band: the SKILL.md-compatibility story, unique to this hub. */
-  readonly crossoverEyebrow: string;
-  readonly crossoverHeading: string;
-  readonly crossoverBody: string;
-  readonly crossoverCta: string;
-  readonly crossoverSecondaryCta: string;
 }
 
 /*
@@ -65,12 +58,6 @@ const en: DeepseekCopy = {
   categoryWorkflow: 'Design Workflow',
   categoryWorkspace: 'Workspace & Preview',
 
-  crossoverEyebrow: 'Already have skills?',
-  crossoverHeading: 'Your design skill library already runs here',
-  crossoverBody:
-    'DeepSeek Harness reads the same SKILL.md format as Claude Code and Codex, and discovers skills from .agents/skills out of the box. The 50 curated design plugins in our Codex design collection work in the harness unchanged — and dsh-plugin-claude-bridge carries your whole Claude Code setup over with zero migration.',
-  crossoverCta: 'Browse the Codex design collection',
-  crossoverSecondaryCta: 'How to design with DeepSeek Harness',
 
   ctaDownload: 'Download Open Design',
   ctaStarList: 'Star DeepSeek Harness',

@@ -6,9 +6,9 @@ import type { DeepseekCopyOverride } from './index';
 
 export const tr: DeepseekCopyOverride = {
   collectionEyebrow: 'Küratörlü koleksiyon',
-  collectionHeading: 'DeepSeek Harness’e gözler ve bir canvas kazandıran tasarım eklentileri',
+  collectionHeading: 'Tasarım için DeepSeek Harness eklentileri',
   collectionLede:
-    '‘Her şey bir eklenti’ — DeepSeek Harness mimarisinin tamamı bu; ve kutudan çıktığı hâliyle yalnızca metin çalışan bir kodlama ajanı. Onu bir tasarım aracına dönüştüren dsh eklentileri bunlar: ekran görüntülerini okuyan görüş köprüleri, üzerine çizebildiği canvas’lar ve üretken arayüzler, tasarım inceleme döngüsünü kapatan araçlar ve hepsini önizleyen çalışma tezgâhları. Ayrıca Claude Code ve Codex ile aynı SKILL.md formatını okur; tasarım skill kitaplığınız olduğu gibi taşınır.',
+    'Tasarım işi için seçilmiş dsh eklentileri: ekran görüntülerini okuyan görü köprüleri, ajanın üzerine çizebileceği tuvaller ve üretken arayüzler, tasarım inceleme araçları ve hepsini önizleyen çalışma tezgâhları. DeepSeek Harness, Claude Code ve Codex ile aynı SKILL.md biçimini okur; tasarım skill kitaplığın olduğu gibi taşınır.',
   collectionStats: [
     { value: '13', label: 'seçilmiş dsh eklentisi' },
     { value: '13', label: 'kaynak repo' },
@@ -31,13 +31,6 @@ export const tr: DeepseekCopyOverride = {
   categoryCanvas: 'Canvas & Üretken Arayüz',
   categoryWorkflow: 'Tasarım İş Akışı',
   categoryWorkspace: 'Çalışma Alanı & Önizleme',
-
-  crossoverEyebrow: 'Zaten skill’leriniz var mı?',
-  crossoverHeading: 'Tasarım skill kitaplığınız burada zaten çalışıyor',
-  crossoverBody:
-    'DeepSeek Harness, Claude Code ve Codex ile aynı SKILL.md formatını okur ve skill’leri kutudan çıktığı gibi .agents/skills içinden keşfeder. Codex tasarım koleksiyonumuzdaki 50 seçilmiş tasarım eklentisi, harness’te hiçbir değişiklik olmadan çalışır — dsh-plugin-claude-bridge ise tüm Claude Code kurulumunuzu sıfır taşımayla buraya getirir.',
-  crossoverCta: 'Codex tasarım koleksiyonuna göz atın',
-  crossoverSecondaryCta: 'DeepSeek Harness ile nasıl tasarlanır',
 
   ctaDownload: 'Open Design’ı indir',
   ctaStarList: 'DeepSeek Harness’e yıldız ver',

@@ -6,9 +6,9 @@ import type { DeepseekCopyOverride } from './index';
 
 export const zh: DeepseekCopyOverride = {
   collectionEyebrow: '精选合集',
-  collectionHeading: '让 DeepSeek Harness 长出眼睛和画布的设计插件',
+  collectionHeading: 'DeepSeek Harness 设计插件',
   collectionLede:
-    '「一切皆插件」就是 DeepSeek Harness 的全部架构——而它开箱只是一个纯文本编程 Agent。这里精选的 dsh 插件让它变成设计工具：能读截图的视觉桥、能落笔的画布和生成式 UI、把设计评审接进闭环的工具，以及把这一切预览出来的工作台。它还读取跟 Claude Code 和 Codex 相同的 SKILL.md 格式，你的设计 Skill 库可以直接带过来。',
+    '一个精选的 dsh 设计插件合集：能读截图的视觉桥、Agent 可以落笔的画布和生成式 UI、设计评审工具，以及把这一切预览出来的工作台。DeepSeek Harness 读取跟 Claude Code 和 Codex 相同的 SKILL.md 格式，你的设计 Skill 库可以直接带过来。',
   collectionStats: [
     { value: '13', label: '个精选 dsh 插件' },
     { value: '13', label: '个来源仓库' },
@@ -31,13 +31,6 @@ export const zh: DeepseekCopyOverride = {
   categoryCanvas: '画布与生成式 UI',
   categoryWorkflow: '设计工作流',
   categoryWorkspace: '工作空间与预览',
-
-  crossoverEyebrow: '已经有一套 Skill？',
-  crossoverHeading: '你的设计 Skill 库，在这里直接就能跑',
-  crossoverBody:
-    'DeepSeek Harness 读取跟 Claude Code 和 Codex 相同的 SKILL.md 格式，开箱就能从 .agents/skills 发现 Skill。我们 Codex 设计合集里的 50 个精选设计插件不用改一行就能在 harness 里跑——dsh-plugin-claude-bridge 还能把你整套 Claude Code 配置零迁移带过来。',
-  crossoverCta: '浏览 Codex 设计插件合集',
-  crossoverSecondaryCta: '如何用 DeepSeek Harness 做设计',
 
   ctaDownload: '下载 Open Design',
   ctaStarList: '给 DeepSeek Harness 点 Star',

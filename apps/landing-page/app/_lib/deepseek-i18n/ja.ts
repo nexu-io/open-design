@@ -6,9 +6,9 @@ import type { DeepseekCopyOverride } from './index';
 
 export const ja: DeepseekCopyOverride = {
   collectionEyebrow: 'キュレーションコレクション',
-  collectionHeading: 'DeepSeek Harness に「目」と「キャンバス」を与えるデザインプラグイン',
+  collectionHeading: 'デザインのための DeepSeek Harness プラグイン',
   collectionLede:
-    '「すべてはプラグイン」— それが DeepSeek Harness のアーキテクチャそのもの。ただし素のままでは、テキスト専用のコーディングエージェントにすぎない。ここに集めたのは、それをデザインツールに変える dsh プラグイン。スクリーンショットを読むビジョンブリッジ、描き込めるキャンバスと生成 UI、デザインレビューのループを閉じるツール、そしてそのすべてをプレビューするワークベンチ。Claude Code や Codex と同じ SKILL.md 形式も読めるので、手持ちのデザインスキルライブラリはそのまま引き継げる。',
+    'デザイン作業のための dsh プラグイン厳選集。スクリーンショットを読むビジョンブリッジ、エージェントが描けるキャンバスと生成 UI、デザインレビューのツール、そしてすべてをプレビューするワークベンチ。DeepSeek Harness は Claude Code や Codex と同じ SKILL.md 形式を読み込むため、手持ちのデザインスキルもそのまま使えます。',
   collectionStats: [
     { value: '13', label: '厳選 dsh プラグイン' },
     { value: '13', label: '提供元リポジトリ' },
@@ -31,13 +31,6 @@ export const ja: DeepseekCopyOverride = {
   categoryCanvas: 'キャンバス & 生成 UI',
   categoryWorkflow: 'デザインワークフロー',
   categoryWorkspace: 'ワークスペース & プレビュー',
-
-  crossoverEyebrow: 'すでにスキルをお持ちなら',
-  crossoverHeading: 'あなたのデザインスキルライブラリは、もうここで動く',
-  crossoverBody:
-    'DeepSeek Harness は Claude Code や Codex と同じ SKILL.md 形式を読み、.agents/skills のスキルを標準で発見します。Codex デザインコレクションで厳選した 50 のデザインプラグインは、そのままハーネスで動作します。さらに dsh-plugin-claude-bridge が、Claude Code の環境まるごとを移行ゼロで持ち込みます。',
-  crossoverCta: 'Codex デザインコレクションを見る',
-  crossoverSecondaryCta: 'DeepSeek Harness でデザインする方法',
 
   ctaDownload: 'Open Design をダウンロード',
   ctaStarList: 'DeepSeek Harness に Star を付ける',

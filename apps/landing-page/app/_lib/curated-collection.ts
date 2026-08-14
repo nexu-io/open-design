@@ -180,6 +180,8 @@ export interface CuratedBinding {
   readonly collection: CuratedCollectionContent;
   readonly skills: readonly CuratedSkill[];
   readonly getCopy: (locale: LandingLocaleCode) => CuratedCopyBase;
+  /** Optional <title> builder for the hub page; defaults to eyebrow · heading. */
+  readonly hubTitle?: (copy: CuratedCopyBase) => string;
   readonly skillCopy: (copy: CuratedCopyBase, slug: string) => CuratedSkillCopy;
   readonly categoryLabel: (copy: CuratedCopyBase, category: string) => string;
 }

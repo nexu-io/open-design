@@ -26,6 +26,9 @@ export const DEEPSEEK_BINDING: CuratedBinding = {
   collection: DEEPSEEK_COLLECTION,
   skills: DEEPSEEK_SKILLS,
   getCopy: getDeepseekCopy,
+  // The heading already names the collection, so the default eyebrow-prefixed
+  // title would read "DeepSeek Harness design · DeepSeek Harness plugins …".
+  hubTitle: (copy) => `${copy.collectionHeading} · Open Design`,
   skillCopy: (copy, slug) => deepseekSkillCopy(copy as DeepseekCopy, slug),
   categoryLabel: (copy, category) =>
     deepseekCategoryLabel(copy as DeepseekCopy, category as DeepseekSkillCategory),

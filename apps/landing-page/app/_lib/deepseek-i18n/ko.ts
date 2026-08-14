@@ -6,9 +6,9 @@ import type { DeepseekCopyOverride } from './index';
 
 export const ko: DeepseekCopyOverride = {
   collectionEyebrow: '엄선한 컬렉션',
-  collectionHeading: 'DeepSeek Harness에 눈과 캔버스를 달아 주는 디자인 플러그인',
+  collectionHeading: '디자인을 위한 DeepSeek Harness 플러그인',
   collectionLede:
-    '‘모든 것이 플러그인’이라는 말이 DeepSeek Harness 아키텍처의 전부입니다. 그리고 기본 상태의 하네스는 텍스트만 다루는 코딩 에이전트죠. 여기 모은 것은 그것을 디자인 도구로 바꿔 주는 dsh 플러그인입니다. 스크린샷을 읽어 내는 비전 브리지, 그릴 수 있는 캔버스와 생성형 UI, 디자인 리뷰 루프를 닫아 주는 도구, 그리고 그 모든 것을 미리 보여 주는 워크벤치까지. 게다가 Claude Code, Codex와 같은 SKILL.md 형식을 읽으므로 여러분의 디자인 스킬 라이브러리도 그대로 옮겨 옵니다.',
+    '디자인 작업을 위한 dsh 플러그인 큐레이션. 스크린샷을 읽는 비전 브리지, 에이전트가 그릴 수 있는 캔버스와 생성형 UI, 디자인 리뷰 도구, 그리고 그 모든 것을 미리 보여 주는 워크벤치까지. DeepSeek Harness는 Claude Code·Codex와 같은 SKILL.md 형식을 읽으므로 기존 디자인 스킬 라이브러리를 그대로 가져올 수 있습니다.',
   collectionStats: [
     { value: '13', label: '엄선한 dsh 플러그인' },
     { value: '13', label: '출처 저장소' },
@@ -31,13 +31,6 @@ export const ko: DeepseekCopyOverride = {
   categoryCanvas: '캔버스 & 생성형 UI',
   categoryWorkflow: '디자인 워크플로',
   categoryWorkspace: '워크스페이스 & 프리뷰',
-
-  crossoverEyebrow: '이미 스킬이 있나요?',
-  crossoverHeading: '여러분의 디자인 스킬 라이브러리는 이미 여기서 돌아갑니다',
-  crossoverBody:
-    'DeepSeek Harness는 Claude Code, Codex와 같은 SKILL.md 형식을 읽고, .agents/skills의 스킬을 기본으로 찾아냅니다. Codex 디자인 컬렉션에 엄선해 둔 50개의 디자인 플러그인이 하네스에서 그대로 동작하며, dsh-plugin-claude-bridge는 여러분의 Claude Code 세팅 전체를 마이그레이션 없이 옮겨 옵니다.',
-  crossoverCta: 'Codex 디자인 컬렉션 둘러보기',
-  crossoverSecondaryCta: 'DeepSeek Harness로 디자인하는 법',
 
   ctaDownload: 'Open Design 다운로드',
   ctaStarList: 'DeepSeek Harness에 Star 남기기',

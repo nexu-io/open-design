@@ -48,8 +48,8 @@ const noLicense = (repoUrl: string) =>
 
 export const DEEPSEEK_COLLECTION: DeepseekCollection = {
   eyebrow: 'DeepSeek Harness design',
-  heading: 'The design plugins that give DeepSeek Harness eyes and a canvas',
-  lede: '“Everything is a plugin” is the whole DeepSeek Harness architecture — and out of the box it is a text-only coding agent. These are the dsh plugins that make it a design tool: vision bridges that read screenshots, canvases and generative UI it can draw on, tools that close the design review loop, and workbenches that preview it all. It also reads the same SKILL.md format as Claude Code and Codex, so your design skill library carries over.',
+  heading: 'DeepSeek Harness plugins for design',
+  lede: 'A curated collection of dsh plugins for design work: vision bridges that read screenshots, canvases and generative UI the agent can draw on, design review tools, and workbenches that preview it all. DeepSeek Harness reads the same SKILL.md format as Claude Code and Codex, so your design skill library carries over.',
   stats: [
     { value: '13', label: 'curated dsh plugins' },
     { value: '13', label: 'source repos' },

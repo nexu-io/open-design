@@ -2,9 +2,7 @@
 /*
  * Collection hub for a curated design-plugin board, shared by every curated
  * collection (Codex design, DeepSeek Harness design). The thin per-collection
- * pages pass a `CuratedBinding`; a named `crossover` slot lets a collection
- * insert one extra editorial band between the category strip and the grid
- * (the DeepSeek hub uses it for the SKILL.md-compatibility story).
+ * pages pass a `CuratedBinding`.
  *
  * A standalone editorial board (NOT bundled-plugin driven). Visual language is
  * deliberately the SAME as the rest of /plugins/*: editorial tpl-card DNA
@@ -30,7 +28,7 @@ const href = (path: string) => localizedHref(path, locale);
 
 const c = binding.collection;
 const skills = binding.skills;
-const title = `${c.eyebrow} · ${cc.collectionHeading} · Open Design`;
+const title = binding.hubTitle?.(cc) ?? `${c.eyebrow} · ${cc.collectionHeading} · Open Design`;
 const description = cc.collectionLede;
 
 const jsonLd = [
@@ -89,8 +87,6 @@ const jsonLd = [
         </ul>
       </div>
     </section>
-
-    <slot name="crossover" />
 
     {/* The plugins. */}
     <section class="dbband" aria-label={cc.collectionHeading}>

@@ -6,9 +6,9 @@ import type { DeepseekCopyOverride } from './index';
 
 export const es: DeepseekCopyOverride = {
   collectionEyebrow: 'Colección curada',
-  collectionHeading: 'Los plugins de diseño que dan a DeepSeek Harness ojos y un lienzo',
+  collectionHeading: 'Plugins de DeepSeek Harness para diseño',
   collectionLede:
-    '«Everything is a plugin» es toda la arquitectura de DeepSeek Harness — y de serie es un agente de código de solo texto. Estos son los plugins dsh que lo convierten en una herramienta de diseño: puentes de visión que leen capturas de pantalla, lienzos y UI generativa sobre los que dibujar, herramientas que cierran el bucle de la revisión de diseño, y bancos de trabajo que lo previsualizan todo. Además lee el mismo formato SKILL.md que Claude Code y Codex, así que tu biblioteca de skills de diseño se traslada tal cual.',
+    'Una colección curada de plugins dsh para diseñar: puentes de visión que leen capturas, lienzos y UI generativa donde el agente puede dibujar, herramientas de revisión de diseño y bancos de trabajo que lo previsualizan todo. DeepSeek Harness lee el mismo formato SKILL.md que Claude Code y Codex, así que tu biblioteca de skills de diseño te acompaña.',
   collectionStats: [
     { value: '13', label: 'plugins dsh seleccionados' },
     { value: '13', label: 'repos de origen' },
@@ -31,13 +31,6 @@ export const es: DeepseekCopyOverride = {
   categoryCanvas: 'Lienzo y UI generativa',
   categoryWorkflow: 'Flujo de diseño',
   categoryWorkspace: 'Espacio de trabajo y vista previa',
-
-  crossoverEyebrow: '¿Ya tienes skills?',
-  crossoverHeading: 'Tu biblioteca de skills de diseño ya funciona aquí',
-  crossoverBody:
-    'DeepSeek Harness lee el mismo formato SKILL.md que Claude Code y Codex, y descubre skills desde .agents/skills de serie. Los 50 plugins de diseño seleccionados de nuestra colección de diseño para Codex funcionan en el harness sin cambios — y dsh-plugin-claude-bridge traslada toda tu configuración de Claude Code sin migración alguna.',
-  crossoverCta: 'Ver la colección de diseño para Codex',
-  crossoverSecondaryCta: 'Cómo diseñar con DeepSeek Harness',
 
   ctaDownload: 'Descargar Open Design',
   ctaStarList: 'Dar una estrella a DeepSeek Harness',

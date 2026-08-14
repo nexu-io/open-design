@@ -6,9 +6,9 @@ import type { DeepseekCopyOverride } from './index';
 
 export const ru: DeepseekCopyOverride = {
   collectionEyebrow: 'Кураторская подборка',
-  collectionHeading: 'Дизайн-плагины, которые дают DeepSeek Harness глаза и холст',
+  collectionHeading: 'Плагины DeepSeek Harness для дизайна',
   collectionLede:
-    '«Всё есть плагин» — это вся архитектура DeepSeek Harness, и из коробки это текстовый кодинг-агент. Вот dsh-плагины, которые превращают его в инструмент дизайна: зрительные мосты, читающие скриншоты, холсты и генеративный UI, на которых он может рисовать, инструменты, замыкающие цикл дизайн-ревью, и рабочие панели, где всё это можно посмотреть в превью. Он также читает тот же формат SKILL.md, что Claude Code и Codex, поэтому ваша библиотека дизайн-скиллов переносится целиком.',
+    'Подборка dsh-плагинов для дизайна: зрительные мосты, читающие скриншоты, холсты и генеративный UI, на которых агент может рисовать, инструменты дизайн-ревью и рабочие пространства с превью всего этого. DeepSeek Harness читает тот же формат SKILL.md, что Claude Code и Codex, — ваша библиотека дизайн-скиллов переносится как есть.',
   collectionStats: [
     { value: '13', label: 'отобранных dsh-плагинов' },
     { value: '13', label: 'репозиториев-источников' },
@@ -31,13 +31,6 @@ export const ru: DeepseekCopyOverride = {
   categoryCanvas: 'Холст и генеративный UI',
   categoryWorkflow: 'Дизайн-процесс',
   categoryWorkspace: 'Рабочее пространство и превью',
-
-  crossoverEyebrow: 'Уже есть скиллы?',
-  crossoverHeading: 'Ваша библиотека дизайн-скиллов уже работает здесь',
-  crossoverBody:
-    'DeepSeek Harness читает тот же формат SKILL.md, что Claude Code и Codex, и из коробки находит скиллы в .agents/skills. Все 50 отобранных дизайн-плагинов из нашей подборки для Codex работают в харнессе без изменений — а dsh-plugin-claude-bridge переносит всю вашу настройку Claude Code с нулевой миграцией.',
-  crossoverCta: 'Смотреть дизайн-подборку для Codex',
-  crossoverSecondaryCta: 'Как проектировать с DeepSeek Harness',
 
   ctaDownload: 'Скачать Open Design',
   ctaStarList: 'Поставить звезду DeepSeek Harness',
