@@ -1122,6 +1122,20 @@ describe("wellKnownUserToolchainBins", () => {
     }
   });
 
+  it("includes Nix profile bin dirs so nix-darwin CLIs resolve under GUI launch (issue #6121)", () => {
+    const home = mkdtempSync(join(tmpdir(), "wkutb-nix-"));
+    try {
+      const dirs = wellKnownUserToolchainBins({ home, env: {}, includeSystemBins: false });
+      // System-wide Nix profiles (absolute paths, same on all POSIX systems)
+      expect(dirs).toContain("/run/current-system/sw/bin");
+      expect(dirs).toContain("/nix/var/nix/profiles/default/bin");
+      // User's active Nix profile
+      expect(dirs).toContain(join(home, ".nix-profile", "bin"));
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it("includes /opt/homebrew/bin and /usr/local/bin when includeSystemBins is true", () => {
     const home = mkdtempSync(join(tmpdir(), "wkutb-sys-"));
     try {

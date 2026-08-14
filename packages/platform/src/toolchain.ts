@@ -167,6 +167,19 @@ export function wellKnownUserToolchainBins(
     dirs.push(join(home, ".mise", "shims"));
   }
 
+  // Nix / NixOS / nix-darwin: a GUI-launched daemon inherits a minimal PATH
+  // from launchd and never sources the Nix profile script, so CLIs installed
+  // via `environment.systemPackages` or `nix-env -iA` are invisible.
+  //
+  // `/run/current-system/sw/bin` — system-wide profile on NixOS and nix-darwin
+  // `/nix/var/nix/profiles/default/bin` — default system profile
+  // `~/.nix-profile/bin` — user's active Nix profile (default symlink target)
+  //
+  // All three are search-path candidates; existence is not required.
+  dirs.push("/run/current-system/sw/bin");
+  dirs.push("/nix/var/nix/profiles/default/bin");
+  dirs.push(join(home, ".nix-profile", "bin"));
+
   if (includeSystemBins) {
     dirs.push("/opt/homebrew/bin", "/usr/local/bin");
   }
