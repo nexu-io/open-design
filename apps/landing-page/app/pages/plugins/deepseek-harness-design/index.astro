@@ -1,0 +1,63 @@
+---
+/*
+ * /plugins/deepseek-harness-design/ — curated "DeepSeek Harness design"
+ * collection.
+ *
+ * Sibling board to /plugins/codex-design/: real, external plugins native to
+ * DeepSeek Harness that give the text-only agent vision input, design
+ * canvases, generative UI and design-workflow tools. The crossover band tells
+ * the SKILL.md-compatibility story and cross-links the Codex board instead of
+ * duplicating its entries.
+ *
+ * Layout and chrome come from the shared `curated-collection-hub.astro`;
+ * content from `_lib/deepseek-design.ts` via `DEEPSEEK_BINDING`.
+ */
+import CuratedCollectionHub from '../../../_components/curated-collection-hub.astro';
+import { DEEPSEEK_BINDING } from '../../../_lib/deepseek-binding';
+import { DEEPSEEK_SKILLS, DEEPSEEK_GUIDE_HREF } from '../../../_lib/deepseek-design';
+import { CODEX_SKILLS } from '../../../_lib/codex-design';
+import { getDeepseekCopy } from '../../../_lib/deepseek-i18n';
+import { assertNoCuratedSlugCollision } from '../../../_lib/curated-collection';
+import { getDetailPlugins } from '../../../_lib/bundled-plugins';
+import { localeFromPath, localizedHref } from '../../../i18n';
+
+// Fails the build if a bundled plugin or the sibling curated collection ever
+// claims one of the flat `/plugins/<slug>/` routes these curated plugins occupy.
+assertNoCuratedSlugCollision('DeepSeek Harness design', DEEPSEEK_SKILLS, [
+  ...getDetailPlugins().map((p) => p.detailSlug),
+  ...CODEX_SKILLS.map((s) => s.slug),
+]);
+
+const locale = localeFromPath(Astro.url.pathname);
+const cc = getDeepseekCopy(locale);
+const href = (path: string) => localizedHref(path, locale);
+---
+
+<CuratedCollectionHub binding={DEEPSEEK_BINDING}>
+  {/* The compatibility story: the harness reads the same SKILL.md format as
+      Claude Code and Codex, so the existing design-skill canon carries over.
+      Cross-links the Codex board rather than duplicating its 50 entries. */}
+  <section slot="crossover" class="dbband dsh-crossover" aria-labelledby="dsh-crossover-heading">
+    <div class="dbin">
+      <p class="dbeye">{cc.crossoverEyebrow}</p>
+      <h2 class="dbh2" id="dsh-crossover-heading">{cc.crossoverHeading}</h2>
+      <p class="dsh-crossover-p">{cc.crossoverBody}</p>
+      <div class="dbcta-row">
+        <a class="dbbtn-p" href={href('/plugins/codex-design/')}>{cc.crossoverCta}</a>
+        <a class="dbbtn-g" href={href(DEEPSEEK_GUIDE_HREF)}>{cc.crossoverSecondaryCta}</a>
+      </div>
+    </div>
+  </section>
+</CuratedCollectionHub>
+
+<style>
+  .dsh-crossover { border-top: 1.5px solid var(--ink); }
+  .dsh-crossover .dbin { padding-block: 8px; }
+  .dsh-crossover-p {
+    max-width: 720px;
+    margin: 14px 0 24px;
+    font-size: 16.5px;
+    line-height: 1.65;
+    color: var(--ink-soft);
+  }
+</style>
