@@ -365,7 +365,7 @@ async function main(): Promise<void> {
     });
   }
   setSplashStage(splash?.window ?? null, "workspace");
-  registerOdProtocol(() => status.webUrl);
+  const loopbackGateway = registerOdProtocol(() => status.webUrl);
 
   const { runDesktopMain } = await import("./main/index.js");
   await runDesktopMain(desktopControl, {
@@ -377,12 +377,16 @@ async function main(): Promise<void> {
         await retireObsoleteInstalledOuter();
       } finally {
         try {
-          await standalone.close();
+          await loopbackGateway.close();
         } finally {
           try {
-            await identity.close();
+            await standalone.close();
           } finally {
-            await parkPackagedLaunchContext(shellConfig.launchContext);
+            try {
+              await identity.close();
+            } finally {
+              await parkPackagedLaunchContext(shellConfig.launchContext);
+            }
           }
         }
       }

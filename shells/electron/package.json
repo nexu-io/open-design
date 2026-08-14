@@ -37,7 +37,8 @@
     "@open-design/release": "workspace:*",
     "@open-design/shell": "workspace:*",
     "@open-design/sidecar": "workspace:*",
-    "@open-design/standalone": "workspace:*"
+    "@open-design/standalone": "workspace:*",
+    "undici": "7.29.0"
   },
   "devDependencies": {
     "@types/node": "24.12.2",

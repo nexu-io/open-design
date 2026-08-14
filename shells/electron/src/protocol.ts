@@ -1,4 +1,6 @@
-import { net, protocol } from "electron";
+import { protocol } from "electron";
+
+import { createLoopbackGateway, type LoopbackGateway } from "./protocol/loopback-gateway.js";
 
 const OD_SCHEME = "od";
 const OD_ENTRY_URL = `${OD_SCHEME}://app/`;
@@ -69,7 +71,7 @@ const OD_PROXY_RETRYABLE_METHODS = new Set(["GET", "HEAD"]);
  * Error tokens that mean the LOCAL machine is out of network resources —
  * sockets, file descriptors, ephemeral ports, kernel buffers. Kept as an
  * explicit whitelist: everything not listed here retains the proxy's normal
- * resilience behavior (undici fallback, transient retry).
+ * transient-retry behavior.
  */
 const OD_RESOURCE_EXHAUSTION_ERROR_TOKENS: readonly string[] = [
   "ERR_INSUFFICIENT_RESOURCES",
@@ -86,17 +88,16 @@ const OD_RESOURCE_EXHAUSTION_ERROR_TOKENS: readonly string[] = [
  * sockets/file descriptors must cost exactly ONE upstream attempt. Both of
  * the proxy's resilience layers amplify load, and when the failure is
  * exhaustion, amplification is precisely the wrong medicine: in the incident
- * that motivated this classifier, the undici fallback re-issued every failed
- * net.fetch (7890 doubled requests measured) and the linear-backoff transient
- * retry stacked another 1334 attempts on top — each new attempt consuming
- * exactly the resource the machine had already run out of, and prolonging the
- * outage it was trying to ride through.
+ * that motivated this classifier, the retired dual-transport fallback
+ * re-issued 7890 failed requests and the linear-backoff transient retry stacked
+ * another 1334 attempts on top — each new attempt consuming exactly the
+ * resource the machine had already run out of.
  *
  * Matching looks at BOTH `Error.code` and the message because the two fetch
- * transports report differently: Electron's net.fetch surfaces Chromium
- * network-stack failures as plain Errors whose message carries the
- * `net::ERR_...` token while `code` stays unset, whereas Node/undici throws
- * ErrnoExceptions that carry the token in `code`.
+ * historical transports reported differently: Chromium surfaced plain Errors
+ * whose message carried `net::ERR_...`, whereas Node/undici uses
+ * ErrnoExceptions with the token in `code`. Persisted diagnostics can still
+ * present either shape, so the classifier deliberately understands both.
  */
 function isLocalResourceExhaustionError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
@@ -139,7 +140,7 @@ const defaultRetryDelay = (ms: number): Promise<void> =>
 /**
  * One proxied fetch with EXPLICIT cancellation plumbing. The renderer's 6-per-
  * origin connection pool made this load-bearing: an EventSource the renderer
- * closes (or a fetch it aborts) MUST release the upstream net.fetch connection,
+ * closes (or a fetch it aborts) MUST release the upstream gateway connection,
  * or long-lived streams (workspace/collab SSE, chat run streams) leak pool
  * slots until every od:// request in the app hangs forever — tofu icons,
  * dead fetches, the works. Electron's protocol.handle does not reliably
@@ -189,7 +190,7 @@ async function fetchOdTargetOnce(
       method: request.method,
       headers: request.headers,
       body: request.body,
-      // @ts-expect-error -- duplex is required by undici/net.fetch for
+      // @ts-expect-error -- duplex is required by Node fetch implementations for
       // streaming request bodies and absent from the lib.dom Request typings.
       duplex: "half",
       signal: controller.signal,
@@ -421,62 +422,18 @@ export function packagedEntryUrl(): string {
 }
 
 /**
- * Route the od:// proxy through Electron's `net.fetch` (Chromium's network
- * stack, ~6 pooled connections per origin like a browser tab) instead of Node's
- * global `fetch` (undici), which caps a single origin far lower. Proxying every
- * renderer request through undici serialized them: a project-open request burst
- * that a browser tab runs in parallel dribbled out over minutes in the packaged
- * app. `net.fetch` gives the packaged client the same concurrency as the
- * browser.
- *
- * Electron can nevertheless reject particular renderer-owned subresource
- * requests with a generic `net::ERR_FAILED` even while the same URL succeeds
- * through ordinary fetch and the sidecar returns 200. CSS mask images are one
- * concrete case: packaged agent icons disappeared while their SVG files were
- * present and directly readable. For GET/HEAD only, fall back to undici after
- * that transport-level rejection. Those methods are safe to replay; write
- * requests deliberately stay on a single transport.
- *
- * Set OD_OD_PROXY_FETCH=undici to force the old path for all requests if
- * `net.fetch` regresses a broader streaming edge on a specific Electron/OS
- * combo.
- */
-function resolveOdProxyFetch(): OdProtocolFetch {
-  if (process.env.OD_OD_PROXY_FETCH === "undici") return fetch;
-  const undiciFetch = fetch;
-  return async (request) => {
-    try {
-      return await net.fetch(request);
-    } catch (error) {
-      if (!OD_PROXY_RETRYABLE_METHODS.has(request.method) || isClientCancelled(request)) {
-        throw error;
-      }
-      // The fallback exists to rescue Electron-specific transport rejections
-      // (net::ERR_FAILED on CSS-mask GETs) that undici serves fine. Local
-      // resource exhaustion is not that: undici draws on the same exhausted
-      // machine, so replaying there only doubles the failing load. Rethrow and
-      // let the handler answer 502 at once. See isLocalResourceExhaustionError.
-      if (isLocalResourceExhaustionError(error)) throw error;
-      console.warn("[open-design packaged] net.fetch failed; falling back to undici", {
-        message: error instanceof Error ? error.message : String(error),
-        method: request.method,
-        target: request.url,
-      });
-      return await undiciFetch(request);
-    }
-  };
-}
-
-/**
  * Install the `od://` handler, resolving the proxy target through
  * `resolveWebRuntimeUrl` on EVERY request.
  *
  * See `OdProtocolTargetResolver` for why this takes a provider rather than the
  * address itself.
  */
-export function registerOdProtocol(resolveWebRuntimeUrl: OdProtocolTargetResolver): void {
-  const fetchImpl = resolveOdProxyFetch();
+export function registerOdProtocol(
+  resolveWebRuntimeUrl: OdProtocolTargetResolver,
+  gateway: LoopbackGateway = createLoopbackGateway(),
+): LoopbackGateway {
   protocol.handle(OD_SCHEME, async (request) => {
-    return await handleOdRequest(request, resolveWebRuntimeUrl(), fetchImpl);
+    return await handleOdRequest(request, resolveWebRuntimeUrl(), gateway.fetch);
   });
+  return gateway;
 }

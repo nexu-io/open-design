@@ -4,8 +4,8 @@
  *
  * The packaged Electron entry registers `od://` as the loader for the
  * web runtime and forwards every renderer request to the local web
- * sidecar through Node's global `fetch` (which is undici under the
- * hood). Without a try/catch in the handler, undici throwing
+ * sidecar through one Shell-owned loopback gateway. Without a try/catch in
+ * the handler, a transport throwing
  * `setTypeOfService EINVAL` from socket internals on certain macOS /
  * VPN configurations bubbled up to Electron's default uncaught
  * exception handler — surfacing as a native "JavaScript error in
@@ -22,12 +22,6 @@
 import { vi } from 'vitest';
 
 vi.mock('electron', () => ({
-  // `registerOdProtocol` resolves its proxy fetch through `net.fetch`
-  // (Chromium's network stack). Stubbed here so the registration tests can
-  // drive the real handler that `protocol.handle` receives.
-  net: {
-    fetch: vi.fn(),
-  },
   protocol: {
     registerSchemesAsPrivileged: vi.fn(),
     handle: vi.fn(),
@@ -35,8 +29,16 @@ vi.mock('electron', () => ({
 }));
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { net, protocol } from 'electron';
+import { protocol } from 'electron';
 import { handleOdRequest, registerOdProtocol } from '../src/protocol.js';
+import type { LoopbackGateway } from '../src/protocol/loopback-gateway.js';
+
+function gateway(fetchImpl: typeof fetch): LoopbackGateway {
+  return Object.freeze({
+    async close() {},
+    fetch: fetchImpl,
+  });
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -78,10 +80,9 @@ describe('od:// protocol proxy', () => {
     expect(response.headers.get('content-type')).toBe('font/ttf');
   });
 
-  // net.fetch decompresses the upstream body but leaves the encoding
-  // headers in place; forwarding them makes renderer-side consumers that
-  // honor them (the font loader) gunzip plain bytes and fail. The proxy
-  // must strip the stale framing headers.
+  // Fetch transports may decompress the upstream body while retaining its
+  // encoding headers. Forwarding those makes renderer-side consumers gunzip
+  // plain bytes and fail, so the protocol boundary stays defensive.
   it('strips stale content-encoding/length/transfer-encoding from proxied responses', async () => {
     const fetchImpl: typeof fetch = async () =>
       new Response('plain-after-decode', {
@@ -201,18 +202,17 @@ describe('od:// protocol proxy', () => {
     const handleMock = vi.mocked(protocol.handle);
     handleMock.mockClear();
 
-    // `registerOdProtocol` wires the handler to Electron's `net.fetch`, so
-    // stub that rather than probing real ports: a port-based test
+    // Inject the transport rather than probing real ports: a port-based test
     // would silently pass or fail depending on whatever happens to be
     // listening on the developer's machine.
     const targets: string[] = [];
-    vi.mocked(net.fetch).mockImplementation((async (input: Request) => {
-      targets.push(input.url);
+    const fetchImpl: typeof fetch = async (input) => {
+      targets.push((input as Request).url);
       return new Response('ok', { status: 200 });
-    }) as unknown as typeof net.fetch);
+    };
 
     let current = 'http://127.0.0.1:50401';
-    registerOdProtocol(() => current);
+    registerOdProtocol(() => current, gateway(fetchImpl));
 
     const handler = handleMock.mock.calls[0]?.[1] as (
       request: Request,
@@ -500,38 +500,13 @@ describe('od:// proxy client-cancellation is not an upstream failure', () => {
 });
 
 /**
- * Local resource exhaustion must FAIL FAST — the proxy's two resilience
- * layers (undici fallback after a net.fetch rejection, linear-backoff
- * transient retry) both amplify load, and when the failure IS "this machine
- * is out of sockets/file descriptors", amplification is exactly wrong:
- * during the incident that motivated this, the undici fallback doubled every
- * failing request (7890 fallback fetches measured) and the retry loop added
- * another 1334 attempts on top, each consuming precisely the resource the
- * machine had run out of.
- *
- * Electron's net.fetch surfaces these as plain Errors whose MESSAGE carries
- * the `net::ERR_...` token while `code` stays unset; Node/undici surfaces
- * them as ErrnoExceptions with a `code`. Both shapes must be recognized.
- *
- * Errors outside the explicit exhaustion whitelist must keep today's
- * behavior: ECONNREFUSED still buys the full retry budget (it covers the
- * daemon startup race) and generic net.fetch rejections still fall back to
- * undici (that fallback rescues real Electron transport regressions such as
- * CSS-mask GETs).
+ * Local resource exhaustion must FAIL FAST. A retry consumes exactly the
+ * resource the machine has already exhausted, so the single transport must
+ * not spend its retry budget on these errors. Both Chromium-style messages
+ * and Node/undici error codes remain accepted for historical diagnostics.
  */
 describe('od:// proxy fails fast on local resource exhaustion', () => {
-  beforeEach(() => {
-    vi.mocked(protocol.handle).mockClear();
-    vi.mocked(net.fetch).mockReset();
-  });
-
-  const registeredHandler = (): ((request: Request) => Promise<Response>) => {
-    const calls = vi.mocked(protocol.handle).mock.calls;
-    expect(calls.length).toBeGreaterThan(0);
-    return calls.at(-1)![1] as (request: Request) => Promise<Response>;
-  };
-
-  /** Electron net.fetch shape: token in the message, `code` unset. */
+  /** Historical Chromium shape: token in the message, `code` unset. */
   const exhaustionByMessage = (): Error => new Error('net::ERR_INSUFFICIENT_RESOURCES');
 
   /** Node/undici shape: token in `code`. */
@@ -540,26 +515,6 @@ describe('od:// proxy fails fast on local resource exhaustion', () => {
     error.code = code;
     return error;
   };
-
-  it('does not double a net::ERR_INSUFFICIENT_RESOURCES failure through the undici fallback', async () => {
-    vi.mocked(net.fetch).mockRejectedValue(exhaustionByMessage());
-    const undiciFetch = vi.fn(async (_input: Request | string | URL) =>
-      new Response('ok', { status: 200 }));
-    vi.stubGlobal('fetch', undiciFetch);
-
-    registerOdProtocol(() => 'http://127.0.0.1:61424/');
-    const handler = registeredHandler();
-    const response = await handler(new Request('od://app/agent-icons/opencode.svg'));
-
-    // Exhaustion must cost exactly one upstream attempt: no undici double,
-    // no retry amplification, an honest 502 to the renderer.
-    expect(undiciFetch).not.toHaveBeenCalled();
-    expect(vi.mocked(net.fetch)).toHaveBeenCalledTimes(1);
-    expect(response.status).toBe(502);
-    const body = (await response.json()) as { error: string; message: string };
-    expect(body.error).toBe('OD_PROTOCOL_PROXY_FAILED');
-    expect(body.message).toContain('ERR_INSUFFICIENT_RESOURCES');
-  });
 
   it('does not burn the retry budget when only the message carries net::ERR_INSUFFICIENT_RESOURCES', async () => {
     let calls = 0;
@@ -635,22 +590,6 @@ describe('od:// proxy fails fast on local resource exhaustion', () => {
     expect(response.status).toBe(502);
   });
 
-  // Guard: a generic net.fetch rejection still gets the undici fallback —
-  // that fallback exists because Electron can reject specific renderer-owned
-  // subresource requests (CSS-mask GETs) that undici serves fine.
-  it('still falls back to undici on a generic net::ERR_FAILED', async () => {
-    vi.mocked(net.fetch).mockRejectedValue(new Error('net::ERR_FAILED'));
-    const undiciFetch = vi.fn(async (_input: Request | string | URL) =>
-      new Response('ok', { status: 200 }));
-    vi.stubGlobal('fetch', undiciFetch);
-
-    registerOdProtocol(() => 'http://127.0.0.1:61424/');
-    const handler = registeredHandler();
-    const response = await handler(new Request('od://app/agent-icons/opencode.svg'));
-
-    expect(response.status).toBe(200);
-    expect(undiciFetch).toHaveBeenCalledTimes(1);
-  });
 });
 
 /**
@@ -677,7 +616,6 @@ describe('od:// proxy fails fast on local resource exhaustion', () => {
 describe('od:// protocol target resolution', () => {
   beforeEach(() => {
     vi.mocked(protocol.handle).mockClear();
-    vi.mocked(net.fetch).mockReset();
   });
 
   const registeredHandler = (): ((request: Request) => Promise<Response>) => {
@@ -688,16 +626,16 @@ describe('od:// protocol target resolution', () => {
 
   it('follows the web sidecar address when it changes after registration', async () => {
     const captured: string[] = [];
-    vi.mocked(net.fetch).mockImplementation((async (input: Request) => {
-      captured.push(input.url);
+    const fetchImpl: typeof fetch = async (input) => {
+      captured.push((input as Request).url);
       return new Response('ok', { status: 200 });
-    }) as unknown as typeof net.fetch);
+    };
 
     // The address the provider reports is what the proxy must use — including
     // after it changes. A registration that snapshots the first value keeps
     // forwarding to the retired port forever.
     let webRuntimeUrl: string | null = 'http://127.0.0.1:61424/';
-    registerOdProtocol(() => webRuntimeUrl);
+    registerOdProtocol(() => webRuntimeUrl, gateway(fetchImpl));
     const handler = registeredHandler();
 
     const first = await handler(new Request('od://app/_next/static/chunk-a.js'));
@@ -712,43 +650,6 @@ describe('od:// protocol target resolution', () => {
       'http://127.0.0.1:61424/_next/static/chunk-a.js',
       'http://127.0.0.1:52001/_next/static/chunk-b.js',
     ]);
-  });
-
-  it('falls back to undici when net.fetch rejects a CSS-mask GET', async () => {
-    vi.mocked(net.fetch).mockRejectedValue(new Error('net::ERR_FAILED'));
-    const undiciFetch = vi.fn(async (_input: Request | string | URL) =>
-      new Response('<svg viewBox="0 0 24 24"></svg>', {
-        status: 200,
-        headers: { 'content-type': 'image/svg+xml' },
-      }));
-    vi.stubGlobal('fetch', undiciFetch);
-
-    registerOdProtocol(() => 'http://127.0.0.1:61424/');
-    const handler = registeredHandler();
-    const response = await handler(new Request('od://app/agent-icons/opencode.svg'));
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get('content-type')).toBe('image/svg+xml');
-    expect(await response.text()).toContain('<svg');
-    expect(vi.mocked(net.fetch)).toHaveBeenCalledTimes(1);
-    expect(undiciFetch).toHaveBeenCalledTimes(1);
-    expect((undiciFetch.mock.calls[0]![0] as Request).url)
-      .toBe('http://127.0.0.1:61424/agent-icons/opencode.svg');
-  });
-
-  it('does not replay a non-idempotent request through undici when net.fetch rejects', async () => {
-    vi.mocked(net.fetch).mockRejectedValue(new Error('net::ERR_FAILED'));
-    const undiciFetch = vi.fn(async (_input: Request | string | URL) =>
-      new Response('unexpected', { status: 200 }));
-    vi.stubGlobal('fetch', undiciFetch);
-
-    registerOdProtocol(() => 'http://127.0.0.1:61424/');
-    const handler = registeredHandler();
-    const response = await handler(new Request('od://app/api/projects', { method: 'POST' }));
-
-    expect(response.status).toBe(502);
-    expect(vi.mocked(net.fetch)).toHaveBeenCalledTimes(1);
-    expect(undiciFetch).not.toHaveBeenCalled();
   });
 
   it('answers a missing web runtime address with a structured 503 instead of dialling a placeholder port', async () => {
@@ -775,11 +676,9 @@ describe('od:// protocol target resolution', () => {
   });
 
   it('surfaces the 503 through the registered handler when the provider reports no address', async () => {
-    vi.mocked(net.fetch).mockImplementation((async () => {
-      throw new Error('net.fetch must not be reached without a target');
-    }) as unknown as typeof net.fetch);
+    const fetchImpl = vi.fn(async () => new Response('unexpected')) as unknown as typeof fetch;
 
-    registerOdProtocol(() => null);
+    registerOdProtocol(() => null, gateway(fetchImpl));
     const handler = registeredHandler();
 
     const response = await handler(new Request('od://app/'));
@@ -787,7 +686,7 @@ describe('od:// protocol target resolution', () => {
     expect(response.status).toBe(503);
     const body = (await response.json()) as { error: string };
     expect(body.error).toBe('OD_PROTOCOL_TARGET_UNAVAILABLE');
-    expect(vi.mocked(net.fetch)).not.toHaveBeenCalled();
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('never rejects on a malformed target, so a bad address cannot reach the Electron uncaught handler', async () => {
