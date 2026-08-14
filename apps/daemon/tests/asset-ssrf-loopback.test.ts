@@ -348,26 +348,27 @@ describe('assertAndFetchExternalAsset — fail-closed paths (issue #5478)', () =
 });
 
 describe('assertAndFetchExternalAsset — TOCTOU with injectable lookup (issue #5478)', () => {
-  it('rejects when validation lookup returns public but fetch would reach loopback', async () => {
+  it('fetch carries dispatcher so connect-time rebind to loopback is refused', async () => {
     // The validation lookup returns a public IP, so assertExternalAssetUrl passes.
-    // A real attacker would rebind DNS for the fetch lookup. With fail-closed +
-    // injectable fetch, we prove the fetch stub is still called with redirect:'error'
-    // and the validation was done against the right address set.
+    // The fetch stub receives the request init — assert that `dispatcher` is
+    // attached, proving the validating Agent would refuse a connect-time rebind.
     const publicLookup: DnsLookupFn = async () => [{ address: '93.184.216.34', family: 4 }];
-    let fetchCalled = false;
-    const stubFetch = async () => {
-      fetchCalled = true;
+    let capturedInit: RequestInit | undefined;
+    const stubFetch = async (_url: string, init?: RequestInit) => {
+      capturedInit = init;
       return new Response('ok', { status: 200 });
     };
 
-    const resp = await assertAndFetchExternalAsset(
+    await assertAndFetchExternalAsset(
       'http://rebind.example.com/asset.png',
       {},
       publicLookup,
       stubFetch as never,
     );
-    expect(fetchCalled).toBe(true);
-    expect(resp.ok).toBe(true);
+    // The dispatcher must be present so production fetch uses the validating Agent
+    expect(capturedInit).toBeDefined();
+    expect((capturedInit as { dispatcher?: unknown }).dispatcher).toBeDefined();
+    expect(capturedInit?.redirect).toBe('error');
   });
 
   it('rejects without invoking fetch when validation lookup throws', async () => {

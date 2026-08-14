@@ -21,7 +21,7 @@ import { promises as dnsPromises, lookup as dnsLookupCb } from 'node:dns';
 import { promises as fsp } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Agent, EnvHttpProxyAgent, Socks5ProxyAgent, fetch as undiciFetch } from 'undici';
+import { Agent, EnvHttpProxyAgent, Socks5ProxyAgent } from 'undici';
 import type { Dispatcher, Pool } from 'undici';
 import {
   applyAgentLaunchEnv,
@@ -367,10 +367,15 @@ export async function assertAndFetchExternalAsset(
     throw new Error('asset URL hostname was not DNS-validated — refusing unpinned fetch');
   }
 
-  // Use the injected (or default global) fetch so tests can stub it with
-  // vi.stubGlobal('fetch', …). redirect:'error' blocks a 3xx hop into
-  // private space (issue #5478).
-  return fetchImpl(url, { ...init, redirect: 'error' });
+  // Route through the long-lived asset dispatcher whose connection-time lookup
+  // rejects non-public addresses. The dispatcher is attached to the init object
+  // so injected fetch stubs (vi.stubGlobal) still see redirect:'error' and
+  // can ignore dispatcher, while production globalThis.fetch (Node/undici)
+  // uses it to refuse a connect-time rebind to loopback/metadata (issue #5478).
+  // Same pattern as plugins/plugin-asset-cache.ts safeExternalFetch.
+  const requestInit: RequestInit = { ...init, redirect: 'error' };
+  (requestInit as { dispatcher?: unknown }).dispatcher = assetDispatcher;
+  return fetchImpl(url, requestInit);
 }
 
 // Aggressive but not punitive — happy paths usually return in under 2 s.
