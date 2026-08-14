@@ -1,6 +1,6 @@
 {
   "name": "@open-design/web",
-  "version": "0.19.3",
+  "version": "0.19.4",
   "private": true,
   "type": "module",
   "exports": {

@@ -55,24 +55,27 @@ export const winResources = {
 } as const;
 
 export const BUNDLED_RESOURCE_GROUPS = [
-  { id: "skills", title: "Skills", trees: [{ from: "skills", to: "skills" }] },
+  { id: "skills", startup: "lazy", title: "Skills", trees: [{ from: "skills", to: "skills" }] },
   // After the skills/design-templates split (specs/current/skills-and-design-templates.md)
   // the rendering catalogue lives under its own root and the daemon
   // resolves it via DESIGN_TEMPLATES_DIR. Bundle it like any other
   // first-class resource so packaged builds carry the full template set.
   {
     id: "design-templates",
+    startup: "lazy",
     title: "Design templates",
     trees: [{ from: "design-templates", to: "design-templates" }],
   },
   {
     id: "design-systems",
+    startup: "lazy",
     title: "Design systems",
     trees: [{ from: "design-systems", to: "design-systems" }],
   },
-  { id: "craft", title: "Craft knowledge", trees: [{ from: "craft", to: "craft" }] },
+  { id: "craft", startup: "lazy", title: "Craft knowledge", trees: [{ from: "craft", to: "craft" }] },
   {
     id: "plugins",
+    startup: "blocking",
     title: "Plugin registry",
     trees: [
       { from: join("plugins", "_official"), to: join("plugins", "_official") },
@@ -81,16 +84,19 @@ export const BUNDLED_RESOURCE_GROUPS = [
   },
   {
     id: "frames",
+    startup: "lazy",
     title: "Artifact frames",
     trees: [{ from: join("assets", "frames"), to: "frames" }],
   },
   {
     id: "community-pets",
+    startup: "lazy",
     title: "Community pets",
     trees: [{ from: join("assets", "community-pets"), to: "community-pets" }],
   },
   {
     id: "prompt-templates",
+    startup: "lazy",
     title: "Prompt templates",
     trees: [{ from: "prompt-templates", to: "prompt-templates" }],
   },
@@ -101,6 +107,7 @@ export const BUNDLED_RESOURCE_GROUPS = [
   // gallery falls back to live, GPU-expensive iframes instead of the baked clips.
   {
     id: "plugin-previews",
+    startup: "lazy",
     title: "Plugin preview index",
     trees: [{ from: join("data", "plugin-previews"), to: join("data", "plugin-previews") }],
   },

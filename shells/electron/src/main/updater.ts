@@ -79,17 +79,25 @@ import {
   checksumMatchesCandidate,
   compareVersions,
   fetchJson,
+  hasStandaloneDistributionMetadata,
   hasValidLauncherPayloadContext,
   releaseKey,
   releaseMatchesCandidate,
-  remoteRequiresReinstall,
+  resolveLegacyReinstallRequirement,
   resolveChecksum,
   resolveInstalledOuterVersion,
   selectUpdateCandidateWithFallback,
   type UpdateCandidate,
 } from "./updater/feed.js";
+import {
+  resolveStandaloneMetadataPreparation,
+  type DesktopStandaloneUpdatePreparation,
+  type StandaloneUpdatePreparationPort,
+} from "./updater/standalone.js";
 
-export { compareVersions, remoteRequiresReinstall, resolveInstalledOuterVersion } from "./updater/feed.js";
+export type { DesktopStandaloneUpdatePreparation } from "./updater/standalone.js";
+
+export { compareVersions, resolveLegacyReinstallRequirement, resolveInstalledOuterVersion } from "./updater/feed.js";
 import {
   activatePreparedLauncherPayloadRelease,
   clearLauncherStateForManualClear,
@@ -149,6 +157,7 @@ export type DesktopUpdaterDeps = {
   logger?: DesktopUpdaterLogger;
   now?: () => Date;
   openPath?: (path: string) => Promise<string>;
+  prepareStandaloneUpdate?: StandaloneUpdatePreparationPort;
   processExecPath?: string;
   processPid?: number;
   removeLauncherPayloadRoot?: (path: string) => Promise<void>;
@@ -163,6 +172,7 @@ export type LoadedRelease = {
 };
 
 type ActionOptions = {
+  activateOnRestart?: boolean;
   autoDownload?: boolean;
 };
 
@@ -594,7 +604,8 @@ export function createDesktopUpdater(
       && compareVersions(storedActive.version, config.currentVersion) === 0
       && await hasValidLauncherPayloadContext(config);
     const restoredReinstallRequirement = launcherPayloadContextValid
-      ? remoteRequiresReinstall(
+      && !hasStandaloneDistributionMetadata(storedActive.metadata)
+      ? resolveLegacyReinstallRequirement(
           storedActive.metadata,
           config,
           await resolveInstalledOuterVersion(config),
@@ -757,10 +768,34 @@ export function createDesktopUpdater(
         lastCheckedAt,
       }));
       if (root != null) scheduleBackCleanup(root.realRoot, logger);
+      const standaloneRoute = await resolveStandaloneMetadataPreparation({
+        activateOnRestart: options.activateOnRestart === true,
+        metadata: body,
+        ...(deps.prepareStandaloneUpdate == null ? {} : { prepare: deps.prepareStandaloneUpdate }),
+      });
+      const standalonePreparation = standaloneRoute.preparation;
+      if (standaloneRoute.modern && standalonePreparation == null) {
+        return setFailurePreservingActive(createError(
+          "standalone-updater-unavailable",
+          "Standalone update metadata cannot be handled by this runtime",
+        ));
+      }
+      if (standalonePreparation?.architecture === "standalone" && standalonePreparation.route === "closure") {
+        candidate = null;
+        reinstallRequirement = undefined;
+        logUpdateEvent("standalone-update-prepared", {
+          releaseVersion: standalonePreparation.releaseVersion,
+          state: standalonePreparation.state,
+        });
+        return activeRelease == null
+          ? setState(DESKTOP_UPDATE_STATES.NOT_AVAILABLE)
+          : setState(DESKTOP_UPDATE_STATES.DOWNLOADED);
+      }
       const launcherPayloadContextValid = await hasValidLauncherPayloadContext(config);
       const installedOuterVersion = launcherPayloadContextValid ? await resolveInstalledOuterVersion(config) : null;
-      reinstallRequirement = launcherPayloadContextValid
-        ? remoteRequiresReinstall(body, config, installedOuterVersion) ?? undefined
+      const legacyMetadata = standalonePreparation?.architecture === "legacy";
+      reinstallRequirement = launcherPayloadContextValid && legacyMetadata
+        ? resolveLegacyReinstallRequirement(body, config, installedOuterVersion) ?? undefined
         : undefined;
       if (reinstallRequirement != null) {
         logUpdateEvent("reseed-required-installer-route", {

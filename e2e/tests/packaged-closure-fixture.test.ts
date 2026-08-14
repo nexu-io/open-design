@@ -102,7 +102,7 @@ describe('packaged Closure release fixture', () => {
       namespace: 'release-beta',
       workspaceRoot: root,
     });
-    expect((await readPackagedClosureFixtureRuntime(fixture)).committed).toEqual({
+    expect((await readPackagedClosureFixtureRuntime(fixture)).active).toMatchObject({
       releaseVersion: fixture.manifest.identity.version,
       standalone: fixture.pointer,
     });
@@ -119,7 +119,7 @@ describe('packaged Closure release fixture', () => {
 
     const successor = await activateBrokenClosureSuccessor(fixture);
     expect(successor.manifest.identity.version).toBe('0.18.0-beta.5');
-    expect((await readPackagedClosureFixtureRuntime(fixture)).committed).toEqual({
+    expect((await readPackagedClosureFixtureRuntime(fixture)).attempt).toMatchObject({
       releaseVersion: successor.manifest.identity.version,
       standalone: successor.pointer,
     });
@@ -127,7 +127,7 @@ describe('packaged Closure release fixture', () => {
       .toContain('damaged Closure successor');
 
     await resetPackagedClosureFixture({ channel: 'beta', installationRoot, namespace: 'release-beta' });
-    expect((await readPackagedClosureFixtureRuntime(fixture)).committed).toBeNull();
+    expect((await readPackagedClosureFixtureRuntime(fixture)).active).toBeNull();
   });
 });
 

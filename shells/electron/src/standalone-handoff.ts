@@ -133,7 +133,7 @@ function requireShellHandle(value: StandaloneHandle): StandaloneShellHandle {
 }
 
 /**
- * Lazy-load one committed Standalone binding. Repeated identical launches
+ * Lazy-load one active Standalone binding. Repeated identical launches
  * share the task; any different binding fails closed. The Shell never imports
  * an app-private module and never falls back after entering bootloader.mjs.
  */
@@ -176,14 +176,14 @@ export function createElectronStandaloneLauncher(
           ) {
             throw new ElectronStandaloneLaunchError(
               "installer-required",
-              "The committed Standalone requires a newer Electron Shell",
+              "The active Standalone requires a newer Electron Shell",
               { cause: error },
             );
           }
           if (error instanceof ElectronStandaloneLaunchError) throw error;
           throw new ElectronStandaloneLaunchError(
             "standalone-start-failed",
-            `Electron Shell could not enter the committed Standalone: ${errorDetail(error)}`,
+            `Electron Shell could not enter the active Standalone: ${errorDetail(error)}`,
             { cause: error },
           );
         }

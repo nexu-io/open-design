@@ -10,7 +10,7 @@ product body.
   host capabilities.
 - Mechanical execution of the Shell-carried Standalone bootstrap resource
   using the Shell-carried official Node, followed by consumption of the one
-  validated committed-generation resolution it returns.
+  validated active-generation resolution it returns.
 - Projection of Electron identity and capabilities into the Standalone handoff
   and generic sidecar control plane.
 - Launcher argv, payload target selection, fallback execution and updater
@@ -40,3 +40,6 @@ product body.
   with the implementation.
 - A `minShellVersion` failure produces `installer-required`; it must never
   silently launch an incompatible Standalone generation.
+- Metadata with a Closure graph is modern: transport it to Standalone and never
+  consume legacy installation-floor fields. Metadata without Closure alone may
+  use the `legacyXxx` adapter path.

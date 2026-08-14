@@ -14,7 +14,10 @@ import {
   type ClosureCandidateManifest,
 } from '@open-design/closure/protocol';
 import {
-  commitStoredClosureCandidate,
+  activatePreparedClosureBinding,
+  authorizePreparedClosureActivation,
+  confirmClosureBindingAttempt,
+  prepareStoredClosureCandidate,
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
@@ -88,7 +91,7 @@ export async function readCommittedPackagedClosureFixture(input: {
   const binding = bindClosureCandidateIdentity(source.manifest.identity, input.namespace);
   const versionPaths = resolveClosureStoreVersionPaths(storePaths, binding);
   const descriptor = await readClosureBindingDescriptor(storePaths);
-  const pointer = descriptor.committed?.standalone;
+  const pointer = descriptor.active?.standalone;
   if (
     pointer == null
     || pointer.channel !== binding.channel
@@ -98,7 +101,7 @@ export async function readCommittedPackagedClosureFixture(input: {
     || pointer.protocolVersion !== binding.protocolVersion
     || pointer.version !== binding.version
   ) {
-    throw new Error('product did not commit the expected Standalone Closure binding');
+    throw new Error('product did not activate the expected Standalone Closure binding');
   }
   return {
     manifest: source.manifest,
@@ -122,10 +125,10 @@ export async function resetPackagedClosureFixture(input: {
 }
 
 /**
- * Release-only bridge for committed-binding acceptance.
+ * Release-only bridge for active-binding acceptance.
  *
  * The release lane has already built and validated the immutable Closure. This
- * helper materializes those exact bytes into the one product Store and commits
+ * helper materializes those exact bytes into the one product Store and activates
  * the binding so a real installed shell can prove attach/fail-closed behavior.
  * It deliberately does not discover or download remote metadata; that update
  * policy belongs to PR8.
@@ -155,21 +158,24 @@ export async function seedPackagedClosureFixture(input: {
     copyFile(manifestPath, versionPaths.manifestPath),
   ]);
   await extractZip(versionPaths.archivePath, { dir: versionPaths.payloadRoot });
-  const committed = await commitStoredClosureCandidate(
+  const prepared = await prepareStoredClosureCandidate(
     storePaths,
     binding,
     manifest.identity.version,
   );
+  await authorizePreparedClosureActivation(storePaths, prepared.prepared);
+  await activatePreparedClosureBinding(storePaths, prepared.prepared, fixtureShell(prepared.prepared));
+  const active = await confirmClosureBindingAttempt(storePaths, prepared.prepared);
   return {
     manifest,
-    pointer: committed.committed.standalone,
+    pointer: active.standalone,
     storePaths,
     versionPaths,
   };
 }
 
 /**
- * Adds a newer committed candidate with the same immutable bytes and then
+ * Adds a newer activation attempt with the same immutable bytes and then
  * damages only its entrypoint. The next shell boot must fail visibly without
  * selecting or restoring another generation.
  */
@@ -202,10 +208,16 @@ export async function activateBrokenClosureSuccessor(
     force: false,
     recursive: true,
   });
-  const committed = await commitStoredClosureCandidate(
+  const prepared = await prepareStoredClosureCandidate(
     fixture.storePaths,
     binding,
     version,
+  );
+  await authorizePreparedClosureActivation(fixture.storePaths, prepared.prepared);
+  const attempt = await activatePreparedClosureBinding(
+    fixture.storePaths,
+    prepared.prepared,
+    fixtureShell(prepared.prepared),
   );
   await writeFile(
     join(versionPaths.payloadRoot, manifest.artifact.entryPath),
@@ -214,9 +226,17 @@ export async function activateBrokenClosureSuccessor(
   );
   return {
     manifest,
-    pointer: committed.committed.standalone,
+    pointer: attempt.standalone,
     storePaths: fixture.storePaths,
     versionPaths,
+  };
+}
+
+function fixtureShell(binding: { releaseVersion: string; standalone: ClosureRuntimePointer }) {
+  return {
+    digest: binding.standalone.digest,
+    type: 'e2e-fixture',
+    version: binding.releaseVersion,
   };
 }
 

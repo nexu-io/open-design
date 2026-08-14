@@ -190,7 +190,7 @@ export async function runPackagedStandalone(
   const target = resolveElectronStandaloneTarget();
   if (target == null) throw new Error(`Standalone is unsupported on ${process.platform}-${process.arch}`);
   const metadataUrl = resolvePackagedStandaloneMetadataUrl(shellConfig.updateMetadataUrl);
-  const releaseVersion = await resolvePackagedStandaloneReleaseVersion(shellConfig.releaseVersion, metadataUrl);
+  const releaseVersion = resolvePackagedStandaloneReleaseVersion(shellConfig.releaseVersion);
   const nodeCommand = resolveShellNodeCommand(shellConfig.nodeCommand);
   const shellDigest = await digestElectronShellEntry(options.shellEntryUrl);
   const resolution = await resolveStandaloneViaOfficialNode({

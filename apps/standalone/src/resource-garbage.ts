@@ -18,7 +18,7 @@ export type ClosureResourceDiscardResult = Readonly<{
 
 const CONTENT_ADDRESS = /^[0-9a-f]{64}$/u;
 
-async function committedChannelReferences(paths: ClosureStorePaths): Promise<Readonly<{
+async function liveChannelReferences(paths: ClosureStorePaths): Promise<Readonly<{
   blobs: ReadonlySet<string>;
   resources: ReadonlySet<string>;
 }>> {
@@ -39,19 +39,30 @@ async function committedChannelReferences(paths: ClosureStorePaths): Promise<Rea
       root: paths.root,
     });
     const descriptor = await readClosureBindingDescriptor(namespacePaths);
-    if (descriptor.committed == null) continue;
-    const pointer = descriptor.committed.standalone;
-    const manifest = await readStoredClosureDistributionManifest(namespacePaths, pointer);
-    const plan = planClosureDistributionGeneration(
-      namespacePaths,
-      pointer.generation,
-      manifest,
-      pointer.target,
-    );
-    for (const blobPath of plan.requiredBlobPaths) blobs.add(basename(blobPath));
-    for (const resource of plan.resources) {
-      blobs.add(basename(resource.blobPath));
-      resources.add(basename(resource.resourceRoot));
+    const references = [
+      descriptor.active,
+      descriptor.attempt,
+      descriptor.lastSuccessful,
+      descriptor.prepared,
+    ].filter((binding) => binding != null);
+    const seen = new Set<string>();
+    for (const binding of references) {
+      const pointer = binding.standalone;
+      const key = `${pointer.generation}:${pointer.digest}:${pointer.target}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const manifest = await readStoredClosureDistributionManifest(namespacePaths, pointer);
+      const plan = planClosureDistributionGeneration(
+        namespacePaths,
+        pointer.generation,
+        manifest,
+        pointer.target,
+      );
+      for (const blobPath of plan.requiredBlobPaths) blobs.add(basename(blobPath));
+      for (const resource of plan.resources) {
+        blobs.add(basename(resource.blobPath));
+        resources.add(basename(resource.resourceRoot));
+      }
     }
   }
   return Object.freeze({ blobs, resources });
@@ -84,12 +95,12 @@ async function discardUnreferencedRoot(input: Readonly<{
 
 /**
  * Caller-owned conservative sweep. This runs under the channel maintenance
- * lock; any unreadable committed graph aborts before the first discard.
+ * lock; any unreadable retained graph aborts before the first discard.
  */
 export async function discardUnreferencedClosureResources(
   paths: ClosureStorePaths,
 ): Promise<ClosureResourceDiscardResult> {
-  const live = await committedChannelReferences(paths);
+  const live = await liveChannelReferences(paths);
   const discardedResources = await discardUnreferencedRoot({
     entriesAreDirectories: true,
     live: live.resources,

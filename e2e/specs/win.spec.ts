@@ -12,7 +12,10 @@ import { promisify } from 'node:util';
 import { describe, expect, test } from 'vitest';
 import { bindClosureCandidateIdentity } from '@open-design/closure/protocol';
 import {
-  commitVerifiedStoredClosureCandidate,
+  activatePreparedClosureBinding,
+  authorizePreparedClosureActivation,
+  confirmClosureBindingAttempt,
+  prepareVerifiedStoredClosureCandidate,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
   verifyStoredClosureCandidate,
@@ -885,7 +888,7 @@ winDescribe('packaged windows runtime smoke', () => {
         if (closureAcceptance == null) throw new Error('Windows Shell did not commit the expected Closure fixture');
         const closureRuntime = await readPackagedClosureFixtureRuntime(closureAcceptance);
         expectedStandaloneVersion = closureAcceptance.manifest.identity.version;
-        const committedClosureReleaseVersion = closureRuntime.committed?.releaseVersion;
+        const committedClosureReleaseVersion = closureRuntime.active?.releaseVersion;
         if (committedClosureReleaseVersion == null) {
           throw new Error('Windows Shell did not commit a Closure release version');
         }
@@ -1717,28 +1720,16 @@ winClosureDescribe('packaged Windows Standalone Closure release acceptance', () 
       const broken = await measureSmokeStep(timings, 'materialize damaged successor', async () =>
         activateBrokenClosureSuccessor(fixture),
       );
-      const brokenStart = await measureSmokeStep(timings, 'start damaged successor fail-fast', async () =>
+      expect((await readPackagedClosureFixtureRuntime(fixture)).attempt?.standalone).toEqual(broken.pointer);
+      await measureSmokeStep(timings, 'rollback interrupted successor on start', async () =>
         runToolsPackJson<WinStartResult>('start'),
       );
-      expect(brokenStart.status).toBeNull();
-      expect(brokenStart.processExitedBeforeStatus).toBe(true);
-      await measureSmokeStep(timings, 'assert damaged successor stayed closed', async () =>
-        waitForDesktopGone('damaged Closure never became the desktop'),
-      );
-      await expect(readDesktopIdentityMarker()).rejects.toThrow();
-      const brokenDesktopLog = await readFile(join(runtimeNamespaceRoot, 'logs', 'desktop', 'latest.log'), 'utf8');
-      expect(brokenDesktopLog).toContain('Committed Standalone failed immutable Store verification');
-      expect(brokenDesktopLog).toContain('"code":1');
-      expect((await readPackagedClosureFixtureRuntime(fixture)).committed?.standalone).toEqual(broken.pointer);
-
-      const recovered = await measureSmokeStep(timings, 'restore verified good binding', async () =>
-        restoreReusableWinPackagedClosureFixture(fixture),
-      );
-      await measureSmokeStep(timings, 'start recovered binding', async () => runToolsPackJson<WinStartResult>('start'));
       started = true;
-      await measureSmokeStep(timings, 'recovered binding healthy wait', async () => waitForHealthyDesktop());
-      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
-      expect((await readPackagedClosureFixtureRuntime(recovered)).committed?.standalone).toEqual(recovered.pointer);
+      await measureSmokeStep(timings, 'rolled-back binding healthy wait', async () => waitForHealthyDesktop());
+      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+      const recovered = await readPackagedClosureFixtureRuntime(fixture);
+      expect(recovered.active?.standalone).toEqual(fixture.pointer);
+      expect(recovered.attempt).toBeNull();
     } finally {
       if (started) {
         await measureSmokeStep(timings, 'cleanup stop', async () =>
@@ -3614,37 +3605,38 @@ async function seedReusableWinPackagedClosureFixture(input: {
   const verification = await measureSmokeStep(input.timings, 'closure fixture verify immutable bytes', async () =>
     verifyStoredClosureCandidate(storePaths, binding),
   );
-  const committed = await measureSmokeStep(input.timings, 'closure fixture commit verified binding', async () =>
-    commitVerifiedStoredClosureCandidate(storePaths, verification, source.manifest.identity.version),
+  const active = await measureSmokeStep(input.timings, 'closure fixture activate verified binding', async () =>
+    activateVerifiedFixture(storePaths, verification, source.manifest.identity.version),
   );
   return {
     manifest: source.manifest,
-    pointer: committed.committed.standalone,
+    pointer: active.standalone,
     storePaths,
     verification,
     versionPaths,
   };
 }
 
-async function restoreReusableWinPackagedClosureFixture(
-  fixture: ReusableWinPackagedClosureFixture,
-): Promise<ReusableWinPackagedClosureFixture> {
-  const committed = await commitVerifiedStoredClosureCandidate(
-    fixture.storePaths,
-    fixture.verification,
-    fixture.manifest.identity.version,
-  );
-  return {
-    ...fixture,
-    pointer: committed.committed.standalone,
-  };
+async function activateVerifiedFixture(
+  storePaths: ReturnType<typeof resolveClosureStorePaths>,
+  verification: StoredClosureVerification,
+  releaseVersion: string,
+) {
+  const prepared = await prepareVerifiedStoredClosureCandidate(storePaths, verification, releaseVersion);
+  await authorizePreparedClosureActivation(storePaths, prepared.prepared);
+  await activatePreparedClosureBinding(storePaths, prepared.prepared, {
+    digest: prepared.prepared.standalone.digest,
+    type: 'e2e-fixture',
+    version: releaseVersion,
+  });
+  return await confirmClosureBindingAttempt(storePaths, prepared.prepared);
 }
 
 /**
  * `publish=false` release acceptance cannot discover the Closure it has just
  * built through remote channel metadata. Commit those exact workflow bytes to
  * the local Store before the first Shell boot; every later restart/update in
- * the scenario must reuse the committed binding without further test help.
+ * the scenario must reuse the active binding without further test help.
  */
 async function seedConfiguredPackagedClosure(): Promise<PackagedStandaloneDistributionFixture | null> {
   if (closureDistributionManifestPath != null) {
@@ -3712,7 +3704,7 @@ async function runWinStandaloneDistributionAcceptance(): Promise<void> {
     await startWindowsDesktopOrThrow('exact-version repair start');
     started = true;
     await waitForHealthyDesktop();
-    const repaired = (await readPackagedStandaloneDistributionBinding(fixture)).committed?.standalone;
+    const repaired = (await readPackagedStandaloneDistributionBinding(fixture)).active?.standalone;
     expect(repaired).toMatchObject({
       digest: fixture.pointer.digest,
       target: fixture.pointer.target,

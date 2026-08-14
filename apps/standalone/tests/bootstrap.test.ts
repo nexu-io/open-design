@@ -11,7 +11,11 @@ import {
   createClosureDistributionManifest,
   type ClosureDistributionBlob,
 } from "@open-design/closure/protocol";
-import { readClosureBindingDescriptor, resolveClosureStorePaths } from "@open-design/closure/store";
+import {
+  confirmClosureBindingAttempt,
+  readClosureBindingDescriptor,
+  resolveClosureStorePaths,
+} from "@open-design/closure/store";
 import { bootstrapSidecarLifecycle } from "@open-design/sidecar/lifecycle";
 import {
   STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
@@ -24,6 +28,7 @@ import { resolveStandaloneBootstrap } from "../src/bootstrap.js";
 import { discardUnreferencedClosureResources } from "../src/resource-garbage.js";
 import { prepareStandaloneResourceEnv } from "../src/resource-runtime.js";
 import { STANDALONE_RESOURCE_ROOTS_ENV } from "../src/tool-env.js";
+import { prepareStandaloneUpdate } from "../src/update-runtime.js";
 
 const roots: string[] = [];
 
@@ -106,6 +111,7 @@ async function fixture() {
             resources: [{
               blob: artifacts.vela.digest,
               id: "vela-runtime",
+              startup: "blocking",
               title: "Vela runtime",
               treeDigest: tree(source.vela),
             }],
@@ -116,12 +122,14 @@ async function fixture() {
         {
           blob: artifacts.plugins.digest,
           id: "plugins",
+          startup: "blocking",
           title: "Plugin registry",
           treeDigest: tree(source.plugins),
         },
         {
           blob: artifacts.skills.digest,
           id: "skills",
+          startup: "lazy",
           title: "Skills",
           treeDigest: tree(source.skills),
         },
@@ -217,6 +225,13 @@ async function consumeTransition(
     transition,
   });
   if (completed.state !== "completed") throw new Error("fixture transition completion was rejected");
+  const paths = resolveClosureStorePaths({
+    channel: "beta",
+    namespace: "release-beta",
+    root: value.paths.installationRoot,
+  });
+  const descriptor = await readClosureBindingDescriptor(paths);
+  if (descriptor.attempt != null) await confirmClosureBindingAttempt(paths, descriptor.attempt);
   await lifecycle.detach(attached.credential);
 }
 
@@ -239,7 +254,7 @@ describe("Standalone unresolved bootstrap", () => {
       target: "darwin-arm64",
     });
     const store = resolveClosureStorePaths({ channel: "beta", namespace: "release-beta", root: value.paths.installationRoot });
-    expect((await readClosureBindingDescriptor(store)).committed?.standalone.generation).toBe(0);
+    expect((await readClosureBindingDescriptor(store)).active?.standalone.generation).toBe(0);
     expect((await stat(join(store.blobsRoot, value.artifacts.plugins.digest.slice("sha256:".length)))).isFile())
       .toBe(true);
     expect(await stat(join(store.blobsRoot, value.artifacts.skills.digest.slice("sha256:".length))).catch(() => null))
@@ -387,7 +402,7 @@ describe("Standalone unresolved bootstrap", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("aligns an older committed Standalone to the requested release", async () => {
+  it("does not reinterpret a newer Shell release binding as a Standalone update", async () => {
     const value = await fixture();
     await consumeTransition(
       value,
@@ -396,11 +411,80 @@ describe("Standalone unresolved bootstrap", () => {
     const resolution = await resolveStandaloneBootstrap(request(value, "0.19.0-beta.2"), { fetch: value.fetch });
     await consumeTransition(value, resolution);
 
-    expect(resolution.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.2");
-    expect(resolution.handoff.handoff.scope.generation).toBe(1);
+    expect(resolution.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.1");
+    expect(resolution.handoff.handoff.scope.generation).toBe(0);
   });
 
-  it("keeps Shell identity independent while aligning Standalone to a newer release", async () => {
+  it("keeps prepared bytes inactive until silent activation is authorized", async () => {
+    const value = await fixture();
+    await consumeTransition(
+      value,
+      await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), { fetch: value.fetch }),
+    );
+    const metadata = {
+      channel: "beta",
+      closure: value.manifests["0.19.0-beta.2"],
+      closureControl: createClosureDistributionControl(value.manifests["0.19.0-beta.2"]),
+      releaseState: "complete",
+      releaseVersion: "0.19.0-beta.2",
+    };
+    const updateInput = {
+      channel: "beta",
+      fetch: value.fetch,
+      metadata,
+      namespace: "release-beta",
+      repositoryConfigPath: value.repositoryConfigPath,
+      shellType: "electron",
+      shellVersion: "0.19.0-beta.1",
+      storeRoot: value.paths.installationRoot,
+      target: "darwin-arm64",
+    } as const;
+
+    await prepareStandaloneUpdate({ ...updateInput, activateOnRestart: false });
+    const current = await resolveStandaloneBootstrap(
+      request(value, "0.19.0-beta.1", null),
+      { fetch: value.fetch },
+    );
+    expect(current.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.1");
+
+    await prepareStandaloneUpdate({ ...updateInput, activateOnRestart: true });
+    const activated = await resolveStandaloneBootstrap(
+      request(value, "0.19.0-beta.1", null),
+      { fetch: value.fetch },
+    );
+    expect(activated.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.2");
+    await consumeTransition(value, activated);
+  });
+
+  it("does not recover an attempt while its lifecycle transition is still owned", async () => {
+    const value = await fixture();
+    const first = await resolveStandaloneBootstrap(
+      request(value, "0.19.0-beta.1"),
+      { fetch: value.fetch },
+    );
+
+    await expect(resolveStandaloneBootstrap(
+      request(value, "0.19.0-beta.1"),
+      { fetch: value.fetch },
+    )).rejects.toMatchObject({ code: "standalone-occupied" });
+
+    const store = resolveClosureStorePaths({
+      channel: "beta",
+      namespace: "release-beta",
+      root: value.paths.installationRoot,
+    });
+    expect((await readClosureBindingDescriptor(store)).attempt?.standalone.generation).toBe(0);
+    const transition = first.handoff.transition;
+    if (transition != null) {
+      const lifecycle = bootstrapSidecarLifecycle({
+        controlRoot: value.paths.dataRoot,
+        scope: { channel: "beta", namespace: "release-beta" },
+      });
+      await lifecycle.abortTransition(transition);
+    }
+  });
+
+  it("keeps Shell identity independent from Standalone update discovery", async () => {
     const value = await fixture();
     await consumeTransition(
       value,
@@ -413,8 +497,8 @@ describe("Standalone unresolved bootstrap", () => {
     await consumeTransition(value, resolution);
 
     expect(resolution.handoff.attachment.shell.version).toBe("0.19.0-beta.1");
-    expect(resolution.handoff.handoff.descriptor.release.version).toBe("0.19.0-beta.2");
-    expect(resolution.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.2");
+    expect(resolution.handoff.handoff.descriptor.release.version).toBe("0.19.0-beta.1");
+    expect(resolution.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.1");
   });
 
   it("keeps a newer compatible Standalone when an older Shell attaches", async () => {
@@ -452,7 +536,7 @@ describe("Standalone unresolved bootstrap", () => {
     )).rejects.toMatchObject({ code: "installer-required" });
   });
 
-  it("quick-fails an alignment while another Shell lease owns the namespace", async () => {
+  it("quick-fails a new Shell combination while another attachment owns the namespace", async () => {
     const value = await fixture();
     await consumeTransition(
       value,

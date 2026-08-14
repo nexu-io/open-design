@@ -11,10 +11,7 @@ import {
 } from "@open-design/closure/update";
 import type { ClosureDistributionManifest } from "@open-design/closure/protocol";
 
-import {
-  STANDALONE_BOOT_RESOURCE_IDS,
-  VELA_RUNTIME_RESOURCE_ID,
-} from "./tool-env.js";
+import { VELA_RUNTIME_RESOURCE_ID } from "./tool-env.js";
 import { discardUnreferencedClosureResources } from "./resource-garbage.js";
 export {
   prepareStandaloneResourceEnv,
@@ -37,11 +34,13 @@ export async function ensureStandaloneBootResources(input: Readonly<{
   target: string;
 }>): Promise<readonly StandalonePreparedResource[]> {
   const plan = planClosureDistributionGeneration(input.paths, 0, input.manifest, input.target);
-  const requiredIds = new Set<string>(STANDALONE_BOOT_RESOURCE_IDS);
-  if (!(process.env.VELA_BIN?.trim() && process.env.VELA_OPENCODE_BIN?.trim())) {
-    requiredIds.add(VELA_RUNTIME_RESOURCE_ID);
-  }
-  const required = plan.resources.filter((entry) => requiredIds.has(entry.id));
+  const required = plan.resources.filter((entry) => (
+    entry.startup === "blocking"
+    && (
+      entry.id !== VELA_RUNTIME_RESOURCE_ID
+      || !(process.env.VELA_BIN?.trim() && process.env.VELA_OPENCODE_BIN?.trim())
+    )
+  ));
   if (required.length === 0) return [];
   const lock = await acquireClosureChannelLock(input.paths, { waitMs: 30_000 });
   if (lock == null) throw new Error("Closure channel resources are busy");

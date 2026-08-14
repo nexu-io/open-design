@@ -698,7 +698,7 @@ export function validateStandaloneHandoffEnvelope(
     )
   ) {
     throw new StandaloneProtocolError(
-      "standalone handoff does not match the committed generation and descriptor",
+      "standalone handoff does not match the active generation and descriptor",
     );
   }
   return normalized;

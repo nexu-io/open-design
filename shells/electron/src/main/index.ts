@@ -25,6 +25,7 @@ import {
   type WebStatusSnapshot,
 } from "@open-design/sidecar/protocol";
 import type { StandaloneLifecyclePort, StandaloneRuntimeStatus } from "@open-design/standalone/protocol";
+import type { DesktopStandaloneUpdatePreparation } from "./updater.js";
 import { dirname, join } from "node:path";
 
 import {
@@ -213,6 +214,10 @@ export type DesktopMainOptions = {
     launcherRoot?: string | null;
     launcherPayloadExtractorPath?: string | null;
     launcherRuntimePath?: string | null;
+    prepareStandaloneUpdate?: (
+      metadata: Record<string, unknown>,
+      options?: { activateOnRestart?: boolean },
+    ) => Promise<DesktopStandaloneUpdatePreparation>;
   };
 };
 
@@ -767,7 +772,16 @@ export async function runDesktopMain(
       runtimeBase: runtime.base,
       source: runtime.source,
     },
-    { openPath: (path) => shell.openPath(path) },
+    {
+      openPath: (path) => shell.openPath(path),
+      ...(options.update?.prepareStandaloneUpdate == null
+        ? {}
+        : {
+            prepareStandaloneUpdate: async (metadata, preparation) => {
+              return await options.update!.prepareStandaloneUpdate!(metadata, preparation);
+            },
+          }),
+    },
   );
   const updateTransition = new DesktopUpdateTransitionOwner(options.standaloneLifecycle);
   // Resolve the namespace root the same way the daemon diagnostics export does
@@ -1075,6 +1089,11 @@ export async function runDesktopMain(
     backoffMaxMs: updater.config.checkBackoffMaxMs,
     initialDelayMs: updater.config.checkInitialDelayMs,
     intervalMs: updater.config.checkIntervalMs,
+    standaloneActivationOnRestart: async () => {
+      const baseUrl = await discoverUpdaterAppConfigBaseUrl();
+      const config = await readAppConfigFromDaemon(baseUrl);
+      return config.allowSilentUpdates === true;
+    },
     startupSilentPayloadUpdate: {
       isEnabled: async () => {
         const baseUrl = await discoverUpdaterAppConfigBaseUrl();

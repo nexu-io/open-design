@@ -93,6 +93,7 @@ describe("Closure contribution publication boundary", () => {
           url: `https://releases.open-design.test/beta/versions/0.19.0-beta.9/closure/blobs/${resource.slice("sha256:".length)}`,
         },
         id: "vela-runtime",
+        startup: "blocking",
         title: "Vela runtime",
         treeDigest: digest("vela tree"),
       }],

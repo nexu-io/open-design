@@ -2,9 +2,9 @@ import { isReleaseChannel, type ReleaseChannel } from "@open-design/release";
 import { normalizeNamespace } from "@open-design/sidecar/protocol";
 
 export const CLOSURE_SCHEMA_VERSION = 1 as const;
-export const CLOSURE_DISTRIBUTION_SCHEMA_VERSION = 3 as const;
+export const CLOSURE_DISTRIBUTION_SCHEMA_VERSION = 4 as const;
 export const CLOSURE_DISTRIBUTION_CONTROL_SCHEMA_VERSION = 1 as const;
-export const CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION = 2 as const;
+export const CLOSURE_DISTRIBUTION_CONTRIBUTION_SCHEMA_VERSION = 3 as const;
 export const CLOSURE_PROTOCOL_VERSION = 1 as const;
 export const CLOSURE_INVENTORY_SCHEMA_VERSION = 1 as const;
 export const CLOSURE_SIGNATURE_SCHEMA_VERSION = 1 as const;
@@ -102,6 +102,7 @@ export type ClosureDistributionTarget = {
 
 export type ClosureDistributionResource = ClosureDistributionComponent & {
   id: string;
+  startup: "blocking" | "lazy";
   title: string;
 };
 
@@ -161,6 +162,7 @@ export type ClosureDistributionSharedContribution = {
   resources: Array<{
     artifact: ClosureDistributionBlob;
     id: string;
+    startup: "blocking" | "lazy";
     title: string;
     treeDigest: ClosureDigest;
   }>;
@@ -176,6 +178,7 @@ export type ClosureDistributionTargetContribution = {
   resources: Array<{
     artifact: ClosureDistributionBlob;
     id: string;
+    startup: "blocking" | "lazy";
     title: string;
     treeDigest: ClosureDigest;
   }>;

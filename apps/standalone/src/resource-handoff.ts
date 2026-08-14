@@ -12,12 +12,11 @@ import {
 import {
   bundledStandaloneToolEnv,
   lazyVelaRuntimeEnv,
-  STANDALONE_BOOT_RESOURCE_IDS,
   standaloneResourceRootsEnv,
   VELA_RUNTIME_RESOURCE_ID,
 } from "./tool-env.js";
 
-/** Project an already-prepared resource into the committed body process. */
+/** Project prepared blocking resources into the active body process. */
 export async function prepareStandaloneResourceEnv(
   requestInput: StandaloneHandoffRequest,
 ): Promise<NodeJS.ProcessEnv> {
@@ -29,26 +28,25 @@ export async function prepareStandaloneResourceEnv(
     root: request.closure.storeRoot,
   });
   const binding = await readClosureBindingDescriptor(paths);
-  const committed = binding.committed;
+  const active = binding.active;
   if (
-    committed == null
-    || committed.standalone.digest !== request.handoff.descriptor.standalone.digest
-    || committed.standalone.target !== request.closure.target
+    active == null
+    || active.standalone.digest !== request.handoff.descriptor.standalone.digest
+    || active.standalone.target !== request.closure.target
   ) {
-    throw new Error("Standalone Vela resource context does not match the committed Closure generation");
+    throw new Error("Standalone resource context does not match the active Closure generation");
   }
-  const manifest = await readStoredClosureDistributionManifest(paths, committed.standalone);
+  const manifest = await readStoredClosureDistributionManifest(paths, active.standalone);
   const plan = planClosureDistributionGeneration(
     paths,
-    committed.standalone.generation,
+    active.standalone.generation,
     manifest,
     request.closure.target,
   );
   const resource = plan.resources.find((entry) => entry.id === VELA_RUNTIME_RESOURCE_ID);
-  const bootResourceIds = new Set<string>(STANDALONE_BOOT_RESOURCE_IDS);
   const roots = new Map(
     plan.resources
-      .filter((entry) => bootResourceIds.has(entry.id))
+      .filter((entry) => entry.startup === "blocking")
       .map((entry) => [entry.id, entry.resourceRoot]),
   );
   return {

@@ -20,11 +20,6 @@ export const STANDALONE_DAEMON_RESOURCE_IDS = Object.freeze([
 
 export type StandaloneDaemonResourceId = (typeof STANDALONE_DAEMON_RESOURCE_IDS)[number];
 
-/** Shared resources required before the daemon may report product readiness. */
-export const STANDALONE_BOOT_RESOURCE_IDS = Object.freeze([
-  "plugins",
-] as const satisfies readonly StandaloneDaemonResourceId[]);
-
 export function standaloneResourceRootsEnv(
   resources: ReadonlyMap<string, string>,
 ): NodeJS.ProcessEnv {

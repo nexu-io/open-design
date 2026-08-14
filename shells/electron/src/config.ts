@@ -217,32 +217,13 @@ export function resolvePackagedStandaloneMetadataUrl(
     ?? cleanOptionalString(configuredUrl ?? undefined);
 }
 
-/**
- * Reusable Shell bytes intentionally carry no product release binding. Resolve
- * that binding from the same public metadata document the Closure bootstrap
- * will subsequently verify and pin to its immutable version URL.
- */
-export async function resolvePackagedStandaloneReleaseVersion(
+/** Resolve the install-time Standalone binding without consulting mutable metadata. */
+export function resolvePackagedStandaloneReleaseVersion(
   configuredVersion: string | null | undefined,
-  metadataUrl: string | null | undefined,
-  fetchImpl: typeof fetch = fetch,
-): Promise<string> {
+): string {
   const configured = cleanOptionalString(configuredVersion ?? undefined);
   if (configured != null) return configured;
-  const url = cleanOptionalString(metadataUrl ?? undefined);
-  if (url == null) throw new Error("Standalone release version and metadata URL are unavailable");
-  const response = await fetchImpl(url, { headers: { accept: "application/json" } });
-  if (!response.ok) throw new Error(`Standalone release metadata request failed with HTTP ${response.status}`);
-  const value = await response.json() as unknown;
-  if (value == null || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Standalone release metadata must be an object");
-  }
-  const rawReleaseVersion = (value as { releaseVersion?: unknown }).releaseVersion;
-  const releaseVersion = typeof rawReleaseVersion === "string"
-    ? cleanOptionalString(rawReleaseVersion)
-    : null;
-  if (releaseVersion == null) throw new Error("Standalone release metadata does not declare releaseVersion");
-  return releaseVersion;
+  throw new Error("Packaged Standalone release binding is unavailable");
 }
 
 function isTruthyEnv(value: string | undefined): boolean {

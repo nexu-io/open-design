@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  confirmClosureBindingAttempt,
+  resolveClosureStorePaths,
+  rollbackClosureBindingAttempt,
+} from "@open-design/closure/store";
 
 import {
   SidecarControlError,
@@ -194,6 +199,22 @@ export async function exposeStandaloneShellBridge(options: Readonly<{
   let activeTransition: SidecarTransitionCredential | null = null;
   let activeTransitionHandle: StandaloneLifecycleTransition | null = null;
   let heartbeat: NodeJS.Timeout;
+  const closurePaths = descriptor.closure == null
+    ? null
+    : resolveClosureStorePaths({
+        channel: descriptor.handoff.scope.channel,
+        namespace: descriptor.handoff.scope.namespace,
+        root: descriptor.closure.storeRoot,
+      });
+  const closurePointer = {
+    channel: descriptor.handoff.scope.channel,
+    digest: descriptor.handoff.descriptor.standalone.digest,
+    generation: descriptor.handoff.scope.generation,
+    namespace: descriptor.handoff.scope.namespace,
+    protocolVersion: descriptor.handoff.descriptor.standalone.protocolVersion,
+    target: descriptor.closure?.target ?? "unknown-unknown",
+    version: descriptor.handoff.descriptor.standalone.version,
+  } as const;
   const releaseActiveTransition = async (): Promise<void> => {
     const credential = activeTransition;
     activeTransition = null;
@@ -234,6 +255,9 @@ export async function exposeStandaloneShellBridge(options: Readonly<{
     async abortTransition() {
       if (transitionCompleted || descriptor.transition == null) return;
       await lifecycle.abortTransition(descriptor.transition).catch(() => undefined);
+      if (closurePaths != null) {
+        await rollbackClosureBindingAttempt(closurePaths, closurePointer).catch(() => undefined);
+      }
     },
     async completeTransition() {
       if (transitionCompleted || descriptor.transition == null) return;
@@ -243,6 +267,9 @@ export async function exposeStandaloneShellBridge(options: Readonly<{
       });
       if (result.state === "rejected") {
         throw new Error(`Standalone transition completion was rejected: ${result.reason}`);
+      }
+      if (closurePaths != null) {
+        await confirmClosureBindingAttempt(closurePaths, closurePointer);
       }
       transitionCompleted = true;
     },

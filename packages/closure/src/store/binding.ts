@@ -5,16 +5,18 @@ import { isAbsolute, join, resolve, sep } from "node:path";
 
 import {
   isClosureChannel,
+  normalizeDigest,
   validateClosureBindingIdentity,
   type ClosureBindingIdentity,
   type ClosureCandidateManifest,
   type ClosureChannel,
+  type ClosureDigest,
   type ClosureFileInventory,
 } from "../protocol/index.js";
 import { normalizeNamespace } from "@open-design/sidecar/protocol";
 
-export const CLOSURE_BINDING_SCHEMA_VERSION = 3 as const;
-export const CLOSURE_STORE_EPOCH = 3 as const;
+export const CLOSURE_BINDING_SCHEMA_VERSION = 4 as const;
+export const CLOSURE_STORE_EPOCH = 4 as const;
 
 export type ClosureStoreRequest = {
   channel: string;
@@ -54,16 +56,30 @@ export type ClosureRuntimePointer = Omit<ClosureBindingIdentity, "platform"> & {
   target: string;
 };
 
-export type CommittedClosureBinding = {
+export type ClosureReleaseBinding = {
   releaseVersion: string;
   standalone: ClosureRuntimePointer;
 };
 
+export type ClosureShellBinding = {
+  digest: ClosureDigest;
+  type: string;
+  version: string;
+};
+
+export type ClosureRuntimeBinding = ClosureReleaseBinding & {
+  shell: ClosureShellBinding;
+};
+
 export type ClosureBindingDescriptor = {
+  active: ClosureRuntimeBinding | null;
+  attempt: ClosureRuntimeBinding | null;
+  activationAuthorized: boolean;
   channel: ClosureChannel;
-  committed: CommittedClosureBinding | null;
+  lastSuccessful: ClosureRuntimeBinding | null;
   namespace: string;
   nextGeneration: number;
+  prepared: ClosureReleaseBinding | null;
   schemaVersion: typeof CLOSURE_BINDING_SCHEMA_VERSION;
   updatedAt: string;
 };
@@ -221,16 +237,73 @@ export function closureBindingIdentityFromRuntimePointer(
   });
 }
 
-function normalizeCommittedBinding(
+function normalizeReleaseBinding(
   value: unknown,
   expected: Pick<ClosureStorePaths, "channel" | "namespace">,
-): CommittedClosureBinding {
-  const committed = requireRecord(value, "Committed Closure binding");
-  assertExactKeys(committed, ["releaseVersion", "standalone"], "Committed Closure binding");
+): ClosureReleaseBinding {
+  const binding = requireRecord(value, "Closure release binding");
+  assertExactKeys(binding, ["releaseVersion", "standalone"], "Closure release binding");
   return {
-    releaseVersion: normalizeReleaseVersion(committed.releaseVersion),
-    standalone: normalizePointer(committed.standalone, expected),
+    releaseVersion: normalizeReleaseVersion(binding.releaseVersion),
+    standalone: normalizePointer(binding.standalone, expected),
   };
+}
+
+export function normalizeShellBinding(value: unknown): ClosureShellBinding {
+  const shell = requireRecord(value, "Closure Shell binding");
+  assertExactKeys(shell, ["digest", "type", "version"], "Closure Shell binding");
+  const type = typeof shell.type === "string" ? shell.type : "";
+  const version = typeof shell.version === "string" ? shell.version : "";
+  if (type.length === 0 || type !== type.trim() || version.length === 0 || version !== version.trim()) {
+    throw new ClosureStoreError("Closure Shell type and version must be non-empty trimmed strings");
+  }
+  return { digest: normalizeDigest(shell.digest), type, version };
+}
+
+function normalizeRuntimeBinding(
+  value: unknown,
+  expected: Pick<ClosureStorePaths, "channel" | "namespace">,
+): ClosureRuntimeBinding {
+  const binding = requireRecord(value, "Closure runtime binding");
+  assertExactKeys(binding, ["releaseVersion", "shell", "standalone"], "Closure runtime binding");
+  return {
+    releaseVersion: normalizeReleaseVersion(binding.releaseVersion),
+    shell: normalizeShellBinding(binding.shell),
+    standalone: normalizePointer(binding.standalone, expected),
+  };
+}
+
+export function sameReleaseBinding(
+  left: ClosureReleaseBinding,
+  right: ClosureReleaseBinding,
+): boolean {
+  return left.releaseVersion === right.releaseVersion
+    && left.standalone.generation === right.standalone.generation
+    && left.standalone.channel === right.standalone.channel
+    && left.standalone.namespace === right.standalone.namespace
+    && left.standalone.protocolVersion === right.standalone.protocolVersion
+    && left.standalone.target === right.standalone.target
+    && left.standalone.version === right.standalone.version
+    && left.standalone.digest === right.standalone.digest;
+}
+
+export function sameRuntimeBinding(
+  left: ClosureRuntimeBinding,
+  right: ClosureRuntimeBinding,
+): boolean {
+  return sameReleaseBinding(left, right)
+    && left.shell.digest === right.shell.digest
+    && left.shell.type === right.shell.type
+    && left.shell.version === right.shell.version;
+}
+
+export function sameShellBinding(
+  left: ClosureShellBinding,
+  right: ClosureShellBinding,
+): boolean {
+  return left.digest === right.digest
+    && left.type === right.type
+    && left.version === right.version;
 }
 
 export function validateClosureBindingDescriptor(
@@ -239,10 +312,14 @@ export function validateClosureBindingDescriptor(
 ): ClosureBindingDescriptor {
   const descriptor = requireRecord(value, "Closure binding descriptor");
   assertExactKeys(descriptor, [
+    "active",
+    "attempt",
+    "activationAuthorized",
     "channel",
-    "committed",
+    "lastSuccessful",
     "namespace",
     "nextGeneration",
+    "prepared",
     "schemaVersion",
     "updatedAt",
   ], "Closure binding descriptor");
@@ -254,18 +331,44 @@ export function validateClosureBindingDescriptor(
   if (channel !== expected.channel || namespace !== expected.namespace) {
     throw new ClosureStoreError("Closure binding descriptor does not match its channel/namespace store");
   }
-  const committed = descriptor.committed == null
+  const active = descriptor.active == null ? null : normalizeRuntimeBinding(descriptor.active, expected);
+  const attempt = descriptor.attempt == null ? null : normalizeRuntimeBinding(descriptor.attempt, expected);
+  const lastSuccessful = descriptor.lastSuccessful == null
     ? null
-    : normalizeCommittedBinding(descriptor.committed, expected);
+    : normalizeRuntimeBinding(descriptor.lastSuccessful, expected);
+  const prepared = descriptor.prepared == null
+    ? null
+    : normalizeReleaseBinding(descriptor.prepared, expected);
+  if (typeof descriptor.activationAuthorized !== "boolean") {
+    throw new ClosureStoreError("Closure activation authorization flag must be boolean");
+  }
+  if (prepared == null && descriptor.activationAuthorized) {
+    throw new ClosureStoreError("Closure activation authorization requires a prepared binding");
+  }
   const nextGeneration = normalizeGeneration(descriptor.nextGeneration);
-  if (committed != null && committed.standalone.generation >= nextGeneration) {
-    throw new ClosureStoreError("Closure nextGeneration must be greater than the committed generation");
+  const retained = [active, attempt, lastSuccessful, prepared].filter(
+    (binding): binding is ClosureReleaseBinding => binding != null,
+  );
+  if (retained.some((binding) => binding.standalone.generation >= nextGeneration)) {
+    throw new ClosureStoreError("Closure nextGeneration must be greater than every retained generation");
+  }
+  if (attempt != null && (active == null || !sameRuntimeBinding(active, attempt))) {
+    throw new ClosureStoreError("Closure attempt must match the active binding");
+  }
+  if (attempt == null && active != null && (
+    lastSuccessful == null || !sameRuntimeBinding(active, lastSuccessful)
+  )) {
+    throw new ClosureStoreError("Closure active binding must be the pending attempt or last successful binding");
   }
   return {
+    active,
+    attempt,
+    activationAuthorized: descriptor.activationAuthorized,
     channel,
-    committed,
+    lastSuccessful,
     namespace,
     nextGeneration,
+    prepared,
     schemaVersion: CLOSURE_BINDING_SCHEMA_VERSION,
     updatedAt: normalizeIsoString(descriptor.updatedAt, "Closure binding updatedAt"),
   };

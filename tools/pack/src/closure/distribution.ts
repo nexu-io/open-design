@@ -33,6 +33,7 @@ export type ClosureDistributionArtifactSource = Readonly<{
 
 export type ClosureDistributionResourceSource = ClosureDistributionArtifactSource & Readonly<{
   id: string;
+  startup: "blocking" | "lazy";
   title: string;
 }>;
 
@@ -147,6 +148,7 @@ export async function createClosureDistributionSharedContribution(
       return Object.freeze({
         artifact,
         id: resource.id,
+        startup: resource.startup,
         title: resource.title,
         treeDigest: resource.treeDigest,
       });
@@ -175,6 +177,7 @@ export async function createClosureDistributionTargetContribution(
       return Object.freeze({
         artifact,
         id: resource.id,
+        startup: resource.startup,
         title: resource.title,
         treeDigest: resource.treeDigest,
       });

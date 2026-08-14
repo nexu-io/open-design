@@ -46,7 +46,13 @@ async function fixture() {
       launcher: { blob: artifacts.launcher.digest, entryPath: "launcher.mjs", handoffPath: "bootloader.mjs", treeDigest: digest("launcher-tree") },
       targets: { "darwin-arm64": { native: { blob: artifacts.native.digest, treeDigest: digest("native-tree") } } },
     },
-    resources: [{ blob: artifacts.resource.digest, id: "skills", title: "Skills", treeDigest: digest("resource-tree") }],
+    resources: [{
+      blob: artifacts.resource.digest,
+      id: "skills",
+      startup: "lazy",
+      title: "Skills",
+      treeDigest: digest("resource-tree"),
+    }],
     schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   }, digest);
   const manifestPath = join(root, "closure.json");

@@ -36,6 +36,7 @@ export function createDesktopUpdaterScheduler(
     initialDelayMs: number;
     intervalMs: number;
     logger?: DesktopUpdaterLogger;
+    standaloneActivationOnRestart?: () => Promise<boolean>;
     startupSilentPayloadUpdate?: StartupSilentPayloadUpdateOptions;
   },
 ): DesktopUpdaterScheduler {
@@ -104,7 +105,8 @@ export function createDesktopUpdaterScheduler(
       const startupReady = startupTick && options.startupSilentPayloadUpdate != null
         ? await updater.status()
         : null;
-      status = await updater.checkForUpdates();
+      const activateOnRestart = await options.standaloneActivationOnRestart?.().catch(() => false) ?? false;
+      status = await updater.checkForUpdates({ activateOnRestart });
       if (
         startupTick
         && options.startupSilentPayloadUpdate != null

@@ -214,6 +214,7 @@ describe("tools-pack Closure component archives", () => {
       resources: [{
         id: "skills",
         root: await componentRoot(root, "skills", "skills/sample/SKILL.md"),
+        startup: "lazy",
         title: "Skills",
       }],
       run: fakeArchive,

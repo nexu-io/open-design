@@ -260,12 +260,25 @@ function descriptor(
   standalone: ClosureRuntimePointer | null,
   releaseVersion = standalone?.version ?? "0.18.0-beta.0",
 ): ClosureBindingDescriptor {
+  const active = standalone == null ? null : {
+    releaseVersion,
+    shell: {
+      digest: `sha256:${"f".repeat(64)}` as const,
+      type: "electron",
+      version: "0.19.0-beta.1",
+    },
+    standalone,
+  };
   return {
+    active,
+    attempt: null,
+    activationAuthorized: false,
     channel: "beta",
-    committed: standalone == null ? null : { releaseVersion, standalone },
+    lastSuccessful: active,
     namespace: "release-beta",
     nextGeneration: standalone == null ? 0 : 1,
-    schemaVersion: 3,
+    prepared: null,
+    schemaVersion: 4,
     updatedAt: new Date(0).toISOString(),
   };
 }
@@ -411,6 +424,7 @@ async function downloadableDistribution(): Promise<{
     resources: [{
       blob: artifacts.resource.digest,
       id: "skills",
+      startup: "lazy",
       title: "Skills",
       treeDigest: trees.resource,
     }],
@@ -548,7 +562,7 @@ describe("Closure release update selection", () => {
     })).toThrow(/does not match win32-x64/u);
   });
 
-  it("uses shell compatibility and the independent committed release binding", () => {
+  it("uses shell compatibility and the independent active release binding", () => {
     const candidate = select();
 
     expect(decideClosureUpdate({
@@ -556,13 +570,13 @@ describe("Closure release update selection", () => {
       descriptor: descriptor(null),
       shellType: "electron",
       shellVersion: "0.16.2",
-    })).toMatchObject({ action: "commit", reason: "no-committed-closure" });
+    })).toMatchObject({ action: "prepare", reason: "no-active-closure" });
     expect(decideClosureUpdate({
       candidate,
       descriptor: descriptor(pointer("0.18.0-beta.3", OTHER_DIGEST)),
       shellType: "electron",
       shellVersion: "0.18.0-beta.4",
-    })).toMatchObject({ action: "commit", reason: "newer-release-binding" });
+    })).toMatchObject({ action: "prepare", reason: "newer-release-binding" });
     expect(decideClosureUpdate({
       candidate,
       descriptor: descriptor(pointer("0.18.0-beta.5", OTHER_DIGEST)),
@@ -646,7 +660,7 @@ describe("version-wide Closure distribution selection", () => {
       closure: invalidGraph,
       closureControl: {
         ...control,
-        distribution: { ...control.distribution, schemaVersion: 4 },
+        distribution: { ...control.distribution, schemaVersion: 5 },
       },
       releaseVersion: fixture.candidate.releaseVersion,
     }), {
@@ -705,7 +719,7 @@ describe("version-wide Closure distribution selection", () => {
 });
 
 describe("Closure release update application", () => {
-  it("downloads, verifies, and atomically commits a candidate", async () => {
+  it("downloads, verifies, and atomically prepares a candidate", async () => {
     const paths = await createStore();
     const fixture = await downloadableCandidate();
 
@@ -717,9 +731,9 @@ describe("Closure release update application", () => {
       shellVersion: "0.16.2",
     });
 
-    expect(result).toMatchObject({ reason: "no-committed-closure", state: "committed" });
+    expect(result).toMatchObject({ reason: "no-active-closure", state: "prepared" });
     const binding = await readClosureBindingDescriptor(paths);
-    expect(binding.committed).toMatchObject({
+    expect(binding.prepared).toMatchObject({
       releaseVersion: fixture.candidate.releaseVersion,
       standalone: {
         channel: fixture.candidate.manifest.identity.channel,
@@ -743,7 +757,7 @@ describe("Closure release update application", () => {
       shellType: "electron",
       shellVersion: "0.16.2",
     });
-    expect(retained).toMatchObject({ reason: "already-committed", state: "retained" });
+    expect(retained).toMatchObject({ reason: "already-prepared", state: "retained" });
     expect(vi.mocked(fixture.fetch).mock.calls).toHaveLength(fetchCount);
   });
 
@@ -769,7 +783,7 @@ describe("Closure release update application", () => {
       shellVersion: "0.16.2",
     })).rejects.toThrow(/checksum/u);
 
-    expect((await readClosureBindingDescriptor(paths)).committed).toBeNull();
+    expect((await readClosureBindingDescriptor(paths)).prepared).toBeNull();
   });
 
   it("leaves an active updater lock untouched", async () => {
@@ -796,7 +810,7 @@ describe("Closure release update application", () => {
 });
 
 describe("layered Closure distribution application", () => {
-  it("discovers and commits the root graph without consulting the legacy target", async () => {
+  it("discovers and prepares the root graph without consulting the legacy target", async () => {
     const paths = await createStore();
     const fixture = await downloadableDistribution();
     const metadataUrl = "https://releases.open-design.test/beta/metadata.json";
@@ -824,8 +838,8 @@ describe("layered Closure distribution application", () => {
       shellVersion: "0.19.0",
     });
 
-    expect(result).toMatchObject({ reason: "no-committed-closure", state: "committed" });
-    expect((await readClosureBindingDescriptor(paths)).committed?.standalone).toMatchObject({
+    expect(result).toMatchObject({ reason: "no-active-closure", state: "prepared" });
+    expect((await readClosureBindingDescriptor(paths)).prepared?.standalone).toMatchObject({
       digest: fixture.candidate.manifest.identity.digest,
       target: "darwin-arm64",
       version: "0.19.0-beta.10",
@@ -846,8 +860,8 @@ describe("layered Closure distribution application", () => {
       shellVersion: "0.19.0",
     });
 
-    expect(result).toMatchObject({ reason: "no-committed-closure", state: "committed" });
-    if (result.state !== "committed") throw new Error("distribution was not committed");
+    expect(result).toMatchObject({ reason: "no-active-closure", state: "prepared" });
+    if (result.state !== "prepared") throw new Error("distribution was not prepared");
     const storeRoot = join(
       paths.installationsRoot,
       result.pointer.version,
@@ -882,7 +896,7 @@ describe("layered Closure distribution application", () => {
       shellType: "electron",
       shellVersion: "0.19.0",
     });
-    expect(retained).toMatchObject({ reason: "already-committed", state: "retained" });
+    expect(retained).toMatchObject({ reason: "already-prepared", state: "retained" });
     expect(vi.mocked(fixture.fetch)).toHaveBeenCalledTimes(3);
   });
 
@@ -908,7 +922,7 @@ describe("layered Closure distribution application", () => {
       shellType: "electron",
       shellVersion: "0.19.0",
     })).rejects.toThrow(/checksum/u);
-    expect((await readClosureBindingDescriptor(paths)).committed).toBeNull();
+    expect((await readClosureBindingDescriptor(paths)).prepared).toBeNull();
   });
 
   it("lets independent namespaces converge on the same immutable channel CAS", async () => {
@@ -928,9 +942,9 @@ describe("layered Closure distribution application", () => {
       })
     )));
 
-    expect(results.map((result) => result.state)).toEqual(["committed", "committed"]);
+    expect(results.map((result) => result.state)).toEqual(["prepared", "prepared"]);
     expect(left.blobsRoot).toBe(right.blobsRoot);
-    expect((await readClosureBindingDescriptor(left)).committed?.standalone.namespace).toBe("team-a");
-    expect((await readClosureBindingDescriptor(right)).committed?.standalone.namespace).toBe("team-b");
+    expect((await readClosureBindingDescriptor(left)).prepared?.standalone.namespace).toBe("team-a");
+    expect((await readClosureBindingDescriptor(right)).prepared?.standalone.namespace).toBe("team-b");
   });
 });

@@ -37,7 +37,7 @@ import { compareLauncherVersions } from "../../launcher-policy.js";
  * Release-feed interpretation for the desktop updater: metadata fetch and
  * parsing, per-channel version resolution, artifact selection with the
  * payload-to-installer fallback, checksum resolution, candidate/release
- * naming, and the installer-reinstall floor. Pure decision logic plus the
+ * naming, and the legacy installer-reinstall floor. Pure decision logic plus the
  * two feed HTTP fetches; no store writes.
  */
 
@@ -106,6 +106,10 @@ export function compareVersions(a: string, b: string): number {
 export function metadataChannel(metadata: Record<string, unknown>): DesktopUpdateChannel | null {
   const channel = stringField(metadata, "channel");
   return isDesktopUpdateChannel(channel) ? channel : null;
+}
+
+export function hasStandaloneDistributionMetadata(metadata: Record<string, unknown>): boolean {
+  return Object.hasOwn(metadata, "closure");
 }
 
 export function releaseVersionForChannel(metadata: Record<string, unknown>, channel: DesktopUpdateChannel): string | null {
@@ -299,20 +303,20 @@ export function selectUpdateCandidateWithFallback(
   return selectUpdateCandidate(metadata, config);
 }
 
-export function controlInstallationVersion(metadata: Record<string, unknown>): Record<string, unknown> | null {
+export function legacyControlInstallationVersion(metadata: Record<string, unknown>): Record<string, unknown> | null {
   const control = objectField(metadata, "control");
   const shell = control == null ? null : objectField(control, "shell");
   const installation = shell == null ? null : objectField(shell, "installation");
   return installation == null ? null : objectField(installation, "version");
 }
 
-export function controlInstallationVersionMin(metadata: Record<string, unknown>): string | null {
-  const version = controlInstallationVersion(metadata);
+export function legacyInstallationFloor(metadata: Record<string, unknown>): string | null {
+  const version = legacyControlInstallationVersion(metadata);
   return version == null ? null : stringField(version, "min");
 }
 
-export function controlInstallationVersionUrl(metadata: Record<string, unknown>): string | null {
-  const version = controlInstallationVersion(metadata);
+export function legacyInstallationUrl(metadata: Record<string, unknown>): string | null {
+  const version = legacyControlInstallationVersion(metadata);
   return version == null ? null : stringField(version, "url");
 }
 
@@ -342,7 +346,8 @@ export async function resolveInstalledOuterVersion(config: DesktopUpdaterConfig)
 }
 
 /**
- * Installed-base escape hatch: decide whether the remote release is beyond what
+ * Legacy installed-base escape hatch for metadata without a Closure graph.
+ * Decide whether the remote release is beyond what
  * this install can adopt as an in-place payload update, forcing a full
  * installer instead. Two orthogonal guardrails, either of which trips →
  * installer:
@@ -363,13 +368,13 @@ export async function resolveInstalledOuterVersion(config: DesktopUpdaterConfig)
  * updating seamlessly. Returns the reinstall requirement for the status
  * snapshot, or null when an in-place payload update is acceptable.
  */
-export function remoteRequiresReinstall(
+export function resolveLegacyReinstallRequirement(
   metadata: Record<string, unknown>,
   config: DesktopUpdaterConfig,
   installedOuterVersion: string | null,
 ): DesktopUpdateReinstallSnapshot | null {
-  const minVersion = controlInstallationVersionMin(metadata);
-  const url = controlInstallationVersionUrl(metadata);
+  const minVersion = legacyInstallationFloor(metadata);
+  const url = legacyInstallationUrl(metadata);
   const shared = {
     ...(minVersion == null ? {} : { minVersion }),
     ...(url == null ? {} : { url }),

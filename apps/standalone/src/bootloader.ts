@@ -262,7 +262,7 @@ function createSlot(request: StandaloneHandoffRequest): AttachmentSlot {
 /**
  * Create the fossil-compatible `bootloader.mjs` boundary. The root selects at
  * most one inner bootloader and never falls back after that selection. The
- * selected body is entered once per committed generation, while compatible
+ * selected body is entered once per active generation, while compatible
  * Shell attachments receive independent handles over the shared body.
  */
 export function createStandaloneBootloader(

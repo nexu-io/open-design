@@ -31,6 +31,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Metadata fetch/parse/channel match, per-channel version fields | U, P, F | desktop unit; specs; real beta feed loop |
 | not-available / available / downloaded-stays-visible | U, P | desktop unit; specs |
 | Silent startup payload update (allowSilentUpdates) | U, P | desktop unit silent group; mac/win spec `applies a downloaded payload silently on the next cold start` |
+| Modern route: Shell min decides Shell vs Closure; legacy floor is isolated | U | Closure update tests; desktop modern-metadata routing test |
 | Artifact selection (payload vs installer, context validity) | U, P | desktop unit routing group; specs |
 | Installer-reinstall floor (`control.shell.installation.version.min`): three reasons, same-version offer, clamp | U, P | desktop unit reseed group; spec recovery segment |
 | Installed-outer version read (bundle config, env override) | U, P | desktop unit `resolveInstalledOuterVersion`; spec recovery segment reads the real outer |
@@ -42,8 +43,18 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Triple checksum verify (downloader, post-download, pre-install) | U | desktop unit |
 | In-session resume; cross-session interrupted-download clearing | U | desktop unit (fixture byte ranges) |
 | On-disk release adoption; store ownership/shape validation | U, P | desktop unit; specs |
+| Closure blocking-resource predownload + activation authorization | U | Closure Store transaction; Standalone bootstrap/update tests |
 
-## D. Payload apply chain
+## D. Standalone activation transaction
+
+| Node | Coverage | Owning tests |
+| --- | --- | --- |
+| prepared → Shell+Closure attempt → health-confirmed lastSuccessful | U | Closure Store; Standalone process bridge/bootstrap |
+| Interrupted attempt rollback to lastSuccessful | U | Closure Store transaction |
+| Prepared graph/blob retention during GC | U | Standalone resource-garbage tests |
+| Unarmed prepared generation stays inactive | U | Standalone bootstrap tests |
+
+## E. Legacy Shell payload apply chain
 
 | Node | Coverage | Owning tests |
 | --- | --- | --- |
@@ -59,7 +70,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Reinstalled newer outer resets runtime (bound > active) | U | packaged `launcher-runtime.test.ts` supersede case |
 | Reinstalled older outer delegates (bound < active) | P | spec recovery segment precondition |
 
-## E. Installer (reinstall) path
+## F. Installer (reinstall) path
 
 | Node | Coverage | Owning tests |
 | --- | --- | --- |
@@ -67,7 +78,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | mac dry-run installer open | P | mac spec recovery segment |
 | mac real DMG open via the deferred helper script | U, M | desktop unit fake-spawn; human acceptance |
 
-## F. Manual clear-cache (disaster recovery)
+## G. Manual clear-cache (disaster recovery)
 
 | Node | Coverage | Owning tests |
 | --- | --- | --- |
@@ -76,7 +87,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Owned-but-corrupt store rebuild (sentinel = ownership proof) | U | desktop unit store-rebuild group |
 | Post-clear recovery (re-check re-derives + re-downloads) | P | spec recovery segment |
 
-## G. Publication pipeline
+## H. Publication pipeline
 
 | Node | Coverage | Owning tests |
 | --- | --- | --- |

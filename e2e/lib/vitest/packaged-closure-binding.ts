@@ -29,11 +29,11 @@ export function assertPackagedClosureBinding(
   expected?: PackagedClosureBindingExpectation,
 ): JsonRecord {
   const binding = record(value, 'packaged Closure binding');
-  const committed = record(binding.committed, 'packaged Closure committed binding');
-  const standalone = record(committed.standalone, 'packaged Closure standalone binding');
+  const active = record(binding.active, 'packaged Closure active binding');
+  const standalone = record(active.standalone, 'packaged Closure standalone binding');
   if (expected != null) {
     for (const [name, actual, wanted] of [
-      ['releaseVersion', committed.releaseVersion, expected.releaseVersion],
+      ['releaseVersion', active.releaseVersion, expected.releaseVersion],
       ['channel', standalone.channel, expected.channel],
       ['namespace', standalone.namespace, expected.namespace],
       ['target', standalone.target, expected.target],

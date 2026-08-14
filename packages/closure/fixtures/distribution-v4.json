@@ -44,7 +44,7 @@
     "channel": "beta",
     "protocolVersion": 1,
     "version": "0.19.0-beta.10",
-    "digest": "sha256:12eaf996e5f2dd3f6a8980a2c59e676dcbb5ac5ec1d1ea5e438d794f21ee93f8"
+    "digest": "sha256:9ba00f0bc814419397bb0056fa764a3e0b75a4692644e85820f1a1edba83d912"
   },
   "required": {
     "body": {
@@ -79,9 +79,10 @@
     {
       "blob": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       "id": "design-system-core",
+      "startup": "lazy",
       "title": "Open Design Core",
       "treeDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
     }
   ],
-  "schemaVersion": 3
+  "schemaVersion": 4
 }

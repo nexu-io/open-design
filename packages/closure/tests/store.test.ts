@@ -21,9 +21,14 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  commitStoredClosureCandidate,
-  commitVerifiedClosureDistributionGeneration,
-  commitVerifiedStoredClosureCandidate,
+  activatePreparedClosureBinding,
+  authorizePreparedClosureActivation,
+  beginActiveClosureBindingAttempt,
+  confirmClosureBindingAttempt,
+  prepareStoredClosureCandidate,
+  prepareVerifiedClosureDistributionGeneration,
+  prepareVerifiedStoredClosureCandidate,
+  recoverInterruptedClosureBinding,
   cleanupClosureChannelGarbage,
   consumeClosureDistributionTarget,
   discardClosureStoreEntry,
@@ -40,8 +45,13 @@ import {
 } from "../src/store/index.js";
 
 const roots: string[] = [];
+const shellBinding = {
+  digest: `sha256:${"f".repeat(64)}` as const,
+  type: "electron",
+  version: "0.19.0-beta.1",
+};
 const distributionFixturePath = fileURLToPath(
-  new URL("../fixtures/distribution-v3.json", import.meta.url),
+  new URL("../fixtures/distribution-v4.json", import.meta.url),
 );
 
 afterEach(async () => {
@@ -170,6 +180,7 @@ async function materializeDistributionGeneration(
     resources: [{
       blob: artifacts.resource.digest,
       id: "skills",
+      startup: "lazy",
       title: "Skills",
       treeDigest: trees.resource,
     }],
@@ -200,7 +211,7 @@ describe("Closure store paths", () => {
     const beta = resolveClosureStorePaths({ channel: "beta", namespace: "release-beta", root });
     const preview = resolveClosureStorePaths({ channel: "preview", namespace: "release-preview", root });
 
-    expect(beta.namespaceRoot).toBe(join(root, "closure", "channels", "beta", "epochs", "3", "namespaces", "release-beta"));
+    expect(beta.namespaceRoot).toBe(join(root, "closure", "channels", "beta", "epochs", "4", "namespaces", "release-beta"));
     expect(preview.namespaceRoot).not.toBe(beta.namespaceRoot);
     expect(JSON.stringify(beta)).not.toMatch(/port/iu);
   });
@@ -295,7 +306,7 @@ describe("layered Closure distribution consumer", () => {
     }, "win32-x64")).toThrow(/canonical digest/u);
   });
 
-  it("plans one committed generation view while resources remain lazy channel blobs", async () => {
+  it("plans one active generation view while resources remain lazy channel blobs", async () => {
     const fixture = JSON.parse(await readFile(distributionFixturePath, "utf8")) as unknown;
     const root = await mkdtemp(join(tmpdir(), "od-closure-store-plan-"));
     roots.push(root);
@@ -343,7 +354,7 @@ describe("layered Closure distribution consumer", () => {
   });
 });
 
-describe("layered Closure generation commit", () => {
+describe("layered Closure generation preparation", () => {
   it("publishes exactly one verified generation while lazy resources stay outside the cold view", async () => {
     const paths = await createStore();
     const staged = await materializeDistributionGeneration(paths, 0);
@@ -353,13 +364,13 @@ describe("layered Closure generation commit", () => {
       staged.plan,
       staged.stageRoot,
     );
-    const result = await commitVerifiedClosureDistributionGeneration(
+    const result = await prepareVerifiedClosureDistributionGeneration(
       paths,
       verification,
       "0.19.0-beta.10",
     );
 
-    expect(result.committed.standalone).toEqual({
+    expect(result.prepared.standalone).toEqual({
       channel: "beta",
       digest: staged.manifest.identity.digest,
       generation: 0,
@@ -368,7 +379,7 @@ describe("layered Closure generation commit", () => {
       target: "darwin-arm64",
       version: "0.19.0-beta.10",
     });
-    expect(result.descriptor.schemaVersion).toBe(3);
+    expect(result.descriptor.schemaVersion).toBe(4);
     expect((await stat(staged.plan.required.body.resolvedEntryPath)).isFile()).toBe(true);
     expect(await stat(staged.stageRoot).catch(() => null)).toBeNull();
     expect(await stat(staged.plan.resources[0]!.blobPath).catch(() => null)).toBeNull();
@@ -376,7 +387,7 @@ describe("layered Closure generation commit", () => {
 
     const stored = await verifyStoredClosureDistributionGeneration(
       paths,
-      result.committed.standalone,
+      result.prepared.standalone,
     );
     expect(stored.materializedRoot).toBe(staged.plan.storeRoot);
     expect(stored.plan.required.native.componentRoot).toBe(
@@ -384,11 +395,11 @@ describe("layered Closure generation commit", () => {
     );
     await expect(hasStoredClosureDistributionGeneration(
       paths,
-      result.committed.standalone,
+      result.prepared.standalone,
     )).resolves.toBe(true);
   });
 
-  it("rejects a committed v3 pointer whose content-addressed installation drifted", async () => {
+  it("rejects a prepared pointer whose content-addressed installation drifted", async () => {
     const paths = await createStore();
     const staged = await materializeDistributionGeneration(paths, 0);
     const verification = await verifyMaterializedClosureDistributionGeneration(
@@ -396,7 +407,7 @@ describe("layered Closure generation commit", () => {
       staged.plan,
       staged.stageRoot,
     );
-    const result = await commitVerifiedClosureDistributionGeneration(
+    const result = await prepareVerifiedClosureDistributionGeneration(
       paths,
       verification,
       "0.19.0-beta.10",
@@ -405,7 +416,7 @@ describe("layered Closure generation commit", () => {
 
     await expect(verifyStoredClosureDistributionGeneration(
       paths,
-      result.committed.standalone,
+      result.prepared.standalone,
     )).rejects.toThrow(/native/u);
   });
 
@@ -419,7 +430,7 @@ describe("layered Closure generation commit", () => {
       staged.plan,
       staged.stageRoot,
     )).rejects.toThrow(/native blob does not match/u);
-    expect((await readClosureBindingDescriptor(paths)).committed).toBeNull();
+    expect((await readClosureBindingDescriptor(paths)).prepared).toBeNull();
 
     await writeFile(staged.plan.required.native.blobPath, Buffer.from("native-archive"));
     await mkdir(join(staged.stageRoot, "resources"));
@@ -428,7 +439,7 @@ describe("layered Closure generation commit", () => {
       staged.plan,
       staged.stageRoot,
     )).rejects.toThrow(/top-level shape/u);
-    expect((await readClosureBindingDescriptor(paths)).committed).toBeNull();
+    expect((await readClosureBindingDescriptor(paths)).prepared).toBeNull();
   });
 });
 
@@ -481,11 +492,11 @@ describe("stored Closure verification", () => {
     const versionPaths = resolveClosureStoreVersionPaths(paths, binding);
 
     await writeFile(versionPaths.archivePath, "corrupt");
-    await expect(commitStoredClosureCandidate(paths, binding, "0.18.0-beta.1")).rejects.toThrow(/archive does not match/u);
+    await expect(prepareStoredClosureCandidate(paths, binding, "0.18.0-beta.1")).rejects.toThrow(/archive does not match/u);
 
     await writeFile(versionPaths.archivePath, "archive:0.18.0-beta.1");
     await writeFile(join(versionPaths.payloadRoot, CLOSURE_ARCHIVE_ENTRY_PATH), "mutated");
-    await expect(commitStoredClosureCandidate(paths, binding, "0.18.0-beta.1")).rejects.toThrow(/payload does not match/u);
+    await expect(prepareStoredClosureCandidate(paths, binding, "0.18.0-beta.1")).rejects.toThrow(/payload does not match/u);
   });
 
   it("refuses a self-consistent replacement inventory not bound by the manifest", async () => {
@@ -504,18 +515,47 @@ describe("stored Closure verification", () => {
     entry.size = Buffer.byteLength(replacement);
     await writeFile(versionPaths.inventoryPath, `${JSON.stringify(inventory, null, 2)}\n`);
 
-    await expect(commitStoredClosureCandidate(paths, binding, "0.18.0-beta.1")).rejects.toThrow(/inventory does not match/u);
+    await expect(prepareStoredClosureCandidate(paths, binding, "0.18.0-beta.1")).rejects.toThrow(/inventory does not match/u);
   });
 });
 
-describe("Closure committed binding", () => {
-  it("atomically commits one release-to-Standalone binding", async () => {
+describe("Closure prepared binding", () => {
+  it("confirms a healthy attempt and rolls an interrupted attempt back to it", async () => {
+    const paths = await createStore();
+    const first = await materializeCandidate(paths, "0.18.0-beta.1");
+    const second = await materializeCandidate(paths, "0.18.0-beta.2");
+    const initial = await prepareStoredClosureCandidate(paths, first.binding, "0.19.0-beta.1");
+
+    await authorizePreparedClosureActivation(paths, initial.prepared);
+    await activatePreparedClosureBinding(paths, initial.prepared, shellBinding);
+    await confirmClosureBindingAttempt(paths, initial.prepared);
+
+    await beginActiveClosureBindingAttempt(paths, initial.prepared, {
+      ...shellBinding,
+      version: "0.19.0-beta.2",
+    });
+    await recoverInterruptedClosureBinding(paths);
+
+    const update = await prepareStoredClosureCandidate(paths, second.binding, "0.19.0-beta.2");
+    await authorizePreparedClosureActivation(paths, update.prepared);
+    await activatePreparedClosureBinding(paths, update.prepared, shellBinding);
+    await recoverInterruptedClosureBinding(paths);
+
+    const descriptor = await readClosureBindingDescriptor(paths);
+    expect(descriptor.active).toEqual({ ...initial.prepared, shell: shellBinding });
+    expect(descriptor.lastSuccessful).toEqual({ ...initial.prepared, shell: shellBinding });
+    expect(descriptor.attempt).toBeNull();
+    expect(descriptor.prepared).toBeNull();
+    expect(descriptor.activationAuthorized).toBe(false);
+  });
+
+  it("atomically prepares one release-to-Standalone binding", async () => {
     const paths = await createStore();
     const { binding } = await materializeCandidate(paths, "0.18.0-beta.1");
 
-    const result = await commitStoredClosureCandidate(paths, binding, "0.19.0-beta.1");
+    const result = await prepareStoredClosureCandidate(paths, binding, "0.19.0-beta.1");
 
-    expect(result.committed).toEqual({
+    expect(result.prepared).toEqual({
       releaseVersion: "0.19.0-beta.1",
       standalone: {
         channel: binding.channel,
@@ -531,14 +571,14 @@ describe("Closure committed binding", () => {
     expect(paths.bindingPath).toMatch(/binding\.json$/u);
   });
 
-  it("commits an atomically promoted candidate from its existing verification proof", async () => {
+  it("prepares an atomically promoted candidate from its existing verification proof", async () => {
     const paths = await createStore();
     const { binding } = await materializeCandidate(paths, "0.18.0-beta.1");
     const verification = await verifyStoredClosureCandidate(paths, binding);
 
-    const result = await commitVerifiedStoredClosureCandidate(paths, verification, "0.19.0-beta.1");
+    const result = await prepareVerifiedStoredClosureCandidate(paths, verification, "0.19.0-beta.1");
 
-    expect(result.committed.standalone).toEqual({
+    expect(result.prepared.standalone).toEqual({
       channel: binding.channel,
       digest: binding.digest,
       generation: 0,
@@ -547,25 +587,24 @@ describe("Closure committed binding", () => {
       target: binding.platform,
       version: binding.version,
     });
-    await expect(commitVerifiedStoredClosureCandidate(paths, {
+    await expect(prepareVerifiedStoredClosureCandidate(paths, {
       ...verification,
       paths: { ...verification.paths, versionRoot: join(paths.stagingRoot, "candidate") },
     }, "0.19.0-beta.1")).rejects.toThrow(/verified Closure paths/u);
   });
 
-  it("replaces the committed binding without retaining launch history", async () => {
+  it("replaces the prepared binding without changing launch history", async () => {
     const paths = await createStore();
     const first = await materializeCandidate(paths, "0.18.0-beta.1");
     const second = await materializeCandidate(paths, "0.18.0-beta.2");
 
-    const firstCommit = await commitStoredClosureCandidate(paths, first.binding, "0.19.0-beta.1");
-    const secondCommit = await commitStoredClosureCandidate(paths, second.binding, "0.19.0-beta.2");
+    const firstCommit = await prepareStoredClosureCandidate(paths, first.binding, "0.19.0-beta.1");
+    const secondCommit = await prepareStoredClosureCandidate(paths, second.binding, "0.19.0-beta.2");
 
-    expect(firstCommit.committed.standalone.generation).toBe(0);
-    expect(secondCommit.committed.standalone.generation).toBe(1);
-    expect(secondCommit.descriptor).not.toHaveProperty("active");
-    expect(secondCommit.descriptor).not.toHaveProperty("attempt");
-    expect(secondCommit.descriptor).not.toHaveProperty("lastSuccessful");
+    expect(firstCommit.prepared.standalone.generation).toBe(0);
+    expect(secondCommit.prepared.standalone.generation).toBe(1);
+    expect(secondCommit.descriptor.active).toBeNull();
+    expect(secondCommit.descriptor.lastSuccessful).toBeNull();
   });
 
   it("fails closed on transport fields or corrupt persisted state", async () => {
@@ -573,11 +612,15 @@ describe("Closure committed binding", () => {
     await mkdir(paths.stateRoot, { recursive: true });
     await writeFile(paths.bindingPath, `${JSON.stringify({
       channel: paths.channel,
-      committed: null,
+      active: null,
+      attempt: null,
+      activationAuthorized: false,
+      lastSuccessful: null,
       namespace: paths.namespace,
       nextGeneration: 0,
       port: 7456,
-      schemaVersion: 3,
+      prepared: null,
+      schemaVersion: 4,
       updatedAt: new Date().toISOString(),
     })}\n`);
 
@@ -595,11 +638,11 @@ describe("Closure committed binding", () => {
     const leftCandidate = await materializeCandidate(left, "0.18.0-beta.1");
     const rightCandidate = await materializeCandidate(right, "0.18.0-beta.2");
 
-    await commitStoredClosureCandidate(left, leftCandidate.binding, "0.19.0-beta.1");
-    await commitStoredClosureCandidate(right, rightCandidate.binding, "0.19.0-beta.2");
+    await prepareStoredClosureCandidate(left, leftCandidate.binding, "0.19.0-beta.1");
+    await prepareStoredClosureCandidate(right, rightCandidate.binding, "0.19.0-beta.2");
 
-    expect((await readClosureBindingDescriptor(left)).committed?.standalone.version).toBe("0.18.0-beta.1");
-    expect((await readClosureBindingDescriptor(right)).committed?.standalone.version).toBe("0.18.0-beta.2");
+    expect((await readClosureBindingDescriptor(left)).prepared?.standalone.version).toBe("0.18.0-beta.1");
+    expect((await readClosureBindingDescriptor(right)).prepared?.standalone.version).toBe("0.18.0-beta.2");
     expect(await readFile(left.bindingPath, "utf8")).not.toContain("team-b");
   });
 });

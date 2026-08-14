@@ -134,7 +134,7 @@ describe("bootloader.mjs handoff-once", () => {
     });
   });
 
-  it("fails closed for a different committed generation", async () => {
+  it("fails closed for a different active generation", async () => {
     const start = vi.fn(async (input: StandaloneHandoffRequest) => runningHandle(input));
     const handoff = createStandaloneBootloader({
       shellCompatibility: compatibility(),
@@ -250,7 +250,7 @@ describe("bootloader.mjs handoff-once", () => {
       },
     });
 
-    await expect(handoff(input)).rejects.toThrow(/committed generation/);
+    await expect(handoff(input)).rejects.toThrow(/active generation/);
   });
 
   it("rejects body readiness from another handoff", async () => {

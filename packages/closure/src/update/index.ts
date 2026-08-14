@@ -31,8 +31,6 @@ import {
 } from "../protocol/index.js";
 import type { ClosureBindingDescriptor } from "../store/index.js";
 import {
-  commitVerifiedClosureDistributionGeneration,
-  commitVerifiedStoredClosureCandidate,
   planClosureDistributionGeneration,
   readClosureBindingDescriptor,
   resolveClosureStoreVersionPaths,
@@ -80,21 +78,23 @@ export type ClosureDistributionConsumer = Readonly<{
   shellVersion: string;
 }>;
 
-export type ClosureUpdateCommitReason =
+export type ClosureUpdatePrepareReason =
   | "newer-release-binding"
-  | "no-committed-closure"
-  | "repair-committed-closure";
+  | "no-active-closure"
+  | "repair-active-closure";
 
 export type ClosureUpdateRetainReason =
-  | "already-committed"
+  | "already-active"
+  | "already-prepared"
   | "candidate-not-newer"
+  | "runtime-attempt-pending"
   | "shell-incompatible";
 
 export type ClosureUpdateDecision =
   | {
-      action: "commit";
+      action: "prepare";
       candidate: ClosureReleaseCandidate;
-      reason: ClosureUpdateCommitReason;
+      reason: ClosureUpdatePrepareReason;
     }
   | {
       action: "retain";
@@ -186,8 +186,8 @@ export type ApplyClosureUpdateResult =
   | {
       candidate: ClosureReleaseCandidate;
       pointer: ClosureRuntimePointer;
-      reason: ClosureUpdateCommitReason;
-      state: "committed";
+      reason: ClosureUpdatePrepareReason;
+      state: "prepared";
     }
   | {
       candidate: ClosureReleaseCandidate;
@@ -204,8 +204,8 @@ export type ApplyClosureDistributionUpdateResult =
   | {
       candidate: ClosureDistributionReleaseCandidate;
       pointer: ClosureRuntimePointer;
-      reason: ClosureUpdateCommitReason;
-      state: "committed";
+      reason: ClosureUpdatePrepareReason;
+      state: "prepared";
     }
   | {
       candidate: ClosureDistributionReleaseCandidate;
@@ -678,35 +678,46 @@ export function decideClosureUpdate(input: {
   ) {
     return { action: "retain", candidate, reason: "shell-incompatible" };
   }
-  const committed = input.descriptor.committed;
-  if (committed == null) {
-    return { action: "commit", candidate, reason: "no-committed-closure" };
+  if (input.descriptor.attempt != null) {
+    return { action: "retain", candidate, reason: "runtime-attempt-pending" };
   }
-  const active = committed.standalone;
+  const prepared = input.descriptor.prepared;
+  if (
+    prepared?.standalone.version === candidate.manifest.identity.version
+    && prepared.standalone.digest === candidate.manifest.identity.digest
+    && prepared.releaseVersion === candidate.releaseVersion
+  ) {
+    return { action: "retain", candidate, reason: "already-prepared" };
+  }
+  const activeBinding = input.descriptor.active;
+  if (activeBinding == null) {
+    return { action: "prepare", candidate, reason: "no-active-closure" };
+  }
+  const active = activeBinding.standalone;
   if (
     active.version === candidate.manifest.identity.version
     && active.digest === candidate.manifest.identity.digest
-    && committed.releaseVersion === candidate.releaseVersion
+    && activeBinding.releaseVersion === candidate.releaseVersion
   ) {
-    return { action: "retain", candidate, reason: "already-committed" };
+    return { action: "retain", candidate, reason: "already-active" };
   }
   const channel = candidate.manifest.identity.channel as ReleaseChannel;
-  const comparison = compareReleaseVersions(candidate.releaseVersion, committed.releaseVersion, channel);
+  const comparison = compareReleaseVersions(candidate.releaseVersion, activeBinding.releaseVersion, channel);
   if (comparison === 0) {
     throw new ClosureUpdateError(
-      `Closure release ${committed.releaseVersion} has conflicting immutable bindings`,
+      `Closure release ${activeBinding.releaseVersion} has conflicting immutable bindings`,
     );
   }
   return comparison > 0
-    ? { action: "commit", candidate, reason: "newer-release-binding" }
+    ? { action: "prepare", candidate, reason: "newer-release-binding" }
     : { action: "retain", candidate, reason: "candidate-not-newer" };
 }
 
 export type ClosureDistributionUpdateDecision =
   | {
-      action: "commit";
+      action: "prepare";
       candidate: ClosureDistributionReleaseCandidate;
-      reason: ClosureUpdateCommitReason;
+      reason: ClosureUpdatePrepareReason;
     }
   | {
       action: "retain";
@@ -734,32 +745,44 @@ export function decideClosureDistributionUpdate(input: {
   ) {
     return { action: "retain", candidate, reason: "shell-incompatible" };
   }
-  const committed = input.descriptor.committed;
-  if (committed == null) {
-    return { action: "commit", candidate, reason: "no-committed-closure" };
+  if (input.descriptor.attempt != null) {
+    return { action: "retain", candidate, reason: "runtime-attempt-pending" };
   }
-  const active = committed.standalone;
+  const prepared = input.descriptor.prepared;
+  if (
+    prepared?.standalone.version === candidate.manifest.identity.version
+    && prepared.standalone.digest === candidate.manifest.identity.digest
+    && prepared.standalone.target === candidate.target
+    && prepared.releaseVersion === candidate.releaseVersion
+  ) {
+    return { action: "retain", candidate, reason: "already-prepared" };
+  }
+  const activeBinding = input.descriptor.active;
+  if (activeBinding == null) {
+    return { action: "prepare", candidate, reason: "no-active-closure" };
+  }
+  const active = activeBinding.standalone;
   if (
     active.version === candidate.manifest.identity.version
     && active.digest === candidate.manifest.identity.digest
     && active.target === candidate.target
-    && committed.releaseVersion === candidate.releaseVersion
+    && activeBinding.releaseVersion === candidate.releaseVersion
   ) {
-    return { action: "retain", candidate, reason: "already-committed" };
+    return { action: "retain", candidate, reason: "already-active" };
   }
   const channel = candidate.manifest.identity.channel;
   const comparison = compareReleaseVersions(
     candidate.releaseVersion,
-    committed.releaseVersion,
+    activeBinding.releaseVersion,
     channel,
   );
   if (comparison === 0) {
     throw new ClosureUpdateError(
-      `Closure release ${committed.releaseVersion} has conflicting immutable distribution bindings`,
+      `Closure release ${activeBinding.releaseVersion} has conflicting immutable distribution bindings`,
     );
   }
   return comparison > 0
-    ? { action: "commit", candidate, reason: "newer-release-binding" }
+    ? { action: "prepare", candidate, reason: "newer-release-binding" }
     : { action: "retain", candidate, reason: "candidate-not-newer" };
 }
 

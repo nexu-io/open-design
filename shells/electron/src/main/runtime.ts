@@ -1811,11 +1811,15 @@ function unavailableUpdaterStatus(): DesktopUpdateStatusSnapshot {
   };
 }
 
-function checkOptionsFromHost(options: unknown): { autoDownload?: boolean } | undefined {
+function checkOptionsFromHost(options: unknown): { activateOnRestart: true; autoDownload?: boolean } {
   const input = options as OpenDesignHostUpdaterActionOptions | null | undefined;
   const payload = input?.payload;
-  if (payload == null || typeof payload.autoDownload !== "boolean") return undefined;
-  return { autoDownload: payload.autoDownload };
+  return {
+    activateOnRestart: true,
+    ...(payload != null && typeof payload.autoDownload === "boolean"
+      ? { autoDownload: payload.autoDownload }
+      : {}),
+  };
 }
 
 async function reportRendererCrash(

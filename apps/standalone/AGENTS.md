@@ -9,8 +9,10 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the deploy
 - Composition of Web and daemon adapters into one product closure.
 - Product lifecycle composition over semantic `@open-design/sidecar` launch/connect/stop operations.
 - Initial Closure discovery, layered local/remote resource resolution,
-  immutable Store verification, and exactly one committed-generation
-  resolution before the live handoff is exposed to a Shell.
+  immutable Store verification, and prepared → Shell+Closure attempt →
+  lastSuccessful activation before the live handoff is exposed to a Shell.
+- Modern update routing from Closure metadata. Preparation is non-authoritative;
+  cold-start activation requires explicit authorization and health confirmation.
 - Product-facing exposure of common readiness, health, diagnostics, and shutdown.
 - Composition of validated Standalone-owned and attachment-local Shell updater provider ports into one opaque projection; it must not interpret provider action ids.
 - Serialization adapters that project attachment-local Shell capabilities and generation-shared Standalone body handles through the generic Sidecar control plane; transport-private service names stay out of standalone-proto.
@@ -31,7 +33,7 @@ Follow the root `AGENTS.md` and `apps/AGENTS.md` first. This app owns the deploy
 - Keep the root `bootloader.mjs` fossil handoff-only: it may enter the adjacent
   Standalone-owned baseline launcher once, but must not select a version,
   interpret a component graph, or fall back to a second target. The baseline
-  launcher owns initial candidate resolution and Store commit.
+  launcher owns initial candidate resolution and Store preparation/activation.
 - Never infer or normalize product paths. The launcher adapter supplies already-resolved roots.
 - Always attempt shutdown in reverse startup order, even when one runtime fails to close.
 - Keep live handoff validation in `@open-design/standalone/protocol` and release candidate/integrity parsing in `@open-design/closure/protocol`.

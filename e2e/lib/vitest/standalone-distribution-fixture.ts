@@ -8,6 +8,9 @@ import {
   type ClosureDistributionManifest,
 } from '@open-design/closure/protocol';
 import {
+  activatePreparedClosureBinding,
+  authorizePreparedClosureActivation,
+  confirmClosureBindingAttempt,
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
   type ClosureBindingDescriptor,
@@ -79,12 +82,18 @@ export async function commitPackagedStandaloneDistributionFixture(input: {
       shellType: input.shellType,
       shellVersion: input.shellVersion,
     });
-    if (result.state !== 'committed' && result.reason !== 'already-committed') {
-      throw new Error(`Standalone distribution fixture was not committed: ${result.state}/${result.reason}`);
+    if (result.state !== 'prepared') {
+      throw new Error(`Standalone distribution fixture was not prepared: ${result.state}/${result.reason}`);
     }
-    const pointer = (await readClosureBindingDescriptor(paths)).committed?.standalone;
+    await authorizePreparedClosureActivation(paths, result.pointer);
+    await activatePreparedClosureBinding(paths, result.pointer, {
+      digest: result.pointer.digest,
+      type: input.shellType,
+      version: input.shellVersion,
+    });
+    const pointer = (await confirmClosureBindingAttempt(paths, result.pointer)).standalone;
     if (pointer == null || pointer.digest !== manifest.identity.digest || pointer.target !== input.target) {
-      throw new Error('Standalone distribution fixture committed an unexpected binding');
+      throw new Error('Standalone distribution fixture activated an unexpected binding');
     }
     for (const resource of manifest.required.targets[input.target]!.resources) {
       await ensureClosureDistributionBlob({
@@ -131,9 +140,9 @@ export async function readPackagedStandaloneDistributionFixture(input: {
     namespace: input.namespace,
     root: input.installationRoot,
   });
-  const pointer = (await readClosureBindingDescriptor(paths)).committed?.standalone;
+    const pointer = (await readClosureBindingDescriptor(paths)).active?.standalone;
   if (pointer == null || pointer.digest !== manifest.identity.digest || pointer.target !== input.target) {
-    throw new Error('Installed Shell did not commit the expected embedded Standalone distribution');
+    throw new Error('Installed Shell did not activate the expected embedded Standalone distribution');
   }
 
   const seedRoot = await mkdtemp(join(tmpdir(), 'od-standalone-distribution-read-'));

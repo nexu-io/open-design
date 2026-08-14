@@ -19,8 +19,8 @@ import {
 import type { ClosureBindingDescriptor } from "../store/index.js";
 import {
   acquireClosureChannelLock,
-  commitVerifiedClosureDistributionGeneration,
-  commitVerifiedStoredClosureCandidate,
+  prepareVerifiedClosureDistributionGeneration,
+  prepareVerifiedStoredClosureCandidate,
   planClosureDistributionGeneration,
   readClosureBindingDescriptor,
   resolveClosureStoreVersionPaths,
@@ -150,8 +150,8 @@ function candidateIsReferenced(
   descriptor: ClosureBindingDescriptor,
   binding: ReturnType<typeof bindClosureCandidateIdentity>,
 ): boolean {
-  return descriptor.committed != null
-    && sameCandidate(descriptor.committed.standalone, binding);
+  return [descriptor.active, descriptor.attempt, descriptor.lastSuccessful, descriptor.prepared]
+    .some((reference) => reference != null && sameCandidate(reference.standalone, binding));
 }
 
 async function ensureCandidateMaterialized(input: {
@@ -336,16 +336,16 @@ export async function applyClosureDistributionUpdate(input: {
       ...(input.repository == null ? {} : { repository: input.repository }),
     });
     try {
-      const committed = await commitVerifiedClosureDistributionGeneration(
+      const prepared = await prepareVerifiedClosureDistributionGeneration(
         input.paths,
         verification,
         input.candidate.releaseVersion,
       );
       return {
         candidate: input.candidate,
-        pointer: committed.committed.standalone,
+        pointer: prepared.prepared.standalone,
         reason: decision.reason,
-        state: "committed",
+        state: "prepared",
       };
     } finally {
       await rm(verification.materializedRoot, { force: true, recursive: true }).catch(() => undefined);
@@ -358,7 +358,7 @@ export async function applyClosureDistributionUpdate(input: {
 /**
  * Re-materialize the exact content identity and advance only the runtime fence.
  */
-export async function repairCommittedClosureDistribution(input: {
+export async function repairActiveClosureDistribution(input: {
   candidate: ClosureDistributionReleaseCandidate;
   fetch?: typeof globalThis.fetch;
   onProgress?: (progress: ClosureDistributionUpdateProgress) => void;
@@ -373,21 +373,21 @@ export async function repairCommittedClosureDistribution(input: {
   }
   try {
     const descriptor = await readClosureBindingDescriptor(input.paths);
-    const committed = descriptor.committed;
-    if (committed == null) {
-      throw new ClosureUpdateError("Closure repair requires a committed binding");
+    const active = descriptor.active;
+    if (active == null) {
+      throw new ClosureUpdateError("Closure repair requires an active binding");
     }
     const minimum = resolveClosureShellMinimumVersion(input.candidate.manifest, input.shellType);
     if (minimum == null || compareClosureShellVersions(input.shellVersion, minimum) < 0) {
       return { candidate: input.candidate, reason: "shell-incompatible", state: "retained" };
     }
     if (
-      input.candidate.releaseVersion !== committed.releaseVersion
-      || input.candidate.manifest.identity.version !== committed.standalone.version
-      || input.candidate.manifest.identity.digest !== committed.standalone.digest
-      || input.candidate.target !== committed.standalone.target
+      input.candidate.releaseVersion !== active.releaseVersion
+      || input.candidate.manifest.identity.version !== active.standalone.version
+      || input.candidate.manifest.identity.digest !== active.standalone.digest
+      || input.candidate.target !== active.standalone.target
     ) {
-      throw new ClosureUpdateError("Closure repair candidate does not match the committed immutable binding");
+      throw new ClosureUpdateError("Closure repair candidate does not match the active immutable binding");
     }
     const verification = await stageClosureDistributionGeneration({
       candidate: input.candidate,
@@ -398,16 +398,16 @@ export async function repairCommittedClosureDistribution(input: {
       ...(input.repository == null ? {} : { repository: input.repository }),
     });
     try {
-      const repaired = await commitVerifiedClosureDistributionGeneration(
+      const repaired = await prepareVerifiedClosureDistributionGeneration(
         input.paths,
         verification,
         input.candidate.releaseVersion,
       );
       return {
         candidate: input.candidate,
-        pointer: repaired.committed.standalone,
-        reason: "repair-committed-closure",
-        state: "committed",
+        pointer: repaired.prepared.standalone,
+        reason: "repair-active-closure",
+        state: "prepared",
       };
     } finally {
       await rm(verification.materializedRoot, { force: true, recursive: true }).catch(() => undefined);
@@ -456,16 +456,16 @@ export async function applyClosureUpdate(input: {
     if (currentDecision.action === "retain") {
       return { candidate: input.candidate, reason: currentDecision.reason, state: "retained" };
     }
-    const committed = await commitVerifiedStoredClosureCandidate(
+    const prepared = await prepareVerifiedStoredClosureCandidate(
       input.paths,
       verification,
       input.candidate.releaseVersion,
     );
     return {
       candidate: input.candidate,
-      pointer: committed.committed.standalone,
+      pointer: prepared.prepared.standalone,
       reason: currentDecision.reason,
-      state: "committed",
+      state: "prepared",
     };
   } finally {
     await releaseClosureChannelLock(lock);

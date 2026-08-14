@@ -72,43 +72,20 @@ describe('resolvePackagedStandaloneMetadataUrl', () => {
 });
 
 describe('resolvePackagedStandaloneReleaseVersion', () => {
-  it('keeps an explicitly pinned release without requesting metadata', async () => {
-    let requested = false;
-    const fetchImpl = (async () => {
-      requested = true;
-      throw new Error('unexpected request');
-    }) as typeof fetch;
-
-    await expect(resolvePackagedStandaloneReleaseVersion(
-      ' 0.19.1-beta.6 ',
-      'https://releases.example/beta/latest/metadata.json',
-      fetchImpl,
-    )).resolves.toBe('0.19.1-beta.6');
-    expect(requested).toBe(false);
+  it('keeps the immutable release packaged with the Shell', () => {
+    expect(resolvePackagedStandaloneReleaseVersion(' 0.19.1-beta.6 '))
+      .toBe('0.19.1-beta.6');
   });
 
-  it('resolves an unbound reusable Shell from public release metadata', async () => {
-    const fetchImpl = (async (input: string | URL | Request) => {
-      expect(String(input)).toBe('https://releases.example/beta/latest/metadata.json');
-      return new Response(JSON.stringify({ releaseVersion: '0.19.1-beta.7' }), { status: 200 });
-    }) as typeof fetch;
-
-    await expect(resolvePackagedStandaloneReleaseVersion(
-      null,
-      'https://releases.example/beta/latest/metadata.json',
-      fetchImpl,
-    )).resolves.toBe('0.19.1-beta.7');
-  });
-
-  it('fails closed when neither a pin nor usable metadata exists', async () => {
-    await expect(resolvePackagedStandaloneReleaseVersion(null, null)).rejects.toThrow(
-      'Standalone release version and metadata URL are unavailable',
+  it('does not bind an unbound Shell to mutable public metadata', () => {
+    expect(() => resolvePackagedStandaloneReleaseVersion(null)).toThrow(
+      'Packaged Standalone release binding is unavailable',
     );
-    const fetchImpl = (async () => new Response(JSON.stringify({ releaseVersion: 7 }), { status: 200 })) as typeof fetch;
-    await expect(resolvePackagedStandaloneReleaseVersion(
-      null,
-      'https://releases.example/beta/latest/metadata.json',
-      fetchImpl,
-    )).rejects.toThrow('Standalone release metadata does not declare releaseVersion');
+  });
+
+  it('fails closed for an empty packaged binding', () => {
+    expect(() => resolvePackagedStandaloneReleaseVersion('  ')).toThrow(
+      'Packaged Standalone release binding is unavailable',
+    );
   });
 });

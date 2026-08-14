@@ -29,7 +29,7 @@ import {
   type ClosureRuntimePointer,
   type ClosureStorePaths,
   type ClosureStoreVersionPaths,
-  type CommittedClosureBinding,
+  type ClosureReleaseBinding,
   type StoredClosureVerification,
 } from "./binding.js";
 
@@ -182,10 +182,14 @@ export async function verifyMaterializedClosureCandidate(
 
 function emptyBinding(paths: ClosureStorePaths, now: string): ClosureBindingDescriptor {
   return {
+    active: null,
+    attempt: null,
+    activationAuthorized: false,
     channel: paths.channel,
-    committed: null,
+    lastSuccessful: null,
     namespace: paths.namespace,
     nextGeneration: 0,
+    prepared: null,
     schemaVersion: CLOSURE_BINDING_SCHEMA_VERSION,
     updatedAt: now,
   };
@@ -198,33 +202,33 @@ export async function readClosureBindingDescriptor(paths: ClosureStorePaths): Pr
     : validateClosureBindingDescriptor(raw, paths);
 }
 
-export async function commitStoredClosureCandidate(
+export async function prepareStoredClosureCandidate(
   paths: ClosureStorePaths,
   binding: ClosureBindingIdentity,
   releaseVersion: string,
 ): Promise<{
-  committed: CommittedClosureBinding;
+  prepared: ClosureReleaseBinding;
   descriptor: ClosureBindingDescriptor;
   verification: StoredClosureVerification;
 }> {
   const verification = await verifyStoredClosureCandidate(paths, binding);
-  return await commitVerifiedStoredClosureCandidate(paths, verification, releaseVersion);
+  return await prepareVerifiedStoredClosureCandidate(paths, verification, releaseVersion);
 }
 
 /**
- * Commit a candidate whose exact materialized bytes were already verified.
+ * Prepare a candidate whose exact materialized bytes were already verified.
  *
  * Fresh update staging verifies every inventory entry before an atomic rename
  * into the Store. Carrying that proof across the rename avoids hashing a large
  * Windows Closure two more times while preserving the one full byte-level
  * verification before the binding becomes visible.
  */
-export async function commitVerifiedStoredClosureCandidate(
+export async function prepareVerifiedStoredClosureCandidate(
   paths: ClosureStorePaths,
   verification: StoredClosureVerification,
   releaseVersion: string,
 ): Promise<{
-  committed: CommittedClosureBinding;
+  prepared: ClosureReleaseBinding;
   descriptor: ClosureBindingDescriptor;
   verification: StoredClosureVerification;
 }> {
@@ -237,7 +241,7 @@ export async function commitVerifiedStoredClosureCandidate(
     || verification.paths.manifestPath !== expectedPaths.manifestPath
     || verification.paths.payloadRoot !== expectedPaths.payloadRoot
   ) {
-    throw new ClosureStoreError("verified Closure paths do not match the committed Store location");
+    throw new ClosureStoreError("verified Closure paths do not match the prepared Store location");
   }
   const current = await readClosureBindingDescriptor(paths);
   const generation = current.nextGeneration;
@@ -250,16 +254,17 @@ export async function commitVerifiedStoredClosureCandidate(
     target: binding.platform,
     version: binding.version,
   };
-  const committed: CommittedClosureBinding = {
+  const prepared: ClosureReleaseBinding = {
     releaseVersion: normalizeReleaseVersion(releaseVersion),
     standalone: pointer,
   };
   const descriptor: ClosureBindingDescriptor = {
     ...current,
-    committed,
+    activationAuthorized: false,
+    prepared,
     nextGeneration: generation + 1,
     updatedAt: new Date().toISOString(),
   };
   await writeJsonFile(paths.bindingPath, descriptor);
-  return { committed, descriptor, verification };
+  return { prepared, descriptor, verification };
 }

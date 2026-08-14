@@ -367,7 +367,7 @@ export async function buildClosureDistributionShared(
     const resourceRoot = join(resourcesRoot, group.id);
     await mkdir(resourceRoot, { recursive: true });
     await copyBundledResourceGroup({ id: group.id, resourceRoot, workspaceRoot });
-    resources.push({ id: group.id, root: resourceRoot, title: group.title });
+    resources.push({ id: group.id, root: resourceRoot, startup: group.startup, title: group.title });
   }
   const contribution = await buildClosureDistributionSharedContribution({
     archiveTarget,

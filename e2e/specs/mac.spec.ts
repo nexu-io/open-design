@@ -93,6 +93,7 @@ const closureBlobRoots = parsePathListEnv(process.env.OD_PACKAGED_E2E_CLOSURE_BL
 const standaloneSeedEmbedded = process.env.OD_PACKAGED_E2E_STANDALONE_SEED_EMBEDDED === '1';
 const verifyPublicImmutableArtifacts =
   normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_SHELL_SMOKE_PROOF) === 'public-immutable-artifacts';
+const verifyStandaloneRuntimeBinding = verifyPublicImmutableArtifacts || standaloneSeedEmbedded;
 const maxStartDurationMs = 90_000;
 const legacyDmgPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH);
 const legacyVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_VERSION);
@@ -516,7 +517,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       }
 
       const inspect = await waitForHealthyDesktop();
-      if (verifyPublicImmutableArtifacts) {
+      if (verifyStandaloneRuntimeBinding) {
         coldStart = createPackagedColdStartObservation({
           launchFinishedAt: coldLaunchFinishedAt,
           launchStartedAt: coldLaunchStartedAt,
@@ -573,7 +574,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       expect(pty.exitCode, JSON.stringify(pty, null, 2)).toBe(0);
       expect(pty.cleanup.terminalStatus).toBe(200);
       expect(pty.cleanup.projectStatus).toBe(200);
-      if (verifyPublicImmutableArtifacts) {
+      if (verifyStandaloneRuntimeBinding) {
         assertPackagedStandaloneStatus(inspect.status?.standalone, {
           namespace,
           releaseVersion: updateScenario.expectedCurrentVersion,
@@ -877,34 +878,22 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         started = false;
         expect(closureFaultStop.remainingPids).toEqual([]);
         const broken = await activateBrokenClosureSuccessor(closureAcceptance);
-        await expect(runToolsPackJson<MacStartResult>('start')).rejects.toThrow(/Standalone|standalone/u);
-        expect((await readPackagedClosureFixtureRuntime(closureAcceptance)).committed?.standalone)
+        expect((await readPackagedClosureFixtureRuntime(closureAcceptance)).attempt?.standalone)
           .toEqual(broken.pointer);
-
-        await resetPackagedClosureFixture({
-          channel: updateScenario.channel,
-          installationRoot: join(toolsPackDir, 'runtime', 'mac'),
-          namespace,
-        });
-        closureAcceptance = await seedPackagedClosureFixture({
-          buildJsonPath: closureBuildJsonPath!,
-          channel: updateScenario.channel,
-          expectedPlatform: packagedMacClosureTarget,
-          installationRoot: join(toolsPackDir, 'runtime', 'mac'),
-          namespace,
-          workspaceRoot,
-        });
         await runToolsPackJson<MacStartResult>('start');
         started = true;
-        const repairedInspect = await waitForHealthyDesktop();
-        await capturePackagedCheckpoint(report, 'shell-closure-repaired', repairedInspect);
+        const rollbackInspect = await waitForHealthyDesktop();
+        await capturePackagedCheckpoint(report, 'shell-closure-rollback', rollbackInspect);
         assertClosureDesktopIdentity(
           await readDesktopIdentityMarker(),
           closureAcceptance.manifest.identity.version,
         );
+        const recovered = await readPackagedClosureFixtureRuntime(closureAcceptance);
+        expect(recovered.active?.standalone).toEqual(closureAcceptance.pointer);
+        expect(recovered.attempt).toBeNull();
       }
 
-      const closureBinding = verifyPublicImmutableArtifacts
+      const closureBinding = verifyStandaloneRuntimeBinding
         ? await readPackagedClosureBinding({
             channel: updateScenario.channel,
             label: 'packaged macOS',
@@ -1342,28 +1331,15 @@ macClosureDescribe('packaged mac Standalone Closure release acceptance', () => {
       started = false;
       expect(faultStop.remainingPids).toEqual([]);
       const broken = await activateBrokenClosureSuccessor(fixture);
-      await expect(runToolsPackJson<MacStartResult>('start')).rejects.toThrow(/Standalone|standalone/u);
-      expect((await readPackagedClosureFixtureRuntime(fixture)).committed?.standalone).toEqual(broken.pointer);
-
-      await resetPackagedClosureFixture({
-        channel: updateScenario.channel,
-        installationRoot,
-        namespace,
-      });
-      const recovered = await seedPackagedClosureFixture({
-        buildJsonPath: closureBuildJsonPath!,
-        channel: updateScenario.channel,
-        expectedPlatform: packagedMacClosureTarget,
-        installationRoot,
-        namespace,
-        workspaceRoot,
-      });
+      expect((await readPackagedClosureFixtureRuntime(fixture)).attempt?.standalone).toEqual(broken.pointer);
       await runToolsPackJson<MacStartResult>('start');
       started = true;
       const recoveredInspect = await waitForHealthyDesktop();
-      await capturePackagedCheckpoint(report, 'closure-repaired', recoveredInspect);
-      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), recovered.manifest.identity.version);
-      expect((await readPackagedClosureFixtureRuntime(recovered)).committed?.standalone).toEqual(recovered.pointer);
+      await capturePackagedCheckpoint(report, 'closure-rollback', recoveredInspect);
+      assertClosureDesktopIdentity(await readDesktopIdentityMarker(), fixture.manifest.identity.version);
+      const recovered = await readPackagedClosureFixtureRuntime(fixture);
+      expect(recovered.active?.standalone).toEqual(fixture.pointer);
+      expect(recovered.attempt).toBeNull();
     } finally {
       restoreUpdateEnv(updateEnv);
       await closureFixture?.close().catch(() => undefined);

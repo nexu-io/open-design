@@ -164,6 +164,13 @@ function normalizeDistributionComponent(
   };
 }
 
+function normalizeResourceStartup(value: unknown): "blocking" | "lazy" {
+  if (value !== "blocking" && value !== "lazy") {
+    throw new ClosureProtocolError("closure distribution resource startup must be blocking or lazy");
+  }
+  return value;
+}
+
 function normalizeDistributionEntrypointComponent(
   value: unknown,
   label: string,
@@ -203,10 +210,11 @@ function normalizeDistributionResources(value: unknown): ClosureDistributionReso
   }
   const resources = value.map((rawResource) => {
     const resource = requireRecord(rawResource, "closure distribution resource");
-    requireKnownKeys(resource, ["blob", "id", "title", "treeDigest"], "closure distribution resource");
+    requireKnownKeys(resource, ["blob", "id", "startup", "title", "treeDigest"], "closure distribution resource");
     return {
       blob: normalizeDigest(resource.blob),
       id: normalizeProtocolToken(resource.id, "closure distribution resource id"),
+      startup: normalizeResourceStartup(resource.startup),
       title: normalizeDisplayTitle(resource.title, "closure distribution resource title"),
       treeDigest: normalizeDigest(resource.treeDigest),
     };
@@ -467,12 +475,13 @@ export function validateClosureDistributionSharedContribution(
     const resource = requireRecord(value, "closure distribution shared resource");
     requireKnownKeys(
       resource,
-      ["artifact", "id", "title", "treeDigest"],
+      ["artifact", "id", "startup", "title", "treeDigest"],
       "closure distribution shared resource",
     );
     return {
       artifact: normalizeContributionArtifact(resource.artifact, "closure distribution shared resource"),
       id: normalizeProtocolToken(resource.id, "closure distribution shared resource id"),
+      startup: normalizeResourceStartup(resource.startup),
       title: normalizeDisplayTitle(resource.title, "closure distribution shared resource title"),
       treeDigest: normalizeDigest(resource.treeDigest),
     };
@@ -523,12 +532,13 @@ export function validateClosureDistributionTargetContribution(
     const resource = requireRecord(value, "closure distribution target resource");
     requireKnownKeys(
       resource,
-      ["artifact", "id", "title", "treeDigest"],
+      ["artifact", "id", "startup", "title", "treeDigest"],
       "closure distribution target resource",
     );
     return {
       artifact: normalizeContributionArtifact(resource.artifact, "closure distribution target resource"),
       id: normalizeProtocolToken(resource.id, "closure distribution target resource id"),
+      startup: normalizeResourceStartup(resource.startup),
       title: normalizeDisplayTitle(resource.title, "closure distribution target resource title"),
       treeDigest: normalizeDigest(resource.treeDigest),
     };
@@ -611,6 +621,7 @@ export function mergeClosureDistributionContributions(
       resources: contribution.resources.map((resource) => ({
         blob: resource.artifact.digest,
         id: resource.id,
+        startup: resource.startup,
         title: resource.title,
         treeDigest: resource.treeDigest,
       })),
@@ -641,6 +652,7 @@ export function mergeClosureDistributionContributions(
     resources: shared.resources.map((resource) => ({
       blob: resource.artifact.digest,
       id: resource.id,
+      startup: resource.startup,
       title: resource.title,
       treeDigest: resource.treeDigest,
     })),

@@ -87,7 +87,10 @@ import {
   resolveElectronStandaloneTarget,
   resolveStandaloneViaOfficialNode,
 } from "./standalone-bootstrap.js";
-import { createStandaloneDesktopAuthRegistration } from "./standalone-commands.js";
+import {
+  createStandaloneDesktopAuthRegistration,
+  createStandaloneUpdatePreparation,
+} from "./standalone-commands.js";
 import { resolveShellNodeCommand, withStandaloneBootstrapEnvironment } from "./standalone-environment.js";
 import {
   parsePackagedStandaloneRequest,
@@ -192,9 +195,7 @@ async function main(): Promise<void> {
   const shellConfig = shellRuntime.config;
   const paths = shellRuntime.paths;
   const shellVersion = shellConfig.shellVersion;
-  const launcherVersion = shellConfig.launcherVersion;
   if (shellVersion == null) throw new Error("Electron Shell version is unavailable");
-  if (launcherVersion == null) throw new Error("Electron launcher version is unavailable");
   const mcpBootstrap = resolvePackagedMcpBootstrapLaunch({
     installedLaunchPath: shellRuntime.installedLaunchPath,
   });
@@ -256,10 +257,7 @@ async function main(): Promise<void> {
   const metadataUrl = resolvePackagedStandaloneMetadataUrl(
     shellConfig.updateMetadataUrl,
   );
-  const releaseVersion = await resolvePackagedStandaloneReleaseVersion(
-    shellConfig.releaseVersion,
-    metadataUrl,
-  );
+  const releaseVersion = resolvePackagedStandaloneReleaseVersion(shellConfig.releaseVersion);
   const target = resolveElectronStandaloneTarget();
   if (target == null) throw new Error(`Standalone is unsupported on ${process.platform}-${process.arch}`);
   const nodeCommand = resolveShellNodeCommand(shellConfig.nodeCommand);
@@ -429,7 +427,7 @@ async function main(): Promise<void> {
     },
     standaloneLifecycle: standalone.lifecycle,
     update: {
-      currentVersion: launcherVersion,
+      currentVersion: shellVersion,
       downloadRoot: paths.updateRoot,
       installerObservationRoot: paths.installerObservationRoot,
       launcherLaunchPath: shellRuntime.installedLaunchPath,
@@ -438,6 +436,11 @@ async function main(): Promise<void> {
         ? null
         : join(shellConfig.resourceRoot, "bin", "7z.exe"),
       launcherRuntimePath: shellRuntime.launcherPaths.runtimePath,
+      prepareStandaloneUpdate: createStandaloneUpdatePreparation({
+        attachmentId: binding.attachment.id,
+        handoff: status.handoff,
+        handle: standalone,
+      }),
     },
     windowTitle: resolvePackagedWindowTitle(shellConfig),
   });

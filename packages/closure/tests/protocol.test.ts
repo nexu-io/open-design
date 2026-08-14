@@ -119,6 +119,7 @@ const distributionDraft: ClosureDistributionManifestDraft = {
         resources: [{
           blob: distributionDigests.velaWin,
           id: "vela-runtime",
+          startup: "blocking",
           title: "Vela runtime",
           treeDigest: distributionDigests.velaWin,
         }],
@@ -128,6 +129,7 @@ const distributionDraft: ClosureDistributionManifestDraft = {
         resources: [{
           blob: distributionDigests.velaMac,
           id: "vela-runtime",
+          startup: "blocking",
           title: "Vela runtime",
           treeDigest: distributionDigests.velaMac,
         }],
@@ -137,6 +139,7 @@ const distributionDraft: ClosureDistributionManifestDraft = {
   resources: [{
     blob: distributionDigests.resource,
     id: "design-system-core",
+    startup: "lazy",
     title: "Open Design Core",
     treeDigest: distributionDigests.resource,
   }],
@@ -556,6 +559,7 @@ describe("layered Closure cross-job contributions", () => {
     resources: [{
       artifact: artifact(distributionDigests.resource),
       id: "design-system-core",
+      startup: "lazy",
       title: "Open Design Core",
       treeDigest: distributionDigests.resource,
     }],
@@ -573,6 +577,7 @@ describe("layered Closure cross-job contributions", () => {
     resources: [{
       artifact: artifact(distributionDigests.velaMac),
       id: "vela-runtime",
+      startup: "blocking",
       title: "Vela runtime",
       treeDigest: distributionDigests.velaMac,
     }],

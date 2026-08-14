@@ -58,6 +58,7 @@ export type ClosureSharedResourceRoot = Readonly<{
   executablePaths?: readonly string[];
   id: string;
   root: string;
+  startup: "blocking" | "lazy";
   title: string;
 }>;
 
@@ -586,7 +587,7 @@ export async function buildClosureDistributionSharedContribution(options: Readon
       sourceRoot: resource.root,
       target: options.archiveTarget,
     });
-    resources.push({ ...archive, id, title: resource.title });
+    resources.push({ ...archive, id, startup: resource.startup, title: resource.title });
   }
   return await createClosureDistributionSharedContribution({
     blobOrigin: options.blobOrigin,
@@ -632,7 +633,7 @@ export async function buildClosureDistributionTargetContribution(options: Readon
       sourceRoot: resource.root,
       target: options.target,
     });
-    resources.push({ ...archive, id, title: resource.title });
+    resources.push({ ...archive, id, startup: resource.startup, title: resource.title });
   }
   return await createClosureDistributionTargetContribution({
     blobOrigin: options.blobOrigin,

@@ -1,6 +1,6 @@
 {
   "name": "@open-design/shell",
-  "version": "0.19.3",
+  "version": "0.19.4",
   "private": true,
   "type": "module",
   "description": "Shared Open Design Shell update persistence contract and deterministic layout.",

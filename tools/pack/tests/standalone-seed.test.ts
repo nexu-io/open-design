@@ -11,7 +11,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { ToolPackConfig } from "../src/config.js";
-import { inspectStandaloneSeed } from "../src/standalone-seed.js";
+import { bindStandaloneSeed, inspectStandaloneSeed } from "../src/standalone-seed.js";
 
 const roots: string[] = [];
 const fixtureTarget = process.arch === "arm64" ? "darwin-arm64" : "darwin-x64";
@@ -25,12 +25,14 @@ function digest(value: string | Buffer): `sha256:${string}` {
 }
 
 async function seedFixture(options: Readonly<{
+  channel?: "beta" | "local";
   minShellVersion?: string;
   writeBlob?: boolean;
 }> = {}): Promise<{ config: ToolPackConfig; digest: `sha256:${string}`; root: string }> {
   const root = await mkdtemp(join(tmpdir(), "od-tools-pack-seed-"));
   roots.push(root);
   const seedRoot = join(root, "seed");
+  const channel = options.channel ?? "beta";
   const blob = Buffer.from("PK\u0003\u0004standalone-component");
   const blobDigest = digest(blob);
   const manifest = createClosureDistributionManifest({
@@ -43,7 +45,7 @@ async function seedFixture(options: Readonly<{
       },
     },
     compatibility: { shell: { electron: { version: { min: options.minShellVersion ?? "0.19.0-beta.1" } } } },
-    identity: { channel: "beta", protocolVersion: CLOSURE_PROTOCOL_VERSION, version: "0.19.0-beta.3" },
+    identity: { channel, protocolVersion: CLOSURE_PROTOCOL_VERSION, version: "0.19.0-beta.3" },
     required: {
       body: { blob: blobDigest, entryPath: "bootloader.mjs", treeDigest: digest("body") },
       launcher: { blob: blobDigest, entryPath: "launcher.mjs", handoffPath: "bootloader.mjs", treeDigest: digest("launcher") },
@@ -52,15 +54,15 @@ async function seedFixture(options: Readonly<{
     resources: [],
     schemaVersion: CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
   }, digest);
-  await mkdir(join(seedRoot, "beta", "blobs"), { recursive: true });
-  await writeFile(join(seedRoot, "beta", "baseline.json"), JSON.stringify({
-    channel: "beta",
+  await mkdir(join(seedRoot, channel, "blobs"), { recursive: true });
+  await writeFile(join(seedRoot, channel, "baseline.json"), JSON.stringify({
+    channel,
     closure: manifest,
     releaseState: "complete",
     releaseVersion: "0.19.0-beta.3",
   }));
   if (options.writeBlob !== false) {
-    await writeFile(join(seedRoot, "beta", "blobs", blobDigest.slice("sha256:".length)), blob);
+    await writeFile(join(seedRoot, channel, "blobs", blobDigest.slice("sha256:".length)), blob);
   }
   return {
     config: {
@@ -76,6 +78,22 @@ async function seedFixture(options: Readonly<{
 }
 
 describe("Standalone Shell seed", () => {
+  it("persists the validated seed release as the packaged runtime binding", async () => {
+    const value = await seedFixture({ channel: "local" });
+    value.config.releaseVersion = undefined;
+    value.config.debugChannel = "local";
+    await expect(bindStandaloneSeed(value.config)).resolves.toMatchObject({
+      releaseVersion: "0.19.0-beta.3",
+    });
+    expect(value.config.runtimeReleaseVersion).toBe("0.19.0-beta.3");
+  });
+
+  it("rejects a seed that disagrees with the packaged release", async () => {
+    const value = await seedFixture();
+    value.config.releaseVersion = "0.19.0-beta.4";
+    await expect(bindStandaloneSeed(value.config)).rejects.toThrow(/does not match packaged release/u);
+  });
+
   it("binds a valid partial or complete baseline repository to the artifact profile", async () => {
     const complete = await seedFixture();
     await expect(inspectStandaloneSeed(complete.config)).resolves.toMatchObject({

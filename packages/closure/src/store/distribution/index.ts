@@ -16,21 +16,20 @@ import {
   type ClosureChannel,
   type ResolvedClosureDistributionTarget,
 } from "../../protocol/index.js";
-import { writeJsonFile } from "@open-design/sidecar";
 import {
   ClosureStoreError,
   assertUnderRoot,
   digestFile,
   normalizeGeneration,
   normalizePointer,
-  normalizeReleaseVersion,
   readRequiredJson,
   type ClosureBindingDescriptor,
   type ClosureRuntimePointer,
   type ClosureStorePaths,
-  type CommittedClosureBinding,
+  type ClosureReleaseBinding,
 } from "../binding.js";
 import { compareName, readClosureBindingDescriptor } from "../legacy-candidate.js";
+import { publishPreparedClosureBinding } from "../runtime.js";
 import { resolveDistributionInstallationRoot } from "./paths.js";
 
 export type ClosureDistributionComponentPlan = Readonly<{
@@ -55,6 +54,7 @@ export type ClosureDistributionResourcePlan = Readonly<{
   blobPath: string;
   id: string;
   resourceRoot: string;
+  startup: "blocking" | "lazy";
   title: string;
   treeDigest: ClosureDigest;
 }>;
@@ -90,7 +90,7 @@ function sha256CanonicalDistribution(value: string): ClosureDigest {
 /**
  * Consume one sealed distribution graph without selecting a release or
  * exposing Store layout. Materialization may stage the returned target, but a
- * later Store commit still publishes the generation atomically.
+ * later Store preparation still publishes the generation atomically.
  */
 export function consumeClosureDistributionTarget(
   value: unknown,
@@ -245,6 +245,7 @@ export function planClosureDistributionGeneration(
         paths.resourcesRoot,
         createClosureResourceIndexKey(resource.title, resource.treeDigest),
       )),
+      startup: resource.startup,
       title: resource.title,
       treeDigest: resource.treeDigest,
     }))),
@@ -420,7 +421,7 @@ export async function readStoredClosureDistributionManifest(
     || plan.identity.protocolVersion !== pointer.protocolVersion
     || plan.identity.version !== pointer.version
   ) {
-    throw new ClosureStoreError("committed Closure distribution identity does not match its installation");
+    throw new ClosureStoreError("stored Closure distribution identity does not match its installation");
   }
   return manifest;
 }
@@ -451,13 +452,13 @@ export async function hasStoredClosureDistributionGeneration(
   return metadata?.isFile() === true && !metadata.isSymbolicLink();
 }
 
-/** Publish one verified generation and then advance the sole binding truth. */
-export async function commitVerifiedClosureDistributionGeneration(
+/** Publish verified bytes as a prepared generation without changing launch authority. */
+export async function prepareVerifiedClosureDistributionGeneration(
   paths: ClosureStorePaths,
   verification: StoredClosureDistributionVerification,
   releaseVersion: string,
 ): Promise<{
-  committed: CommittedClosureBinding;
+  prepared: ClosureReleaseBinding;
   descriptor: ClosureBindingDescriptor;
   verification: StoredClosureDistributionVerification;
 }> {
@@ -480,16 +481,8 @@ export async function commitVerifiedClosureDistributionGeneration(
     target: verification.plan.target,
     version: verification.plan.identity.version,
   };
-  const committed: CommittedClosureBinding = {
-    releaseVersion: normalizeReleaseVersion(releaseVersion),
-    standalone: pointer,
-  };
-  const descriptor: ClosureBindingDescriptor = {
-    ...current,
-    committed,
-    nextGeneration: current.nextGeneration + 1,
-    updatedAt: new Date().toISOString(),
-  };
-  await writeJsonFile(paths.bindingPath, descriptor);
-  return { committed, descriptor, verification };
+  const descriptor = await publishPreparedClosureBinding(paths, pointer, releaseVersion);
+  const prepared = descriptor.prepared;
+  if (prepared == null) throw new ClosureStoreError("prepared Closure binding was not published");
+  return { prepared, descriptor, verification };
 }

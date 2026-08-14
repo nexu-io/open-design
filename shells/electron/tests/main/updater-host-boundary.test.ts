@@ -22,6 +22,7 @@ describe("desktop updater host boundary", () => {
     expect(runtime).toContain("od:update:quit");
     expect(runtime).toContain("UPDATER_STATUS_EVENT");
     expect(runtime).toContain("event.sender !== window.webContents");
+    expect(runtime).toContain("activateOnRestart: true");
   });
 
   it("lists every registered od:update:* handler in the teardown channel table", () => {
@@ -144,11 +145,10 @@ describe("desktop updater host boundary", () => {
     expect(scheduler).toContain("startupSilentPayloadUpdate.transition.acquire()");
   });
 
-  it("keeps product telemetry on the committed release while updater tracks the launcher payload", () => {
+  it("keeps product telemetry on the active release while updater compares the Shell version", () => {
     const entry = source("src/index.ts");
     expect(entry).toContain("startupTelemetryContext.appVersion = binding.descriptor.release.version");
-    expect(entry).toContain("currentVersion: launcherVersion");
-    expect(entry).not.toContain("currentVersion: shellVersion");
+    expect(entry).toContain("currentVersion: shellVersion");
   });
 
   it("keeps packaged saturation smoke renderable without surfacing native windows", () => {

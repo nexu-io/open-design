@@ -29,6 +29,7 @@ export async function prepareClosureTargetResources(
     executablePaths: velaRuntimeExecutablePaths(target),
     id: VELA_RUNTIME_RESOURCE_ID,
     root,
+    startup: "blocking",
     title: "Vela runtime",
   }];
 }

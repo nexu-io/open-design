@@ -21,7 +21,7 @@ import {
 } from "../src/closure/distribution.js";
 
 const fixturePath = fileURLToPath(
-  new URL("../../../packages/closure/fixtures/distribution-v3.json", import.meta.url),
+  new URL("../../../packages/closure/fixtures/distribution-v4.json", import.meta.url),
 );
 const roots: string[] = [];
 
@@ -50,6 +50,7 @@ async function sharedContributionOptions(version = "0.19.0-beta.10") {
     resources: [{
       ...await artifact(root, "design-systems.zip", "shared-design-systems"),
       id: "design-systems",
+      startup: "lazy" as const,
       title: "Design systems",
     }],
     shellCompatibility: {
@@ -185,6 +186,7 @@ describe("tools-pack layered Closure producer", () => {
       resources: [{
         ...await artifact(root, "vela.zip", "darwin-vela"),
         id: "vela-runtime",
+        startup: "blocking",
         title: "Vela runtime",
       }],
     });

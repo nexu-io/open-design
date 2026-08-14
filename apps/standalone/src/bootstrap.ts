@@ -1,9 +1,14 @@
 import { join } from "node:path";
 
 import {
+  activatePreparedClosureBinding,
+  authorizePreparedClosureActivation,
+  beginActiveClosureBindingAttempt,
   readClosureBindingDescriptor,
   readStoredClosureDistributionManifest,
+  recoverInterruptedClosureBinding,
   resolveClosureStorePaths,
+  sameShellBinding,
   verifyStoredClosureDistributionGeneration,
 } from "@open-design/closure/store";
 import {
@@ -11,7 +16,7 @@ import {
   ClosureInstallerRequiredError,
   discoverClosureDistributionVersionCandidate,
   readClosureResourceRepositoryConfig,
-  repairCommittedClosureDistribution,
+  repairActiveClosureDistribution,
   resolveClosureShellMinimumVersion,
   type ClosureDistributionReleaseCandidate,
   type ClosureDistributionUpdateProgress,
@@ -46,9 +51,9 @@ export class StandaloneBootstrapError extends Error {
 }
 
 /**
- * Resolve an unresolved Shell attachment into exactly one committed
- * generation. The launcher supplies the release binding while Standalone owns
- * discovery, component selection, compatibility, commit, and repair policy.
+ * Resolve an unresolved Shell attachment into one attempted or last-successful
+ * generation. Cold start may activate prepared bytes, but never discovers a
+ * newer release than the Shell's explicit first-install binding.
  */
 export async function resolveStandaloneBootstrap(
   requestInput: StandaloneBootstrapDescriptor,
@@ -66,8 +71,23 @@ export async function resolveStandaloneBootstrap(
   const repository = await readClosureResourceRepositoryConfig({
     OD_CLOSURE_RESOURCE_REPOSITORY_V1: request.repositoryConfigPath,
   });
+  const lifecycle = bootstrapSidecarLifecycle({
+    controlRoot: request.paths.dataRoot,
+    scope: { channel: request.scope.channel, namespace: request.scope.namespace },
+  });
   let descriptor = await readClosureBindingDescriptor(paths);
-  const initialLoad = descriptor.committed == null;
+  if (descriptor.attempt != null) {
+    const snapshot = await lifecycle.snapshot();
+    if (snapshot.transition != null) {
+      throw new StandaloneBootstrapError(
+        "standalone-occupied",
+        `Standalone activation is already active: ${snapshot.transition.kind}`,
+      );
+    }
+    await recoverInterruptedClosureBinding(paths);
+    descriptor = await readClosureBindingDescriptor(paths);
+  }
+  const initialLoad = descriptor.active == null;
   const standaloneSubject = Object.freeze({
     id: "standalone",
     kind: "standalone" as const,
@@ -106,10 +126,6 @@ export async function resolveStandaloneBootstrap(
     });
   };
   emitProgress("checking");
-  const lifecycle = bootstrapSidecarLifecycle({
-    controlRoot: request.paths.dataRoot,
-    scope: { channel: request.scope.channel, namespace: request.scope.namespace },
-  });
   let transition: SidecarTransitionCredential | null = null;
   let transitionRenewal: ReturnType<typeof setInterval> | null = null;
   let transitionRenewalError: Error | null = null;
@@ -128,7 +144,7 @@ export async function resolveStandaloneBootstrap(
         kind,
         leaseMs: 60_000,
         owner: {
-          generation: descriptor.committed?.standalone.generation ?? descriptor.nextGeneration,
+          generation: descriptor.active?.standalone.generation ?? descriptor.nextGeneration,
           incarnation: request.attachment.id,
           key: `${request.attachment.shell.type}:${request.attachment.id}`,
           projection: {
@@ -212,7 +228,7 @@ export async function resolveStandaloneBootstrap(
     }
   };
 
-  const commitExact = async (version: string): Promise<void> => {
+  const prepareExact = async (version: string): Promise<void> => {
     const candidate = await discoverExact(version);
     assertCandidateSupportsShell(candidate);
     const result = await applyClosureDistributionUpdate({
@@ -227,103 +243,15 @@ export async function resolveStandaloneBootstrap(
     if (result.state === "retained" && result.reason === "shell-incompatible") {
       throw new StandaloneBootstrapError("installer-required", "Standalone requires a newer Shell");
     }
-    if (result.state !== "committed" && result.reason !== "already-committed") {
-      throw new StandaloneBootstrapError("standalone-invalid", `Standalone bootstrap could not commit: ${result.reason}`);
+    if (result.state !== "prepared" && result.reason !== "already-prepared") {
+      throw new StandaloneBootstrapError("standalone-invalid", `Standalone bootstrap could not prepare: ${result.reason}`);
     }
     descriptor = await readClosureBindingDescriptor(paths);
   };
 
-  try {
-    const committedBeforeAlignment = descriptor.committed;
-    if (committedBeforeAlignment == null) {
-      await withTransition("install-standalone", async () => await commitExact(request.releaseVersion));
-    } else if (
-      compareStandaloneVersions(
-        committedBeforeAlignment.standalone.version,
-        request.releaseVersion,
-      ) < 0
-    ) {
-      await withTransition("align-standalone-to-release", async () => await commitExact(request.releaseVersion));
-    }
-
-    let committed = descriptor.committed;
-    if (committed == null) throw new StandaloneBootstrapError("no-standalone", "Standalone binding remained empty");
-    if (committed.standalone.target !== request.discovery.target) {
-      throw new StandaloneBootstrapError(
-        "standalone-invalid",
-        `Committed Standalone target ${committed.standalone.target} does not match ${request.discovery.target}`,
-      );
-    }
-    let verification: Awaited<ReturnType<typeof verifyStoredClosureDistributionGeneration>>;
-    try {
-      emitProgress("verifying");
-      verification = await verifyStoredClosureDistributionGeneration(paths, committed.standalone);
-    } catch (error) {
-      let candidate: ClosureDistributionReleaseCandidate;
-      try {
-        candidate = {
-          manifest: await readStoredClosureDistributionManifest(paths, committed.standalone),
-          releaseVersion: committed.releaseVersion,
-          target: committed.standalone.target,
-        };
-      } catch (localError) {
-        candidate = await discoverExact(committed.standalone.version).catch((discoveryError) => {
-          throw new StandaloneBootstrapError(
-            "standalone-invalid",
-            "Committed Standalone failed verification and its exact repair candidate is unavailable",
-            { cause: new AggregateError([error, localError, discoveryError]) },
-          );
-        });
-      }
-      assertCandidateSupportsShell(candidate);
-      const repair = await withTransition("repair-standalone", async () => {
-        return await repairCommittedClosureDistribution({
-          candidate,
-          ...(options.fetch == null ? {} : { fetch: options.fetch }),
-          onProgress: forwardDistributionProgress,
-          paths,
-          repository,
-          shellType: request.attachment.shell.type,
-          shellVersion: request.attachment.shell.version,
-        });
-      });
-      if (repair.state === "busy") {
-        throw new StandaloneBootstrapError(
-          "standalone-invalid",
-          "Committed Standalone repair is already active",
-        );
-      }
-      if (repair.state !== "committed") {
-        throw new StandaloneBootstrapError(
-          repair.reason === "shell-incompatible" ? "installer-required" : "standalone-invalid",
-          `Committed Standalone repair could not commit: ${repair.reason}`,
-        );
-      }
-      descriptor = await readClosureBindingDescriptor(paths);
-      committed = descriptor.committed;
-      if (committed == null) {
-        throw new StandaloneBootstrapError("standalone-invalid", "Standalone repair did not publish a binding");
-      }
-      try {
-        emitProgress("verifying");
-        verification = await verifyStoredClosureDistributionGeneration(paths, committed.standalone);
-      } catch (repairError) {
-        throw new StandaloneBootstrapError(
-          "standalone-invalid",
-          "Repaired Standalone failed immutable Store verification",
-          { cause: repairError },
-        );
-      }
-    }
-    const minimum = verification.plan.manifest.compatibility.shell[request.attachment.shell.type]?.version.min;
-    if (minimum == null || compareStandaloneVersions(request.attachment.shell.version, minimum) < 0) {
-      throw new StandaloneBootstrapError(
-        "installer-required",
-        minimum == null
-          ? `Standalone does not support Shell ${request.attachment.shell.type}`
-          : `Standalone requires ${request.attachment.shell.type} Shell ${minimum} or newer`,
-      );
-    }
+  type DistributionVerification = Awaited<ReturnType<typeof verifyStoredClosureDistributionGeneration>>;
+  let bootResourcesReady = false;
+  const ensureBootResources = async (verification: DistributionVerification): Promise<void> => {
     try {
       await ensureStandaloneBootResources({
         ...(options.fetch == null ? {} : { fetch: options.fetch }),
@@ -348,6 +276,7 @@ export async function resolveStandaloneBootstrap(
         repository,
         target: verification.plan.target,
       });
+      bootResourcesReady = true;
     } catch (error) {
       throw new StandaloneBootstrapError(
         "resource-unavailable",
@@ -355,6 +284,131 @@ export async function resolveStandaloneBootstrap(
         { cause: error },
       );
     }
+  };
+
+  const activatePrepared = async (): Promise<DistributionVerification> => {
+    const prepared = descriptor.prepared;
+    if (prepared == null) throw new StandaloneBootstrapError("no-standalone", "Standalone prepared binding is missing");
+    let verification: DistributionVerification;
+    try {
+      emitProgress("verifying");
+      verification = await verifyStoredClosureDistributionGeneration(paths, prepared.standalone);
+    } catch (error) {
+      throw new StandaloneBootstrapError("standalone-invalid", "Prepared Standalone failed verification", { cause: error });
+    }
+    assertCandidateSupportsShell({
+      manifest: verification.plan.manifest,
+      releaseVersion: prepared.releaseVersion,
+      target: prepared.standalone.target,
+    });
+    await ensureBootResources(verification);
+    await withTransition("activate-standalone", async () => {
+      await activatePreparedClosureBinding(paths, prepared, request.attachment.shell);
+    });
+    descriptor = await readClosureBindingDescriptor(paths);
+    return verification;
+  };
+
+  try {
+    let verification: DistributionVerification | null = null;
+    if (descriptor.prepared != null && descriptor.activationAuthorized) {
+      verification = await activatePrepared();
+    } else if (descriptor.active == null) {
+      await withTransition("prepare-initial-standalone", async () => {
+        await prepareExact(request.releaseVersion);
+        if (descriptor.prepared == null) {
+          throw new StandaloneBootstrapError("no-standalone", "Initial Standalone preparation is missing");
+        }
+        await authorizePreparedClosureActivation(paths, descriptor.prepared);
+        descriptor = await readClosureBindingDescriptor(paths);
+      });
+      verification = await activatePrepared();
+    }
+
+    let active = descriptor.active;
+    if (active == null) throw new StandaloneBootstrapError("no-standalone", "Standalone binding remained empty");
+    if (active.standalone.target !== request.discovery.target) {
+      throw new StandaloneBootstrapError(
+        "standalone-invalid",
+        `Active Standalone target ${active.standalone.target} does not match ${request.discovery.target}`,
+      );
+    }
+    if (verification == null) try {
+      emitProgress("verifying");
+      verification = await verifyStoredClosureDistributionGeneration(paths, active.standalone);
+    } catch (error) {
+      let candidate: ClosureDistributionReleaseCandidate;
+      try {
+        candidate = {
+          manifest: await readStoredClosureDistributionManifest(paths, active.standalone),
+          releaseVersion: active.releaseVersion,
+          target: active.standalone.target,
+        };
+      } catch (localError) {
+        candidate = await discoverExact(active.standalone.version).catch((discoveryError) => {
+          throw new StandaloneBootstrapError(
+            "standalone-invalid",
+            "Active Standalone failed verification and its exact repair candidate is unavailable",
+            { cause: new AggregateError([error, localError, discoveryError]) },
+          );
+        });
+      }
+      assertCandidateSupportsShell(candidate);
+      const repair = await withTransition("repair-standalone", async () => {
+        return await repairActiveClosureDistribution({
+          candidate,
+          ...(options.fetch == null ? {} : { fetch: options.fetch }),
+          onProgress: forwardDistributionProgress,
+          paths,
+          repository,
+          shellType: request.attachment.shell.type,
+          shellVersion: request.attachment.shell.version,
+        });
+      });
+      if (repair.state === "busy") {
+        throw new StandaloneBootstrapError(
+          "standalone-invalid",
+          "Active Standalone repair is already active",
+        );
+      }
+      if (repair.state !== "prepared") {
+        throw new StandaloneBootstrapError(
+          repair.reason === "shell-incompatible" ? "installer-required" : "standalone-invalid",
+          `Active Standalone repair could not prepare: ${repair.reason}`,
+        );
+      }
+      descriptor = await readClosureBindingDescriptor(paths);
+      if (descriptor.prepared == null) {
+        throw new StandaloneBootstrapError("standalone-invalid", "Standalone repair preparation is missing");
+      }
+      await authorizePreparedClosureActivation(paths, descriptor.prepared);
+      descriptor = await readClosureBindingDescriptor(paths);
+      verification = await activatePrepared();
+      active = descriptor.active;
+      if (active == null) throw new StandaloneBootstrapError("standalone-invalid", "Standalone repair did not activate");
+    }
+    if (verification == null) throw new StandaloneBootstrapError("standalone-invalid", "Standalone verification is unavailable");
+    const minimum = verification.plan.manifest.compatibility.shell[request.attachment.shell.type]?.version.min;
+    if (minimum == null || compareStandaloneVersions(request.attachment.shell.version, minimum) < 0) {
+      throw new StandaloneBootstrapError(
+        "installer-required",
+        minimum == null
+          ? `Standalone does not support Shell ${request.attachment.shell.type}`
+          : `Standalone requires ${request.attachment.shell.type} Shell ${minimum} or newer`,
+      );
+    }
+    if (descriptor.attempt == null && !sameShellBinding(active.shell, request.attachment.shell)) {
+      const currentActive = active;
+      await withTransition("activate-shell-combination", async () => {
+        await beginActiveClosureBindingAttempt(paths, currentActive, request.attachment.shell);
+      });
+      descriptor = await readClosureBindingDescriptor(paths);
+      active = descriptor.active;
+      if (active == null) {
+        throw new StandaloneBootstrapError("standalone-invalid", "Shell combination activation did not start");
+      }
+    }
+    if (!bootResourcesReady) await ensureBootResources(verification);
     const handoff = Object.freeze({
       attachment: request.attachment,
       closure: Object.freeze({
@@ -364,16 +418,16 @@ export async function resolveStandaloneBootstrap(
       }),
       handoff: createStandaloneHandoffEnvelope({
         descriptor: {
-          release: { version: committed.releaseVersion },
+          release: { version: active.releaseVersion },
           standalone: {
-            digest: committed.standalone.digest,
+            digest: active.standalone.digest,
             protocolVersion: STANDALONE_PROTOCOL_VERSION,
-            version: committed.standalone.version,
+            version: active.standalone.version,
           },
         },
         scope: {
           channel: paths.channel,
-          generation: committed.standalone.generation,
+          generation: active.standalone.generation,
           namespace: paths.namespace,
         },
       }),

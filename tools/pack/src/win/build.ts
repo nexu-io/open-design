@@ -6,6 +6,7 @@ import { ToolPackCache } from "../cache.js";
 import { describeToolPackArtifact } from "../artifacts.js";
 import type { ToolPackConfig } from "../config.js";
 import { prepareLocalStandaloneSeed } from "../local-standalone.js";
+import { bindStandaloneSeed } from "../standalone-seed.js";
 import {
   collectWorkspaceTarballs,
   createWinPackagedAppCacheKey,
@@ -88,7 +89,10 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
     }
   };
 
-  await runPhase("local-standalone", async () => await prepareLocalStandaloneSeed(config));
+  await runPhase("local-standalone", async () => {
+    await prepareLocalStandaloneSeed(config);
+    await bindStandaloneSeed(config);
+  });
   await runPhase("target-artifact-cleanup", async () => {
     if (!hasNsisTarget) {
       await rm(paths.setupPath, { force: true });

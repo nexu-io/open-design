@@ -117,7 +117,7 @@ describe("Standalone bootloader protocol", () => {
     })).toThrow(/stage/u);
   });
 
-  it("separates unresolved discovery scope from the committed generation handoff", () => {
+  it("separates unresolved discovery scope from the active generation handoff", () => {
     const full = request();
     const bootstrap = {
       attachment: full.attachment,
@@ -299,7 +299,7 @@ describe("Standalone bootloader protocol", () => {
       pid: 42,
       schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
       state: "stopped",
-    }, { handoff })).toThrow(/committed generation/);
+    }, { handoff })).toThrow(/active generation/);
   });
 
   it("owns the typed rendering capability payloads on both sides of the handoff", () => {
@@ -327,7 +327,7 @@ describe("Standalone bootloader protocol", () => {
     )).toThrow(/array of strings/);
   });
 
-  it("fences Shell-to-Standalone commands to the committed generation", () => {
+  it("fences Shell-to-Standalone commands to the active generation", () => {
     const handoff = request().handoff;
     const command = validateStandaloneRuntimeCommandRequest({
       attachmentId: request().attachment.id,

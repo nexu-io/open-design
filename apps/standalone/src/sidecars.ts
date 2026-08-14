@@ -25,6 +25,7 @@ import {
   acquireStandalone,
   type StandaloneRuntimeHandle,
 } from "./runtime/index.js";
+import { prepareStandaloneUpdate } from "./update-runtime.js";
 
 type SidecarStatus = Readonly<{
   pid: number;
@@ -52,6 +53,8 @@ export const STANDALONE_SHELL_CAPABILITY_SERVICE = "shell" as const;
 
 export const OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND =
   "open-design.register-desktop-auth.v1" as const;
+export const OPEN_DESIGN_PREPARE_UPDATE_COMMAND =
+  "open-design.prepare-update.v1" as const;
 
 export type StandaloneSidecarLaunchSpec = Readonly<{
   args?: readonly string[];
@@ -282,6 +285,48 @@ export async function startSidecarStandalone(
       const command = validateStandaloneRuntimeCommandRequest(value, {
         handoff: request.handoff,
       });
+      if (command.command === OPEN_DESIGN_PREPARE_UPDATE_COMMAND) {
+        if (request.closure == null || command.input == null || typeof command.input !== "object" || Array.isArray(command.input)) {
+          return {
+            attachmentId: command.attachmentId,
+            error: { code: "standalone-update-unavailable" },
+            handoff: request.handoff,
+            outcome: "failed",
+            requestId: command.requestId,
+            schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+          };
+        }
+        try {
+          const output = await prepareStandaloneUpdate({
+            activateOnRestart: command.input.activateOnRestart === true,
+            channel: request.handoff.scope.channel,
+            metadata: command.input.metadata,
+            namespace: request.handoff.scope.namespace,
+            repositoryConfigPath: request.closure.repositoryConfigPath,
+            shellType: request.attachment.shell.type,
+            shellVersion: request.attachment.shell.version,
+            storeRoot: request.closure.storeRoot,
+            target: request.closure.target,
+          });
+          return {
+            attachmentId: command.attachmentId,
+            handoff: request.handoff,
+            outcome: "completed",
+            output,
+            requestId: command.requestId,
+            schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+          };
+        } catch {
+          return {
+            attachmentId: command.attachmentId,
+            error: { code: "standalone-update-prepare-failed" },
+            handoff: request.handoff,
+            outcome: "failed",
+            requestId: command.requestId,
+            schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+          };
+        }
+      }
       if (command.command !== OPEN_DESIGN_REGISTER_DESKTOP_AUTH_COMMAND) {
         return {
           attachmentId: command.attachmentId,

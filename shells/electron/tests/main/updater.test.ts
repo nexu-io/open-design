@@ -102,6 +102,7 @@ async function createUpdaterFixture(options: {
   launcherSchema?: number;
   platform?: FixturePlatform;
   payloadBody?: string;
+  standaloneMetadata?: Record<string, unknown>;
   version?: string;
 } = {}): Promise<FixtureServer> {
   const version = options.version ?? "1.0.1";
@@ -133,6 +134,7 @@ async function createUpdaterFixture(options: {
       response.end(JSON.stringify({
         channel,
         ...channelMetadata(channel, version),
+        ...(options.standaloneMetadata == null ? {} : { closure: options.standaloneMetadata }),
         ...(options.launcherSchema != null ? { launcher: { schema: options.launcherSchema } } : {}),
         ...(options.controlInstallationVersionMin != null || options.controlInstallationVersionUrl != null
           ? {
@@ -338,6 +340,43 @@ function failLauncherPayloadRemovalForVersion(version: string): (path: string) =
 }
 
 describe("desktop updater", () => {
+  it("routes modern metadata through Standalone without consuming legacy installation fields", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({
+      controlInstallationVersionMin: "9.9.9",
+      standaloneMetadata: { schemaVersion: 4 },
+    });
+    const prepareStandaloneUpdate = vi.fn(async () => ({
+      architecture: "standalone" as const,
+      releaseVersion: "1.0.1",
+      route: "closure" as const,
+      state: "prepared" as const,
+    }));
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        source: SIDECAR_SOURCES.PACKAGED,
+      }, { prepareStandaloneUpdate });
+
+      const status = await updater.checkForUpdates({
+        activateOnRestart: true,
+        autoDownload: false,
+      });
+
+      expect(status.state).toBe(DESKTOP_UPDATE_STATES.NOT_AVAILABLE);
+      expect(status.reinstall).toBeUndefined();
+      expect(prepareStandaloneUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ closure: { schemaVersion: 4 } }),
+        { activateOnRestart: true },
+      );
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("derives installer observation summary paths from safe flow ids only", () => {
     const root = makeRoot();
     try {

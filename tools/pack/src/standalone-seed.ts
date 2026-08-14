@@ -97,3 +97,17 @@ export async function inspectStandaloneSeed(
     target,
   });
 }
+
+/** Bind the packaged Shell to the exact release carried by its validated seed. */
+export async function bindStandaloneSeed(config: ToolPackConfig): Promise<StandaloneSeedInspection | null> {
+  const inspection = await inspectStandaloneSeed(config);
+  if (inspection == null) return null;
+  const configuredVersion = config.runtimeReleaseVersion ?? config.releaseVersion;
+  if (configuredVersion != null && configuredVersion !== inspection.releaseVersion) {
+    throw new Error(
+      `Standalone seed release ${inspection.releaseVersion} does not match packaged release ${configuredVersion}`,
+    );
+  }
+  config.runtimeReleaseVersion = inspection.releaseVersion;
+  return inspection;
+}

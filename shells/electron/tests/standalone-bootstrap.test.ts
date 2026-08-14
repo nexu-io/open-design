@@ -116,7 +116,7 @@ describe("Electron thin Standalone bootstrap", () => {
       root: join(root, "install"),
     });
     expect(await readClosureBindingDescriptor(storePaths))
-      .toMatchObject({ committed: { standalone: { generation: 0 } } });
+      .toMatchObject({ active: { standalone: { generation: 0 } } });
     expect(progress.map((entry) => entry.stage)).toEqual(expect.arrayContaining([
       "checking", "discovering", "downloading", "materializing", "verifying", "ready",
     ]));
