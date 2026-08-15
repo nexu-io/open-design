@@ -14,7 +14,7 @@ const expected = {
 
 function binding() {
   return {
-    committed: {
+    active: {
       releaseVersion: expected.releaseVersion,
       standalone: { ...expected, digest, protocolVersion: 1 },
     },

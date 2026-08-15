@@ -2921,7 +2921,7 @@ process.stdin.on("end", () => {
     expect(publicAcceptanceJob).toContain("OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core");
     expect(publicAcceptanceJob).toContain("OD_PACKAGED_E2E_WIN_SMOKE_LANES: shell");
     expect(publicAcceptanceJob).toContain('OD_TOOLS_PACK_EMBEDDED_CONFIG_ONLY: "1"');
-    expect(publicAcceptanceJob).toContain("OD_STANDALONE_METADATA_URL: ${{ inputs.metadata_url }}");
+    expect(publicAcceptanceJob).toContain("OD_STANDALONE_METADATA_URL: ${{ inputs.mutable_metadata_url }}");
     expect(publicAcceptanceJob).not.toContain("OD_PACKAGED_CONFIG_PATH:");
     expect(publicAcceptanceJob).not.toContain("OD_PACKAGED_E2E_CLOSURE_BUILD_JSON_PATH");
     expect(publicAcceptanceJob).not.toContain("RELEASE_STORAGE_SECRET_ACCESS_KEY");

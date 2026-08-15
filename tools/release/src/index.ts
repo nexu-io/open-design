@@ -218,6 +218,12 @@ cli
   });
 
 cli
+  .command("stage-acceptance-feed", "Stage one run-scoped mutable-shaped feed for cold-start acceptance")
+  .action(async () => {
+    await import("./storage/stage-acceptance-feed.ts");
+  });
+
+cli
   .command("issue-public-acceptance", "Issue a digest-bound credential for a successful public Windows smoke")
   .action(async () => {
     await import("./storage/issue-public-acceptance.ts");

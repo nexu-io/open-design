@@ -56,13 +56,16 @@ import {
   ClosureInstallerRequiredError,
   ClosureUpdateError,
 } from "./errors.js";
-import { closureImmutableMetadataVersion } from "./metadata-url.js";
+import { parseClosureImmutableMetadataVersion } from "./metadata-url.js";
 
 export {
   ClosureInstallerRequiredError,
   ClosureUpdateError,
 } from "./errors.js";
-export { resolveClosureImmutableMetadataVersion } from "./metadata-url.js";
+export {
+  parseClosureImmutableMetadataVersion,
+  resolveClosureImmutableMetadataVersion,
+} from "./metadata-url.js";
 
 export type ClosureReleaseAssetUrls = {
   archive: string;
@@ -494,7 +497,7 @@ export async function discoverClosureDistributionBootstrapCandidate(input: Reado
 
 function versionMetadataUrl(latestMetadataUrl: string, version: string): string {
   const latest = new URL(requireHttpUrl(latestMetadataUrl, "Closure release metadata URL"));
-  const immutableVersion = closureImmutableMetadataVersion(latest);
+  const immutableVersion = parseClosureImmutableMetadataVersion(latest.toString());
   if (immutableVersion != null) {
     if (immutableVersion !== version) {
       throw new ClosureUpdateError(

@@ -12,6 +12,9 @@ on:
       metadata_url:
         required: true
         type: string
+      mutable_metadata_url:
+        required: true
+        type: string
       public_origin:
         required: true
         type: string
@@ -91,11 +94,10 @@ jobs:
           OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/public-feedback/report
           OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: public-immutable-artifacts
           OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/public-feedback/tools-pack
-          # The candidate is intentionally not the channel's latest pointer until
-          # this job accepts it. Exercise the reusable Shell's metadata-based
-          # release binding against the staged immutable document; no packaged
-          # config or releaseVersion is injected.
-          OD_STANDALONE_METADATA_URL: ${{ inputs.metadata_url }}
+          # Exercise the final reusable-Shell shape: an empty Store receives a
+          # mutable latest discovery URL, then Standalone re-fetches the exact
+          # immutable sibling before preparation. No releaseVersion is injected.
+          OD_STANDALONE_METADATA_URL: ${{ inputs.mutable_metadata_url }}
           OD_PACKAGED_E2E_WIN: ${{ matrix.os == 'win' && '1' || '' }}
           OD_PACKAGED_E2E_WIN_SMOKE_LANES: shell
           OD_PACKAGED_E2E_WIN_SMOKE_PROFILE: core

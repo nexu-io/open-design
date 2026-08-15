@@ -127,9 +127,9 @@ describe("Standalone bootloader protocol", () => {
         target: "darwin-arm64",
       },
       paths: full.paths,
-      releaseVersion: "0.18.0-beta.4",
+      releaseIntent: { kind: "exact", releaseVersion: "0.18.0-beta.4" },
       repositoryConfigPath: "/shell/resources/repository.json",
-      schemaVersion: 1,
+      schemaVersion: 2,
       scope: { channel: "beta", namespace: "release-beta" },
     };
     expect(validateStandaloneBootstrapRequest(bootstrap)).toMatchObject({
@@ -137,7 +137,12 @@ describe("Standalone bootloader protocol", () => {
       scope: { channel: "beta", namespace: "release-beta" },
     });
     const { capabilities: _capabilities, ...descriptor } = bootstrap;
-    expect(validateStandaloneBootstrapDescriptor(descriptor)).toMatchObject({ schemaVersion: 1 });
+    expect(validateStandaloneBootstrapDescriptor(descriptor)).toMatchObject({ schemaVersion: 2 });
+    expect(() => validateStandaloneBootstrapDescriptor({
+      ...descriptor,
+      releaseIntent: undefined,
+      releaseVersion: "0.18.0-beta.4",
+    })).toThrow(/unsupported fields|release intent/u);
     expect(bootstrap).not.toHaveProperty("generation");
     expect(bootstrap).not.toHaveProperty("handoff");
     expect(validateStandaloneBootstrapResolution({
@@ -179,9 +184,9 @@ describe("Standalone bootloader protocol", () => {
       attachment: full.attachment,
       discovery: { metadataUrl: null, target: "darwin-arm64" },
       paths: full.paths,
-      releaseVersion: "0.19.1-local.1",
+      releaseIntent: { kind: "resume-or-bootstrap" },
       repositoryConfigPath: "/shell/resources/repository.json",
-      schemaVersion: 1,
+      schemaVersion: 2,
       scope: { channel: "local", namespace: "local-test" },
     }).scope.channel).toBe("local");
     expect(validateStandaloneHandoffEnvelope(localHandoff).scope.channel).toBe("local");

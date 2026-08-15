@@ -1,6 +1,6 @@
 import { ClosureUpdateError } from "./errors.js";
 
-export function closureImmutableMetadataVersion(metadataUrl: URL): string | null {
+function immutableMetadataVersion(metadataUrl: URL): string | null {
   const match = metadataUrl.pathname.match(/\/versions\/([^/]+)\/metadata\.json$/u);
   if (match == null) return null;
   try {
@@ -14,8 +14,8 @@ export function closureImmutableMetadataVersion(metadataUrl: URL): string | null
   }
 }
 
-/** Resolve first-install launch authority only from an immutable exact metadata endpoint. */
-export function resolveClosureImmutableMetadataVersion(metadataUrl: string): string {
+/** Parse a valid metadata URL without requiring it to be an immutable endpoint. */
+export function parseClosureImmutableMetadataVersion(metadataUrl: string): string | null {
   let parsed: URL;
   try {
     parsed = new URL(metadataUrl);
@@ -25,7 +25,12 @@ export function resolveClosureImmutableMetadataVersion(metadataUrl: string): str
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new ClosureUpdateError("Closure release metadata URL must be an absolute http(s) URL");
   }
-  const version = closureImmutableMetadataVersion(parsed);
+  return immutableMetadataVersion(parsed);
+}
+
+/** Resolve first-install launch authority only from an immutable exact metadata endpoint. */
+export function resolveClosureImmutableMetadataVersion(metadataUrl: string): string {
+  const version = parseClosureImmutableMetadataVersion(metadataUrl);
   if (version == null) {
     throw new ClosureUpdateError(
       "Closure first-install release binding requires an immutable /versions/<version>/metadata.json URL",

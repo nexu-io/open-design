@@ -43,6 +43,7 @@ import {
   ensureClosureResource,
   discoverClosureDistributionBootstrapCandidate,
   discoverClosureDistributionVersionCandidate,
+  parseClosureImmutableMetadataVersion,
   readClosureResourceRepositoryConfig,
   resolveClosureImmutableMetadataVersion,
   selectClosureDistributionReleaseCandidate,
@@ -454,6 +455,9 @@ async function downloadableDistribution(): Promise<{
 
 describe("Closure baseline discovery", () => {
   it("projects first-install authority only from an immutable metadata URL", () => {
+    expect(parseClosureImmutableMetadataVersion(
+      "https://releases.example.test/beta/latest/metadata.json",
+    )).toBeNull();
     expect(resolveClosureImmutableMetadataVersion(
       "https://releases.example.test/beta/versions/0.19.4-beta.2/metadata.json",
     )).toBe("0.19.4-beta.2");

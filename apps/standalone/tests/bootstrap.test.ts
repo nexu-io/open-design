@@ -20,7 +20,7 @@ import { bootstrapSidecarLifecycle } from "@open-design/sidecar/lifecycle";
 import {
   STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
   type StandaloneBootstrapProgress,
-} from "@open-design/standalone/protocol";
+} from "../src/protocol/index.js";
 import JSZip from "jszip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -184,7 +184,8 @@ function request(
   value: Awaited<ReturnType<typeof fixture>>,
   shellVersion: string,
   metadataUrl: string | null = value.metadataUrl,
-  releaseVersion: string = shellVersion,
+  releaseIntent: { kind: "exact"; releaseVersion: string } | { kind: "resume-or-bootstrap" }
+    = { kind: "exact", releaseVersion: shellVersion },
 ) {
   return {
     attachment: {
@@ -193,7 +194,7 @@ function request(
     },
     discovery: { metadataUrl, target: "darwin-arm64" },
     paths: value.paths,
-    releaseVersion,
+    releaseIntent,
     repositoryConfigPath: value.repositoryConfigPath,
     schemaVersion: STANDALONE_BOOTSTRAP_SCHEMA_VERSION,
     scope: { channel: "beta" as const, namespace: "release-beta" },
@@ -236,6 +237,52 @@ async function consumeTransition(
 }
 
 describe("Standalone unresolved bootstrap", () => {
+  it("discovers mutable latest only for an empty Store and revalidates immutable metadata", async () => {
+    const value = await fixture();
+    const resolution = await resolveStandaloneBootstrap(request(
+      value,
+      "0.19.0-beta.1",
+      value.metadataUrl,
+      { kind: "resume-or-bootstrap" },
+    ), { fetch: value.fetch });
+
+    expect(resolution.handoff.handoff.descriptor.release.version).toBe("0.19.0-beta.1");
+    expect(vi.mocked(value.fetch).mock.calls.slice(0, 2).map(([url]) => String(url))).toEqual([
+      value.metadataUrl,
+      "https://releases.example.test/beta/versions/0.19.0-beta.1/metadata.json",
+    ]);
+  });
+
+  it("fails closed when mutable discovery and immutable metadata disagree", async () => {
+    const value = await fixture();
+    const fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith("/versions/0.19.0-beta.1/metadata.json")) {
+        return Response.json({
+          channel: "beta",
+          closure: value.manifests["0.19.0-beta.2"],
+          closureControl: createClosureDistributionControl(value.manifests["0.19.0-beta.2"]),
+          releaseState: "complete",
+          releaseVersion: "0.19.0-beta.2",
+        });
+      }
+      return await value.fetch(input, init);
+    }) as typeof globalThis.fetch;
+
+    await expect(resolveStandaloneBootstrap(request(
+      value,
+      "0.19.0-beta.1",
+      value.metadataUrl,
+      { kind: "resume-or-bootstrap" },
+    ), { fetch })).rejects.toThrow(/exact version 0\.19\.0-beta\.1/u);
+    const store = resolveClosureStorePaths({
+      channel: "beta",
+      namespace: "release-beta",
+      root: value.paths.installationRoot,
+    });
+    expect((await readClosureBindingDescriptor(store)).active).toBeNull();
+  });
+
   it("discovers, commits, and resolves one immutable generation before handoff", async () => {
     const value = await fixture();
     const progress: StandaloneBootstrapProgress[] = [];
@@ -397,7 +444,12 @@ describe("Standalone unresolved bootstrap", () => {
       await writeFile(join(value.seedRoot, "beta", "blobs", artifact.digest.slice("sha256:".length)), bytes);
     }
     const fetch = vi.fn(async () => new Response("offline", { status: 503 })) as typeof globalThis.fetch;
-    const resolution = await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), { fetch });
+    const resolution = await resolveStandaloneBootstrap(request(
+      value,
+      "0.19.0-beta.1",
+      value.metadataUrl,
+      { kind: "resume-or-bootstrap" },
+    ), { fetch });
     expect(resolution.handoff.handoff.scope.generation).toBe(0);
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -491,7 +543,10 @@ describe("Standalone unresolved bootstrap", () => {
       await resolveStandaloneBootstrap(request(value, "0.19.0-beta.1"), { fetch: value.fetch }),
     );
     const resolution = await resolveStandaloneBootstrap(
-      request(value, "0.19.0-beta.1", value.metadataUrl, "0.19.0-beta.2"),
+      request(value, "0.19.0-beta.1", value.metadataUrl, {
+        kind: "exact",
+        releaseVersion: "0.19.0-beta.2",
+      }),
       { fetch: value.fetch },
     );
     await consumeTransition(value, resolution);
@@ -531,7 +586,10 @@ describe("Standalone unresolved bootstrap", () => {
   it("maps shallow metadata incompatibility to installer-required before graph consumption", async () => {
     const value = await fixture();
     await expect(resolveStandaloneBootstrap(
-      request(value, "0.19.0-beta.2", value.metadataUrl, "0.19.0-beta.3"),
+      request(value, "0.19.0-beta.2", value.metadataUrl, {
+        kind: "exact",
+        releaseVersion: "0.19.0-beta.3",
+      }),
       { fetch: value.fetch },
     )).rejects.toMatchObject({ code: "installer-required" });
   });

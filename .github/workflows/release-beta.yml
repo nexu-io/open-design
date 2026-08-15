@@ -423,6 +423,7 @@ jobs:
       }}
     runs-on: ubuntu-latest
     outputs:
+      acceptance_latest_url: ${{ steps.acceptance_feed.outputs.latest_url }}
       release_state: ${{ steps.distribute.outputs.release_state }}
       version_metadata_url: ${{ steps.distribute.outputs.version_metadata_url }}
       mac_arm64_url: ${{ steps.distribute.outputs.mac_arm64_url }}
@@ -573,6 +574,24 @@ jobs:
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
           STATE_SOURCE: ${{ needs.metadata.outputs.state_source }}
 
+      - name: Stage run-scoped mutable acceptance feed
+        id: acceptance_feed
+        env:
+          RELEASE_ACCEPTANCE_FEED_PREFIX: ${{ inputs.exact_name }}/acceptance/runs/${{ github.run_id }}-${{ github.run_attempt }}
+          RELEASE_METADATA_PATH: ${{ runner.temp }}/release-metadata/metadata.json
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
+        run: |
+          set -euo pipefail
+          pnpm exec tools-release stage-acceptance-feed
+          origin="${RELEASE_PUBLIC_ORIGIN%/}"
+          echo "latest_url=$origin/$RELEASE_ACCEPTANCE_FEED_PREFIX/latest/metadata.json" >> "$GITHUB_OUTPUT"
+
   accept:
     name: Accept and activate exact release
     needs:
@@ -592,6 +611,7 @@ jobs:
       commit: ${{ needs.metadata.outputs.commit }}
       exact_name: ${{ inputs.exact_name }}
       metadata_url: ${{ needs.stage.outputs.version_metadata_url }}
+      mutable_metadata_url: ${{ needs.stage.outputs.acceptance_latest_url }}
       public_origin: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       release_version: ${{ needs.metadata.outputs.release_version }}
 

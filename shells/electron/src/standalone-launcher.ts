@@ -40,7 +40,7 @@ import {
   createElectronStandaloneLauncher,
   electronBindingFromBootstrapResolution,
 } from "./standalone-handoff.js";
-import { resolvePackagedStandaloneReleaseBinding } from "./standalone-release.js";
+import { resolvePackagedStandaloneReleaseIntent } from "./standalone-release.js";
 
 export {
   resolvePackagedMcpBootstrapLaunch,
@@ -190,12 +190,9 @@ export async function runPackagedStandalone(
   const target = resolveElectronStandaloneTarget();
   if (target == null) throw new Error(`Standalone is unsupported on ${process.platform}-${process.arch}`);
   const metadataUrl = resolvePackagedStandaloneMetadataUrl(shellConfig.updateMetadataUrl);
-  const releaseVersion = await resolvePackagedStandaloneReleaseBinding({
-    channel: launcherRuntime.launcherPaths.channel,
+  const releaseIntent = resolvePackagedStandaloneReleaseIntent({
     configuredVersion: shellConfig.releaseVersion,
     metadataUrl,
-    namespace: shellConfig.namespace,
-    root: launcherRuntime.launcherPaths.root,
   });
   const nodeCommand = resolveShellNodeCommand(shellConfig.nodeCommand);
   const shellDigest = await digestElectronShellEntry(options.shellEntryUrl);
@@ -219,9 +216,9 @@ export async function runPackagedStandalone(
         resourceRoot: paths.resourceRoot,
         runtimeRoot: paths.runtimeRoot,
       },
-      releaseVersion,
+      releaseIntent,
       repositoryConfigPath: join(shellConfig.resourceRoot, "standalone", "repository.json"),
-      schemaVersion: 1,
+      schemaVersion: 2,
       scope: { channel: launcherRuntime.launcherPaths.channel, namespace: config.namespace },
     },
     nodeCommand,

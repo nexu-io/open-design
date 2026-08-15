@@ -439,7 +439,7 @@ export function validateStandaloneBootstrapDescriptor(
   const descriptor = requireRecord(value, "standalone bootstrap descriptor");
   requireKnownKeys(
     descriptor,
-    ["attachment", "discovery", "paths", "releaseVersion", "repositoryConfigPath", "schemaVersion", "scope"],
+    ["attachment", "discovery", "paths", "releaseIntent", "repositoryConfigPath", "schemaVersion", "scope"],
     "standalone bootstrap descriptor",
   );
   if (descriptor.schemaVersion !== STANDALONE_BOOTSTRAP_SCHEMA_VERSION) {
@@ -447,6 +447,14 @@ export function validateStandaloneBootstrapDescriptor(
   }
   const discovery = requireRecord(descriptor.discovery, "standalone bootstrap discovery");
   requireKnownKeys(discovery, ["metadataUrl", "target"], "standalone bootstrap discovery");
+  const releaseIntent = requireRecord(descriptor.releaseIntent, "standalone release intent");
+  if (releaseIntent.kind === "exact") {
+    requireKnownKeys(releaseIntent, ["kind", "releaseVersion"], "standalone exact release intent");
+  } else if (releaseIntent.kind === "resume-or-bootstrap") {
+    requireKnownKeys(releaseIntent, ["kind"], "standalone resume-or-bootstrap release intent");
+  } else {
+    throw new StandaloneProtocolError(`unsupported standalone release intent: ${String(releaseIntent.kind)}`);
+  }
   return Object.freeze({
     attachment: validateStandaloneAttachmentDescriptor(descriptor.attachment),
     discovery: Object.freeze({
@@ -454,7 +462,15 @@ export function validateStandaloneBootstrapDescriptor(
       target: normalizeToken(discovery.target, "standalone bootstrap target"),
     }),
     paths: validateStandalonePaths(descriptor.paths),
-    releaseVersion: normalizeVersion(descriptor.releaseVersion, "standalone requested release version"),
+    releaseIntent: releaseIntent.kind === "exact"
+      ? Object.freeze({
+          kind: "exact" as const,
+          releaseVersion: normalizeVersion(
+            releaseIntent.releaseVersion,
+            "standalone requested release version",
+          ),
+        })
+      : Object.freeze({ kind: "resume-or-bootstrap" as const }),
     repositoryConfigPath: normalizePath(
       descriptor.repositoryConfigPath,
       "standalone bootstrap repositoryConfigPath",
@@ -468,14 +484,14 @@ export function validateStandaloneBootstrapRequest(value: unknown): StandaloneBo
   const request = requireRecord(value, "standalone bootstrap request");
   requireKnownKeys(
     request,
-    ["attachment", "capabilities", "discovery", "paths", "releaseVersion", "repositoryConfigPath", "schemaVersion", "scope"],
+    ["attachment", "capabilities", "discovery", "paths", "releaseIntent", "repositoryConfigPath", "schemaVersion", "scope"],
     "standalone bootstrap request",
   );
   const descriptor = validateStandaloneBootstrapDescriptor({
     attachment: request.attachment,
     discovery: request.discovery,
     paths: request.paths,
-    releaseVersion: request.releaseVersion,
+    releaseIntent: request.releaseIntent,
     repositoryConfigPath: request.repositoryConfigPath,
     schemaVersion: request.schemaVersion,
     scope: request.scope,

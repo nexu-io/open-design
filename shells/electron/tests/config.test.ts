@@ -9,7 +9,6 @@ import {
   resolvePackagedAmrProfile,
   resolvePackagedNamespaceBaseRoot,
   resolvePackagedStandaloneMetadataUrl,
-  resolvePackagedStandaloneReleaseVersion,
 } from '../src/config.js';
 
 describe('resolveDefaultPackagedNodeCommandRelative', () => {
@@ -68,29 +67,5 @@ describe('resolvePackagedStandaloneMetadataUrl', () => {
     expect(resolvePackagedStandaloneMetadataUrl('https://releases.example/beta/latest/metadata.json', {
       [PACKAGED_STANDALONE_METADATA_URL_ENV]: ' https://releases.example/beta/versions/0.19.0-beta.32/metadata.json ',
     })).toBe('https://releases.example/beta/versions/0.19.0-beta.32/metadata.json');
-  });
-});
-
-describe('resolvePackagedStandaloneReleaseVersion', () => {
-  it('keeps the immutable release packaged with the Shell', () => {
-    expect(resolvePackagedStandaloneReleaseVersion(' 0.19.1-beta.6 '))
-      .toBe('0.19.1-beta.6');
-  });
-
-  it('accepts an immutable release restored from Closure state', () => {
-    expect(resolvePackagedStandaloneReleaseVersion(null, ' 0.19.1-beta.5 '))
-      .toBe('0.19.1-beta.5');
-  });
-
-  it('does not bind an unbound Shell to mutable public metadata', () => {
-    expect(() => resolvePackagedStandaloneReleaseVersion(null)).toThrow(
-      'Packaged Standalone release binding is unavailable',
-    );
-  });
-
-  it('fails closed for an empty packaged binding', () => {
-    expect(() => resolvePackagedStandaloneReleaseVersion('  ')).toThrow(
-      'Packaged Standalone release binding is unavailable',
-    );
   });
 });

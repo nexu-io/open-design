@@ -217,18 +217,6 @@ export function resolvePackagedStandaloneMetadataUrl(
     ?? cleanOptionalString(configuredUrl ?? undefined);
 }
 
-/** Resolve the install-time Standalone binding without consulting mutable metadata. */
-export function resolvePackagedStandaloneReleaseVersion(
-  configuredVersion: string | null | undefined,
-  storedVersion?: string | null,
-): string {
-  const configured = cleanOptionalString(configuredVersion ?? undefined);
-  if (configured != null) return configured;
-  const stored = cleanOptionalString(storedVersion ?? undefined);
-  if (stored != null) return stored;
-  throw new Error("Packaged Standalone release binding is unavailable");
-}
-
 function isTruthyEnv(value: string | undefined): boolean {
   return value === "1" || value === "true" || value === "yes";
 }

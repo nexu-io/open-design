@@ -4,7 +4,7 @@ import { isAbsolute, posix, win32 } from "node:path";
 import type { ClosureChannel } from "@open-design/closure/protocol";
 
 export const STANDALONE_PROTOCOL_VERSION = 1 as const;
-export const STANDALONE_BOOTSTRAP_SCHEMA_VERSION = 1 as const;
+export const STANDALONE_BOOTSTRAP_SCHEMA_VERSION = 2 as const;
 export const STANDALONE_BOOTSTRAP_PROGRESS_SCHEMA_VERSION = 2 as const;
 export const STANDALONE_BOOTSTRAP_RESULT_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_HANDOFF_SCHEMA_VERSION = 1 as const;
@@ -69,6 +69,15 @@ export type StandaloneClosureResourceContext = Readonly<{
   target: string;
 }>;
 
+export type StandaloneReleaseIntent =
+  | Readonly<{
+      kind: "exact";
+      releaseVersion: string;
+    }>
+  | Readonly<{
+      kind: "resume-or-bootstrap";
+    }>;
+
 export type StandaloneBootstrapDescriptor = Readonly<{
   attachment: StandaloneAttachmentDescriptor;
   discovery: Readonly<{
@@ -76,8 +85,8 @@ export type StandaloneBootstrapDescriptor = Readonly<{
     target: string;
   }>;
   paths: StandalonePaths;
-  /** Product release requested by the launcher; independent from Shell bytes. */
-  releaseVersion: string;
+  /** Shell states intent; Standalone owns persisted binding and discovery policy. */
+  releaseIntent: StandaloneReleaseIntent;
   repositoryConfigPath: string;
   schemaVersion: typeof STANDALONE_BOOTSTRAP_SCHEMA_VERSION;
   scope: StandaloneBootstrapScope;

@@ -14,6 +14,7 @@ import {
 import {
   applyClosureDistributionUpdate,
   ClosureInstallerRequiredError,
+  discoverClosureDistributionBootstrapCandidate,
   discoverClosureDistributionVersionCandidate,
   readClosureResourceRepositoryConfig,
   repairActiveClosureDistribution,
@@ -52,8 +53,9 @@ export class StandaloneBootstrapError extends Error {
 
 /**
  * Resolve an unresolved Shell attachment into one attempted or last-successful
- * generation. Cold start may activate prepared bytes, but never discovers a
- * newer release than the Shell's explicit first-install binding.
+ * generation. Existing bindings remain authoritative. Only an empty Store may
+ * discover a first-install release, which is then revalidated through its
+ * immutable version endpoint before any bytes are prepared.
  */
 export async function resolveStandaloneBootstrap(
   requestInput: StandaloneBootstrapDescriptor,
@@ -213,6 +215,46 @@ export async function resolveStandaloneBootstrap(
     return candidate;
   };
 
+  const discoverInitial = async (): Promise<ClosureDistributionReleaseCandidate> => {
+    emitProgress("discovering");
+    let discovered: ClosureDistributionReleaseCandidate | null;
+    try {
+      discovered = await discoverClosureDistributionBootstrapCandidate({
+        channel: request.scope.channel,
+        consumer: {
+          shellType: request.attachment.shell.type,
+          shellVersion: request.attachment.shell.version,
+        },
+        ...(options.fetch == null ? {} : { fetch: options.fetch }),
+        metadataUrl: request.discovery.metadataUrl,
+        repository,
+        target: request.discovery.target,
+      });
+    } catch (error) {
+      if (error instanceof ClosureInstallerRequiredError) {
+        throw new StandaloneBootstrapError("installer-required", error.message, { cause: error });
+      }
+      throw error;
+    }
+    if (discovered == null) {
+      throw new StandaloneBootstrapError(
+        "no-standalone",
+        "Standalone is unavailable from Shell resources and the release feed",
+      );
+    }
+    const exact = await discoverExact(discovered.releaseVersion);
+    if (
+      exact.target !== discovered.target
+      || exact.manifest.identity.digest !== discovered.manifest.identity.digest
+    ) {
+      throw new StandaloneBootstrapError(
+        "standalone-invalid",
+        `Standalone ${discovered.releaseVersion} discovery conflicts with its immutable binding`,
+      );
+    }
+    return exact;
+  };
+
   const assertCandidateSupportsShell = (candidate: ClosureDistributionReleaseCandidate): void => {
     const minimum = resolveClosureShellMinimumVersion(
       candidate.manifest,
@@ -228,8 +270,7 @@ export async function resolveStandaloneBootstrap(
     }
   };
 
-  const prepareExact = async (version: string): Promise<void> => {
-    const candidate = await discoverExact(version);
+  const prepareCandidate = async (candidate: ClosureDistributionReleaseCandidate): Promise<void> => {
     assertCandidateSupportsShell(candidate);
     const result = await applyClosureDistributionUpdate({
       candidate,
@@ -247,6 +288,10 @@ export async function resolveStandaloneBootstrap(
       throw new StandaloneBootstrapError("standalone-invalid", `Standalone bootstrap could not prepare: ${result.reason}`);
     }
     descriptor = await readClosureBindingDescriptor(paths);
+  };
+
+  const prepareExact = async (version: string): Promise<void> => {
+    await prepareCandidate(await discoverExact(version));
   };
 
   type DistributionVerification = Awaited<ReturnType<typeof verifyStoredClosureDistributionGeneration>>;
@@ -315,7 +360,11 @@ export async function resolveStandaloneBootstrap(
       verification = await activatePrepared();
     } else if (descriptor.active == null) {
       await withTransition("prepare-initial-standalone", async () => {
-        await prepareExact(request.releaseVersion);
+        if (request.releaseIntent.kind === "exact") {
+          await prepareExact(request.releaseIntent.releaseVersion);
+        } else {
+          await prepareCandidate(await discoverInitial());
+        }
         if (descriptor.prepared == null) {
           throw new StandaloneBootstrapError("no-standalone", "Initial Standalone preparation is missing");
         }

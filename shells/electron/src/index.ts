@@ -95,7 +95,7 @@ import {
   parsePackagedStandaloneRequest,
   runPackagedStandalone,
 } from "./standalone-launcher.js";
-import { resolvePackagedStandaloneReleaseBinding } from "./standalone-release.js";
+import { resolvePackagedStandaloneReleaseIntent } from "./standalone-release.js";
 import { resolvePackagedWindowTitle } from "./window-title.js";
 import { syncWindowsUninstallDisplayVersion } from "./windows-lifecycle.js";
 
@@ -257,12 +257,9 @@ async function main(): Promise<void> {
   const metadataUrl = resolvePackagedStandaloneMetadataUrl(
     shellConfig.updateMetadataUrl,
   );
-  const releaseVersion = await resolvePackagedStandaloneReleaseBinding({
-    channel: shellRuntime.launcherPaths.channel,
+  const releaseIntent = resolvePackagedStandaloneReleaseIntent({
     configuredVersion: shellConfig.releaseVersion,
     metadataUrl,
-    namespace,
-    root: shellRuntime.launcherPaths.root,
   });
   const target = resolveElectronStandaloneTarget();
   if (target == null) throw new Error(`Standalone is unsupported on ${process.platform}-${process.arch}`);
@@ -284,9 +281,9 @@ async function main(): Promise<void> {
         resourceRoot: paths.resourceRoot,
         runtimeRoot: paths.runtimeRoot,
       },
-      releaseVersion,
+      releaseIntent,
       repositoryConfigPath: join(shellConfig.resourceRoot, "standalone", "repository.json"),
-      schemaVersion: 1,
+      schemaVersion: 2,
       scope: { channel: shellRuntime.launcherPaths.channel, namespace },
     },
     nodeCommand,

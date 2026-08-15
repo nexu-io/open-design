@@ -1,53 +1,27 @@
-import {
-  readClosureBindingDescriptor,
-  resolveClosureStorePaths,
-  type ClosureBindingDescriptor,
-} from "@open-design/closure/store";
-import { resolveClosureImmutableMetadataVersion } from "@open-design/closure/update";
+import { parseClosureImmutableMetadataVersion } from "@open-design/closure/update";
+import type { StandaloneReleaseIntent } from "@open-design/standalone/protocol";
 
-import { resolvePackagedStandaloneReleaseVersion } from "./config.js";
-
-export type PackagedStandaloneReleaseBindingInput = Readonly<{
-  channel: string;
-  configuredVersion: string | null | undefined;
-  metadataUrl: string | null;
-  namespace: string;
-  root: string;
-}>;
-
-export function selectPackagedStandaloneReleaseVersion(
-  configuredVersion: string | null | undefined,
-  descriptor: Pick<
-    ClosureBindingDescriptor,
-    "activationAuthorized" | "active" | "lastSuccessful" | "prepared"
-  >,
-  metadataUrl: string | null = null,
-): string {
-  const storedVersion = descriptor.activationAuthorized
-    ? descriptor.prepared?.releaseVersion
-    : descriptor.active?.releaseVersion ?? descriptor.lastSuccessful?.releaseVersion;
-  const hasConfiguredVersion = configuredVersion != null && configuredVersion.trim().length > 0;
-  const exactMetadataVersion = !hasConfiguredVersion && storedVersion == null && metadataUrl != null
-    ? resolveClosureImmutableMetadataVersion(metadataUrl)
-    : null;
-  return resolvePackagedStandaloneReleaseVersion(
-    configuredVersion,
-    storedVersion ?? exactMetadataVersion,
-  );
+function cleanVersion(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized == null || normalized.length === 0 ? null : normalized;
 }
 
-/** Resolve an immutable release from the launch transaction or persisted Closure state. */
-export async function resolvePackagedStandaloneReleaseBinding(
-  input: PackagedStandaloneReleaseBindingInput,
-): Promise<string> {
-  const descriptor = await readClosureBindingDescriptor(resolveClosureStorePaths({
-    channel: input.channel,
-    namespace: input.namespace,
-    root: input.root,
-  }));
-  return selectPackagedStandaloneReleaseVersion(
-    input.configuredVersion,
-    descriptor,
-    input.metadataUrl,
-  );
+/**
+ * Project immutable launch input into protocol intent. Shell never reads the
+ * Closure Store or interprets mutable release metadata.
+ */
+export function resolvePackagedStandaloneReleaseIntent(input: Readonly<{
+  configuredVersion: string | null | undefined;
+  metadataUrl: string | null;
+}>): StandaloneReleaseIntent {
+  const configuredVersion = cleanVersion(input.configuredVersion);
+  if (configuredVersion != null) {
+    return Object.freeze({ kind: "exact", releaseVersion: configuredVersion });
+  }
+  const metadataVersion = input.metadataUrl == null
+    ? null
+    : parseClosureImmutableMetadataVersion(input.metadataUrl);
+  return metadataVersion == null
+    ? Object.freeze({ kind: "resume-or-bootstrap" })
+    : Object.freeze({ kind: "exact", releaseVersion: metadataVersion });
 }

@@ -95,6 +95,7 @@ describe("release workflow topology", () => {
       expect(acceptance).toContain(`target: ${target}`);
     }
     expect(entry).toContain("uses: ./.github/workflows/distribution-exact-accept.yml");
+    expect(entry).toContain("tools-release stage-acceptance-feed");
     expect(acceptance).toContain("tools-release prepare-public-acceptance");
     expect(acceptance).toContain("tools-release issue-public-acceptance");
     expect(acceptance).toContain("tools-release activate-public-release");
@@ -119,7 +120,7 @@ describe("release workflow topology", () => {
     expect(win).toContain("uses: ./.github/actions/release/platform/cache/save");
   });
 
-  it("validates a real installation with embedded config and the staged immutable Closure binding", async () => {
+  it("validates a real installation with embedded config through mutable discovery and immutable binding", async () => {
     const [acceptance, lifecycle, packagedConfig] = await Promise.all([
       read(".github/workflows/distribution-exact-accept.yml"),
       read("tools/pack/src/mac/lifecycle.ts"),
@@ -127,7 +128,7 @@ describe("release workflow topology", () => {
     ]);
 
     expect(acceptance).toContain('OD_TOOLS_PACK_EMBEDDED_CONFIG_ONLY: "1"');
-    expect(acceptance).toContain("OD_STANDALONE_METADATA_URL: ${{ inputs.metadata_url }}");
+    expect(acceptance).toContain("OD_STANDALONE_METADATA_URL: ${{ inputs.mutable_metadata_url }}");
     expect(acceptance).not.toContain("OD_PACKAGED_CONFIG_PATH:");
     expect(lifecycle).toContain('process.env.OD_TOOLS_PACK_EMBEDDED_CONFIG_ONLY === "1"');
     expect(packagedConfig).toContain("!options.config.portable");
