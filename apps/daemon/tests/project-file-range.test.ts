@@ -230,7 +230,13 @@ describe('GET /api/projects/:id/raw/* range request route', () => {
     );
   });
 
-  afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
+  // `server.close()` only stops new connections; undici's agent keeps the
+  // sockets from this suite's many fetches alive, so the callback would never
+  // fire and the hook would hit vitest's 10s budget. Drop them explicitly.
+  afterAll(() => new Promise<void>((resolve) => {
+    server.close(() => resolve());
+    server.closeAllConnections?.();
+  }));
 
   const rawUrl = (name: string) => `${baseUrl}/api/projects/${projectId}/raw/${name}`;
   const poweredUrl = (name: string) => `${baseUrl}/api/projects/${projectId}/powered/${name}`;
