@@ -1,0 +1,16 @@
+{
+  "name": "react-components",
+  "version": "1.0.0",
+  "description": "Design-to-code prompt to React components for Stitch MCP",
+  "type": "module",
+  "scripts": {
+    "validate": "node scripts/validate.js",
+    "fetch": "bash scripts/fetch-stitch.sh"
+  },
+  "dependencies": {
+    "@swc/core": "^1.3.100"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -136,6 +136,11 @@ const residualAllowedExactPaths = new Set([
   "tools/pack/resources/mac/notarize.cjs",
   // electron-builder hook path; CJS compatibility entry used by tools-pack desktop builds.
   "tools/pack/resources/web-standalone-after-pack.cjs",
+  // Vendored upstream Stitch skill helper scripts (google-labs-code/stitch-skills).
+  // Portable Node-run validators executed from user workspaces via explicit
+  // script paths, kept as-is to preserve the upstream skill packaging.
+  "skills/react-components/scripts/validate.js",
+  "skills/react-native/scripts/validate.js",
 ]);
 
 const residualAllowedPathPrefixes = [
