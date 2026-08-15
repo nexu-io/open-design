@@ -263,6 +263,39 @@ describe('project preview containment routes', () => {
     expect(borrowedTokenResponse.status).toBe(404);
   });
 
+  it('does not rewrite url(...) patterns inside <script> blocks', async () => {
+    const workspaceId = `workspace-${randomUUID()}`;
+    const workspaceMemberId = `member-${randomUUID()}`;
+    const projectId = await createProject({ entryFile: 'script.html' });
+    await writeProjectFile(
+      projectId,
+      'script.html',
+      [
+        '<!doctype html><html><head><title>Script</title>',
+        '<style>.hero { background-image: url("assets/hero.png") }</style>',
+        '</head><body>',
+        '<script>var u = URL.createObjectURL(new Blob(["x"])); URL.revokeObjectURL(u);</script>',
+        '</body></html>',
+      ].join(''),
+    );
+    await writeProjectFile(projectId, 'assets/hero.png', 'hero-png-bytes');
+    bindPersonalProject(projectId, workspaceId, workspaceMemberId);
+
+    const scopeQuery = new URLSearchParams({ workspaceId, workspaceMemberId });
+    const rawResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/script.html?${scopeQuery}`,
+    );
+    expect(rawResponse.status).toBe(200);
+    const html = await rawResponse.text();
+
+    // CSS url(...) references outside <script> are still workspace-scoped.
+    expect(html).toContain(`/api/projects/${projectId}/raw/assets/hero.png`);
+
+    // Executable JS that happens to contain url(...) is left untouched.
+    expect(html).toContain('URL.revokeObjectURL(u)');
+    expect(html).not.toContain('revokeObjecturl(');
+  });
+
   it('serves minted preview HTML and assets without bearer headers when API token auth is enabled', async () => {
     const previousToken = process.env.OD_API_TOKEN;
     const token = `preview-token-${randomUUID()}`;
