@@ -16,7 +16,14 @@ import type {
  *
  * Selection mirrors the daemon's own `selectDefaultCandidate`
  * (collab/vela-workspace-context.ts): active memberships only, then the
- * personal workspace, then the first remaining candidate.
+ * personal workspace, then the first remaining candidate. The daemon-side
+ * caller feeds its locally pinned workspace in as the preferred id, but the
+ * bridge is a separate stdio process with no view of the UI's per-request
+ * workspace headers — so for a multi-workspace account (personal + team) the
+ * default pick is always the personal workspace and a UI switch changes
+ * nothing. `OD_MCP_WORKSPACE_ID` lets an MCP client pin the bridge to another
+ * workspace (e.g. the team one); an id that is not an active membership falls
+ * back to the default pick.
  */
 
 export interface McpWorkspaceContext {
@@ -30,6 +37,13 @@ export interface McpWorkspaceContext {
 export const MCP_WORKSPACE_CONTEXT_TTL_MS = 15_000;
 /** Back off after a directory outage instead of hammering the daemon. */
 export const MCP_WORKSPACE_FAILURE_COOLDOWN_MS = 60_000;
+
+/**
+ * Env var pinning the bridge to one workspace. The default pick is
+ * personal-first, so a multi-workspace account needs this to reach its team
+ * workspace from MCP at all.
+ */
+export const MCP_WORKSPACE_OVERRIDE_ENV = 'OD_MCP_WORKSPACE_ID';
 
 const DIRECTORY_TIMEOUT_MS = 8_000;
 
@@ -63,9 +77,11 @@ const lastFailureAt = new Map<string, number>();
 
 /**
  * Resolve the signed-in workspace to scope MCP project/run calls, or null for a
- * headerless fallback (non-vela, signed-out, or a directory outage). Results are
- * cached per base URL for MCP_WORKSPACE_CONTEXT_TTL_MS; failures suppress
- * re-fetch for MCP_WORKSPACE_FAILURE_COOLDOWN_MS. `force` bypasses both.
+ * headerless fallback (non-vela, signed-out, or a directory outage). Honors
+ * `OD_MCP_WORKSPACE_ID` as the preferred workspace before the personal-first
+ * default. Results are cached per base URL for MCP_WORKSPACE_CONTEXT_TTL_MS;
+ * failures suppress re-fetch for MCP_WORKSPACE_FAILURE_COOLDOWN_MS. `force`
+ * bypasses both.
  */
 export async function resolveMcpWorkspaceContext(
   baseUrl: string,
@@ -94,7 +110,8 @@ export async function resolveMcpWorkspaceContext(
       return null;
     }
     const data = (await resp.json()) as WorkspaceDirectoryResponse;
-    const selected = selectDefaultMcpCandidate(data.items);
+    const preferredId = process.env[MCP_WORKSPACE_OVERRIDE_ENV]?.trim() || undefined;
+    const selected = selectDefaultMcpCandidate(data.items, preferredId);
     if (!selected) {
       // 200 with empty items — non-vela (dev provider) or no live membership.
       recordFailure(baseUrl);

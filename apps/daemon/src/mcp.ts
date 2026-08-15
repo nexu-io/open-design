@@ -427,7 +427,8 @@ export const TOOL_DEFS = [
   },
   {
     name: 'list_projects',
-    description: 'List every Open Design project on this daemon.',
+    description:
+      'List every Open Design project on this daemon. For accounts with several workspaces this lists the one the bridge selected (personal workspace first); pin a specific workspace by setting OD_MCP_WORKSPACE_ID in the MCP server environment.',
     inputSchema: {
       type: 'object',
       properties: { pluginWorkflowId: PLUGIN_WORKFLOW_ID_ARG },
