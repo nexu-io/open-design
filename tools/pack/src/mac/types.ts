@@ -2,6 +2,7 @@ import type { DesktopEvalResult, DesktopScreenshotResult, DesktopStatusSnapshot,
 import type { CacheReport } from "../cache.js";
 import type { ToolPackArtifactDescriptor } from "../artifacts.js";
 import type { ToolPackBuildOutput, ToolPackConfig } from "../config.js";
+import type { ToolPackInspectSnapshotSource } from "../inspect-runtime-snapshots.js";
 import type { ToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
 import type { ToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
 import type { INTERNAL_PACKAGES } from "./constants.js";
@@ -100,12 +101,14 @@ export type MacStartResult = {
 
 export type MacInspectResult = {
   eval?: DesktopEvalResult;
-  launcher: ToolPackLauncherRuntimeSnapshot;
+  launcher: ToolPackLauncherRuntimeSnapshot | null;
+  launcherSource: ToolPackInspectSnapshotSource;
   screenshot?: DesktopScreenshotResult;
   status: DesktopStatusSnapshot | null;
   statusError?: string;
   statusPoll?: MacInspectStatusPollResult;
-  updateCache: ToolPackUpdateCacheLifecycleSnapshot;
+  updateCache: ToolPackUpdateCacheLifecycleSnapshot | null;
+  updateCacheSource: ToolPackInspectSnapshotSource;
   update?: DesktopUpdateResult;
 };
 

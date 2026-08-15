@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import {
+  cleanupClosureChannelGarbage,
   confirmClosureBindingAttempt,
+  discardObsoleteClosureNamespaceEpochs,
   resolveClosureStorePaths,
   rollbackClosureBindingAttempt,
 } from "@open-design/closure/store";
@@ -270,6 +272,11 @@ export async function exposeStandaloneShellBridge(options: Readonly<{
       }
       if (closurePaths != null) {
         await confirmClosureBindingAttempt(closurePaths, closurePointer);
+        void discardObsoleteClosureNamespaceEpochs(closurePaths)
+          .then(async (result) => {
+            if (result.discarded > 0) await cleanupClosureChannelGarbage({ paths: closurePaths });
+          })
+          .catch(() => undefined);
       }
       transitionCompleted = true;
     },

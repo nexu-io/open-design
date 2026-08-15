@@ -5,10 +5,13 @@ import { isAbsolute, join, relative, sep } from "node:path";
 import { isProcessAlive } from "@open-design/platform";
 
 import {
+  CLOSURE_STORE_EPOCH,
   ClosureStoreError,
   assertUnderRoot,
+  sameRuntimeBinding,
   type ClosureStorePaths,
 } from "./binding.js";
+import { readClosureBindingDescriptor } from "./legacy-candidate.js";
 
 export const CLOSURE_GARBAGE_CLEANUP_MAX_ENTRIES = 16 as const;
 export const CLOSURE_GARBAGE_CLEANUP_MAX_DURATION_MS = 250 as const;
@@ -19,6 +22,11 @@ export type ClosureGarbageCleanupResult = Readonly<{
   durationMs: number;
   remaining: number;
   removed: number;
+}>;
+
+export type ClosureObsoleteEpochDiscardResult = Readonly<{
+  discarded: number;
+  state: "deferred" | "discarded";
 }>;
 
 type CleanupLockRecord = Readonly<{
@@ -71,6 +79,41 @@ export async function discardClosureStoreEntry(input: Readonly<{
     if (errorCode(error) === "ENOENT") return Object.freeze({ garbagePath, state: "missing" });
     throw error;
   }
+}
+
+/** Discard this namespace's obsolete epochs only after its current binding is confirmed. */
+export async function discardObsoleteClosureNamespaceEpochs(
+  paths: ClosureStorePaths,
+): Promise<ClosureObsoleteEpochDiscardResult> {
+  const descriptor = await readClosureBindingDescriptor(paths);
+  if (
+    descriptor.active == null
+    || descriptor.lastSuccessful == null
+    || !sameRuntimeBinding(descriptor.active, descriptor.lastSuccessful)
+    || descriptor.attempt != null
+    || descriptor.prepared != null
+    || descriptor.activationAuthorized
+  ) {
+    return Object.freeze({ discarded: 0, state: "deferred" });
+  }
+
+  const epochsRoot = assertUnderRoot(paths.channelRoot, join(paths.channelRoot, "epochs"));
+  const entries = await readdir(epochsRoot, { withFileTypes: true }).catch(() => []);
+  let discarded = 0;
+  for (const entry of entries) {
+    if (
+      !entry.isDirectory()
+      || entry.isSymbolicLink()
+      || entry.name === String(CLOSURE_STORE_EPOCH)
+    ) continue;
+    const sourcePath = assertUnderRoot(
+      paths.channelRoot,
+      join(epochsRoot, entry.name, "namespaces", paths.namespace),
+    );
+    const result = await discardClosureStoreEntry({ paths, sourcePath });
+    if (result.state === "discarded") discarded += 1;
+  }
+  return Object.freeze({ discarded, state: "discarded" });
 }
 
 function cleanupLockPath(paths: ClosureStorePaths): string {

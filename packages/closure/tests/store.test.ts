@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cp, mkdtemp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,6 +31,7 @@ import {
   recoverInterruptedClosureBinding,
   cleanupClosureChannelGarbage,
   consumeClosureDistributionTarget,
+  discardObsoleteClosureNamespaceEpochs,
   discardClosureStoreEntry,
   hasStoredClosureDistributionGeneration,
   planClosureDistributionGeneration,
@@ -271,6 +272,33 @@ describe("Closure channel garbage black hole", () => {
       paths,
     });
     expect(second).toMatchObject({ attempted: 1, busy: false, remaining: 0, removed: 1 });
+  });
+
+  it("discards obsolete namespace epochs only after the current binding is confirmed", async () => {
+    const paths = await createStore();
+    const obsoleteNamespaceRoot = join(paths.channelRoot, "epochs", "3", "namespaces", paths.namespace);
+    await mkdir(obsoleteNamespaceRoot, { recursive: true });
+    await writeFile(join(obsoleteNamespaceRoot, "obsolete.bin"), "obsolete");
+
+    expect(await discardObsoleteClosureNamespaceEpochs(paths)).toEqual({
+      discarded: 0,
+      state: "deferred",
+    });
+    const candidate = await materializeCandidate(paths, "0.19.0-beta.1");
+    const prepared = await prepareStoredClosureCandidate(paths, candidate.binding, "0.19.0-beta.1");
+    await authorizePreparedClosureActivation(paths, prepared.prepared);
+    await activatePreparedClosureBinding(paths, prepared.prepared, shellBinding);
+    await confirmClosureBindingAttempt(paths, prepared.prepared);
+
+    expect(await discardObsoleteClosureNamespaceEpochs(paths)).toEqual({
+      discarded: 1,
+      state: "discarded",
+    });
+    await expect(stat(obsoleteNamespaceRoot)).rejects.toMatchObject({ code: "ENOENT" });
+    const garbageEntries = await readdir(paths.garbageRoot);
+    expect(garbageEntries).toHaveLength(1);
+    await expect(readFile(join(paths.garbageRoot, garbageEntries[0]!, "obsolete.bin"), "utf8"))
+      .resolves.toBe("obsolete");
   });
 });
 

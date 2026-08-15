@@ -79,6 +79,14 @@ export async function readToolPackUpdateCacheLifecycleSnapshot(
   config: Pick<ToolPackConfig, "platform" | "roots">,
 ): Promise<ToolPackUpdateCacheLifecycleSnapshot> {
   const updateRoot = join(config.roots.runtime.namespaceRoot, "updates");
+  return await readUpdateCacheLifecycleSnapshot({ platform: config.platform, updateRoot });
+}
+
+export async function readUpdateCacheLifecycleSnapshot(input: {
+  platform: string;
+  updateRoot: string;
+}): Promise<ToolPackUpdateCacheLifecycleSnapshot> {
+  const { updateRoot } = input;
   const releasesRoot = join(updateRoot, UPDATE_RELEASES_DIR);
   const cleanupPath = join(updateRoot, UPDATE_STATE_DIR, UPDATE_CLEANUP_FILE);
   const releaseEntries = await readdir(releasesRoot, { withFileTypes: true }).catch(() => []);

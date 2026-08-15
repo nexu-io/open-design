@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -50,6 +50,7 @@ describe("packaged config cold-launch routing", () => {
     const resourcesRoot = join(root, "resources");
     const namespaceBaseRoot = join(root, "tools-pack-runtime", "namespaces");
     const explicitPath = join(root, "external-config.json");
+    const legacyColdLaunchPath = join(userDataPath.current, "open-design-cold-launch.json");
     const embedded = {
       namespace: "embedded-default",
       shellVersion: "0.19.0-beta.23",
@@ -66,7 +67,9 @@ describe("packaged config cold-launch routing", () => {
       releaseVersion: "0.19.0-beta.23",
     }), "utf8");
     await mkdir(resourcesRoot, { recursive: true });
+    await mkdir(userDataPath.current, { recursive: true });
     await mkdir(namespaceBaseRoot, { recursive: true });
+    await writeFile(legacyColdLaunchPath, JSON.stringify({ namespace: "legacy", schemaVersion: 1 }), "utf8");
     await writeFile(join(resourcesRoot, "open-design-config.json"), JSON.stringify(embedded), "utf8");
 
     const transaction = await beginPackagedLaunchContext({
@@ -86,6 +89,7 @@ describe("packaged config cold-launch routing", () => {
     expect(cold.namespaceBaseRoot).toBe(namespaceBaseRoot);
     expect(cold.shellVersion).toBe("0.19.0-beta.23");
     expect(cold.webOutputMode).toBe("standalone");
+    await expect(readFile(legacyColdLaunchPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });
 
   it("does not persist an unleased explicit config", async () => {

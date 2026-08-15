@@ -342,6 +342,18 @@ describe("inspectPackedMacApp", () => {
       expect(result.statusPoll).toMatchObject({ count: 2, intervalMs: 1 });
       expect(result.statusPoll?.samples.map((sample) => sample.attempt)).toEqual([1, 2]);
       expect(result.statusPoll?.samples.every((sample) => sample.status?.standalone?.state === "running")).toBe(true);
+      expect(result.launcher).toBeNull();
+      expect(result.launcherSource).toMatchObject({
+        kind: "installed-runtime",
+        note: "running Shell did not expose its launcher root",
+        root: null,
+      });
+      expect(result.updateCache).toBeNull();
+      expect(result.updateCacheSource).toMatchObject({
+        kind: "installed-runtime",
+        note: "running Shell did not expose its update root",
+        root: null,
+      });
     } finally {
       await rm(root, { force: true, recursive: true });
     }

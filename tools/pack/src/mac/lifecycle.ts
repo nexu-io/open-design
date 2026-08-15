@@ -33,8 +33,7 @@ import {
   parkToolPackDebugSession,
   restoreToolPackDebugSession,
 } from "../debug-session.js";
-import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
-import { readToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
+import { resolveToolPackInspectRuntimeSnapshots } from "../inspect-runtime-snapshots.js";
 import { requestDesktopUpdateAction } from "../update-action.js";
 import { PACKAGED_CONFIG_PATH_ENV, writeLaunchPackagedConfig } from "./app-config.js";
 import { DESKTOP_LOG_ECHO_ENV } from "./constants.js";
@@ -792,6 +791,7 @@ export async function inspectPackedMacApp(
   const updateAction = resolveUpdateAction(options.updateAction);
   const statusPollCount = resolveOptionalPositiveInteger(options.statusPollCount, "--status-poll-count");
   const statusPollIntervalMs = resolveOptionalPositiveInteger(options.statusPollIntervalMs, "--status-poll-interval-ms") ?? 500;
+  const runtimeSnapshots = await resolveToolPackInspectRuntimeSnapshots(config, desktopSnapshot.status);
 
   return {
     ...(options.expr == null ? {} : {
@@ -801,8 +801,7 @@ export async function inspectPackedMacApp(
         { timeoutMs: 5000 },
       ),
     }),
-    launcher: await readToolPackLauncherRuntimeSnapshot(config),
-    updateCache: await readToolPackUpdateCacheLifecycleSnapshot(config),
+    ...runtimeSnapshots,
     ...(options.path == null ? {} : {
       screenshot: await requestJsonIpc<DesktopScreenshotResult>(
         stamp.ipc,

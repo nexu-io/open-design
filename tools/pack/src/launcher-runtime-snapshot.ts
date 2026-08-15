@@ -1,6 +1,7 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 
 import {
+  resolveLauncherPaths,
   validateLauncherDesktopHandoffDescriptor,
   validateLauncherRuntimeDescriptor,
   type LauncherAttemptDescriptor,
@@ -34,13 +35,25 @@ export async function readToolPackLauncherRuntimeSnapshot(
   config: Pick<ToolPackConfig, "releaseVersion" | "namespace" | "roots">,
 ): Promise<ToolPackLauncherRuntimeSnapshot> {
   const launcher = resolveToolPackLauncherLayout(config);
-  const paths = launcher.paths;
-  const base = {
-    attemptsPath: paths.attemptsPath,
+  return await readLauncherRuntimeSnapshot({
     channel: launcher.channel,
-    handoffPath: paths.handoffPath,
     namespace: config.namespace,
     root: launcher.root,
+  });
+}
+
+export async function readLauncherRuntimeSnapshot(input: {
+  channel: string;
+  namespace: string;
+  root: string;
+}): Promise<ToolPackLauncherRuntimeSnapshot> {
+  const paths = resolveLauncherPaths(input);
+  const base = {
+    attemptsPath: paths.attemptsPath,
+    channel: paths.channel,
+    handoffPath: paths.handoffPath,
+    namespace: input.namespace,
+    root: input.root,
     runtimePath: paths.runtimePath,
     stateRoot: paths.stateRoot,
     versionRoots: await listVersionRoots(paths.versionsRoot),
@@ -55,8 +68,8 @@ export async function readToolPackLauncherRuntimeSnapshot(
     : (() => {
         try {
           return validateLauncherDesktopHandoffDescriptor(handoffRaw, {
-            channel: launcher.channel,
-            namespace: config.namespace,
+            channel: paths.channel,
+            namespace: input.namespace,
           });
         } catch {
           return null;
@@ -75,8 +88,8 @@ export async function readToolPackLauncherRuntimeSnapshot(
 
   try {
     const runtime = validateLauncherRuntimeDescriptor(runtimeRaw, {
-      channel: launcher.channel,
-      namespace: config.namespace,
+      channel: paths.channel,
+      namespace: input.namespace,
     });
     return {
       ...base,

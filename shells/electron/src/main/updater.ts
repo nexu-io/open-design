@@ -535,7 +535,12 @@ export function createDesktopUpdater(
       ...(lastCheckedAt == null ? {} : { lastCheckedAt }),
       ...(metadata == null ? {} : { metadata }),
       mode: config.mode,
-      paths: { downloadRoot: config.downloadRoot, manifestPath: join(config.downloadRoot, STORE_METADATA_FILE) },
+      paths: {
+        downloadRoot: config.downloadRoot,
+        ...(config.launcherRoot == null ? {} : { launcherRoot: config.launcherRoot }),
+        ...(config.launcherRuntimePath == null ? {} : { launcherRuntimePath: config.launcherRuntimePath }),
+        manifestPath: join(config.downloadRoot, STORE_METADATA_FILE),
+      },
       platform: config.platform,
       ...(progress == null ? {} : { progress }),
       ...(reinstallRequirement == null ? {} : { reinstall: reinstallRequirement }),

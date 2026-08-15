@@ -35,8 +35,7 @@ import {
   restoreToolPackDebugSession,
 } from "../debug-session.js";
 import { resolveToolPackLauncherLayout } from "../launcher-layout.js";
-import { readToolPackLauncherRuntimeSnapshot } from "../launcher-runtime-snapshot.js";
-import { readToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifecycle-snapshot.js";
+import { resolveToolPackInspectRuntimeSnapshots } from "../inspect-runtime-snapshots.js";
 import { requestDesktopUpdateAction } from "../update-action.js";
 import { DESKTOP_LOG_ECHO_ENV } from "./constants.js";
 import { listDirectories, pathExists, removeTree } from "./fs.js";
@@ -785,27 +784,15 @@ export async function inspectPackedWinApp(
   const updateAction = resolveUpdateAction(options.updateAction);
   const statusPollCount = resolveOptionalPositiveInteger(options.statusPollCount, "--status-poll-count");
   const statusPollIntervalMs = resolveOptionalPositiveInteger(options.statusPollIntervalMs, "--status-poll-interval-ms") ?? 500;
-  const launcher = await readToolPackLauncherRuntimeSnapshot(runtimeConfig);
-  const updateCache = await readToolPackUpdateCacheLifecycleSnapshot(runtimeConfig);
+  const runtimeSnapshots = await resolveToolPackInspectRuntimeSnapshots(runtimeConfig, desktopSnapshot.status);
   return {
     daemonStatus: daemonSnapshot.status,
     ...(daemonSnapshot.error == null ? {} : { daemonStatusError: daemonSnapshot.error }),
     ...(options.expr == null ? {} : {
       eval: await requestDesktopEval(stamp.ipc, options.expr),
     }),
-    launcher,
-    launcherSource: {
-      kind: "tools-pack-runtime",
-      note: "launcher snapshot is read from the tools-pack runtime root; user-installed launcher state is reported by the running desktop status and its AppData paths",
-      root: launcher.root,
-    },
+    ...runtimeSnapshots,
     ...(managedProcessPids == null ? {} : { managedProcessPids }),
-    updateCache,
-    updateCacheSource: {
-      kind: "tools-pack-runtime",
-      note: "update cache snapshot is read from the tools-pack runtime root; user-installed update cache is reported by status.update.paths",
-      root: updateCache.updateRoot,
-    },
     ...(options.path == null ? {} : {
       screenshot: await requestJsonIpc<DesktopScreenshotResult>(
         stamp.ipc,

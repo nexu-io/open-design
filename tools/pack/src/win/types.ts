@@ -11,6 +11,7 @@ import type { ToolPackUpdateCacheLifecycleSnapshot } from "../update-cache-lifec
 import type { CacheReport } from "../cache.js";
 import type { ToolPackArtifactDescriptor } from "../artifacts.js";
 import type { ToolPackConfig } from "../config.js";
+import type { ToolPackInspectSnapshotSource } from "../inspect-runtime-snapshots.js";
 import type { INTERNAL_PACKAGES } from "./constants.js";
 
 export type PackedTarballInfo = {
@@ -377,23 +378,15 @@ export type WinInspectResult = {
   daemonStatusError?: string;
   desktopIpcUnavailable?: boolean;
   eval?: DesktopEvalResult;
-  launcher: ToolPackLauncherRuntimeSnapshot;
-  launcherSource: {
-    kind: "tools-pack-runtime";
-    note: string;
-    root: string;
-  };
+  launcher: ToolPackLauncherRuntimeSnapshot | null;
+  launcherSource: ToolPackInspectSnapshotSource;
   managedProcessPids?: number[];
   screenshot?: DesktopScreenshotResult;
   status: DesktopStatusSnapshot | null;
   statusError?: string;
   statusPoll?: WinInspectStatusPollResult;
-  updateCache: ToolPackUpdateCacheLifecycleSnapshot;
-  updateCacheSource: {
-    kind: "tools-pack-runtime";
-    note: string;
-    root: string;
-  };
+  updateCache: ToolPackUpdateCacheLifecycleSnapshot | null;
+  updateCacheSource: ToolPackInspectSnapshotSource;
   update?: DesktopUpdateResult;
   webStatus: WebStatusSnapshot | null;
   webStatusError?: string;

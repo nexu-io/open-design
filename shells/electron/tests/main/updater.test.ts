@@ -3761,6 +3761,73 @@ describe("desktop updater", () => {
     }
   });
 
+  it("re-evaluates releases retained by an older Shell during cold start", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ channel: "beta", platform: "win", version: "1.0.0-beta.5" });
+    try {
+      const original = createDesktopUpdater({
+        arch: "x64",
+        downloadRoot: root,
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.1",
+        },
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      await original.status();
+      await writeReleaseFixture(root, "1.0.0-beta.2-win-x64-stale", "beta", "1.0.0-beta.2");
+      await mkdir(join(root, "state"), { recursive: true });
+      await writeFile(join(root, "state", "cleanup.json"), `${JSON.stringify({
+        currentVersion: "1.0.0-beta.1",
+        platform: "win32",
+        releases: [
+          {
+            currentVersion: "1.0.0-beta.1",
+            key: "1.0.0-beta.2-win-x64-stale",
+            metadataPath: "releases/1.0.0-beta.2-win-x64-stale/metadata.json",
+            path: "releases/1.0.0-beta.2-win-x64-stale",
+            reason: "current-version-or-newer",
+            state: "retained",
+            updatedAt: "2026-06-08T00:00:00.000Z",
+            version: "1.0.0-beta.2",
+          },
+        ],
+        trigger: "cold-start",
+        updatedAt: "2026-06-08T00:00:00.000Z",
+        version: 1,
+      }, null, 2)}\n`, "utf8");
+
+      const restarted = createDesktopUpdater({
+        arch: "x64",
+        downloadRoot: root,
+        env: {
+          ...updaterEnv(fixture.metadataUrl, "win32"),
+          [DESKTOP_UPDATE_ENV.CURRENT_VERSION]: "1.0.0-beta.4",
+        },
+        source: SIDECAR_SOURCES.TOOLS_PACK,
+      });
+      const status = await restarted.status();
+      const cleanup = JSON.parse(await readFile(join(root, "state", "cleanup.json"), "utf8")) as {
+        currentVersion?: string;
+        releases: Array<{ currentVersion?: string; reason: string; state: string; version?: string }>;
+      };
+
+      expect(status.cache?.lifecycle?.lastTrigger).toBe("cold-start");
+      expect(status.cache?.lifecycle?.releases.cleanupRemoved).toBe(1);
+      expect(cleanup.currentVersion).toBe("1.0.0-beta.4");
+      expect(cleanup.releases).toContainEqual(expect.objectContaining({
+        currentVersion: "1.0.0-beta.4",
+        reason: "older-than-current-version",
+        state: "cleanup-removed",
+        version: "1.0.0-beta.2",
+      }));
+      expect(existsSync(join(root, "releases", "1.0.0-beta.2-win-x64-stale"))).toBe(false);
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("cleans deprecated launcher payload versions on cold start from the launcher cleanup descriptor", async () => {
     const root = makeRoot();
     const fixture = await createUpdaterFixture({ channel: "beta", platform: "win", version: "1.0.0-beta.3" });

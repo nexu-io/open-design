@@ -1,4 +1,4 @@
-import { access, readFile } from "node:fs/promises";
+import { access, readFile, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { SIDECAR_DEFAULTS, normalizeNamespace } from "@open-design/sidecar/protocol";
@@ -21,6 +21,7 @@ async function loadElectronApp() {
 }
 
 export const PACKAGED_CONFIG_PATH_ENV = "OD_PACKAGED_CONFIG_PATH";
+const LEGACY_PACKAGED_COLD_LAUNCH_FILE = "open-design-cold-launch.json";
 export const PACKAGED_LAUNCH_CONTEXT_SESSION_ENV = "OD_PACKAGED_LAUNCH_CONTEXT_SESSION";
 export const PACKAGED_NAMESPACE_ENV = "OD_PACKAGED_NAMESPACE";
 export const PACKAGED_NAMESPACE_BASE_ROOT_ENV = "OD_PACKAGED_NAMESPACE_BASE_ROOT";
@@ -123,6 +124,7 @@ async function readRawPackagedConfig(electronUserDataRoot: string): Promise<{
   launchContext: PackagedLaunchContext | null;
   raw: RawPackagedConfig;
 }> {
+  await rm(join(electronUserDataRoot, LEGACY_PACKAGED_COLD_LAUNCH_FILE), { force: true }).catch(() => undefined);
   const explicit = process.env[PACKAGED_CONFIG_PATH_ENV];
   if (explicit != null && explicit.length > 0) {
     const config = await readJsonIfExists(resolve(explicit));

@@ -237,6 +237,8 @@ export type DesktopUpdateCapabilitySet = {
 
 export type DesktopUpdatePathSnapshot = {
   downloadRoot?: string;
+  launcherRoot?: string;
+  launcherRuntimePath?: string;
   manifestPath?: string;
 };
 

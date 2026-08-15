@@ -487,35 +487,26 @@ export async function runUpdateReleaseLifecycle(input: {
   return await withUpdaterLifecycleLock(layout, logger, async () => {
     const startedAt = now().toISOString();
     const current = await readReleaseCleanupDescriptor(layout);
-    let next: ReleaseCleanupDescriptor;
-    if (trigger === "next-version-ready" || trigger === "manual") {
-      next = {
-        currentVersion: config.currentVersion,
-        platform: config.platform,
-        ...(readyVersion == null ? {} : { readyVersion }),
-        releases: await scanReleaseCleanupEntries({
-          config,
-          deprecateAll: trigger === "manual",
-          descriptor: current,
-          layout,
-          nowIso: startedAt,
-          readyVersion,
-        }),
-        trigger,
-        updatedAt: startedAt,
-        version: RELEASE_CLEANUP_DESCRIPTOR_VERSION,
-      };
-      await writeJson(layout.cleanupPath, next);
-    } else {
-      next = current ?? {
-        currentVersion: config.currentVersion,
-        platform: config.platform,
-        releases: [],
-        trigger,
-        updatedAt: startedAt,
-        version: RELEASE_CLEANUP_DESCRIPTOR_VERSION,
-      };
-    }
+    // cleanup.json records prior observations; it is never retention authority.
+    // Re-scan on every trigger so a release retained by an older executable can
+    // become deprecated after the installed Shell advances.
+    const next: ReleaseCleanupDescriptor = {
+      currentVersion: config.currentVersion,
+      platform: config.platform,
+      ...(readyVersion == null ? {} : { readyVersion }),
+      releases: await scanReleaseCleanupEntries({
+        config,
+        deprecateAll: trigger === "manual",
+        descriptor: current,
+        layout,
+        nowIso: startedAt,
+        readyVersion,
+      }),
+      trigger,
+      updatedAt: startedAt,
+      version: RELEASE_CLEANUP_DESCRIPTOR_VERSION,
+    };
+    await writeJson(layout.cleanupPath, next);
 
     const cleaned = await cleanupDeprecatedReleaseEntries({
       descriptor: {
