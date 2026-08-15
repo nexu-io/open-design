@@ -105,9 +105,6 @@ runs:
     - name: Setup NSIS
       if: ${{ steps.win_x64_shell_resolution.outputs.state == 'miss' || (inputs.smoke-mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '') }}
       uses: ./.github/actions/release/platform/win/nsis
-      with:
-        attempts: "3"
-        delay-seconds: "5"
     - name: Build exact win_x64
       id: win_tools_pack_build
       if: ${{ steps.win_x64_shell_resolution.outputs.state == 'miss' }}

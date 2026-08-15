@@ -1,30 +1,53 @@
 name: Setup NSIS
 description: Ensure makensis is available on the Windows release runner
 
-inputs:
-  attempts:
-    description: Maximum Chocolatey install attempts
-    required: false
-    default: "4"
-  delay-seconds:
-    description: Linear retry delay multiplier in seconds
-    required: false
-    default: "15"
-
 runs:
   using: composite
   steps:
-    - name: Setup NSIS
+    - name: Restore pinned NSIS
+      id: cache
+      uses: actions/cache@v5.0.5
+      continue-on-error: true
+      with:
+        path: ${{ runner.tool_cache }}\open-design-nsis\3.0.4.1
+        key: open-design-nsis-${{ runner.os }}-${{ runner.arch }}-3.0.4.1-9877df902530f96357d13a7a31ae2b9df67f48b11ffc9a1700a7c961574ec5fa
+
+    - name: Materialize pinned NSIS
       shell: pwsh
       run: |
-        function Test-Makensis {
-          [bool]((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe"))
+        $ErrorActionPreference = "Stop"
+        $version = "3.0.4.1"
+        $expectedSha256 = "9877df902530f96357d13a7a31ae2b9df67f48b11ffc9a1700a7c961574ec5fa"
+        $root = Join-Path $env:RUNNER_TOOL_CACHE "open-design-nsis\$version"
+        $makensis = Join-Path $root "makensis.exe"
+
+        if (-not (Test-Path -LiteralPath $makensis -PathType Leaf)) {
+          $archive = Join-Path $env:RUNNER_TEMP "nsis-$version.7z"
+          $staging = "$root.staging-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          $url = "https://github.com/electron-userland/electron-builder-binaries/releases/download/nsis-$version/nsis-$version.7z"
+
+          Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
+          Remove-Item -LiteralPath $staging -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path (Split-Path -Parent $root) | Out-Null
+
+          curl.exe --fail --location --retry 3 --retry-all-errors --output $archive $url
+          if ($LASTEXITCODE -ne 0) { throw "failed to download pinned NSIS $version" }
+          $actualSha256 = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) {
+            throw "pinned NSIS $version digest mismatch: expected $expectedSha256, got $actualSha256"
+          }
+
+          New-Item -ItemType Directory -Force -Path $staging | Out-Null
+          7z.exe x -y "-o$staging" $archive | Out-Host
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $staging "makensis.exe") -PathType Leaf)) {
+            throw "pinned NSIS $version archive did not materialize makensis.exe"
+          }
+
+          Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+          Move-Item -LiteralPath $staging -Destination $root
+          Remove-Item -LiteralPath $archive -Force -ErrorAction SilentlyContinue
         }
-        if (Test-Makensis) { Write-Host "makensis already present"; exit 0 }
-        foreach ($attempt in 1..${{ inputs.attempts }}) {
-          Write-Host "choco install nsis (attempt $attempt)"
-          choco install nsis -y --no-progress
-          if (Test-Makensis) { break }
-          Start-Sleep -Seconds (${{ inputs.delay-seconds }} * $attempt)
-        }
-        if (-not (Test-Makensis)) { throw "NSIS install failed after ${{ inputs.attempts }} attempts" }
+
+        & $makensis /VERSION
+        if ($LASTEXITCODE -ne 0) { throw "pinned NSIS $version failed its version probe" }
+        $root | Out-File -FilePath $env:GITHUB_PATH -Append

@@ -110,6 +110,16 @@ const winDistributionActionPath = join(
   "win",
   "action.yml",
 );
+const winNsisSetupActionPath = join(
+  workspaceRoot,
+  ".github",
+  "actions",
+  "release",
+  "platform",
+  "win",
+  "nsis",
+  "action.yml",
+);
 const packagedMacSpecPath = join(e2eRoot, "specs", "mac.spec.ts");
 const releasePrereleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease.yml");
 const distributionCountedWorkflowPath = join(workspaceRoot, ".github", "workflows", "distribution-counted.yml");
@@ -2363,6 +2373,25 @@ process.stdin.on("end", () => {
 
     expect(canary).toContain("该 smoke 是独立质量信号，不阻塞 release cut 或 prerelease 打包 / 发布。");
     expect(canary).not.toContain("release cut 会被阻止");
+  });
+
+  it("[P1] materializes one pinned NSIS toolchain without a live Chocolatey index", async () => {
+    const [setup, exact, prereleaseCanary] = await Promise.all([
+      readFile(winNsisSetupActionPath, "utf8"),
+      readFile(betaWinDistributionActionPath, "utf8"),
+      readFile(mainPrereleaseWinSmokeWorkflowPath, "utf8"),
+    ]);
+
+    expect(setup).toContain("actions/cache@v5.0.5");
+    expect(setup).toContain("electron-builder-binaries/releases/download/nsis-$version/nsis-$version.7z");
+    expect(setup).toContain("9877df902530f96357d13a7a31ae2b9df67f48b11ffc9a1700a7c961574ec5fa");
+    expect(setup).toContain("Get-FileHash -LiteralPath $archive -Algorithm SHA256");
+    expect(setup).toContain("Move-Item -LiteralPath $staging -Destination $root");
+    expect(setup).toContain("$root | Out-File -FilePath $env:GITHUB_PATH -Append");
+    expect(setup).not.toContain("choco install");
+    expect(exact).toContain("uses: ./.github/actions/release/platform/win/nsis");
+    expect(prereleaseCanary).toContain("uses: ./.github/actions/release/platform/win/nsis");
+    expect(prereleaseCanary).not.toContain("choco install nsis");
   });
 
   it("[P1] keeps prerelease smoke failures advisory and annotates the download card", async () => {

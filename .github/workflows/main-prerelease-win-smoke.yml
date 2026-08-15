@@ -99,22 +99,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Setup NSIS
-        shell: pwsh
-        run: |
-          function Test-Makensis {
-            [bool]((Get-Command makensis.exe -ErrorAction SilentlyContinue) -or (Test-Path "C:\Program Files (x86)\NSIS\makensis.exe"))
-          }
-          if (Test-Makensis) { Write-Host "makensis already present"; exit 0 }
-          foreach ($attempt in 1..4) {
-            Write-Host "choco install nsis (attempt $attempt)"
-            choco install nsis -y --no-progress
-            if (Test-Makensis) { break }
-            Start-Sleep -Seconds (15 * $attempt)
-          }
-          if (-not (Test-Makensis)) {
-            Write-Error "NSIS install failed after 4 attempts"
-            exit 1
-          }
+        uses: ./.github/actions/release/platform/win/nsis
 
       - name: Build prerelease Windows canary
         id: win_tools_pack_build
