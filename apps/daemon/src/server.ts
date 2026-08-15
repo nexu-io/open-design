@@ -1601,6 +1601,18 @@ export function createAgentRuntimeEnv(
   for (const key of Object.keys(env)) {
     if (key.toUpperCase() === 'OD_API_TOKEN') delete env[key];
   }
+  // A GUI-launched daemon can inherit a broken PATHEXT such as `.CPL` (issue
+  // #6934). Nested native commands then lose stdout/stderr or fail with
+  // ERROR_NO_DATA. On Windows, recover a usable executable-extension list while
+  // preserving an already-valid value and the inherited key casing.
+  if (process.platform === 'win32') {
+    const pathextKey =
+      Object.keys(env).find((key) => key.toLowerCase() === 'pathext') ?? 'PATHEXT';
+    const pathextValue = typeof env[pathextKey] === 'string' ? (env[pathextKey] as string) : '';
+    if (!/\.exe/i.test(pathextValue)) {
+      env[pathextKey] = '.COM;.EXE;.BAT;.CMD;.VBS;.VBE;.JS;.JSE;.WSF;.WSH;.MSC';
+    }
+  }
   const sidecarIpcPath = baseEnv[SIDECAR_ENV.IPC_PATH];
   if (typeof sidecarIpcPath === 'string' && sidecarIpcPath.length > 0) {
     env[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
