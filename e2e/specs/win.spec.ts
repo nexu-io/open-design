@@ -3635,7 +3635,7 @@ async function activateVerifiedFixture(
   releaseVersion: string,
 ) {
   const prepared = await prepareVerifiedStoredClosureCandidate(storePaths, verification, releaseVersion);
-  await authorizePreparedClosureActivation(storePaths, prepared.prepared);
+  await authorizePreparedClosureActivation(storePaths, prepared.prepared, 'initial-bootstrap');
   await activatePreparedClosureBinding(storePaths, prepared.prepared, {
     digest: prepared.prepared.standalone.digest,
     type: 'e2e-fixture',

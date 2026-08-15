@@ -92,7 +92,7 @@ export async function discardObsoleteClosureNamespaceEpochs(
     || !sameRuntimeBinding(descriptor.active, descriptor.lastSuccessful)
     || descriptor.attempt != null
     || descriptor.prepared != null
-    || descriptor.activationAuthorized
+    || descriptor.activationIntent != null
   ) {
     return Object.freeze({ discarded: 0, state: "deferred" });
   }

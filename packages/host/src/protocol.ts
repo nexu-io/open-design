@@ -312,6 +312,12 @@ export type OpenDesignHostUpdaterReinstallSnapshot = {
   url?: string;
 };
 
+export type OpenDesignHostStandaloneUpdaterSnapshot = {
+  activationSource: "silent-policy" | "user-restart" | null;
+  releaseVersion: string;
+  state: "current" | "prepared";
+};
+
 export type OpenDesignHostUpdaterStatusSnapshot = {
   active?: OpenDesignHostUpdaterReleaseSnapshot;
   arch: string;
@@ -335,6 +341,7 @@ export type OpenDesignHostUpdaterStatusSnapshot = {
   platform: string;
   progress?: OpenDesignHostUpdaterProgressSnapshot;
   reinstall?: OpenDesignHostUpdaterReinstallSnapshot;
+  standalone?: OpenDesignHostStandaloneUpdaterSnapshot;
   state: OpenDesignHostUpdaterState;
   supported: boolean;
 };

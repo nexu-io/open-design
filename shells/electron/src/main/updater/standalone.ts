@@ -4,6 +4,7 @@ export type DesktopStandaloneUpdatePreparation =
   | { architecture: "legacy" }
   | { architecture: "standalone"; minimumShellVersion: string | null; route: "shell" }
   | {
+      activationSource: "silent-policy" | "user-restart" | null;
       architecture: "standalone";
       releaseVersion: string;
       route: "closure";
@@ -12,11 +13,11 @@ export type DesktopStandaloneUpdatePreparation =
 
 export type StandaloneUpdatePreparationPort = (
   metadata: Record<string, unknown>,
-  options: { activateOnRestart: boolean },
+  options: { activationSource?: "silent-policy" | "user-restart" },
 ) => Promise<DesktopStandaloneUpdatePreparation>;
 
 export async function resolveStandaloneMetadataPreparation(input: Readonly<{
-  activateOnRestart: boolean;
+  activationSource?: "silent-policy" | "user-restart";
   metadata: Record<string, unknown>;
   prepare?: StandaloneUpdatePreparationPort;
 }>): Promise<Readonly<{
@@ -27,7 +28,7 @@ export async function resolveStandaloneMetadataPreparation(input: Readonly<{
   const preparation = input.prepare == null
     ? (modern ? null : { architecture: "legacy" as const })
     : await input.prepare(input.metadata, {
-        activateOnRestart: input.activateOnRestart,
+        ...(input.activationSource == null ? {} : { activationSource: input.activationSource }),
       });
   return Object.freeze({ modern, preparation });
 }

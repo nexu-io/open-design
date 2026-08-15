@@ -36,7 +36,7 @@ export function createDesktopUpdaterScheduler(
     initialDelayMs: number;
     intervalMs: number;
     logger?: DesktopUpdaterLogger;
-    standaloneActivationOnRestart?: () => Promise<boolean>;
+  silentStandaloneActivation?: () => Promise<boolean>;
     startupSilentPayloadUpdate?: StartupSilentPayloadUpdateOptions;
   },
 ): DesktopUpdaterScheduler {
@@ -105,8 +105,10 @@ export function createDesktopUpdaterScheduler(
       const startupReady = startupTick && options.startupSilentPayloadUpdate != null
         ? await updater.status()
         : null;
-      const activateOnRestart = await options.standaloneActivationOnRestart?.().catch(() => false) ?? false;
-      status = await updater.checkForUpdates({ activateOnRestart });
+      const silentActivationEnabled = await options.silentStandaloneActivation?.().catch(() => false) ?? false;
+      status = await updater.checkForUpdates({
+        ...(silentActivationEnabled ? { activationSource: "silent-policy" as const } : {}),
+      });
       if (
         startupTick
         && options.startupSilentPayloadUpdate != null

@@ -184,6 +184,57 @@ describe('UpdateDialog', () => {
     expect(screen.queryByRole('button', { name: 'Check again' })).toBeNull();
   });
 
+  it('opens a prepared Standalone release as restart-ready without checking again', async () => {
+    let openDialogListener: OpenDesignHostUpdaterOpenDialogListener | null = null;
+    const ready = idleStatus({
+      standalone: {
+        activationSource: null,
+        releaseVersion: '1.2.4-beta.9',
+        state: 'prepared',
+      },
+      state: 'not-available',
+    });
+    const authorized = idleStatus({
+      standalone: {
+        activationSource: 'user-restart',
+        releaseVersion: '1.2.4-beta.9',
+        state: 'prepared',
+      },
+      state: 'not-available',
+    });
+    const check = vi.fn();
+    const install = vi.fn(async () => authorized);
+    const quit = vi.fn(async () => ({ ok: true as const }));
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          check,
+          install,
+          quit,
+          status: vi.fn(async () => ready),
+          subscribeOpenDialog: vi.fn((listener) => {
+            openDialogListener = listener;
+            return vi.fn();
+          }),
+        },
+      },
+    });
+
+    render(<I18nProvider initial="en"><UpdateDialog /></I18nProvider>);
+    await act(async () => {
+      openDialogListener?.({ source: 'mac-app-menu' });
+      await Promise.resolve();
+    });
+
+    expect(await screen.findByText(
+      'Open Design 1.2.4-beta.9 is ready. Open Design will close and restart automatically.',
+    )).toBeTruthy();
+    expect(check).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Install and restart' }));
+    await waitFor(() => expect(install).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(quit).toHaveBeenCalledTimes(1));
+  });
+
   it('keeps copy and actions focused as an update moves from available to downloading and installing', async () => {
     let statusListener: OpenDesignHostUpdaterStatusListener | null = null;
     let openDialogListener: OpenDesignHostUpdaterOpenDialogListener | null = null;

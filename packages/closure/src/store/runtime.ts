@@ -7,6 +7,7 @@ import {
   sameReleaseBinding,
   sameShellBinding,
   type ClosureBindingDescriptor,
+  type ClosureActivationSource,
   type ClosureReleaseBinding,
   type ClosureRuntimeBinding,
   type ClosureRuntimePointer,
@@ -57,7 +58,7 @@ export async function publishPreparedClosureBinding(
   };
   return await writeDescriptor(paths, {
     ...current,
-    activationAuthorized: false,
+    activationIntent: null,
     nextGeneration: current.nextGeneration + 1,
     prepared,
   });
@@ -66,11 +67,29 @@ export async function publishPreparedClosureBinding(
 export async function authorizePreparedClosureActivation(
   paths: ClosureStorePaths,
   expected: ClosureReleaseBinding | ClosureRuntimePointer,
+  source: ClosureActivationSource,
 ): Promise<ClosureReleaseBinding> {
   const current = await readClosureBindingDescriptor(paths);
   const prepared = expectedBinding(current.prepared, expected, "prepared");
-  await writeDescriptor(paths, { ...current, activationAuthorized: true });
+  await writeDescriptor(paths, {
+    ...current,
+    activationIntent: { ...prepared, source },
+  });
   return prepared;
+}
+
+export async function revokePreparedClosureActivation(
+  paths: ClosureStorePaths,
+  source?: ClosureActivationSource,
+): Promise<ClosureBindingDescriptor> {
+  const current = await readClosureBindingDescriptor(paths);
+  if (current.activationIntent == null || (
+    source != null && current.activationIntent.source !== source
+  )) return current;
+  return await writeDescriptor(paths, {
+    ...current,
+    activationIntent: null,
+  });
 }
 
 export async function activatePreparedClosureBinding(
@@ -88,7 +107,7 @@ export async function activatePreparedClosureBinding(
     ...current,
     active: attempt,
     attempt,
-    activationAuthorized: false,
+    activationIntent: null,
     prepared: null,
   });
   return attempt;
@@ -140,7 +159,7 @@ export async function rollbackClosureBindingAttempt(
     ...current,
     active: current.lastSuccessful,
     attempt: null,
-    activationAuthorized: false,
+    activationIntent: null,
     prepared: null,
   });
   return current.lastSuccessful;

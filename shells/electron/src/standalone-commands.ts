@@ -16,6 +16,7 @@ export type StandaloneUpdatePreparation =
   | { architecture: "legacy" }
   | { architecture: "standalone"; minimumShellVersion: string | null; route: "shell" }
   | {
+      activationSource: "silent-policy" | "user-restart" | null;
       architecture: "standalone";
       releaseVersion: string;
       route: "closure";
@@ -55,7 +56,7 @@ export function createStandaloneUpdatePreparation(input: Readonly<{
   requestId?: () => string;
 }>): (
   metadata: Record<string, unknown>,
-  options?: { activateOnRestart?: boolean },
+  options?: { activationSource?: "silent-policy" | "user-restart" },
 ) => Promise<StandaloneUpdatePreparation> {
   const requestId = input.requestId ?? randomUUID;
   return async (metadata, options = {}) => {
@@ -64,7 +65,7 @@ export function createStandaloneUpdatePreparation(input: Readonly<{
       command: OPEN_DESIGN_PREPARE_UPDATE_COMMAND,
       handoff: input.handoff,
       input: {
-        activateOnRestart: options.activateOnRestart === true,
+        ...(options.activationSource == null ? {} : { activationSource: options.activationSource }),
         metadata,
       } as StandaloneProtocolJsonValue,
       requestId: requestId(),
@@ -91,6 +92,9 @@ export function createStandaloneUpdatePreparation(input: Readonly<{
     ) throw new Error("Standalone update preparation returned an invalid Closure state");
     return {
       architecture: "standalone",
+      activationSource: output.activationSource === "silent-policy" || output.activationSource === "user-restart"
+        ? output.activationSource
+        : null,
       releaseVersion: output.releaseVersion,
       route: "closure",
       state: output.state,

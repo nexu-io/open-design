@@ -172,7 +172,7 @@ export type LoadedRelease = {
 };
 
 type ActionOptions = {
-  activateOnRestart?: boolean;
+  activationSource?: "silent-policy" | "user-restart";
   autoDownload?: boolean;
 };
 
@@ -451,6 +451,7 @@ export function createDesktopUpdater(
   let lifecycleSummary: DesktopUpdateCacheLifecycleSummary | undefined;
   let progress: DesktopUpdateProgressSnapshot | undefined;
   let reinstallRequirement: DesktopUpdateReinstallSnapshot | undefined;
+  let standaloneStatus: DesktopStandaloneUpdatePreparation | null = null;
   let state: DesktopUpdateState = DESKTOP_UPDATE_STATES.IDLE;
   let error: DesktopUpdateErrorSnapshot | undefined;
   let operation: Promise<unknown> = Promise.resolve();
@@ -460,12 +461,13 @@ export function createDesktopUpdater(
 
   function logUpdateEvent(event: string, fields: Record<string, unknown> = {}): void {
     logger.info?.("[open-design updater] lifecycle", {
-      currentVersion: config.currentVersion,
+      currentVersion: config.productVersion,
       event,
       mode: config.mode,
       namespace: config.namespace,
       platform: config.platform,
       sessionId,
+      shellVersion: config.currentVersion,
       source: config.source,
       ...fields,
     });
@@ -526,7 +528,7 @@ export function createDesktopUpdater(
       }),
       channel: config.channel,
       ...(activeChecksum == null ? {} : { checksum: activeChecksum }),
-      currentVersion: config.currentVersion,
+      currentVersion: config.productVersion,
       ...(downloadPath == null ? {} : { downloadPath }),
       enabled: config.enabled,
       ...(error == null ? {} : { error }),
@@ -544,6 +546,13 @@ export function createDesktopUpdater(
       platform: config.platform,
       ...(progress == null ? {} : { progress }),
       ...(reinstallRequirement == null ? {} : { reinstall: reinstallRequirement }),
+      ...(standaloneStatus?.architecture === "standalone" && standaloneStatus.route === "closure"
+        ? { standalone: {
+            activationSource: standaloneStatus.activationSource,
+            releaseVersion: standaloneStatus.releaseVersion,
+            state: standaloneStatus.state,
+          } }
+        : {}),
       state,
       supported: statusSupported,
     };
@@ -761,6 +770,20 @@ export function createDesktopUpdater(
       if (restored?.state === DESKTOP_UPDATE_STATES.ERROR) return restored;
       if (installFrozen || installResult != null) return snapshot();
     }
+    if (
+      options.activationSource == null
+      && standaloneStatus?.architecture === "standalone"
+      && standaloneStatus.route === "closure"
+      && standaloneStatus.state === "prepared"
+      && standaloneStatus.activationSource === "silent-policy"
+      && metadata != null
+    ) {
+      const reconciled = await resolveStandaloneMetadataPreparation({
+        metadata,
+        ...(deps.prepareStandaloneUpdate == null ? {} : { prepare: deps.prepareStandaloneUpdate }),
+      });
+      standaloneStatus = reconciled.preparation;
+    }
     const keepDownloadedVisible = activeRelease != null;
     if (!keepDownloadedVisible) setState(DESKTOP_UPDATE_STATES.CHECKING);
     try {
@@ -774,11 +797,12 @@ export function createDesktopUpdater(
       }));
       if (root != null) scheduleBackCleanup(root.realRoot, logger);
       const standaloneRoute = await resolveStandaloneMetadataPreparation({
-        activateOnRestart: options.activateOnRestart === true,
+        ...(options.activationSource == null ? {} : { activationSource: options.activationSource }),
         metadata: body,
         ...(deps.prepareStandaloneUpdate == null ? {} : { prepare: deps.prepareStandaloneUpdate }),
       });
       const standalonePreparation = standaloneRoute.preparation;
+      standaloneStatus = standaloneRoute.preparation;
       if (standaloneRoute.modern && standalonePreparation == null) {
         return setFailurePreservingActive(createError(
           "standalone-updater-unavailable",
@@ -1180,6 +1204,29 @@ export function createDesktopUpdater(
     if (installResult != null) {
       installFrozen = true;
       return snapshot();
+    }
+    if (
+      standaloneStatus?.architecture === "standalone"
+      && standaloneStatus.route === "closure"
+      && standaloneStatus.state === "prepared"
+      && metadata != null
+    ) {
+      const authorized = await resolveStandaloneMetadataPreparation({
+        activationSource: "user-restart",
+        metadata,
+        ...(deps.prepareStandaloneUpdate == null ? {} : { prepare: deps.prepareStandaloneUpdate }),
+      });
+      standaloneStatus = authorized.preparation;
+      if (
+        standaloneStatus?.architecture !== "standalone"
+        || standaloneStatus.route !== "closure"
+        || standaloneStatus.state !== "prepared"
+        || standaloneStatus.activationSource !== "user-restart"
+      ) return setState(DESKTOP_UPDATE_STATES.ERROR, createError(
+        "standalone-authorization-failed",
+        "Standalone update could not be authorized for restart",
+      ));
+      return setState(DESKTOP_UPDATE_STATES.NOT_AVAILABLE);
     }
     if (activeRelease == null) {
       const restored = await restoreStoreStateOnce();

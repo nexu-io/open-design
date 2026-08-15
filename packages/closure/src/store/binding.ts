@@ -15,7 +15,8 @@ import {
 } from "../protocol/index.js";
 import { normalizeNamespace } from "@open-design/sidecar/protocol";
 
-export const CLOSURE_BINDING_SCHEMA_VERSION = 4 as const;
+export const CLOSURE_BINDING_SCHEMA_VERSION = 5 as const;
+const LEGACY_CLOSURE_BINDING_SCHEMA_VERSION = 4 as const;
 export const CLOSURE_STORE_EPOCH = 4 as const;
 
 export type ClosureStoreRequest = {
@@ -71,10 +72,20 @@ export type ClosureRuntimeBinding = ClosureReleaseBinding & {
   shell: ClosureShellBinding;
 };
 
+export type ClosureActivationSource =
+  | "initial-bootstrap"
+  | "repair"
+  | "silent-policy"
+  | "user-restart";
+
+export type ClosureActivationIntent = ClosureReleaseBinding & {
+  source: ClosureActivationSource;
+};
+
 export type ClosureBindingDescriptor = {
   active: ClosureRuntimeBinding | null;
   attempt: ClosureRuntimeBinding | null;
-  activationAuthorized: boolean;
+  activationIntent: ClosureActivationIntent | null;
   channel: ClosureChannel;
   lastSuccessful: ClosureRuntimeBinding | null;
   namespace: string;
@@ -311,7 +322,8 @@ export function validateClosureBindingDescriptor(
   expected: Pick<ClosureStorePaths, "channel" | "namespace">,
 ): ClosureBindingDescriptor {
   const descriptor = requireRecord(value, "Closure binding descriptor");
-  assertExactKeys(descriptor, [
+  const legacy = descriptor.schemaVersion === LEGACY_CLOSURE_BINDING_SCHEMA_VERSION;
+  assertExactKeys(descriptor, legacy ? [
     "active",
     "attempt",
     "activationAuthorized",
@@ -322,8 +334,19 @@ export function validateClosureBindingDescriptor(
     "prepared",
     "schemaVersion",
     "updatedAt",
+  ] : [
+    "active",
+    "attempt",
+    "activationIntent",
+    "channel",
+    "lastSuccessful",
+    "namespace",
+    "nextGeneration",
+    "prepared",
+    "schemaVersion",
+    "updatedAt",
   ], "Closure binding descriptor");
-  if (descriptor.schemaVersion !== CLOSURE_BINDING_SCHEMA_VERSION) {
+  if (!legacy && descriptor.schemaVersion !== CLOSURE_BINDING_SCHEMA_VERSION) {
     throw new ClosureStoreError(`unsupported Closure binding schema: ${String(descriptor.schemaVersion)}`);
   }
   const channel = normalizeChannel(String(descriptor.channel));
@@ -339,12 +362,15 @@ export function validateClosureBindingDescriptor(
   const prepared = descriptor.prepared == null
     ? null
     : normalizeReleaseBinding(descriptor.prepared, expected);
-  if (typeof descriptor.activationAuthorized !== "boolean") {
+  if (legacy && typeof descriptor.activationAuthorized !== "boolean") {
     throw new ClosureStoreError("Closure activation authorization flag must be boolean");
   }
-  if (prepared == null && descriptor.activationAuthorized) {
-    throw new ClosureStoreError("Closure activation authorization requires a prepared binding");
-  }
+  const activationIntent = legacy || descriptor.activationIntent == null
+    ? null
+    : normalizeActivationIntent(descriptor.activationIntent, expected);
+  if (activationIntent != null && (
+    prepared == null || !sameReleaseBinding(activationIntent, prepared)
+  )) throw new ClosureStoreError("Closure activation intent must match the prepared binding");
   const nextGeneration = normalizeGeneration(descriptor.nextGeneration);
   const retained = [active, attempt, lastSuccessful, prepared].filter(
     (binding): binding is ClosureReleaseBinding => binding != null,
@@ -363,7 +389,7 @@ export function validateClosureBindingDescriptor(
   return {
     active,
     attempt,
-    activationAuthorized: descriptor.activationAuthorized,
+    activationIntent,
     channel,
     lastSuccessful,
     namespace,
@@ -371,6 +397,28 @@ export function validateClosureBindingDescriptor(
     prepared,
     schemaVersion: CLOSURE_BINDING_SCHEMA_VERSION,
     updatedAt: normalizeIsoString(descriptor.updatedAt, "Closure binding updatedAt"),
+  };
+}
+
+function normalizeActivationIntent(
+  value: unknown,
+  expected: Pick<ClosureStorePaths, "channel" | "namespace">,
+): ClosureActivationIntent {
+  const intent = requireRecord(value, "Closure activation intent");
+  assertExactKeys(intent, ["releaseVersion", "source", "standalone"], "Closure activation intent");
+  const sources: readonly ClosureActivationSource[] = [
+    "initial-bootstrap",
+    "repair",
+    "silent-policy",
+    "user-restart",
+  ];
+  if (!sources.includes(intent.source as ClosureActivationSource)) {
+    throw new ClosureStoreError(`unsupported Closure activation source: ${String(intent.source)}`);
+  }
+  const { source: _source, ...binding } = intent;
+  return {
+    ...normalizeReleaseBinding(binding, expected),
+    source: intent.source as ClosureActivationSource,
   };
 }
 

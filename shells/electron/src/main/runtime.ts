@@ -453,6 +453,7 @@ export type DesktopRuntimeOptions = {
    */
   splashStartedAt?: number;
   updater?: DesktopUpdater;
+  ensureSilentUpdatePreference?: () => Promise<boolean>;
   /**
    * Fired once the main window is actually revealed (the web app mounted and
    * the window is shown) — the real "app is running" moment, distinct from
@@ -1811,11 +1812,10 @@ function unavailableUpdaterStatus(): DesktopUpdateStatusSnapshot {
   };
 }
 
-function checkOptionsFromHost(options: unknown): { activateOnRestart: true; autoDownload?: boolean } {
+function checkOptionsFromHost(options: unknown): { autoDownload?: boolean } {
   const input = options as OpenDesignHostUpdaterActionOptions | null | undefined;
   const payload = input?.payload;
   return {
-    activateOnRestart: true,
     ...(payload != null && typeof payload.autoDownload === "boolean"
       ? { autoDownload: payload.autoDownload }
       : {}),
@@ -2365,7 +2365,11 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
   ipcMain.handle("od:update:check", async (event, updaterOptions: unknown) => {
     requireMainWindowSender(event);
-    const status = await (options.updater?.checkForUpdates(checkOptionsFromHost(updaterOptions)) ?? unavailableUpdaterStatus());
+    const silent = await options.ensureSilentUpdatePreference?.().catch(() => false) ?? false;
+    const status = await (options.updater?.checkForUpdates({
+      ...checkOptionsFromHost(updaterOptions),
+      ...(silent ? { activationSource: "silent-policy" as const } : {}),
+    }) ?? unavailableUpdaterStatus());
     sendUpdaterStatus(status);
     return status;
   });
@@ -2393,7 +2397,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
     }
     try {
       const status = await (options.updater?.installUpdate() ?? unavailableUpdaterStatus());
-      if (status.installResult == null) await updateTransition.release();
+      const standaloneRestartAuthorized = status.standalone?.state === "prepared"
+        && status.standalone.activationSource === "user-restart";
+      if (status.installResult == null && !standaloneRestartAuthorized) await updateTransition.release();
       sendUpdaterStatus(status);
       return status;
     } catch (error) {
@@ -2416,7 +2422,9 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
       };
     }
     const status = await (options.updater?.status() ?? unavailableUpdaterStatus());
-    if (status.installResult == null) {
+    const standaloneRestartAuthorized = status.standalone?.state === "prepared"
+      && status.standalone.activationSource === "user-restart";
+    if (status.installResult == null && !standaloneRestartAuthorized) {
       await updateTransition.release();
       return { ok: false, reason: "installer has not been opened" };
     }

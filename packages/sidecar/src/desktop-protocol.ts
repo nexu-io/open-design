@@ -354,6 +354,12 @@ export type DesktopUpdateReinstallSnapshot = {
   url?: string;
 };
 
+export type DesktopStandaloneUpdateSnapshot = {
+  activationSource: "silent-policy" | "user-restart" | null;
+  releaseVersion: string;
+  state: "current" | "prepared";
+};
+
 export type DesktopUpdateStatusSnapshot = {
   active?: DesktopUpdateReleaseSnapshot;
   arch: string;
@@ -377,6 +383,7 @@ export type DesktopUpdateStatusSnapshot = {
   platform: string;
   progress?: DesktopUpdateProgressSnapshot;
   reinstall?: DesktopUpdateReinstallSnapshot;
+  standalone?: DesktopStandaloneUpdateSnapshot;
   state: DesktopUpdateState;
   supported: boolean;
 };

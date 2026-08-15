@@ -59,6 +59,7 @@ export type DesktopUpdaterConfigInput = {
   mode?: DesktopUpdateMode;
   namespace?: string | null;
   platform?: string;
+  productVersion?: string | null;
   runtimeBase?: string | null;
   source: SidecarSource;
 };
@@ -87,6 +88,7 @@ export type DesktopUpdaterConfig = {
   namespace?: string;
   openDryRun: boolean;
   platform: string;
+  productVersion: string;
   runtimeBase: string;
   source: SidecarSource;
 };
@@ -176,6 +178,7 @@ export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): D
     input.appVersion ??
     "0.0.0";
   const channel = normalizeChannel(env[DESKTOP_UPDATE_ENV.CHANNEL], defaultChannelForVersion(currentVersion));
+  const productVersion = normalizeOptionalNonEmpty(input.productVersion) ?? currentVersion;
   const installedVersionOverride = normalizeOptionalNonEmpty(env[DESKTOP_UPDATE_ENV.INSTALLED_VERSION]);
   const installerObservationRoot = normalizeOptionalRoot(input.installerObservationRoot, "installer observation root");
   const launcherLaunchPath = normalizeOptionalNonEmpty(input.launcherLaunchPath);
@@ -224,6 +227,7 @@ export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): D
     ...(namespace == null ? {} : { namespace }),
     openDryRun: isTruthyEnv(env[DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]) ?? false,
     platform: env[DESKTOP_UPDATE_ENV.PLATFORM] ?? input.platform ?? process.platform,
+    productVersion,
     runtimeBase,
     source: input.source,
   };

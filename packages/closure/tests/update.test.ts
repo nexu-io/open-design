@@ -17,6 +17,7 @@ import {
   type ClosureDistributionBlob,
 } from "@open-design/closure/protocol";
 import {
+  CLOSURE_BINDING_SCHEMA_VERSION,
   readClosureBindingDescriptor,
   resolveClosureStorePaths,
   verifyStoredClosureCandidate,
@@ -274,13 +275,13 @@ function descriptor(
   return {
     active,
     attempt: null,
-    activationAuthorized: false,
+    activationIntent: null,
     channel: "beta",
     lastSuccessful: active,
     namespace: "release-beta",
     nextGeneration: standalone == null ? 0 : 1,
     prepared: null,
-    schemaVersion: 4,
+    schemaVersion: CLOSURE_BINDING_SCHEMA_VERSION,
     updatedAt: new Date(0).toISOString(),
   };
 }

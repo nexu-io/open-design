@@ -64,6 +64,7 @@ export type UpdaterModel = {
   upToDate: boolean;
   shouldShowControl: boolean;
   shouldPrompt: boolean;
+  standaloneReady: boolean;
   status: OpenDesignHostUpdaterStatusSnapshot | null;
   supported: boolean;
 };
@@ -133,10 +134,11 @@ export function deriveUpdaterModel(
   const installerOpened = status?.installResult != null;
   const artifactType = status?.artifact?.type ?? status?.incoming?.artifact?.type;
   const updateKind = artifactType === 'payload' ? 'payload' : artifactType === 'dmg' || artifactType === 'installer' ? 'installer' : 'unknown';
-  const availableVersion = status?.availableVersion ?? null;
+  const standaloneReady = status?.standalone?.state === 'prepared';
+  const availableVersion = status?.standalone?.releaseVersion ?? status?.availableVersion ?? null;
   const currentVersion = status?.currentVersion ?? null;
   const downloadProgress = downloadProgressFromStatus(status);
-  const upToDate = state === OPEN_DESIGN_HOST_UPDATER_STATES.NOT_AVAILABLE;
+  const upToDate = state === OPEN_DESIGN_HOST_UPDATER_STATES.NOT_AVAILABLE && !standaloneReady;
   const promptKey =
     status == null || availableVersion == null
       ? null
@@ -168,8 +170,9 @@ export function deriveUpdaterModel(
     reinstall: status?.reinstall ?? null,
     requiresManualInstall: Boolean(status?.capabilities.requiresManualInstall),
     upToDate,
-    shouldShowControl: canInstallUpdate && hasDownloadedInstaller && !installerOpened,
-    shouldPrompt: canInstallUpdate && hasDownloadedInstaller && !installerOpened,
+    shouldShowControl: standaloneReady || (canInstallUpdate && hasDownloadedInstaller && !installerOpened),
+    shouldPrompt: standaloneReady || (canInstallUpdate && hasDownloadedInstaller && !installerOpened),
+    standaloneReady,
     status,
     supported: Boolean(status?.supported),
   };

@@ -431,6 +431,7 @@ async function main(): Promise<void> {
     standaloneLifecycle: standalone.lifecycle,
     update: {
       currentVersion: shellVersion,
+      productVersion: binding.descriptor.release.version,
       downloadRoot: paths.updateRoot,
       installerObservationRoot: paths.installerObservationRoot,
       launcherLaunchPath: shellRuntime.installedLaunchPath,

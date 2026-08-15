@@ -89,6 +89,13 @@ describe("macOS update menu", () => {
         installResult: { openedAt: new Date(0).toISOString(), path: "/tmp/payload.zip" },
       }),
     })).toMatchObject({ label: "Installing Update…", enabled: false, action: null });
+    expect(deriveDesktopUpdateMenuItem({
+      labels: DEFAULT_DESKTOP_UPDATE_MENU_LABELS,
+      platform: "darwin",
+      status: status("not-available", {
+        standalone: { activationSource: null, releaseVersion: "0.10.0-beta.2", state: "prepared" },
+      }),
+    })).toMatchObject({ label: "Restart to Update Open Design…", enabled: true, action: "open-dialog" });
   });
 
   it("uses renderer-provided localized labels without changing behavior", () => {

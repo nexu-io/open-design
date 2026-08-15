@@ -21,6 +21,7 @@ import {
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  CLOSURE_BINDING_SCHEMA_VERSION,
   activatePreparedClosureBinding,
   authorizePreparedClosureActivation,
   beginActiveClosureBindingAttempt,
@@ -36,6 +37,7 @@ import {
   hasStoredClosureDistributionGeneration,
   planClosureDistributionGeneration,
   readClosureBindingDescriptor,
+  revokePreparedClosureActivation,
   resolveClosureStorePaths,
   resolveClosureStoreVersionPaths,
   verifyMaterializedClosureCandidate,
@@ -286,7 +288,7 @@ describe("Closure channel garbage black hole", () => {
     });
     const candidate = await materializeCandidate(paths, "0.19.0-beta.1");
     const prepared = await prepareStoredClosureCandidate(paths, candidate.binding, "0.19.0-beta.1");
-    await authorizePreparedClosureActivation(paths, prepared.prepared);
+    await authorizePreparedClosureActivation(paths, prepared.prepared, "user-restart");
     await activatePreparedClosureBinding(paths, prepared.prepared, shellBinding);
     await confirmClosureBindingAttempt(paths, prepared.prepared);
 
@@ -407,7 +409,7 @@ describe("layered Closure generation preparation", () => {
       target: "darwin-arm64",
       version: "0.19.0-beta.10",
     });
-    expect(result.descriptor.schemaVersion).toBe(4);
+    expect(result.descriptor.schemaVersion).toBe(CLOSURE_BINDING_SCHEMA_VERSION);
     expect((await stat(staged.plan.required.body.resolvedEntryPath)).isFile()).toBe(true);
     expect(await stat(staged.stageRoot).catch(() => null)).toBeNull();
     expect(await stat(staged.plan.resources[0]!.blobPath).catch(() => null)).toBeNull();
@@ -548,13 +550,43 @@ describe("stored Closure verification", () => {
 });
 
 describe("Closure prepared binding", () => {
+  it("ignores legacy boolean authorization and binds new intent to the prepared candidate", async () => {
+    const paths = await createStore();
+    await mkdir(paths.stateRoot, { recursive: true });
+    await writeFile(paths.bindingPath, `${JSON.stringify({
+      active: null,
+      activationAuthorized: true,
+      attempt: null,
+      channel: paths.channel,
+      lastSuccessful: null,
+      namespace: paths.namespace,
+      nextGeneration: 0,
+      prepared: null,
+      schemaVersion: 4,
+      updatedAt: new Date().toISOString(),
+    })}\n`);
+
+    const legacy = await readClosureBindingDescriptor(paths);
+    expect(legacy.activationIntent).toBeNull();
+
+    const candidate = await materializeCandidate(paths, "0.18.0-beta.1");
+    const prepared = await prepareStoredClosureCandidate(paths, candidate.binding, "0.19.0-beta.1");
+    await authorizePreparedClosureActivation(paths, prepared.prepared, "silent-policy");
+    expect((await readClosureBindingDescriptor(paths)).activationIntent).toEqual({
+      ...prepared.prepared,
+      source: "silent-policy",
+    });
+    await revokePreparedClosureActivation(paths, "silent-policy");
+    expect((await readClosureBindingDescriptor(paths)).activationIntent).toBeNull();
+  });
+
   it("confirms a healthy attempt and rolls an interrupted attempt back to it", async () => {
     const paths = await createStore();
     const first = await materializeCandidate(paths, "0.18.0-beta.1");
     const second = await materializeCandidate(paths, "0.18.0-beta.2");
     const initial = await prepareStoredClosureCandidate(paths, first.binding, "0.19.0-beta.1");
 
-    await authorizePreparedClosureActivation(paths, initial.prepared);
+    await authorizePreparedClosureActivation(paths, initial.prepared, "user-restart");
     await activatePreparedClosureBinding(paths, initial.prepared, shellBinding);
     await confirmClosureBindingAttempt(paths, initial.prepared);
 
@@ -565,7 +597,7 @@ describe("Closure prepared binding", () => {
     await recoverInterruptedClosureBinding(paths);
 
     const update = await prepareStoredClosureCandidate(paths, second.binding, "0.19.0-beta.2");
-    await authorizePreparedClosureActivation(paths, update.prepared);
+    await authorizePreparedClosureActivation(paths, update.prepared, "silent-policy");
     await activatePreparedClosureBinding(paths, update.prepared, shellBinding);
     await recoverInterruptedClosureBinding(paths);
 
@@ -574,7 +606,7 @@ describe("Closure prepared binding", () => {
     expect(descriptor.lastSuccessful).toEqual({ ...initial.prepared, shell: shellBinding });
     expect(descriptor.attempt).toBeNull();
     expect(descriptor.prepared).toBeNull();
-    expect(descriptor.activationAuthorized).toBe(false);
+    expect(descriptor.activationIntent).toBeNull();
   });
 
   it("atomically prepares one release-to-Standalone binding", async () => {

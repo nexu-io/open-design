@@ -69,6 +69,9 @@ export function deriveDesktopUpdateMenuItem(input: {
   if (status.state === "downloading") {
     return { action: null, enabled: false, label: labels.downloading, visible: true };
   }
+  if (status.standalone?.state === "prepared") {
+    return { action: "open-dialog", enabled: true, label: labels.restart, visible: true };
+  }
   if (status.state === "downloaded") {
     const artifactType = status.artifact?.type ?? status.incoming?.artifact.type;
     return {

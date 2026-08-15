@@ -35,7 +35,9 @@ function withEllipsis(value: string): string {
 }
 
 function shouldRunManualCheck(status: OpenDesignHostUpdaterStatusSnapshot): boolean {
-  return status.state === 'idle' || status.state === 'not-available' || status.state === 'error';
+  return status.state === 'idle'
+    || (status.state === 'not-available' && status.standalone?.state !== 'prepared')
+    || status.state === 'error';
 }
 
 export function UpdateDialog() {
@@ -113,7 +115,7 @@ export function UpdateDialog() {
           trackUpdateCheckResult(analyticsTrackRef.current, {
             area: 'update_dialog',
             page_name: 'app',
-            result: result.status.state === 'not-available'
+            result: result.status.state === 'not-available' && result.status.standalone?.state !== 'prepared'
               ? 'up_to_date'
               : result.status.state === 'error'
                 ? 'failed'
@@ -200,7 +202,9 @@ export function UpdateDialog() {
         trackUpdateCheckResult(analytics.track, {
           area: 'update_dialog',
           page_name: 'app',
-          result: result.status.state === 'not-available' ? 'up_to_date' : result.status.state === 'error' ? 'failed' : 'available',
+          result: result.status.state === 'not-available' && result.status.standalone?.state !== 'prepared'
+            ? 'up_to_date'
+            : result.status.state === 'error' ? 'failed' : 'available',
           ...(result.status.currentVersion ? { app_version_before: result.status.currentVersion } : {}),
           ...(result.status.availableVersion ? { app_version_after: result.status.availableVersion } : {}),
           ...(result.status.error?.code ? { error_code: result.status.error.code } : {}),
@@ -316,7 +320,7 @@ export function UpdateDialog() {
   if (!open) return null;
 
   const state = status?.state;
-  const ready = state === 'downloaded' && model.hasDownloadedInstaller;
+  const ready = model.standaloneReady || (state === 'downloaded' && model.hasDownloadedInstaller);
   const available = state === 'available';
   const checking = state === 'checking';
   const downloading = state === 'downloading';
@@ -348,6 +352,9 @@ export function UpdateDialog() {
         : t('updater.reinstallReadyVersion', { version: model.availableVersion });
     }
     if (ready) {
+      if (model.standaloneReady && model.availableVersion != null) {
+        return t('updater.payloadReadyVersion', { version: model.availableVersion });
+      }
       if (model.availableVersion != null) {
         return t('updater.dialogReadyVersion', { version: model.availableVersion });
       }
@@ -380,7 +387,9 @@ export function UpdateDialog() {
   const reinstallUrl = model.reinstall?.url ?? null;
   const title = showSafety ? t('updater.activeRunsTitle') : t('settings.updateCheck');
   const primaryLabel = (() => {
-    if (ready) return model.updateKind === 'payload' ? t('updater.installRestart') : t('updater.openInstaller');
+    if (ready) return model.standaloneReady || model.updateKind === 'payload'
+      ? t('updater.installRestart')
+      : t('updater.openInstaller');
     if (available) return t('updater.download');
     if (unsupported) return t('updater.manualDownload');
     if (state === 'error') return t('settings.updateRecheck');

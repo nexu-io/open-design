@@ -85,7 +85,7 @@ export async function commitPackagedStandaloneDistributionFixture(input: {
     if (result.state !== 'prepared') {
       throw new Error(`Standalone distribution fixture was not prepared: ${result.state}/${result.reason}`);
     }
-    await authorizePreparedClosureActivation(paths, result.pointer);
+    await authorizePreparedClosureActivation(paths, result.pointer, 'initial-bootstrap');
     await activatePreparedClosureBinding(paths, result.pointer, {
       digest: result.pointer.digest,
       type: input.shellType,

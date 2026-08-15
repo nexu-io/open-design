@@ -492,14 +492,23 @@ describe("Standalone unresolved bootstrap", () => {
       target: "darwin-arm64",
     } as const;
 
-    await prepareStandaloneUpdate({ ...updateInput, activateOnRestart: false });
+    await prepareStandaloneUpdate(updateInput);
     const current = await resolveStandaloneBootstrap(
       request(value, "0.19.0-beta.1", null),
       { fetch: value.fetch },
     );
     expect(current.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.1");
 
-    await prepareStandaloneUpdate({ ...updateInput, activateOnRestart: true });
+    await prepareStandaloneUpdate({ ...updateInput, activationSource: "silent-policy" });
+    const revoked = await prepareStandaloneUpdate(updateInput);
+    expect(revoked).toMatchObject({ activationSource: null, state: "prepared" });
+    const stillCurrent = await resolveStandaloneBootstrap(
+      request(value, "0.19.0-beta.1", null),
+      { fetch: value.fetch },
+    );
+    expect(stillCurrent.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.1");
+
+    await prepareStandaloneUpdate({ ...updateInput, activationSource: "silent-policy" });
     const activated = await resolveStandaloneBootstrap(
       request(value, "0.19.0-beta.1", null),
       { fetch: value.fetch },

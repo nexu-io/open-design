@@ -184,7 +184,7 @@ function emptyBinding(paths: ClosureStorePaths, now: string): ClosureBindingDesc
   return {
     active: null,
     attempt: null,
-    activationAuthorized: false,
+    activationIntent: null,
     channel: paths.channel,
     lastSuccessful: null,
     namespace: paths.namespace,
@@ -260,7 +260,7 @@ export async function prepareVerifiedStoredClosureCandidate(
   };
   const descriptor: ClosureBindingDescriptor = {
     ...current,
-    activationAuthorized: false,
+    activationIntent: null,
     prepared,
     nextGeneration: generation + 1,
     updatedAt: new Date().toISOString(),

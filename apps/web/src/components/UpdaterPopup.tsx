@@ -63,14 +63,14 @@ function versionText(t: Translator, model: UpdaterModel): string {
   if (model.reinstall != null) {
     return version == null ? t('updater.reinstallReadyGeneric') : t('updater.reinstallReadyVersion', { version });
   }
-  if (model.updateKind === 'payload') {
+  if (model.standaloneReady || model.updateKind === 'payload') {
     return version == null ? t('updater.payloadReadyGeneric') : t('updater.payloadReadyVersion', { version });
   }
   return version == null ? t('updater.readyGeneric') : t('updater.readyVersion', { version });
 }
 
 function installActionText(t: Translator, model: UpdaterModel, installBusy: boolean): string {
-  if (model.updateKind === 'payload') {
+  if (model.standaloneReady || model.updateKind === 'payload') {
     return installBusy ? t('updater.installingRestart') : t('updater.installRestart');
   }
   return installBusy ? t('updater.opening') : t('updater.openInstaller');
@@ -257,7 +257,7 @@ export function UpdaterPopup({
   const installFailureText = model.canOpenInstaller ? t('updater.openFailedFallback') : t('updater.failed');
   const controlLabel = quitRecoverable
     ? t('updater.quitButton')
-    : model.updateKind === 'payload'
+    : model.standaloneReady || model.updateKind === 'payload'
       ? t('updater.installRestart')
       : t('updater.openInstaller');
   const channelLabel = channelLabelFor(model.status?.channel);
@@ -550,7 +550,7 @@ function UpdaterPopupPanel({
           WhatsNewPopup), never from a bundled asset or a hardcoded URL. */}
       <div className="updater-popup__body">
         <h2 id="updater-popup-title">{quitRecoverable ? t('updater.quitFailedTitle') : t('updater.ready')}</h2>
-        {quitRecoverable && model.updateKind === 'payload'
+        {quitRecoverable && (model.standaloneReady || model.updateKind === 'payload')
           ? null
           : <p>{quitRecoverable ? t('updater.quitFailedBody') : versionText(t, model)}</p>}
         {!quitRecoverable && model.reinstall?.url != null ? (

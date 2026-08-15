@@ -7,6 +7,7 @@ import {
   CLOSURE_PROTOCOL_VERSION,
   createClosureDistributionManifest,
 } from "@open-design/closure/protocol";
+import { CLOSURE_BINDING_SCHEMA_VERSION } from "@open-design/closure/store";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { compareCountedReleaseVersions, sha256Digest } from "../src/storage/latest-publication.js";
@@ -161,7 +162,7 @@ describe("public Windows release acceptance", () => {
             version: closureVersion,
           },
         },
-        activationAuthorized: false,
+        activationIntent: null,
         attempt: null,
         channel: "beta",
         lastSuccessful: {
@@ -178,7 +179,7 @@ describe("public Windows release acceptance", () => {
         },
         namespace,
         prepared: null,
-        schemaVersion: 4,
+        schemaVersion: CLOSURE_BINDING_SCHEMA_VERSION,
       },
       plan: { profile: "core", selectedLanes: ["shell"] },
       coldStart: {
@@ -267,7 +268,7 @@ describe("public Windows release acceptance", () => {
             version: closureVersion,
           },
         },
-        activationAuthorized: false,
+        activationIntent: null,
         attempt: null,
         channel: "beta",
         lastSuccessful: {
@@ -283,7 +284,7 @@ describe("public Windows release acceptance", () => {
         },
         namespace,
         prepared: null,
-        schemaVersion: 4,
+        schemaVersion: CLOSURE_BINDING_SCHEMA_VERSION,
       },
       plan: { profile: "core", selectedLanes: ["shell"] },
       coldStart: {

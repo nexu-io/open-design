@@ -1,6 +1,7 @@
 import {
   authorizePreparedClosureActivation,
   readClosureBindingDescriptor,
+  revokePreparedClosureActivation,
   resolveClosureStorePaths,
 } from "@open-design/closure/store";
 import {
@@ -18,6 +19,7 @@ export type StandaloneUpdatePreparation = Readonly<
   | { architecture: "legacy" }
   | { architecture: "standalone"; minimumShellVersion: string | null; route: "shell" }
   | {
+      activationSource: "silent-policy" | "user-restart" | null;
       architecture: "standalone";
       releaseVersion: string;
       route: "closure";
@@ -26,7 +28,7 @@ export type StandaloneUpdatePreparation = Readonly<
 >;
 
 export async function prepareStandaloneUpdate(input: Readonly<{
-  activateOnRestart: boolean;
+  activationSource?: "silent-policy" | "user-restart";
   channel: string;
   fetch?: typeof globalThis.fetch;
   metadata: unknown;
@@ -70,16 +72,23 @@ export async function prepareStandaloneUpdate(input: Readonly<{
     if (result.reason === "shell-incompatible") {
       return { architecture: "standalone", minimumShellVersion, route: "shell" };
     }
-    const descriptor = await readClosureBindingDescriptor(paths);
+    let descriptor = await readClosureBindingDescriptor(paths);
     if (
-      input.activateOnRestart
+      input.activationSource != null
       && result.reason === "already-prepared"
       && descriptor.prepared != null
     ) {
-      await authorizePreparedClosureActivation(paths, descriptor.prepared);
+      await authorizePreparedClosureActivation(paths, descriptor.prepared, input.activationSource);
+      descriptor = await readClosureBindingDescriptor(paths);
+    } else if (result.reason === "already-prepared") {
+      descriptor = await revokePreparedClosureActivation(paths, "silent-policy");
     }
     return {
       architecture: "standalone",
+      activationSource: descriptor.activationIntent?.source === "silent-policy"
+        || descriptor.activationIntent?.source === "user-restart"
+        ? descriptor.activationIntent.source
+        : null,
       releaseVersion: candidate.releaseVersion,
       route: "closure",
       state: result.reason === "already-prepared" ? "prepared" : "current",
@@ -96,12 +105,17 @@ export async function prepareStandaloneUpdate(input: Readonly<{
   if (descriptor.prepared?.standalone.generation !== result.pointer.generation) {
     throw new Error("Standalone prepared binding changed before resource completion");
   }
-  if (input.activateOnRestart) {
-    await authorizePreparedClosureActivation(paths, descriptor.prepared);
+  if (input.activationSource != null) {
+    await authorizePreparedClosureActivation(paths, descriptor.prepared, input.activationSource);
   }
+  const preparedDescriptor = await readClosureBindingDescriptor(paths);
   await discardUnreferencedClosureResources(paths).catch(() => undefined);
   return {
     architecture: "standalone",
+    activationSource: preparedDescriptor.activationIntent?.source === "silent-policy"
+      || preparedDescriptor.activationIntent?.source === "user-restart"
+      ? preparedDescriptor.activationIntent.source
+      : null,
     releaseVersion: candidate.releaseVersion,
     route: "closure",
     state: "prepared",

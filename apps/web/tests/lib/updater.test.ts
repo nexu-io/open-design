@@ -163,6 +163,28 @@ describe('web updater model', () => {
     expect(model.hasDownloadedInstaller).toBe(false);
   });
 
+  it('projects a prepared Standalone release as restart-ready instead of latest', () => {
+    const model = deriveUpdaterModel(
+      downloadedStatus({
+        availableVersion: undefined,
+        downloadPath: undefined,
+        standalone: {
+          activationSource: null,
+          releaseVersion: '1.2.3-beta.9',
+          state: 'prepared',
+        },
+        state: 'not-available',
+      }),
+      { hostAvailable: true },
+    );
+
+    expect(model.availableVersion).toBe('1.2.3-beta.9');
+    expect(model.standaloneReady).toBe(true);
+    expect(model.upToDate).toBe(false);
+    expect(model.shouldShowControl).toBe(true);
+    expect(model.shouldPrompt).toBe(true);
+  });
+
   it('keeps the downloaded installer visible without surfacing newer incoming progress', () => {
     const model = deriveUpdaterModel(
       downloadedStatus({

@@ -22,7 +22,9 @@ describe("desktop updater host boundary", () => {
     expect(runtime).toContain("od:update:quit");
     expect(runtime).toContain("UPDATER_STATUS_EVENT");
     expect(runtime).toContain("event.sender !== window.webContents");
-    expect(runtime).toContain("activateOnRestart: true");
+    expect(runtime).toContain("ensureSilentUpdatePreference");
+    expect(runtime).toContain('activationSource: "silent-policy"');
+    expect(runtime).not.toContain("activateOnRestart");
   });
 
   it("lists every registered od:update:* handler in the teardown channel table", () => {

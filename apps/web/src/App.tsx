@@ -197,6 +197,7 @@ import {
 } from './state/projects';
 import { useModalWindowDragGuard } from './hooks/useModalWindowDragGuard';
 import { resumeThumbnailLoads, suspendThumbnailLoads } from './lib/thumbnail-load-gate';
+import { checkForUpdaterUpdate } from './lib/updater';
 import type {
   PluginShareAction,
   PluginShareProjectOutcome,
@@ -2600,6 +2601,9 @@ function AppInner() {
   );
   const handleSilentUpdatePreferenceChange = useCallback(async (allowSilentUpdates: boolean) => {
     await silentUpdatePreferenceWriterRef.current.write(allowSilentUpdates);
+    await checkForUpdaterUpdate({
+      payload: { autoDownload: false, source: 'silent-update-preference' },
+    });
   }, []);
 
   /**

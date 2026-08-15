@@ -57,6 +57,7 @@ export type {
   OpenDesignHostUpdaterCacheSnapshot,
   OpenDesignHostUpdaterReinstallReason,
   OpenDesignHostUpdaterReinstallSnapshot,
+  OpenDesignHostStandaloneUpdaterSnapshot,
   OpenDesignHostUpdaterStatusSnapshot,
   OpenDesignHostUpdaterResult,
   OpenDesignHostUpdaterStatusListener,

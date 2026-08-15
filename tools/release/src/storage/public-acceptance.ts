@@ -10,6 +10,7 @@ import {
   resolveClosureDistributionColdStartBudget,
   type ClosureDistributionColdStartBudget,
 } from "@open-design/closure/protocol";
+import { CLOSURE_BINDING_SCHEMA_VERSION } from "@open-design/closure/store";
 
 import {
   isReleaseChannel,
@@ -193,13 +194,17 @@ function assertSuccessfulClosureBinding(
 ): void {
   assertRecord(value, "smoke summary.closureBinding");
   if (
-    value.schemaVersion !== 4
+    value.schemaVersion !== CLOSURE_BINDING_SCHEMA_VERSION
     || value.channel !== plan.closure.channel
     || value.namespace !== plan.namespace
   ) {
     throw new Error("public smoke Closure store identity mismatch");
   }
-  if (value.prepared !== null || value.attempt !== null || value.activationAuthorized !== false) {
+  if (
+    value.prepared !== null
+    || value.attempt !== null
+    || value.activationIntent !== null
+  ) {
     throw new Error("public smoke Closure transaction did not settle");
   }
 

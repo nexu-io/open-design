@@ -63,6 +63,7 @@ import {
   type DesktopUpdater,
   type DesktopUpdaterScheduler,
 } from "./updater.js";
+import { ensureSilentUpdatePreference } from "./updater/silent-policy.js";
 import { DesktopUpdateTransitionOwner } from "./update-preflight.js";
 import {
   exportDiagnosticsToFile,
@@ -208,6 +209,7 @@ export type DesktopMainOptions = {
   splashStartedAt?: number;
   update?: {
     currentVersion?: string | null;
+    productVersion?: string | null;
     downloadRoot?: string | null;
     installerObservationRoot?: string | null;
     launcherLaunchPath?: string | null;
@@ -216,7 +218,7 @@ export type DesktopMainOptions = {
     launcherRuntimePath?: string | null;
     prepareStandaloneUpdate?: (
       metadata: Record<string, unknown>,
-      options?: { activateOnRestart?: boolean },
+      options?: { activationSource?: "silent-policy" | "user-restart" },
     ) => Promise<DesktopStandaloneUpdatePreparation>;
   };
 };
@@ -348,7 +350,7 @@ export function createAmrEnvironmentProfileMenuItems(
 }
 
 export function resolveAboutPanelVersion(options: DesktopMainOptions): string | null {
-  const version = options.update?.currentVersion?.trim();
+  const version = options.update?.productVersion?.trim();
   return version == null || version.length === 0 ? null : version;
 }
 
@@ -762,6 +764,7 @@ export async function runDesktopMain(
   const updater = createDesktopUpdater(
     {
       currentVersion: options.update?.currentVersion,
+      productVersion: options.update?.productVersion,
       downloadRoot: options.update?.downloadRoot,
       installerObservationRoot: options.update?.installerObservationRoot,
       launcherLaunchPath: options.update?.launcherLaunchPath,
@@ -783,6 +786,24 @@ export async function runDesktopMain(
           }),
     },
   );
+  const discoverUpdaterAppConfigBaseUrl = resolveDaemonBaseUrl(runtime, options);
+  let silentPreferenceTask: Promise<boolean> | null = null;
+  const ensureUpdaterSilentPreference = async (): Promise<boolean> => {
+    if (silentPreferenceTask != null) return await silentPreferenceTask;
+    const task = (async () => {
+      const baseUrl = await discoverUpdaterAppConfigBaseUrl();
+      return await ensureSilentUpdatePreference(
+        async () => await readAppConfigFromDaemon(baseUrl),
+        async (config) => await writeAppConfigToDaemon(baseUrl, config),
+      );
+    })();
+    silentPreferenceTask = task;
+    try {
+      return await task;
+    } finally {
+      if (silentPreferenceTask === task) silentPreferenceTask = null;
+    }
+  };
   const updateTransition = new DesktopUpdateTransitionOwner(options.standaloneLifecycle);
   // Resolve the namespace root the same way the daemon diagnostics export does
   // (apps/daemon/src/diagnostics-export.ts buildSidecarLogSources). In packaged
@@ -1034,6 +1055,7 @@ export async function runDesktopMain(
     splashWindow: options.splashWindow,
     splashStartedAt: options.splashStartedAt,
     updater,
+    ensureSilentUpdatePreference: ensureUpdaterSilentPreference,
     windowTitle: options.windowTitle,
   });
   if (pendingUpdateDialogRequest) {
@@ -1083,22 +1105,17 @@ export async function runDesktopMain(
     },
     protocolClientPath: options.inviteProtocolClientPath,
   });
-  const discoverUpdaterAppConfigBaseUrl = resolveDaemonBaseUrl(runtime, options);
   updateScheduler = createDesktopUpdaterScheduler(updater, {
     backoffInitialMs: updater.config.checkBackoffInitialMs,
     backoffMaxMs: updater.config.checkBackoffMaxMs,
     initialDelayMs: updater.config.checkInitialDelayMs,
     intervalMs: updater.config.checkIntervalMs,
-    standaloneActivationOnRestart: async () => {
-      const baseUrl = await discoverUpdaterAppConfigBaseUrl();
-      const config = await readAppConfigFromDaemon(baseUrl);
-      return config.allowSilentUpdates === true;
+    silentStandaloneActivation: async () => {
+      return await ensureUpdaterSilentPreference();
     },
     startupSilentPayloadUpdate: {
       isEnabled: async () => {
-        const baseUrl = await discoverUpdaterAppConfigBaseUrl();
-        const config = await readAppConfigFromDaemon(baseUrl);
-        return config.allowSilentUpdates === true;
+        return await ensureUpdaterSilentPreference();
       },
       requestQuit: shutdownAndExit,
       transition: updateTransition,

@@ -166,10 +166,13 @@ describe("AMR Environment Profile desktop menu helpers", () => {
     expect(selected).toEqual(["local"]);
   });
 
-  it("uses the active packaged runtime version for the native About panel", () => {
-    expect(resolveAboutPanelVersion({ update: { currentVersion: "0.10.0-beta.24" } })).toBe("0.10.0-beta.24");
-    expect(resolveAboutPanelVersion({ update: { currentVersion: " 0.10.0-beta.24 " } })).toBe("0.10.0-beta.24");
-    expect(resolveAboutPanelVersion({ update: { currentVersion: "" } })).toBeNull();
+  it("uses the active product release projection for the native About panel", () => {
+    expect(resolveAboutPanelVersion({ update: {
+      currentVersion: "0.10.0-beta.5",
+      productVersion: "0.10.0-beta.24",
+    } })).toBe("0.10.0-beta.24");
+    expect(resolveAboutPanelVersion({ update: { productVersion: " 0.10.0-beta.24 " } })).toBe("0.10.0-beta.24");
+    expect(resolveAboutPanelVersion({ update: { currentVersion: "0.10.0-beta.5", productVersion: "" } })).toBeNull();
     expect(resolveAboutPanelVersion({})).toBeNull();
   });
 });

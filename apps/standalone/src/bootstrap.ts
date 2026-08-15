@@ -356,7 +356,7 @@ export async function resolveStandaloneBootstrap(
 
   try {
     let verification: DistributionVerification | null = null;
-    if (descriptor.prepared != null && descriptor.activationAuthorized) {
+    if (descriptor.prepared != null && descriptor.activationIntent != null) {
       verification = await activatePrepared();
     } else if (descriptor.active == null) {
       await withTransition("prepare-initial-standalone", async () => {
@@ -368,7 +368,7 @@ export async function resolveStandaloneBootstrap(
         if (descriptor.prepared == null) {
           throw new StandaloneBootstrapError("no-standalone", "Initial Standalone preparation is missing");
         }
-        await authorizePreparedClosureActivation(paths, descriptor.prepared);
+        await authorizePreparedClosureActivation(paths, descriptor.prepared, "initial-bootstrap");
         descriptor = await readClosureBindingDescriptor(paths);
       });
       verification = await activatePrepared();
@@ -430,7 +430,7 @@ export async function resolveStandaloneBootstrap(
       if (descriptor.prepared == null) {
         throw new StandaloneBootstrapError("standalone-invalid", "Standalone repair preparation is missing");
       }
-      await authorizePreparedClosureActivation(paths, descriptor.prepared);
+      await authorizePreparedClosureActivation(paths, descriptor.prepared, "repair");
       descriptor = await readClosureBindingDescriptor(paths);
       verification = await activatePrepared();
       active = descriptor.active;

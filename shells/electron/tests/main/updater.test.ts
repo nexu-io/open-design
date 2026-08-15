@@ -346,7 +346,71 @@ describe("desktop updater", () => {
       controlInstallationVersionMin: "9.9.9",
       standaloneMetadata: { schemaVersion: 4 },
     });
-    const prepareStandaloneUpdate = vi.fn(async () => ({
+    const prepareStandaloneUpdate = vi.fn(async (_metadata: unknown, options?: {
+      activationSource?: "silent-policy" | "user-restart";
+    }) => ({
+      activationSource: options?.activationSource ?? null,
+      architecture: "standalone" as const,
+      releaseVersion: "1.0.1",
+      route: "closure" as const,
+      state: "prepared" as const,
+    }));
+    try {
+      const updater = createDesktopUpdater({
+        arch: "arm64",
+        downloadRoot: root,
+        env: updaterEnv(fixture.metadataUrl),
+        productVersion: "0.19.4-beta.9",
+        source: SIDECAR_SOURCES.PACKAGED,
+      }, { prepareStandaloneUpdate });
+
+      const status = await updater.checkForUpdates({
+        activationSource: "silent-policy",
+        autoDownload: false,
+      });
+
+      expect(status.state).toBe(DESKTOP_UPDATE_STATES.NOT_AVAILABLE);
+      expect(status.currentVersion).toBe("0.19.4-beta.9");
+      expect(status.standalone).toEqual({
+        activationSource: "silent-policy",
+        releaseVersion: "1.0.1",
+        state: "prepared",
+      });
+      expect(status.reinstall).toBeUndefined();
+      expect(prepareStandaloneUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ closure: { schemaVersion: 4 } }),
+        { activationSource: "silent-policy" },
+      );
+
+      const authorized = await updater.installUpdate();
+      expect(authorized.standalone).toEqual({
+        activationSource: "user-restart",
+        releaseVersion: "1.0.1",
+        state: "prepared",
+      });
+      expect(prepareStandaloneUpdate).toHaveBeenLastCalledWith(
+        expect.objectContaining({ closure: { schemaVersion: 4 } }),
+        { activationSource: "user-restart" },
+      );
+    } finally {
+      await fixture.close();
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it("revokes silent Standalone intent before a later metadata request can fail", async () => {
+    const root = makeRoot();
+    const fixture = await createUpdaterFixture({ standaloneMetadata: { schemaVersion: 4 } });
+    let fetchCount = 0;
+    const fetchImpl: typeof globalThis.fetch = async (input, init) => {
+      fetchCount += 1;
+      if (fetchCount > 1) throw new Error("offline");
+      return await globalThis.fetch(input, init);
+    };
+    const prepareStandaloneUpdate = vi.fn(async (_metadata: unknown, options?: {
+      activationSource?: "silent-policy" | "user-restart";
+    }) => ({
+      activationSource: options?.activationSource ?? null,
       architecture: "standalone" as const,
       releaseVersion: "1.0.1",
       route: "closure" as const,
@@ -358,18 +422,17 @@ describe("desktop updater", () => {
         downloadRoot: root,
         env: updaterEnv(fixture.metadataUrl),
         source: SIDECAR_SOURCES.PACKAGED,
-      }, { prepareStandaloneUpdate });
+      }, { fetch: fetchImpl, prepareStandaloneUpdate });
 
-      const status = await updater.checkForUpdates({
-        activateOnRestart: true,
-        autoDownload: false,
-      });
+      await updater.checkForUpdates({ activationSource: "silent-policy", autoDownload: false });
+      const offline = await updater.checkForUpdates({ autoDownload: false });
 
-      expect(status.state).toBe(DESKTOP_UPDATE_STATES.NOT_AVAILABLE);
-      expect(status.reinstall).toBeUndefined();
-      expect(prepareStandaloneUpdate).toHaveBeenCalledWith(
+      expect(offline.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
+      expect(offline.standalone?.activationSource).toBeNull();
+      expect(prepareStandaloneUpdate).toHaveBeenNthCalledWith(
+        2,
         expect.objectContaining({ closure: { schemaVersion: 4 } }),
-        { activateOnRestart: true },
+        {},
       );
     } finally {
       await fixture.close();

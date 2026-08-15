@@ -163,7 +163,7 @@ export async function seedPackagedClosureFixture(input: {
     binding,
     manifest.identity.version,
   );
-  await authorizePreparedClosureActivation(storePaths, prepared.prepared);
+  await authorizePreparedClosureActivation(storePaths, prepared.prepared, "initial-bootstrap");
   await activatePreparedClosureBinding(storePaths, prepared.prepared, fixtureShell(prepared.prepared));
   const active = await confirmClosureBindingAttempt(storePaths, prepared.prepared);
   return {
@@ -213,7 +213,7 @@ export async function activateBrokenClosureSuccessor(
     binding,
     version,
   );
-  await authorizePreparedClosureActivation(fixture.storePaths, prepared.prepared);
+  await authorizePreparedClosureActivation(fixture.storePaths, prepared.prepared, "initial-bootstrap");
   const attempt = await activatePreparedClosureBinding(
     fixture.storePaths,
     prepared.prepared,
