@@ -162,7 +162,7 @@ describe("public Windows release acceptance", () => {
             version: closureVersion,
           },
         },
-        activationIntent: null,
+        activationAuthorized: false,
         attempt: null,
         channel: "beta",
         lastSuccessful: {
@@ -268,7 +268,7 @@ describe("public Windows release acceptance", () => {
             version: closureVersion,
           },
         },
-        activationIntent: null,
+        activationAuthorized: false,
         attempt: null,
         channel: "beta",
         lastSuccessful: {

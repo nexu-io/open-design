@@ -203,7 +203,7 @@ function assertSuccessfulClosureBinding(
   if (
     value.prepared !== null
     || value.attempt !== null
-    || value.activationIntent !== null
+    || value.activationAuthorized !== false
   ) {
     throw new Error("public smoke Closure transaction did not settle");
   }
