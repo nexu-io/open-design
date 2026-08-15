@@ -16,12 +16,15 @@ function sanitizeNamespace(value: string): string {
 }
 
 export function resolvePackagedWinInstallIdentity(options: {
+  debugChannel?: string | null | undefined;
   namespace: string;
   releaseVersion: string | null | undefined;
 }): PackagedWinInstallIdentity {
   const namespaceToken = sanitizeNamespace(options.namespace);
   const channel = releaseChannelFromVersion(options.releaseVersion)
     ?? releaseChannelFromNamespace(options.namespace, "default");
-  const displayName = channel == null ? `Open Design ${namespaceToken}` : releaseInstallIdentity(channel).productName;
+  const displayName = channel == null
+    ? options.debugChannel === "local" ? "Open Design Local" : `Open Design ${namespaceToken}`
+    : releaseInstallIdentity(channel).productName;
   return { displayName, namespaceToken };
 }

@@ -12,7 +12,7 @@ import {
 import { SIDECAR_DEFAULTS } from "@open-design/sidecar/protocol";
 import { releaseChannelFromNamespace, releaseChannelFromVersion } from "@open-design/release";
 
-import type { ToolPackConfig, ToolPackPlatform } from "./config.js";
+import type { ToolPackConfig, ToolPackDebugChannel, ToolPackPlatform } from "./config.js";
 
 export type ToolPackLauncherLayout = {
   channel: LauncherChannel;
@@ -32,11 +32,13 @@ export type ToolPackLauncherPayloadLayout = {
 };
 
 export function resolveToolPackLauncherChannel(
-  config: Pick<ToolPackConfig, "namespace" | "releaseVersion">,
+  config: Pick<ToolPackConfig, "namespace" | "releaseVersion"> & { debugChannel?: ToolPackDebugChannel },
 ): LauncherChannel {
-  return releaseChannelFromVersion(config.releaseVersion)
-    ?? releaseChannelFromNamespace(config.namespace, SIDECAR_DEFAULTS.namespace)
-    ?? "stable";
+  const versionChannel = releaseChannelFromVersion(config.releaseVersion);
+  if (versionChannel != null) return versionChannel;
+  if (config.releaseVersion != null && /^\d+\.\d+\.\d+$/u.test(config.releaseVersion)) return "stable";
+  if (config.debugChannel != null) return config.debugChannel;
+  return releaseChannelFromNamespace(config.namespace, SIDECAR_DEFAULTS.namespace) ?? "stable";
 }
 
 export function resolveToolPackLauncherRoot(
@@ -46,7 +48,7 @@ export function resolveToolPackLauncherRoot(
 }
 
 export function resolveToolPackLauncherLayout(
-  config: Pick<ToolPackConfig, "namespace" | "releaseVersion" | "roots">,
+  config: Pick<ToolPackConfig, "debugChannel" | "namespace" | "releaseVersion" | "roots">,
 ): ToolPackLauncherLayout {
   const root = resolveToolPackLauncherRoot(config);
   const channel = resolveToolPackLauncherChannel(config);
@@ -66,7 +68,7 @@ export function payloadArchiveExtension(platform: ToolPackPlatform): "7z" | "zip
 }
 
 export function resolveToolPackLauncherPayloadLayout(
-  config: Pick<ToolPackConfig, "namespace" | "platform" | "releaseVersion" | "roots">,
+  config: Pick<ToolPackConfig, "debugChannel" | "namespace" | "platform" | "releaseVersion" | "roots">,
   version: string,
 ): ToolPackLauncherPayloadLayout {
   const launcher = resolveToolPackLauncherLayout(config);
@@ -96,7 +98,7 @@ export function resolveToolPackLauncherPayloadLayout(
 }
 
 export function buildInitialLauncherRuntimeDescriptor(
-  config: Pick<ToolPackConfig, "namespace" | "releaseVersion" | "roots">,
+  config: Pick<ToolPackConfig, "debugChannel" | "namespace" | "releaseVersion" | "roots">,
   version: string,
 ): LauncherRuntimeDescriptor {
   const launcher = resolveToolPackLauncherLayout(config);

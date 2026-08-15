@@ -29,7 +29,7 @@ import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
 
 
 export const execFileAsync = promisify(execFile);
-export const e2eRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+export const e2eRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 export const workspaceRoot = dirname(e2eRoot);
 export const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
 export const namespace = resolvePackagedSmokeNamespace('win');
@@ -77,7 +77,11 @@ export const verifyPublicImmutableArtifacts = shellSmokeProof === 'public-immuta
 export const packagedInviteDeeplink =
   'opendesign://workspace/invite/continue?workspace_id=packaged-smoke-workspace&member_id=packaged-smoke-member&invite_id=packaged-smoke-invite&nonce=packaged-smoke-nonce';
 export const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion, shellVersion });
-export const installIdentity = resolvePackagedWinInstallIdentity({ namespace, releaseVersion });
+export const installIdentity = resolvePackagedWinInstallIdentity({
+  debugChannel: releaseChannel,
+  namespace,
+  releaseVersion,
+});
 
 export const outputNamespaceRoot = join(toolsPackDir, 'out', 'win', 'namespaces', namespace);
 export const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'win', 'namespaces', namespace);

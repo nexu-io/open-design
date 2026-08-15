@@ -130,6 +130,11 @@ function incomingVersionSupersedesExisting(
   const incoming = incomingVersion.trim();
   const existing = existingVersion.trim();
   if (incoming.length === 0 || existing.length === 0) return false;
+  // Local Closure builds append `-local.<stamp>` to the product release while
+  // the physically installed outer Shell keeps its bare workspace version.
+  // They are the same installed generation, not a stable upgrade over a
+  // prerelease; restarting here breaks hot protocol delivery on Windows.
+  if (existing.startsWith(`${incoming}-local.`)) return false;
   try {
     return compareLauncherVersions(incoming, existing) > 0;
   } catch {

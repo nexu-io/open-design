@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { packagedPtySmokeCommand } from '@/vitest/packaged-pty-smoke';
+import { packagedPtySmokeCommand, packagedPtySmokeExpression } from '@/vitest/packaged-pty-smoke';
 
 describe('packaged PTY smoke command', () => {
+  it('cleans up through the same terminal kill route as the product UI', () => {
+    const expression = packagedPtySmokeExpression('win32');
+    expect(expression).toContain("encodeURIComponent(terminalId) +\n              '/kill'");
+    expect(expression).toContain("{ method: 'POST' }");
+  });
+
   it('expands the Windows marker only after cmd.exe applies the assignment', () => {
     const command = packagedPtySmokeCommand('win32');
 

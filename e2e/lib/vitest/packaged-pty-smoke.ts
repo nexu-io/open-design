@@ -2,7 +2,9 @@ export type PackagedPtySmokePlatform = 'darwin' | 'win32';
 
 export type PackagedPtySmokeResult = {
   cleanup: {
+    projectBody: string | null;
     projectStatus: number | null;
+    terminalBody: string | null;
     terminalStatus: number | null;
   };
   exitCode: number | null;
@@ -59,7 +61,9 @@ export function packagedPtySmokeExpression(platform: PackagedPtySmokePlatform): 
       let terminalId = null;
       let source = null;
       let terminalCleanupStatus = null;
+      let terminalCleanupBody = null;
       let projectCleanupStatus = null;
+      let projectCleanupBody = null;
       let result = null;
       let failure = null;
 
@@ -177,10 +181,12 @@ export function packagedPtySmokeExpression(platform: PackagedPtySmokePlatform): 
             '/api/projects/' +
               encodeURIComponent(projectId) +
               '/terminals/' +
-              encodeURIComponent(terminalId),
-            { method: 'DELETE' },
+              encodeURIComponent(terminalId) +
+              '/kill',
+            { method: 'POST' },
           ).catch(() => null);
           terminalCleanupStatus = terminalCleanup?.status ?? null;
+          terminalCleanupBody = terminalCleanup == null ? null : await terminalCleanup.text().catch(() => null);
         }
         if (projectCreated) {
           const projectCleanup = await fetch(
@@ -188,6 +194,7 @@ export function packagedPtySmokeExpression(platform: PackagedPtySmokePlatform): 
             { method: 'DELETE' },
           ).catch(() => null);
           projectCleanupStatus = projectCleanup?.status ?? null;
+          projectCleanupBody = projectCleanup == null ? null : await projectCleanup.text().catch(() => null);
         }
       }
 
@@ -195,7 +202,9 @@ export function packagedPtySmokeExpression(platform: PackagedPtySmokePlatform): 
       return {
         ...result,
         cleanup: {
+          projectBody: projectCleanupBody,
           projectStatus: projectCleanupStatus,
+          terminalBody: terminalCleanupBody,
           terminalStatus: terminalCleanupStatus,
         },
       };

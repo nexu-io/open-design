@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -91,6 +91,13 @@ async function generateInstallerScript(root: string, portable: boolean): Promise
   const paths = { ...resolveWinPaths(config), nsisLogPath: BUILD_HOST_NSIS_LOG_PATH };
   const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
   if (platformDescriptor == null) throw new Error("process.platform descriptor is unavailable");
+  await mkdir(dirname(paths.winIconPath), { recursive: true });
+  await mkdir(dirname(paths.installerBasePayloadPath), { recursive: true });
+  await copyFile(join(import.meta.dirname, "..", "resources", "win", "icon.ico"), paths.winIconPath);
+  await Promise.all([
+    writeFile(paths.installerBasePayloadPath, "fixture"),
+    writeFile(paths.installerOverlayPayloadPath, "fixture"),
+  ]);
 
   Object.defineProperty(process, "platform", { ...platformDescriptor, value: "win32" });
   try {

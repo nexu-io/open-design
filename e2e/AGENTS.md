@@ -214,6 +214,7 @@ Run commands from this directory:
 ```bash
 pnpm test specs/mac.spec.ts
 pnpm smoke:mac:local
+pnpm smoke:win:local
 pnpm test tests/tools-dev/inspect.test.ts
 pnpm test specs
 pnpm test tests

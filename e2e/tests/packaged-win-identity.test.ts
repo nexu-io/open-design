@@ -52,4 +52,15 @@ describe("packaged windows smoke identity", () => {
     });
     expect(releaseAppVersionArgs("   ")).toEqual([]);
   });
+
+  it("[P2] mirrors the first-class local Windows installer identity", () => {
+    expect(resolvePackagedWinInstallIdentity({
+      debugChannel: "local",
+      namespace: "wl-123456",
+      releaseVersion: "0.19.4-local.123456",
+    })).toEqual({
+      displayName: "Open Design Local",
+      namespaceToken: "wl-123456",
+    });
+  });
 });

@@ -183,6 +183,7 @@ describe("inspectExistingDesktopForLauncher", () => {
   it.each([
     { existingVersion: "0.16.0-prerelease.1", incomingVersion: "0.16.0-prerelease.1", label: "the same version" },
     { existingVersion: "0.16.0-prerelease.2", incomingVersion: "0.16.0-prerelease.1", label: "a newer version" },
+    { existingVersion: "0.19.4-local.1786802050516", incomingVersion: "0.19.4", label: "the matching local Closure build" },
     { existingVersion: undefined, incomingVersion: "0.16.0-prerelease.1", label: "an unknown historical version" },
   ])("focuses an existing namespace desktop running $label", async ({ existingVersion, incomingVersion }) => {
     const root = await mkdtemp(join(tmpdir(), "od-launcher-inspect-focus-"));

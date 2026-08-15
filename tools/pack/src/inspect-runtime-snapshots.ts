@@ -53,31 +53,42 @@ export async function resolveToolPackInspectRuntimeSnapshots(
   const updatePaths = status.update?.paths;
   const launcherRoot = updatePaths?.launcherRoot ?? null;
   const launcherRuntimePath = updatePaths?.launcherRuntimePath ?? null;
-  const launcher = launcherRoot == null || status.update == null
+  const installedLauncher = launcherRoot == null || status.update == null
     ? null
     : await readLauncherRuntimeSnapshot({
         channel: status.update.channel,
         namespace: config.namespace,
         root: launcherRoot,
       });
-  const launcherPathMatches = launcher == null
+  const launcherPathMatches = installedLauncher == null
     || launcherRuntimePath == null
-    || launcher.runtimePath === launcherRuntimePath;
+    || installedLauncher.runtimePath === launcherRuntimePath;
+  const launcherFallback = installedLauncher == null || !launcherPathMatches
+    ? await readToolPackLauncherRuntimeSnapshot(config)
+    : null;
+  const launcherFallbackMatches = launcherFallback?.exists === true
+    && (launcherRuntimePath == null || launcherFallback.runtimePath === launcherRuntimePath);
+  const launcher = launcherFallback == null
+    ? installedLauncher
+    : launcherFallbackMatches ? launcherFallback : null;
+  const launcherUsesToolsPackFallback = launcherFallbackMatches;
   const updateRoot = updatePaths?.downloadRoot ?? null;
   const updateCache = updateRoot == null || status.update == null
     ? null
     : await readUpdateCacheLifecycleSnapshot({ platform: status.update.platform, updateRoot });
 
   return {
-    launcher: launcherPathMatches ? launcher : null,
+    launcher,
     launcherSource: {
-      kind: "installed-runtime",
-      note: launcherRoot == null
-        ? "running Shell did not expose its launcher root"
-        : launcherPathMatches
+      kind: launcherUsesToolsPackFallback ? "tools-pack-runtime" : "installed-runtime",
+      note: launcherUsesToolsPackFallback
+        ? "running Shell updater is disabled or reports the local launcher path under its tools-pack root; snapshot is read from that root"
+        : launcherRoot == null
+          ? "running Shell did not expose its launcher root"
+          : launcherPathMatches
           ? "snapshot is read from the launcher root reported by the running Shell"
           : "running Shell reported inconsistent launcher root and runtime paths",
-      root: launcherRoot,
+      root: launcherUsesToolsPackFallback ? launcher?.root ?? null : launcherRoot,
     },
     updateCache,
     updateCacheSource: {

@@ -38,7 +38,7 @@ import { shouldRunPackagedWinSmoke,winProtocolDebugCase } from './lib/context.js
 
 
 import type { HealthEvalValue,InstallerFallbackSummary,LogsResult,PayloadUpdateSummary,SmokeTiming,UpdaterRecoverySummary,UpgradePersistenceSeed,WinInspectResult,WinInstallResult,WinStartResult,WinStopResult,WinUninstallResult } from './lib/index.js';
-import { activeRuntimeNamespaceRoot,assertClosureDesktopIdentity,assertHealthEvalValue,assertLauncherPointer,assertLogPathsAndContent,assertToolsServeFixtureEnabled,assertUpdateVersionPresent,assertUpgradePersistenceSeed,assertWindowsInviteProtocolRegistration,assertWindowsInviteProtocolRemoved,bundledPluginInventoryExpression,captureUpdateEnv,closureBuildJsonPath,countInviteContinuationResults,expectPathInside,expectWindowsDaemonUrl,expectWindowsFallbackWebUrl,expectWindowsPackagedRouteUrl,fileSizeBytes,formatUnknown,installIdentity,intermediateUpdateBuildJsonPath,invokeWindowsInviteDeeplink,launchNativeWindowsAcceptance,maxInstallDurationMs,maxStartDurationMs,measureSmokeStep,namespace,nativeProductUserDataRoot,nativeRuntimeNamespaceRoot,observePackagedAppShell,outputNamespaceRoot,preUpdateScreenshotPath,printLifecycleTimings,printPackagedLogs,printSmokeTimings,readDesktopIdentityMarker,readPackagedOnboardingConfig,readTiming,releaseVersion,resetNativePackagedExperienceState,resetPackagedRuntimeDataRoot,resetPackagedUpdaterNamespaceRoots,resolveLocalUpdateFixture,resolveNativeAcceptanceUpdateMetadataUrl,restoreUpdateEnv,runInstallerFallbackAcceptance,runPayloadUpdateAcceptance,runSameVersionUpdaterRecoveryAcceptance,runtimeNamespaceRoot,runToolsPackJson,screenshotPath,seedConfiguredPackagedClosure,seedNativePackagedOnboardingComplete,seedPackagedOnboardingComplete,smokeLanes,startWindowsDesktopOrThrow,summarizeLogs,toolsPackDir,updateFixture,updateFixtureMode,updateFixturePort,updateMetadataUrl,updateScenario,updateVersion,upgradePersistenceSeedExpression,verifyCoreOnly,verifyPublicImmutableArtifacts,verifyUpgradePersistence,waitForCommittedPackagedClosureFixture,waitForDesktopStopped,waitForHealthyDesktop,waitForHealthyDesktopShellVersion,waitForInviteContinuationResult,workspaceRoot } from './lib/index.js';
+import { activeRuntimeNamespaceRoot,assertClosureDesktopIdentity,assertHealthEvalValue,assertLauncherPointer,assertLogPathsAndContent,assertToolsServeFixtureEnabled,assertUpdateVersionPresent,assertUpgradePersistenceSeed,assertWindowsInviteProtocolRegistration,assertWindowsInviteProtocolRemoved,bundledPluginInventoryExpression,captureUpdateEnv,closureBuildJsonPath,countInviteContinuationResults,expectPathInside,expectWindowsDaemonUrl,expectWindowsFallbackWebUrl,expectWindowsPackagedRouteUrl,fileSizeBytes,formatUnknown,installIdentity,intermediateUpdateBuildJsonPath,invokeWindowsInviteDeeplink,launchNativeWindowsAcceptance,maxInstallDurationMs,maxStartDurationMs,measureSmokeStep,namespace,nativeProductUserDataRoot,nativeRuntimeNamespaceRoot,observePackagedAppShell,outputNamespaceRoot,preUpdateScreenshotPath,printLifecycleTimings,printPackagedLogs,printSmokeTimings,readDesktopIdentityMarker,readPackagedOnboardingConfig,readTiming,releaseChannel,releaseVersion,resetNativePackagedExperienceState,resetPackagedRuntimeDataRoot,resetPackagedUpdaterNamespaceRoots,resolveLocalUpdateFixture,resolveNativeAcceptanceUpdateMetadataUrl,restoreUpdateEnv,runInstallerFallbackAcceptance,runPayloadUpdateAcceptance,runSameVersionUpdaterRecoveryAcceptance,runtimeNamespaceRoot,runToolsPackJson,screenshotPath,seedConfiguredPackagedClosure,seedNativePackagedOnboardingComplete,seedPackagedOnboardingComplete,shellVersion,smokeLanes,startWindowsDesktopOrThrow,summarizeLogs,toolsPackDir,updateFixture,updateFixtureMode,updateFixturePort,updateMetadataUrl,updateScenario,updateVersion,upgradePersistenceSeedExpression,verifyCoreOnly,verifyPublicImmutableArtifacts,verifyUpgradePersistence,waitForCommittedPackagedClosureFixture,waitForDesktopStopped,waitForHealthyDesktop,waitForHealthyDesktopShellVersion,waitForInviteContinuationResult,workspaceRoot } from './lib/index.js';
 
 const winDescribe = shouldRunPackagedWinSmoke && hasPackagedSmokeLane(smokeLanes, 'shell') && winProtocolDebugCase === 'off' ? describe : describe.skip;
 const shellAbsorbsStandaloneAcceptance = hasPackagedSmokeLane(smokeLanes, 'shell')
@@ -351,16 +351,19 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(pty.stdinStatus).toBe(200);
       expect(pty.output).toContain(pty.marker);
       expect(pty.exitCode, JSON.stringify(pty, null, 2)).toBe(0);
-      expect(pty.cleanup.terminalStatus).toBe(200);
-      expect(pty.cleanup.projectStatus).toBe(200);
+      expect(pty.cleanup.terminalStatus, JSON.stringify(pty.cleanup, null, 2)).toBe(200);
+      expect(pty.cleanup.projectStatus, JSON.stringify(pty.cleanup, null, 2)).toBe(200);
       if (verifyPublicImmutableArtifacts) {
         assertPackagedStandaloneStatus(inspect.status?.standalone, {
           namespace,
           releaseVersion: updateScenario.expectedCurrentVersion,
         });
       } else {
-        assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
-        assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
+        const initialLauncherVersion = releaseChannel === 'local' && shellVersion != null
+          ? shellVersion
+          : updateScenario.expectedCurrentVersion;
+        assertLauncherPointer(inspect.launcher.active, initialLauncherVersion, 0, 'initial active');
+        assertLauncherPointer(inspect.launcher.lastSuccessful, initialLauncherVersion, 0, 'initial lastSuccessful');
       }
 
       // Runtime registration must preserve the stable installed outer path;
@@ -377,7 +380,14 @@ winDescribe('packaged windows runtime smoke', () => {
           waitForInviteContinuationResult(protocolHotContinuationCount),
         ]),
       );
-      expect(protocolHotInspect.status?.pid).toBe(protocolHotPid);
+      // A visible desktop must absorb protocol delivery in place. Headless
+      // acceptance deliberately has no visible owner, so the launcher follows
+      // the production `standalone-owner` recovery path and replaces it.
+      if (process.env.OD_PACKAGED_E2E_HEADLESS === '1') {
+        expect(protocolHotInspect.status?.pid).not.toBe(protocolHotPid);
+      } else {
+        expect(protocolHotInspect.status?.pid).toBe(protocolHotPid);
+      }
       expect(protocolHotContinuation.reason).not.toBe('daemon_unavailable');
       expect(protocolHotContinuation.reason).not.toBe('unreachable');
 

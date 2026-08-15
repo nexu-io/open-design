@@ -45,7 +45,7 @@ import { shouldRunPackagedMacSmoke } from './lib/context.js';
 
 
 import type { LogsResult,MacInspectResult,MacInstallResult,MacStartResult,MacStopResult,MacUninstallResult,PayloadRuntimeAcceptance,UpdaterRecoverySummary,UpgradePersistenceSeed } from './lib/index.js';
-import { assertClosureDesktopIdentity,assertHealthEvalValue,assertLauncherPointer,assertLogPathsAndContent,assertMacInviteProtocolRegistration,assertPayloadDesktopIdentity,assertPptxExportEvalValue,assertSettledDesktopHandoff,assertToolsServeFixtureEnabled,assertUpdateVersionPresent,assertUpgradePersistenceSeed,bundledPluginInventoryExpression,capturePackagedCheckpoint,captureUpdateEnv,closureBuildJsonPath,existingProjectPptxExportExpression,expectPathInside,fileSizeBytes,formatUnknown,invokeMacInviteDeeplink,launchMacAppWithLaunchServices,macFocusWitness,maxStartDurationMs,namespace,outputNamespaceRoot,packagedMacClosureTarget,packagedMacUpdaterPlatform,pathExists,printPackagedLogs,readDesktopIdentityMarker,releaseChannel,releaseVersion,resetPackagedRuntimeState,resolveLocalPayloadUpdateFixture,restoreUpdateEnv,runtimeNamespaceRoot,runToolsPackJson,screenshotPath,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,smokeLanes,standaloneSeedEmbedded,summarizeLogs,toolsPackDir,updateFixture,updateMetadataUrl,updateScenario,updateVersion,upgradePersistenceSeedExpression,verifyCoreOnly,verifyStandaloneRuntimeBinding,waitForHealthyDesktop,waitForHealthyDesktopShellVersion,waitForUpdaterStatus,workspaceRoot } from './lib/index.js';
+import { assertClosureDesktopIdentity,assertHealthEvalValue,assertLauncherPointer,assertLogPathsAndContent,assertMacInviteProtocolRegistration,assertPayloadDesktopIdentity,assertPptxExportEvalValue,assertSettledDesktopHandoff,assertToolsServeFixtureEnabled,assertUpdateVersionPresent,assertUpgradePersistenceSeed,bundledPluginInventoryExpression,capturePackagedCheckpoint,captureUpdateEnv,closureBuildJsonPath,existingProjectPptxExportExpression,expectPathInside,fileSizeBytes,formatUnknown,invokeMacInviteDeeplink,launchMacAppWithLaunchServices,macFocusWitness,maxStartDurationMs,namespace,outputNamespaceRoot,packagedMacClosureTarget,packagedMacUpdaterPlatform,pathExists,printPackagedLogs,readDesktopIdentityMarker,releaseChannel,releaseVersion,resetPackagedRuntimeState,resolveLocalPayloadUpdateFixture,restoreUpdateEnv,runtimeNamespaceRoot,runToolsPackJson,screenshotPath,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,shellVersion,smokeLanes,standaloneSeedEmbedded,summarizeLogs,toolsPackDir,updateFixture,updateMetadataUrl,updateScenario,updateVersion,upgradePersistenceSeedExpression,verifyCoreOnly,verifyStandaloneRuntimeBinding,waitForHealthyDesktop,waitForHealthyDesktopShellVersion,waitForUpdaterStatus,workspaceRoot } from './lib/index.js';
 
 const macShellDescribe = shouldRunPackagedMacSmoke && hasPackagedSmokeLane(smokeLanes, 'shell') ? describe : describe.skip;
 const shellAbsorbsStandaloneAcceptance = hasPackagedSmokeLane(smokeLanes, 'shell')
@@ -213,16 +213,19 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
       expect(pty.stdinStatus).toBe(200);
       expect(pty.output).toContain(pty.marker);
       expect(pty.exitCode, JSON.stringify(pty, null, 2)).toBe(0);
-      expect(pty.cleanup.terminalStatus).toBe(200);
-      expect(pty.cleanup.projectStatus).toBe(200);
+      expect(pty.cleanup.terminalStatus, JSON.stringify(pty.cleanup, null, 2)).toBe(200);
+      expect(pty.cleanup.projectStatus, JSON.stringify(pty.cleanup, null, 2)).toBe(200);
       if (verifyStandaloneRuntimeBinding) {
         assertPackagedStandaloneStatus(inspect.status?.standalone, {
           namespace,
           releaseVersion: updateScenario.expectedCurrentVersion,
         });
       } else {
-        assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
-        assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
+        const initialLauncherVersion = releaseChannel === 'local' && shellVersion != null
+          ? shellVersion
+          : updateScenario.expectedCurrentVersion;
+        assertLauncherPointer(inspect.launcher.active, initialLauncherVersion, 0, 'initial active');
+        assertLauncherPointer(inspect.launcher.lastSuccessful, initialLauncherVersion, 0, 'initial lastSuccessful');
       }
 
       let protocolBaseInspect = inspect;

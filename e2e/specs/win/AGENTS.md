@@ -16,6 +16,10 @@ registry, file-locking, replacement, and cleanup behavior.
 ## Execution and evidence
 
 - Every run uses an isolated short namespace and the matching channel identity.
+- Run the isolated local cold-start lifecycle through `pnpm smoke:win:local`.
+  It builds an unsigned, non-portable NSIS artifact with an embedded local
+  Standalone seed beneath a short drive-root path, then runs the core Windows
+  product scenarios without touching a release namespace.
 - External login and agent services are deterministic synthetic boundaries by
   default and must be declared by the scenario.
 - Historical migration and launcher behavior use pinned immutable released

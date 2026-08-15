@@ -20,7 +20,7 @@ import { resolvePackagedSmokeNamespace } from '@/vitest/suite';
 
 
 export const execFileAsync = promisify(execFile);
-export const e2eRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+export const e2eRoot = dirname(dirname(dirname(dirname(fileURLToPath(import.meta.url)))));
 export const workspaceRoot = dirname(e2eRoot);
 export const toolsPackDir = resolveFromWorkspace(process.env.OD_PACKAGED_E2E_TOOLS_PACK_DIR ?? '.tmp/tools-pack');
 export const namespace = resolvePackagedSmokeNamespace('mac');

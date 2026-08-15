@@ -32,7 +32,7 @@ export type ToolPackLauncherRuntimeSnapshot = {
 };
 
 export async function readToolPackLauncherRuntimeSnapshot(
-  config: Pick<ToolPackConfig, "releaseVersion" | "namespace" | "roots">,
+  config: Pick<ToolPackConfig, "debugChannel" | "releaseVersion" | "namespace" | "roots">,
 ): Promise<ToolPackLauncherRuntimeSnapshot> {
   const launcher = resolveToolPackLauncherLayout(config);
   return await readLauncherRuntimeSnapshot({
