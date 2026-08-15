@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 
 import { describe, expect, it } from 'vitest';
 
@@ -25,6 +25,16 @@ import {
   type PackagedAppShellProbeElement,
   type PackagedAppShellSnapshot,
 } from '@/vitest/packaged-app-shell';
+
+async function readSpecGraph(root: URL): Promise<string> {
+  const entries = await readdir(root, { withFileTypes: true });
+  const sources = await Promise.all(entries.map(async (entry) => {
+    const path = new URL(`${entry.name}${entry.isDirectory() ? '/' : ''}`, root);
+    if (entry.isDirectory()) return await readSpecGraph(path);
+    return entry.isFile() && entry.name.endsWith('.ts') ? await readFile(path, 'utf8') : '';
+  }));
+  return sources.filter(Boolean).join('\n');
+}
 
 /**
  * A fixture element the probe can `instanceof`-check and measure. `rects` is
@@ -124,8 +134,8 @@ describe('packaged app-shell probe', () => {
   it('tracks the identity gate rendered by the current onboarding shell', async () => {
     const [entryShellSource, macSpecSource, winSpecSource] = await Promise.all([
       readFile(new URL('../../../apps/web/src/components/EntryShell.tsx', import.meta.url), 'utf8'),
-      readFile(new URL('../../specs/mac.spec.ts', import.meta.url), 'utf8'),
-      readFile(new URL('../../specs/win.spec.ts', import.meta.url), 'utf8'),
+      readSpecGraph(new URL('../../specs/mac/', import.meta.url)),
+      readSpecGraph(new URL('../../specs/win/', import.meta.url)),
     ]);
     const identityProbe = "querySelector('.onboarding-cloud__primary')";
 

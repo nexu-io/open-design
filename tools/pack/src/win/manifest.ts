@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { ToolPackConfig } from "../config.js";
+import { resolvePackagedUpdateEnabled } from "../local-runtime.js";
 import { readRuntimeShellVersion } from "../versions.js";
 import { pathExists } from "./fs.js";
 import type { WinBuiltAppManifest, WinPaths } from "./types.js";
@@ -21,6 +22,7 @@ function createPackagedConfig(
   packagedVersion: string,
   entrypoints: PackagedConfigEntrypoints = {},
 ): Record<string, unknown> {
+  const updateEnabled = resolvePackagedUpdateEnabled(config);
   return {
     ...(config.amrProfile == null ? {} : { amrProfile: config.amrProfile }),
     ...entrypoints,
@@ -34,6 +36,7 @@ function createPackagedConfig(
     shellVersion: packagedVersion,
     ...(config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: config.telemetryRelayUrl }),
     ...(config.updateMetadataUrl == null ? {} : { updateMetadataUrl: config.updateMetadataUrl }),
+    ...(updateEnabled == null ? {} : { updateEnabled }),
     ...(config.posthogKey == null ? {} : { posthogKey: config.posthogKey }),
     ...(config.posthogHost == null ? {} : { posthogHost: config.posthogHost }),
     ...(config.velaWebUrl == null ? {} : { velaWebUrl: config.velaWebUrl }),

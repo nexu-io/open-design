@@ -53,7 +53,7 @@ export const standaloneClosureDeliveryMatrix = {
           "level": "platform-product",
           "state": "proven",
           "credential": "https://github.com/nexu-io/open-design/actions/runs/31299133459",
-          "witness": "e2e/specs/mac.spec.ts"
+          "witness": "e2e/specs/mac/suite.ts"
         }
       ],
       "evidence": [
@@ -136,7 +136,7 @@ export const standaloneClosureDeliveryMatrix = {
           "level": "platform-product",
           "state": "proven",
           "credential": "https://github.com/nexu-io/open-design/actions/runs/31299133459",
-          "witness": "e2e/specs/mac.spec.ts"
+          "witness": "e2e/specs/mac/suite.ts"
         }
       ],
       "evidence": [
@@ -177,7 +177,7 @@ export const standaloneClosureDeliveryMatrix = {
           "level": "platform-product",
           "state": "proven",
           "credential": "https://github.com/nexu-io/open-design/actions/runs/31299133459",
-          "witness": "e2e/specs/mac.spec.ts"
+          "witness": "e2e/specs/mac/suite.ts"
         }
       ],
       "evidence": [
@@ -256,7 +256,7 @@ export const standaloneClosureDeliveryMatrix = {
           "level": "platform-product",
           "state": "proven",
           "credential": "https://github.com/nexu-io/open-design/actions/runs/31299133459",
-          "witness": "e2e/specs/mac.spec.ts"
+          "witness": "e2e/specs/mac/suite.ts"
         }
       ],
       "evidence": [
@@ -266,11 +266,11 @@ export const standaloneClosureDeliveryMatrix = {
         },
         {
           "role": "legacy-product-reference",
-          "path": "e2e/specs/mac.spec.ts"
+          "path": "e2e/specs/mac/suite.ts"
         },
         {
           "role": "legacy-product-reference",
-          "path": "e2e/specs/win.spec.ts"
+          "path": "e2e/specs/win/suite.ts"
         }
       ]
     },
@@ -313,7 +313,7 @@ export const standaloneClosureDeliveryMatrix = {
         },
         {
           "role": "legacy-product-reference",
-          "path": "e2e/specs/win.spec.ts"
+          "path": "e2e/specs/win/suite.ts"
         }
       ]
     }

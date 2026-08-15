@@ -4,11 +4,21 @@ export const PACKAGED_SMOKE_LANES = ['shell', 'standalone', 'migration'] as cons
 
 export type PackagedSmokeLane = typeof PACKAGED_SMOKE_LANES[number];
 export type PackagedSmokeDomain = 'contract' | 'distribution' | 'migration' | 'shell' | 'standalone';
+export type PackagedScenarioBoundaryMode =
+  | 'fixed-response'
+  | 'not-exercised'
+  | 'public-immutable'
+  | 'synthetic-state'
+  | 'temporary-fixture';
 
 export type PackagedSmokeScenario = {
+  boundaries: Readonly<Record<'agent' | 'auth' | 'landing' | 'release', PackagedScenarioBoundaryMode>>;
+  doesNotProve: readonly string[];
   domains: readonly PackagedSmokeDomain[];
   id: string;
+  initialState: string;
   lane: PackagedSmokeLane;
+  proves: readonly string[];
   title: string;
 };
 

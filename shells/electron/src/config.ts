@@ -49,6 +49,8 @@ export type RawPackagedConfig = {
   // Baked by tools/pack from OPEN_DESIGN_TELEMETRY_RELAY_URL and forwarded to
   // the daemon at runtime; Langfuse credentials never ship in packaged config.
   telemetryRelayUrl?: string;
+  /** Explicit packaged updater policy. Absent keeps the release default. */
+  updateEnabled?: boolean;
   updateMetadataUrl?: string;
   // PostHog product-analytics ingest key, baked by tools/pack from
   // process.env.POSTHOG_KEY at packaging time. Forwarded to the daemon
@@ -83,6 +85,7 @@ export type PackagedConfig = {
   releaseVersion: string | null;
   shellVersion: string | null;
   telemetryRelayUrl: string | null;
+  updateEnabled: boolean | null;
   updateMetadataUrl: string | null;
   posthogKey: string | null;
   posthogHost: string | null;
@@ -91,6 +94,18 @@ export type PackagedConfig = {
   webStandaloneRoot: string | null;
   webOutputMode: PackagedWebOutputMode;
 };
+
+export function applyPackagedUpdateEnv(
+  input: Readonly<{ enabled: boolean | null; metadataUrl: string | null }>,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (input.enabled != null && env.OD_UPDATE_ENABLED == null) {
+    env.OD_UPDATE_ENABLED = input.enabled ? "1" : "0";
+  }
+  if (input.metadataUrl != null && !env.OD_UPDATE_METADATA_URL?.trim()) {
+    env.OD_UPDATE_METADATA_URL = input.metadataUrl;
+  }
+}
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
@@ -186,6 +201,10 @@ function cleanOptionalString(value: string | undefined): string | null {
   if (value == null) return null;
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+function cleanOptionalBoolean(value: boolean | undefined): boolean | null {
+  return typeof value === "boolean" ? value : null;
 }
 
 function resolvePackagedWebOutputMode(value: string | undefined): PackagedWebOutputMode {
@@ -295,6 +314,7 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     releaseVersion: cleanOptionalString(raw.releaseVersion),
     shellVersion: cleanOptionalString(raw.shellVersion),
     telemetryRelayUrl: cleanOptionalString(raw.telemetryRelayUrl),
+    updateEnabled: cleanOptionalBoolean(raw.updateEnabled),
     updateMetadataUrl: cleanOptionalString(raw.updateMetadataUrl),
     posthogKey: cleanOptionalString(raw.posthogKey),
     posthogHost: cleanOptionalString(raw.posthogHost),

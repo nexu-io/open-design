@@ -64,6 +64,7 @@ function resolveStandaloneConfig(): PackagedConfig {
     resourceRoot,
     telemetryRelayUrl:
       process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL?.trim() || null,
+    updateEnabled: null,
     updateMetadataUrl: resolvePackagedStandaloneMetadataUrl(
       process.env.OD_UPDATE_METADATA_URL,
     ),

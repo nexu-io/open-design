@@ -1,9 +1,14 @@
+import { rm } from "node:fs/promises";
+
 import { writeJsonFile } from "@open-design/sidecar";
 
 import {
   ClosureStoreError,
   normalizeReleaseVersion,
   normalizeShellBinding,
+  persistedClosureActivationIntentDescriptor,
+  persistedClosureBindingDescriptor,
+  resolveClosureActivationIntentPath,
   sameReleaseBinding,
   sameShellBinding,
   type ClosureBindingDescriptor,
@@ -21,7 +26,11 @@ async function writeDescriptor(
   descriptor: ClosureBindingDescriptor,
 ): Promise<ClosureBindingDescriptor> {
   const next = { ...descriptor, updatedAt: new Date().toISOString() };
-  await writeJsonFile(paths.bindingPath, next);
+  const activationIntentPath = resolveClosureActivationIntentPath(paths);
+  const intent = persistedClosureActivationIntentDescriptor(next);
+  if (intent != null) await writeJsonFile(activationIntentPath, intent);
+  await writeJsonFile(paths.bindingPath, persistedClosureBindingDescriptor(next));
+  if (intent == null) await rm(activationIntentPath, { force: true });
   return next;
 }
 

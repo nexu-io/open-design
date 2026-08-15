@@ -1,7 +1,7 @@
 /**
  * The packaged Windows smoke's app-shell probe and the rule that reads it.
  *
- * `specs/win.spec.ts` only executes on a Windows runner that has a packaged
+ * `specs/win/suite.ts` only executes on a Windows runner that has a packaged
  * build installed, and the probe below reaches the packaged renderer as a
  * plain string through `tools-pack inspect --expr` — so neither the compiler
  * nor any cross-platform suite ever sees it. Keeping the probe text and the

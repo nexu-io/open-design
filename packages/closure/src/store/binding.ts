@@ -15,8 +15,9 @@ import {
 } from "../protocol/index.js";
 import { normalizeNamespace } from "@open-design/sidecar/protocol";
 
-export const CLOSURE_BINDING_SCHEMA_VERSION = 5 as const;
-const LEGACY_CLOSURE_BINDING_SCHEMA_VERSION = 4 as const;
+export const CLOSURE_BINDING_SCHEMA_VERSION = 4 as const;
+export const CLOSURE_ACTIVATION_INTENT_SCHEMA_VERSION = 1 as const;
+const TRANSITIONAL_CLOSURE_BINDING_SCHEMA_VERSION = 5 as const;
 export const CLOSURE_STORE_EPOCH = 4 as const;
 
 export type ClosureStoreRequest = {
@@ -26,6 +27,7 @@ export type ClosureStoreRequest = {
 };
 
 export type ClosureStorePaths = {
+  activationIntentPath: string;
   bindingPath: string;
   blobsRoot: string;
   channel: ClosureChannel;
@@ -95,6 +97,14 @@ export type ClosureBindingDescriptor = {
   updatedAt: string;
 };
 
+export type ClosureActivationIntentDescriptor = {
+  channel: ClosureChannel;
+  intent: ClosureActivationIntent;
+  namespace: string;
+  schemaVersion: typeof CLOSURE_ACTIVATION_INTENT_SCHEMA_VERSION;
+  updatedAt: string;
+};
+
 export type StoredClosureVerification = {
   binding: ClosureBindingIdentity;
   inventory: ClosureFileInventory;
@@ -147,6 +157,7 @@ export function resolveClosureStorePaths(request: ClosureStoreRequest): ClosureS
   const namespaceRoot = assertUnderRoot(root, join(channelRoot, "epochs", String(CLOSURE_STORE_EPOCH), "namespaces", namespace));
   const stateRoot = assertUnderRoot(root, join(namespaceRoot, "state"));
   return {
+    activationIntentPath: assertUnderRoot(root, join(stateRoot, "activation-intent.json")),
     bindingPath: assertUnderRoot(root, join(stateRoot, "binding.json")),
     blobsRoot: assertUnderRoot(root, join(channelRoot, "blobs")),
     channel,
@@ -162,6 +173,12 @@ export function resolveClosureStorePaths(request: ClosureStoreRequest): ClosureS
     stateRoot,
     versionsRoot: assertUnderRoot(root, join(namespaceRoot, "versions")),
   };
+}
+
+export function resolveClosureActivationIntentPath(
+  paths: Pick<ClosureStorePaths, "root" | "stateRoot">,
+): string {
+  return assertUnderRoot(paths.root, join(paths.stateRoot, "activation-intent.json"));
 }
 
 export function sameBinding(left: ClosureBindingIdentity, right: ClosureBindingIdentity): boolean {
@@ -322,19 +339,8 @@ export function validateClosureBindingDescriptor(
   expected: Pick<ClosureStorePaths, "channel" | "namespace">,
 ): ClosureBindingDescriptor {
   const descriptor = requireRecord(value, "Closure binding descriptor");
-  const legacy = descriptor.schemaVersion === LEGACY_CLOSURE_BINDING_SCHEMA_VERSION;
-  assertExactKeys(descriptor, legacy ? [
-    "active",
-    "attempt",
-    "activationAuthorized",
-    "channel",
-    "lastSuccessful",
-    "namespace",
-    "nextGeneration",
-    "prepared",
-    "schemaVersion",
-    "updatedAt",
-  ] : [
+  const transitional = descriptor.schemaVersion === TRANSITIONAL_CLOSURE_BINDING_SCHEMA_VERSION;
+  assertExactKeys(descriptor, transitional ? [
     "active",
     "attempt",
     "activationIntent",
@@ -345,8 +351,19 @@ export function validateClosureBindingDescriptor(
     "prepared",
     "schemaVersion",
     "updatedAt",
+  ] : [
+    "active",
+    "attempt",
+    "activationAuthorized",
+    "channel",
+    "lastSuccessful",
+    "namespace",
+    "nextGeneration",
+    "prepared",
+    "schemaVersion",
+    "updatedAt",
   ], "Closure binding descriptor");
-  if (!legacy && descriptor.schemaVersion !== CLOSURE_BINDING_SCHEMA_VERSION) {
+  if (!transitional && descriptor.schemaVersion !== CLOSURE_BINDING_SCHEMA_VERSION) {
     throw new ClosureStoreError(`unsupported Closure binding schema: ${String(descriptor.schemaVersion)}`);
   }
   const channel = normalizeChannel(String(descriptor.channel));
@@ -362,10 +379,10 @@ export function validateClosureBindingDescriptor(
   const prepared = descriptor.prepared == null
     ? null
     : normalizeReleaseBinding(descriptor.prepared, expected);
-  if (legacy && typeof descriptor.activationAuthorized !== "boolean") {
+  if (!transitional && typeof descriptor.activationAuthorized !== "boolean") {
     throw new ClosureStoreError("Closure activation authorization flag must be boolean");
   }
-  const activationIntent = legacy || descriptor.activationIntent == null
+  const activationIntent = !transitional || descriptor.activationIntent == null
     ? null
     : normalizeActivationIntent(descriptor.activationIntent, expected);
   if (activationIntent != null && (
@@ -397,6 +414,61 @@ export function validateClosureBindingDescriptor(
     prepared,
     schemaVersion: CLOSURE_BINDING_SCHEMA_VERSION,
     updatedAt: normalizeIsoString(descriptor.updatedAt, "Closure binding updatedAt"),
+  };
+}
+
+export function validateClosureActivationIntentDescriptor(
+  value: unknown,
+  expected: Pick<ClosureStorePaths, "channel" | "namespace">,
+): ClosureActivationIntentDescriptor {
+  const descriptor = requireRecord(value, "Closure activation intent descriptor");
+  assertExactKeys(descriptor, [
+    "channel",
+    "intent",
+    "namespace",
+    "schemaVersion",
+    "updatedAt",
+  ], "Closure activation intent descriptor");
+  if (descriptor.schemaVersion !== CLOSURE_ACTIVATION_INTENT_SCHEMA_VERSION) {
+    throw new ClosureStoreError(
+      `unsupported Closure activation intent schema: ${String(descriptor.schemaVersion)}`,
+    );
+  }
+  const channel = normalizeChannel(String(descriptor.channel));
+  const namespace = normalizeStoreNamespace(String(descriptor.namespace));
+  if (channel !== expected.channel || namespace !== expected.namespace) {
+    throw new ClosureStoreError("Closure activation intent does not match its channel/namespace store");
+  }
+  return {
+    channel,
+    intent: normalizeActivationIntent(descriptor.intent, expected),
+    namespace,
+    schemaVersion: CLOSURE_ACTIVATION_INTENT_SCHEMA_VERSION,
+    updatedAt: normalizeIsoString(descriptor.updatedAt, "Closure activation intent updatedAt"),
+  };
+}
+
+export function persistedClosureBindingDescriptor(
+  descriptor: ClosureBindingDescriptor,
+): Record<string, unknown> {
+  const { activationIntent: _activationIntent, ...binding } = descriptor;
+  return {
+    ...binding,
+    activationAuthorized: descriptor.activationIntent != null,
+    schemaVersion: CLOSURE_BINDING_SCHEMA_VERSION,
+  };
+}
+
+export function persistedClosureActivationIntentDescriptor(
+  descriptor: ClosureBindingDescriptor,
+): ClosureActivationIntentDescriptor | null {
+  if (descriptor.activationIntent == null) return null;
+  return {
+    channel: descriptor.channel,
+    intent: descriptor.activationIntent,
+    namespace: descriptor.namespace,
+    schemaVersion: CLOSURE_ACTIVATION_INTENT_SCHEMA_VERSION,
+    updatedAt: descriptor.updatedAt,
   };
 }
 

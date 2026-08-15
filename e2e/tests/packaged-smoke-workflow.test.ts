@@ -120,7 +120,20 @@ const winNsisSetupActionPath = join(
   "nsis",
   "action.yml",
 );
-const packagedMacSpecPath = join(e2eRoot, "specs", "mac.spec.ts");
+const packagedMacSpecRoot = join(e2eRoot, "specs", "mac");
+const packagedWinSpecRoot = join(e2eRoot, "specs", "win");
+
+async function readTypeScriptSourceGraph(root: string): Promise<string> {
+  const entries = await readdir(root, { withFileTypes: true });
+  const sources = await Promise.all(entries
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map(async (entry) => {
+      const path = join(root, entry.name);
+      if (entry.isDirectory()) return await readTypeScriptSourceGraph(path);
+      return entry.isFile() && entry.name.endsWith(".ts") ? await readFile(path, "utf8") : "";
+    }));
+  return sources.filter(Boolean).join("\n");
+}
 const releasePrereleaseWorkflowPath = join(workspaceRoot, ".github", "workflows", "release-prerelease.yml");
 const distributionCountedWorkflowPath = join(workspaceRoot, ".github", "workflows", "distribution-counted.yml");
 const distributionPrereleaseWorkflowPath = distributionCountedWorkflowPath;
@@ -2283,8 +2296,8 @@ process.stdin.on("end", () => {
 
   it("[P1] keeps macOS and Windows public Closure binding and cold-start evidence symmetric", async () => {
     const [mac, win, distribution] = await Promise.all([
-      readFile(packagedMacSpecPath, "utf8"),
-      readFile(join(e2eRoot, "specs", "win.spec.ts"), "utf8"),
+      readTypeScriptSourceGraph(packagedMacSpecRoot),
+      readTypeScriptSourceGraph(packagedWinSpecRoot),
       readFile(join(workspaceRoot, ".github", "workflows", "distribution-exact-accept.yml"), "utf8"),
     ]);
     for (const [platform, spec] of [["mac", mac], ["win", win]] as const) {
@@ -2823,7 +2836,7 @@ process.stdin.on("end", () => {
       readFile(betaMacDistributionActionPath, "utf8"),
       readFile(betaWinDistributionActionPath, "utf8"),
       readFile(join(workspaceRoot, ".github", "actions", "release", "closure", "shared", "action.yml"), "utf8"),
-      readFile(join(e2eRoot, "specs", "win.spec.ts"), "utf8"),
+      readTypeScriptSourceGraph(packagedWinSpecRoot),
     ]);
     const sharedJob = sectionBetween(workflow, "  metadata:", "  build:");
     const buildJob = sectionBetween(workflow, "  build:", "  stage:");
@@ -2971,7 +2984,7 @@ process.stdin.on("end", () => {
   it("publishes release-beta mac_x64 payloads while preserving the zip feed", async () => {
     const [workflow, macSpec, betaMacAction] = await Promise.all([
       readReleaseWorkflow(releaseBetaWorkflowPath, distributionBetaWorkflowPath),
-      readFile(packagedMacSpecPath, "utf8"),
+      readTypeScriptSourceGraph(packagedMacSpecRoot),
       readFile(betaMacDistributionActionPath, "utf8"),
     ]);
     const buildJob = sectionBetween(workflow, "  build:", "  stage:");
@@ -2998,7 +3011,7 @@ process.stdin.on("end", () => {
   it("keeps local macOS saturation complete through a package-level background agent", async () => {
     const [runner, macSpec, builder, shellEntry] = await Promise.all([
       readFile(join(e2eRoot, "scripts/release-smoke.ts"), "utf8"),
-      readFile(packagedMacSpecPath, "utf8"),
+      readTypeScriptSourceGraph(packagedMacSpecRoot),
       readFile(join(workspaceRoot, "tools/pack/src/mac/builder.ts"), "utf8"),
       readFile(join(workspaceRoot, "shells/electron/src/index.ts"), "utf8"),
     ]);

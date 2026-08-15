@@ -7,6 +7,8 @@ For the current coverage posture, recent hardening work, grouped-run status, and
 ## Directory layout
 
 - `specs/`: highest-ROI, long-running core business capability regressions suitable for PR or release gating. Each spec should describe one nearly orthogonal product capability chain, such as main dialog generation, Pet, Orbit, or packaged runtime. Keep this layer small and expand it only when a core capability deserves always-on signal.
+- `specs/mac/`: macOS install, cold-start, update, recovery, and clean-exit product lifecycles. Read `specs/mac/AGENTS.md` before editing this surface.
+- `specs/win/`: Windows install, cold-start, update, recovery, and clean-exit product lifecycles. Read `specs/win/AGENTS.md` before editing this surface.
 - `tests/`: broader user-level end-to-end coverage and local hotspot checks that intentionally span app/package/resource boundaries. Prefer adding tests here when a repeated or high-risk local capability naturally falls out of a core spec. Do not build a speculative coverage matrix before the core spec needs it.
 - `tests/scripts/`: behavior-contract coverage for root operational scripts whose regressions affect install, CI, or release flows. Keep fixtures hermetic and runnable through e2e Vitest; do not put `*.test.ts` siblings directly under root `scripts/`.
 - `ui/`: flat Playwright UI automation test files only. Keep helpers, resources, and non-Playwright harnesses out of this directory.
@@ -34,6 +36,32 @@ For the current coverage posture, recent hardening work, grouped-run status, and
 - Keep new non-UI e2e smoke chains pure inspect by default. Do not use Playwright for these chains; use daemon/web APIs, sidecar IPC, tools-dev/tools-pack inspect, logs, reports, and screenshots when available.
 - External service dependencies must use temporary server-level mocks. Do not rely on real API keys, real provider accounts, or UI-level route patching for core e2e smoke.
 - Every atomic suite must run in an isolated namespace. Successful suites should keep only curated reports and high-value artifacts, then clean process/runtime scratch. Failed suites should preserve runtime scratch, logs, mock requests, screenshots, and report pointers for diagnosis.
+
+### Initial state and proof boundaries
+
+Deterministic, unattended automation is more valuable to the core lifecycle
+matrix than replaying every unrelated predecessor through a real external
+service. A scenario may inject a synthetic signed-in session, fixed agent
+response, completed landing state, or other already-valid projection when that
+boundary is not the behavior under test.
+
+- Keep one focused proof for every state-producing boundary that matters. Other
+  scenarios may start from its validated projection instead of replaying it.
+- Never mock the transition named by the scenario. Cross-version migration and
+  recovery scenarios must preserve the real historical bytes and state being
+  migrated.
+- Declare synthetic boundaries, the facts the scenario proves, and the facts it
+  deliberately does not prove next to the scenario definition. Reports must
+  retain that declaration.
+- Prefer shared state builders over hand-written JSON in specs. Builders own
+  schema validation and link the synthetic projection to its focused proof.
+- When a state cannot be prepared without guessing at hidden coupling, stop and
+  make that uncertainty explicit instead of adding fields until the test passes.
+
+The terminal oracle remains the running product: a valid product surface,
+daemon health, expected persisted lifecycle state, curated inspect/screenshot
+artifacts, a clean stop, and a stable second start where the scenario requires
+one. Fixture preparation is never a success oracle by itself.
 
 ## UI test stability rules
 
@@ -185,6 +213,7 @@ Run commands from this directory:
 
 ```bash
 pnpm test specs/mac.spec.ts
+pnpm smoke:mac:local
 pnpm test tests/tools-dev/inspect.test.ts
 pnpm test specs
 pnpm test tests

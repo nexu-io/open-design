@@ -5,6 +5,7 @@ import { dirname, join, relative } from "node:path";
 import { rebuild, type RebuildOptions } from "@electron/rebuild";
 
 import type { ToolPackConfig } from "../config.js";
+import { resolvePackagedUpdateEnabled } from "../local-runtime.js";
 import {
   MAC_PREBUNDLE_ESM_REQUIRE_BANNER,
   MAC_PREBUNDLE_COPIED_RUNTIME_DEPENDENCIES,
@@ -93,6 +94,7 @@ export function renderMacPackagedConfig(options: {
   shellVersion: string;
   usePrebundledStandaloneWeb: boolean;
 }): string {
+  const updateEnabled = resolvePackagedUpdateEnabled(options.config);
   return `${JSON.stringify(
     {
       ...(options.config.amrProfile == null ? {} : { amrProfile: options.config.amrProfile }),
@@ -106,6 +108,7 @@ export function renderMacPackagedConfig(options: {
       shellVersion: options.shellVersion,
       ...(options.config.telemetryRelayUrl == null ? {} : { telemetryRelayUrl: options.config.telemetryRelayUrl }),
       ...(options.config.updateMetadataUrl == null ? {} : { updateMetadataUrl: options.config.updateMetadataUrl }),
+      ...(updateEnabled == null ? {} : { updateEnabled }),
       ...(options.config.posthogKey == null ? {} : { posthogKey: options.config.posthogKey }),
       ...(options.config.posthogHost == null ? {} : { posthogHost: options.config.posthogHost }),
       ...(options.config.velaWebUrl == null ? {} : { velaWebUrl: options.config.velaWebUrl }),

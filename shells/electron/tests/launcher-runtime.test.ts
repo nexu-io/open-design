@@ -37,6 +37,7 @@ function fakeConfig(
     posthogKey: null,
     resourceRoot: join(root, "installed", "resources", "open-design"),
     telemetryRelayUrl: null,
+    updateEnabled: null,
     updateMetadataUrl: null,
     velaWebUrl: null,
     webOutputMode: "server",

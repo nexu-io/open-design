@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readFile, readdir, rename, stat } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, rename, rm, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 
 import {
@@ -20,11 +20,16 @@ import {
   assertUnderRoot,
   digestFile,
   normalizeReleaseVersion,
+  persistedClosureActivationIntentDescriptor,
+  persistedClosureBindingDescriptor,
   readOptionalJson,
   readRequiredJson,
+  resolveClosureActivationIntentPath,
   resolveClosureStoreVersionPaths,
   sameBinding,
+  sameReleaseBinding,
   validateClosureBindingDescriptor,
+  validateClosureActivationIntentDescriptor,
   type ClosureBindingDescriptor,
   type ClosureRuntimePointer,
   type ClosureStorePaths,
@@ -197,9 +202,39 @@ function emptyBinding(paths: ClosureStorePaths, now: string): ClosureBindingDesc
 
 export async function readClosureBindingDescriptor(paths: ClosureStorePaths): Promise<ClosureBindingDescriptor> {
   const raw = await readOptionalJson(paths.bindingPath, "Closure binding descriptor");
-  return raw == null
-    ? emptyBinding(paths, new Date(0).toISOString())
-    : validateClosureBindingDescriptor(raw, paths);
+  if (raw == null) return emptyBinding(paths, new Date(0).toISOString());
+  let descriptor = validateClosureBindingDescriptor(raw, paths);
+  const activationIntentPath = resolveClosureActivationIntentPath(paths);
+  const physical = raw as Record<string, unknown>;
+  const transitional = physical.schemaVersion === 5;
+  let revokeOrphanedAuthorization = false;
+  if (!transitional && physical.activationAuthorized === true) {
+    const rawIntent = await readOptionalJson(activationIntentPath, "Closure activation intent").catch(() => null);
+    if (rawIntent != null) {
+      const intent = (() => {
+        try {
+          return validateClosureActivationIntentDescriptor(rawIntent, paths).intent;
+        } catch {
+          return null;
+        }
+      })();
+      if (intent != null && descriptor.prepared != null && sameReleaseBinding(intent, descriptor.prepared)) {
+        descriptor = { ...descriptor, activationIntent: intent };
+      } else revokeOrphanedAuthorization = true;
+    } else {
+      revokeOrphanedAuthorization = true;
+    }
+  }
+  if (transitional) {
+    const intent = persistedClosureActivationIntentDescriptor(descriptor);
+    if (intent != null) await writeJsonFile(activationIntentPath, intent);
+    await writeJsonFile(paths.bindingPath, persistedClosureBindingDescriptor(descriptor));
+    if (intent == null) await rm(activationIntentPath, { force: true });
+  } else if (revokeOrphanedAuthorization) {
+    await writeJsonFile(paths.bindingPath, persistedClosureBindingDescriptor(descriptor));
+    await rm(activationIntentPath, { force: true });
+  }
+  return descriptor;
 }
 
 export async function prepareStoredClosureCandidate(
@@ -265,6 +300,7 @@ export async function prepareVerifiedStoredClosureCandidate(
     nextGeneration: generation + 1,
     updatedAt: new Date().toISOString(),
   };
-  await writeJsonFile(paths.bindingPath, descriptor);
+  await writeJsonFile(paths.bindingPath, persistedClosureBindingDescriptor(descriptor));
+  await rm(resolveClosureActivationIntentPath(paths), { force: true });
   return { prepared, descriptor, verification };
 }

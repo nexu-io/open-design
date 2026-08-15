@@ -246,6 +246,16 @@ describe("copyMacPrebundleRuntimeDependencies", () => {
 });
 
 describe("renderMacPackagedConfig", () => {
+  it("persists the updater-disabled boundary for a local OS cold start", () => {
+    const packagedConfig = JSON.parse(renderMacPackagedConfig({
+      config: makeConfig("/work", { debugChannel: "local" }),
+      shellVersion: "1.2.3-local.1",
+      usePrebundledStandaloneWeb: true,
+    })) as Record<string, unknown>;
+
+    expect(packagedConfig.updateEnabled).toBe(false);
+  });
+
   it("leaves portable Shell bytes release-independent", () => {
     const packagedConfig = JSON.parse(renderMacPackagedConfig({
       config: makeConfig("/work", {

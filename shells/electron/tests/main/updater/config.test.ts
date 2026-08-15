@@ -12,6 +12,24 @@ function makeRoot(): string {
 }
 
 describe("desktop updater config", () => {
+  it("does not project a disabled local package onto the stable feed", () => {
+    const root = makeRoot();
+    try {
+      const config = resolveDesktopUpdaterConfig({
+        currentVersion: "1.2.3-local.1",
+        downloadRoot: root,
+        env: { [DESKTOP_UPDATE_ENV.ENABLED]: "0" },
+        source: SIDECAR_SOURCES.PACKAGED,
+      });
+
+      expect(config.enabled).toBe(false);
+      expect(config.autoCheck).toBe(false);
+      expect(config.metadataUrl).toBe("about:blank");
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it("defaults counted beta internal builds to the beta update channel", () => {
     const root = makeRoot();
     try {

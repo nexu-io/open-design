@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "smoke:mac:local": "bash scripts/mac-local-saturation.sh",
     "test": "vitest run -c vitest.config.ts",
     "test:p0": "vitest run -c vitest.config.ts tests specs -t '\\[P0\\]'",
     "test:p0p1": "vitest run -c vitest.config.ts tests specs -t '\\[P[01]\\]'",

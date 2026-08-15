@@ -39,6 +39,7 @@ export const DESKTOP_UPDATE_ENV = Object.freeze({
 } as const);
 
 const DEFAULT_RELEASE_ORIGIN = "https://releases.open-design.ai";
+const DISABLED_METADATA_URL = "about:blank";
 const BETA_POLL_INTERVAL_MS = 15 * 60 * 1000;
 const STABLE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_POLL_INITIAL_DELAY_MS = 5000;
@@ -222,7 +223,8 @@ export function resolveDesktopUpdaterConfig(input: DesktopUpdaterConfigInput): D
     ...(launcherRoot == null ? {} : { launcherRoot }),
     ...(launcherPayloadExtractorPath == null ? {} : { launcherPayloadExtractorPath }),
     ...(launcherRuntimePath == null ? {} : { launcherRuntimePath }),
-    metadataUrl: env[DESKTOP_UPDATE_ENV.METADATA_URL] ?? defaultMetadataUrl(channel),
+    metadataUrl: env[DESKTOP_UPDATE_ENV.METADATA_URL]
+      ?? (enabled ? defaultMetadataUrl(channel) : DISABLED_METADATA_URL),
     mode,
     ...(namespace == null ? {} : { namespace }),
     openDryRun: isTruthyEnv(env[DESKTOP_UPDATE_ENV.OPEN_DRY_RUN]) ?? false,

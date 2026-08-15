@@ -5,6 +5,7 @@ import { resolveWinPaths } from "./win/paths.js";
 import { readRuntimeShellVersion } from "./versions.js";
 import { resolveShellBuildIdentity } from "./workspace-build.js";
 import { inspectStandaloneSeed } from "./standalone-seed.js";
+import { resolvePackagedUpdateEnabled } from "./local-runtime.js";
 
 export type ToolPackShellBuildPlan = Readonly<{
   artifacts: Readonly<Record<string, string | null>>;
@@ -45,6 +46,7 @@ export async function resolveToolPackShellBuildPlan(config: ToolPackConfig): Pro
     standaloneSeedDigest,
     telemetryRelayUrl: config.telemetryRelayUrl ?? null,
     updateMetadataUrl: config.updateMetadataUrl ?? null,
+    updateEnabled: resolvePackagedUpdateEnabled(config) ?? null,
     velaWebUrl: config.velaWebUrl ?? null,
     webOutputMode: config.webOutputMode,
   })}` as const;

@@ -7,6 +7,13 @@ import {
 export const TOOL_PACK_LOCAL_NAMESPACE = "local";
 export type ToolPackProductChannel = "local" | ReleaseChannel;
 
+/** Persist the local updater boundary inside packaged bytes for OS cold starts. */
+export function resolvePackagedUpdateEnabled(
+  input: Readonly<{ debugChannel?: ToolPackProductChannel }>,
+): false | undefined {
+  return input.debugChannel === "local" ? false : undefined;
+}
+
 /**
  * Resolve the installed product identity independently from its runtime
  * namespace. A release version is authoritative for immutable builds; an

@@ -19,6 +19,7 @@ vi.mock("electron", () => ({
 }));
 
 import {
+  applyPackagedUpdateEnv,
   PACKAGED_CONFIG_PATH_ENV,
   PACKAGED_LAUNCH_CONTEXT_SESSION_ENV,
   readPackagedConfig,
@@ -42,6 +43,25 @@ afterEach(async () => {
 });
 
 describe("packaged config cold-launch routing", () => {
+  it("applies a packaged updater boundary without overriding a directed test", () => {
+    const coldEnv: NodeJS.ProcessEnv = {};
+    applyPackagedUpdateEnv({ enabled: false, metadataUrl: null }, coldEnv);
+    expect(coldEnv.OD_UPDATE_ENABLED).toBe("0");
+
+    const directedEnv: NodeJS.ProcessEnv = {
+      OD_UPDATE_ENABLED: "1",
+      OD_UPDATE_METADATA_URL: "http://127.0.0.1:4567/metadata.json",
+    };
+    applyPackagedUpdateEnv({
+      enabled: false,
+      metadataUrl: "https://releases.open-design.ai/stable/latest/metadata.json",
+    }, directedEnv);
+    expect(directedEnv).toMatchObject({
+      OD_UPDATE_ENABLED: "1",
+      OD_UPDATE_METADATA_URL: "http://127.0.0.1:4567/metadata.json",
+    });
+  });
+
   it("reuses only a leased caller projection when a later OS launch has no environment", async () => {
     const root = await mkdtemp(join(tmpdir(), "od-electron-config-cold-launch-"));
     roots.push(root);
@@ -54,6 +74,7 @@ describe("packaged config cold-launch routing", () => {
     const embedded = {
       namespace: "embedded-default",
       shellVersion: "0.19.0-beta.23",
+      updateEnabled: false,
       webOutputMode: "standalone",
     };
     Object.defineProperty(process, "resourcesPath", {
@@ -88,6 +109,7 @@ describe("packaged config cold-launch routing", () => {
     expect(cold.namespace).toBe("release-beta-x64");
     expect(cold.namespaceBaseRoot).toBe(namespaceBaseRoot);
     expect(cold.shellVersion).toBe("0.19.0-beta.23");
+    expect(cold.updateEnabled).toBe(false);
     expect(cold.webOutputMode).toBe("standalone");
     await expect(readFile(legacyColdLaunchPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
   });

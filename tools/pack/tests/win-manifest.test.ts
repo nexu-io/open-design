@@ -116,6 +116,17 @@ describe("readBuiltAppManifest", () => {
 });
 
 describe("writePackagedConfigFile", () => {
+  it("persists the updater-disabled boundary for a local OS cold start", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-config-"));
+    try {
+      const filePath = join(root, "config", "open-design-config.json");
+      await writePackagedConfigFile(filePath, makeConfig({ debugChannel: "local" }), "1.2.3-local.1");
+      expect(JSON.parse(await readFile(filePath, "utf8")).updateEnabled).toBe(false);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("omits namespaceBaseRoot for portable builds", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-config-"));
     try {

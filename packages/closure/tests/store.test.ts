@@ -568,6 +568,10 @@ describe("Closure prepared binding", () => {
 
     const legacy = await readClosureBindingDescriptor(paths);
     expect(legacy.activationIntent).toBeNull();
+    expect(JSON.parse(await readFile(paths.bindingPath, "utf8"))).toMatchObject({
+      activationAuthorized: false,
+      schemaVersion: 4,
+    });
 
     const candidate = await materializeCandidate(paths, "0.18.0-beta.1");
     const prepared = await prepareStoredClosureCandidate(paths, candidate.binding, "0.19.0-beta.1");
@@ -576,8 +580,52 @@ describe("Closure prepared binding", () => {
       ...prepared.prepared,
       source: "silent-policy",
     });
+    expect(JSON.parse(await readFile(paths.bindingPath, "utf8"))).toMatchObject({
+      activationAuthorized: true,
+      schemaVersion: 4,
+    });
+    expect(await readFile(paths.bindingPath, "utf8")).not.toContain("activationIntent");
+    expect(JSON.parse(await readFile(paths.activationIntentPath, "utf8"))).toMatchObject({
+      intent: { ...prepared.prepared, source: "silent-policy" },
+      schemaVersion: 1,
+    });
     await revokePreparedClosureActivation(paths, "silent-policy");
     expect((await readClosureBindingDescriptor(paths)).activationIntent).toBeNull();
+    await expect(readFile(paths.activationIntentPath, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("repairs the transitional schema before an immutable schema-4 launcher reads it", async () => {
+    const paths = await createStore();
+    const candidate = await materializeCandidate(paths, "0.18.0-beta.1");
+    const prepared = await prepareStoredClosureCandidate(paths, candidate.binding, "0.19.0-beta.10");
+    const intent = { ...prepared.prepared, source: "user-restart" as const };
+    await writeFile(paths.bindingPath, `${JSON.stringify({
+      ...prepared.descriptor,
+      activationIntent: intent,
+      schemaVersion: 5,
+    })}\n`);
+
+    expect((await readClosureBindingDescriptor(paths)).activationIntent).toEqual(intent);
+
+    const repaired = JSON.parse(await readFile(paths.bindingPath, "utf8")) as Record<string, unknown>;
+    expect(repaired).toMatchObject({ activationAuthorized: true, schemaVersion: 4 });
+    expect(repaired).not.toHaveProperty("activationIntent");
+    expect(Object.keys(repaired).sort()).toEqual([
+      "activationAuthorized",
+      "active",
+      "attempt",
+      "channel",
+      "lastSuccessful",
+      "namespace",
+      "nextGeneration",
+      "prepared",
+      "schemaVersion",
+      "updatedAt",
+    ]);
+    expect(JSON.parse(await readFile(paths.activationIntentPath, "utf8"))).toMatchObject({
+      intent,
+      schemaVersion: 1,
+    });
   });
 
   it("confirms a healthy attempt and rolls an interrupted attempt back to it", async () => {

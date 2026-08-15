@@ -27,6 +27,7 @@ import { readProcessStamp } from "@open-design/platform";
 import type { StandaloneBootstrapProgress } from "@open-design/standalone/protocol";
 
 import {
+  applyPackagedUpdateEnv,
   parkPackagedLaunchContext,
   readPackagedConfig,
   resolvePackagedStandaloneMetadataUrl,
@@ -139,12 +140,6 @@ function applyLaunchEnv(base: string, stamp: SidecarStamp): void {
   }
 }
 
-function applyShellUpdateEnv(updateMetadataUrl: string | null): void {
-  if (updateMetadataUrl == null) return;
-  if (process.env.OD_UPDATE_METADATA_URL?.trim()) return;
-  process.env.OD_UPDATE_METADATA_URL = updateMetadataUrl;
-}
-
 async function main(): Promise<void> {
   const headless = process.env.OD_PACKAGED_E2E_HEADLESS === "1";
   const packageConfig = await readPackagedConfig();
@@ -239,7 +234,10 @@ async function main(): Promise<void> {
     platform: process.platform,
   });
   applyPackagedElectronPathOverrides(paths);
-  applyShellUpdateEnv(shellConfig.updateMetadataUrl);
+  applyPackagedUpdateEnv({
+    enabled: shellConfig.updateEnabled,
+    metadataUrl: shellConfig.updateMetadataUrl,
+  });
   if (!await claimPackagedSingleInstanceLock(app, (argv) => {
     secondInstanceHandoff.handle(findPackagedDeeplinkArg(argv));
   })) return;

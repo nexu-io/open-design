@@ -303,9 +303,13 @@ async function resolveSmokeSummary(input: {
       const scenario = assertion.title == null ? null : byTitle.get(assertion.title);
       if (scenario == null) return [];
       return [{
+        boundaries: scenario.boundaries,
+        doesNotProve: scenario.doesNotProve,
         domains: scenario.domains,
         durationMs: Math.max(0, Math.round(assertion.duration ?? 0)),
         lane: scenario.lane,
+        initialState: scenario.initialState,
+        proves: scenario.proves,
         status: normalizeVitestStatus(assertion.status),
         step: scenario.id,
         title: scenario.title,
