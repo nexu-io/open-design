@@ -12864,6 +12864,7 @@ export async function startServer({
           ...(observeClaudeNativeChildBehavior
             ? { observeNativeChildBehavior: true }
             : {}),
+          dataDir: RUNTIME_DATA_DIR,
         },
       );
     } catch (err) {
@@ -14563,11 +14564,20 @@ export async function startServer({
       acpSession = attachPiRpcSession({
         child,
         prompt: composed,
-        cwd: effectiveCwd,
+        // The pi family shares this transport but disagrees on where the CLI
+        // stores session `.jsonl` files. When the def declares
+        // `piRpcSessionScanBase` (Oh My Pi — see types.ts), scan the
+        // daemon-owned directory it computed instead of the project cwd, so
+        // agent runtime state never lands in the user's own repository.
+        cwd: def.piRpcSessionScanBase?.({ dataDir: RUNTIME_DATA_DIR, cwd: effectiveCwd }) ?? effectiveCwd,
         model: safeModel,
         parentSession: agentResumePromptPolicy.resumeSessionId
           ? agentResumePromptPolicy.resumeSessionId
           : undefined,
+        // The pi family shares this transport but not its resume dialect or
+        // session-directory name; both come from the def (see types.ts).
+        ...(def.piRpcResumeCommand ? { resumeCommand: def.piRpcResumeCommand } : {}),
+        ...(def.piRpcSessionDirName ? { sessionDirName: def.piRpcSessionDirName } : {}),
         send: (channel, payload) => {
           if (channel === 'agent') {
             sendAgentEvent(payload);

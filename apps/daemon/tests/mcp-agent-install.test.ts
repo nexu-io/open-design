@@ -28,7 +28,7 @@ describe('agent slug guard', () => {
   it('accepts every documented slug and rejects others', () => {
     for (const s of AGENT_SLUGS) expect(isAgentSlug(s)).toBe(true);
     expect(isAgentSlug('not-an-agent')).toBe(false);
-    expect(AGENT_SLUGS).toHaveLength(17);
+    expect(AGENT_SLUGS).toHaveLength(18);
     expect(isAgentSlug('kiro')).toBe(true);
     expect(isAgentSlug('reasonix')).toBe(true);
     expect(isAgentSlug('raven')).toBe(true);
@@ -202,14 +202,23 @@ describe('JSON-config agents', () => {
 });
 
 describe('manual (unverified) agents', () => {
-  it('pi / vibe / hermes never produce a writable plan', () => {
-    for (const slug of ['pi', 'vibe', 'hermes'] as const) {
+  it('pi / omp / vibe / hermes never produce a writable plan', () => {
+    for (const slug of ['pi', 'omp', 'vibe', 'hermes'] as const) {
       const plan = planAgentInstall(slug, SPEC, ctx());
       expect(plan.kind).toBe('manual');
       if (plan.kind !== 'manual') throw new Error('expected manual');
       expect(plan.snippet.length).toBeGreaterThan(0);
       expect(plan.reason.length).toBeGreaterThan(0);
     }
+  });
+
+  it('omp points at ~/.omp/agent/mcp.json and emits a JSON snippet', () => {
+    const plan = planAgentInstall('omp', SPEC, ctx());
+    if (plan.kind !== 'manual') throw new Error('expected manual');
+    expect(plan.configPath).toBe('/home/u/.omp/agent/mcp.json');
+    expect(plan.format).toBe('json');
+    expect(plan.snippet).toContain('mcpServers');
+    expect(plan.snippet).toContain('open-design');
   });
 
   it('vibe snippet is TOML array-of-tables', () => {
