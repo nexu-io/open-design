@@ -1,0 +1,27 @@
+{
+  "theme": {
+    "colors": {
+      "primary": "#19e66f",
+      "background": {
+        "light": "#f6f8f7",
+        "dark": "#112118",
+        "elevated": "#1A1A1A"
+      },
+      "accent": {
+        "purple": "#8A2BE2",
+        "lavender": "#D0A9F5"
+      }
+    },
+    "typography": {
+      "display": [
+        "Space Grotesk",
+        "sans-serif"
+      ],
+      "icons": "Material Symbols Outlined"
+    },
+    "spacing": {
+      "header-h": "72px",
+      "container-max": "960px"
+    }
+  }
+}

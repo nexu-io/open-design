@@ -1,0 +1,23 @@
+{
+  "projectId": "4044680601076201931",
+  "title": "Solace Mindfulness App",
+  "screens": [
+    {
+      "screenId": "98b50e2ddc9943efb387052637738f61",
+      "title": "Landing Page",
+      "deviceType": "DESKTOP"
+    },
+    {
+      "screenId": "98b50e2ddc9943efb387052637738f62",
+      "title": "Breathing Exercise",
+      "deviceType": "MOBILE"
+    }
+  ],
+  "designSystem": {
+    "assetId": "15996705518239280238",
+    "primaryColor": "#1a365d",
+    "secondaryColor": "#718096",
+    "backgroundColor": "#f7fafc",
+    "fontFamily": "INTER"
+  }
+}

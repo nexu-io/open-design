@@ -1,0 +1,56 @@
+{
+  "projectName": "Calculator App",
+  "projectId": "projects/13534454087919359824",
+  "videoConfig": {
+    "fps": 30,
+    "width": 1920,
+    "height": 1080,
+    "durationInSeconds": 20
+  },
+  "screens": [
+    {
+      "id": "1",
+      "screenId": "12345",
+      "title": "Home Screen",
+      "description": "Main calculator interface with number pad and basic operations",
+      "imagePath": "assets/screens/home.png",
+      "width": 1200,
+      "height": 800,
+      "duration": 5,
+      "transitionType": "fade"
+    },
+    {
+      "id": "2",
+      "screenId": "12346",
+      "title": "History View",
+      "description": "View of previous calculations with option to reuse results",
+      "imagePath": "assets/screens/history.png",
+      "width": 1200,
+      "height": 800,
+      "duration": 4,
+      "transitionType": "slide"
+    },
+    {
+      "id": "3",
+      "screenId": "12347",
+      "title": "Settings Panel",
+      "description": "Customize calculator behavior and appearance",
+      "imagePath": "assets/screens/settings.png",
+      "width": 1200,
+      "height": 800,
+      "duration": 4,
+      "transitionType": "fade"
+    },
+    {
+      "id": "4",
+      "screenId": "12348",
+      "title": "Scientific Mode",
+      "description": "Advanced mathematical functions and operations",
+      "imagePath": "assets/screens/scientific.png",
+      "width": 1200,
+      "height": 800,
+      "duration": 5,
+      "transitionType": "zoom"
+    }
+  ]
+}
