@@ -40,6 +40,7 @@ export const AGENT_SLUGS = [
   'openclaw',
   'antigravity',
   'pi',
+  'omp',
   'vibe',
   'hermes',
   'cline',
@@ -346,6 +347,18 @@ export function planAgentInstall(
           'The pi coding agent exposes MCP, but its config path/schema is ' +
           'not authoritatively documented. Paste this into pi’s MCP ' +
           'config (check `pi --help` for the exact location).',
+      };
+    case 'omp':
+      return {
+        kind: 'manual',
+        slug,
+        format: 'json',
+        configPath: path.join(home, '.omp', 'agent', 'mcp.json'),
+        snippet: genericMcpServersSnippet(spec, serverName),
+        reason:
+          'Oh My Pi exposes MCP, but its config path/schema is not ' +
+          'authoritatively documented. Paste this into omp’s MCP config ' +
+          '(check `omp --help` for the exact location).',
       };
     case 'hermes':
       return {

@@ -78,6 +78,7 @@ const CLI_ORDER = [
   'aider',
   'trae-cli',
   'pi',
+  'omp',
   'reasonix',
 ];
 
@@ -102,6 +103,7 @@ const FALLBACK_CLI_TARGETS: CliTarget[] = [
   { id: 'aider', name: 'Aider', bin: 'aider', available: false },
   { id: 'trae-cli', name: 'Trae CLI', bin: 'traecli', available: false },
   { id: 'pi', name: 'Pi', bin: 'pi', available: false },
+  { id: 'omp', name: 'OMP', bin: 'omp', available: false },
   { id: 'reasonix', name: 'DeepSeek Reasonix', bin: 'reasonix', available: false },
 ];
 

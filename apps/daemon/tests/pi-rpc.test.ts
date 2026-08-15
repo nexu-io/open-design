@@ -1,11 +1,21 @@
-import { test } from 'vitest';
+import { onTestFinished, test } from 'vitest';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { parsePiModels, mapPiRpcEvent, attachPiRpcSession } from '../src/agent-protocol/index.js';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import type { ChildProcess } from 'node:child_process';
 import type { Writable } from 'node:stream';
+
+function createParentSessionFile(): string {
+  const dir = mkdtempSync(path.join(tmpdir(), 'od-pi-rpc-resume-'));
+  onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+  const sessionFile = path.join(dir, 'prior.jsonl');
+  writeFileSync(sessionFile, '{"type":"session"}\n');
+  return sessionFile;
+}
 
 // ─── parsePiModels ─────────────────────────────────────────────────────────
 
@@ -1113,11 +1123,12 @@ test('attachPiRpcSession loads history with switch_session before prompt when pa
   const events: TestSentEvent[] = [];
   const send = (channel: string, payload: JsonRecord) => events.push({ channel, ...payload });
   const child = createMockChild();
+  const sessionFile = createParentSessionFile();
   const session = attachPiRpcSession({
     child: child as unknown as ChildProcess,
     prompt: 'test',
     send,
-    parentSession: '/path/to/prior-session.jsonl',
+    parentSession: sessionFile,
   });
   // Use only read() to read stdin (not on('data')). attachPiRpcSession writes
   // synchronously to the PassThrough, so all data is buffered and available
@@ -1134,7 +1145,7 @@ test('attachPiRpcSession loads history with switch_session before prompt when pa
   assert.equal(lines.length, 1, 'should wait for switch_session response before prompt');
   const first = parseJsonRecord(lines[0] ?? '');
   assert.equal(first.type, 'switch_session', 'new_session only tracks ancestry and starts empty');
-  assert.equal(first.sessionPath, '/path/to/prior-session.jsonl', 'sessionPath should match');
+  assert.equal(first.sessionPath, sessionFile, 'sessionPath should match');
   feedStdoutLines(child, [{ type: 'response', id: first.id, success: true }]);
   const promptChunk = child.stdin.read();
   const promptLines = promptChunk ? promptChunk.toString().trim().split('\n').filter(Boolean) : [];
@@ -1154,7 +1165,7 @@ test('attachPiRpcSession fails and does not send prompt when parentSession is re
     child: child as unknown as ChildProcess,
     prompt: 'trimmed latest turn',
     send,
-    parentSession: '/path/to/missing-session.jsonl',
+    parentSession: createParentSessionFile(),
   });
   const firstChunk = child.stdin.read();
   const firstLines = firstChunk ? firstChunk.toString().trim().split('\n').filter(Boolean) : [];
@@ -1174,6 +1185,23 @@ test('attachPiRpcSession fails and does not send prompt when parentSession is re
       code: 'PI_PARENT_SESSION_FAILED',
     },
   );
+});
+
+test('attachPiRpcSession fails without prompting when the parent session file is missing', () => {
+  const events: TestSentEvent[] = [];
+  const child = createMockChild();
+  const sessionFile = createParentSessionFile();
+  rmSync(sessionFile);
+  const session = attachPiRpcSession({
+    child: child as unknown as ChildProcess,
+    prompt: 'trimmed latest turn',
+    send: (channel, payload: JsonRecord) => events.push({ channel, ...payload }),
+    parentSession: sessionFile,
+  });
+
+  assert.equal(child.stdin.read(), null, 'must not send any command for a missing session file');
+  assert.equal(session.hasFatalError(), true);
+  assert.equal(events.find(event => event.channel === 'error')?.code, 'PI_PARENT_SESSION_FAILED');
 });
 
 test('attachPiRpcSession does not switch sessions when parentSession is omitted', () => {
@@ -1205,7 +1233,7 @@ test('attachPiRpcSession does not send a trimmed prompt when an extension cancel
   const session = attachPiRpcSession({
     child: child as unknown as ChildProcess,
     prompt: 'trimmed latest turn',
-    parentSession: '/path/to/prior-session.jsonl',
+    parentSession: createParentSessionFile(),
     send: (channel, payload: JsonRecord) => events.push({ channel, ...payload }),
   });
   const first = parseJsonRecord(child.stdin.read().toString().trim());

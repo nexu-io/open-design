@@ -11,5 +11,11 @@ export {
   detectAcpModels,
   attachAcpSession,
 } from './acp/index.js';
-export { mapPiRpcEvent, attachPiRpcSession, parsePiModels } from './pi-rpc/index.js';
+export {
+  mapPiRpcEvent,
+  attachPiRpcSession,
+  parsePiModels,
+  piSessionsDir,
+  DEFAULT_PI_SESSION_DIR_NAME,
+} from './pi-rpc/index.js';
 export * from './dsh-profile/index.js';
