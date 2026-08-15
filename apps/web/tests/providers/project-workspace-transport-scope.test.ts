@@ -457,6 +457,7 @@ describe('persisted project Workspace transport scope', () => {
       'vercel-self',
       undefined,
       undefined,
+      undefined,
       workspaceA,
     );
     await checkDeploymentLink('project-1', 'deployment-1', workspaceA);

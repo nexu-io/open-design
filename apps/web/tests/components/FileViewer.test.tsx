@@ -6275,7 +6275,7 @@ describe('FileViewer SVG artifacts', () => {
     fireEvent.click(await screen.findByRole('menuitem', { name: /Deploy to display.dev/i }));
 
     await screen.findByRole('dialog');
-    await waitFor(() => expect(deploymentsCalls).toBe(2));
+    await waitFor(() => expect(deploymentsCalls).toBe(3));
     expect(await screen.findByText('temporary display.dev outage')).toBeInTheDocument();
     const saveButton = screen.getByRole('button', { name: 'Save' });
     expect(saveButton).toBeEnabled();
@@ -6489,7 +6489,7 @@ describe('FileViewer SVG artifacts', () => {
       const method = init?.method || (input instanceof Request ? input.method : 'GET');
       if (url === '/api/projects/project-1/deployments') {
         deploymentsCallCount += 1;
-        if (deploymentsCallCount === 1) {
+        if (deploymentsCallCount <= 2) {
           return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
         }
         return modalDeployments;

@@ -217,6 +217,17 @@ describe('deploy provider routes', () => {
       const projectId = `displaydev-invalid-config-${Date.now()}`;
       const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
       await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+      const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'display.dev invalid config route test',
+          skillId: null,
+          designSystemId: null,
+        }),
+      });
+      expect(createProjectResp.status).toBe(200);
       await writeFile(deployConfigPath(DISPLAYDEV_PROVIDER_ID), JSON.stringify({
         token: 'dsp_live_secret',
         apiUrl: 'api.display.test:3331',

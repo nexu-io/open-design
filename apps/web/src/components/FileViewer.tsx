@@ -10054,6 +10054,9 @@ function HtmlViewer({
       setDeploymentsByProvider(nextDeploymentsByProvider);
       setDeployment(current ?? null);
       setDeployResult(current ?? null);
+    }).catch(() => {
+      // The menu refresh is best-effort. Provider-specific loading owns any
+      // warning shown after the user chooses a deploy target.
     });
     return () => {
       cancelled = true;
