@@ -57,6 +57,10 @@ const allowedConsumers = new Map([
     "workflow and scope topology fixtures; packaged paths are data rather than runtime imports",
   ],
   [
+    "e2e/scripts/win-local-saturation.ts",
+    "the explicit local operator entrypoint invokes the packaged builder without importing its implementation",
+  ],
+  [
     "e2e/tests/scripts/approve-fork-pr-workflows.test.ts",
     "fork-approval path classification fixtures; packaged paths are data",
   ],

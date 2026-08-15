@@ -23,7 +23,7 @@ const depsDigest = `sha256:${"b".repeat(64)}` as const;
 const buildDigest = `sha256:${"c".repeat(64)}` as const;
 const capabilityDigest = `sha256:${"f".repeat(64)}` as const;
 const carrierDigest = `sha256:${"1".repeat(64)}` as const;
-const acceptanceDigest = `sha256:${"e".repeat(64)}` as const;
+const specDigest = `sha256:${"e".repeat(64)}` as const;
 const temporaryRoots: string[] = [];
 
 afterEach(async () => {
@@ -65,10 +65,10 @@ describe("immutable Shell build storage", () => {
       plan.profileDigest,
       "darwin-arm64",
       "mac-shell-v3",
-      acceptanceDigest,
+      specDigest,
       1,
     )).toBe(
-      `beta/shells/electron/builds/${"c".repeat(64)}/profiles/${"d".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
+      `beta/shells/electron/builds/${"c".repeat(64)}/profiles/${"d".repeat(64)}/spec/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
     );
     expect(shellSmokeProofObjectKey(
       "beta",
@@ -77,7 +77,7 @@ describe("immutable Shell build storage", () => {
       `sha256:${"2".repeat(64)}`,
       "darwin-arm64",
       "mac-shell-v3",
-      acceptanceDigest,
+      specDigest,
       1,
     )).not.toBe(shellSmokeProofObjectKey(
       "beta",
@@ -86,7 +86,7 @@ describe("immutable Shell build storage", () => {
       plan.profileDigest,
       "darwin-arm64",
       "mac-shell-v3",
-      acceptanceDigest,
+      specDigest,
       1,
     ));
   });
@@ -132,7 +132,7 @@ describe("immutable Shell build storage", () => {
   it("binds the Windows Shell proof to lifecycle, update, rollback, native installer boundaries, and migration", () => {
     const windowsPlan = { ...plan, target: "win32-x64" as const };
     const proof = validateShellSmokeProofRecord({
-      acceptanceDigest,
+      specDigest,
       channel: "beta",
       createdAt: "2026-08-10T00:00:00.000Z",
       matrix: "win-shell-v2",
@@ -146,11 +146,11 @@ describe("immutable Shell build storage", () => {
         "win-native-install-boundaries",
         "win-legacy-migration",
       ],
-      schemaVersion: 3,
+      schemaVersion: 4,
       shell: windowsPlan.shell,
       standaloneProtocolVersion: 1,
       target: "win32-x64",
-    }, windowsPlan, "beta", "win-shell-v2", acceptanceDigest, 1);
+    }, windowsPlan, "beta", "win-shell-v2", specDigest, 1);
 
     expect(proof.scenarios).toEqual([
       "win-shell-lifecycle",
@@ -164,7 +164,7 @@ describe("immutable Shell build storage", () => {
       windowsPlan,
       "beta",
       "win-shell-v2",
-      acceptanceDigest,
+      specDigest,
       1,
     )).toThrow(/scenarios/);
   });
@@ -236,7 +236,7 @@ describe("immutable Shell build storage", () => {
         RELEASE_CHANNEL: "beta",
         RELEASE_PUBLIC_ORIGIN: "https://releases.example",
         RELEASE_SHELL_BUILD_JSON_PATH: buildPath,
-        RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST: acceptanceDigest,
+        RELEASE_SHELL_SPEC_DIGEST: specDigest,
         RELEASE_SHELL_SMOKE_MATRIX: "mac-shell-v3",
         RELEASE_SHELL_SMOKE_SUMMARY_PATH: smokeSummaryPath,
         RELEASE_SHELL_PLAN_JSON_PATH: planPath,
@@ -274,7 +274,7 @@ describe("immutable Shell build storage", () => {
         expect(reused.timings[0].phase).toBe("remote-shell-materialize");
         expect(reused.timings[0].durationMs).toBeGreaterThan(0);
         expect(reused.resolution.smokeProof).toEqual({
-          acceptanceDigest,
+          specDigest,
           matrix: "mac-shell-v3",
           standaloneProtocolVersion: 1,
           state: "miss",
@@ -308,11 +308,11 @@ describe("immutable Shell build storage", () => {
         await resolveShellBuild();
         const proven = JSON.parse(await readFile(buildPath, "utf8"));
         expect(proven.resolution.smokeProof).toEqual({
-          acceptanceDigest,
+          specDigest,
           matrix: "mac-shell-v3",
           standaloneProtocolVersion: 1,
           state: "hit",
-          url: `https://releases.example/beta/shells/electron/builds/${"c".repeat(64)}/profiles/${"d".repeat(64)}/acceptance/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
+          url: `https://releases.example/beta/shells/electron/builds/${"c".repeat(64)}/profiles/${"d".repeat(64)}/spec/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
         });
         const proofKey = shellSmokeProofObjectKey(
           "beta",
@@ -321,7 +321,7 @@ describe("immutable Shell build storage", () => {
           plan.profileDigest,
           "darwin-arm64",
           "mac-shell-v3",
-          acceptanceDigest,
+          specDigest,
           1,
         );
         expect(validateShellSmokeProofRecord(
@@ -329,7 +329,7 @@ describe("immutable Shell build storage", () => {
           plan,
           "beta",
           "mac-shell-v3",
-          acceptanceDigest,
+          specDigest,
           1,
         ).scenarios).toEqual([
           "mac-shell-lifecycle",
@@ -338,11 +338,11 @@ describe("immutable Shell build storage", () => {
           "mac-legacy-migration",
         ]);
 
-        process.env.RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST = `sha256:${"f".repeat(64)}`;
+        process.env.RELEASE_SHELL_SPEC_DIGEST = `sha256:${"f".repeat(64)}`;
         await resolveShellBuild();
         expect(JSON.parse(await readFile(buildPath, "utf8")).resolution.smokeProof.state).toBe("miss");
 
-        process.env.RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST = acceptanceDigest;
+        process.env.RELEASE_SHELL_SPEC_DIGEST = specDigest;
         process.env.RELEASE_STANDALONE_PROTOCOL_VERSION = "2";
         await resolveShellBuild();
         expect(JSON.parse(await readFile(buildPath, "utf8")).resolution.smokeProof.state).toBe("miss");

@@ -72,9 +72,11 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        digest="$(pnpm exec tsx .github/scripts/release/shell-smoke-acceptance.ts ${{ inputs.target }})"
+        digest="$(pnpm exec tools-release identity digest shell.spec.${{ inputs.target }} \
+          --parameter matrix=${{ inputs.shell-smoke-matrix }} \
+          --parameter standaloneProtocolVersion=1)"
         [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
-        echo "RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST=$digest" >> "$GITHUB_ENV"
+        echo "RELEASE_SHELL_SPEC_DIGEST=$digest" >> "$GITHUB_ENV"
 
     - name: Resolve immutable Electron Shell
       id: resolution

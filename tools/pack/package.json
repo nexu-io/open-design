@@ -17,6 +17,7 @@
     "@electron/notarize": "3.1.1",
     "@electron/rebuild": "4.0.4",
     "@open-design/closure": "workspace:*",
+    "@open-design/metatool": "workspace:*",
     "@open-design/platform": "workspace:*",
     "@open-design/release": "workspace:*",
     "@open-design/shell": "workspace:*",

@@ -34,9 +34,11 @@ import {
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const allowedE2eScripts = new Set([
+  "e2e/scripts/mac-local-saturation.sh",
   "e2e/scripts/playwright.ts",
   "e2e/scripts/release-smoke.ts",
   "e2e/scripts/visual-report.ts",
+  "e2e/scripts/win-local-saturation.ts",
 ]);
 
 function toRepositoryPath(filePath: string): string {
@@ -549,6 +551,8 @@ async function checkTestLayout(): Promise<boolean> {
 const e2ePackageJsonPath = path.join(repoRoot, "e2e", "package.json");
 const e2eSkippedDirectories = new Set([".od-data", "node_modules", "reports", "test-results"]);
 const e2eAllowedScripts = [
+  "smoke:mac:local",
+  "smoke:win:local",
   "test",
   "test:p0",
   "test:p0p1",
@@ -721,8 +725,9 @@ async function checkE2eLayout(): Promise<boolean> {
     }
 
     if (repositoryPath.startsWith("e2e/specs/")) {
-      if (!/\.spec\.ts$/.test(repositoryPath)) {
-        violations.push(`${repositoryPath} -> e2e specs must be *.spec.ts`);
+      const platformSupport = /^e2e\/specs\/(?:mac|win)\/(?:AGENTS\.md|suite\.ts|lib\/[^/]+\.ts)$/u;
+      if (!/\.spec\.ts$/u.test(repositoryPath) && !platformSupport.test(repositoryPath)) {
+        violations.push(`${repositoryPath} -> e2e specs must be *.spec.ts or platform-local AGENTS.md, suite.ts, and lib/*.ts support`);
       }
       continue;
     }

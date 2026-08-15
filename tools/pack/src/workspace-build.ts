@@ -1,12 +1,12 @@
 import { access, cp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 
-import { hashJson, hashPath, ToolPackCache } from "./cache.js";
+import { hashJson, ToolPackCache } from "./cache.js";
 import type { ToolPackConfig } from "./config.js";
 import { hashText } from "./lib/hash.js";
-import { hashPackageSourcePath } from "./package-source-hash.js";
 import { toolPackShellDefinition } from "./shells.js";
 import { readRuntimeShellVersion, versionFamilyForShellVersion } from "./versions.js";
+import { resolveDeclaredReleaseIdentity } from "./release-identity.js";
 
 type WorkspaceBuildMetadata = {
   builtAt: string;
@@ -42,47 +42,6 @@ const STANDALONE_NATIVE_DEPENDENCIES = [
   "node-pty",
 ] as const;
 
-// The Shell carries this baseline as a resource, not as Shell policy. Its
-// complete source closure must still invalidate the signed Shell bytes when it
-// changes; otherwise the workspace cache could materialize an older baseline.
-const STANDALONE_BOOTSTRAP_PACKAGES = [
-  { directory: "packages/closure", name: "@open-design/closure" },
-] as const;
-
-const STANDALONE_CAPABILITY_SOURCE_PATHS = [
-  "apps/standalone/package.json",
-  "apps/standalone/src/bootloader.ts",
-  "apps/standalone/src/bootstrap-entry.ts",
-  "apps/standalone/src/launcher-bootstrap.ts",
-  "apps/standalone/src/process-bridge.ts",
-  "apps/standalone/src/protocol",
-  "shells/electron/src/desktop-capability-adapter.ts",
-  "shells/electron/src/shell-capabilities.ts",
-  "shells/electron/src/standalone-bootstrap.ts",
-  "shells/electron/src/standalone-commands.ts",
-  "shells/electron/src/standalone-handoff.ts",
-  "shells/electron/src/standalone-launcher-entry.ts",
-  "shells/electron/src/standalone-launcher.ts",
-  "tools/pack/src/closure/components.ts",
-  "tools/pack/src/closure/distribution.ts",
-  "tools/pack/src/shell-build-plan.ts",
-  "tools/pack/src/standalone-seed.ts",
-] as const;
-
-const STANDALONE_CARRIER_SOURCE_PATHS = [
-  ".node-version",
-  "apps/standalone/src/bootstrap-entry.ts",
-  "apps/standalone/src/fossil-bootloader.ts",
-  "apps/standalone/src/generation-bootloader.ts",
-  "apps/standalone/src/launcher.ts",
-  "apps/standalone/src/native-loader.ts",
-  "packages/closure/src/store",
-  "packages/closure/src/update",
-  "packages/shell/src/update",
-  "tools/pack/src/closure/components.ts",
-  "tools/pack/src/closure/platform.ts",
-] as const;
-
 async function resolveWorkspaceBuildVersionFamily(config: ToolPackConfig): Promise<string | null> {
   if (config.platform !== "win") return null;
   const releaseVersion = await readRuntimeShellVersion(config).catch(() => null);
@@ -105,77 +64,33 @@ async function readPackageManager(workspaceRoot: string): Promise<unknown> {
   return rootPackageJson.packageManager;
 }
 
-async function digestSourcePaths(
-  workspaceRoot: string,
-  paths: readonly string[],
-): Promise<`sha256:${string}`> {
-  const entries = await Promise.all(paths.map(async (sourcePath) => [
-    sourcePath,
-    await hashPath(join(workspaceRoot, sourcePath), { normalizeTextLineEndings: true }),
-  ] as const));
-  return `sha256:${hashJson(Object.fromEntries(entries))}`;
-}
-
 export async function resolveStandaloneCapabilityDigest(
   workspaceRoot: string,
 ): Promise<`sha256:${string}`> {
-  return await digestSourcePaths(workspaceRoot, STANDALONE_CAPABILITY_SOURCE_PATHS);
+  return (await resolveDeclaredReleaseIdentity({
+    id: "shell.capability",
+    parameters: {},
+    workspaceRoot,
+  })).digest;
 }
 
 export async function resolveStandaloneCarrierDigest(
   config: Pick<ToolPackConfig, "platform" | "workspaceRoot">,
 ): Promise<`sha256:${string}`> {
-  return await digestSourcePaths(config.workspaceRoot, [
-    ...STANDALONE_CARRIER_SOURCE_PATHS,
-    `tools/pack/src/${config.platform}/payload.ts`,
-    `tools/pack/src/${config.platform}/paths.ts`,
-  ]);
-}
-
-async function hashShellBuildPackageSource(
-  workspaceRoot: string,
-  packageInfo: ShellBuildPackage,
-): Promise<string> {
-  const packageRoot = join(workspaceRoot, packageInfo.directory);
-  if (packageInfo.sourcePaths == null) return await hashPackageSourcePath(packageRoot);
-
-  const hashes = await Promise.all(packageInfo.sourcePaths.map(async (sourcePath) => [
-    sourcePath,
-    await hashPath(join(packageRoot, sourcePath)),
-  ] as const));
-  return hashText(JSON.stringify(Object.fromEntries(hashes)));
+  return (await resolveDeclaredReleaseIdentity({
+    id: `shell.carrier.${config.platform}`,
+    parameters: { platform: config.platform },
+    workspaceRoot: config.workspaceRoot,
+  })).digest;
 }
 
 export async function resolveShellSourceDigest(config: ToolPackConfig): Promise<`sha256:${string}`> {
   const definition = toolPackShellDefinition(config.shell);
-  const packageHashes: Record<string, string> = {};
-  for (const packageInfo of definition.buildPackages) {
-    packageHashes[packageInfo.name] = await hashShellBuildPackageSource(config.workspaceRoot, packageInfo);
-  }
-  for (const packageInfo of STANDALONE_BOOTSTRAP_PACKAGES) {
-    packageHashes[packageInfo.name] = await hashPackageSourcePath(join(config.workspaceRoot, packageInfo.directory));
-  }
-  const toolsPackRoot = join(config.workspaceRoot, "tools/pack");
-  packageHashes["@open-design/tools-pack/common"] = await hashPackageSourcePath(toolsPackRoot, {
-    ignoredRelativePaths: ["resources/mac", "resources/win", "src/closure", "src/mac", "src/win"],
-  });
-  packageHashes[`@open-design/tools-pack/${config.platform}`] = await hashPackageSourcePath(toolsPackRoot, {
-    ignoredRelativePaths: config.platform === "mac"
-      ? ["resources/win", "src/closure", "src/win"]
-      : ["resources/mac", "src/closure", "src/mac"],
-  });
-  const standaloneBootstrapSources = await Promise.all([
-    "apps/standalone/src/bootstrap.ts",
-    "apps/standalone/src/bootstrap-entry.ts",
-    "apps/standalone/src/fossil-bootloader.ts",
-  ].map(async (path) => [path, await hashPath(join(config.workspaceRoot, path))] as const));
-  return `sha256:${hashJson({
-    buildCommand: definition.buildCommand,
-    packageHashes,
-    standaloneBootstrapSources: Object.fromEntries(standaloneBootstrapSources),
-    schemaVersion: 16,
-    shell: config.shell,
-  })}`;
+  return (await resolveDeclaredReleaseIdentity({
+    id: `shell.source.${config.platform}`,
+    parameters: { buildCommand: definition.buildCommand, shell: config.shell },
+    workspaceRoot: config.workspaceRoot,
+  })).digest;
 }
 
 export async function resolveShellDepsDigestFromWorkspace(input: Readonly<{
@@ -202,13 +117,18 @@ export async function resolveShellDepsDigestFromWorkspace(input: Readonly<{
   const modules = process.versions.modules;
   const napi = process.versions.napi;
   if (modules == null || napi == null) throw new Error("Shell Node ABI identity is unavailable");
-  return `sha256:${hashJson({
-    nativeDependencies,
-    node: { modules, napi, version: nodeVersion },
-    packageManager: await readPackageManager(input.workspaceRoot),
-    pnpmLock: await hashPath(join(input.workspaceRoot, "pnpm-lock.yaml")),
-    schemaVersion: 1,
-  })}`;
+  const packageManager = await readPackageManager(input.workspaceRoot);
+  return (await resolveDeclaredReleaseIdentity({
+    id: "shell.dependencies",
+    parameters: {
+      nativeDependencies,
+      nodeModulesAbi: modules,
+      nodeNapi: napi,
+      nodeVersion,
+      packageManager,
+    },
+    workspaceRoot: input.workspaceRoot,
+  })).digest;
 }
 
 export async function resolveShellDepsDigest(config: ToolPackConfig): Promise<`sha256:${string}`> {

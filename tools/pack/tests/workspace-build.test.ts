@@ -309,6 +309,29 @@ describe("Electron Shell workspace build cache", () => {
     }
   });
 
+  it("projects workspace version-only bumps out of Shell identity", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-shell-version-projection-"));
+    try {
+      await writeWorkspace(root);
+      const config = createConfig(root, join(root, ".cache"));
+      const before = await resolveShellBuildIdentity(config);
+      for (const manifestPath of [
+        "package.json",
+        "apps/daemon/package.json",
+        "apps/standalone/package.json",
+        "packages/closure/package.json",
+      ]) {
+        const path = join(root, manifestPath);
+        const manifest = JSON.parse(await readFile(path, "utf8"));
+        manifest.version = "99.0.0";
+        await writeFile(path, `${JSON.stringify(manifest)}\n`);
+      }
+      expect(await resolveShellBuildIdentity(config)).toEqual(before);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("keeps capability target-neutral while binding carriers to their target", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-shell-capability-"));
     try {

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@open-design/closure": "workspace:*",
+    "@open-design/metatool": "workspace:*",
     "@open-design/release": "workspace:*",
     "cac": "6.7.14",
     "yaml": "2.9.0"

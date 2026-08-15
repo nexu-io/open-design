@@ -100,9 +100,11 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        digest="$(pnpm exec tsx .github/scripts/release/shell-smoke-acceptance.ts ${{ inputs.target }})"
+        digest="$(pnpm exec tools-release identity digest shell.spec.${{ inputs.target }} \
+          --parameter matrix=${{ inputs.shell-smoke-matrix }} \
+          --parameter standaloneProtocolVersion=1)"
         [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
-        echo "RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST=$digest" >> "$GITHUB_ENV"
+        echo "RELEASE_SHELL_SPEC_DIGEST=$digest" >> "$GITHUB_ENV"
     - name: Download shared Standalone contract
       uses: actions/download-artifact@v8
       with:
@@ -220,7 +222,40 @@ runs:
           printf '%s\n' "$build_output"
           exit "$build_status"
         fi
+    - name: Resolve ${{ inputs.target }} Closure target identity
+      id: closure_identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        digest="$(pnpm exec tools-release identity digest closure.target.${{ inputs.platform }} \
+          --parameter nodeModulesAbi=$(node -p 'process.versions.modules') \
+          --parameter nodeNapi=$(node -p 'process.versions.napi') \
+          --parameter nodeVersion=$(node -p 'process.version') \
+          --parameter packageManager=$(node -p 'require("./package.json").packageManager') \
+          --parameter target=${{ inputs.platform }})"
+        [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+        echo "digest=$digest" >> "$GITHUB_OUTPUT"
+    - name: Resolve immutable ${{ inputs.target }} Closure target
+      id: target_closure_resolution
+      if: ${{ inputs.publish == 'true' }}
+      shell: bash
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/release-build/${{ inputs.target }}/closure-blobs
+        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.closure_identity.outputs.digest }}
+        RELEASE_CLOSURE_BUILD_KIND: target
+        RELEASE_CLOSURE_BUILD_TOKEN: target-${{ inputs.platform }}
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/target-contribution.json
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
+        RELEASE_VERSION: ${{ inputs.closure-version }}
+      run: pnpm exec tools-release resolve-closure-build
     - name: Build exact ${{ inputs.target }} Standalone target contribution
+      if: ${{ steps.target_closure_resolution.outputs.state != 'hit' }}
       shell: bash
       env:
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -243,6 +278,22 @@ runs:
           "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json" | while IFS= read -r digest; do
           cp "$blob_root/${digest#sha256:}" "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-blobs/${digest#sha256:}"
         done
+    - name: Register immutable ${{ inputs.target }} Closure target
+      if: ${{ inputs.publish == 'true' && steps.target_closure_resolution.outputs.state != 'hit' }}
+      shell: bash
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/release-build/${{ inputs.target }}/closure-blobs
+        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.closure_identity.outputs.digest }}
+        RELEASE_CLOSURE_BUILD_KIND: target
+        RELEASE_CLOSURE_BUILD_TOKEN: target-${{ inputs.platform }}
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/target-contribution.json
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
+      run: pnpm exec tools-release register-closure-build
     - name: Prepare ${{ inputs.target }} Standalone smoke graph
       shell: bash
       run: |
@@ -295,7 +346,7 @@ runs:
       if: ${{ inputs.publish == 'true' }}
       env:
         RELEASE_CHANNEL: ${{ inputs.channel }}
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/tools-pack/out/closure-distribution/${{ inputs.channel }}/${{ inputs.platform }}/versions/${{ inputs.closure-version }}/blobs
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/release-build/${{ inputs.target }}/closure-blobs
         RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/target-contribution.json
         RELEASE_CLOSURE_CONTRIBUTION_KIND: target
         RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/closure-publication.json

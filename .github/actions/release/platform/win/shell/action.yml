@@ -56,9 +56,9 @@ runs:
       shell: pwsh
       run: |
         $ErrorActionPreference = "Stop"
-        $digest = (pnpm.cmd exec tsx .github/scripts/release/shell-smoke-acceptance.ts win_x64).Trim()
+        $digest = (pnpm.cmd exec tools-release identity digest shell.spec.win_x64 --parameter matrix=${{ inputs.shell-smoke-matrix }} --parameter standaloneProtocolVersion=1).Trim()
         if ($LASTEXITCODE -ne 0 -or $digest -notmatch '^sha256:[0-9a-f]{64}$') { throw "invalid win_x64 Shell smoke digest: $digest" }
-        "RELEASE_SHELL_SMOKE_ACCEPTANCE_DIGEST=$digest" | Out-File -FilePath $env:GITHUB_ENV -Append
+        "RELEASE_SHELL_SPEC_DIGEST=$digest" | Out-File -FilePath $env:GITHUB_ENV -Append
 
     - name: Resolve immutable Electron Shell
       id: resolution

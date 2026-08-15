@@ -25,7 +25,34 @@ runs:
           exit 1
         fi
 
+    - name: Resolve shared Closure build identity
+      id: identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        digest="$(pnpm exec tools-release identity digest closure.shared.build \
+          --parameter minShellVersion=${{ inputs.min-shell-version }} \
+          --parameter nodeVersion=$(node -p 'process.version') \
+          --parameter packageManager=$(node -p 'require("./package.json").packageManager'))"
+        [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+        echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve immutable shared Closure build
+      id: closure_resolution
+      if: ${{ inputs.publish-enabled == 'true' }}
+      shell: bash
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/release-build/closure-shared/blobs
+        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.identity.outputs.digest }}
+        RELEASE_CLOSURE_BUILD_KIND: shared
+        RELEASE_CLOSURE_BUILD_TOKEN: shared
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/closure-shared/shared-contribution.json
+        RELEASE_VERSION: ${{ inputs.release-version }}
+      run: pnpm exec tools-release resolve-closure-build
+
     - name: Build shared Closure components
+      if: ${{ steps.closure_resolution.outputs.state != 'hit' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -43,12 +70,24 @@ runs:
         cp "$contribution_path" "$build_dir/shared-contribution.json"
         cp -R "$blob_root" "$build_dir/blobs"
 
+    - name: Register immutable shared Closure build
+      if: ${{ inputs.publish-enabled == 'true' && steps.closure_resolution.outputs.state != 'hit' }}
+      shell: bash
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/release-build/closure-shared/blobs
+        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.identity.outputs.digest }}
+        RELEASE_CLOSURE_BUILD_KIND: shared
+        RELEASE_CLOSURE_BUILD_TOKEN: shared
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/closure-shared/shared-contribution.json
+      run: pnpm exec tools-release register-closure-build
+
     - name: Publish verified shared Closure blobs
       if: ${{ inputs.publish-enabled == 'true' }}
       shell: bash
       env:
         RELEASE_CHANNEL: ${{ inputs.channel }}
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/tools-pack/out/closure-distribution/${{ inputs.channel }}/shared/versions/${{ inputs.release-version }}/blobs
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/release-build/closure-shared/blobs
         RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/closure-shared/shared-contribution.json
         RELEASE_CLOSURE_CONTRIBUTION_KIND: shared
         RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ runner.temp }}/release-build/closure-shared/publication.json

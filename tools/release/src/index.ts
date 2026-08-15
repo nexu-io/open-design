@@ -5,6 +5,36 @@ import { cac } from "cac";
 const cli = cac("tools-release");
 
 cli
+  .command("identity <action> <id>", "Resolve or print one declared release identity")
+  .option("--output <path>", "write the resolved identity JSON")
+  .option("--parameters <path>", "JSON object containing the identity's declared parameters")
+  .option("--parameter <key=value>", "declared identity parameter (repeatable)", { default: [] })
+  .option("--root <path>", "workspace root (default: cwd)")
+  .action(async (action: string, id: string, options: {
+    output?: string;
+    parameter?: string | string[];
+    parameters?: string;
+    root?: string;
+  }) => {
+    const { printReleaseIdentityDigest, resolveReleaseIdentityCli } = await import("./identity/resolution/resolve.ts");
+    if (action === "digest") {
+      await printReleaseIdentityDigest({ id, parameter: options.parameter, root: options.root });
+      return;
+    }
+    if (action === "resolve") {
+      await resolveReleaseIdentityCli({
+        id,
+        output: options.output,
+        parameter: options.parameter,
+        parameters: options.parameters,
+        root: options.root,
+      });
+      return;
+    }
+    throw new Error(`identity action must be resolve or digest; got ${action}`);
+  });
+
+cli
   .command("prepare <channel>", "Prepare release metadata outputs for a lane")
   .action(async (channel: string) => {
     const { releaseChannelProfile } = await import("./channel/profiles.ts");
@@ -49,6 +79,20 @@ cli
   .action(async () => {
     const { publishClosureContribution } = await import("./storage/publish-closure-contribution.ts");
     await publishClosureContribution();
+  });
+
+cli
+  .command("resolve-closure-build", "Resolve and materialize one immutable Closure component build")
+  .action(async () => {
+    const { resolveClosureBuild } = await import("./storage/closure/build-record.ts");
+    await resolveClosureBuild();
+  });
+
+cli
+  .command("register-closure-build", "Register one verified immutable Closure component build")
+  .action(async () => {
+    const { registerClosureBuild } = await import("./storage/closure/build-record.ts");
+    await registerClosureBuild();
   });
 
 cli
@@ -260,4 +304,5 @@ cli
   });
 
 cli.help();
-cli.parse();
+cli.parse(process.argv, { run: false });
+await cli.runMatchedCommand();

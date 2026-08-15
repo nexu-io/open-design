@@ -244,6 +244,61 @@ describe("tools-pack Closure component archives", () => {
     expect(await readFile(join(outputRoot, "targets", target, "native.zip"), "utf8")).toMatch(/^PK/u);
   });
 
+  it("keeps shared and target blob identities stable across version projections", async () => {
+    const root = await tempRoot("version-projection");
+    const target = (resolveHostClosurePlatformTarget() ?? "darwin-arm64") as ClosurePlatformTarget;
+    const bodyRoot = await componentRoot(root, "body", "bootloader.mjs");
+    const launcherRoot = await componentRoot(root, "launcher", "launcher.mjs");
+    await writeFile(join(launcherRoot, "bootloader.mjs"), "export const handoff = true;\n");
+    await writeFile(join(launcherRoot, "native-loader.mjs"), "export {};\n");
+    const nativeRoot = await componentRoot(root, "native", "node_modules/better-sqlite3/addon.node");
+    await writeFile(join(nativeRoot, "node_modules", "better-sqlite3", ["LIC", "ENSE"].join("")), "license");
+
+    const sharedInput = {
+      archiveTarget: target,
+      blobOrigin: "https://releases.open-design.ai/",
+      bodyRoot,
+      channel: "beta" as const,
+      launcherRoot,
+      resources: [],
+      run: fakeArchive,
+      shellCompatibility: { electron: { version: { min: "0.19.0-beta.4" } } },
+    };
+    const firstShared = await buildClosureDistributionSharedContribution({
+      ...sharedInput,
+      outputRoot: join(root, "shared-first"),
+      version: "0.19.4-beta.1",
+    });
+    const nextShared = await buildClosureDistributionSharedContribution({
+      ...sharedInput,
+      outputRoot: join(root, "shared-next"),
+      version: "0.19.4-beta.2",
+    });
+    const targetInput = {
+      blobOrigin: "https://releases.open-design.ai/",
+      channel: "beta" as const,
+      nativeRoot,
+      run: fakeArchive,
+      target,
+    };
+    const firstTarget = await buildClosureDistributionTargetContribution({
+      ...targetInput,
+      outputRoot: join(root, "target-first"),
+      version: "0.19.4-beta.1",
+    });
+    const nextTarget = await buildClosureDistributionTargetContribution({
+      ...targetInput,
+      outputRoot: join(root, "target-next"),
+      version: "0.19.4-beta.2",
+    });
+
+    expect(nextShared.version).not.toBe(firstShared.version);
+    expect(nextShared.body.artifact.digest).toBe(firstShared.body.artifact.digest);
+    expect(nextShared.launcher.artifact.digest).toBe(firstShared.launcher.artifact.digest);
+    expect(nextTarget.version).not.toBe(firstTarget.version);
+    expect(nextTarget.native.artifact.digest).toBe(firstTarget.native.artifact.digest);
+  });
+
   it("materializes only the handoff and official-Node fossil launcher entries", async () => {
     const root = await tempRoot("launcher-layout");
     const distRoot = join(root, "dist");
