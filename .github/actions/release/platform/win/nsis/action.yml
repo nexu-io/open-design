@@ -9,8 +9,8 @@ runs:
       uses: actions/cache@v5.0.5
       continue-on-error: true
       with:
-        path: ${{ runner.tool_cache }}\open-design-nsis\3.0.4.1
-        key: open-design-nsis-${{ runner.os }}-${{ runner.arch }}-3.0.4.1-9877df902530f96357d13a7a31ae2b9df67f48b11ffc9a1700a7c961574ec5fa
+        path: ${{ runner.tool_cache }}\open-design-electron-builder-cache\3.0.4.1
+        key: open-design-nsis-${{ runner.os }}-${{ runner.arch }}-3.0.4.1-eb-cache-v1-9877df902530f96357d13a7a31ae2b9df67f48b11ffc9a1700a7c961574ec5fa
 
     - name: Materialize pinned NSIS
       shell: pwsh
@@ -18,7 +18,8 @@ runs:
         $ErrorActionPreference = "Stop"
         $version = "3.0.4.1"
         $expectedSha256 = "9877df902530f96357d13a7a31ae2b9df67f48b11ffc9a1700a7c961574ec5fa"
-        $root = Join-Path $env:RUNNER_TOOL_CACHE "open-design-nsis\$version"
+        $cacheRoot = Join-Path $env:RUNNER_TOOL_CACHE "open-design-electron-builder-cache\$version"
+        $root = Join-Path $cacheRoot "nsis\nsis-$version-nsis-$version"
         $makensis = Join-Path $root "makensis.exe"
 
         if (-not (Test-Path -LiteralPath $makensis -PathType Leaf)) {
@@ -50,4 +51,5 @@ runs:
 
         & $makensis /VERSION
         if ($LASTEXITCODE -ne 0) { throw "pinned NSIS $version failed its version probe" }
+        "ELECTRON_BUILDER_CACHE=$cacheRoot" | Out-File -FilePath $env:GITHUB_ENV -Append
         $root | Out-File -FilePath $env:GITHUB_PATH -Append

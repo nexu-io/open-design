@@ -2387,6 +2387,7 @@ process.stdin.on("end", () => {
     expect(setup).toContain("9877df902530f96357d13a7a31ae2b9df67f48b11ffc9a1700a7c961574ec5fa");
     expect(setup).toContain("Get-FileHash -LiteralPath $archive -Algorithm SHA256");
     expect(setup).toContain("Move-Item -LiteralPath $staging -Destination $root");
+    expect(setup).toContain('"ELECTRON_BUILDER_CACHE=$cacheRoot" | Out-File -FilePath $env:GITHUB_ENV -Append');
     expect(setup).toContain("$root | Out-File -FilePath $env:GITHUB_PATH -Append");
     expect(setup).not.toContain("choco install");
     expect(exact).toContain("uses: ./.github/actions/release/platform/win/nsis");
