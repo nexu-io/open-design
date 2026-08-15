@@ -5462,60 +5462,61 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       return `${scoped}&${suffix.slice(1)}`;
     };
 
-    const rewriteMarkup = (chunk: string): string => {
-      let next = chunk.replace(
-        assetAttr,
-        (match, space: string, name: string, eq: string, quote: string, value: string) => {
-          const rewritten = rewrite(value);
-          return rewritten === value ? match : `${space}${name}${eq}${quote}${rewritten}${quote}`;
-        },
-      );
-      next = next.replace(linkTag, (tag) =>
-        tag.replace(linkHref, (match, prefix: string, quote: string, value: string) => {
-          const rewritten = rewrite(value);
-          return rewritten === value ? match : `${prefix}${quote}${rewritten}${quote}`;
-        }),
-      );
-      next = next.replace(srcsetAttr, (match, prefix: string, quote: string, value: string) => {
-        // A data URL contains an unescaped comma, so the lightweight candidate
-        // splitter below cannot safely rewrite a mixed data-URL srcset. Leave the
-        // whole attribute untouched rather than corrupting embedded bytes.
-        if (/(?:^|,\s*)data:/i.test(value)) return match;
-        const rewritten = value
-          .split(',')
-          .map((candidate) => {
-            const body = candidate.trim();
-            if (!body) return candidate;
-            const [url = '', ...descriptors] = body.split(/\s+/);
-            const rewrittenUrl = rewrite(url);
-            if (rewrittenUrl === url) return candidate;
-            const leading = candidate.match(/^\s*/)?.[0] ?? '';
-            return `${leading}${[rewrittenUrl, ...descriptors].join(' ')}`;
-          })
-          .join(',');
+    let next = html.replace(
+      assetAttr,
+      (match, space: string, name: string, eq: string, quote: string, value: string) => {
+        const rewritten = rewrite(value);
+        return rewritten === value ? match : `${space}${name}${eq}${quote}${rewritten}${quote}`;
+      },
+    );
+    next = next.replace(linkTag, (tag) =>
+      tag.replace(linkHref, (match, prefix: string, quote: string, value: string) => {
+        const rewritten = rewrite(value);
         return rewritten === value ? match : `${prefix}${quote}${rewritten}${quote}`;
-      });
-      return next.replace(cssUrl, (match, quote: string, value: string) => {
+      }),
+    );
+    next = next.replace(srcsetAttr, (match, prefix: string, quote: string, value: string) => {
+      // A data URL contains an unescaped comma, so the lightweight candidate
+      // splitter below cannot safely rewrite a mixed data-URL srcset. Leave the
+      // whole attribute untouched rather than corrupting embedded bytes.
+      if (/(?:^|,\s*)data:/i.test(value)) return match;
+      const rewritten = value
+        .split(',')
+        .map((candidate) => {
+          const body = candidate.trim();
+          if (!body) return candidate;
+          const [url = '', ...descriptors] = body.split(/\s+/);
+          const rewrittenUrl = rewrite(url);
+          if (rewrittenUrl === url) return candidate;
+          const leading = candidate.match(/^\s*/)?.[0] ?? '';
+          return `${leading}${[rewrittenUrl, ...descriptors].join(' ')}`;
+        })
+        .join(',');
+      return rewritten === value ? match : `${prefix}${quote}${rewritten}${quote}`;
+    });
+
+    const rewriteCssUrls = (chunk: string): string =>
+      chunk.replace(cssUrl, (match, quote: string, value: string) => {
         const rewritten = rewrite(value);
         return rewritten === value ? match : `url(${quote}${rewritten}${quote})`;
       });
-    };
 
-    // Never rewrite bytes inside a <script> block. Executable JS legitimately
-    // contains `url(...)` substrings (for example `URL.revokeObjectURL(url)`),
-    // and the global cssUrl rewrite would otherwise corrupt that source into a
-    // syntax error that kills the whole script. CSS `url(...)` references live
-    // in <style>, style=, and stylesheet markup, all of which stay outside
-    // <script>, so skipping scripts does not lose any asset rewriting.
+    // The attribute passes above run over the whole document, so a relative
+    // <script src> is still workspace-scoped. The cssUrl pass must not touch
+    // executable JS, though: inline code legitimately contains `url(...)`
+    // substrings (for example `URL.revokeObjectURL(url)`), and rewriting them
+    // produces a syntax error that kills the entire script. CSS `url(...)`
+    // references only appear outside <script> (in <style>, style=, and
+    // stylesheet markup), so skipping script bodies loses nothing.
     const scriptBlock = /<script\b[^>]*>[\s\S]*?<\/script>/gi;
-    let rewrittenHtml = '';
+    let cssRewritten = '';
     let cursor = 0;
     let scriptMatch: RegExpExecArray | null;
-    while ((scriptMatch = scriptBlock.exec(html)) !== null) {
-      rewrittenHtml += rewriteMarkup(html.slice(cursor, scriptMatch.index)) + scriptMatch[0];
+    while ((scriptMatch = scriptBlock.exec(next)) !== null) {
+      cssRewritten += rewriteCssUrls(next.slice(cursor, scriptMatch.index)) + scriptMatch[0];
       cursor = scriptMatch.index + scriptMatch[0].length;
     }
-    return rewrittenHtml + rewriteMarkup(html.slice(cursor));
+    return cssRewritten + rewriteCssUrls(next.slice(cursor));
   }
 
   async function maybeResolveVitePreviewHtml({

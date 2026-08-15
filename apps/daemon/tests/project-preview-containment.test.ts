@@ -274,6 +274,7 @@ describe('project preview containment routes', () => {
         '<!doctype html><html><head><title>Script</title>',
         '<style>.hero { background-image: url("assets/hero.png") }</style>',
         '</head><body>',
+        '<script src="scripts/app.js"></script>',
         '<script>var u = URL.createObjectURL(new Blob(["x"])); URL.revokeObjectURL(u);</script>',
         '</body></html>',
       ].join(''),
@@ -290,6 +291,9 @@ describe('project preview containment routes', () => {
 
     // CSS url(...) references outside <script> are still workspace-scoped.
     expect(html).toContain(`/api/projects/${projectId}/raw/assets/hero.png`);
+
+    // Relative external script sources are still workspace-scoped.
+    expect(html).toContain(`/api/projects/${projectId}/raw/scripts/app.js`);
 
     // Executable JS that happens to contain url(...) is left untouched.
     expect(html).toContain('URL.revokeObjectURL(u)');
