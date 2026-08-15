@@ -9,6 +9,7 @@ const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 
 const buildTargets = [
+  "packages/metatool",
   "packages/release",
   "packages/contracts",
   "packages/components",

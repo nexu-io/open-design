@@ -347,17 +347,18 @@ describe("postinstall script contract", () => {
   it("[P1] selects release profiles by recursive workspace dependency closure", () => {
     const sandbox = createSandbox();
     try {
+      writeTarget(sandbox, "packages/metatool", { name: "@fixture/metatool" });
       writeTarget(sandbox, "packages/release", { name: "@fixture/release" });
       writeTarget(sandbox, "packages/closure", {
         dependencies: { "@fixture/release": "workspace:*" },
         name: "@fixture/closure",
       });
       writeTarget(sandbox, "tools/pack", {
-        dependencies: { "@fixture/closure": "workspace:*" },
+        dependencies: { "@fixture/closure": "workspace:*", "@fixture/metatool": "workspace:*" },
         name: "@fixture/tools-pack",
       });
       writeTarget(sandbox, "tools/release", {
-        dependencies: { "@fixture/release": "workspace:*" },
+        dependencies: { "@fixture/metatool": "workspace:*", "@fixture/release": "workspace:*" },
         name: "@fixture/tools-release",
       });
       writeTarget(sandbox, "tools/serve", {
@@ -377,6 +378,7 @@ describe("postinstall script contract", () => {
         .filter((event) => event.event === "start")
         .map((event) => event.target);
       expect(prepareTargets).toEqual([
+        "packages/metatool",
         "packages/release",
         "packages/closure",
         "tools/pack",
@@ -403,6 +405,7 @@ describe("postinstall script contract", () => {
         .filter((event) => event.event === "start")
         .map((event) => event.target);
       expect(smokeTargets).toEqual([
+        "packages/metatool",
         "packages/release",
         "packages/closure",
         "tools/pack",
