@@ -940,6 +940,76 @@ describe('ProjectView daemon reattach restore', () => {
     });
   });
 
+  it('coalesces adjacent thinking events while saving a full reattach replay', async () => {
+    const startedAt = Date.now();
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
+    listMessages.mockResolvedValue([
+      {
+        id: 'msg-reattach-full-replay-thinking',
+        role: 'assistant',
+        content: '',
+        createdAt: startedAt,
+        startedAt,
+        runId: 'run-full-replay-thinking',
+        runStatus: 'running',
+        preTurnFileNames: [],
+        events: [],
+      } satisfies ChatMessage,
+    ]);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue({
+      id: 'run-full-replay-thinking',
+      status: 'running',
+      createdAt: startedAt,
+      updatedAt: startedAt,
+      exitCode: null,
+      signal: null,
+    });
+    listActiveChatRuns.mockResolvedValue([]);
+
+    let captured: {
+      onAgentEvent: (ev: unknown) => void;
+      onDone: () => void;
+    } | null = null;
+    reattachDaemonRun.mockImplementation(async (options: any) => {
+      captured = {
+        onAgentEvent: options.handlers.onAgentEvent,
+        onDone: options.handlers.onDone,
+      };
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(reattachDaemonRun).toHaveBeenCalledTimes(1));
+    expect(captured).not.toBeNull();
+    for (let index = 0; index < 1_500; index += 1) {
+      captured!.onAgentEvent({ kind: 'thinking', text: 'thought ' });
+    }
+    captured!.onDone();
+
+    await waitFor(() => {
+      const finalMessage = saveMessage.mock.calls
+        .map((call) => call[2] as ChatMessage)
+        .filter(
+          (message) =>
+            message?.id === 'msg-reattach-full-replay-thinking' &&
+            message.runStatus === 'succeeded',
+        )
+        .at(-1);
+      expect(finalMessage?.events).toHaveLength(1);
+      expect(finalMessage?.events).toEqual([
+        { kind: 'thinking', text: 'thought '.repeat(1_500) },
+      ]);
+    });
+  });
+
   it('clears touched-file paths after a failed run before the next successful run finalizes', async () => {
     listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation' }]);
     listMessages.mockResolvedValue([]);
