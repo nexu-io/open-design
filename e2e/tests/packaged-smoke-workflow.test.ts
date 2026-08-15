@@ -2818,11 +2818,12 @@ process.stdin.on("end", () => {
   });
 
   it("publishes one shared-plus-target Standalone graph in release-beta", async () => {
-    const [workflow, betaMacAction, betaWinAction, sharedClosureAction] = await Promise.all([
+    const [workflow, betaMacAction, betaWinAction, sharedClosureAction, winSpec] = await Promise.all([
       readReleaseWorkflow(releaseBetaWorkflowPath, distributionBetaWorkflowPath),
       readFile(betaMacDistributionActionPath, "utf8"),
       readFile(betaWinDistributionActionPath, "utf8"),
       readFile(join(workspaceRoot, ".github", "actions", "release", "closure", "shared", "action.yml"), "utf8"),
+      readFile(join(e2eRoot, "specs", "win.spec.ts"), "utf8"),
     ]);
     const sharedJob = sectionBetween(workflow, "  metadata:", "  build:");
     const buildJob = sectionBetween(workflow, "  build:", "  stage:");
@@ -2961,6 +2962,10 @@ process.stdin.on("end", () => {
     expect(activationJob).toContain("Read back activated exact public feed");
     expect(activationJob).toContain("tools-release observe-public-feed");
     expect(activationJob).not.toContain("continue-on-error");
+    expect(winSpec).toContain("resolveNativeAcceptanceStandaloneMetadataUrl()");
+    expect(winSpec).toContain("resolveNativeAcceptanceUpdateMetadataUrl()");
+    expect(winSpec).toContain("acceptance/runs/[0-9]+-[0-9]+/latest/metadata\\\\.json$");
+    expect(winSpec).not.toContain("function resolveNativeAcceptanceMetadataUrl");
   });
 
   it("publishes release-beta mac_x64 payloads while preserving the zip feed", async () => {

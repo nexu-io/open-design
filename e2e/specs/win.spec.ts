@@ -636,11 +636,10 @@ winDescribe('packaged windows runtime smoke', () => {
     const updateEnv = captureUpdateEnv();
     try {
       if (verifyPublicImmutableArtifacts) {
-        // Public acceptance runs against immutable staged objects before the
-        // channel pointer moves. Make that exact feed an explicit invariant of
-        // the suite rather than relying on the caller's inherited environment;
-        // every child launch in this test, including tools-pack, now sees it.
-        process.env.OD_UPDATE_METADATA_URL = resolveNativeAcceptanceMetadataUrl();
+        // Installer acceptance stays pinned to immutable staged metadata while
+        // Standalone may discover the same release through the run-scoped
+        // mutable feed. Keep those independently owned inputs separate.
+        process.env.OD_UPDATE_METADATA_URL = resolveNativeAcceptanceUpdateMetadataUrl();
       }
       if (!verifyCoreOnly && updateScenario.channel === 'beta') {
         expect(namespace).toBe('release-beta-win');
@@ -3391,25 +3390,38 @@ type WindowsProtocolLaunchObservation = {
 };
 
 async function launchNativeWindowsAcceptance(installDir: string): Promise<WindowsProtocolLaunchObservation> {
-  const metadataUrl = resolveNativeAcceptanceMetadataUrl();
   return await invokeWindowsProtocolProcess(join(installDir, 'Open Design.exe'), undefined, {
-    OD_STANDALONE_METADATA_URL: metadataUrl,
-    OD_UPDATE_METADATA_URL: metadataUrl,
+    OD_STANDALONE_METADATA_URL: resolveNativeAcceptanceStandaloneMetadataUrl(),
+    OD_UPDATE_METADATA_URL: resolveNativeAcceptanceUpdateMetadataUrl(),
   });
 }
 
-function resolveNativeAcceptanceMetadataUrl(): string {
+function resolveNativeAcceptanceUpdateMetadataUrl(): string {
   const version = normalizeOptionalEnv(releaseVersion);
   if (version == null) throw new Error('native Windows acceptance requires OD_PACKAGED_E2E_RELEASE_VERSION');
   const channel = updateScenario.channel;
   const expectedPath = `/${channel}/versions/${encodeURIComponent(version)}/metadata.json`;
-  const candidate = normalizeOptionalEnv(process.env.OD_STANDALONE_METADATA_URL)
-    ?? normalizeOptionalEnv(process.env.OD_UPDATE_METADATA_URL)
+  const candidate = normalizeOptionalEnv(process.env.OD_UPDATE_METADATA_URL)
     ?? `https://releases.open-design.ai${expectedPath}`;
   const parsed = new URL(candidate);
   if (!parsed.pathname.endsWith(expectedPath)) {
     throw new Error(
       `native Windows acceptance requires exact version metadata ${expectedPath}, got ${candidate}`,
+    );
+  }
+  return candidate;
+}
+
+function resolveNativeAcceptanceStandaloneMetadataUrl(): string {
+  const exactUrl = resolveNativeAcceptanceUpdateMetadataUrl();
+  const candidate = normalizeOptionalEnv(process.env.OD_STANDALONE_METADATA_URL) ?? exactUrl;
+  const parsed = new URL(candidate);
+  const channel = updateScenario.channel;
+  const exactPath = new URL(exactUrl).pathname;
+  const mutablePath = new RegExp(`/${channel}/acceptance/runs/[0-9]+-[0-9]+/latest/metadata\\.json$`);
+  if (parsed.pathname !== exactPath && !mutablePath.test(parsed.pathname)) {
+    throw new Error(
+      `native Windows Standalone acceptance requires exact metadata or a run-scoped mutable feed, got ${candidate}`,
     );
   }
   return candidate;
