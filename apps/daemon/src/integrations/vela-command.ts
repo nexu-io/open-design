@@ -37,6 +37,8 @@ export interface VelaCommandOptions {
    * stays unchanged; observer failures never affect command completion.
    */
   onStderr?: (stderr: string) => void;
+  /** Optional bytes written to the child stdin before it is closed. */
+  input?: string | Buffer;
 }
 
 type VelaTerminationReason = 'abort' | 'timeout';
@@ -279,6 +281,14 @@ export function runVelaCommand(
       },
     );
     childPid = child.pid;
+    if (options.input !== undefined && child.stdin) {
+      // The exec callback remains the command's completion authority. Ignore a
+      // redundant stream error here (for example EPIPE after an early CLI
+      // validation failure) so it cannot become an unhandled EventEmitter
+      // error while the callback reports the actual process result.
+      child.stdin.on('error', () => undefined);
+      child.stdin.end(options.input);
+    }
     if (settled) return;
 
     if (options.signal) {

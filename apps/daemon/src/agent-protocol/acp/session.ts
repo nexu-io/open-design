@@ -379,6 +379,84 @@ export function attachAcpSession({
     });
   };
 
+  const emitAcpExecutionObservability = (update: JsonObject): boolean => {
+    const name = typeof update.sessionUpdate === 'string' ? update.sessionUpdate : '';
+    if (
+      name !== 'assistant_message_lifecycle' &&
+      name !== 'model_step_lifecycle' &&
+      name !== 'model_retry'
+    ) {
+      return false;
+    }
+    const numberField = (key: string) => {
+      const value = update[key];
+      return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+    };
+    const stringField = (key: string) => {
+      const value = update[key];
+      return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+    };
+    const usage = asObject(update.usage);
+    send('agent', {
+      type: 'diagnostic',
+      name,
+      source: 'amr-opencode',
+      elapsedMs: Date.now() - runStartedAt,
+      ...(stringField('phase') ? { phase: stringField('phase') } : {}),
+      ...(stringField('status') ? { status: stringField('status') } : {}),
+      ...(stringField('reason') ? { reason: stringField('reason') } : {}),
+      ...(stringField('provider') ? { provider: stringField('provider') } : {}),
+      ...(stringField('model') ? { model: stringField('model') } : {}),
+      ...(stringField('errorClass') ? { errorClass: stringField('errorClass') } : {}),
+      ...(stringField('timingEvidence')
+        ? { timingEvidence: stringField('timingEvidence') }
+        : {}),
+      ...(numberField('assistantMessageIndex') !== undefined
+        ? { assistantMessageIndex: numberField('assistantMessageIndex') }
+        : {}),
+      ...(numberField('stepIndex') !== undefined
+        ? { stepIndex: numberField('stepIndex') }
+        : {}),
+      ...(numberField('startedAtMs') !== undefined
+        ? { startedAtMs: numberField('startedAtMs') }
+        : {}),
+      ...(numberField('endedAtMs') !== undefined
+        ? { endedAtMs: numberField('endedAtMs') }
+        : {}),
+      ...(numberField('durationMs') !== undefined
+        ? { durationMs: numberField('durationMs') }
+        : {}),
+      ...(numberField('attempt') !== undefined
+        ? { attempt: numberField('attempt') }
+        : {}),
+      ...(usage
+        ? {
+            usage: {
+              ...(typeof usage.inputTokens === 'number'
+                ? { inputTokens: usage.inputTokens }
+                : {}),
+              ...(typeof usage.outputTokens === 'number'
+                ? { outputTokens: usage.outputTokens }
+                : {}),
+              ...(typeof usage.totalTokens === 'number'
+                ? { totalTokens: usage.totalTokens }
+                : {}),
+              ...(typeof usage.reasoningTokens === 'number'
+                ? { reasoningTokens: usage.reasoningTokens }
+                : {}),
+              ...(typeof usage.cacheReadTokens === 'number'
+                ? { cacheReadTokens: usage.cacheReadTokens }
+                : {}),
+              ...(typeof usage.cacheWriteTokens === 'number'
+                ? { cacheWriteTokens: usage.cacheWriteTokens }
+                : {}),
+            },
+          }
+        : {}),
+    });
+    return true;
+  };
+
   const emitVisibleTextDelta = (delta: string) => {
     if (!delta) return;
     emittedVisibleTextChunk = true;
@@ -633,6 +711,9 @@ export function attachAcpSession({
           failWithPayload(promotedPayload);
           return;
         }
+      }
+      if (emitAcpExecutionObservability(update)) {
+        return;
       }
       if (update.sessionUpdate !== 'agent_message_chunk' && update.sessionUpdate !== 'agent_thought_chunk') {
         const detail = extractAcpStatusDetail(update);

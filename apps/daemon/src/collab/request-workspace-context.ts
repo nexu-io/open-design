@@ -9,10 +9,11 @@ export type VerifiedWorkspaceRequestContextResult =
   | { ok: true; context: WorkspaceCollabContext }
   | {
       ok: false;
-      status: 400 | 403 | 503;
+      status: 400 | 401 | 403 | 503;
       code:
         | 'WORKSPACE_CONTEXT_REQUIRED'
         | 'WORKSPACE_CONTEXT_INCOMPLETE'
+        | 'AMR_AUTH_REQUIRED'
         | 'WORKSPACE_AUTHORITY_UNAVAILABLE'
         | 'WORKSPACE_ACCESS_DENIED';
       message: string;
@@ -57,6 +58,14 @@ export async function verifyWorkspaceRequestContext(input: {
     directory = { ok: false, items: [] };
   }
   if (!directory.ok) {
+    if (directory.reason === 'unauthorized') {
+      return {
+        ok: false,
+        status: 401,
+        code: 'AMR_AUTH_REQUIRED',
+        message: 'AMR authorization expired. Sign in again to continue.',
+      };
+    }
     return {
       ok: false,
       status: 503,

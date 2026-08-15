@@ -73,6 +73,15 @@ export interface CollabClientOptions {
 
 const DEFAULT_HEARTBEAT_MS = 10_000;
 const DEFAULT_STATUS_POLL_MS = 5_000;
+/**
+ * Ceiling for the failure-widened heartbeat interval. Presence retries
+ * forever (the upstream can recover at any moment), but a packaged client
+ * left open against a persistently rejecting upstream must degrade to a slow
+ * probe — not an error every 10 seconds for hours (the 502 storm).
+ */
+const HEARTBEAT_BACKOFF_CAP_MS = 300_000;
+/** ±10% jitter so many open clients do not re-probe in lockstep. */
+const HEARTBEAT_BACKOFF_JITTER = 0.2;
 // Vela's authoritative project-presence lease is 30 seconds from the
 // server-recorded heartbeatAt, not from when this client happens to observe
 // the roster. Using observation time can nearly double a stale lease.
@@ -154,6 +163,14 @@ export class CollabClient {
   private presenceSessionSequence = 0;
   /** A leave is necessary only after a heartbeat request could have made a lease. */
   private presenceLeaseMemberId: string | null = null;
+  /**
+   * Self-scheduling heartbeat chain (single pending timer). A fixed interval
+   * cannot express failure backoff, so each settled heartbeat schedules the
+   * next one at {@link nextHeartbeatDelayMs}.
+   */
+  private heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Consecutive failed heartbeat requests; any success resets it. */
+  private heartbeatFailureStreak = 0;
   private running = false;
   private onVisibilityChange: (() => void) | null = null;
 
@@ -193,6 +210,9 @@ export class CollabClient {
       this.presenceAppliedRequestGeneration = this.presenceRequestGeneration;
       this.clearPresenceRoster();
       this.presenceAttemptedForMember = false;
+      // A new identity is a new presence session: probe it promptly instead
+      // of inheriting the previous identity's widened failure interval.
+      this.heartbeatFailureStreak = 0;
     }
     if (
       this.running
@@ -248,9 +268,6 @@ export class CollabClient {
     this.timers.push(setInterval(() => {
       if (visible()) void this.pollStatus();
     }, this.statusPollMs));
-    this.timers.push(setInterval(() => {
-      void this.heartbeat();
-    }, this.heartbeatMs));
     if (typeof document !== 'undefined') {
       this.onVisibilityChange = () => {
         if (!visible()) return;
@@ -275,6 +292,10 @@ export class CollabClient {
     this.presenceFallbackMissingSince.clear();
     for (const timer of this.timers) clearInterval(timer);
     this.timers.length = 0;
+    if (this.heartbeatTimer) {
+      clearTimeout(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
     if (this.onVisibilityChange && typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.onVisibilityChange);
       this.onVisibilityChange = null;
@@ -307,6 +328,17 @@ export class CollabClient {
     // still resolve and reach the "newly shared" heartbeat below. Stopped
     // clients no longer own a presence loop and must never write to it.
     if (!this.running) return;
+    try {
+      await this.heartbeatOnce();
+    } finally {
+      // Every heartbeat attempt — including the identity-less and unshared
+      // early returns — keeps the presence loop alive by scheduling the next
+      // beat. stop() is the only exit from the chain.
+      this.scheduleNextHeartbeat();
+    }
+  }
+
+  private async heartbeatOnce(): Promise<void> {
     // No identity yet (status polling can be running well before `member`
     // resolves — see setMember) — presence has nothing to announce.
     if (!this.member) return;
@@ -337,6 +369,7 @@ export class CollabClient {
         clientId: this.clientId,
         sequence,
       });
+      this.heartbeatFailureStreak = 0;
       if (Array.isArray(body?.present)) {
         this.applyPresenceResponse(
           requestGeneration,
@@ -344,12 +377,45 @@ export class CollabClient {
         );
       }
     } catch (error) {
+      this.heartbeatFailureStreak += 1;
       if (isForbiddenCollabRequest(error)) {
         this.applyPresenceAuthorityRevocation(requestGeneration);
       }
       this.presenceAttemptedForMember = false;
       this.onError?.(error);
     }
+  }
+
+  /**
+   * Reschedule the single pending heartbeat. Out-of-band beats (setMember's
+   * immediate announce, the shared-transition beat in pollStatus) land here
+   * too, so the loop never accumulates parallel timers.
+   */
+  private scheduleNextHeartbeat(): void {
+    if (!this.running) return;
+    if (this.heartbeatTimer) clearTimeout(this.heartbeatTimer);
+    this.heartbeatTimer = setTimeout(() => {
+      this.heartbeatTimer = null;
+      void this.heartbeat();
+    }, this.nextHeartbeatDelayMs());
+  }
+
+  /**
+   * The invariant behind the 502-storm fix: consecutive heartbeat failures
+   * double the interval (base → 2× → 4× → …) up to
+   * {@link HEARTBEAT_BACKOFF_CAP_MS}, with jitter; one success — or a new
+   * presence identity — restores the base cadence.
+   */
+  private nextHeartbeatDelayMs(): number {
+    if (this.heartbeatFailureStreak === 0) return this.heartbeatMs;
+    const exponent = Math.min(this.heartbeatFailureStreak - 1, 10);
+    const widened = Math.min(
+      this.heartbeatMs * 2 ** exponent,
+      HEARTBEAT_BACKOFF_CAP_MS,
+    );
+    const jitter =
+      1 - HEARTBEAT_BACKOFF_JITTER / 2 + HEARTBEAT_BACKOFF_JITTER * Math.random();
+    return Math.round(widened * jitter);
   }
 
   /**

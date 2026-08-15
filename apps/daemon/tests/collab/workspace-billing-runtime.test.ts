@@ -732,6 +732,40 @@ describe('WorkspaceBillingRuntimeCoordinator', () => {
     runtime.dispose();
   });
 
+  it('uses realtime events as the fast path but immediately restores polling after disconnect', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+    let calls = 0;
+    const onPollSuppressed = vi.fn();
+    const runtime = createWorkspaceBillingRuntimeCoordinator({
+      pollIntervalMs: 10,
+      softTtlMs: 10,
+      hardTtlMs: 40,
+      realtimePollFloorMs: 100,
+      onPollSuppressed,
+      fetchProjection: async () => {
+        calls += 1;
+        return projection('workspace-a', 'member-a', String(calls));
+      },
+    });
+
+    await runtime.read(KEY_A);
+    runtime.setRealtimeHealthy('workspace-a', true);
+    await vi.advanceTimersByTimeAsync(99);
+    await runtime.read(KEY_A);
+    expect(calls).toBe(1);
+    expect(onPollSuppressed).toHaveBeenCalledTimes(9);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.waitFor(() => expect(calls).toBe(2));
+
+    runtime.setRealtimeHealthy('workspace-a', false);
+    await Promise.resolve();
+    expect(calls).toBe(3);
+    expect(runtime.peek(KEY_A)?.state.reason).toBe('reconnect');
+    runtime.dispose();
+  });
+
   it('forces an authoritative catch-up after reconnect', async () => {
     let balance = '1.00';
     let calls = 0;
@@ -931,6 +965,34 @@ describe('WorkspaceBillingRuntimeCoordinator', () => {
       projection: { snapshot: null, workspaceBalance: null },
       state: { status: 'access-revoked' },
     });
+    runtime.dispose();
+  });
+
+  it('clears a projection and reports backend scope rejection to the authority cache', async () => {
+    const revoked: Array<{ workspaceId: string; workspaceMemberId: string }> = [];
+    let calls = 0;
+    const runtime = createWorkspaceBillingRuntimeCoordinator({
+      fetchProjection: async () => {
+        calls += 1;
+        return calls === 1
+          ? projection('workspace-a', 'member-a', '1.00')
+          : projection('workspace-a', 'member-replaced', '2.00');
+      },
+      onAccessRevoked: (key) => revoked.push(key),
+    });
+    await runtime.read(KEY_A);
+
+    runtime.reconnect('workspace-a');
+    const result = await runtime.read(KEY_A);
+
+    expect(result).toMatchObject({
+      projection: { snapshot: null, workspaceBalance: null },
+      state: {
+        status: 'access-revoked',
+        errorCode: 'workspace_not_authorized',
+      },
+    });
+    expect(revoked).toEqual([KEY_A]);
     runtime.dispose();
   });
 
@@ -1185,8 +1247,8 @@ describe('WorkspaceBillingRuntimeCoordinator', () => {
     expect(result).toMatchObject({
       projection: { snapshot: null, workspaceBalance: null },
       state: {
-        status: 'error',
-        errorCode: 'workspace_billing_scope_mismatch',
+        status: 'access-revoked',
+        errorCode: 'workspace_not_authorized',
       },
     });
     runtime.dispose();

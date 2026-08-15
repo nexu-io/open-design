@@ -7,6 +7,8 @@ import {
   amrPlansUrlForWorkspace,
   amrProfileBadgeLabel,
   amrRechargeUrlForProfile,
+  formatModelWindowRetryAt,
+  modelWindowLimitCopy,
   resolveRunFailureUi,
   setRuntimeAmrConsoleOrigin,
 } from '../../src/runtime/amr-guidance';
@@ -114,6 +116,47 @@ describe('workspace-scoped AMR URLs', () => {
     expect(amrConsoleUrlForWorkspace('feature-test', null)).toBeNull();
     expect(amrConsoleUrlForWorkspace('feature-test', '   ')).toBeNull();
     expect(amrPlansUrlForWorkspace('feature-test', undefined)).toBeNull();
+  });
+});
+
+// The Home composer's send path never reaches `resolveRunFailureUi` — it fails
+// before a run exists, and its catch-all prints `err.message` verbatim, which is
+// how an English gateway sentence ends up on a localized Home screen. Both
+// surfaces therefore read the window limit through this one helper.
+describe('modelWindowLimitCopy', () => {
+  it('reads the window limit and its reset instant off the upstream sentence', () => {
+    expect(
+      modelWindowLimitCopy(
+        'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z. This request was not charged to Wallet Credits.',
+      ),
+    ).toEqual({
+      messageKey: 'chat.runError.modelWindowLimitMessage',
+      retryAt: '2026-08-12T06:34:47Z',
+    });
+  });
+
+  it('falls back to the no-time copy when no instant is readable', () => {
+    expect(
+      modelWindowLimitCopy('[code=model_limit_exceeded] rolling window in effect'),
+    ).toEqual({ messageKey: 'chat.runError.modelWindowLimitMessageNoTime' });
+  });
+
+  it('leaves every other failure alone', () => {
+    expect(modelWindowLimitCopy('Could not create project')).toBeNull();
+    expect(modelWindowLimitCopy('insufficient wallet balance')).toBeNull();
+    expect(modelWindowLimitCopy(null)).toBeNull();
+  });
+});
+
+describe('formatModelWindowRetryAt', () => {
+  it('renders the gateway instant in the reader locale', () => {
+    const formatted = formatModelWindowRetryAt('2026-08-12T06:34:47Z', 'en-US');
+    expect(formatted).not.toBe('2026-08-12T06:34:47Z');
+    expect(formatted).toMatch(/Aug/);
+  });
+
+  it('returns the input untouched rather than rendering "Invalid Date"', () => {
+    expect(formatModelWindowRetryAt('not-an-instant', 'en-US')).toBe('not-an-instant');
   });
 });
 
@@ -343,6 +386,56 @@ describe('resolveRunFailureUi', () => {
   it('falls back to plain retry for other AMR failures', () => {
     const ui = resolveRunFailureUi('AGENT_EXECUTION_FAILED', null, 'amr');
     expect(ui).toMatchObject({ primaryAction: 'retry', showSwitchCard: false });
+  });
+
+  // vela's rolling 5-hour model window resets on its own, so the card must name
+  // the wait — not fall through to the generic "task failed" title with the raw
+  // English upstream sentence as its body, which is what every AMR failure
+  // outside the three account codes used to get.
+  it('names the model window limit and carries the reset instant for AMR', () => {
+    const ui = resolveRunFailureUi(
+      'RATE_LIMITED',
+      'model_window_limit',
+      'amr',
+      'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z. This request was not charged to Wallet Credits.',
+    );
+    expect(ui).toMatchObject({
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.modelWindowLimit',
+      messageKey: 'chat.runError.modelWindowLimitMessage',
+      showSwitchCard: false,
+    });
+    expect(ui.messageVars?.retryAt).toBe('2026-08-12T06:34:47Z');
+  });
+
+  // Same classification without a readable instant (older CLI, or upstream
+  // wording drift) must still get the localized copy — just the variant that
+  // does not promise a time.
+  it('degrades to the no-time copy when the reset instant is unreadable', () => {
+    const ui = resolveRunFailureUi(
+      'RATE_LIMITED',
+      'model_window_limit',
+      'amr',
+      'You have reached the 5-hour usage limit for Kimi K2.6.',
+    );
+    expect(ui.titleKey).toBe('chat.runError.title.modelWindowLimit');
+    expect(ui.messageKey).toBe('chat.runError.modelWindowLimitMessageNoTime');
+    expect(ui.messageVars?.retryAt).toBeUndefined();
+  });
+
+  // The window limit is agent-neutral: it comes from the hosted gateway, so the
+  // AMR branch's catch-all "generic + raw English" fallthrough must not be the
+  // thing that decides how it reads. Same classification, same card, whichever
+  // agent carried the request.
+  it('names the model window limit for non-AMR agents too', () => {
+    const ui = resolveRunFailureUi(
+      'RATE_LIMITED',
+      'model_window_limit',
+      'claude',
+      'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z.',
+    );
+    expect(ui.titleKey).toBe('chat.runError.title.modelWindowLimit');
+    expect(ui.messageVars?.retryAt).toBe('2026-08-12T06:34:47Z');
   });
 
   // PR #3157: Antigravity's `agy -p` cannot complete Google Sign-In on

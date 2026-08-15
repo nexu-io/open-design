@@ -378,6 +378,104 @@ describe('GET /api/projects/:id resolvedDir', () => {
     expect(forkMessages[1]?.lastRunEventId).toBeUndefined();
   });
 
+  it('cuts persisted history at the fallback predecessor before appending the missing fork point', async () => {
+    const projectId = `proj-conv-fork-fallback-${Date.now()}`;
+    const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: projectId,
+        name: 'Conversation fork fallback fixture',
+        skillId: null,
+        designSystemId: null,
+      }),
+    });
+    expect(createProjectResp.status).toBe(200);
+
+    const sourceResp = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Source', sessionMode: 'chat' }),
+    });
+    expect(sourceResp.status).toBe(200);
+    const sourceId = (
+      (await sourceResp.json()) as { conversation: { id: string } }
+    ).conversation.id;
+
+    const saveUserResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations/${sourceId}/messages/fallback-user-1`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: 'fallback-user-1',
+          role: 'user',
+          content: 'Continue from this request',
+        }),
+      },
+    );
+    expect(saveUserResp.status).toBe(200);
+
+    for (const message of [
+      {
+        id: 'fallback-user-2',
+        role: 'user',
+        content: 'Later persisted request that must be excluded',
+      },
+      {
+        id: 'fallback-assistant-2',
+        role: 'assistant',
+        content: 'Later persisted answer that must be excluded',
+      },
+    ]) {
+      const saveLaterResp = await fetch(
+        `${baseUrl}/api/projects/${projectId}/conversations/${sourceId}/messages/${message.id}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(message),
+        },
+      );
+      expect(saveLaterResp.status).toBe(200);
+    }
+
+    const forkResp = await fetch(`${baseUrl}/api/projects/${projectId}/conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: 'Recovered fork',
+        sessionMode: 'chat',
+        seedFromConversationId: sourceId,
+        forkAfterMessageId: 'fallback-assistant-1',
+        forkFallbackPredecessorMessageId: 'fallback-user-1',
+        forkFallbackMessage: {
+          id: 'fallback-assistant-1',
+          role: 'assistant',
+          content: 'Unpersisted answer',
+        },
+      }),
+    });
+    expect(forkResp.status).toBe(200);
+    const forkId = (
+      (await forkResp.json()) as { conversation: { id: string } }
+    ).conversation.id;
+
+    const forkMessagesResp = await fetch(
+      `${baseUrl}/api/projects/${projectId}/conversations/${forkId}/messages`,
+    );
+    expect(forkMessagesResp.status).toBe(200);
+    const forkMessages = (
+      (await forkMessagesResp.json()) as {
+        messages: Array<{ id: string; role: string; content: string }>;
+      }
+    ).messages;
+    expect(forkMessages.map((message) => message.content)).toEqual([
+      'Continue from this request',
+      'Unpersisted answer',
+    ]);
+    expect(forkMessages.map((message) => message.id)).not.toContain('fallback-assistant-1');
+  });
+
   it('serves project files through raw and files path routes', async () => {
     const projectId = `proj-raw-route-${Date.now()}`;
     const createResp = await fetch(`${baseUrl}/api/projects`, {
@@ -398,6 +496,13 @@ describe('GET /api/projects/:id resolvedDir', () => {
       body: JSON.stringify({ name: 'index.html', content: '<!doctype html><h1>ok</h1>' }),
     });
     expect(writeResp.status).toBe(200);
+
+    const listResp = await fetch(`${baseUrl}/api/projects/${projectId}/files`);
+    expect(listResp.status).toBe(200);
+    expect(listResp.headers.get('cache-control')).toBe('no-store');
+    await expect(listResp.json()).resolves.toMatchObject({
+      files: [expect.objectContaining({ name: 'index.html' })],
+    });
 
     const rawResp = await fetch(`${baseUrl}/api/projects/${projectId}/raw/index.html`);
     expect(rawResp.status).toBe(200);

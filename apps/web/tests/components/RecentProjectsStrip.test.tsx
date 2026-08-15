@@ -94,6 +94,10 @@ vi.mock('../../src/providers/registry', () => ({
 
 afterEach(() => {
   cleanup();
+  Object.assign(recentWorkspaceState.context, {
+    displayName: undefined,
+    avatarUrl: undefined,
+  });
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.mocked(invalidateProjectFilesCache).mockClear();
@@ -268,6 +272,25 @@ describe('RecentProjectsStrip', () => {
         }),
       }),
     );
+  });
+
+  it('renders the signed-in creator name and profile image for a self-owned project', async () => {
+    Object.assign(recentWorkspaceState.context, {
+      displayName: 'Elian Zhang',
+      avatarUrl: 'https://example.com/elian.png',
+    });
+
+    const { container } = render(
+      <RecentProjectsStrip
+        projects={[project({ id: 'project-owned', name: 'Owned project' })]}
+        onOpen={() => {}}
+      />,
+    );
+
+    await screen.findByText('Created by Elian Zhang');
+    expect(screen.queryByText('Created by Me')).toBeNull();
+    const avatar = container.querySelector<HTMLImageElement>('.recent-projects__card-owner img');
+    expect(avatar?.src).toBe('https://example.com/elian.png');
   });
 
   it('refreshes only the card named by team-project-content-ready', async () => {
@@ -1320,5 +1343,37 @@ describe('recvqbh189zBY6 — single-card delete confirmation', () => {
       expect(onDelete).toHaveBeenCalledWith('project-1');
     });
     expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+
+  it('submits at most one delete while the request is pending', async () => {
+    let resolveDelete!: (value: true) => void;
+    const pendingDelete = new Promise<true>((resolve) => {
+      resolveDelete = resolve;
+    });
+    const onDelete = vi.fn(() => pendingDelete);
+    render(
+      <RecentProjectsStrip
+        projects={[project({ id: 'project-1', name: 'My project' })]}
+        onOpen={() => {}}
+        onDelete={onDelete}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+
+    const dialog = await screen.findByRole('alertdialog');
+    const deleteButton = within(dialog).getByRole('button', { name: 'Delete' });
+    fireEvent.click(deleteButton);
+    fireEvent.click(deleteButton);
+
+    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect((deleteButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(dialog.parentElement as HTMLElement);
+    expect(screen.getByRole('alertdialog')).toBe(dialog);
+    expect(within(dialog).getByText(/My project/)).toBeTruthy();
+
+    await act(async () => resolveDelete(true));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   });
 });

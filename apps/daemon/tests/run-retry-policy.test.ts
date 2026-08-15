@@ -426,6 +426,30 @@ describe('decidePostToolResumeRecovery', () => {
     expect(decidePostToolResume({ sideEffects: { toolCallSeen: false } })).toBeNull();
   });
 
+  it.each([
+    'upstream_5xx',
+    'stream_disconnected',
+    'provider_high_demand',
+    'provider_routing_error',
+    'network_error',
+  ] as const)(
+    'continues the native session after a retryable post-tool %s failure',
+    (failureDetail) => {
+      expect(decidePostToolResume({
+        failure: {
+          failure_category: 'upstream_unavailable',
+          failure_detail: failureDetail,
+          failure_stage: 'post_tool_resume',
+          retryable: true,
+        },
+      })).toMatchObject({
+        shouldRetry: true,
+        retryStrategy: NATIVE_SESSION_CONTINUE_STRATEGY,
+        retryReason: 'post_tool_resume',
+      });
+    },
+  );
+
   it('does not loop after the single continuation attempt', () => {
     expect(decidePostToolResume({ continuationAttemptCount: 1 })).toBeNull();
   });

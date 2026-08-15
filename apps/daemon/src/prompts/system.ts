@@ -39,12 +39,16 @@ import {
 } from './core-slim.js';
 import { renderDirectionIndexBlock, renderDirectionSpecBlock } from './directions.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
-import { renderMediaGenerationContract } from './media-contract.js';
-import { IMAGE_MODELS } from '../media/models.js';
+import {
+  MEDIA_USER_REPLY_CONTRACT,
+  renderMediaGenerationContract,
+} from './media-contract.js';
 import { renderPanelPrompt } from './panel.js';
 import { defaultCritiqueConfig, type CritiqueConfig } from '@open-design/contracts/critique';
 import {
   executionProfileFromStreamFormat,
+  INTEGRATIONS_MCP_PATH,
+  SETTINGS_MEDIA_PROVIDERS_PATH,
   type ByokMediaDefaults,
   type ChatSessionMode,
   type ExecutionProfile,
@@ -130,7 +134,7 @@ function formatElevenLabsVoiceOptionsErrorForPrompt(
   if (!trimmed) return undefined;
 
   if (/no ElevenLabs API key/i.test(trimmed)) {
-    return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX} because the ElevenLabs API key is missing. Tell the user to configure it in Settings or paste a voice id manually.`;
+    return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX} because the ElevenLabs API key is missing. Tell the user to configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or paste a voice id manually.`;
   }
 
   const statusMatch = trimmed.match(
@@ -457,6 +461,10 @@ const MEDIA_DISPATCH_HINT = `
 
 If the user asks you to generate an image, video, or audio file — regardless of which provider or model they mention (fal, Replicate, OpenAI, etc.) — use the daemon dispatcher via your **Bash tool**. Do NOT call provider REST APIs directly.
 
+Open Design Cloud models use the \`vela/*\` prefix. Never invoke the \`vela\`
+CLI directly for those models: the OD dispatcher owns trusted Workspace
+attribution, polling, downloads, and final project-file placement.
+
 The daemon injects these env vars into your shell (**POSIX bash — not PowerShell**):
 
 - \`OD_NODE_BIN\`   — absolute path to the Node runtime
@@ -499,6 +507,8 @@ printf '%s\\n' "\$last"
 
 The command exits \`0\` with one line of JSON: \`{"file":{...}}\` when done within ~25s, or \`{"taskId":"..."}\` as a SUCCESSFUL handoff for slow models. On a handoff, run the exact \`media wait\` command the CLI prints on stderr and repeat it until exit \`0\` (done) or exit \`5\` (failed); exit \`2\` means still running — not a failure. Parse JSON with \`python3\`, never \`jq\`.
 
+${MEDIA_USER_REPLY_CONTRACT}
+
 MODEL_SELECTION_GUIDANCE`;
 
 function renderByokMediaDefaultsHint(defaults?: ByokMediaDefaults): string {
@@ -538,12 +548,55 @@ function renderMediaDispatchModelGuidance(defaults?: ByokMediaDefaults): string 
   return `${imagePart} ${videoPart} Always pass \`--surface\` explicitly (\`image\`, \`video\`, or \`audio\`). Any \`fal-ai/*\` path (e.g. \`fal-ai/flux/schnell\`, \`fal-ai/wan-i2v\`) is also a valid \`--model\` value for image/video — pass it through as-is without substitution.`;
 }
 
-function renderMediaDispatchHint(defaults?: ByokMediaDefaults): string {
-  const imageModel = defaults?.imageModel?.trim() || 'flux-pro-ultra';
+function renderMediaDispatchHint(
+  defaults?: ByokMediaDefaults,
+  runtimeDefaults?: ByokMediaDefaults,
+): string {
+  const effectiveDefaults = runtimeDefaults ?? defaults;
+  const imageModel = effectiveDefaults?.imageModel?.trim() || 'flux-pro-ultra';
   const hint = MEDIA_DISPATCH_HINT
     .replace('IMAGE_MODEL_VALUE', shellDoubleQuote(imageModel))
-    .replace('MODEL_SELECTION_GUIDANCE', renderMediaDispatchModelGuidance(defaults));
-  return `${hint}${renderByokMediaDefaultsHint(defaults)}`;
+    .replace(
+      'MODEL_SELECTION_GUIDANCE',
+      renderMediaDispatchModelGuidance(effectiveDefaults),
+    );
+  return `${hint}${renderByokMediaDefaultsHint(defaults)}${renderRuntimeMediaDefaultsHint(runtimeDefaults, defaults)}`;
+}
+
+function mediaDefaultsForRuntime(
+  agentId: string | null | undefined,
+  defaults?: ByokMediaDefaults,
+): ByokMediaDefaults | undefined {
+  if (agentId !== 'amr') return defaults;
+  return {
+    ...defaults,
+    imageModel: defaults?.imageModel?.trim() || 'vela/gpt-image-2',
+    videoModel:
+      defaults?.videoModel?.trim()
+      || 'vela/doubao-seedance-2-0-260128',
+  };
+}
+
+function renderRuntimeMediaDefaultsHint(
+  runtimeDefaults: ByokMediaDefaults | undefined,
+  userDefaults: ByokMediaDefaults | undefined,
+): string {
+  if (!runtimeDefaults) return '';
+  const lines: string[] = [];
+  if (!userDefaults?.imageModel?.trim() && runtimeDefaults.imageModel?.trim()) {
+    lines.push(`- Image model: \`${runtimeDefaults.imageModel.trim()}\``);
+  }
+  if (!userDefaults?.videoModel?.trim() && runtimeDefaults.videoModel?.trim()) {
+    lines.push(`- Video model: \`${runtimeDefaults.videoModel.trim()}\``);
+  }
+  if (lines.length === 0) return '';
+  return `
+
+### Open Design Cloud media defaults
+
+This AMR run uses these managed media defaults when the user has not selected
+a different run-scoped model:
+${lines.join('\n')}`;
 }
 
 const FILESYSTEM_HANDOFF_OVERRIDE = `
@@ -614,7 +667,11 @@ Active design system exception: the active design system is the visual direction
 - When a downstream framework mentions "active direction" or "theme tokens", bind those fields from the active design system instead of the built-in direction library.
 `;
 
-const DEFAULT_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles, paste tokens.css verbatim into the first <style> when it is provided, and match component shapes from the reference component manifest or fixture when available. Treat any pull-layer index as optional context for deeper inspection; do not assume those files have already been loaded.`;
+const DEFAULT_LEGACY_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles, paste tokens.css verbatim into the first <style> when it is provided, and match component shapes from the reference component manifest or fixture when available. Treat any pull-layer index as optional context for deeper inspection; do not assume those files have already been loaded.`;
+
+const DEFAULT_STRUCTURED_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles and paste tokens.css verbatim into the first <style> when it is provided. Use the structured intent routing below as the sole component-selection path; do not infer components from a legacy manifest or fixture. Treat any pull-layer index as optional evidence for deeper inspection, not as an alternate component inventory.`;
+
+const DEFAULT_INVALID_RUNTIME_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles and paste tokens.css verbatim into the first <style> when it is provided. The package's structured component runtime is unavailable, so do not fall back to a legacy manifest or fixture or claim exact component reuse. Treat any pull-layer index as optional evidence for diagnosing the package.`;
 
 function renderDesignSystemImportModeGuidance(
   importMode: ComposeInput['designSystemImportMode'],
@@ -633,7 +690,6 @@ function renderDesignSystemImportModeGuidance(
 
 export interface ComposeInput {
   agentId?: string | null | undefined;
-  includeCodexImagegenOverride?: boolean | undefined;
   streamFormat?: string | undefined;
   skillBody?: string | undefined;
   skillName?: string | undefined;
@@ -671,11 +727,19 @@ export interface ComposeInput {
   // - `designSystemPullIndex`          — lightweight manifest-derived
   //                                      list of richer files available
   //                                      for later pull-channel work.
+  // - `designSystemIntentIndex`        — compact list of canonical business
+  //                                      intents; component details are pulled
+  //                                      only after an intent is selected.
+  // - `designSystemRuntimeIssue`       — visible validation failure for a DS
+  //                                      that declared, but could not load, a
+  //                                      structured runtime.
   designSystemUsageMd?: string | undefined;
   designSystemTokensCss?: string | undefined;
   designSystemComponentsManifest?: string | undefined;
   designSystemFixtureHtml?: string | undefined;
   designSystemPullIndex?: string | undefined;
+  designSystemIntentIndex?: string | undefined;
+  designSystemRuntimeIssue?: string | undefined;
   designSystemImportMode?: 'normalized' | 'hybrid' | 'verbatim' | undefined;
   // Craft references the active skill opted into via `od.craft.requires`.
   // The daemon resolves the slug list to file contents and concatenates
@@ -790,7 +854,6 @@ export interface ComposeInput {
 
 export function composeSystemPrompt({
   agentId,
-  includeCodexImagegenOverride = true,
   skillBody,
   skillName,
   skillMode,
@@ -802,6 +865,8 @@ export function composeSystemPrompt({
   designSystemComponentsManifest,
   designSystemFixtureHtml,
   designSystemPullIndex,
+  designSystemIntentIndex,
+  designSystemRuntimeIssue,
   designSystemImportMode,
   craftBody,
   craftSections,
@@ -834,6 +899,10 @@ export function composeSystemPrompt({
   // layered composition until the A/B comparison signs off.
   const isSlimCore = promptCoreVariant === 'slim';
   const isAskModeEarly = sessionMode === 'chat';
+  const runtimeMediaDefaults = mediaDefaultsForRuntime(
+    agentId,
+    byokMediaDefaults,
+  );
   // Media surfaces (image / video / audio) must be resolved BEFORE the head
   // is built: their generation contract, rather than the design charter's
   // HTML workflow, is the sole workflow authority on these runs.
@@ -937,8 +1006,8 @@ export function composeSystemPrompt({
   // Ask mode (`chat`) is the deliberately bare conversation mode: the
   // CHAT_MODE_OVERRIDE below IS the whole charter, and every artifact-oriented
   // block (the ~3k-token discovery layer, direction library, device frames, the
-  // full designer charter, deck framework, media contracts, codex imagegen
-  // override, critique panel, DS visual-direction override) is gated off so the
+  // full designer charter, deck framework, media contracts, critique panel,
+  // DS visual-direction override) is gated off so the
   // turn stays cheap. Memory, custom instructions, the active design system,
   // attached skills, plugins, MCP tools, and the clarifying-questions surface
   // are still composed in — Ask mode is light, not amnesiac.
@@ -1115,11 +1184,20 @@ export function composeSystemPrompt({
     );
   }
 
+  const hasStructuredIntentIndex = Boolean(designSystemIntentIndex?.trim());
+  const hasStructuredRuntimeIssue = Boolean(designSystemRuntimeIssue?.trim());
+  const hasDeclaredStructuredRuntime = hasStructuredIntentIndex || hasStructuredRuntimeIssue;
+
   if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
+    const defaultUsageBlock = hasStructuredIntentIndex
+      ? DEFAULT_STRUCTURED_DESIGN_SYSTEM_USAGE
+      : hasStructuredRuntimeIssue
+        ? DEFAULT_INVALID_RUNTIME_DESIGN_SYSTEM_USAGE
+        : DEFAULT_LEGACY_DESIGN_SYSTEM_USAGE;
     const usageBlock =
       designSystemUsageMd && designSystemUsageMd.trim().length > 0
         ? designSystemUsageMd.trim()
-        : DEFAULT_DESIGN_SYSTEM_USAGE;
+        : defaultUsageBlock;
     parts.push(
       `\n\n## How to use this design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\n${usageBlock}`,
     );
@@ -1139,26 +1217,51 @@ export function composeSystemPrompt({
   // Structured (compiled) form of the active brand. The DESIGN.md above
   // sets voice and intent; the tokens.css block below is the SAME
   // contract in machine-readable form — names + values the agent pastes
-  // verbatim instead of re-deriving from prose. The components.html
-  // manifest grounds the token vocabulary in worked component shapes
-  // (button / card / type roles) without injecting the full HTML fixture.
-  // If manifest extraction fails or is unavailable, the composer falls
-  // back to the verbatim components.html fixture. Both blocks are
-  // individually gated: missing files skip silently, preserving the
-  // legacy DESIGN.md-only behaviour for prose-only brands.
+  // verbatim instead of re-deriving from prose. Legacy packages use the
+  // components.html manifest to ground the token vocabulary in worked
+  // component shapes (button / card / type roles) without injecting the full
+  // HTML fixture. If manifest extraction fails or is unavailable, the composer
+  // falls back to the verbatim components.html fixture.
+  // Structured packages instead expose an intent index and resolve one exact
+  // component on demand. Those two component paths are mutually exclusive:
+  // the structured runtime, including an invalid one, never falls back to the
+  // legacy manifest / fixture as a competing selection authority.
   if (designSystemTokensCss && designSystemTokensCss.trim().length > 0) {
     parts.push(
       `\n\n## Active design system tokens${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThe block below is this brand's tokens.css contract — every \`:root\` custom property and any scoped override (e.g. \`:root[lang=...]\`) the brand defines. **Paste the unscoped \`:root { ... }\` block verbatim into the artifact's first \`<style>\`** so every \`var(--*)\` reference resolves at runtime.\n\nDo not invent new tokens. Do not redefine these values. Do not write raw hex outside this :root block. The DESIGN.md above is prose; this is the binding contract.\n\n\`\`\`css\n${designSystemTokensCss.trim()}\n\`\`\``,
     );
   }
 
-  if (designSystemComponentsManifest && designSystemComponentsManifest.trim().length > 0) {
+  if (
+    !hasDeclaredStructuredRuntime
+    && designSystemComponentsManifest
+    && designSystemComponentsManifest.trim().length > 0
+  ) {
     parts.push(
       `\n\n## Reference component manifest${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA compact structured summary derived from this brand's components.html fixture. Use it as the component inventory for generated artifacts: match the listed selectors, component groups, class names, token references, focus behavior, and spacing cadence. Prefer these manifest entries over inventing new component shapes.\n\n\`\`\`text\n${designSystemComponentsManifest.trim()}\n\`\`\``,
     );
-  } else if (designSystemFixtureHtml && designSystemFixtureHtml.trim().length > 0) {
+  } else if (
+    !hasDeclaredStructuredRuntime
+    && designSystemFixtureHtml
+    && designSystemFixtureHtml.trim().length > 0
+  ) {
     parts.push(
       `\n\n## Reference fixture${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA self-contained worked artifact in this design system. Match its component shapes (button structure, card structure, type-scale rhythm, focus ring, spacing cadence) when generating new artifacts. Copying fragments is encouraged as long as you keep the \`var(--*)\` references intact — they are already wired to the tokens above.\n\n\`\`\`html\n${designSystemFixtureHtml.trim()}\n\`\`\``,
+    );
+  }
+
+  if (designSystemIntentIndex && designSystemIntentIndex.trim().length > 0) {
+    const resolutionInstruction = resolvedExecutionProfile === 'text_artifact'
+      ? 'This runtime cannot call the resolver or adherence checker. Use the visible intent-to-component mapping to choose the component, but do not invent hidden variants, properties, states, or implementation details. Before finishing, self-check that every mapped component is reused and every visible value comes from the active tokens.'
+      : 'Before writing UI for a listed business intent, run `"$OD_NODE_BIN" "$OD_BIN" tools design-systems resolve --intent <canonical-intent>` once. Reuse the returned implementation and selectors, apply its variant and properties, and include every required state. If the result requires confirmation or forbids invention, follow that decision instead of creating a near-copy. After writing, run `"$OD_NODE_BIN" "$OD_BIN" tools design-systems validate --intent <canonical-intent> --artifact <project-relative-file>` and add one `--artifact` for every related HTML, CSS, or component source file. A failed report must be fixed and re-run before completion. A confirmation-required report must be surfaced to the user; do not silently bypass it.';
+    parts.push(
+      `\n\n## Structured component intent routing${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis intent map and its resolver are the sole component-selection authority. Do not select components from prose, a legacy component manifest, or a fixture. Identify the page's business intent first, then choose from the canonical ids below. ${resolutionInstruction}\n\n\`\`\`text\n${designSystemIntentIndex.trim()}\n\`\`\``,
+    );
+  }
+
+  if (designSystemRuntimeIssue && designSystemRuntimeIssue.trim().length > 0) {
+    parts.push(
+      `\n\n## Structured design-system runtime unavailable${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis package declares a structured runtime, but it failed validation. Do not silently treat it as a valid legacy component map and do not claim structured component reuse. You may still apply DESIGN.md and tokens.css for visual styling; if the task requires mapped component reuse, report this issue for repair.\n\n\`\`\`text\n${designSystemRuntimeIssue.trim()}\n\`\`\``,
     );
   }
 
@@ -1269,6 +1372,11 @@ export function composeSystemPrompt({
     // mode for anything that actually generates media.
   } else if (isMediaSurface) {
     parts.push(renderMediaGenerationContract(mediaExecution, byokMediaDefaults));
+    const runtimeDefaultsHint = renderRuntimeMediaDefaultsHint(
+      runtimeMediaDefaults,
+      byokMediaDefaults,
+    );
+    if (runtimeDefaultsHint) parts.push(runtimeDefaultsHint);
   } else if (mediaHintSignal ?? true) {
     // Non-media projects (prototype, deck, etc.): inject a lightweight hint
     // so the agent uses `od media generate` if the user asks for an image/video
@@ -1277,18 +1385,8 @@ export function composeSystemPrompt({
     // media, and the transcript-scanned signal flips the hint on for the
     // rest of the session as soon as one does.
     (isSlimCore ? slimTurnVariableParts : parts).push(
-      renderMediaDispatchHint(byokMediaDefaults),
+      renderMediaDispatchHint(byokMediaDefaults, runtimeMediaDefaults),
     );
-  }
-
-  if (!isAskMode && includeCodexImagegenOverride && shouldAllowCodexImagegenOverride(metadata, mediaExecution)) {
-    const codexImagegenOverride = renderCodexImagegenOverride(
-      agentId,
-      metadata,
-    );
-    if (codexImagegenOverride) {
-      parts.push(codexImagegenOverride);
-    }
   }
 
   // Critique Theater addendum. When cfg.enabled is true the panel protocol
@@ -1478,121 +1576,8 @@ export function renderConnectedExternalMcpDirective(
     lines.join('\n'),
     '\n\n',
     '**Do NOT call any tool whose name matches `mcp__<server>__authenticate` or `mcp__<server>__complete_authentication` for the servers above.** Those are synthetic fallback tools Claude Code exposes when its first HTTP connect briefly flipped the server into a needs-auth state. The flow they drive (a `localhost:<random>/callback` redirect) cannot complete in this environment, and the real tools (e.g. `generate_image`, `models_explore`, `balance`, …) are already reachable.\n\n',
-    'If a real tool actually fails with an auth-related error, report the exact tool name and error text and stop — the user will reconnect the server in Settings → External MCP. Do not retry by invoking any `*_authenticate` tool.\n',
+    `If a real tool actually fails with an auth-related error, report the exact tool name and error text and stop — the user will reconnect the server in ${INTEGRATIONS_MCP_PATH}. Do not retry by invoking any \`*_authenticate\` tool.\n`,
   ].join('');
-}
-
-const CODEX_IMAGEGEN_MODEL_IDS = new Set(
-  IMAGE_MODELS.filter(
-    (model) =>
-      model?.provider === 'openai' &&
-      typeof model?.id === 'string' &&
-      model.id.startsWith('gpt-image-'),
-  ).map((model) => model.id),
-);
-
-export function resolveCodexImagegenModelId(
-  metadata: ProjectMetadata | undefined,
-): string {
-  const imageModel =
-    typeof metadata?.imageModel === 'string' ? metadata.imageModel.trim() : '';
-  return CODEX_IMAGEGEN_MODEL_IDS.has(imageModel) ? imageModel : '';
-}
-
-export function shouldRenderCodexImagegenOverride(
-  agentId: string | null | undefined,
-  metadata: ProjectMetadata | undefined,
-): boolean {
-  const normalizedAgentId =
-    typeof agentId === 'string' ? agentId.trim().toLowerCase() : '';
-  return (
-    normalizedAgentId === 'codex' &&
-    metadata?.kind === 'image' &&
-    resolveCodexImagegenModelId(metadata).length > 0
-  );
-}
-
-function shouldAllowCodexImagegenOverride(
-  metadata: ProjectMetadata | undefined,
-  mediaExecution: MediaExecutionPolicy | undefined,
-): boolean {
-  const mode = mediaExecution?.mode ?? 'enabled';
-  if (mode !== 'enabled') return false;
-  if (
-    Array.isArray(mediaExecution?.allowedSurfaces) &&
-    mediaExecution.allowedSurfaces.length > 0 &&
-    !mediaExecution.allowedSurfaces.includes('image')
-  ) {
-    return false;
-  }
-  const model = resolveCodexImagegenModelId(metadata);
-  if (
-    model &&
-    Array.isArray(mediaExecution?.allowedModels) &&
-    mediaExecution.allowedModels.length > 0 &&
-    !mediaExecution.allowedModels.includes(model)
-  ) {
-    return false;
-  }
-  return true;
-}
-
-export function renderCodexImagegenOverride(
-  agentId: string | null | undefined,
-  metadata: ProjectMetadata | undefined,
-): string {
-  if (!shouldRenderCodexImagegenOverride(agentId, metadata)) {
-    return '';
-  }
-  const imageModel = resolveCodexImagegenModelId(metadata);
-
-  return `
-
----
-
-## Codex built-in imagegen override (load-bearing — Codex only)
-
-The active agent is Codex and this image project selected \`${imageModel}\`.
-For this specific case, use Codex's built-in image generation capability
-instead of \`"$OD_NODE_BIN" "$OD_BIN" media generate\` for the first generation
-attempt. This is an intentional exception to the media generation contract and
-the active image skill's dispatcher wording.
-
-Do not require, request, or mention \`OPENAI_API_KEY\` before trying the
-built-in path. Reuse the project metadata, reference prompt template, aspect
-ratio, style notes, and the user's current brief to form the final image
-prompt. Generate the image with Codex built-in imagegen, then use the actual
-output path returned by the built-in imagegen result as the source file first.
-Only if the built-in result does not return a usable path should you search
-\`\${CODEX_HOME:-$HOME/.codex}/generated_images/.../ig_*.png\` as a fallback
-source. Never leave a project-referenced asset only under \`$CODEX_HOME\`.
-
-When the user asked for one image, produce exactly one final project image
-file. If Codex built-in imagegen returns multiple candidate files, previews, or
-variants, select the single best match and import only that file into
-\`$OD_PROJECT_DIR\`. Do not copy every generated variant, do not keep multiple
-final image files, and do not present multiple outputs unless the user
-explicitly asked for variants or more than one image.
-
-Copy or move the selected generated file into \`$OD_PROJECT_DIR\` with a short
-descriptive filename, then verify the exact destination file exists under
-\`$OD_PROJECT_DIR\` before claiming success. If reading the source path,
-creating the destination directory, copying/moving, or verifying the copied
-asset fails, report the exact source path, destination path, and access/copy
-error. Do not claim success, silently fall back, or ask about OpenAI/Azure
-fallback after a generated image exists but the project copy fails; stop after
-reporting the failure unless the user explicitly chooses fallback in a later
-turn, because fallback may create a different image.
-
-After the file exists under \`$OD_PROJECT_DIR\`, reply with the project-local
-filename and a short summary of the prompt used. Do not emit an \`<artifact>\`
-block for media.
-
-If Codex built-in imagegen is unavailable or generation fails before producing
-an image, surface the actual failure message and ask the user for one-time
-confirmation before falling back to the existing OpenAI/Azure API-key provider
-path via \`"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model ${imageModel}\`.
-Do not silently fall back.`;
 }
 
 // `style: 'facts'` (slim core) keeps the block a pure fact sheet: key-value

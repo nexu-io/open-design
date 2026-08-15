@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3';
 import type { PersistedAgentEvent } from '@open-design/contracts';
 import {
-  appendMessageAgentEvent,
+  appendMessageAgentEvents,
   upsertMessage,
 } from '../db.js';
 
@@ -22,6 +22,18 @@ type ChatRunMessageState = {
   failureDetail?: string | null;
 };
 
+type PendingMessageEvents = {
+  db: SqliteDb;
+  messageId: string;
+  events: PersistedAgentEvent[];
+  bytes: number;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+
+export const RUN_MESSAGE_EVENT_FLUSH_INTERVAL_MS = 250;
+const RUN_MESSAGE_EVENT_FLUSH_BYTES = 64 * 1024;
+const pendingMessageEvents = new WeakMap<ChatRunMessageState, PendingMessageEvents>();
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
@@ -34,9 +46,67 @@ export function persistRunEventToAssistantMessage(
 ): void {
   if (!run.assistantMessageId) return;
   const persisted = runSseEventToPersistedAgentEvent(event, data);
-  if (!persisted) return;
+  if (!persisted) {
+    if (event === 'end' || event === 'close') flushRunMessageEvents(run);
+    return;
+  }
+
+  let pending = pendingMessageEvents.get(run);
+  if (pending && (pending.db !== db || pending.messageId !== run.assistantMessageId)) {
+    flushRunMessageEvents(run);
+    pending = undefined;
+  }
+  if (!pending) {
+    pending = {
+      db,
+      messageId: run.assistantMessageId,
+      events: [],
+      bytes: 0,
+      timer: null,
+    };
+    pendingMessageEvents.set(run, pending);
+  }
+  appendPendingMessageEvent(pending, persisted);
+
+  const isDelta = persisted.kind === 'text' || persisted.kind === 'thinking';
+  if (!isDelta || pending.bytes >= RUN_MESSAGE_EVENT_FLUSH_BYTES) {
+    flushRunMessageEvents(run);
+    return;
+  }
+  if (!pending.timer) {
+    pending.timer = setTimeout(() => {
+      flushRunMessageEvents(run);
+    }, RUN_MESSAGE_EVENT_FLUSH_INTERVAL_MS);
+    pending.timer.unref?.();
+  }
+}
+
+function appendPendingMessageEvent(
+  pending: PendingMessageEvents,
+  event: PersistedAgentEvent,
+): void {
+  const last = pending.events[pending.events.length - 1];
+  if (
+    (event.kind === 'text' || event.kind === 'thinking') &&
+    last?.kind === event.kind
+  ) {
+    last.text += event.text;
+  } else {
+    pending.events.push(event);
+  }
+  pending.bytes += event.kind === 'text' || event.kind === 'thinking'
+    ? event.text.length
+    : JSON.stringify(event).length;
+}
+
+export function flushRunMessageEvents(run: ChatRunMessageState): void {
+  const pending = pendingMessageEvents.get(run);
+  if (!pending) return;
+  pendingMessageEvents.delete(run);
+  if (pending.timer) clearTimeout(pending.timer);
+  if (pending.events.length === 0) return;
   try {
-    appendMessageAgentEvent(db, run.assistantMessageId, persisted);
+    appendMessageAgentEvents(pending.db, pending.messageId, pending.events);
   } catch (err) {
     console.warn('[runs] message event persistence failed', err);
   }
@@ -304,43 +374,121 @@ function liveArtifactRefreshPhase(value: unknown): 'started' | 'succeeded' | 'fa
   return 'started';
 }
 
-export function pinAssistantMessageOnRunCreate(db: SqliteDb, run: ChatRunMessageState): void {
-  if (!run.conversationId || !run.assistantMessageId) return;
-  const existing = db
-    .prepare(`SELECT id FROM messages WHERE id = ?`)
-    .get(run.assistantMessageId);
-  if (existing) {
-    db.prepare(
+export function pinAssistantMessageOnRunCreate(
+  db: SqliteDb,
+  run: ChatRunMessageState,
+  opts?: {
+    status?: string;
+    beforeFreshInsert?: () => void;
+    beforeClaimCommit?: () => void;
+    isRunActive?: (runId: string) => boolean;
+  },
+): { ok: boolean; reason?: 'active' | 'scope' } {
+  // Headless / omit-pin runs with no assistant message have nothing to claim.
+  if (!run.conversationId || !run.assistantMessageId) return { ok: true };
+
+  // A resume claim writes the post-restart intent (queued) while the run
+  // object is still terminal (failed) — prepareRestart flips it afterwards
+  // (#6418).
+  const claimStatus = opts?.status ?? run.status;
+
+  // Atomic ownership claim (#6418). The claim is a single conditional UPDATE
+  // inside an immediate transaction: the create -> claim stretch is synchronous
+  // on the single better-sqlite3 connection, so two concurrent runs sharing an
+  // assistantMessageId can never both claim the row. `changes > 0` means THIS
+  // run owns the message; `0` means another active run holds it (or it is out
+  // of scope) and the run must not start — the caller drops the just-created
+  // run and rejects the request.
+  const claim = db.transaction((): { ok: boolean; reason?: 'active' | 'scope' } => {
+    const existing = db
+      .prepare(
+        `SELECT run_id AS runId, run_status AS runStatus, role, conversation_id AS conversationId
+           FROM messages WHERE id = ?`,
+      )
+      .get(run.assistantMessageId) as
+      | { runId: string | null; runStatus: string | null; role: string; conversationId: string }
+      | undefined;
+    if (!existing) {
+      // Fresh id: insert the assistant row bound to this run (we own it).
+      opts?.beforeFreshInsert?.();
+      opts?.beforeClaimCommit?.();
+      upsertMessage(db, run.conversationId!, {
+        id: run.assistantMessageId!,
+        role: 'assistant',
+        content: '',
+        agentId: run.agentId ?? undefined,
+        events: [],
+        runId: run.id,
+        runStatus: claimStatus,
+        sessionMode: run.sessionMode ?? undefined,
+        runContext: run.context ?? undefined,
+        startedAt: run.createdAt,
+      });
+      return { ok: true };
+    }
+    // Scope guard (defense in depth; the route pre-filters these cases).
+    if (existing.role !== 'assistant' || existing.conversationId !== run.conversationId) {
+      return { ok: false, reason: 'scope' };
+    }
+    const isSameRun = existing.runId === run.id;
+    const activeLookingExistingRun =
+      existing.runId !== null &&
+      !isSameRun &&
+      (existing.runStatus === 'queued' || existing.runStatus === 'running');
+    const existingRunStillActive =
+      activeLookingExistingRun &&
+      (opts?.isRunActive ? opts.isRunActive(existing.runId!) : true);
+    // Clean early verdict for the common concurrency case (the UPDATE's WHERE
+    // gate below re-asserts it at the DB level so the guarantee survives
+    // refactors).
+    if (existingRunStillActive) {
+      return { ok: false, reason: 'active' };
+    }
+    const allowStaleActiveRebind = activeLookingExistingRun && !existingRunStillActive;
+    const result = db.prepare(
       `UPDATE messages
           SET run_id = ?,
-              run_status = CASE
-                WHEN run_status IN ('succeeded', 'failed', 'canceled') THEN run_status
-                ELSE ?
-              END,
+              run_status = ?,
               session_mode = ?,
               run_context_json = ?,
-              started_at = COALESCE(started_at, ?)
-        WHERE id = ?`,
+              events_json = CASE WHEN run_id = ? THEN events_json ELSE NULL END,
+              content = CASE WHEN run_id = ? OR run_id IS NULL THEN content ELSE '' END,
+              ended_at = NULL,
+              last_run_event_id = CASE WHEN run_id = ? THEN last_run_event_id ELSE NULL END,
+              started_at = CASE
+                WHEN run_id = ? THEN started_at
+                WHEN ? THEN COALESCE(started_at, ?)
+                ELSE ?
+              END
+        WHERE id = ?
+          AND conversation_id = ?
+          AND role = 'assistant'
+          AND (
+            run_id IS NULL
+            OR run_id = ?
+            OR run_status IN ('succeeded','failed','canceled')
+            OR ?
+          )`,
     ).run(
       run.id,
-      run.status,
+      claimStatus,
       run.sessionMode ?? null,
       run.context ? JSON.stringify(run.context) : null,
+      run.id, // same-run: preserve events_json
+      run.id, // same-run: preserve content
+      run.id, // same-run: preserve last_run_event_id
+      run.id, // same-run: preserve started_at
+      existing.runId ? 0 : 1, // placeholder -> keep web-persisted startedAt
       run.createdAt,
+      run.createdAt, // terminal rebind -> reset to this run's start
       run.assistantMessageId,
+      run.conversationId,
+      run.id, // same-run gate in WHERE
+      allowStaleActiveRebind ? 1 : 0,
     );
-    return;
-  }
-  upsertMessage(db, run.conversationId, {
-    id: run.assistantMessageId,
-    role: 'assistant',
-    content: '',
-    agentId: run.agentId ?? undefined,
-    events: [],
-    runId: run.id,
-    runStatus: run.status,
-    sessionMode: run.sessionMode ?? undefined,
-    runContext: run.context ?? undefined,
-    startedAt: run.createdAt,
+    if (result.changes === 0) return { ok: false, reason: 'active' as const };
+    opts?.beforeClaimCommit?.();
+    return { ok: true };
   });
+  return claim.immediate();
 }

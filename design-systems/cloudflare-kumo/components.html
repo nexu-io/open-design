@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cloudflare Kumo UI - reference components</title>
+    <meta name="description" content="Reference fixture for the Open Design Cloudflare Kumo UI integration: compact semantic surfaces, precise controls, visible states, and operational data density." />
+    <style>
+      :root {
+        --bg: oklch(98.75% 0 0);
+        --surface: #ffffff;
+        --surface-warm: oklch(96% 0 0);
+        --fg: oklch(21% 0.006 285.885);
+        --fg-2: var(--fg);
+        --muted: oklch(55.6% 0 0);
+        --meta: var(--muted);
+        --border: oklch(14.5% 0 0 / 0.1);
+        --border-soft: oklch(93.5% 0 0);
+        --accent: oklch(0.5772 0.2324 260);
+        --accent-on: #ffffff;
+        --accent-hover: oklch(48.8% 0.243 264.376);
+        --accent-active: var(--accent-hover);
+        --success: oklch(59.6% 0.145 163.225);
+        --warn: oklch(73.9% 0.177 58.2);
+        --danger: oklch(63.7% 0.237 25.331);
+        --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+        --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        --text-xs: 12px;
+        --text-sm: 13px;
+        --text-base: 14px;
+        --text-lg: 16px;
+        --text-xl: 20px;
+        --text-2xl: 24px;
+        --text-3xl: 30px;
+        --text-4xl: 36px;
+        --leading-body: 1.5;
+        --leading-tight: 1.2;
+        --tracking-display: 0;
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --space-5: 20px;
+        --space-6: 24px;
+        --space-8: 32px;
+        --space-12: 48px;
+        --section-y-desktop: 64px;
+        --section-y-tablet: 48px;
+        --section-y-phone: 32px;
+        --radius-sm: 4px;
+        --radius-md: 6px;
+        --radius-lg: 8px;
+        --radius-pill: 9999px;
+        --elev-flat: none;
+        --elev-ring: 0 0 0 1px var(--border);
+        --elev-raised: 0 1px 2px 0 oklch(0% 0 0 / 0.08);
+        --focus-ring: 0 0 0 2px oklch(15% 0 0);
+        --motion-fast: 150ms;
+        --motion-base: 250ms;
+        --ease-standard: cubic-bezier(0.77, 0, 0.175, 1);
+        --container-max: 1200px;
+        --container-gutter-desktop: 24px;
+        --container-gutter-tablet: 16px;
+        --container-gutter-phone: 12px;
+      }
+
+      [data-theme="dark"],
+      [data-mode="dark"] {
+        --bg: oklch(10% 0 0);
+        --surface: oklch(17% 0 0);
+        --surface-warm: oklch(15% 0 0);
+        --fg: oklch(97% 0 0);
+        --fg-2: var(--fg);
+        --muted: oklch(70.8% 0 0);
+        --meta: var(--muted);
+        --border: oklch(32% 0 0);
+        --border-soft: oklch(26.9% 0 0);
+        --accent: color-mix(in oklch, oklch(0.5772 0.2324 260), black 10%);
+        --accent-on: #ffffff;
+        --accent-hover: oklch(48.8% 0.243 264.376);
+        --accent-active: var(--accent-hover);
+        --success: oklch(76.5% 0.177 163.223);
+        --warn: oklch(64.5% 0.168 50);
+        --danger: oklch(57.7% 0.245 27.325);
+        --elev-raised: 0 1px 2px 0 oklch(0% 0 0 / 0.3);
+        --focus-ring: 0 0 0 2px oklch(93.5% 0 0);
+      }
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body { background: var(--bg); color: var(--fg); font: 400 var(--text-base) / var(--leading-body) var(--font-body); }
+      button, input { font: inherit; }
+      button { cursor: pointer; }
+      button:disabled { cursor: not-allowed; }
+      .page { min-height: 100vh; padding-block: var(--section-y-desktop); }
+      .container { width: min(100% - (2 * var(--container-gutter-desktop)), var(--container-max)); margin-inline: auto; }
+      .stack-2 { display: grid; gap: var(--space-2); }
+      .stack-4 { display: grid; gap: var(--space-4); }
+      .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+      h1, h2, h3, p { margin: 0; }
+      h1, h2, h3 { font-family: var(--font-display); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+      h1 { font-size: var(--text-3xl); font-weight: 600; }
+      h2 { font-size: var(--text-lg); font-weight: 600; }
+      h3 { font-size: var(--text-base); font-weight: 600; }
+      .eyebrow { color: var(--muted); font-size: var(--text-sm); }
+      .lead { max-width: 68ch; color: var(--fg-2); font-size: var(--text-lg); }
+      .layout-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.7fr); gap: var(--space-6); margin-top: var(--space-8); }
+      .panel { overflow: hidden; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--elev-ring), var(--elev-raised); }
+      .panel-header { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--border-soft); }
+      .panel-body { padding: var(--space-5); }
+      .status-badge { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); background: var(--surface-warm); color: var(--fg-2); font-size: var(--text-xs); font-weight: 500; }
+      .status-badge::before { width: 7px; height: 7px; border-radius: var(--radius-pill); background: var(--success); content: ""; }
+      .btn { display: inline-flex; min-height: 36px; align-items: center; justify-content: center; gap: var(--space-2); padding-inline: var(--space-3); border: 1px solid transparent; border-radius: var(--radius-lg); font-weight: 500; }
+      .btn:focus-visible, input:focus-visible, a:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+      .btn-primary { background: var(--accent); color: var(--accent-on); }
+      .btn-primary:hover, .btn-primary:active { background: var(--accent-hover); }
+      .btn-secondary { border-color: var(--border); background: var(--surface); color: var(--fg); }
+      .btn-secondary:hover { background: var(--surface-warm); }
+      .btn-danger { background: var(--danger); color: var(--accent-on); }
+      .btn:disabled { border-color: var(--border-soft); background: var(--surface-warm); color: var(--muted); }
+      .btn-loading::before { width: 12px; height: 12px; border: 2px solid currentcolor; border-right-color: transparent; border-radius: var(--radius-pill); animation: spin var(--motion-base) linear infinite; content: ""; }
+      .actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+      .field { display: grid; gap: var(--space-2); }
+      .field label { font-size: var(--text-sm); font-weight: 500; }
+      .field input { width: 100%; min-height: 36px; padding-inline: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); color: var(--fg); }
+      .field input:hover { border-color: var(--muted); }
+      .field input[aria-invalid="true"] { border-color: var(--danger); }
+      .field-error { color: var(--danger); font-size: var(--text-xs); }
+      .metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid var(--border-soft); }
+      .metric { padding: var(--space-4); border-right: 1px solid var(--border-soft); }
+      .metric:last-child { border-right: 0; }
+      .metric strong { display: block; font-size: var(--text-xl); font-weight: 600; }
+      .metric span { color: var(--muted); font-size: var(--text-sm); }
+      .activity-list { display: grid; margin: 0; padding: 0; list-style: none; }
+      .activity-item { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-soft); }
+      .activity-item:last-child { border-bottom: 0; }
+      .activity-icon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: var(--radius-md); background: var(--surface-warm); color: var(--accent); font-family: var(--font-mono); font-size: var(--text-xs); }
+      .activity-meta { color: var(--muted); font-size: var(--text-xs); }
+      .text-link { color: var(--accent); font-weight: 500; text-decoration: none; }
+      .text-link:hover { text-decoration: underline; }
+      kbd { padding: 2px var(--space-1); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-warm); box-shadow: 0 1px 0 var(--border); font: 500 var(--text-xs) / 1.4 var(--font-mono); }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (max-width: 800px) { .layout-grid { grid-template-columns: 1fr; } .metric-grid { grid-template-columns: 1fr; } .metric { border-right: 0; border-bottom: 1px solid var(--border-soft); } .metric:last-child { border-bottom: 0; } }
+      @media (max-width: 639px) { .page { padding-block: var(--section-y-phone); } .container { width: min(100% - (2 * var(--container-gutter-phone)), var(--container-max)); } .row-between { align-items: flex-start; flex-direction: column; } }
+      @media (prefers-reduced-motion: reduce) { .btn-loading::before { animation: none; border-right-color: currentcolor; } }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <div class="container">
+        <header class="stack-2">
+          <p class="eyebrow">Cloudflare Kumo UI</p>
+          <h1>Network operations</h1>
+          <p class="lead">A compact reference surface using semantic layers, clear states, and task-focused controls.</p>
+        </header>
+        <section class="layout-grid" aria-label="Reference components">
+          <article class="panel">
+            <header class="panel-header row-between">
+              <div class="stack-2"><h2>Service overview</h2><p class="activity-meta">Updated moments ago</p></div>
+              <span class="status-badge">Operational</span>
+            </header>
+            <div class="metric-grid">
+              <div class="metric"><strong>99.99%</strong><span>Availability</span></div>
+              <div class="metric"><strong>18 ms</strong><span>Edge latency</span></div>
+              <div class="metric"><strong>42</strong><span>Active zones</span></div>
+            </div>
+            <ul class="activity-list">
+              <li class="activity-item"><span class="activity-icon" aria-hidden="true">A</span><div><h3>API gateway</h3><p class="activity-meta">Healthy in every region</p></div><a class="text-link" href="#api">Inspect</a></li>
+              <li class="activity-item"><span class="activity-icon" aria-hidden="true">W</span><div><h3>Workers deployment</h3><p class="activity-meta">Version 24 is serving traffic</p></div><kbd>G</kbd></li>
+              <li class="activity-item"><span class="activity-icon" aria-hidden="true">D</span><div><h3>DNS analytics</h3><p class="activity-meta">No anomalies detected</p></div><a class="text-link" href="#dns">Open</a></li>
+            </ul>
+          </article>
+          <aside class="panel">
+            <header class="panel-header"><h2>Configure alert</h2></header>
+            <div class="panel-body stack-4">
+              <div class="field">
+                <label for="alert-name">Alert name</label>
+                <input id="alert-name" value="Latency threshold" />
+              </div>
+              <div class="field">
+                <label for="threshold">Threshold</label>
+                <input id="threshold" aria-invalid="true" aria-describedby="threshold-error" value="" placeholder="Milliseconds" />
+                <p id="threshold-error" class="field-error">Enter a threshold.</p>
+              </div>
+              <div class="actions">
+                <button class="btn btn-primary" type="button">Save alert</button>
+                <button class="btn btn-secondary" type="button">Cancel</button>
+                <button class="btn btn-danger" type="button">Delete</button>
+                <button class="btn btn-loading" type="button" disabled aria-busy="true">Saving</button>
+              </div>
+            </div>
+          </aside>
+        </section>
+      </div>
+    </main>
+  </body>
+</html>

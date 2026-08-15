@@ -78,6 +78,22 @@ export interface PromptTemplateMetadata {
   source?: PromptTemplateMetadataSource;
 }
 
+/**
+ * The local Workspace/member partition from which a catalogue item was picked.
+ *
+ * This is lookup provenance only. It does not bind the project to a Workspace,
+ * prove current membership, or authorize a remote operation.
+ */
+export interface LocalCatalogScope {
+  workspaceId: string;
+  workspaceMemberId: string;
+}
+
+export interface ProjectResourceCatalogScopes {
+  skill?: LocalCatalogScope;
+  designSystem?: LocalCatalogScope;
+}
+
 export type DesignSystemReviewDecision = 'looks-good' | 'needs-work';
 
 export type DesignSystemReviewTaskStatus = 'queued' | 'sent' | 'failed';
@@ -196,6 +212,12 @@ export interface ProjectMetadata {
   contextPlugins?: ProjectContextPluginRef[];
   contextMcpServers?: ProjectContextMcpServerRef[];
   contextConnectors?: ProjectContextConnectorRef[];
+  /**
+   * Daemon-stamped provenance for locally selected project resources. This
+   * keeps the first run on the same local catalogue partition when Workspace
+   * identity is still loading; it is never Workspace ownership or authority.
+   */
+  localCatalogScopes?: ProjectResourceCatalogScopes;
   // Stored on design-system projects so the review overview can remember
   // which generated sections were accepted or sent back for another pass.
   designSystemReview?: Record<string, DesignSystemReviewEntry>;
@@ -313,10 +335,16 @@ export interface CreateProjectRequest {
   /** Optional project library location id. Omit or use `default` for .od/projects. */
   projectLocationId?: string;
   skillId?: string | null;
+  /** Local lookup provenance captured when the Skill was selected. */
+  skillCatalogScope?: LocalCatalogScope;
   designSystemId?: string | null;
+  /** Local lookup provenance captured when the Design System was selected. */
+  designSystemCatalogScope?: LocalCatalogScope;
   pendingPrompt?: string;
   metadata?: ProjectMetadata;
   pluginId?: string;
+  /** Exact identity of the local catalogue record selected by the caller. */
+  pluginSource?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
   /** Session mode for the default conversation seeded with the project. */
@@ -628,6 +656,20 @@ export interface CreateConversationRequest {
    */
   forkAfterMessageId?: string | null;
   /**
+   * One compact client-side message used only when `forkAfterMessageId` is not
+   * present in the source conversation's persisted history. The daemon appends
+   * it to the persisted prefix, which preserves an errored/unpersisted final
+   * assistant turn without making normal forks upload the entire transcript.
+   */
+  forkFallbackMessage?: ChatMessage;
+  /**
+   * The persisted message immediately before `forkFallbackMessage`, or null
+   * when the fallback is the first message. The daemon cuts persisted history
+   * at this boundary before appending the fallback, so later turns cannot leak
+   * into a fork from an older unpersisted assistant message.
+   */
+  forkFallbackPredecessorMessageId?: string | null;
+  /**
    * Client-supplied snapshot of the messages to seed the fork with, in order,
    * up to and including the fork point. When present, the daemon copies these
    * instead of reading the source conversation from the database by id. This
@@ -636,6 +678,10 @@ export interface CreateConversationRequest {
    * message reached the database. Without it, such a fork would 404 on
    * `forkAfterMessageId` and silently fail. When absent, the daemon falls back
    * to copying from `seedFromConversationId` (the original Side Chat path).
+   *
+   * @deprecated Retained for older clients. New clients should first fork from
+   * persisted history and use `forkFallbackMessage` only after a missing fork
+   * point response.
    */
   seedMessages?: ChatMessage[];
 }

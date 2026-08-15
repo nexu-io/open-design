@@ -1,0 +1,467 @@
+{
+  "schemaVersion": 1,
+  "brandId": "cloudflare-kumo",
+  "source": {
+    "componentsHtml": "components.html",
+    "tokensCss": "tokens.css"
+  },
+  "fixture": {
+    "title": "Cloudflare Kumo UI - reference components",
+    "description": "Reference fixture for the Open Design Cloudflare Kumo UI integration: compact semantic surfaces, precise controls, visible states, and operational data density.",
+    "styleBlockCount": 1,
+    "selectorCount": 59,
+    "classCount": 27,
+    "elementCount": 25
+  },
+  "tokens": {
+    "declared": [
+      "--accent",
+      "--accent-active",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--border-soft",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--danger",
+      "--ease-standard",
+      "--elev-flat",
+      "--elev-raised",
+      "--elev-ring",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--meta",
+      "--motion-base",
+      "--motion-fast",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-1",
+      "--space-12",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--success",
+      "--surface",
+      "--surface-warm",
+      "--text-2xl",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display",
+      "--warn"
+    ],
+    "referenced": [
+      "--accent",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--border-soft",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-max",
+      "--danger",
+      "--elev-raised",
+      "--elev-ring",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--motion-base",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--space-1",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--success",
+      "--surface",
+      "--surface-warm",
+      "--text-3xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display"
+    ],
+    "unusedDeclared": [
+      "--accent-active",
+      "--container-gutter-tablet",
+      "--ease-standard",
+      "--elev-flat",
+      "--meta",
+      "--motion-fast",
+      "--section-y-tablet",
+      "--space-12",
+      "--text-2xl",
+      "--text-4xl",
+      "--warn"
+    ],
+    "undeclaredReferenced": []
+  },
+  "selectors": [
+    ".actions",
+    ".activity-icon",
+    ".activity-item",
+    ".activity-item:last-child",
+    ".activity-list",
+    ".activity-meta",
+    ".btn",
+    ".btn-danger",
+    ".btn-loading::before",
+    ".btn-primary",
+    ".btn-primary:active",
+    ".btn-primary:hover",
+    ".btn-secondary",
+    ".btn-secondary:hover",
+    ".btn:disabled",
+    ".btn:focus-visible",
+    ".container",
+    ".eyebrow",
+    ".field",
+    ".field input",
+    ".field input:hover",
+    ".field input[aria-invalid=\"true\"]",
+    ".field label",
+    ".field-error",
+    ".layout-grid",
+    ".lead",
+    ".metric",
+    ".metric span",
+    ".metric strong",
+    ".metric-grid",
+    ".metric:last-child",
+    ".page",
+    ".panel",
+    ".panel-body",
+    ".panel-header",
+    ".row-between",
+    ".stack-2",
+    ".stack-4",
+    ".status-badge",
+    ".status-badge::before",
+    ".text-link",
+    ".text-link:hover",
+    "[data-mode=\"dark\"]",
+    "[data-theme=\"dark\"]",
+    "*",
+    "*::after",
+    "*::before",
+    "a:focus-visible",
+    "body",
+    "button",
+    "button:disabled",
+    "h1",
+    "h2",
+    "h3",
+    "html",
+    "input",
+    "input:focus-visible",
+    "kbd",
+    "p"
+  ],
+  "classes": [
+    "actions",
+    "activity-icon",
+    "activity-item",
+    "activity-list",
+    "activity-meta",
+    "btn",
+    "btn-danger",
+    "btn-loading",
+    "btn-primary",
+    "btn-secondary",
+    "container",
+    "eyebrow",
+    "field",
+    "field-error",
+    "layout-grid",
+    "lead",
+    "metric",
+    "metric-grid",
+    "page",
+    "panel",
+    "panel-body",
+    "panel-header",
+    "row-between",
+    "stack-2",
+    "stack-4",
+    "status-badge",
+    "text-link"
+  ],
+  "elements": [
+    "a",
+    "article",
+    "aside",
+    "body",
+    "button",
+    "div",
+    "h1",
+    "h2",
+    "h3",
+    "head",
+    "header",
+    "html",
+    "input",
+    "kbd",
+    "label",
+    "li",
+    "main",
+    "meta",
+    "p",
+    "section",
+    "span",
+    "strong",
+    "style",
+    "title",
+    "ul"
+  ],
+  "groups": [
+    {
+      "id": "buttons",
+      "label": "Buttons and calls to action",
+      "present": true,
+      "selectors": [
+        ".btn",
+        ".btn-danger",
+        ".btn-loading::before",
+        ".btn-primary",
+        ".btn-primary:active",
+        ".btn-primary:hover",
+        ".btn-secondary",
+        ".btn-secondary:hover",
+        ".btn:disabled",
+        ".btn:focus-visible",
+        "button",
+        "button:disabled"
+      ],
+      "classes": [
+        "btn",
+        "btn-danger",
+        "btn-loading",
+        "btn-primary",
+        "btn-secondary"
+      ],
+      "elements": [
+        "button"
+      ],
+      "tokenReferences": [
+        "--accent",
+        "--accent-on",
+        "--border",
+        "--danger",
+        "--fg",
+        "--motion-base",
+        "--radius-lg",
+        "--radius-pill",
+        "--space-2",
+        "--space-3",
+        "--surface"
+      ]
+    },
+    {
+      "id": "inputs",
+      "label": "Form fields and controls",
+      "present": true,
+      "selectors": [
+        ".field",
+        ".field input",
+        ".field input:hover",
+        ".field input[aria-invalid=\"true\"]",
+        ".field label",
+        ".field-error",
+        "input",
+        "input:focus-visible"
+      ],
+      "classes": [
+        "field",
+        "field-error"
+      ],
+      "elements": [
+        "input",
+        "label"
+      ],
+      "tokenReferences": [
+        "--border",
+        "--danger",
+        "--fg",
+        "--radius-lg",
+        "--space-2",
+        "--space-3",
+        "--surface"
+      ]
+    },
+    {
+      "id": "cards",
+      "label": "Cards and panels",
+      "present": true,
+      "selectors": [
+        ".panel",
+        ".panel-body",
+        ".panel-header"
+      ],
+      "classes": [
+        "panel",
+        "panel-body",
+        "panel-header"
+      ],
+      "elements": [],
+      "tokenReferences": [
+        "--border-soft",
+        "--space-4",
+        "--space-5"
+      ]
+    },
+    {
+      "id": "badges",
+      "label": "Badges, chips, and status labels",
+      "present": true,
+      "selectors": [],
+      "classes": [
+        "status-badge"
+      ],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "links",
+      "label": "Links and inline actions",
+      "present": true,
+      "selectors": [
+        "a:focus-visible"
+      ],
+      "classes": [],
+      "elements": [
+        "a"
+      ],
+      "tokenReferences": []
+    },
+    {
+      "id": "keyboard",
+      "label": "Keyboard hints",
+      "present": true,
+      "selectors": [
+        "kbd"
+      ],
+      "classes": [],
+      "elements": [
+        "kbd"
+      ],
+      "tokenReferences": [
+        "--border",
+        "--font-mono",
+        "--radius-sm",
+        "--space-1",
+        "--surface-warm",
+        "--text-xs"
+      ]
+    },
+    {
+      "id": "icons",
+      "label": "Icon slots",
+      "present": false,
+      "selectors": [],
+      "classes": [],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "typography",
+      "label": "Typography scale and text utilities",
+      "present": true,
+      "selectors": [
+        ".eyebrow",
+        ".lead",
+        "h1",
+        "h2",
+        "h3"
+      ],
+      "classes": [
+        "eyebrow",
+        "lead"
+      ],
+      "elements": [
+        "h1",
+        "h2",
+        "h3",
+        "p"
+      ],
+      "tokenReferences": [
+        "--font-display",
+        "--leading-tight",
+        "--muted",
+        "--text-lg",
+        "--text-sm",
+        "--tracking-display"
+      ]
+    },
+    {
+      "id": "layout",
+      "label": "Layout primitives",
+      "present": true,
+      "selectors": [
+        ".container",
+        ".row-between",
+        ".stack-2",
+        ".stack-4"
+      ],
+      "classes": [
+        "container",
+        "layout-grid",
+        "metric-grid",
+        "row-between",
+        "stack-2",
+        "stack-4"
+      ],
+      "elements": [
+        "header",
+        "main",
+        "section"
+      ],
+      "tokenReferences": [
+        "--space-2",
+        "--space-4"
+      ]
+    }
+  ],
+  "literals": {
+    "colorExpressions": 15,
+    "pixelValues": 25,
+    "hardcodedFontFamilies": 2
+  }
+}

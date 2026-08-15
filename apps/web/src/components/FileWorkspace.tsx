@@ -157,6 +157,7 @@ import { LibraryPicker } from './LibraryPicker';
 import { QuickSwitcher } from './QuickSwitcher';
 import { SketchEditor } from './SketchEditor';
 import { SketchEnginePrewarm } from './SketchEnginePrewarm';
+import { useWorkspaceTabsDockRef } from './workspaceTabsDock';
 import {
   emptySketchScene,
   isSketchJsonFileName,
@@ -1472,6 +1473,8 @@ export function FileWorkspace({
   const launcherBtnRef = useRef<HTMLButtonElement | null>(null);
   const projectShareRef = useRef<HTMLDivElement | null>(null);
   const tabsBarRef = useRef<HTMLDivElement | null>(null);
+  // Focus-mode dock host for the workspace tab strip (workspaceTabsDock.ts).
+  const focusTabsDockRef = useWorkspaceTabsDockRef();
   const draggedTabNameRef = useRef<string | null>(null);
   const browserTabSequenceRef = useRef(0);
   const openFileRef = useRef<(name: string) => void>(() => {});
@@ -3263,6 +3266,21 @@ export function FileWorkspace({
     return liveArtifactEntries.find((entry) => entry.tabId === activeTab) ?? null;
   }, [activeTab, liveArtifactEntries]);
 
+  const activeTabHasRenderableSurface =
+    (activeTab === DESIGN_SYSTEM_TAB && Boolean(designSystemProject))
+    || (isBrowserTabId(activeTab) && browserTabs.some((tab) => tab.id === activeTab))
+    || isTerminalTabId(activeTab)
+    || (isSideChatTabId(activeTab) && Boolean(chatConfig) && Boolean(chatAgentsById))
+    || activeLiveArtifact !== null
+    || activeFile !== null;
+  // A persisted file tab can outlive its file. The tab strip hides that stale
+  // entry, so keeping it as the visual active target would leave the fixed
+  // Design Files tab as the only visible tab while the body tells the user to
+  // open Design Files. Treat the root as the display fallback without erasing
+  // persisted state: an in-flight file refresh may still restore the target.
+  const designFilesTabActive =
+    activeTab === DESIGN_FILES_TAB || !activeTabHasRenderableSurface;
+
   // Identity-stable props for the memoized FileViewer. Without these, every
   // FileWorkspace state change (closing an adjacent tab, drag hover, launcher
   // toggles) would hand FileViewer fresh object/function identities and drag
@@ -3359,7 +3377,7 @@ export function FileWorkspace({
         tabId: activeTab,
       };
     }
-    if (activeTab === DESIGN_FILES_TAB) {
+    if (designFilesTabActive) {
       // Nothing to reference yet — don't auto-stage an empty "Design files" chip.
       if (designFilesTabIsEmpty) return null;
       const trimmedDir = uploadDir.trim();
@@ -3368,7 +3386,7 @@ export function FileWorkspace({
         id: trimmedDir ? `folder:${trimmedDir}` : 'workspace:design-files',
         kind: trimmedDir ? 'folder' : 'design-files',
         label,
-        tabId: activeTab,
+        tabId: DESIGN_FILES_TAB,
         ...(trimmedDir ? { path: trimmedDir } : {}),
         ...(resolvedDir ? { absolutePath: joinDisplayPath(resolvedDir, trimmedDir) } : {}),
       };
@@ -3434,6 +3452,7 @@ export function FileWorkspace({
     browserTabs,
     conversations,
     designFilesTabIsEmpty,
+    designFilesTabActive,
     designSystemProject,
     resolvedDir,
     t,
@@ -3869,6 +3888,17 @@ export function FileWorkspace({
             <Icon name="chevron-right" size={15} />
           </button>
         ) : null}
+        {/* Focus mode keeps the project tab strip on this same row (the chat
+            column — its usual dock — is collapsed): the strip portals in here,
+            between the expand-chat control and the file tabs, so the chrome
+            row above stays Home + account only. See workspaceTabsDock.ts. */}
+        {focusMode ? (
+          <div
+            className="ws-tabs-project-dock"
+            data-testid="workspace-tabs-dock-focus"
+            ref={focusTabsDockRef}
+          />
+        ) : null}
         <div
           ref={tabsBarRef}
           className={`ws-tabs-bar${tabsOverflowing ? ' is-overflowing' : ''}`}
@@ -3912,9 +3942,9 @@ export function FileWorkspace({
           ) : null}
           <button
             type="button"
-            className={`ws-tab design-files-tab ${activeTab === DESIGN_FILES_TAB ? 'active' : ''}`}
+            className={`ws-tab design-files-tab ${designFilesTabActive ? 'active' : ''}`}
             role="tab"
-            aria-selected={activeTab === DESIGN_FILES_TAB}
+            aria-selected={designFilesTabActive}
             aria-label={designFilesTabTitle}
             tabIndex={0}
             data-testid="design-files-tab"
@@ -4196,7 +4226,7 @@ export function FileWorkspace({
             onConnectRepo={onConnectRepo}
             githubConnected={githubConnected}
           />
-        ) : activeTab === DESIGN_FILES_TAB ? (
+        ) : designFilesTabActive ? (
           <DesignFilesPanel
             key={projectId}
             projectId={projectId}

@@ -110,6 +110,7 @@ export function AmrArtifactUpgradeGate({
         !detail
         || typeof detail.runId !== 'string'
         || !detail.runId.trim()
+        || detail.agentId !== 'amr'
         || !sessionKey
         || detail.result !== 'success'
         || !Number.isFinite(detail.artifactCount)

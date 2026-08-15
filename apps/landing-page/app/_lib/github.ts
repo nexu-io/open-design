@@ -203,6 +203,90 @@ export function buildMatrixFromStableMetadata(metadata: unknown): ReleaseMatrix 
   };
 }
 
+type ReleaseMetadataFetch = (
+  input: string | URL | Request,
+  init?: RequestInit,
+) => Promise<Response>;
+
+/**
+ * Resolve the canonical public stable release from one complete R2 manifest.
+ * Download-page version labels and artifacts must never be assembled from
+ * independent GitHub and R2 snapshots.
+ */
+export async function fetchLatestStableRelease(
+  fetchImpl: ReleaseMetadataFetch = fetch,
+): Promise<LatestRelease> {
+  const response = await fetchImpl(RELEASE_METADATA_UPSTREAM_URL, {
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) {
+    throw new Error(`Request returned ${response.status}: ${RELEASE_METADATA_UPSTREAM_URL}`);
+  }
+
+  const metadata: unknown = await response.json();
+  if (!isRecord(metadata) || metadata.channel !== 'stable' || metadata.releaseState !== 'complete') {
+    throw new Error('Stable release metadata is not complete');
+  }
+
+  const versionLabel = formatStableReleaseVersion(metadata);
+  if (!versionLabel) throw new Error('Stable release metadata has no valid version');
+
+  const matrix = buildMatrixFromStableMetadata(metadata);
+  if (!matrix.macArm64Dmg || !matrix.macX64Dmg || !matrix.winSetup) {
+    throw new Error('Stable release metadata is missing required desktop installers');
+  }
+  const releaseVersion = cleanVersion(versionLabel);
+  const versionPrefix = `/stable/versions/${releaseVersion}`;
+  const mismatchedArtifact = Object.values(matrix).find((asset) => {
+    if (!asset) return false;
+    try {
+      const url = new URL(asset.url);
+      return (
+        url.origin !== 'https://releases.open-design.ai' ||
+        (url.pathname !== versionPrefix &&
+          !url.pathname.startsWith(`${versionPrefix}/`) &&
+          !url.pathname.startsWith(`${versionPrefix}.`))
+      );
+    } catch {
+      return true;
+    }
+  });
+  if (mismatchedArtifact) {
+    throw new Error(
+      `Stable release artifact ${mismatchedArtifact.name} does not match release version ${releaseVersion}`,
+    );
+  }
+  const expectedTagName = `open-design-v${releaseVersion}`;
+  if (metadata.versionTag !== expectedTagName) {
+    throw new Error(`Stable release tag does not match version ${releaseVersion}`);
+  }
+  const tagName = expectedTagName;
+
+  return {
+    version: releaseVersion,
+    versionLabel,
+    tagName,
+    publishedAt:
+      typeof metadata.publishedAt === 'string'
+        ? metadata.publishedAt
+        : typeof metadata.generatedAt === 'string'
+          ? metadata.generatedAt
+          : null,
+    releaseUrl: tagName
+      ? `${REPO_RELEASES}/tag/${encodeURIComponent(tagName)}`
+      : REPO_RELEASES,
+    matrix,
+    resolved: Object.values(matrix).some((asset) => asset !== null),
+  };
+}
+
+let latestStableReleasePromise: Promise<LatestRelease> | null = null;
+
+export function getLatestStableRelease(): Promise<LatestRelease> {
+  latestStableReleasePromise ??= fetchLatestStableRelease();
+  return latestStableReleasePromise;
+}
+
 function mergeMatrices(preferred: ReleaseMatrix, fallback: ReleaseMatrix): ReleaseMatrix {
   return {
     macArm64Dmg: preferred.macArm64Dmg ?? fallback.macArm64Dmg,

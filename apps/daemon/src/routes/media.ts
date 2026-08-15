@@ -6,6 +6,8 @@ import type {
 } from '@open-design/contracts';
 import type { AnalyticsContext } from '../analytics.js';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
+import { formatMediaTaskDiagnostic } from '../media/diagnostics.js';
+import { findMediaModel } from '../media/models.js';
 import type { ImageGenerationRequestSummary } from '../media/image-generation-retry.js';
 import type { RouteDeps } from '../server-context.js';
 import type {
@@ -31,6 +33,14 @@ import {
 import type { WorkspaceDirectoryFetchResult } from '../collab/vela-workspace-context.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
+
+function mediaProviderId(model: string): string | undefined {
+  const registered = findMediaModel(model)?.provider;
+  if (registered) return registered;
+  if (model.startsWith('fal-ai/')) return 'fal';
+  if (model.startsWith('aihubmix-')) return 'aihubmix';
+  return undefined;
+}
 
 // Short in-memory cache for the AIHubMix media catalogue so the picker can
 // refresh without hammering the upstream public endpoint. Keyed by
@@ -100,7 +110,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       : null;
   const { orbitService } = ctx.orbit;
   const { openBrowser, openNativeFolderDialog } = ctx.nativeDialogs;
-  const { getProject } = ctx.projectStore;
+  const { findTeamWorkspaceIdForProject, getProject } = ctx.projectStore;
   const { insertConversation, upsertMessage } = ctx.conversations;
   const { searchResearch, ResearchError } = ctx.research;
   const getResolvedPort = () => resolvedPortRef.current;
@@ -190,13 +200,28 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       task = createMediaTask(taskId, projectId, {
         surface: req.body?.surface,
         model: req.body?.model,
+        runId: options.grant?.runId,
       });
-      console.error(
-        `[task ${taskId.slice(0, 8)}] queued model=${req.body?.model} ` +
-          `surface=${req.body?.surface} ` +
-          `image=${req.body?.image ? 'yes' : 'no'} ` +
-          `compositionDir=${req.body?.compositionDir ? 'yes' : 'no'}`,
-      );
+      const requestedProviderId = mediaProviderId(model);
+      const diagnosticContext = {
+        taskId,
+        runId: options.grant?.runId,
+        projectId,
+        surface,
+        model,
+      };
+      console.error(formatMediaTaskDiagnostic({
+        ...diagnosticContext,
+        event: 'queued',
+        providerId: requestedProviderId,
+        status: task.status,
+        referenceImageCount: Array.isArray(req.body?.images)
+          ? req.body.images.length
+          : req.body?.image
+            ? 1
+            : 0,
+        hasCompositionDir: Boolean(req.body?.compositionDir),
+      }));
 
       const proxyDispatcher = proxyDispatcherRequestInit(process.env, {
         headersTimeout: LONG_MEDIA_PROXY_TIMEOUT_MS,
@@ -204,6 +229,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       });
       task.status = 'running';
       persistMediaTask(task);
+      const workspaceId = findTeamWorkspaceIdForProject(db, projectId) ?? undefined;
       generateMedia({
         projectRoot: PROJECT_ROOT,
         projectsRoot: PROJECTS_DIR,
@@ -213,6 +239,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         prompt: req.body?.prompt,
         output: req.body?.output,
         aspect: req.body?.aspect,
+        quality: typeof req.body?.quality === 'string' ? req.body.quality : undefined,
+        resolution: typeof req.body?.resolution === 'string' ? req.body.resolution : undefined,
         length:
           typeof req.body?.length === 'number' ? req.body.length : undefined,
         duration:
@@ -229,6 +257,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         compositionDir: req.body?.compositionDir,
         image: req.body?.image,
         images: Array.isArray(req.body?.images) ? req.body.images : undefined,
+        workspaceId,
         onProgress: (line: any) => appendTaskProgress(task, line),
         requestInit: proxyDispatcher.requestInit,
         onProviderRequestSettled: (summary: ImageGenerationRequestSummary & { providerId: string }) => {
@@ -254,10 +283,15 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
             });
           }
           notifyTaskWaiters(task);
-          console.error(
-            `[task ${taskId.slice(0, 8)}] done size=${meta?.size} mime=${meta?.mime} ` +
-              `elapsed=${Math.round((task.endedAt - task.startedAt) / 1000)}s`,
-          );
+          console.error(formatMediaTaskDiagnostic({
+            ...diagnosticContext,
+            event: 'done',
+            providerId: meta?.providerId ?? providerRequestSummary?.providerId ?? requestedProviderId,
+            status: task.status,
+            elapsedMs: task.endedAt - task.startedAt,
+            fileSize: typeof meta?.size === 'number' ? meta.size : undefined,
+            mime: typeof meta?.mime === 'string' ? meta.mime : undefined,
+          }));
         })
         .catch((err: any) => {
           task.status = 'failed';
@@ -281,10 +315,15 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
             });
           }
           notifyTaskWaiters(task);
-          console.error(
-            `[task ${taskId.slice(0, 8)}] failed status=${task.error.status} ` +
-              `message=${(task.error.message || '').slice(0, 240)}`,
-          );
+          console.error(formatMediaTaskDiagnostic({
+            ...diagnosticContext,
+            event: 'failed',
+            providerId: providerRequestSummary?.providerId ?? requestedProviderId,
+            status: task.error.status,
+            code: task.error.code,
+            elapsedMs: task.endedAt - task.startedAt,
+            error: task.error.message,
+          }));
         })
         .finally(() => proxyDispatcher.close());
 
@@ -304,6 +343,19 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         task.endedAt = Date.now();
         persistMediaTask(task);
         notifyTaskWaiters(task);
+        console.error(formatMediaTaskDiagnostic({
+          event: 'failed',
+          taskId: task.id,
+          runId: options.grant?.runId,
+          projectId,
+          surface,
+          model,
+          providerId: mediaProviderId(model),
+          status: task.error.status,
+          code: task.error.code,
+          elapsedMs: task.endedAt - task.startedAt,
+          error: task.error.message,
+        }));
       }
       throw err;
     }

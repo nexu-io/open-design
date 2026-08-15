@@ -16,6 +16,7 @@ import {
   buildWorkspaceSeatSummary,
 } from '@open-design/contracts';
 import { coalescedGet, forceCoalescedGet } from '../lib/coalesced-get';
+import { BackoffController, type BackoffOptions } from '../lib/backoff';
 import {
   markProjectDisplaySnapshotsDirty,
   patchProjectDisplaySnapshots,
@@ -77,7 +78,7 @@ export interface WorkspaceContextState {
    * workspace answer is unknown; write paths must fail closed instead of
    * treating that outage as an anonymous identity.
    */
-  failure?: 'unsupported' | 'unavailable';
+  failure?: 'unsupported' | 'unavailable' | 'reauth-required';
 }
 
 /**
@@ -231,6 +232,18 @@ function workspaceContextCoalesceKey(): string {
   return `workspace-context:${workspaceContextRequestToken}`;
 }
 
+/**
+ * The LIVE identity generation token. A cached workspace context is stamped
+ * with the token it was resolved under (see `resourceReadIdentity.generation`);
+ * a write path compares that stamp against this live value to decide whether a
+ * retained (last-good) context still belongs to the current identity, rather
+ * than trusting a possibly-stale `identityChangePending` snapshot. See
+ * `resolvedWorkspaceContextForWrite` in `state/projects.ts`.
+ */
+export function currentWorkspaceContextRequestToken(): string {
+  return workspaceContextRequestToken;
+}
+
 async function fetchWorkspaceDirectory(): Promise<WorkspaceDirectoryResponse> {
   const response = await fetch('/api/workspace/directory', { cache: 'no-store' });
   if (!response.ok) {
@@ -340,25 +353,11 @@ export interface CurrentWorkspaceContextReadWitness {
   isStillCurrent: () => boolean;
 }
 
-/**
- * Resolve the Workspace selected by this browser tab from the account
- * directory, without waiting for the shell's richer `/workspace/context`
- * projection to commit to React state.
- *
- * This is an authorization witness, not a display cache: the directory read
- * verifies the exact Workspace/member pair and the returned lifetime closes
- * over both the account/context generation and the tab-local selection. A
- * concurrent sign-in or Workspace switch therefore invalidates an in-flight
- * project action before it may commit.
- */
-export async function resolveCurrentWorkspaceContextReadWitness(
-  options: { fresh?: boolean } = {},
-): Promise<CurrentWorkspaceContextReadWitness> {
-  const requestToken = workspaceContextRequestToken;
-  const accountGeneration = currentWorkspaceAccountGeneration();
-  const directory = await readWorkspaceDirectoryForCurrentGeneration(options);
-  const selected = chooseWorkspaceForTab(directory.items ?? []);
-  const context = selected ? workspaceContextFromDirectoryItem(selected) : null;
+function createCurrentWorkspaceContextReadWitness(
+  context: WorkspaceCollabContext | null,
+  requestToken: string,
+  accountGeneration: number,
+): CurrentWorkspaceContextReadWitness {
   const selectedWorkspaceId = context?.workspaceId ?? null;
   const selectedWorkspaceMemberId = context?.workspaceMemberId ?? null;
   return {
@@ -368,13 +367,63 @@ export async function resolveCurrentWorkspaceContextReadWitness(
         workspaceContextRequestToken !== requestToken
         || currentWorkspaceAccountGeneration() !== accountGeneration
       ) return false;
-      const currentSelection = readWorkspaceSelection();
+      const currentSelection = readWorkspaceSelectionResult();
+      // The directory-backed identity remains authoritative in memory when a
+      // privacy-restricted browser disables sessionStorage. An available
+      // store still guards explicit tab selection changes below.
+      if (!currentSelection.available) return true;
       return context
-        ? currentSelection?.workspaceId === selectedWorkspaceId
-          && currentSelection.workspaceMemberId === selectedWorkspaceMemberId
-        : currentSelection === null;
+        ? currentSelection.selection?.workspaceId === selectedWorkspaceId
+          && currentSelection.selection.workspaceMemberId === selectedWorkspaceMemberId
+        : currentSelection.selection === null;
     },
   };
+}
+
+/**
+ * Reuse the identity last established by the directory-backed shell state.
+ * This is the steady-state submit path: no new directory request is needed.
+ * The witness protects the client from local account/selection races; mutation
+ * routes still perform the final authorization check in the daemon.
+ */
+export function workspaceContextReadWitnessFromState(
+  state: Pick<WorkspaceContextState, 'resourceReadIdentity'>,
+): CurrentWorkspaceContextReadWitness | null {
+  const identity = state.resourceReadIdentity;
+  if (!identity || identity.generation !== workspaceContextRequestToken) return null;
+  const witness = createCurrentWorkspaceContextReadWitness(
+    identity.context,
+    identity.generation,
+    currentWorkspaceAccountGeneration(),
+  );
+  return witness.isStillCurrent() ? witness : null;
+}
+
+/**
+ * Resolve the Workspace selected by this browser tab from the account
+ * directory, without waiting for the shell's richer `/workspace/context`
+ * projection to commit to React state.
+ *
+ * This is a client-side selection witness, not the final authorization check:
+ * the directory read identifies the exact Workspace/member pair and the
+ * returned lifetime closes over both the account/context generation and the
+ * tab-local selection. A concurrent sign-in or Workspace switch therefore
+ * invalidates an in-flight project action before it may commit; mutation
+ * routes independently re-authorize the claimed pair in the daemon.
+ */
+export async function resolveCurrentWorkspaceContextReadWitness(
+  options: { fresh?: boolean } = {},
+): Promise<CurrentWorkspaceContextReadWitness> {
+  const requestToken = workspaceContextRequestToken;
+  const accountGeneration = currentWorkspaceAccountGeneration();
+  const directory = await readWorkspaceDirectoryForCurrentGeneration(options);
+  const selected = chooseWorkspaceForTab(directory.items ?? []);
+  const context = selected ? workspaceContextFromDirectoryItem(selected) : null;
+  return createCurrentWorkspaceContextReadWitness(
+    context,
+    requestToken,
+    accountGeneration,
+  );
 }
 
 // Last successfully-resolved workspace context, kept at module scope so it
@@ -394,10 +443,27 @@ interface WorkspaceSelection {
   workspaceMemberId: string;
 }
 
-function readWorkspaceSelection(): WorkspaceSelection | null {
-  if (typeof window === 'undefined') return null;
+// `undefined` means storage is authoritative. A value (including null) means
+// the latest write failed and this tab's in-memory choice is authoritative.
+let inMemoryWorkspaceSelection: WorkspaceSelection | null | undefined;
+
+type WorkspaceSelectionRead =
+  | { available: true; selection: WorkspaceSelection | null }
+  | { available: false; selection: null };
+
+function readWorkspaceSelectionResult(): WorkspaceSelectionRead {
+  if (typeof window === 'undefined') return { available: true, selection: null };
+  if (inMemoryWorkspaceSelection !== undefined) {
+    return { available: true, selection: inMemoryWorkspaceSelection };
+  }
+  let storedSelection: string | null;
   try {
-    const raw = JSON.parse(window.sessionStorage.getItem(WORKSPACE_SELECTION_SESSION_KEY) ?? 'null') as {
+    storedSelection = window.sessionStorage.getItem(WORKSPACE_SELECTION_SESSION_KEY);
+  } catch {
+    return { available: false, selection: null };
+  }
+  try {
+    const raw = JSON.parse(storedSelection ?? 'null') as {
       workspaceId?: unknown;
       workspaceMemberId?: unknown;
     } | null;
@@ -405,22 +471,31 @@ function readWorkspaceSelection(): WorkspaceSelection | null {
       typeof raw?.workspaceId === 'string' ? raw.workspaceId.trim() : '';
     const workspaceMemberId =
       typeof raw?.workspaceMemberId === 'string' ? raw.workspaceMemberId.trim() : '';
-    return workspaceId && workspaceMemberId
-      ? { workspaceId, workspaceMemberId }
-      : null;
+    return {
+      available: true,
+      selection: workspaceId && workspaceMemberId
+        ? { workspaceId, workspaceMemberId }
+        : null,
+    };
   } catch {
-    return null;
+    return { available: true, selection: null };
   }
+}
+
+function readWorkspaceSelection(): WorkspaceSelection | null {
+  return readWorkspaceSelectionResult().selection;
 }
 
 function writeWorkspaceSelection(selection: WorkspaceSelection | null): void {
   if (typeof window === 'undefined') return;
+  inMemoryWorkspaceSelection = selection ? { ...selection } : null;
   try {
     if (selection) {
       window.sessionStorage.setItem(WORKSPACE_SELECTION_SESSION_KEY, JSON.stringify(selection));
     } else {
       window.sessionStorage.removeItem(WORKSPACE_SELECTION_SESSION_KEY);
     }
+    inMemoryWorkspaceSelection = undefined;
   } catch {
     // A tab with unavailable sessionStorage still remains isolated in memory.
   }
@@ -465,6 +540,23 @@ function explicitWorkspaceHeaders(selection: WorkspaceSelection): Record<string,
   };
 }
 
+function workspaceDirectoryItemFromContext(
+  context: WorkspaceCollabContext,
+): WorkspaceDirectoryItem {
+  return {
+    workspaceId: context.workspaceId,
+    workspaceName:
+      context.workspaceName?.trim()
+      || context.teamName?.trim()
+      || context.workspaceId,
+    workspaceType: context.workspaceType,
+    workspaceMemberId: context.workspaceMemberId,
+    role: context.role,
+    memberStatus: context.memberStatus,
+    lifecycleState: context.lifecycleState,
+  };
+}
+
 /** Test seam: clear the module-level context cache between tests. */
 export function resetWorkspaceContextCache(): void {
   cachedWorkspaceContext = null;
@@ -476,6 +568,8 @@ export function resetWorkspaceContextCache(): void {
   workspaceContextIdentityChangePending = false;
   workspaceAccountGeneration = 0;
   workspaceAccountGenerationStamp = 'initial';
+  resetWorkspaceContextRetrySchedules();
+  inMemoryWorkspaceSelection = undefined;
   writeWorkspaceSelection(null);
 }
 
@@ -591,7 +685,12 @@ export function useWorkspaceContext(): WorkspaceContextState {
    * declaring a new local identity generation.
    */
   const loadContext = useCallback(async (
-    options: { markLoading?: boolean; fresh?: boolean } = {},
+    options: {
+      markLoading?: boolean;
+      fresh?: boolean;
+      /** Revalidate the already-selected scope without listing the account. */
+      exactScopeOnly?: boolean;
+    } = {},
   ) => {
     const requestEpoch = ++requestEpochRef.current;
     const requestGeneration = workspaceContextRequestToken;
@@ -607,16 +706,31 @@ export function useWorkspaceContext(): WorkspaceContextState {
     }
     try {
       const requestedSelection = readWorkspaceSelection();
+      const exactScopeContext =
+        options.exactScopeOnly
+        && requestedSelection
+        && cachedWorkspaceContext
+        && cachedWorkspaceContextGeneration === requestGeneration
+        && cachedWorkspaceContext.workspaceId === requestedSelection.workspaceId
+        && cachedWorkspaceContext.workspaceMemberId
+          === requestedSelection.workspaceMemberId
+          ? cachedWorkspaceContext
+          : null;
       const forceFresh = options.markLoading || options.fresh;
-      const directory = forceFresh
-        ? await readWorkspaceDirectoryForCurrentGeneration({ fresh: true })
-        : await readWorkspaceDirectoryForCurrentGeneration();
+      let directory: WorkspaceDirectoryResponse | null = null;
+      if (!exactScopeContext) {
+        directory = forceFresh
+          ? await readWorkspaceDirectoryForCurrentGeneration({ fresh: true })
+          : await readWorkspaceDirectoryForCurrentGeneration();
+      }
       if (
         !mountedRef.current
         || requestEpochRef.current !== requestEpoch
         || workspaceContextRequestToken !== requestGeneration
       ) return;
-      const selected = chooseWorkspaceForTab(directory.items ?? []);
+      const selected = exactScopeContext
+        ? workspaceDirectoryItemFromContext(exactScopeContext)
+        : chooseWorkspaceForTab(directory?.items ?? []);
       const exactSessionSelection = requestedSelection && selected
         && selected.workspaceId === requestedSelection.workspaceId
         && selected.workspaceMemberId === requestedSelection.workspaceMemberId
@@ -680,10 +794,11 @@ export function useWorkspaceContext(): WorkspaceContextState {
       // Coalesced: every mounted consumer of this hook (and every focus/pageshow
       // refresh across them) fires the same read on a home-view burst — collapse
       // them to one request. The nav shell tolerates sub-second staleness.
-      // An explicit identity-change refresh forces a fresh read instead of
-      // sharing a settled answer that predates the change.
+      // Identity changes and exact-scope safety checks force a new generation
+      // read instead of sharing a settled answer that predates their trigger.
+      // `forceCoalescedGet` still single-flights the burst across consumers.
       const coalesceKey = workspaceContextCoalesceKey();
-      const body = forceFresh
+      const body = forceFresh || options.exactScopeOnly
         ? await forceCoalescedGet(coalesceKey, fetchContext)
         : await coalescedGet(coalesceKey, fetchContext);
       if (
@@ -701,6 +816,9 @@ export function useWorkspaceContext(): WorkspaceContextState {
       cachedWorkspaceContext = nextContext;
       cachedWorkspaceContextGeneration = requestGeneration;
       workspaceContextIdentityChangePending = false;
+      // A successful read is the only thing that rewinds the failure-retry
+      // backoff for this generation.
+      clearWorkspaceContextRetryFailures(requestGeneration);
       setState({
         context: cachedWorkspaceContext,
         resourceReadIdentity: cachedWorkspaceContext
@@ -719,6 +837,9 @@ export function useWorkspaceContext(): WorkspaceContextState {
       // last-known context instead of flashing the signed-out state. A never-
       // signed-in / personal user has a null cache, so this still shows the local
       // state for them.
+      const status = (error as { status?: unknown })?.status;
+      const unsupported = status === 404;
+      const reauthRequired = status === 401 || status === 403;
       setState({
         context: cachedWorkspaceContext,
         resourceReadIdentity:
@@ -730,11 +851,17 @@ export function useWorkspaceContext(): WorkspaceContextState {
             : null,
         loading: false,
         identityChangePending: workspaceContextIdentityChangePending,
-        failure:
-          (error as { status?: unknown })?.status === 404
-            ? 'unsupported'
+        failure: unsupported
+          ? 'unsupported'
+          : reauthRequired
+            ? 'reauth-required'
             : 'unavailable',
       });
+      // An `unsupported` daemon has no workspace endpoint — retrying is
+      // pointless. A transient `unavailable` outage arms the shared jittered
+      // backoff so the shell recovers on its own without waiting for the 30s
+      // poll or a focus event.
+      if (!unsupported && !reauthRequired) scheduleWorkspaceContextRetry(requestGeneration);
     }
   }, []);
 
@@ -752,7 +879,16 @@ export function useWorkspaceContext(): WorkspaceContextState {
     { 'workspace-context-changed': () => void loadContext({ fresh: true }) },
     {
       workspaceContext: state.context,
-      onActive: () => void loadContext(),
+      // Reconnect is the gap-closing snapshot in the thin-event model. It must
+      // bypass settled one-second directory/context answers: a membership
+      // change may have landed while this browser had no sink, and accepting
+      // that stale snapshot would immediately slow the fallback poll to the
+      // healthy-SSE floor.
+      onActive: (reason) => void loadContext(
+        reason === 'ambient'
+          ? { exactScopeOnly: true }
+          : { fresh: true },
+      ),
     },
   );
 
@@ -761,14 +897,20 @@ export function useWorkspaceContext(): WorkspaceContextState {
     // cadence when the stream is unavailable so there is no regression.
     const intervalMs = sseConnected ? WORKSPACE_CONTEXT_SSE_FLOOR_MS : WORKSPACE_CONTEXT_POLL_MS;
     const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') void loadContext();
+      if (document.visibilityState !== 'visible') return;
+      // A healthy browser→daemon stream still gets a periodic safety read, but
+      // the scope is already known. Avoid listing the whole account merely to
+      // re-verify the current Workspace; the daemon decides whether its stricter
+      // upstream SSE authority is healthy enough to serve a bounded scoped
+      // cache or whether this request must fall back to `/api/v1/workspaces`.
+      void loadContext(sseConnected ? { exactScopeOnly: true } : undefined);
     }, intervalMs);
     return () => clearInterval(interval);
   }, [loadContext, sseConnected]);
 
   useEffect(() => {
     const refresh = () => {
-      void loadContext();
+      void loadContext(sseConnected ? { exactScopeOnly: true } : undefined);
     };
     // An EXPLICIT refresh means a caller just changed the identity (signed in
     // through onboarding or the rail callout) and is telling us so. Focus and
@@ -815,19 +957,37 @@ export function useWorkspaceContext(): WorkspaceContextState {
       advanceWorkspaceAccountGeneration(event.newValue ?? 'storage');
       refreshAfterIdentityChange();
     };
-    window.addEventListener('focus', refresh);
+    // A scheduled failure-retry (see `scheduleWorkspaceContextRetry`) fires this
+    // event for a specific identity generation. Re-read only when it still names
+    // the current generation — a retry armed for an identity the user has since
+    // left must not spend a request.
+    const onContextRetry = (event: Event) => {
+      const detail = (event as CustomEvent<{ requestKey?: string }>).detail;
+      if (detail?.requestKey !== workspaceContextRequestToken) return;
+      void loadContext();
+    };
+    // While the workspace EventSource is connected, its shared manager owns
+    // focus/visibility and labels those reads as ambient exact-scope checks.
+    // Keep these listeners only for the poll-only/disconnected fallback.
+    if (!sseConnected) window.addEventListener('focus', refresh);
     window.addEventListener('pageshow', refresh);
     window.addEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, refreshAfterIdentityChange);
+    window.addEventListener(WORKSPACE_CONTEXT_RETRY_EVENT, onContextRetry);
     window.addEventListener('storage', onStorage);
-    document.addEventListener('visibilitychange', onVisibilityChange);
+    if (!sseConnected) {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
     return () => {
-      window.removeEventListener('focus', refresh);
+      if (!sseConnected) window.removeEventListener('focus', refresh);
       window.removeEventListener('pageshow', refresh);
       window.removeEventListener(WORKSPACE_CONTEXT_REFRESH_EVENT, refreshAfterIdentityChange);
+      window.removeEventListener(WORKSPACE_CONTEXT_RETRY_EVENT, onContextRetry);
       window.removeEventListener('storage', onStorage);
-      document.removeEventListener('visibilitychange', onVisibilityChange);
+      if (!sseConnected) {
+        document.removeEventListener('visibilitychange', onVisibilityChange);
+      }
     };
-  }, [loadContext]);
+  }, [loadContext, sseConnected]);
 
   const accountGeneration = currentWorkspaceAccountGeneration();
   return useMemo(
@@ -1009,6 +1169,7 @@ class WorkspaceBillingHttpError extends Error {
 export function resetWorkspaceBillingCache(): void {
   cachedWorkspaceBillingResponses.clear();
   resetWorkspaceBillingInterestRegistry();
+  resetWorkspaceBillingRetrySchedules();
 }
 
 type BillingInvalidation = Extract<
@@ -1101,7 +1262,6 @@ export function useWorkspaceBillingResponse(
   const activeScopeKeyRef = useRef<string | null>(billingScopeKey);
   const activeRequestKeyRef = useRef<string | null>(billingRequestKey);
   const requestEpochRef = useRef(0);
-  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const runtimeManagedRef = useRef(false);
   const interestOwnerIdRef = useRef('');
   if (!interestOwnerIdRef.current) {
@@ -1115,7 +1275,9 @@ export function useWorkspaceBillingResponse(
     return () => {
       mountedRef.current = false;
       requestEpochRef.current += 1;
-      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+      // The retry schedule is module-level and deliberately survives this
+      // unmount: another consumer of the same requestKey may still be
+      // mounted, and a timer that fires with no listeners is a no-op.
     };
   }, []);
 
@@ -1195,10 +1357,7 @@ export function useWorkspaceBillingResponse(
         activeRequestKeyRef.current === requestKey
       ) {
         runtimeManagedRef.current = Boolean(response.workspaceRuntime);
-        if (retryTimerRef.current) {
-          clearTimeout(retryTimerRef.current);
-          retryTimerRef.current = null;
-        }
+        clearWorkspaceBillingRetryFailures(requestKey);
         cachedWorkspaceBillingResponses.set(scopeKey, response);
         setState({ scopeKey, response });
       }
@@ -1231,20 +1390,10 @@ export function useWorkspaceBillingResponse(
             },
           });
         }
-        if (!revoked && !retryTimerRef.current) {
-          retryTimerRef.current = setTimeout(() => {
-            retryTimerRef.current = null;
-            if (
-              mountedRef.current &&
-              activeScopeKeyRef.current === scopeKey &&
-              activeRequestKeyRef.current === requestKey
-            ) {
-              window.dispatchEvent(new CustomEvent(WORKSPACE_BILLING_RETRY_EVENT, {
-                detail: { requestKey },
-              }));
-            }
-          }, WORKSPACE_BILLING_RETRY_MS);
-        }
+        // A revoked read (403) fails closed and must not retry. Everything
+        // else — including the packaged client's synthetic proxy 502s —
+        // retries on the shared, exponentially backed-off schedule.
+        if (!revoked) scheduleWorkspaceBillingRetry(requestKey);
       }
     }
   }, [
@@ -1306,8 +1455,13 @@ export function useWorkspaceBillingResponse(
       const expired = enforceWorkspaceBillingHardExpiry(current);
       cachedWorkspaceBillingResponses.set(scopeKey, expired);
       setState({ scopeKey, response: expired });
+      // `force: true` — hard expiry KNOWS the cached answer is void (that is
+      // the whole point of the timer), so the revalidation must bypass any
+      // settled coalescing entry, exactly like an identity change. Failure
+      // retries deliberately dispatch WITHOUT force so they can share a
+      // concurrent consumer's fresh success instead.
       window.dispatchEvent(new CustomEvent(WORKSPACE_BILLING_RETRY_EVENT, {
-        detail: { requestKey },
+        detail: { requestKey, force: true },
       }));
     };
     timer = setTimeout(
@@ -1381,8 +1535,15 @@ export function useWorkspaceBillingResponse(
       if (event.key === WORKSPACE_BILLING_REFRESH_STORAGE_KEY) refreshAfterIdentityChange();
     };
     const onRetry = (event: Event) => {
-      const requestKey = (event as CustomEvent<{ requestKey?: string }>).detail?.requestKey;
-      if (requestKey === activeRequestKeyRef.current) void loadBilling(false, true);
+      const detail = (event as CustomEvent<{ requestKey?: string; force?: boolean }>).detail;
+      if (detail?.requestKey !== activeRequestKeyRef.current) return;
+      // Failure retries are deliberately NOT forced: a failed read is never
+      // cached, so the plain coalesced path is a genuine refetch — and when a
+      // concurrent consumer just succeeded, joining that fresh result re-syncs
+      // this one without adding another request to an already-struggling
+      // transport. Hard-expiry revalidation dispatches with `force: true`
+      // because its cached answer is void by definition.
+      void loadBilling(false, detail?.force === true);
     };
     window.addEventListener('focus', refresh);
     window.addEventListener('pageshow', refresh);
@@ -1577,8 +1738,157 @@ export function workspaceBillingSnapshotForContext(
 }
 
 const WORKSPACE_BILLING_POLL_MS = 30_000;
-const WORKSPACE_BILLING_RETRY_MS = 5_000;
+const WORKSPACE_BILLING_RETRY_BASE_MS = 5_000;
+const WORKSPACE_BILLING_RETRY_MAX_MS = 60_000;
 const WORKSPACE_BILLING_RETRY_EVENT = 'od:workspace-billing-retry';
+
+/**
+ * One retry schedule per billing `requestKey`, shared by every mounted
+ * consumer — the module-level counterpart of the per-hook timer it replaced.
+ *
+ * Two properties are load-bearing for the packaged (od://) client, whose
+ * proxy answers with synthetic 502s (`OD_PROTOCOL_PROXY_FAILED`) when the
+ * bursty first-open request load hits a transient transport failure:
+ *
+ *  1. The delay grows exponentially (5s → 10s → 20s → 40s → 60s cap) while
+ *     failures are consecutive. A fixed 5s cadence against a struggling
+ *     transport is self-defeating — each retry adds to the very burst that
+ *     is producing the 502s it is retrying.
+ *  2. The schedule is keyed once per requestKey, not once per mounted hook.
+ *     N consumers failing on the same shared read used to arm N timers whose
+ *     N events each fanned out to N listeners; one schedule dispatches one
+ *     retry event per cycle and the listeners' coalesced reads share one
+ *     network request.
+ *
+ * A success only RESETS the consecutive-failure count — it deliberately does
+ * not cancel a pending timer. Consumers hold their own state, so a success
+ * observed by one consumer has not reached the others; letting the pending
+ * retry fire re-syncs them through the coalescing cache (a fresh success
+ * within the share window costs zero network requests).
+ */
+type WorkspaceBillingRetrySchedule = {
+  backoff: BackoffController;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+const workspaceBillingRetrySchedules = new Map<string, WorkspaceBillingRetrySchedule>();
+
+function scheduleWorkspaceBillingRetry(requestKey: string): void {
+  if (typeof window === 'undefined') return;
+  let schedule = workspaceBillingRetrySchedules.get(requestKey);
+  if (!schedule) {
+    schedule = {
+      backoff: new BackoffController({
+        initialMs: WORKSPACE_BILLING_RETRY_BASE_MS,
+        maxMs: WORKSPACE_BILLING_RETRY_MAX_MS,
+        factor: 2,
+        // Jitter stays OFF for billing: its exponential schedule predates this
+        // change and is pinned by an exact-cadence regression test (the od://
+        // 502-storm). Only the arithmetic moves onto the shared controller;
+        // the observable 5s→10s→20s→40s→60s timing is unchanged.
+        jitter: false,
+      }),
+      timer: null,
+    };
+    workspaceBillingRetrySchedules.set(requestKey, schedule);
+  }
+  if (schedule.timer != null) return;
+  const delay = schedule.backoff.nextDelay();
+  schedule.timer = setTimeout(() => {
+    schedule.timer = null;
+    // Dispatch unconditionally: listeners filter on their own active
+    // requestKey, and an event nobody is mounted for is a no-op.
+    window.dispatchEvent(
+      new CustomEvent(WORKSPACE_BILLING_RETRY_EVENT, { detail: { requestKey } }),
+    );
+  }, delay);
+}
+
+function clearWorkspaceBillingRetryFailures(requestKey: string): void {
+  workspaceBillingRetrySchedules.get(requestKey)?.backoff.reset();
+}
+
+function resetWorkspaceBillingRetrySchedules(): void {
+  for (const schedule of workspaceBillingRetrySchedules.values()) {
+    if (schedule.timer != null) clearTimeout(schedule.timer);
+  }
+  workspaceBillingRetrySchedules.clear();
+}
+
+// ---------- workspace context failure retry ----------
+//
+// `GET /api/workspace/context` (and its directory prerequisite) previously had
+// NO failure retry: a read that failed just sat on the last-good context until
+// the next 30s poll or a focus event. During a multi-hour vela authority outage
+// that left the shell stale far longer than necessary and, combined with the
+// old fail-closed write gate, drove the create-retry storm this PR fixes.
+//
+// The failure path now arms a jittered exponential-backoff retry (1s → 30s),
+// module-level and keyed by identity generation — one timer shared by every
+// mounted consumer, exactly like the billing schedule above (a per-hook timer
+// would arm a dozen for the dozen-plus mounted `useWorkspaceContext`s). Success
+// resets the depth; an ambient trigger (SSE `workspace-context-changed`, focus,
+// the poll floor) fetches immediately WITHOUT rewinding the depth, so unrelated
+// foreground activity cannot keep kicking a flaky transport back to a 1s cadence.
+const WORKSPACE_CONTEXT_RETRY_BASE_MS = 1_000;
+const WORKSPACE_CONTEXT_RETRY_MAX_MS = 30_000;
+const WORKSPACE_CONTEXT_RETRY_EVENT = 'od:workspace-context-retry';
+
+function defaultWorkspaceContextRetryBackoff(): BackoffOptions {
+  return {
+    initialMs: WORKSPACE_CONTEXT_RETRY_BASE_MS,
+    maxMs: WORKSPACE_CONTEXT_RETRY_MAX_MS,
+    factor: 2,
+    jitter: true,
+  };
+}
+
+// Test seam: production uses jittered backoff; a test pins the schedule to a
+// deterministic sequence (jitter off) to assert the exact 1s→2s→4s…→30s growth.
+let workspaceContextRetryBackoffOptions: BackoffOptions = defaultWorkspaceContextRetryBackoff();
+
+export function __setWorkspaceContextRetryBackoffForTests(
+  options: BackoffOptions | null,
+): void {
+  workspaceContextRetryBackoffOptions = options ?? defaultWorkspaceContextRetryBackoff();
+}
+
+type WorkspaceContextRetrySchedule = {
+  backoff: BackoffController;
+  timer: ReturnType<typeof setTimeout> | null;
+};
+const workspaceContextRetrySchedules = new Map<string, WorkspaceContextRetrySchedule>();
+
+function scheduleWorkspaceContextRetry(requestKey: string): void {
+  if (typeof window === 'undefined') return;
+  let schedule = workspaceContextRetrySchedules.get(requestKey);
+  if (!schedule) {
+    schedule = {
+      backoff: new BackoffController(workspaceContextRetryBackoffOptions),
+      timer: null,
+    };
+    workspaceContextRetrySchedules.set(requestKey, schedule);
+  }
+  if (schedule.timer != null) return;
+  const delay = schedule.backoff.nextDelay();
+  schedule.timer = setTimeout(() => {
+    schedule.timer = null;
+    window.dispatchEvent(
+      new CustomEvent(WORKSPACE_CONTEXT_RETRY_EVENT, { detail: { requestKey } }),
+    );
+  }, delay);
+}
+
+function clearWorkspaceContextRetryFailures(requestKey: string): void {
+  workspaceContextRetrySchedules.get(requestKey)?.backoff.reset();
+}
+
+function resetWorkspaceContextRetrySchedules(): void {
+  for (const schedule of workspaceContextRetrySchedules.values()) {
+    if (schedule.timer != null) clearTimeout(schedule.timer);
+  }
+  workspaceContextRetrySchedules.clear();
+}
+
 export const WORKSPACE_BILLING_REFRESH_EVENT = 'od:workspace-billing-refresh';
 const WORKSPACE_BILLING_REFRESH_STORAGE_KEY = 'od.workspaceBilling.refreshAt';
 

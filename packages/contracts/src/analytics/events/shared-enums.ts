@@ -83,16 +83,37 @@ export type TrackingAmrEntrySource =
   | 'generation_preview_switch_retry_card'
   | 'settings_amr_upgrade'
   | 'inline_amr_upgrade'
+  | 'deepseek_unpaid_modal'
+  | 'deepseek_workbench_badge'
+  | 'deepseek_model_switcher_upgrade'
   | 'avatar_amr_upgrade'
   | 'avatar_amr_agent_card'
   | 'artifact_success_upgrade'
   | 'home_artifact_upgrade';
+
+// `deepseek_v4_flash` is the finished 8/6-8/13 free week; `deepseek_v4_pro`
+// is the 8/13-8/27 two-model window that follows it. Both stay declared so
+// the finished campaign's rows keep a valid id in the warehouse.
+export type TrackingCampaignId = 'deepseek_v4_flash' | 'deepseek_v4_pro';
+export type TrackingCampaignUserState = 'paid' | 'unpaid';
+export type TrackingCampaignConversionSource =
+  | 'deepseek_unpaid_modal'
+  | 'deepseek_workbench_badge'
+  | 'deepseek_model_switcher_upgrade'
+  | 'landing_home_banner'
+  | 'landing_pricing_personal_plan'
+  | 'landing_pricing_team_plan';
 
 export interface AmrEntryAttribution {
   entryId: string;
   sourceProduct: 'open_design';
   sourceDetail: TrackingAmrEntrySource;
   occurredAt: string;
+  // Campaign joins keep the first entry source stable and record the final
+  // conversion touch separately. Both fields are forwarded to Vela so a
+  // Stripe payment result can be attributed without replacing first touch.
+  campaignId?: TrackingCampaignId;
+  conversionSource?: TrackingCampaignConversionSource;
   // Open Design install/device id forwarded only on consent-gated AMR handoffs.
   odDeviceId?: string;
   // Self-reported onboarding profile, forwarded to AMR (anchored to entryId) so
@@ -196,7 +217,21 @@ export type TrackingExportFormat =
 
 export type TrackingResult = 'success' | 'failed';
 export type TrackingRunResult = 'success' | 'failed' | 'cancelled';
+export type TrackingRunCancelOrigin =
+  | 'user_stop'
+  | 'project_cleanup'
+  | 'daemon_shutdown'
+  | 'unknown';
+export type TrackingRunTerminalTrigger =
+  | TrackingRunCancelOrigin
+  | 'first_output_deadline'
+  | 'inactivity_watchdog'
+  | 'daemon_restart';
 export type TrackingExportResult = 'success' | 'failed' | 'cancelled';
+// Stable codes for artifact_publish_result.error_code. Deliberately a CLOSED
+// set — unlike artifact_deploy_result's open-ended provider/HTTP codes — so no
+// free-form message text can ever be passed as an analytics error code.
+export type TrackingPublishErrorCode = 'workspace_identity_required' | 'publish_failed';
 export type TrackingTestResult = 'success' | 'failed' | 'timeout';
 export type TrackingRunFailureCategory =
   | 'auth'
@@ -219,6 +254,12 @@ export type TrackingRunFailureDetail =
   | 'missing_api_key'
   | 'invalid_api_key'
   | 'hard_quota'
+  // A rolling per-model usage window (vela's 5-hour `model_limit_exceeded`)
+  // that resets on its own at a known instant. Distinct from `hard_quota`:
+  // nothing was charged, nothing needs topping up, and the same request
+  // succeeds once the window rolls over — so it stays retryable and must not
+  // be counted as a quota exhaustion in reliability reporting.
+  | 'model_window_limit'
   | 'workspace_credits_exhausted'
   | 'rate_limit_429'
   | 'amr_insufficient_balance'

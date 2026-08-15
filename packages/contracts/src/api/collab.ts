@@ -300,6 +300,8 @@ export interface WorkspaceCollabContext {
   workspaceName?: string;
   /** Display name for the presence overlay (optional; falls back to the id). */
   displayName?: string;
+  /** Signed-in user's profile image for identity surfaces such as project bylines. */
+  avatarUrl?: string | null;
 }
 
 /**

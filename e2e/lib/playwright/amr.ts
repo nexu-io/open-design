@@ -244,7 +244,10 @@ export async function expectWorkspaceReady(page: Page) {
   await waitForLoadingToClear(page);
   await expect(page).toHaveURL(/\/projects\//);
   await expect(page.getByTestId('chat-composer')).toBeVisible();
-  await expect(page.getByTestId('chat-composer-input')).toBeVisible();
+  // The composer mounts before Workspace authority has resolved, but remains
+  // read-only until the current member has writer access. Wait on the actual
+  // submit gate so callers cannot race into an opaque click timeout.
+  await expect(page.getByTestId('chat-composer-input')).toBeEditable({ timeout: T.medium });
 }
 
 /**

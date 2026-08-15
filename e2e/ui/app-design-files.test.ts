@@ -1,6 +1,6 @@
 import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal as openNewProjectModalFromProjects } from '@/playwright/rail';
-import { routeAgents } from '@/playwright/mock-factory';
+import { applyStandardMocks, routeAgents } from '@/playwright/mock-factory';
 import { expectAllProjectFilesActive, openAllProjectFiles } from '@/playwright/workspace';
 import type { Locator, Page, Request } from '@playwright/test';
 import { automatedUiScenarios } from '@/playwright/resources';
@@ -14,44 +14,7 @@ const TINY_PNG_B64 =
 test.describe.configure({ timeout: T.xlong });
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(
-      key,
-      JSON.stringify({
-        mode: 'daemon',
-        apiKey: '',
-        baseUrl: 'https://api.anthropic.com',
-        model: 'claude-sonnet-4-5',
-        agentId: 'mock',
-        skillId: null,
-        designSystemId: null,
-        onboardingCompleted: true,
-        agentModels: {},
-        privacyDecisionAt: 1,
-        telemetry: { metrics: false, content: false, artifactManifest: false },
-      }),
-    );
-  }, STORAGE_KEY);
-
-  await page.route('**/api/app-config', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      json: {
-        config: {
-          onboardingCompleted: true,
-          agentId: 'mock',
-          skillId: null,
-          designSystemId: null,
-          agentModels: {},
-          privacyDecisionAt: 1,
-          telemetry: { metrics: false, content: false, artifactManifest: false },
-        },
-      },
-    });
-  });
+  await applyStandardMocks(page);
 });
 
 const designFileFlows = new Set([
@@ -576,7 +539,7 @@ async function runDesignFilesDeleteFlow(page: Page) {
     .toBe(true);
 }
 
-test('[P1] design files page keeps the current single-file actions and context hint copy', async ({ page }) => {
+test('[P1] design files page keeps the current single-file menu actions', async ({ page }) => {
   await routeMockAgents(page);
 
   await gotoEntryHome(page);
@@ -590,10 +553,6 @@ test('[P1] design files page keeps the current single-file actions and context h
   await page.reload();
   await expectWorkspaceReady(page);
   await openAllProjectFiles(page);
-
-  await expect(page.getByTestId('design-files-upload-trigger')).toBeVisible();
-  await expect(page.getByRole('button', { name: /new sketch/i })).toBeVisible();
-  await expect(page.getByRole('button', { name: /create document/i })).toBeVisible();
 
   await expect(page.getByRole('button', { name: /filter by kind/i })).toHaveCount(0);
   await expect(page.getByTestId('design-files-batch-delete')).toHaveCount(0);
@@ -609,8 +568,6 @@ test('[P1] design files page keeps the current single-file actions and context h
   await expect(menu.getByRole('button', { name: /rename/i })).toBeVisible();
   await expect(menu.getByRole('button', { name: /download/i })).toBeVisible();
   await expect(menu.getByRole('button', { name: /delete/i })).toBeVisible();
-
-  await expect(page.getByText(/images, docs, references, or folders/i)).toBeVisible();
 });
 
 test('[P1] design files new sketch creates a persisted sketch tab and restores it after reload', async ({ page }) => {
@@ -642,18 +599,26 @@ test('[P1] design files new sketch creates a persisted sketch tab and restores i
   await expect(page.getByTestId('sketch-excalidraw-editor')).toBeVisible();
 });
 
-test('[P1] design files sketch toolbar creates a sketch and exposes editor menu actions', async ({ page }) => {
+test('[P1] design files tab launcher creates a sketch and exposes editor menu actions', async ({ page }) => {
   test.setTimeout(90_000);
   await routeMockAgents(page);
 
-  const projectId = await createProjectViaApi(page, 'Design files sketch toolbar');
+  await gotoEntryHome(page);
+  await openNewProjectModal(page);
+  await page.getByTestId('new-project-name').fill('Design files sketch launcher');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+  const { projectId } = await getCurrentProjectContext(page);
   await seedProjectFile(page, projectId, 'alpha.html', '<!doctype html><title>alpha</title><h1>alpha</h1>');
-  await page.goto(`/projects/${projectId}`, { waitUntil: 'domcontentloaded' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
   await openAllProjectFiles(page);
 
   await expect(page.getByTestId('design-file-row-alpha.html')).toBeVisible();
-  await page.getByRole('button', { name: /new sketch/i }).click();
+  await page.getByTestId('workspace-add-tab').click();
+  const launcher = page.getByTestId('tab-launcher-menu');
+  await expect(launcher).toBeVisible();
+  await launcher.getByRole('button', { name: /^New Sketch$/i }).click();
 
   const sketchName = await waitForSingleSketchFile(page, projectId);
   await expect(page.getByTestId('file-workspace').getByRole('tab', {
@@ -749,7 +714,12 @@ test('[P1] plan mode selection and new Excalidraw sketch emit analytics dimensio
 test('[P1] markdown plan documents support code, split, preview, and autosaved edits', async ({ page }) => {
   await routeMockAgents(page);
 
-  const projectId = await createProjectViaApi(page, 'Markdown plan editor modes');
+  await gotoEntryHome(page);
+  await openNewProjectModal(page);
+  await page.getByTestId('new-project-name').fill('Markdown plan editor modes');
+  await page.getByTestId('create-project').click();
+  await expectWorkspaceReady(page);
+  const { projectId } = await getCurrentProjectContext(page);
   await seedProjectFile(
     page,
     projectId,
@@ -774,8 +744,11 @@ test('[P1] markdown plan documents support code, split, preview, and autosaved e
   const editor = page.getByRole('textbox', { name: /markdown editor/i });
   const preview = page.getByLabel(/markdown preview/i);
 
-  await expect(splitTab).toHaveAttribute('aria-selected', 'true');
-  await expect(editor).toHaveValue(/Seeded Plan/);
+  await expect(codeTab).toBeEnabled();
+  await expect(splitTab).toBeEnabled();
+  await previewTab.click();
+  await expect(previewTab).toHaveAttribute('aria-selected', 'true');
+  await expect(editor).toHaveCount(0);
   await expect(preview).toContainText('Scope');
 
   await codeTab.click();
@@ -803,8 +776,12 @@ test('[P1] markdown plan documents support code, split, preview, and autosaved e
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expectWorkspaceReady(page);
-  await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Edited from code mode/);
+  await expect(codeTab).toBeEnabled();
+  await previewTab.click();
+  await expect(previewTab).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByLabel(/markdown preview/i)).toContainText('Edited from split mode.');
+  await codeTab.click();
+  await expect(page.getByRole('textbox', { name: /markdown editor/i })).toHaveValue(/Edited from code mode/);
 });
 
 test('[P1] design files batch delete removes selected files and keeps cancel retryable', async ({ page }) => {

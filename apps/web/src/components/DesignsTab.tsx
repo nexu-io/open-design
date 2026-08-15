@@ -12,6 +12,12 @@ import {
 } from "../analytics/events";
 import { useT } from "../i18n";
 import { useWorkspaceContext } from "../collab/useWorkspaceContext";
+import { workspaceIdentityCacheKey } from "../collab/workspace-identity";
+import {
+	getProjectCoverSnapshot,
+	projectCoverSnapshotKey,
+	setProjectCoverSnapshot,
+} from "../lib/project-cover-cache";
 import { deleteLiveArtifact, fetchLiveArtifacts, fetchProjectFiles, liveArtifactPreviewUrl } from "../providers/registry";
 import type {
 	DesignSystemSummary,
@@ -53,6 +59,31 @@ type DesignListItem =
 
 const DESIGNS_VIEW_STORAGE_KEY = "od:designs:view";
 const PROJECTS_AUTO_REFRESH_MS = 15000;
+const MAX_BACKGROUND_PROJECT_READS = 2;
+
+async function mapWithConcurrency<T, R>(
+	items: readonly T[],
+	concurrency: number,
+	map: (item: T) => Promise<R>,
+): Promise<R[]> {
+	const results = new Array<R>(items.length);
+	let nextIndex = 0;
+	const worker = async () => {
+		for (;;) {
+			const index = nextIndex;
+			if (index >= items.length) return;
+			nextIndex += 1;
+			results[index] = await map(items[index]!);
+		}
+	};
+	await Promise.all(
+		Array.from(
+			{ length: Math.min(Math.max(1, concurrency), items.length) },
+			() => worker(),
+		),
+	);
+	return results;
+}
 
 export const STATUS_ORDER = [
 	"not_started",
@@ -109,7 +140,7 @@ export function DesignsTab({
 	const confirmTitleId = useId();
 	const t = useT();
 	const analytics = useAnalytics();
-	const { context: workspaceContext } = useWorkspaceContext();
+	const { context: workspaceContext, loading: workspaceContextLoading } = useWorkspaceContext();
 	// P0 page_view page_name=projects — fire once when the tab mounts so
 	// `/projects` landings register even before the user clicks anything.
 	// ref-keyed to survive re-renders that flip parent state without
@@ -141,14 +172,18 @@ export function DesignsTab({
 	const [projectsRefreshing, setProjectsRefreshing] = useState(false);
 	const menuContainerRef = useRef<HTMLDivElement | null>(null);
 	const projectsRefreshInFlightRef = useRef(false);
+	const liveWorkspaceIdentityRef = useRef<string | null>(null);
+	const coverWorkspaceIdentityRef = useRef<string | null>(null);
 	const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
 	const [renameInput, setRenameInput] = useState("");
 	const [confirmTarget, setConfirmTarget] = useState<{
 		title: string;
 		message: string;
 		confirmLabel: string;
-		onConfirm: () => void;
+		onConfirm: () => Promise<boolean | void> | boolean | void;
 	} | null>(null);
+	const [confirmPending, setConfirmPending] = useState(false);
+	const [confirmError, setConfirmError] = useState<string | null>(null);
 	const [view, setView] = useState<ViewMode>(() => {
 		if (typeof window === "undefined") return "grid";
 		try {
@@ -162,17 +197,23 @@ export function DesignsTab({
 	});
 
 	useEffect(() => {
-		if (!isActive) return;
+		if (!isActive || workspaceContextLoading) return;
 		const controller = new AbortController();
+		const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
+		if (liveWorkspaceIdentityRef.current !== workspaceIdentity) {
+			liveWorkspaceIdentityRef.current = workspaceIdentity;
+			setLiveArtifactsByProject({});
+		}
 		const projectIds = projects.map((project) => project.id);
 		if (projectIds.length === 0) {
 			setLiveArtifactsByProject({});
 			return;
 		}
 
-		void Promise.all(
-			projectIds.map(
-				async (projectId) =>
+		void mapWithConcurrency(
+			projectIds,
+			MAX_BACKGROUND_PROJECT_READS,
+			async (projectId) =>
 					[
 						projectId,
 						await fetchLiveArtifacts(projectId, {
@@ -180,55 +221,92 @@ export function DesignsTab({
 							workspaceContext,
 						}),
 					] as const,
-			),
 		).then((entries) => {
 			if (controller.signal.aborted) return;
 			setLiveArtifactsByProject(Object.fromEntries(entries));
 		});
 
 		return () => controller.abort();
-	}, [isActive, projects, workspaceContext]);
+	}, [isActive, projects, workspaceContext, workspaceContextLoading]);
 
 	useEffect(() => {
-		if (!isActive) return;
+		if (!isActive || workspaceContextLoading) return;
 		const controller = new AbortController();
 		if (projects.length === 0) {
 			setCoverByProject({});
 			return;
 		}
-		void Promise.all(
-			projects.map(async (project) => {
+		const workspaceIdentity = workspaceIdentityCacheKey(workspaceContext);
+		const workspaceIdentityChanged = coverWorkspaceIdentityRef.current !== workspaceIdentity;
+		coverWorkspaceIdentityRef.current = workspaceIdentity;
+		const immediateEntries: Array<readonly [string, ProjectCoverOverride | null]> = [];
+		const unresolvedProjects = projects.filter((project) => {
+			const snapshot = getProjectCoverSnapshot(
+				projectCoverSnapshotKey(workspaceIdentity, project.id, project.updatedAt),
+			);
+			if (snapshot === undefined) return true;
+			immediateEntries.push([project.id, snapshot.cover] as const);
+			return false;
+		});
+	const immediateByProject = new Map(immediateEntries);
+	setCoverByProject((current) => {
+		const next: Record<string, ProjectCoverOverride | null> = {};
+		for (const project of projects) {
+			if (immediateByProject.has(project.id)) {
+				next[project.id] = immediateByProject.get(project.id)!;
+			} else if (!workspaceIdentityChanged && Object.hasOwn(current, project.id)) {
+				next[project.id] = current[project.id]!;
+			}
+		}
+		return next;
+	});
+		void mapWithConcurrency(
+			unresolvedProjects,
+			MAX_BACKGROUND_PROJECT_READS,
+			async (project) => {
 				const designSystemProject = isDesignSystemProject(project);
 				// Brand projects render a generated logo/monogram cover (see
 				// projectCover) instead of a raw HTML file preview, so skip the
 				// file scan entirely for them.
-				if (project.metadata?.kind === "brand") return [project.id, null] as const;
-				if (project.metadata?.entryFile && !designSystemProject) return [project.id, null] as const;
-				let files: Awaited<ReturnType<typeof fetchProjectFiles>>;
-				try {
-					files = await fetchProjectFiles(project.id, {
-						signal: controller.signal,
-						workspaceContext,
-					});
-				} catch {
-					return [project.id, null] as const;
-				}
-				if (controller.signal.aborted) return [project.id, null] as const;
-				if (designSystemProject) {
-					const logo = findDesignSystemLogoFile(files);
-					if (logo) {
-						return [project.id, coverFromProjectFile(logo, "logo")] as const;
+				let cover: ProjectCoverOverride | null;
+				if (project.metadata?.kind === "brand" || (project.metadata?.entryFile && !designSystemProject)) {
+					cover = null;
+				} else {
+					let files: Awaited<ReturnType<typeof fetchProjectFiles>>;
+					try {
+						files = await fetchProjectFiles(project.id, {
+							signal: controller.signal,
+							workspaceContext,
+						});
+					} catch {
+						return [project.id, undefined] as const;
 					}
-					return [project.id, null] as const;
+					if (controller.signal.aborted) return [project.id, undefined] as const;
+					if (designSystemProject) {
+						const logo = findDesignSystemLogoFile(files);
+						cover = logo ? coverFromProjectFile(logo, "logo") : null;
+					} else {
+						cover = selectProjectFileCover(files);
+					}
 				}
-				return [project.id, selectProjectFileCover(files)] as const;
-			}),
+				setProjectCoverSnapshot(
+					projectCoverSnapshotKey(workspaceIdentity, project.id, project.updatedAt),
+					cover,
+				);
+				return [project.id, cover] as const;
+			},
 		).then((entries) => {
 			if (controller.signal.aborted) return;
-			setCoverByProject(Object.fromEntries(entries));
+			const resolvedEntries = entries.filter(
+				(entry): entry is readonly [string, ProjectCoverOverride | null] => entry[1] !== undefined,
+			);
+			setCoverByProject((current) => ({
+				...current,
+				...Object.fromEntries(resolvedEntries),
+			}));
 		});
 		return () => controller.abort();
-	}, [isActive, projects, workspaceContext]);
+	}, [isActive, projects, workspaceContext, workspaceContextLoading]);
 
 	useEffect(() => {
 		if (!menuOpenId) return;
@@ -418,6 +496,7 @@ export function DesignsTab({
 		setRenameInput("");
 	};
 	const handleDeleteProject = (project: Project) => {
+		setConfirmError(null);
 		setConfirmTarget({
 			title: t("designs.deleteTitle"),
 			message: t("designs.deleteConfirm", { name: project.name }),
@@ -439,6 +518,7 @@ export function DesignsTab({
 	const handleBatchDelete = () => {
 		const ids = Array.from(selected);
 		if (ids.length === 0) return;
+		setConfirmError(null);
 		setConfirmTarget({
 			title: t("designs.deleteTitle"),
 			message: t("designs.deleteSelectedConfirm", { n: ids.length }),
@@ -473,21 +553,42 @@ export function DesignsTab({
 		projectId: string,
 		artifact: LiveArtifactSummary,
 	) => {
+		setConfirmError(null);
 		setConfirmTarget({
 			title: t("common.delete"),
 			message: `${t("common.delete")} "${artifact.title}"?`,
 			confirmLabel: t("designs.menuDelete"),
 			onConfirm: async () => {
 				const ok = await deleteLiveArtifact(projectId, artifact.id, workspaceContext);
-				if (!ok) return;
+				if (!ok) return false;
 				setLiveArtifactsByProject((current) => ({
 					...current,
 					[projectId]: (current[projectId] ?? []).filter(
 						(candidate) => candidate.id !== artifact.id,
 					),
 				}));
+				return true;
 			},
 		});
+	};
+
+	const commitConfirmTarget = async () => {
+		if (!confirmTarget || confirmPending) return;
+		const target = confirmTarget;
+		setConfirmError(null);
+		setConfirmPending(true);
+		try {
+			const result = await target.onConfirm();
+			if (result === false) {
+				setConfirmError(t("ds.actionFailed"));
+				return;
+			}
+			setConfirmTarget((current) => current === target ? null : current);
+		} catch (error) {
+			setConfirmError(error instanceof Error ? error.message : t("ds.actionFailed"));
+		} finally {
+			setConfirmPending(false);
+		}
 	};
 
 	return (
@@ -1133,24 +1234,38 @@ export function DesignsTab({
 				<Dialog
 					className="modal-confirm"
 					role="alertdialog"
-					onClose={() => setConfirmTarget(null)}
+					onClose={() => {
+						if (confirmPending) return;
+						setConfirmTarget(null);
+						setConfirmError(null);
+					}}
+					closeOnBackdrop={!confirmPending}
 					ariaLabelledBy={confirmTitleId}
 				>
 					<DialogTitle id={confirmTitleId}>{confirmTarget.title}</DialogTitle>
 					<DialogDescription className="modal-confirm-message">{confirmTarget.message}</DialogDescription>
+					{confirmError ? (
+						<p className="modal-confirm-error" role="alert">
+							{confirmError}
+						</p>
+					) : null}
 					<DialogFooter className="row">
-						<button type="button" onClick={() => setConfirmTarget(null)}>
+						<button
+							type="button"
+							disabled={confirmPending}
+							onClick={() => {
+								setConfirmTarget(null);
+								setConfirmError(null);
+							}}
+						>
 							{t("designs.renameCancel")}
 						</button>
 						<button
 							type="button"
 							className="primary danger"
 							autoFocus
-							onClick={() => {
-								const run = confirmTarget.onConfirm;
-								setConfirmTarget(null);
-								run();
-							}}
+							disabled={confirmPending}
+							onClick={() => void commitConfirmTarget()}
 						>
 							{confirmTarget.confirmLabel}
 						</button>

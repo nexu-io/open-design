@@ -93,11 +93,10 @@ Requirements:
    guard report at the change that broke the premise — not a rationale that
    rotted silently years earlier. Worked example: the consumption guard
    tolerates `apps/daemon/tests/runtimes/trae-cli.test.ts` reading
-   `docs/agent-adapters.md` only while `ci.yml`'s daemon lane still runs
-   nothing but `project-watchers.test.ts` — the exception is conditional on
-   that exclusive invocation check (`workflowRunsOnlyAllowedDaemonTest` in
-   `scripts/check-certain-exempt-consumption.ts`); widening the lane revives
-   the violation and forces reclassification.
+   `docs/agent-adapters.md` because that exact document is classified as
+   daemon core. Editing the consumed document therefore runs the same full
+   daemon suite as editing its consumer; the allowlist cannot create a skipped
+   producer/consumer edge.
 
 No general demotion policy is defined. One hard rule is active: if a guard
 check is deleted or renamed, the rule-table invariant test fails CI — a

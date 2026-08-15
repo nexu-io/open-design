@@ -76,15 +76,46 @@ async function eventually(assertion: () => void, timeoutMs = 2_000): Promise<voi
 }
 
 function createBriefAppHarness(options: {
+  deferInitialization?: boolean;
   hostCapabilities?: Record<string, unknown>;
   initialPayload?: typeof WEBSITE_BRIEF_PAYLOAD;
   failFirstMessage?: boolean;
+  failFirstLegacyFollowUp?: boolean;
   legacyFollowUp?: boolean;
+  nativeToolOutput?: typeof WEBSITE_BRIEF_PAYLOAD;
 } = {}) {
   const requests: JsonRpcMessage[] = [];
   const legacyFollowUps: Array<{ prompt: string; scrollToBottom?: boolean }> = [];
   let failNextMessage = options.failFirstMessage === true;
+  let failNextLegacyFollowUp = options.failFirstLegacyFollowUp === true;
+  let pendingInitializationId: string | null = null;
   let widgetWindow: any;
+
+  function confirmationResult(): Record<string, unknown> {
+    return {
+      structuredContent: {
+        view: 'brief-confirmed',
+        artifactType: 'website',
+        briefConfirmationId: 'brief-confirmation-test',
+        summary: 'What should this website do?: Launch a product',
+      },
+    };
+  }
+
+  function initializationResult(): Record<string, unknown> {
+    return {
+      hostContext: { locale: 'en' },
+      hostCapabilities: options.hostCapabilities ?? {
+        message: { text: true },
+        serverTools: {},
+        updateModelContext: { text: true },
+      },
+      ...(options.initialPayload
+        ? { structuredContent: options.initialPayload }
+        : {}),
+    };
+  }
+
   const parent = {
     postMessage(message: JsonRpcMessage): void {
       requests.push(message);
@@ -99,28 +130,15 @@ function createBriefAppHarness(options: {
           return;
         }
         if (message.method === 'ui/initialize') {
-          respond(message.id!, {
-            hostContext: { locale: 'en' },
-            hostCapabilities: options.hostCapabilities ?? {
-              message: { text: true },
-              serverTools: {},
-              updateModelContext: { text: true },
-            },
-            ...(options.initialPayload
-              ? { structuredContent: options.initialPayload }
-              : {}),
-          });
+          if (options.deferInitialization) {
+            pendingInitializationId = message.id!;
+            return;
+          }
+          respond(message.id!, initializationResult());
           return;
         }
         if (message.method === 'tools/call') {
-          respond(message.id!, {
-            structuredContent: {
-              view: 'brief-confirmed',
-              artifactType: 'website',
-              briefConfirmationId: 'brief-confirmation-test',
-              summary: 'What should this website do?: Launch a product',
-            },
-          });
+          respond(message.id!, confirmationResult());
           return;
         }
         respond(message.id!, {});
@@ -151,16 +169,26 @@ function createBriefAppHarness(options: {
   const dom = new JSDOM(OPEN_DESIGN_BRIEF_APP_HTML, {
     beforeParse(window) {
       widgetWindow = window;
-      if (options.legacyFollowUp) {
+      if (options.legacyFollowUp || options.nativeToolOutput) {
+        const openai: Record<string, unknown> = {};
+        if (options.nativeToolOutput) {
+          openai.toolOutput = options.nativeToolOutput;
+          openai.callTool = async () => confirmationResult();
+        }
+        if (options.legacyFollowUp) {
+          openai.sendFollowUpMessage = async (
+            input: { prompt: string; scrollToBottom?: boolean },
+          ) => {
+            legacyFollowUps.push(input);
+            if (failNextLegacyFollowUp) {
+              failNextLegacyFollowUp = false;
+              throw new Error('Host rejected the follow-up message.');
+            }
+          };
+        }
         Object.defineProperty(window, 'openai', {
           configurable: true,
-          value: {
-            sendFollowUpMessage: async (
-              input: { prompt: string; scrollToBottom?: boolean },
-            ) => {
-              legacyFollowUps.push(input);
-            },
-          },
+          value: openai,
         });
       }
       Object.defineProperty(window, 'parent', {
@@ -186,6 +214,25 @@ function createBriefAppHarness(options: {
     dom,
     legacyFollowUps,
     requests,
+    rejectInitialization(): void {
+      if (!pendingInitializationId) {
+        throw new Error('No deferred initialization request is pending.');
+      }
+      const id = pendingInitializationId;
+      pendingInitializationId = null;
+      respond(id, undefined, {
+        code: -32_000,
+        message: 'Host rejected initialization.',
+      });
+    },
+    resolveInitialization(): void {
+      if (!pendingInitializationId) {
+        throw new Error('No deferred initialization request is pending.');
+      }
+      const id = pendingInitializationId;
+      pendingInitializationId = null;
+      respond(id, initializationResult());
+    },
     notifyToolResult(payload: typeof WEBSITE_BRIEF_PAYLOAD): void {
       dispatch({
         jsonrpc: '2.0',
@@ -208,15 +255,15 @@ describe('local Open Design MCP brief app', () => {
       name: 'collect_brief',
       _meta: {
         ui: {
-          resourceUri: 'ui://open-design/artifact-card-v6.html',
+          resourceUri: 'ui://open-design/artifact-card-v8.html',
         },
-        'ui/resourceUri': 'ui://open-design/artifact-card-v6.html',
-        'openai/outputTemplate': 'ui://open-design/artifact-card-v6.html',
+        'ui/resourceUri': 'ui://open-design/artifact-card-v8.html',
+        'openai/outputTemplate': 'ui://open-design/artifact-card-v8.html',
       },
     });
     expect(localMcpResourceDefinitions()).toContainEqual(
       expect.objectContaining({
-        uri: 'ui://open-design/artifact-card-v6.html',
+        uri: 'ui://open-design/artifact-card-v8.html',
         mimeType: 'text/html;profile=mcp-app',
       }),
     );
@@ -382,11 +429,127 @@ describe('local Open Design MCP brief app', () => {
     expect(
       harness.requests.filter((request) => request.method === 'ui/message'),
     ).toHaveLength(0);
+    const contextUpdates = harness.requests.filter(
+      (request) => request.method === 'ui/update-model-context',
+    );
+    expect(contextUpdates).toHaveLength(1);
+    expect(contextUpdates[0]?.params).toEqual({});
+
+    harness.dom.window.close();
+  });
+
+  it('waits for delayed bridge initialization before clearing native brief context', async () => {
+    const harness = createBriefAppHarness({
+      deferInitialization: true,
+      legacyFollowUp: true,
+      nativeToolOutput: WEBSITE_BRIEF_PAYLOAD,
+    });
+    const { document } = harness.dom.window;
+    const contextUpdates = () => harness.requests.filter(
+      (request) => request.method === 'ui/update-model-context',
+    );
+
+    await eventually(() => {
+      expect(document.querySelector('form')?.hidden).toBe(false);
+    });
+    document.querySelector('form')?.dispatchEvent(
+      new harness.dom.window.Event('submit', {
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    await eventually(() => {
+      expect(harness.legacyFollowUps).toHaveLength(1);
+    });
+    expect(contextUpdates()).toHaveLength(0);
+    expect(document.querySelector('#status')?.textContent)
+      .toContain('Sending confirmed brief');
+
+    harness.resolveInitialization();
+    await eventually(() => {
+      expect(contextUpdates()).toHaveLength(1);
+      expect(document.querySelector('#status')?.textContent).toContain('sent');
+    });
+    expect(contextUpdates()[0]?.params).toEqual({});
+
+    harness.dom.window.close();
+  });
+
+  it('warns after native publication when bridge initialization is rejected', async () => {
+    const harness = createBriefAppHarness({
+      deferInitialization: true,
+      legacyFollowUp: true,
+      nativeToolOutput: WEBSITE_BRIEF_PAYLOAD,
+    });
+    const { document } = harness.dom.window;
+
+    await eventually(() => {
+      expect(document.querySelector('form')?.hidden).toBe(false);
+    });
+    document.querySelector('form')?.dispatchEvent(
+      new harness.dom.window.Event('submit', {
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    await eventually(() => {
+      expect(harness.legacyFollowUps).toHaveLength(1);
+    });
+    harness.rejectInitialization();
+    await eventually(() => {
+      expect(document.querySelector('#status')?.textContent)
+        .toContain('could not be cleared');
+    });
     expect(
       harness.requests.filter(
         (request) => request.method === 'ui/update-model-context',
       ),
     ).toHaveLength(0);
+
+    harness.dom.window.close();
+  });
+
+  it('keeps Codex brief context for retry and clears it after publication succeeds', async () => {
+    const harness = createBriefAppHarness({
+      initialPayload: WEBSITE_BRIEF_PAYLOAD,
+      failFirstLegacyFollowUp: true,
+      legacyFollowUp: true,
+    });
+    const { document } = harness.dom.window;
+    const contextUpdates = () => harness.requests.filter(
+      (request) => request.method === 'ui/update-model-context',
+    );
+
+    await eventually(() => {
+      expect(document.querySelector('form')?.hidden).toBe(false);
+    });
+    document.querySelector('input')?.dispatchEvent(
+      new harness.dom.window.Event('change', { bubbles: true }),
+    );
+    await eventually(() => {
+      expect(contextUpdates()).toHaveLength(1);
+    });
+
+    document.querySelector('form')?.dispatchEvent(
+      new harness.dom.window.Event('submit', {
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await eventually(() => {
+      expect(document.querySelector('#continue')?.hidden).toBe(false);
+    });
+    expect(contextUpdates()).toHaveLength(1);
+
+    document.querySelector('#continue')?.click();
+    await eventually(() => {
+      expect(document.querySelector('#status')?.textContent).toContain('sent');
+      expect(contextUpdates()).toHaveLength(2);
+    });
+    expect(harness.legacyFollowUps).toHaveLength(2);
+    expect(contextUpdates().at(-1)?.params).toEqual({});
 
     harness.dom.window.close();
   });

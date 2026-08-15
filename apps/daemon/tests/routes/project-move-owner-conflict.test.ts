@@ -229,7 +229,7 @@ describe('project move refused by the hub with team_project_owner_conflict', () 
     }
   });
 
-  it('keeps mapping unrelated share failures to the generic BAD_REQUEST', async () => {
+  it('maps transient share failures to retryable UPSTREAM_UNAVAILABLE', async () => {
     const projectId = 'transient-failure';
     seedSelfDraft(projectId);
     const app = express();
@@ -254,9 +254,9 @@ describe('project move refused by the hub with team_project_owner_conflict', () 
           body: JSON.stringify({ visibility: 'team' }),
         },
       );
-      expect(resp.status).toBe(400);
+      expect(resp.status).toBe(503);
       const body = (await resp.json()) as { error: { code: string } };
-      expect(body.error.code).toBe('BAD_REQUEST');
+      expect(body.error.code).toBe('UPSTREAM_UNAVAILABLE');
     } finally {
       await close(routeServer.server);
     }

@@ -33,10 +33,53 @@ import {
   runSideEffectsForRun,
   sideEffectsFromLedger,
 } from '../src/runtimes/run-lifecycle-analytics.js';
+import { runHadFailedDesignSystemWrapper } from '../src/runtimes/run-artifacts.js';
 
 const PROD_DEFAULT_MAX_EVENTS = 2_000;
 
 describe('run event-buffer truncation vs artifact verdict (unit)', () => {
+  it('detects a failed structured design-system wrapper without treating unrelated shell failures as DS failures', () => {
+    const failedWrapper = [
+      {
+        event: 'agent',
+        data: {
+          type: 'tool_use',
+          id: 'resolve-1',
+          name: 'Bash',
+          input: {
+            command: '"$OD_NODE_BIN" "$OD_BIN" tools design-systems resolve --intent account.settings',
+          },
+        },
+      },
+      {
+        event: 'agent',
+        data: {
+          type: 'tool_result',
+          toolUseId: 'resolve-1',
+          isError: true,
+        },
+      },
+    ];
+    expect(runHadFailedDesignSystemWrapper(failedWrapper)).toBe(true);
+    expect(
+      runHadFailedDesignSystemWrapper([
+        {
+          event: 'agent',
+          data: {
+            type: 'tool_use',
+            id: 'lint-1',
+            name: 'Bash',
+            input: { command: 'pnpm lint' },
+          },
+        },
+        {
+          event: 'agent',
+          data: { type: 'tool_result', toolUseId: 'lint-1', isError: true },
+        },
+      ]),
+    ).toBe(false);
+  });
+
   it('the ledger keeps the artifact verdict after 2000+ later events', () => {
     const ledger = createRunSideEffectLedger();
     // Early artifact write: a Write index.html tool_use paired with a

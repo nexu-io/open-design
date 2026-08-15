@@ -550,6 +550,105 @@ test('attachAcpSession mirrors artifact-write tool calls into countable tool_use
   assert.equal(countNewArtifacts(runEvents), 1);
 });
 
+test('attachAcpSession preserves AMR assistant and model-step lifecycle diagnostics', () => {
+  const child = new FakeAcpChild();
+  const events: Array<{ event: string; payload: unknown }> = [];
+
+  attachAcpSession({
+    child: child as never,
+    prompt: 'build a page',
+    cwd: '/tmp/od-project',
+    model: null,
+    mcpServers: [],
+    send: (event, payload) => events.push({ event, payload }),
+  });
+
+  writeAcpResult(child, 1, {});
+  writeAcpResult(child, 2, { sessionId: 'session-1' });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'assistant_message_lifecycle',
+    phase: 'start',
+    status: 'running',
+    assistantMessageIndex: 1,
+    startedAtMs: 1_700_000_000_000,
+    timingEvidence: 'source_timestamp',
+    provider: 'amr',
+    model: 'qwen3.8-max',
+    errorClass: 'rate_limited',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'model_step_lifecycle',
+    phase: 'start',
+    status: 'running',
+    assistantMessageIndex: 1,
+    stepIndex: 1,
+    startedAtMs: 1_700_000_000_100,
+    timingEvidence: 'bridge_observed_step_boundary',
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'model_step_lifecycle',
+    phase: 'end',
+    status: 'completed',
+    reason: 'tool-calls',
+    assistantMessageIndex: 1,
+    stepIndex: 1,
+    startedAtMs: 1_700_000_000_100,
+    endedAtMs: 1_700_000_001_600,
+    durationMs: 1_500,
+    timingEvidence: 'bridge_observed_step_boundary',
+    usage: { reasoningTokens: 7, inputTokens: 10, outputTokens: 3 },
+  });
+  writeAcpUpdate(child, {
+    sessionUpdate: 'model_retry',
+    attempt: 1,
+  });
+  writeAcpResult(child, 3, { usage: { inputTokens: 10, outputTokens: 3 } });
+
+  const diagnostics = events
+    .filter((entry) => entry.event === 'agent')
+    .map((entry) => entry.payload as Record<string, unknown>)
+    .filter((payload) => payload.type === 'diagnostic');
+  assert.deepEqual(
+    diagnostics.map((payload) => payload.name),
+    [
+      'assistant_message_lifecycle',
+      'model_step_lifecycle',
+      'model_step_lifecycle',
+      'model_retry',
+    ],
+  );
+  assert.deepEqual(diagnostics[2], {
+    type: 'diagnostic',
+    name: 'model_step_lifecycle',
+    source: 'amr-opencode',
+    elapsedMs: diagnostics[2]?.elapsedMs,
+    phase: 'end',
+    status: 'completed',
+    reason: 'tool-calls',
+    timingEvidence: 'bridge_observed_step_boundary',
+    assistantMessageIndex: 1,
+    stepIndex: 1,
+    startedAtMs: 1_700_000_000_100,
+    endedAtMs: 1_700_000_001_600,
+    durationMs: 1_500,
+    usage: { inputTokens: 10, outputTokens: 3, reasoningTokens: 7 },
+  });
+  assert.deepEqual(diagnostics[0], {
+    type: 'diagnostic',
+    name: 'assistant_message_lifecycle',
+    source: 'amr-opencode',
+    elapsedMs: diagnostics[0]?.elapsedMs,
+    phase: 'start',
+    status: 'running',
+    provider: 'amr',
+    model: 'qwen3.8-max',
+    errorClass: 'rate_limited',
+    timingEvidence: 'source_timestamp',
+    assistantMessageIndex: 1,
+    startedAtMs: 1_700_000_000_000,
+  });
+});
+
 test('a truly PATHLESS ACP write is NOT coerced into an artifact (no false positive)', () => {
   // A write tool call whose only label is "edit" — no locations, no path, ever.
   // We must not fabricate an artifact extension: without a concrete path the

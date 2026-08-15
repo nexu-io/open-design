@@ -221,10 +221,26 @@ function isRole(value: unknown): value is CollabMemberRole {
   return value === 'owner' || value === 'admin' || value === 'member';
 }
 
+/**
+ * Wall-clock budget for presence spawns. Presence heartbeat/list/leave are
+ * high-frequency lease traffic (the web client beats every 10s and every beat
+ * spawns a CLI process); without a budget a wedged CLI piles up unbounded
+ * children while the client keeps beating. Presence data is disposable — the
+ * next beat re-establishes it — so a hung spawn is terminated rather than
+ * awaited. Lower-frequency member/comment commands keep their existing
+ * unbounded behavior.
+ */
+const PRESENCE_COMMAND_TIMEOUT_MS = 10_000;
+
 const defaultRunVelaCollab: RunVelaCollab = (args, workspaceId) =>
   runVelaCommand(
     ['collab', ...args],
-    velaWorkspaceCommandOptions(workspaceId),
+    {
+      ...velaWorkspaceCommandOptions(workspaceId),
+      ...(args[0] === 'presence'
+        ? { timeoutMs: PRESENCE_COMMAND_TIMEOUT_MS }
+        : {}),
+    },
   );
 
 export function shouldUseVelaCliCollabTransport(

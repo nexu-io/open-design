@@ -3,6 +3,7 @@ import {
   authorizeCreatedProjectWorkspace,
   createdProjectWorkspaceHome,
   CreatedProjectWorkspaceResolutionError,
+  localProjectWorkspaceAttribution,
   type CreatedProjectWorkspaceResolution,
 } from '../../src/collab/created-project-workspace.js';
 
@@ -126,6 +127,22 @@ describe('authorizeCreatedProjectWorkspace', () => {
     expect(result).toMatchObject({ ok: false, retryable: true });
   });
 
+  it('returns a non-retryable 401 when the AMR credential has expired', async () => {
+    const result = await authorizeCreatedProjectWorkspace(
+      request(),
+      async () => ({
+        ok: false,
+        items: [],
+        reason: 'unauthorized',
+        status: 401,
+      }),
+    );
+
+    expectDenied(result, 401, 'AMR_AUTH_REQUIRED');
+    expect(result).toMatchObject({ ok: false });
+    expect(result).not.toHaveProperty('retryable');
+  });
+
   it('preserves explicitly anonymous/headerless compatibility without consulting AMR', async () => {
     const fetchDirectory = vi.fn(async () => ({ ok: false, items: [] }));
     const result = await authorizeCreatedProjectWorkspace(
@@ -146,6 +163,23 @@ describe('authorizeCreatedProjectWorkspace', () => {
 
     expectDenied(result, 400, 'WORKSPACE_CONTEXT_INCOMPLETE');
     expect(fetchDirectory).not.toHaveBeenCalled();
+  });
+});
+
+describe('localProjectWorkspaceAttribution', () => {
+  it('keeps a complete local attribution without consulting remote authority', () => {
+    expect(localProjectWorkspaceAttribution(request())).toMatchObject({
+      workspaceId: 'workspace-a',
+      workspaceMemberId: 'member-a',
+      workspaceType: 'team',
+    });
+  });
+
+  it('leaves missing or partial identity unbound instead of blocking local creation', () => {
+    expect(localProjectWorkspaceAttribution(request({}))).toBeNull();
+    expect(localProjectWorkspaceAttribution(request({
+      'x-od-workspace-id': 'workspace-a',
+    }))).toBeNull();
   });
 });
 

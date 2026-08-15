@@ -40,4 +40,29 @@ describe('createBufferedTextUpdates pending text accounting', () => {
 
     buf.cancel();
   });
+
+  it('coalesces adjacent thinking deltas into one frame update', () => {
+    vi.stubGlobal('requestAnimationFrame', () => 0);
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+
+    let msg = { events: [] } as unknown as ChatMessage;
+    let updates = 0;
+    const buf = createBufferedTextUpdates({
+      updateMessage: (u) => {
+        msg = u(msg);
+        updates += 1;
+      },
+      persistSoon: () => {},
+    });
+
+    for (let index = 0; index < 1_500; index += 1) {
+      buf.appendEvent({ kind: 'thinking', text: 'x' });
+    }
+
+    expect(msg.events).toEqual([]);
+    buf.flush();
+    expect(msg.events).toEqual([{ kind: 'thinking', text: 'x'.repeat(1_500) }]);
+    expect(updates).toBe(1);
+    buf.cancel();
+  });
 });

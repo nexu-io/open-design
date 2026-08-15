@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildWorkspacePermissions,
@@ -191,6 +191,7 @@ vi.mock('../../src/state/projects', async () => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
   window.sessionStorage.clear();
@@ -2154,42 +2155,32 @@ describe('DesignSystemCreationFlow', () => {
   });
 
   it('stops checking GitHub connector if the status request hangs', async () => {
-    const originalSetTimeout = window.setTimeout;
-    type WindowSetTimeout = typeof window.setTimeout;
-    const timeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation(((...params: Parameters<WindowSetTimeout>) => {
-      const [handler, timeout, ...args] = params;
-      if (timeout === 5000 && typeof handler === 'function') {
-        handler(...args);
-        return 1;
-      }
-      return originalSetTimeout(...params);
-    }) as typeof window.setTimeout);
+    vi.useFakeTimers();
     mocks.fetchConnectorStatuses.mockReturnValue(new Promise(() => {}));
     const config = {
       composio: { apiKeyConfigured: true, apiKeyTail: 'uQEg' },
     } as AppConfig;
 
-    try {
-      render(
-        <DesignSystemCreationFlow
-          onBack={() => {}}
-          onCreated={() => {}}
-          config={config}
-        />,
-      );
+    render(
+      <DesignSystemCreationFlow
+        onBack={() => {}}
+        onCreated={() => {}}
+        config={config}
+      />,
+    );
 
-      expect(screen.getByText('GitHub access: Auto')).toBeTruthy();
-      fireEvent.click(screen.getByRole('button', { name: 'Show access methods' }));
-      expect(screen.queryByText('Checking GitHub connector')).toBeNull();
+    expect(screen.getByText('GitHub access: Auto')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show access methods' }));
+    expect(screen.queryByText('Checking GitHub connector')).toBeNull();
 
-      await waitFor(() => expect(screen.getByText('Needs attention')).toBeTruthy());
-      expect(screen.queryByText('Checking GitHub connector')).toBeNull();
-      expect(screen.getByText(/Could not finish checking GitHub connector/i)).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Connect via Composio' })).toBeTruthy();
-      expect(mocks.fetchConnectorStatuses.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
-    } finally {
-      timeoutSpy.mockRestore();
-    }
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(screen.getByText('Needs attention')).toBeTruthy();
+    expect(screen.queryByText('Checking GitHub connector')).toBeNull();
+    expect(screen.getByText(/Could not finish checking GitHub connector/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Connect via Composio' })).toBeTruthy();
+    expect(mocks.fetchConnectorStatuses.mock.calls[0]?.[0]?.signal?.aborted).toBe(true);
   });
 
   it('surfaces GitHub connector status errors from the connector status endpoint', async () => {

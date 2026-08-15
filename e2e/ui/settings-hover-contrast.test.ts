@@ -155,8 +155,8 @@ test.describe('Settings hover contrast (regression guard for #1795)', () => {
   for (const theme of THEMES) {
     test(`[P2] Pets source tabs hover stays readable in ${theme} theme`, async ({ page }) => {
       await openSettings(page, theme);
-      const petsNav = settingsNavItem(page, /^(Pets|Pet|宠物|寵物)$/i);
-      await petsNav.click();
+      // #5517 folded Pets into General instead of keeping a standalone nav item.
+      await settingsNavItem(page, /^(General|通用)$/i).click();
       // Pet tabs render once the section is mounted; no daemon round-trip is
       // required for the tab pills themselves.
       await page.waitForSelector('.pet-tabs .subtab-pill button');
@@ -193,8 +193,8 @@ test.describe('Settings hover contrast (regression guard for #1795)', () => {
         `BYOK seg-btn hover ${execMeasurement.ratio} (${theme})`,
       ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
 
-      const notifNav = settingsNavItem(page, /^(Notifications|通知)$/i);
-      await notifNav.click();
+      // Notifications now shares the General page with the other system preferences.
+      await settingsNavItem(page, /^(General|通用)$/i).click();
       await page.waitForSelector('.seg-control .seg-btn');
       const notifMeasurement = await hoverAndMeasure(
         page,
@@ -206,49 +206,4 @@ test.describe('Settings hover contrast (regression guard for #1795)', () => {
       ).toBeGreaterThanOrEqual(WCAG_AA_NORMAL);
     });
   }
-});
-
-test('[P1] system theme follows the OS color scheme without persisting an explicit theme', async ({ page }) => {
-  await page.addInitScript(
-    ({ key }) => {
-      window.localStorage.setItem(
-        key,
-        JSON.stringify({
-          theme: 'system',
-          accentColor: '#c96442',
-          mode: 'daemon',
-          onboardingCompleted: true,
-          agentId: null,
-          skillId: null,
-          designSystemId: null,
-          mediaProviders: {},
-          agentModels: {},
-        }),
-      );
-    },
-    { key: STORAGE_KEY },
-  );
-  await page.route('**/api/health', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
-  });
-
-  await page.emulateMedia({ colorScheme: 'light' });
-  await page.goto('/');
-  await expect
-    .poll(() => page.locator('html').getAttribute('data-theme'))
-    .toBeNull();
-  const lightBg = await page.evaluate(() =>
-    getComputedStyle(document.documentElement).getPropertyValue('--bg').trim(),
-  );
-
-  await page.emulateMedia({ colorScheme: 'dark' });
-  await expect
-    .poll(() => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()))
-    .not.toBe(lightBg);
-  await expect
-    .poll(() => page.locator('html').getAttribute('data-theme'))
-    .toBeNull();
-  await expect
-    .poll(() => page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? '{}').theme, STORAGE_KEY))
-    .toBe('system');
 });

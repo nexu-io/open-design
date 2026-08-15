@@ -5,7 +5,8 @@
 import type { DesignSystemEnrichClickProps, TrackingDesignSystemEditSurface } from './design-systems.js';
 import type { TrackingPageName, TrackingSettingsPage } from './event-names.js';
 import type { OnboardingClickProps, TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
-import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
+import type { TrackingRunRecoveryActionType } from './result-events.js';
+import type { TrackingAmrEntrySource, TrackingArtifactKind, TrackingByokProviderId, TrackingCampaignConversionSource, TrackingCampaignId, TrackingCampaignUserState, TrackingCliProviderId, TrackingExecutionMode, TrackingExportFormat, TrackingFeedbackProviderId, TrackingNewProjectTab, TrackingProjectKind, TrackingProjectSource } from './shared-enums.js';
 import type { AccountMenuClickProps, CommunityTemplateClickProps, EntryNavigationClickProps, ExtensionMarketplaceClickProps, ProjectCollectionClickProps, TrackingWorkspaceScope, WorkspaceInviteClickProps, WorkspaceSwitcherClickProps } from './workspace.js';
 // ---- ui_click ------------------------------------------------------------
 //
@@ -931,6 +932,22 @@ export interface RunFailedToastClickProps {
   element: 'go_amr';
 }
 
+export interface RunRecoveryActionClickProps {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'run_recovery_action';
+  task_execution_id: string;
+  recovery_action_instance_id: string;
+  recovery_action_type: TrackingRunRecoveryActionType;
+  source_run_id?: string;
+  source_agent_provider_id?: string;
+  source_model_id?: string;
+  failure_category?: string;
+  failure_reason?: string;
+  target_agent_provider_id?: string;
+  target_model_id?: string;
+}
+
 export interface AmrEntryClickProps {
   page_name: TrackingPageName;
   area: 'amr_entry';
@@ -940,6 +957,24 @@ export interface AmrEntryClickProps {
   source_product: 'open_design';
   source_detail: TrackingAmrEntrySource;
   entry_occurred_at: string;
+  campaign_id?: TrackingCampaignId;
+  conversion_source?: TrackingCampaignConversionSource;
+}
+
+export interface DeepSeekCampaignModalClickProps {
+  page_name: 'home';
+  area: 'deepseek_campaign_modal';
+  element: 'close' | 'later' | 'use_now' | 'upgrade';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
+}
+
+export interface DeepSeekCampaignBadgeClickProps {
+  page_name: 'home';
+  area: 'campaign_badge';
+  element: 'open_pricing';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
 }
 
 // Terminal outcome of one AMR (vela) sign-in attempt, fired exactly once
@@ -1302,7 +1337,14 @@ export interface ShareOptionPopoverClickProps {
   // Export/share formats, plus 'publish_required_guide' for the share-intent
   // signal: the user opened Share wanting a link but the artifact isn't
   // deployed yet, so only the "publish online first" guide row is shown.
-  element: TrackingExportFormat | 'publish_required_guide';
+  // 'publish_file' is the Share tab's "Publish this file for everyone" button
+  // (the outcome reports separately via artifact_publish_result);
+  // 'copy_publish_link' is the copy-link button shown once a file is published.
+  element:
+    | TrackingExportFormat
+    | 'publish_required_guide'
+    | 'publish_file'
+    | 'copy_publish_link';
   artifact_id: string;
   artifact_kind: TrackingArtifactKind;
   project_id: string;
@@ -1395,6 +1437,32 @@ export interface AssistantFeedbackReasonSubmitClickProps {
   has_custom_reason: boolean;
   custom_reason?: string;
 }
+
+// CONVERSATION FORK funnel. The click and result events share this context so
+// analysts can compare historical-vs-latest forks without joining prompts or
+// other user-authored content into PostHog.
+export type TrackingConversationForkPoint = 'latest' | 'historical' | 'unknown';
+
+export interface ConversationForkAnalyticsContext {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'assistant_fork_button';
+  action: 'fork_conversation';
+  project_id: string;
+  project_kind: TrackingProjectKind | null;
+  conversation_id: string;
+  assistant_message_id: string;
+  source_run_id: string | null;
+  source_agent_id: string;
+  agent_provider_id: string;
+  session_mode: TrackingSessionMode;
+  fork_point: TrackingConversationForkPoint;
+  seed_message_count: number | null;
+  conversation_message_count: number;
+  messages_after_fork_count: number | null;
+}
+
+export type ConversationForkClickProps = ConversationForkAnalyticsContext;
 
 // SETTINGS clicks
 export type TrackingSettingsArea =
@@ -1616,7 +1684,10 @@ export type UiClickProps =
   | NextStepActionClickProps
   | QuestionsFormClickProps
   | RunFailedToastClickProps
+  | RunRecoveryActionClickProps
   | AmrEntryClickProps
+  | DeepSeekCampaignModalClickProps
+  | DeepSeekCampaignBadgeClickProps
   | ChatPanelResourcesPopoverClickProps
   | ChatPanelMessageQueueClickProps
   | FileManagerClickProps
@@ -1632,6 +1703,7 @@ export type UiClickProps =
   | DeckViewerClickProps
   | ShareOptionPopoverClickProps
   | FileVersionModalClickProps
+  | ConversationForkClickProps
   | AssistantFeedbackButtonClickProps
   | AssistantFeedbackReasonSubmitClickProps
   | SettingsSidebarClickProps

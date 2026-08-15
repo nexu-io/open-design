@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+import { INTEGRATIONS_MCP_PATH } from '@open-design/contracts';
 
 import {
   composeSystemPrompt,
@@ -245,6 +246,16 @@ describe('composeSystemPrompt', () => {
     expect(design).toContain('## Requirements Clarification Phase');
   });
 
+  it('pins Cloud nano-banana shorthand and forbids reading generated media bytes back into context', () => {
+    const prompt = composeSystemPrompt({
+      skillMode: 'image',
+      metadata: { kind: 'image', imageModel: 'vela/nano-banana-2' } as any,
+    });
+
+    expect(prompt).toContain('`nano-banana` and `nano-banana-2` mean');
+    expect(prompt).toContain('Do not call `Read` on the generated image');
+  });
+
   it('injects the html-in-canvas preflight for the hyperframes skill', () => {
     const prompt = composeSystemPrompt({
       skillName: 'hyperframes',
@@ -376,6 +387,51 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('Do not output generated source code in a `<artifact type="text/html">...</artifact>` block.');
     });
 
+    it('uses Vela media defaults only for AMR and forbids direct Vela calls', () => {
+      const amrPrompt = composeSystemPrompt({
+        agentId: 'amr',
+        metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
+      });
+      expect(amrPrompt).toContain('Image model: `vela/gpt-image-2`');
+      expect(amrPrompt).toContain(
+        'Video model: `vela/doubao-seedance-2-0-260128`',
+      );
+      expect(amrPrompt).toContain('### Open Design Cloud media defaults');
+      expect(amrPrompt).not.toContain('### Run-scoped BYOK media defaults');
+      expect(amrPrompt).toContain('Never invoke the `vela` CLI directly');
+      expect(amrPrompt).toContain('trusted Workspace attribution');
+
+      const claudePrompt = composeSystemPrompt({ agentId: 'claude' });
+      expect(claudePrompt).not.toContain('Image model: `vela/gpt-image-2`');
+      expect(claudePrompt).toContain('`--model flux-pro-ultra`');
+    });
+
+    it('keeps image completion copy generic while retaining internal diagnostics', () => {
+      const imagePrompt = composeSystemPrompt({
+        agentId: 'amr',
+        locale: 'zh-CN',
+        metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
+      });
+      expect(imagePrompt).toContain('reply exactly `图片已生成`');
+      expect(imagePrompt).toContain('reply exactly `图片生成服务暂时不可用`');
+      expect(imagePrompt).toContain('tool output and daemon logs');
+      expect(imagePrompt).not.toContain('the filename, the model used');
+      expect(imagePrompt).not.toContain('surface them verbatim to the user');
+      expect(imagePrompt).not.toContain('quote the real stderr / exit code');
+
+      const prototypePrompt = composeSystemPrompt({
+        agentId: 'amr',
+        locale: 'zh-CN',
+        metadata: { kind: 'prototype' } as any,
+      });
+      expect(prototypePrompt).toContain('reply exactly `图片已生成`');
+      expect(prototypePrompt).toContain('reply exactly `图片生成服务暂时不可用`');
+      expect(prototypePrompt).toContain('IMAGE_MODEL="vela/gpt-image-2"');
+      expect(prototypePrompt).not.toContain(
+        'For the best fal image model use `--model flux-pro-ultra`',
+      );
+    });
+
     it('prioritizes question forms over native tool calls when clarifying', () => {
       const prompt = composeSystemPrompt({ agentId: 'amr' });
       expect(prompt).toContain('## Structured clarification on any turn');
@@ -499,7 +555,12 @@ describe('composeSystemPrompt', () => {
         '**Do NOT call any tool whose name matches `mcp__<server>__authenticate` or `mcp__<server>__complete_authentication`',
       );
       expect(directive).toContain('localhost:<random>/callback');
-      expect(directive).toContain('Settings → External MCP');
+      // Reconnect lives in the top-level Integrations view, NOT in Settings:
+      // `mcpClient` kept its Settings render block but lost its sidebar nav
+      // item, so "Settings → External MCP" named a place users cannot navigate
+      // to. Asserted through the contract so this cannot drift again.
+      expect(directive).toContain(INTEGRATIONS_MCP_PATH);
+      expect(directive).not.toContain('Settings → External MCP');
     });
 
     it('skips entries with blank ids and emits nothing when none remain', () => {
@@ -652,6 +713,62 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('preview/colors.html: Colors; colors');
       expect(prompt).toContain('source/evidence.md: import evidence notes');
       expect(prompt).toContain('Keep the push prompt light');
+    });
+
+    it('routes listed business intents through the structured resolver before generation', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# x\n\nbody',
+        designSystemComponentsManifest: sampleComponentsManifest,
+        designSystemFixtureHtml: sampleFixtureHtml,
+        designSystemIntentIndex:
+          'Canonical business intents declared by the active design system:\n- `account.settings.save` → Button.primary — Save account changes',
+        executionProfile: 'filesystem',
+      });
+
+      expect(prompt).toContain('## Structured component intent routing — default');
+      expect(prompt).toContain('tools design-systems resolve --intent <canonical-intent>');
+      expect(prompt).toContain('`account.settings.save` → Button.primary');
+      expect(prompt).toContain('include every required state');
+      expect(prompt).toContain('sole component-selection authority');
+      expect(prompt).not.toContain('match component shapes from the reference component manifest');
+      expect(prompt).not.toContain('## Reference component manifest');
+      expect(prompt).not.toContain('## Reference fixture');
+      expect(prompt).not.toContain('components.manifest schema v1');
+      expect(prompt).not.toContain('class="btn btn-primary"');
+    });
+
+    it('keeps text-artifact runs honest when they cannot call the resolver', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# x\n\nbody',
+        designSystemIntentIndex:
+          'Canonical business intents declared by the active design system:\n- `account.settings.save` → Button.primary',
+        executionProfile: 'text_artifact',
+      });
+
+      expect(prompt).toContain('This runtime cannot call the resolver');
+      expect(prompt).not.toContain('tools design-systems resolve --intent <canonical-intent>');
+      expect(prompt).toContain('do not invent hidden variants, properties, states, or implementation details');
+    });
+
+    it('surfaces a declared invalid runtime instead of silently presenting it as legacy', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'broken',
+        designSystemBody: '# x\n\nbody',
+        designSystemComponentsManifest: sampleComponentsManifest,
+        designSystemFixtureHtml: sampleFixtureHtml,
+        designSystemRuntimeIssue: 'manifests/intent-map.json: unknown component MissingButton',
+      });
+
+      expect(prompt).toContain('## Structured design-system runtime unavailable — broken');
+      expect(prompt).toContain('Do not silently treat it as a valid legacy component map');
+      expect(prompt).toContain('unknown component MissingButton');
+      expect(prompt).toContain('do not fall back to a legacy manifest or fixture');
+      expect(prompt).not.toContain('## Reference component manifest');
+      expect(prompt).not.toContain('## Reference fixture');
+      expect(prompt).not.toContain('components.manifest schema v1');
+      expect(prompt).not.toContain('class="btn btn-primary"');
     });
 
     it('adds importMode guidance when the manifest declares consumption semantics', () => {

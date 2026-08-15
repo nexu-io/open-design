@@ -402,4 +402,15 @@ describe('workspace tabs chrome styles', () => {
     expect(shellCss).not.toContain('.workspace-tab.is-drag-over-before::after');
     expect(shellCss).not.toContain('.workspace-tab.is-drag-over-after::after');
   });
+
+  it('caps the docked tab dropdown at six rows and scrolls the rest', () => {
+    const menu = cssDeclarations(routinesCss, '.workspace-tabs-dropdown__menu');
+    const row = cssDeclarations(routinesCss, '.workspace-tabs-dropdown__row-main');
+
+    // Six 32px rows plus the menu's own 6px paddings and 1px borders.
+    expect(ruleValue(row, 'height')).toBe('32px');
+    expect(ruleValue(menu, 'max-height')).toBe('calc(6 * 32px + 2 * 6px + 2 * 1px)');
+    expect(ruleValue(menu, 'overflow-y')).toBe('auto');
+    expect(ruleValue(menu, 'overscroll-behavior')).toBe('contain');
+  });
 });

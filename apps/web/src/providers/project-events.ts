@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { BackoffController } from '../lib/backoff';
 import {
   COLLAB_PROJECT_INVALIDATION_EVENTS,
   PROJECT_CONTENT_TRANSFER_STATE_EVENT,
@@ -50,6 +51,8 @@ export interface ProjectEventsConnectionOptions {
   /** Test seam: setTimeout/clearTimeout substitutes for fake timers. */
   setTimeoutFn?: typeof setTimeout;
   clearTimeoutFn?: typeof clearTimeout;
+  /** Test seam: deterministic jitter source for the reconnect backoff. */
+  randomFn?: () => number;
   /**
    * Collab realtime hop-2 poll-as-floor signal. Fires `true` when the stream is
    * live (the daemon's `ready` handshake) and `false` on error/disconnect, so a
@@ -101,13 +104,17 @@ export function createProjectEventsConnection(
     ?? (typeof EventSource === 'undefined' ? null : EventSource);
   if (!Ctor) return { close() { /* noop */ } };
 
-  const initialBackoff = options.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF;
-  const maxBackoff = options.maxBackoffMs ?? DEFAULT_MAX_BACKOFF;
   const setT = options.setTimeoutFn ?? setTimeout;
   const clearT = options.clearTimeoutFn ?? clearTimeout;
+  const backoff = new BackoffController({
+    initialMs: options.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF,
+    maxMs: options.maxBackoffMs ?? DEFAULT_MAX_BACKOFF,
+    factor: 2,
+    jitter: true,
+    random: options.randomFn,
+  });
 
   let cancelled = false;
-  let backoff = initialBackoff;
   let source: EventSource | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -116,7 +123,7 @@ export function createProjectEventsConnection(
     const es = new Ctor(projectEventsUrl(projectId, workspaceContext));
     source = es;
     es.addEventListener('ready', () => {
-      backoff = initialBackoff;
+      backoff.reset();
       options.onConnectedChange?.(true);
       options.onReady?.();
     });
@@ -215,9 +222,7 @@ export function createProjectEventsConnection(
       options.onConnectedChange?.(false);
       es.close();
       if (source === es) source = null;
-      const delay = backoff;
-      backoff = Math.min(backoff * 2, maxBackoff);
-      reconnectTimer = setT(connect, delay) as ReturnType<typeof setTimeout>;
+      reconnectTimer = setT(connect, backoff.nextDelay()) as ReturnType<typeof setTimeout>;
     });
   };
 

@@ -7,6 +7,7 @@ import type {
 import type { VelaWorkspaceBillingProjection } from '../integrations/vela-billing.js';
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
+const DEFAULT_REALTIME_POLL_FLOOR_MS = 5 * 60_000;
 const DEFAULT_RETRY_DELAYS_MS = [5_000, 15_000, 30_000] as const;
 const DEFAULT_INTEREST_LEASE_MS = 60_000;
 const DEFAULT_INTEREST_SWEEP_INTERVAL_MS = 5_000;
@@ -76,8 +77,13 @@ export interface WorkspaceBillingRuntimeCoordinatorOptions {
   fetchProjection(key: WorkspaceBillingRuntimeKey): Promise<VelaWorkspaceBillingProjection>;
   scheduler?: WorkspaceBillingRuntimeScheduler;
   pollIntervalMs?: number;
+  realtimePollFloorMs?: number;
   retryDelaysMs?: readonly number[];
   onStateChange?: (state: WorkspaceBillingRuntimeState) => void;
+  onAccessRevoked?: (
+    key: WorkspaceBillingRuntimeKey,
+    error: unknown,
+  ) => void;
   interestLeaseMs?: number;
   interestSweepIntervalMs?: number;
   entryRetentionMs?: number;
@@ -90,6 +96,9 @@ export interface WorkspaceBillingRuntimeCoordinatorOptions {
   maxRefreshStartsPerWindow?: number;
   refreshStartWindowMs?: number;
   onInterestSetChange?: (interests: WorkspaceBillingRuntimeKey[]) => void;
+  /** Bounded observability hook; one callback equals one billing projection
+   * refresh avoided by the strict realtime safety floor. */
+  onPollSuppressed?: () => void;
 }
 
 interface ClientInterest {
@@ -183,6 +192,8 @@ export class WorkspaceBillingRuntimeCoordinator {
   private readonly maxEntries: number;
   private readonly softTtlMs: number;
   private readonly hardTtlMs: number;
+  private readonly realtimePollFloorMs: number;
+  private readonly realtimeHealthyWorkspaces = new Set<string>();
   private readonly maxConcurrentRefreshes: number;
   private readonly maxRefreshStartsPerWindow: number;
   private readonly refreshStartWindowMs: number;
@@ -212,6 +223,10 @@ export class WorkspaceBillingRuntimeCoordinator {
     this.hardTtlMs = Math.max(
       this.softTtlMs,
       options.hardTtlMs ?? this.softTtlMs * DEFAULT_HARD_TTL_MULTIPLIER,
+    );
+    this.realtimePollFloorMs = Math.max(
+      this.softTtlMs,
+      options.realtimePollFloorMs ?? DEFAULT_REALTIME_POLL_FLOOR_MS,
     );
     this.maxConcurrentRefreshes = Math.max(
       1,
@@ -348,10 +363,11 @@ export class WorkspaceBillingRuntimeCoordinator {
     const entry = this.entryFor(key);
     const forceForInterest = this.acceptClientInterest(entry, options);
     const requireFresh = options.requireFresh === true;
+    const softTtlMs = this.effectiveSoftTtlMs(entry);
     if (
       entry.status === 'fresh' &&
       entry.observedAt != null &&
-      this.scheduler.now() - entry.observedAt >= this.softTtlMs
+      this.scheduler.now() - entry.observedAt >= softTtlMs
     ) {
       this.markStatus(entry, 'stale', 'soft-ttl-expired');
     }
@@ -362,7 +378,7 @@ export class WorkspaceBillingRuntimeCoordinator {
       requireFresh ||
       entry.status !== 'fresh' ||
       entry.observedAt == null ||
-      this.scheduler.now() - entry.observedAt >= this.softTtlMs ||
+      this.scheduler.now() - entry.observedAt >= softTtlMs ||
       forceForInterest
     ) {
       this.requestRefresh(
@@ -448,12 +464,35 @@ export class WorkspaceBillingRuntimeCoordinator {
     }
   }
 
+  setRealtimeHealthy(workspaceId: string, healthy: boolean): void {
+    if (this.disposed) return;
+    const requested = workspaceId.trim();
+    if (!requested) return;
+    if (healthy) {
+      this.realtimeHealthyWorkspaces.add(requested);
+      return;
+    }
+    if (!this.realtimeHealthyWorkspaces.delete(requested)) return;
+    // A disconnect or source-health downgrade immediately restores the
+    // authoritative fallback and refreshes the last-good projection.
+    this.reconnect(requested);
+  }
+
   refreshAll(reason = 'catch-up'): void {
     if (this.disposed) return;
     for (const entry of this.entries.values()) {
       if (!this.hasActiveInterest(entry)) continue;
       if (entry.status === 'access-revoked') continue;
       if (reason === 'poll-floor' && entry.retryTimer) continue;
+      if (
+        reason === 'poll-floor' &&
+        this.realtimeHealthyWorkspaces.has(entry.key.workspaceId) &&
+        entry.observedAt != null &&
+        this.scheduler.now() - entry.observedAt < this.realtimePollFloorMs
+      ) {
+        this.options.onPollSuppressed?.();
+        continue;
+      }
       this.markStatus(entry, hasProjection(entry) ? 'stale' : 'loading', reason);
       this.requestRefresh(entry, reason, true);
     }
@@ -486,6 +525,7 @@ export class WorkspaceBillingRuntimeCoordinator {
   revokeWorkspace(workspaceId: string, reason = 'workspace-not-authorized'): void {
     const requested = workspaceId.trim();
     if (!requested) return;
+    this.realtimeHealthyWorkspaces.delete(requested);
     for (const entry of this.entries.values()) {
       if (entry.key.workspaceId !== requested) continue;
       this.revokeEntry(entry, reason);
@@ -555,6 +595,7 @@ export class WorkspaceBillingRuntimeCoordinator {
     }
     this.entries.clear();
     this.clients.clear();
+    this.realtimeHealthyWorkspaces.clear();
   }
 
   private acceptClientInterest(
@@ -883,6 +924,11 @@ export class WorkspaceBillingRuntimeCoordinator {
         const code = errorCode(error);
         if (isAccessRevokedError(error)) {
           this.revokeEntry(entry, code);
+          try {
+            this.options.onAccessRevoked?.({ ...entry.key }, error);
+          } catch {
+            // Revocation is already committed locally; observers are best-effort.
+          }
           return;
         }
         entry.status = 'error';
@@ -1006,6 +1052,8 @@ export class WorkspaceBillingRuntimeCoordinator {
   }
 
   private state(entry: RuntimeEntry): WorkspaceBillingRuntimeState {
+    const softTtlMs = this.effectiveSoftTtlMs(entry);
+    const hardTtlMs = this.effectiveHardTtlMs(entry);
     return {
       workspaceId: entry.key.workspaceId,
       workspaceMemberId: entry.key.workspaceMemberId,
@@ -1013,10 +1061,10 @@ export class WorkspaceBillingRuntimeCoordinator {
       revision: entry.revision.toString(),
       observedAt: timestamp(entry.observedAt),
       softExpiresAt: timestamp(
-        entry.observedAt == null ? null : entry.observedAt + this.softTtlMs,
+        entry.observedAt == null ? null : entry.observedAt + softTtlMs,
       ),
       hardExpiresAt: timestamp(
-        entry.observedAt == null ? null : entry.observedAt + this.hardTtlMs,
+        entry.observedAt == null ? null : entry.observedAt + hardTtlMs,
       ),
       retryAt: timestamp(entry.retryAt),
       errorCode: entry.errorCode,
@@ -1032,8 +1080,20 @@ export class WorkspaceBillingRuntimeCoordinator {
   private isHardExpired(entry: RuntimeEntry): boolean {
     return (
       entry.observedAt != null &&
-      this.scheduler.now() - entry.observedAt >= this.hardTtlMs
+      this.scheduler.now() - entry.observedAt >= this.effectiveHardTtlMs(entry)
     );
+  }
+
+  private effectiveSoftTtlMs(entry: RuntimeEntry): number {
+    return this.realtimeHealthyWorkspaces.has(entry.key.workspaceId)
+      ? this.realtimePollFloorMs
+      : this.softTtlMs;
+  }
+
+  private effectiveHardTtlMs(entry: RuntimeEntry): number {
+    return this.realtimeHealthyWorkspaces.has(entry.key.workspaceId)
+      ? Math.max(this.hardTtlMs, this.realtimePollFloorMs * 2)
+      : this.hardTtlMs;
   }
 
   private assertUsable(): void {
@@ -1118,7 +1178,9 @@ function validateProjectionScope(
       snapshot.workspaceMemberId !== key.workspaceMemberId
     )
   ) {
-    throw new Error('workspace_billing_scope_mismatch');
+    throw Object.assign(new Error('workspace billing scope mismatch'), {
+      code: 'workspace_billing_scope_mismatch',
+    });
   }
   if (
     balance &&
@@ -1128,7 +1190,9 @@ function validateProjectionScope(
       balance.workspaceMemberId !== key.workspaceMemberId
     )
   ) {
-    throw new Error('workspace_billing_scope_mismatch');
+    throw Object.assign(new Error('workspace billing scope mismatch'), {
+      code: 'workspace_billing_scope_mismatch',
+    });
   }
 }
 
@@ -1358,6 +1422,7 @@ function isAccessRevokedError(error: unknown): boolean {
     error instanceof WorkspaceBillingAccessRevokedError ||
     code === 'workspace_not_authorized' ||
     code === 'workspace_access_revoked' ||
+    code === 'workspace_billing_scope_mismatch' ||
     code === 'forbidden'
   );
 }

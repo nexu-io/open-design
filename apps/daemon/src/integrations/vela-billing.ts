@@ -41,6 +41,31 @@ export interface VelaWorkspaceBillingProjection {
   workspaceBalance: WorkspaceWalletBalance | null;
 }
 
+/** The Go CLI preserves the backend status/code in its wrapped stderr text,
+ * while injected/newer adapters may expose a string code directly. */
+export function isVelaWorkspaceAuthorizationError(error: unknown): boolean {
+  const code =
+    error && typeof error === 'object' && 'code' in error &&
+    typeof error.code === 'string'
+      ? error.code.trim().toLowerCase()
+      : '';
+  if (
+    code === 'workspace_not_authorized' ||
+    code === 'workspace_access_revoked' ||
+    code === 'auth_required' ||
+    code === 'forbidden'
+  ) {
+    return true;
+  }
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return (
+    /api request failed with status (?:401|403)(?::|\b)/i.test(message) ||
+    /\b(?:workspace_not_authorized|workspace_access_revoked|auth_required)\b/i.test(
+      message,
+    )
+  );
+}
+
 /** Fetch Vela's account-scoped billing summary through the CLI 收口. */
 export async function fetchVelaBillingSummary(
   options: FetchVelaBillingOptions = {},

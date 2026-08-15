@@ -10,9 +10,9 @@
 // though the row centers them, the differing heights left the pills and Send
 // visibly misaligned against the left buttons.
 //
-// This spec is the regression boundary: every interactive control in the
-// composer row must share one height and one vertical center so the toolbar
-// reads as a single row.
+// This spec is the regression boundary: the utility controls share the compact
+// 28px geometry, Send keeps its deliberate 36px emphasis, and every control
+// shares one vertical center so the toolbar reads as a single row.
 
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@/playwright/suite';
@@ -33,6 +33,7 @@ test.beforeEach(async ({ page }) => {
         skillId: null,
         designSystemId: null,
         onboardingCompleted: true,
+        privacyDecisionAt: 1,
         agentModels: {},
       }),
     );
@@ -43,6 +44,7 @@ test.beforeEach(async ({ page }) => {
       json: {
         config: {
           onboardingCompleted: true,
+          privacyDecisionAt: 1,
           agentId: 'mock',
           skillId: null,
           designSystemId: null,
@@ -71,7 +73,7 @@ test.beforeEach(async ({ page }) => {
   });
 });
 
-test('[P1] composer footer controls share one height and baseline', async ({ page }) => {
+test('[P1] composer footer controls keep their size hierarchy on one baseline', async ({ page }) => {
   await page.goto('/');
   await createProject(page, 'Composer toolbar alignment');
   await expect(page).toHaveURL(/\/projects\//);
@@ -105,14 +107,17 @@ test('[P1] composer footer controls share one height and baseline', async ({ pag
   // selectors below are stale and the height assertion is meaningless.
   expect(controls.length).toBeGreaterThanOrEqual(4);
 
-  const heights = controls.map((c) => c.height);
   const centers = controls.map((c) => c.center);
   const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
 
-  // One control system: identical heights. On main these drift (e.g. the +
-  // at 32px, the working-dir pill at 28px, Send at 30px) and this fails.
-  expect(spread(heights), `control heights: ${JSON.stringify(controls)}`).toBeLessThanOrEqual(1);
-  // ...and a shared vertical center so nothing rides high or low in the row.
+  const send = controls.find((control) => control.sel === '.composer-send');
+  const utilityControls = controls.filter((control) => control.sel !== '.composer-send');
+  expect(send?.height, `control heights: ${JSON.stringify(controls)}`).toBe(36);
+  for (const control of utilityControls) {
+    expect(control.height, `control heights: ${JSON.stringify(controls)}`).toBe(28);
+  }
+
+  // All controls share a vertical center so nothing rides high or low in the row.
   expect(spread(centers), `control centers: ${JSON.stringify(controls)}`).toBeLessThanOrEqual(1);
 });
 

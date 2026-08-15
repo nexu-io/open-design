@@ -7,8 +7,31 @@ export type PinnedRunWorkspaceScope = Readonly<{
   schemaVersion: 1;
   projectId: string;
   workspaceId: string;
+  workspaceMemberId?: string;
   source: 'persisted_project_binding';
 }>;
+
+export type AccountScopedRunWorkspaceScope = Readonly<{
+  schemaVersion: 1;
+  projectId: string;
+  workspaceId: null;
+  source: 'unbound_account';
+}>;
+
+export type RunWorkspaceScope =
+  | PinnedRunWorkspaceScope
+  | AccountScopedRunWorkspaceScope;
+
+export function accountScopedRunWorkspaceScopeForProject(
+  projectId: string,
+): AccountScopedRunWorkspaceScope {
+  return Object.freeze({
+    schemaVersion: 1,
+    projectId,
+    workspaceId: null,
+    source: 'unbound_account',
+  });
+}
 
 /**
  * The spawn wallet is an address, not a local authorization decision.
@@ -20,6 +43,7 @@ export type PinnedRunWorkspaceScope = Readonly<{
  */
 export type ProjectWorkspaceScopeOutcomeKind =
   | 'resolved_persisted_binding'
+  | 'account_scoped_unbound'
   | 'refused_unbound';
 
 export interface ProjectWorkspaceScopeOutcome {
@@ -47,7 +71,9 @@ export class AmrWorkspaceScopeRequiredError extends Error {
  * Freeze the billing address before a run is created.
  *
  * This is the only function in the run path that reads the mutable project
- * binding. Its result is stored on the run and reused for every attempt.
+ * binding. Its result is stored on the run and reused for every attempt. The
+ * separate account-scoped proof records a genuinely unbound local project;
+ * null remains "no proof" and may not silently select a wallet.
  */
 export function pinRunWorkspaceScopeForProject(
   db: SqliteDb,
@@ -61,10 +87,16 @@ export function pinRunWorkspaceScopeForProject(
       ? binding.workspaceId.trim()
       : null;
   if (!workspaceId) return null;
+  const workspaceMemberId =
+    typeof binding?.createdByWorkspaceMemberId === 'string'
+    && binding.createdByWorkspaceMemberId.trim()
+      ? binding.createdByWorkspaceMemberId.trim()
+      : null;
   return Object.freeze({
     schemaVersion: 1,
     projectId: normalizedProjectId,
     workspaceId,
+    ...(workspaceMemberId ? { workspaceMemberId } : {}),
     source: 'persisted_project_binding',
   });
 }
@@ -78,7 +110,8 @@ export function pinRunWorkspaceScopeForProject(
  * switches to B, authority lookup is unavailable, or the project is later
  * rebound. Vela/AMR receives the signed-in account credentials plus
  * `OPEN_DESIGN_WORKSPACE_ID=A` and remains the final authorization/billing
- * authority. Missing proof is refused instead of falling through to Personal.
+ * authority. A genuinely unbound local project stays account-scoped and omits
+ * the Workspace env var on every attempt.
  */
 export async function openDesignAmrTraceEnvForRun(
   input: {
@@ -87,7 +120,7 @@ export async function openDesignAmrTraceEnvForRun(
     conversationId?: string | null;
     runAttempt: number;
     projectId?: string | null;
-    workspaceScope?: PinnedRunWorkspaceScope | null;
+    workspaceScope?: RunWorkspaceScope | null;
     externalPluginAnalytics?: Record<string, unknown> | null;
   },
   deps: {
@@ -109,6 +142,11 @@ export async function openDesignAmrTraceEnvForRun(
 
   const projectId = input.projectId?.trim();
   if (!projectId) throw new AmrWorkspaceScopeRequiredError(null);
+  const accountScoped =
+    input.workspaceScope?.projectId === projectId
+    && input.workspaceScope.source === 'unbound_account'
+    && input.workspaceScope.schemaVersion === 1
+    && input.workspaceScope.workspaceId === null;
   const workspaceId =
     input.workspaceScope?.projectId === projectId
     && input.workspaceScope.source === 'persisted_project_binding'
@@ -117,11 +155,18 @@ export async function openDesignAmrTraceEnvForRun(
       ? input.workspaceScope.workspaceId.trim()
       : null;
   deps.onWorkspaceScopeOutcome?.({
-    kind: workspaceId ? 'resolved_persisted_binding' : 'refused_unbound',
+    kind: workspaceId
+      ? 'resolved_persisted_binding'
+      : accountScoped
+        ? 'account_scoped_unbound'
+        : 'refused_unbound',
     projectId,
     workspaceId,
   });
-  if (!workspaceId) throw new AmrWorkspaceScopeRequiredError(projectId);
+  if (!workspaceId) {
+    if (accountScoped) return openDesignAmrTraceEnv(traceInput);
+    throw new AmrWorkspaceScopeRequiredError(projectId);
+  }
 
   return openDesignAmrTraceEnv({
     ...traceInput,

@@ -148,9 +148,12 @@ export const CERTAIN_EXEMPT_PREFIXES = [
 // proves no gate-lane source reads them.
 export const CERTAIN_EXEMPT_EXACT = ["LICENSE", ".github/CODEOWNERS"] as const;
 
+export const CERTAIN_DAEMON_CORE_EXACT = ["docs/agent-adapters.md"] as const;
+
 const CERTAIN_EXEMPT_SURFACE: RuleMatch = {
   prefixes: CERTAIN_EXEMPT_PREFIXES,
   exact: CERTAIN_EXEMPT_EXACT,
+  excludeWhen: { exact: CERTAIN_DAEMON_CORE_EXACT },
 };
 
 export const CERTAIN_PACKAGED_LEAF_PREFIXES = [
@@ -186,6 +189,7 @@ const CERTAIN_DAEMON_CORE_EXCLUDED_SURFACE: RuleMatch = {
 
 const CERTAIN_DAEMON_CORE_SURFACE: RuleMatch = {
   prefixes: CERTAIN_DAEMON_CORE_PREFIXES,
+  exact: CERTAIN_DAEMON_CORE_EXACT,
   excludeWhen: CERTAIN_DAEMON_CORE_EXCLUDED_SURFACE,
 };
 
@@ -414,6 +418,21 @@ export const scopeRules: readonly ScopeRule[] = [
       regexes: [/^e2e\/ui\/visual-[^/]+\.test\.ts$/],
     },
     effects: ["visual_validation_required"],
+    confidence: "medium",
+  },
+  {
+    // Trusted write-capable rerun atom + its topology/self-check coverage.
+    // web_tests_required arms run_e2e_vitest so PR CI exercises the helper
+    // self-check and packaged-smoke topology assertions before the merge queue.
+    id: "ci-rerun-infra-cancel-surface",
+    match: {
+      exact: [
+        ".github/workflows/rerun.atom.yml",
+        ".github/scripts/rerun_infra_cancel.py",
+        "e2e/tests/packaged-smoke-workflow.test.ts",
+      ],
+    },
+    effects: ["web_tests_required", "workspace_validation_required"],
     confidence: "medium",
   },
   {

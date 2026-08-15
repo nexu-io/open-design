@@ -105,6 +105,32 @@ describe('scanRunEventsForUsageAnalytics', () => {
     expect(result.cache_hit_ratio).toBeUndefined();
   });
 
+  it('uses provider-qualified model attribution from DeepSeek Harness usage', () => {
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            provider: 'deepseek-official',
+            model: 'deepseek-v4-flash',
+            usage: {
+              input_tokens: 300,
+              output_tokens: 30,
+            },
+          },
+        },
+      ],
+      'default',
+      10,
+    );
+
+    expect(result.agent_reported_model).toBe(
+      'deepseek-official/deepseek-v4-flash',
+    );
+    expect(result.token_count_source).toBe('provider_usage');
+  });
+
   it('treats normalized cached_read_tokens / cached_write_tokens aliases as input subsets', () => {
     const result = scanRunEventsForUsageAnalytics(
       [
@@ -613,6 +639,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
         output_tokens: 7,
         total_tokens: 19,
         cache_token_source: 'unavailable',
+        input_accounting_mode: 'unknown',
         token_count_source: 'provider_usage',
       },
     },
@@ -734,6 +761,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
       uncached_input_tokens: 180,
       estimated_context_tokens: 220,
       cache_token_source: 'openai',
+      input_accounting_mode: 'inclusive',
       token_count_source: 'provider_usage',
       agent_reported_model: 'claude-opus-4-1',
     });
@@ -968,6 +996,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
     expect(result).toEqual({
       total_tokens: 345,
       cache_token_source: 'unavailable',
+      input_accounting_mode: 'unknown',
       // Any real provider token field (including total-only) is provider_usage.
       token_count_source: 'provider_usage',
       agent_reported_model: null,
@@ -1031,6 +1060,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
       cache_read_input_tokens: 33,
       cache_creation_input_tokens: 7,
       cache_token_source: 'openai',
+      input_accounting_mode: 'unknown',
       token_count_source: 'provider_usage',
       agent_reported_model: null,
     });
@@ -1045,6 +1075,7 @@ describe('scanRunEventsForUsageAnalytics', () => {
 
     expect(result).toEqual({
       cache_token_source: 'unavailable',
+      input_accounting_mode: 'unknown',
       token_count_source: 'unknown',
       agent_reported_model: null,
     });

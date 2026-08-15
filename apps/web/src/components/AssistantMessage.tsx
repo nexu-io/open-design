@@ -114,6 +114,7 @@ export type QuestionFormSubmitHandler = (
   text: string,
   attachments?: ChatAttachment[],
   context?: RunContextSelection,
+  sourceAssistantMessageId?: string,
 ) => boolean | void | Promise<boolean | void>;
 
 const DISCORD_INVITE_URL = "https://discord.gg/mHAjSMV6gz";
@@ -890,6 +891,8 @@ function AssistantMessageImpl({
             hasConclusion={hasConclusion}
             runStreaming={streaming}
             runSucceeded={runSucceeded}
+            terminalRunSucceeded={message.runStatus === "succeeded"}
+            runCanceled={message.runStatus === "canceled"}
             runFailed={
               !streaming &&
               (message.runStatus === "failed" ||
@@ -1079,6 +1082,7 @@ function AssistantMessageImpl({
                   streaming,
                   hasUnfinishedTodos: unfinishedTodos.length > 0,
                   hasEmptyResponse,
+                  canceled: message.runStatus === "canceled",
                   preparing,
                   preparingStatus,
                   copyMarkdown,
@@ -1097,6 +1101,7 @@ function AssistantMessageImpl({
                 streaming={streaming}
                 hasUnfinishedTodos={unfinishedTodos.length > 0}
                 hasEmptyResponse={hasEmptyResponse}
+                canceled={message.runStatus === "canceled"}
                 preparing={preparing}
                 preparingStatus={preparingStatus}
                 copyMarkdown={copyMarkdown}
@@ -1537,6 +1542,7 @@ interface AssistantFooterProps {
   streaming: boolean;
   hasUnfinishedTodos: boolean;
   hasEmptyResponse: boolean;
+  canceled?: boolean;
   // Pre-output phase: streaming but nothing rendered yet. The label shimmers
   // "Preparing…"; once content lands it flips to "Working".
   preparing?: boolean;
@@ -1558,6 +1564,7 @@ function AssistantFooter({
   streaming,
   hasUnfinishedTodos,
   hasEmptyResponse,
+  canceled = false,
   preparing = false,
   preparingStatus = "preparing",
   copyMarkdown,
@@ -1574,6 +1581,7 @@ function AssistantFooter({
     !streaming &&
     !hasUnfinishedTodos &&
     !hasEmptyResponse &&
+    !canceled &&
     !copyMarkdown &&
     !onFork
   )
@@ -1597,6 +1605,8 @@ function AssistantFooter({
                 : t("assistant.workingLabel")
               : hasEmptyResponse
               ? t("assistant.emptyResponseLabel")
+              : canceled
+              ? t("assistant.canceledLabel")
               : hasUnfinishedTodos
               ? t("assistant.unfinishedLabel")
               : t("assistant.doneLabel")}
@@ -2164,7 +2174,20 @@ function ProducedFiles({
       <div className="produced-files-label">{t("assistant.producedFiles")}</div>
       <div className="produced-files-list">
         {files.map((f) => (
-          <div key={f.name} className="produced-file">
+          <div
+            key={f.name}
+            className={`produced-file${onRequestOpenFile ? " produced-file-openable" : ""}`}
+            role={onRequestOpenFile ? "button" : undefined}
+            tabIndex={onRequestOpenFile ? 0 : undefined}
+            aria-label={onRequestOpenFile ? `${t("assistant.openFile")}: ${f.name}` : undefined}
+            onClick={onRequestOpenFile ? () => onRequestOpenFile(f.name) : undefined}
+            onKeyDown={onRequestOpenFile ? (event) => {
+              if (event.target !== event.currentTarget) return;
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              onRequestOpenFile(f.name);
+            } : undefined}
+          >
             <span className="produced-file-icon" aria-hidden>
               <Icon name={kindIconName(f.kind)} size={14} />
             </span>
@@ -2177,7 +2200,10 @@ function ProducedFiles({
                 <button
                   type="button"
                   className="ghost"
-                  onClick={() => onRequestOpenFile(f.name)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRequestOpenFile(f.name);
+                  }}
                 >
                   {t("assistant.openFile")}
                 </button>
@@ -2186,6 +2212,7 @@ function ProducedFiles({
                 className="ghost-link"
                 href={projectFileUrl(projectId, f.name, workspaceContext)}
                 download={f.name}
+                onClick={(event) => event.stopPropagation()}
               >
                 {t("assistant.downloadFile")}
               </a>
@@ -3615,6 +3642,8 @@ function TaskActivityCard({
   hasConclusion,
   runStreaming,
   runSucceeded,
+  terminalRunSucceeded,
+  runCanceled,
   runFailed,
   startedAt,
   endedAt,
@@ -3628,6 +3657,8 @@ function TaskActivityCard({
   hasConclusion: boolean;
   runStreaming: boolean;
   runSucceeded: boolean;
+  terminalRunSucceeded: boolean;
+  runCanceled: boolean;
   runFailed: boolean;
   startedAt: number | undefined;
   endedAt: number | undefined;
@@ -3656,15 +3687,24 @@ function TaskActivityCard({
   const hasError =
     !runStreaming &&
     (runFailed ||
-      settledItems.some(
-        (item) => item.result?.isError || (!item.result && !runSucceeded),
-      ));
+      (!terminalRunSucceeded &&
+        settledItems.some(
+          (item) => item.result?.isError || (!item.result && !runSucceeded),
+        )));
   const stateLabel = running
     ? t("assistant.workingLabel")
-    : hasError
-      ? t("critiqueTheater.failedHeading")
-      : t("assistant.doneLabel");
-  const runState = running ? "running" : hasError ? "error" : "completed";
+    : runCanceled
+      ? t("assistant.canceledLabel")
+      : hasError
+        ? t("critiqueTheater.failedHeading")
+        : t("assistant.doneLabel");
+  const runState = running
+    ? "running"
+    : runCanceled
+      ? "canceled"
+      : hasError
+        ? "error"
+        : "completed";
   const elapsed = useLiveElapsed(runStreaming, startedAt, endedAt, durationMs);
 
   if (running && !hasConclusion && currentEntry) {
@@ -4047,6 +4087,13 @@ function buildBlocks(events: AgentEvent[]): Block[] {
         ev.label === "streaming" ||
         ev.label === "starting" ||
         ev.label === "running" ||
+        // Bare runtime lifecycle markers are transport telemetry, not
+        // assistant content. Detail-bearing rows are product workflow badges
+        // and must remain visible (for example plugin share/contribute).
+        ((ev.label === "working" ||
+          ev.label === "done" ||
+          ev.label === "completed") &&
+          !ev.detail?.trim()) ||
         ev.label === "requesting" ||
         ev.label === "thinking" ||
         ev.label === "empty_response" ||

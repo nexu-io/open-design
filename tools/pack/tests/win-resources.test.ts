@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
@@ -67,7 +67,72 @@ async function createWorkspaceFixture(workspaceRoot: string): Promise<void> {
   });
 }
 
+async function createDshRuntimeFixture(workspaceRoot: string): Promise<void> {
+  const packageRoot = join(workspaceRoot, "packages", "dsh-runtime");
+  await mkdir(join(packageRoot, "dist", "types"), { recursive: true });
+  await writeFile(
+    join(packageRoot, "package.json"),
+    `${JSON.stringify({
+      name: "@open-design/dsh-runtime",
+      version: "0.1.0",
+      files: ["dist"],
+    }, null, 2)}\n`,
+    "utf8",
+  );
+  await writeFile(join(packageRoot, "dist", "index.js"), "export {};\n", "utf8");
+  await writeFile(
+    join(packageRoot, "dist", "types", "index.d.ts"),
+    "export {};\n",
+    "utf8",
+  );
+}
+
 describe("prepareResourceTree", () => {
+  it("bundles the DeepSeek Harness runtime into the Windows resource tree", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-dsh-runtime-"));
+    const workspaceRoot = join(root, "workspace");
+    const resourceRoot = join(root, "materialized", "open-design");
+    const cache = new ToolPackCache(join(root, "cache"));
+    const config = { workspaceRoot } as ToolPackConfig;
+    const paths = { resourceRoot } as WinPaths;
+
+    try {
+      await createWorkspaceFixture(workspaceRoot);
+      await createDshRuntimeFixture(workspaceRoot);
+
+      await prepareResourceTree(
+        config,
+        paths,
+        cache,
+        { bundleAgentRuntimes: true, materialize: true },
+        "workspace-build-dsh-v1",
+      );
+
+      const runtimeRoot = join(resourceRoot, "agent-runtimes", "deepseek-harness");
+      const manifest = JSON.parse(
+        await readFile(join(runtimeRoot, "manifest.json"), "utf8"),
+      ) as {
+        file: string;
+        packageName: string;
+        schemaVersion: number;
+        sha256: string;
+        version: string;
+      };
+      const tarballs = (await readdir(runtimeRoot)).filter((entry) => entry.endsWith(".tgz"));
+
+      expect(manifest).toMatchObject({
+        file: tarballs[0],
+        packageName: "@open-design/dsh-runtime",
+        schemaVersion: 1,
+        version: "0.1.0",
+      });
+      expect(manifest.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(tarballs).toHaveLength(1);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  }, RESOURCE_TREE_CACHE_TEST_TIMEOUT_MS);
+
   it("invalidates the Windows resource tree cache when design templates change", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-resources-"));
     const workspaceRoot = join(root, "workspace");

@@ -52,7 +52,7 @@ function runDownloadDirectAssetGate(
   options: { userAgent: string; platform: string; maxTouchPoints: number },
 ) {
   const start = page.indexOf("      const ua = (navigator.userAgent || '').toLowerCase();");
-  const endMarker = '      // Live refetch: keep the hero CTA + matrix links current between rebuilds.';
+  const endMarker = '      // Live refetch: replace the complete visible release snapshot from the';
   const end = page.indexOf(endMarker, start);
   assert.ok(start >= 0 && end > start, 'download direct-asset enhancer not found');
   const script = page.slice(start, end);
@@ -96,11 +96,19 @@ function runDownloadDirectAssetGate(
 }
 
 describe('landing header account and download entry', () => {
-  it('keeps the nav download-page CTA and removes the signed-out login entry', async () => {
+  it('makes the nav CTA a platform-aware direct download and removes the signed-out login entry', async () => {
     const header = await readFile(headerPath, 'utf8');
+    const enhancer = await readFile(enhancerPath, 'utf8');
 
     assert.match(header, /href=\{href\('\/download\/'\)\}/);
+    assert.match(header, /data-direct-download/);
+    assert.doesNotMatch(header, /data-download-page/);
     assert.match(header, /data-download-placement='nav'/);
+    assert.match(enhancer, /getLatestRelease/);
+    assert.match(enhancer, /\[data-direct-download\]\[data-download-placement="nav"\]/);
+    assert.match(enhancer, /applyNavDownloadAsset\(directAssets\[navPlatform\.assetKey\]\)/);
+    assert.match(enhancer, /navPlatform\.match\(entry\.name\)/);
+    assert.match(enhancer, /navNeedsLiveRefresh = navPlatform && !downloadPrompt/);
     assert.doesNotMatch(header, /data-amr-signin|className='nav-signin'/);
     assert.match(header, /data-amr-menu hidden/);
     assert.match(header, /data-amr-console-link/);

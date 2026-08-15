@@ -3,7 +3,7 @@
 // `ServerContext.design: any` type.
 interface RunCancellationService {
   list: (filter: { projectId?: string; conversationId?: string; status?: string }) => unknown[];
-  cancel: (run: unknown) => Promise<unknown>;
+  cancel: (run: unknown, origin?: 'project_cleanup') => Promise<unknown>;
 }
 
 /**
@@ -29,5 +29,5 @@ export async function cancelRunsOwnedBy(
   scope: { conversationId?: string; projectId?: string },
 ): Promise<void> {
   const active = runs.list({ ...scope, status: 'active' });
-  await Promise.all(active.map((run) => runs.cancel(run).catch(() => {})));
+  await Promise.all(active.map((run) => runs.cancel(run, 'project_cleanup').catch(() => {})));
 }

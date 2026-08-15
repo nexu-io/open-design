@@ -34,7 +34,7 @@ function teamContext(): WorkspaceCollabContext {
   } as unknown as WorkspaceCollabContext;
 }
 
-function renderRail() {
+function renderRail(overrides: Partial<React.ComponentProps<typeof EntryNavRail>> = {}) {
   return render(
     <I18nProvider initial="zh-CN">
       <EntryNavRail
@@ -44,6 +44,7 @@ function renderRail() {
         open
         context={teamContext()}
         billing={null}
+        {...overrides}
       />
     </I18nProvider>,
   );
@@ -117,5 +118,43 @@ describe('EntryNavRail account menu sign-out confirm (recvqgMWpJZqhL)', () => {
       expect(logoutCalls).toBe(1);
     });
     expect(screen.queryByTestId('sign-out-confirm-dialog')).toBeNull();
+  });
+
+  it('notifies the app to clear its saved model source only after logout succeeds', async () => {
+    const onSignedOut = vi.fn();
+    globalThis.fetch = stubFetch(() => {}) as typeof fetch;
+
+    renderRail({ onSignedOut });
+    openAccountMenuAndClickSignOut();
+    expect(onSignedOut).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
+
+    await waitFor(() => {
+      expect(onSignedOut).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('keeps the saved model source when the daemon rejects logout', async () => {
+    const onSignedOut = vi.fn();
+    globalThis.fetch = vi.fn(async (input, init) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.endsWith('/api/integrations/vela/logout') && init?.method === 'POST') {
+        return new Response(JSON.stringify({ ok: false }), { status: 500 });
+      }
+      return new Response(JSON.stringify({ items: [] }), { status: 200 });
+    }) as typeof fetch;
+
+    renderRail({ onSignedOut });
+    openAccountMenuAndClickSignOut();
+    fireEvent.click(screen.getByTestId('sign-out-confirm-accept'));
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        '/api/integrations/vela/logout',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+    expect(onSignedOut).not.toHaveBeenCalled();
   });
 });

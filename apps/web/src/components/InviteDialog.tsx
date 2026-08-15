@@ -20,6 +20,7 @@ import {
 import { Button } from '@open-design/components';
 import { Icon } from './Icon';
 import { useI18n } from '../i18n';
+import { workspaceInviteErrorMessageKey } from '../collab/invite-error-copy';
 import { workspaceProjectHeaders } from '../collab/workspace-identity';
 import { useAnalytics } from '../analytics/provider';
 import {
@@ -111,6 +112,7 @@ export function InviteDialog({
   const rowsRef = useRef<HTMLDivElement | null>(null);
   const roleTriggerRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const roleMenuRef = useRef<HTMLDivElement | null>(null);
+  const autoCloseTimerRef = useRef<number | null>(null);
   const [roleMenuPos, setRoleMenuPos] = useState<CSSProperties | null>(null);
   const roleListboxId = useId();
 
@@ -161,6 +163,12 @@ export function InviteDialog({
 
   useEffect(() => {
     if (!open) setOpenRoleIndex(null);
+  }, [open]);
+
+  useEffect(() => () => {
+    if (autoCloseTimerRef.current === null) return;
+    window.clearTimeout(autoCloseTimerRef.current);
+    autoCloseTimerRef.current = null;
   }, [open]);
 
   // Reset the submit lifecycle each time the dialog opens so a prior error /
@@ -221,29 +229,8 @@ export function InviteDialog({
   const isEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
   const hasValidEmail = rows.some((r) => isEmail(r.email));
 
-  // Map only the daemon's allowlisted per-invite failure codes to
-  // reason-specific copy. A bare create_409 is deliberately generic: the
-  // conflict may be a duplicate, exhausted seats, a locked subscription, or a
-  // newer B error this client does not understand yet.
   function inviteErrorMessage(code: string | undefined): string {
-    switch (normalizeWorkspaceInviteCreateErrorCode(code)) {
-      case 'already_member':
-      case 'active_pending_invite':
-        return t('workspaceInvite.errorAlreadyMember');
-      case 'workspace_seat_limit_reached':
-      case 'workspace_subscription_seat_allocation_unavailable':
-        return t('workspaceInvite.seatsExhaustedBody');
-    }
-    switch (code) {
-      case 'no_session':
-        return t('workspaceInvite.errorNoSession');
-      case 'no_workspace':
-        return t('workspaceInvite.errorNoWorkspace');
-      case 'create_unreachable':
-        return t('workspaceInvite.errorUnreachable');
-      default:
-        return t('workspaceInvite.submitFailed');
-    }
+    return t(workspaceInviteErrorMessageKey(code));
   }
 
   // Seats are the gate B enforces anyway; checking here turns a post-send row
@@ -337,7 +324,8 @@ export function InviteDialog({
       }, { requestId });
       setSuccess(true);
       onSubmit?.(valid);
-      window.setTimeout(() => {
+      autoCloseTimerRef.current = window.setTimeout(() => {
+        autoCloseTimerRef.current = null;
         onClose();
         setRows([{ email: '', role: DEFAULT_ROLE }]);
         setSuccess(false);

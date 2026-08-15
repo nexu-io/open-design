@@ -1,10 +1,20 @@
 /**
  * AMR profiles whose Vela backend serves the Workspace Team transports.
- * Production deliberately stays outside this allowlist until the feature is
- * released independently of the integration branch.
+ *
+ * Production joined this allowlist once its Vela backend was actually able to
+ * serve the feature: `WORKSPACE_TEAM_ENABLED` (plus the three billing-scope
+ * flags) is true on prod amr-api, and the resource hub it needs for team file
+ * sharing is configured — an S3-backed blob store rather than the chart's mock
+ * default, which would have failed every push with `unsupported protocol
+ * scheme "mock"` while comments (Postgres) kept syncing.
+ *
+ * The second half of the gate below still applies to prod: without an injected
+ * Vela web origin the transports stay dormant, so a build that forgets it
+ * degrades to local-only instead of pointing at an unknown backend.
  */
 const WORKSPACE_TEAM_AMR_PROFILES: ReadonlySet<string> = new Set([
   "feature-test",
+  "prod",
   "test",
 ]);
 

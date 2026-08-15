@@ -35,6 +35,7 @@ import { OFFICIAL_DESIGNER_PROMPT, renderOfficialDesignerPrompt } from './offici
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import { SETTINGS_MEDIA_PROVIDERS_PATH } from '../settings-nav.js';
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
@@ -111,7 +112,7 @@ export function formatElevenLabsVoiceOptionsErrorForPrompt(
   if (!trimmed) return undefined;
 
   if (/no ElevenLabs API key/i.test(trimmed)) {
-    return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX} because the ElevenLabs API key is missing. Tell the user to configure it in Settings or paste a voice id manually.`;
+    return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX} because the ElevenLabs API key is missing. Tell the user to configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or paste a voice id manually.`;
   }
 
   const statusMatch = trimmed.match(
@@ -752,6 +753,11 @@ function imageLines(
     out.push(
       'This is an **image** project. Plan the prompt carefully, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface image --model <imageModel>`. Do NOT emit `<artifact>` HTML for media surfaces.',
     );
+    if (metadata.imageModel?.startsWith('vela/')) {
+      out.push(
+        'This Open Design Cloud `vela/*` model must go through the OD media dispatcher. Do not invoke the `vela` CLI or the remote media API directly; the daemon owns Workspace attribution, downloads, and final project-file placement.',
+      );
+    }
   }
   return out;
 }
@@ -777,6 +783,11 @@ function videoLines(
     out.push(
       'This is a **video** project. Plan the shotlist and motion, then dispatch via the **media generation contract** using `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model <videoModel> --length <seconds> --aspect <ratio>`. Do NOT emit `<artifact>` HTML.',
     );
+    if (metadata.videoModel?.startsWith('vela/')) {
+      out.push(
+        'This Open Design Cloud `vela/*` model must go through the OD media dispatcher. Do not invoke the `vela` CLI or the remote media API directly; the daemon owns Workspace attribution, polling, downloads, and final project-file placement.',
+      );
+    }
     if (metadata.videoModel === 'hyperframes-html') {
       out.push(
         'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then dispatch immediately.',

@@ -88,6 +88,7 @@ export interface Dict {
   'workspaceInvite.confirm': string;
   'workspaceInvite.submitFailed': string;
   'workspaceInvite.errorAlreadyMember': string;
+  'workspaceInvite.errorPendingInvite': string;
   'workspaceInvite.errorNoSession': string;
   'workspaceInvite.errorNoWorkspace': string;
   'workspaceInvite.errorUnreachable': string;
@@ -546,6 +547,12 @@ export interface Dict {
   'settings.getStarted': string;
   'settings.envConfigure': string;
   'settings.localCli': string;
+  'settings.dshSetupTitle': string;
+  'settings.dshSetupDescription': string;
+  'settings.dshSetupNote': string;
+  'settings.dshSetupConfirm': string;
+  'settings.dshSetupInstalling': string;
+  'settings.dshSetupRequired': string;
   'settings.anthropicApi': string;
   'settings.noAgentSelected': string;
   'settings.language': string;
@@ -1250,6 +1257,10 @@ export interface Dict {
   'entry.navTeamSection': string;
   'entry.teamSlotNote': string;
   'entry.cloudCalloutTitle': string;
+  'entry.cloudRecovering': string;
+  'entry.authExpiredBody': string;
+  'home.createFailed': string;
+  'home.daemonRecovering': string;
   'entry.cloudCalloutBody': string;
   'entry.cloudCalloutDismissAria': string;
   'entry.workspaceLockedNote': string;
@@ -2881,6 +2892,7 @@ export interface Dict {
   'chat.runError.title.connectionDropped': string;
   'chat.runError.title.signInRequired': string;
   'chat.runError.title.rateLimited': string;
+  'chat.runError.title.modelWindowLimit': string;
   'chat.runError.title.cliMissing': string;
   'chat.runError.title.promptTooLarge': string;
   'chat.runError.title.modelUnavailable': string;
@@ -2902,6 +2914,8 @@ export interface Dict {
   'chat.runError.promptTooLargeMessage': string;
   'chat.runError.modelUnavailableMessage': string;
   'chat.runError.rateLimitedMessage': string;
+  'chat.runError.modelWindowLimitMessage': string;
+  'chat.runError.modelWindowLimitMessageNoTime': string;
   'chat.runError.upstreamUnavailableMessage': string;
   'chat.runError.toolLoopMessage': string;
   'chat.runError.outputInvalidMessage': string;
@@ -2934,6 +2948,7 @@ export interface Dict {
   'chat.comments.removeAttachmentAria': string;
   'chat.comments.comment': string;
   'chat.comments.sendToChat': string;
+  'chat.comments.viewAll': string;
   'chat.comments.sending': string;
   'chat.comments.edit': string;
   'chat.comments.select': string;
@@ -4036,6 +4051,7 @@ export interface Dict {
   'fileViewer.shareMenuPresentation': string;
   'fileViewer.shareMenuSourceFiles': string;
   'fileViewer.shareMenuSave': string;
+  'fileViewer.shareMenuPublishViaOd': string;
   'fileViewer.unifiedShareAria': string;
   'fileViewer.unifiedShareTab': string;
   'fileViewer.unifiedExportTab': string;
@@ -4323,6 +4339,7 @@ export interface Dict {
   'assistant.role': string;
   'assistant.workingLabel': string;
   'assistant.doneLabel': string;
+  'assistant.canceledLabel': string;
   'assistant.copyMarkdown': string;
   'assistant.forkConversation': string;
   'assistant.forkingConversation': string;
@@ -4578,6 +4595,7 @@ export interface Dict {
   'pet.slashPopoverTitle': string;
   'pet.slashPopoverHint': string;
   'pet.slashPet': string;
+  'pet.slashMcp': string;
   'pet.slashPetWake': string;
   'pet.slashPetTuck': string;
   'pet.slashHatch': string;
@@ -5384,4 +5402,32 @@ export interface Dict {
   'skillDetail.loadFailed': string;
   'skillDetail.previewAria': string;
   'common.dismiss': string;
+  'campaign.deepseekV4Flash.headline': string;
+  'campaign.deepseekV4Flash.description': string;
+  'campaign.deepseekV4Flash.benefit': string;
+  'campaign.deepseekV4Flash.timing': string;
+  'campaign.deepseekV4Flash.ruleSummary': string;
+  'campaign.deepseekV4Flash.windowLabel': string;
+  'campaign.deepseekV4Flash.weekFreeSuffix': string;
+  'campaign.deepseekV4Flash.boundary': string;
+  'campaign.deepseekV4Flash.countdownLabel': string;
+  'campaign.deepseekV4Flash.countdownEnded': string;
+  'campaign.deepseekV4Flash.countdownRemaining': string;
+  'campaign.deepseekV4Flash.closeAria': string;
+  'campaign.deepseekV4Flash.unlocked': string;
+  'campaign.deepseekV4Flash.locked': string;
+  'campaign.deepseekV4Flash.later': string;
+  'campaign.deepseekV4Flash.paid.eyebrow': string;
+  'campaign.deepseekV4Flash.paid.status': string;
+  'campaign.deepseekV4Flash.paid.cta': string;
+  'campaign.deepseekV4Flash.paid.modelBadge': string;
+  'campaign.deepseekV4Flash.unpaid.eyebrow': string;
+  'campaign.deepseekV4Flash.unpaid.status': string;
+  'campaign.deepseekV4Flash.unpaid.cta': string;
+  'campaign.deepseekV4Flash.unpaid.modelBadge': string;
+  'campaign.deepseekV4Flash.unpaid.tooltip': string;
+  'campaign.deepseekV4Flash.restricted.modelBadge': string;
+  'campaign.deepseekV4Flash.restricted.tooltip': string;
+  'campaign.deepseekV4Flash.workbenchBadge': string;
+  'campaign.deepseekV4Flash.workbenchBadgeAria': string;
 }

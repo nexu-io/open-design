@@ -22,6 +22,7 @@ import {
 import type {
   AmrModelsResponse,
   ChatSessionMode,
+  LocalCatalogScope,
   RunContextSelection,
   TeamProject,
   WorkspaceCollabContext,
@@ -50,11 +51,17 @@ import {
   type ProjectRenameFenceToken,
   type ProjectNameAuthorityResolution,
 } from './components/ProjectView';
+import { ProjectCreationPendingView } from './components/ProjectCreationPendingView';
 import { AmrArtifactUpgradeGate } from './components/AmrArtifactUpgradeGate';
 import { AmrArtifactUpgradeHomeCard } from './components/AmrArtifactUpgradeHomeCard';
 import { TooltipLayer } from './components/TooltipLayer';
 import { UpdateDialog } from './components/UpdateDialog';
-import { openWorkspaceTab, WorkspaceTabsBar } from './components/WorkspaceTabsBar';
+import {
+  openWorkspaceTab,
+  removeWorkspaceProjectTabs,
+  WorkspaceTabsBar,
+} from './components/WorkspaceTabsBar';
+import { WorkspaceTopRightAccountCluster } from './components/EntryNavRail';
 import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
@@ -95,6 +102,7 @@ import {
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
+  isAmrSessionAuthenticated,
 } from './components/amrLoginPolling';
 import { CollabDemoView } from './collab/CollabDemoView';
 import {
@@ -116,6 +124,7 @@ import {
   useWorkspaceBilling,
   useWorkspaceContext,
   workspaceIdentityCacheKey,
+  workspaceResourceReadContext,
 } from './collab/useWorkspaceContext';
 import {
   projectResourceReadsCanStart,
@@ -125,9 +134,14 @@ import { resolvePlanTier } from './collab/team-plan';
 import { deriveTabIdentityScope, UNSET_ACCOUNT_BUCKET } from './collab/tab-scope';
 import { CommunityView } from './components/CommunityView';
 import { seedHomeComposerPrompt } from './components/HomeView';
+import {
+  createPluginUseHandoff,
+  stashHomePromptHandoff,
+} from './components/home-hero/plugin-authoring';
 import { goBack, navigate, useRoute, type Route } from './router';
 import {
   fetchDaemonConfig,
+  DEFAULT_CONFIG,
   DEFAULT_PET,
   fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
@@ -144,6 +158,7 @@ import {
 import { createSilentUpdatePreferenceWriter } from './state/silent-update-preference';
 import { applyAppearanceToDocument } from './state/appearance';
 import { isMacPlatform } from './utils/platform';
+import { randomUUID } from './utils/uuid';
 import { summarizeProjectNameFromPrompt } from './utils/projectName';
 import {
   amrArtifactUpgradeHomeMockOffer,
@@ -219,6 +234,9 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   metadata?: CreateInput['metadata'];
   pendingPrompt?: string;
   pluginId?: string;
+  pluginSource?: string;
+  skillCatalogScope?: LocalCatalogScope | null;
+  designSystemCatalogScope?: LocalCatalogScope | null;
   pluginType?: string;
   appliedPluginSnapshotId?: string;
   pluginInputs?: Record<string, unknown>;
@@ -233,6 +251,11 @@ type AppCreateProjectInput = Omit<CreateInput, 'metadata'> & {
   linkedDirs?: string[] | null;
   onboardingEntry?: OnboardingEntry;
 };
+
+interface PendingProjectCreation {
+  projectId: string;
+  prompt: string;
+}
 
 const APP_CONFIG_CHANGED_EVENT = 'open-design:app-config-changed';
 const AMR_AGENT_ID = 'amr';
@@ -348,6 +371,37 @@ function clearStaleAmrModelChoiceOnProfileChange(
   const nextAgentModels = { ...(next.agentModels ?? {}) };
   delete nextAgentModels[AMR_AGENT_ID];
   return { ...next, agentModels: nextAgentModels };
+}
+
+/**
+ * Active Cloud sign-out is an account boundary. Remove every saved execution
+ * choice that could leak account A's Hosted/Local/BYOK setup into account B,
+ * while preserving unrelated product preferences and authored content.
+ */
+export function resetExecutionConfigAfterSignOut(config: AppConfig): AppConfig {
+  return {
+    ...config,
+    onboardingCompleted: false,
+    mode: DEFAULT_CONFIG.mode,
+    agentId: null,
+    agentModels: {},
+    agentCliEnv: {},
+    agentCliEnvIntent: {},
+    apiProtocol: DEFAULT_CONFIG.apiProtocol,
+    apiKey: DEFAULT_CONFIG.apiKey,
+    apiVersion: DEFAULT_CONFIG.apiVersion,
+    baseUrl: DEFAULT_CONFIG.baseUrl,
+    model: DEFAULT_CONFIG.model,
+    byokImageModel: DEFAULT_CONFIG.byokImageModel,
+    byokVideoModel: DEFAULT_CONFIG.byokVideoModel,
+    byokSpeechModel: DEFAULT_CONFIG.byokSpeechModel,
+    byokSpeechVoice: DEFAULT_CONFIG.byokSpeechVoice,
+    byokProviderConfigDrafts: {},
+    byokPendingProviderKey: undefined,
+    maxTokens: DEFAULT_CONFIG.maxTokens,
+    apiProviderBaseUrl: DEFAULT_CONFIG.apiProviderBaseUrl,
+    apiProtocolConfigs: {},
+  };
 }
 
 type ProjectListRequest = {
@@ -905,6 +959,7 @@ function AppInner() {
   // this the failure was swallowed and the user believed their folder was in
   // effect while the project actually stayed in the managed root.
   const [workingDirError, setWorkingDirError] = useState<string | null>(null);
+  const [projectCreateError, setProjectCreateError] = useState<string | null>(null);
   const [projectOpenError, setProjectOpenError] = useState<string | null>(null);
   const [deepLinkResolutionFailure, setDeepLinkResolutionFailure] = useState<{
     projectId: string;
@@ -970,6 +1025,8 @@ function AppInner() {
     Record<string, DesignSystemGenerationJob>
   >({});
   const [projects, setProjects] = useState<Project[]>([]);
+  const [pendingProjectCreation, setPendingProjectCreation] =
+    useState<PendingProjectCreation | null>(null);
   const [appliedProjectListWitness, setAppliedProjectListWitness] = useState<{
     scopeKey: string;
     generation: number;
@@ -1545,8 +1602,8 @@ function AppInner() {
     const next: AmrAuthRetryContinuation = {
       ...input,
       accountIdAtArm:
-        amrLoginStatusRef.current?.loggedIn === true
-          ? amrLoginStatusRef.current.user?.id ?? null
+        isAmrSessionAuthenticated(amrLoginStatusRef.current)
+          ? amrLoginStatusRef.current?.user?.id ?? null
           : null,
       createdAtMs: Date.now(),
     };
@@ -1600,14 +1657,15 @@ function AppInner() {
     options: { forceModelRefresh?: boolean; restartOnSignIn?: boolean } = {},
   ) => {
     const previousStatus = amrLoginStatusRef.current;
-    const wasLoggedIn = previousStatus?.loggedIn === true;
+    const wasLoggedIn = isAmrSessionAuthenticated(previousStatus);
+    const isLoggedIn = isAmrSessionAuthenticated(status);
     const pendingRetry = amrAuthRetryContinuationRef.current;
     const accountChangedWhileAuthorizing = Boolean(
       pendingRetry
       && (
-        (wasLoggedIn && status.loggedIn === false)
+        (wasLoggedIn && !isLoggedIn)
         || (
-          status.loggedIn === true
+          isLoggedIn
           && pendingRetry.accountIdAtArm !== null
           && status.user?.id !== pendingRetry.accountIdAtArm
         )
@@ -1622,7 +1680,7 @@ function AppInner() {
     if (
       pendingRetry
       && !accountChangedWhileAuthorizing
-      && status.loggedIn === true
+      && isLoggedIn
       && status.user?.id
       && (
         pendingRetry.accountIdAtArm === null
@@ -1644,7 +1702,7 @@ function AppInner() {
       }, { replace: true });
     }
     if (
-      status.loggedIn === true
+      isLoggedIn
       && (
         options.forceModelRefresh === true
         || (options.restartOnSignIn === true && !wasLoggedIn)
@@ -1715,7 +1773,7 @@ function AppInner() {
       agentId: config.agentId,
       agents: agents.map((a) => ({ id: a.id, available: a.available })),
       byokConfigured,
-      amrAuthorized: amrLoginStatus?.loggedIn === true,
+      amrAuthorized: isAmrSessionAuthenticated(amrLoginStatus),
     });
     analytics.setConfigureGlobals(globals);
   }, [
@@ -1869,13 +1927,37 @@ function AppInner() {
 
   useEffect(() => {
     analytics.setUserId(
-      amrLoginStatus?.loggedIn === true ? amrLoginStatus.user?.id ?? null : null,
+      isAmrSessionAuthenticated(amrLoginStatus) ? amrLoginStatus?.user?.id ?? null : null,
     );
   }, [analytics.setUserId, amrLoginStatus]);
 
   const handleAmrLoginStatusChange = useCallback((status: VelaLoginStatus | null) => {
     if (status) applyAmrLoginStatus(status, { restartOnSignIn: true });
   }, [applyAmrLoginStatus]);
+
+  useEffect(() => {
+    const usesOpenDesignCloud =
+      config.mode === 'daemon'
+      && config.agentId === AMR_AGENT_ID;
+    const cloudIdentityRejected =
+      workspaceContextState.failure === 'reauth-required'
+      || (
+        usesOpenDesignCloud
+        && (
+          amrLoginStatus?.loggedIn === false
+          || amrLoginStatus?.sessionState === 'reauth_required'
+        )
+      );
+    if (!cloudIdentityRejected) return;
+    if (route.kind === 'home' && route.view === 'onboarding') return;
+    navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
+  }, [
+    amrLoginStatus,
+    config.agentId,
+    config.mode,
+    route,
+    workspaceContextState.failure,
+  ]);
 
   // Bootstrap — detect daemon, then fan out independent fetches so each
   // entry-view tab can render the moment its own data lands. Earlier this
@@ -2811,28 +2893,18 @@ function AppInner() {
       const creationSource: 'blank' | 'template' | 'zip' | 'folder' =
         kind === 'template' ? 'template' : 'blank';
       let createWorkspaceContext: WorkspaceCollabContext | null = null;
+      let optimisticProjectId: string | null = null;
       let result;
       try {
-        const executionConfig = configRef.current;
-        const usesAmrCloud =
-          executionConfig.mode === 'daemon'
-          && executionConfig.agentId === AMR_AGENT_ID;
-        const isExplicitlySignedOut =
-          amrLoginStatusRef.current?.loggedIn === false;
-        createWorkspaceContext = resolvedWorkspaceContextForWrite(
-          workspaceContextStateRef.current,
-          {
-            // Local/BYOK may create without AMR Workspace authority only after
-            // the independent login read explicitly proves there is no AMR
-            // identity. An unknown or signed-in identity can still own a Team
-            // Workspace whose directory read is merely slow/unavailable, so
-            // executor selection must not silently turn that Team project into
-            // an unscoped Personal one. Unsupported/settled no-workspace states
-            // already retain their explicit compatibility behavior below.
-            unavailablePolicy:
-              !usesAmrCloud && isExplicitlySignedOut ? 'unscoped' : 'reject',
-          },
-        );
+        // PRODUCT INVARIANT: ordinary project creation is local. Reuse a
+        // current in-memory Workspace snapshot for `personal` + `local_only`
+        // attribution when available, but never start identity discovery or
+        // block creation on Workspace availability. Remote share/sync/move
+        // operations retain their authoritative gates.
+        const createWorkspaceState = workspaceContextStateRef.current;
+        createWorkspaceContext = createWorkspaceState.failure === 'unsupported'
+          ? null
+          : workspaceResourceReadContext(createWorkspaceState);
         if (
           input.amrGatePrecheckWitness &&
           !amrBalanceGateScopesMatch(
@@ -2842,14 +2914,66 @@ function AppInner() {
         ) {
           throw new Error('AMR_WORKSPACE_GATE_STALE');
         }
+        // Home already accepted the run (including its balance gate), so move
+        // into the project frame immediately. The id is client-owned and the
+        // daemon already accepts that exact id for idempotent retries. Keep the
+        // real ProjectView unmounted until the response settles; the pending
+        // surface is deliberately read-free so an unpersisted project cannot
+        // fan out unauthorized conversation/file/presence requests.
+        if (input.autoSendFirstMessage) {
+          optimisticProjectId = randomUUID();
+          const now = Date.now();
+          const optimisticProject: Project = {
+            id: optimisticProjectId,
+            name: input.name.trim(),
+            skillId: input.skillId,
+            designSystemId: input.designSystemId,
+            createdAt: now,
+            updatedAt: now,
+            ...(derivedPendingPrompt ? { pendingPrompt: derivedPendingPrompt } : {}),
+            ...(metadata ? { metadata } : {}),
+            ...(input.appliedPluginSnapshotId
+              ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
+              : {}),
+            ...(createWorkspaceContext?.workspaceId
+              ? { workspaceId: createWorkspaceContext.workspaceId }
+              : {}),
+          };
+          rememberLocalProject(optimisticProjectId);
+          flushSync(() => {
+            setPendingProjectCreation({
+              projectId: optimisticProjectId!,
+              prompt: derivedPendingPrompt ?? '',
+            });
+            setProjects((current) => [
+              optimisticProject,
+              ...current.filter((project) => project.id !== optimisticProjectId),
+            ]);
+          });
+          const optimisticRoute = {
+            kind: 'project',
+            projectId: optimisticProjectId,
+            fileName: null,
+          } as const;
+          openWorkspaceTab(optimisticRoute);
+          navigate(optimisticRoute);
+        }
         result = await createProject({
+          ...(optimisticProjectId ? { id: optimisticProjectId } : {}),
           name: input.name,
           skillId: input.skillId,
+          ...(input.skillCatalogScope
+            ? { skillCatalogScope: input.skillCatalogScope }
+            : {}),
           designSystemId: input.designSystemId,
+          ...(input.designSystemCatalogScope
+            ? { designSystemCatalogScope: input.designSystemCatalogScope }
+            : {}),
           pendingPrompt: derivedPendingPrompt,
           metadata,
           ...(input.conversationMode ? { conversationMode: input.conversationMode } : {}),
           ...(input.pluginId ? { pluginId: input.pluginId } : {}),
+          ...(input.pluginSource ? { pluginSource: input.pluginSource } : {}),
           ...(input.appliedPluginSnapshotId
             ? { appliedPluginSnapshotId: input.appliedPluginSnapshotId }
             : {}),
@@ -2875,6 +2999,21 @@ function AppInner() {
           },
           { requestId: input.requestId },
         );
+        if (optimisticProjectId) {
+          clearLocalProject(optimisticProjectId);
+          removeWorkspaceProjectTabs(optimisticProjectId);
+          setProjects((current) => current.filter((project) => project.id !== optimisticProjectId));
+          setPendingProjectCreation((current) =>
+            current?.projectId === optimisticProjectId ? null : current);
+          if (
+            routeRef.current.kind === 'project'
+            && routeRef.current.projectId === optimisticProjectId
+          ) {
+            navigate({ kind: 'home', view: 'home' });
+          }
+          setProjectCreateError(errorCode);
+          return false;
+        }
         throw err;
       }
       if (!result) {
@@ -2896,192 +3035,221 @@ function AppInner() {
         );
         return false;
       }
-      const pendingFiles = Array.isArray(input.pendingFiles)
-        ? input.pendingFiles.filter((file): file is File => file instanceof File)
-        : [];
-      // Flip the project onto the user-picked working directory BEFORE
-      // uploading staged Home attachments. `replaceProjectWorkingDir` changes
-      // `metadata.baseDir`, so the project starts reading from the external
-      // folder. If we uploaded first, the staged files would land in the
-      // temporary managed `.od/projects/<id>` root and then silently vanish
-      // from Design Files and the first auto-send context once the working
-      // dir flips. Doing the handoff first means the initial upload lands in
-      // the final tree.
-      const userWorkingDir = metadata?.userWorkingDir;
-      let workingDirHandoffFailed = false;
-      if (userWorkingDir) {
-        try {
-          await replaceProjectWorkingDir(
-            result.project.id,
-            userWorkingDir,
-            input.userWorkingDirToken,
-            createWorkspaceContext,
-          );
-        } catch (err) {
-          // The desktop working-dir token is short-lived (~60s TTL); if the
-          // user lingered on Home or the POST was otherwise rejected, the
-          // handoff fails AFTER the project already exists. Do NOT swallow
-          // this and do NOT proceed: uploading staged attachments or
-          // auto-sending the first message would target the managed
-          // `.od/projects/<id>` root the user did not choose. Mark the
-          // handoff as failed so the upload + auto-send branches below are
-          // skipped, then surface a create-time error so the user can
-          // re-pick the working directory from inside the project.
-          console.warn('Failed to set working directory for new project', userWorkingDir, err);
-          workingDirHandoffFailed = true;
-          setWorkingDirError(
-            `Couldn't apply the chosen folder "${userWorkingDir}". The project was created in the default location — re-pick the working directory from the project before uploading files or sending a message.`,
-          );
-        }
-      }
-      let firstMessageAttachments: ChatAttachment[] = [];
-      if (!workingDirHandoffFailed && pendingFiles.length > 0) {
-        // Home composer attaches stay client-side until submit lands a
-        // project; the actual upload happens here. v2 doc wants one
-        // file_upload_result per surface — `page_name='home'` /
-        // `area='chat_composer'` so it's distinguishable from the
-        // file_manager Upload button and the chat_panel composer.
-        const cohort = deriveUploadCohort(pendingFiles);
-        const uploadResult = await uploadProjectFiles(
-          result.project.id,
-          pendingFiles,
-          undefined,
-          createWorkspaceContext,
-        );
-        firstMessageAttachments = uploadResult.uploaded;
-        const partial = uploadResult.failed.length > 0;
-        if (partial) {
-          console.warn('Some Home attachments failed to upload', uploadResult.failed);
-        }
-        trackFileUploadResult(analytics.track, {
-          page_name: 'home',
-          area: 'chat_composer',
-          project_id: result.project.id,
-          ...cohort,
-          result: partial ? 'failed' : 'success',
-          ...(partial && uploadResult.error
-            ? { error_code: uploadResult.error }
-            : {}),
-        });
-      }
-      trackProjectCreateResult(
-        analytics.track,
-        {
-          page_name: 'home',
-          area: 'new_project',
-          project_source: 'create_button',
-          project_id: result.project.id,
-          project_kind: projectKindFromMetadataToTracking(metadata),
-          fidelity,
-          ...(input.pluginId ? { plugin_id: input.pluginId } : {}),
-          ...(input.pluginType ? { plugin_type: input.pluginType } : {}),
-          result: 'success',
-        },
-        { requestId: input.requestId },
-      );
-      // PluginLoopHome flow: the user already typed (or accepted) the
-      // first message on Home. Mark this project so ProjectView fires
-      // sendMessage(pendingPrompt) once on mount instead of just
-      // pre-filling the composer. Scoped to sessionStorage so a page
-      // reload after the run has started does not refire.
-      if (
-        !workingDirHandoffFailed &&
-        input.autoSendFirstMessage &&
-        (derivedPendingPrompt !== undefined || firstMessageAttachments.length > 0)
-      ) {
-        try {
-          window.sessionStorage.setItem(
-            `od:auto-send-first:${result.project.id}`,
-            '1',
-          );
-          if (derivedPendingPrompt !== undefined) {
-            window.sessionStorage.setItem(
-              `od:auto-send-prompt:${result.project.id}`,
-              derivedPendingPrompt,
-            );
-          } else {
-            window.sessionStorage.removeItem(
-              `od:auto-send-prompt:${result.project.id}`,
-            );
-          }
-          if (input.amrGatePrecheckWitness) {
-            window.sessionStorage.setItem(
-              `od:auto-send-amr-gate-witness:${result.project.id}`,
-              JSON.stringify(input.amrGatePrecheckWitness),
-            );
-          } else {
-            window.sessionStorage.removeItem(
-              `od:auto-send-amr-gate-witness:${result.project.id}`,
-            );
-          }
-          window.sessionStorage.removeItem(
-            `od:auto-send-amr-gate-ok:${result.project.id}`,
-          );
-          if (firstMessageAttachments.length > 0) {
-            window.sessionStorage.setItem(
-              `od:auto-send-attachments:${result.project.id}`,
-              JSON.stringify(firstMessageAttachments),
-            );
-          } else {
-            window.sessionStorage.removeItem(
-              `od:auto-send-attachments:${result.project.id}`,
-            );
-          }
-          if (input.initialRunContext && Object.keys(input.initialRunContext).length > 0) {
-            window.sessionStorage.setItem(
-              `od:auto-send-context:${result.project.id}`,
-              JSON.stringify(input.initialRunContext),
-            );
-          } else {
-            window.sessionStorage.removeItem(
-              `od:auto-send-context:${result.project.id}`,
-            );
-          }
-        } catch {
-          /* sessionStorage may be unavailable (e.g. SSR / private mode); fall
-             back to manual send. */
-        }
-      }
-      // Home recommendation handoff: now that the project exists and its id is
-      // known, stash the onboarding entry keyed by that id. Studio consumes it
-      // by the same id on mount. Keying by id (instead of a single global slot
-      // written before create) removes the race where opening an unrelated
-      // project mid-create could steal the personalized funnel context, and
-      // means a failed/aborted create leaves nothing behind.
-      if (input.onboardingEntry) {
-        // Cache the prefilled seed prompt WITH the entry so the first-prompt
-        // funnel's `has_prefilled_prompt` comparison base survives a
-        // reopen-before-send (project.pendingPrompt is wiped on first mount).
-        stashOnboardingEntryForProject(result.project.id, {
-          ...input.onboardingEntry,
-          ...(derivedPendingPrompt
-            ? { seedPrompt: derivedPendingPrompt.trim() }
-            : {}),
-        });
-      }
       const project = result.appliedPluginSnapshotId
         ? {
             ...result.project,
             appliedPluginSnapshotId: result.appliedPluginSnapshotId,
           }
         : result.project;
-      rememberLocalProject(project.id);
-      flushSync(() => {
-        setProjects((curr) => [
-          project,
-          ...curr.filter((p) => p.id !== project.id),
-        ]);
-      });
+      if (optimisticProjectId) {
+        rememberLocalProject(project.id);
+        flushSync(() => {
+          setProjects((curr) => [
+            project,
+            ...curr.filter((candidate) => candidate.id !== project.id),
+          ]);
+        });
+      }
+      try {
+        const pendingFiles = Array.isArray(input.pendingFiles)
+          ? input.pendingFiles.filter((file): file is File => file instanceof File)
+          : [];
+        // Flip the project onto the user-picked working directory BEFORE
+        // uploading staged Home attachments. `replaceProjectWorkingDir` changes
+        // `metadata.baseDir`, so the project starts reading from the external
+        // folder. If we uploaded first, the staged files would land in the
+        // temporary managed `.od/projects/<id>` root and then silently vanish
+        // from Design Files and the first auto-send context once the working
+        // dir flips. Doing the handoff first means the initial upload lands in
+        // the final tree.
+        const userWorkingDir = metadata?.userWorkingDir;
+        let workingDirHandoffFailed = false;
+        if (userWorkingDir) {
+          try {
+            await replaceProjectWorkingDir(
+              result.project.id,
+              userWorkingDir,
+              input.userWorkingDirToken,
+              createWorkspaceContext,
+            );
+          } catch (err) {
+            // The desktop working-dir token is short-lived (~60s TTL); if the
+            // user lingered on Home or the POST was otherwise rejected, the
+            // handoff fails AFTER the project already exists. Do NOT swallow
+            // this and do NOT proceed: uploading staged attachments or
+            // auto-sending the first message would target the managed
+            // `.od/projects/<id>` root the user did not choose. Mark the
+            // handoff as failed so the upload + auto-send branches below are
+            // skipped, then surface a create-time error so the user can
+            // re-pick the working directory from inside the project.
+            console.warn('Failed to set working directory for new project', userWorkingDir, err);
+            workingDirHandoffFailed = true;
+            setWorkingDirError(
+              `Couldn't apply the chosen folder "${userWorkingDir}". The project was created in the default location — re-pick the working directory from the project before uploading files or sending a message.`,
+            );
+          }
+        }
+        let firstMessageAttachments: ChatAttachment[] = [];
+        if (!workingDirHandoffFailed && pendingFiles.length > 0) {
+          // Home composer attaches stay client-side until submit lands a
+          // project; the actual upload happens here. v2 doc wants one
+          // file_upload_result per surface — `page_name='home'` /
+          // `area='chat_composer'` so it's distinguishable from the
+          // file_manager Upload button and the chat_panel composer.
+          const cohort = deriveUploadCohort(pendingFiles);
+          const uploadResult = await uploadProjectFiles(
+            result.project.id,
+            pendingFiles,
+            undefined,
+            createWorkspaceContext,
+          );
+          firstMessageAttachments = uploadResult.uploaded;
+          const partial = uploadResult.failed.length > 0;
+          if (partial) {
+            console.warn('Some Home attachments failed to upload', uploadResult.failed);
+          }
+          trackFileUploadResult(analytics.track, {
+            page_name: 'home',
+            area: 'chat_composer',
+            project_id: result.project.id,
+            ...cohort,
+            result: partial ? 'failed' : 'success',
+            ...(partial && uploadResult.error
+              ? { error_code: uploadResult.error }
+              : {}),
+          });
+        }
+        trackProjectCreateResult(
+          analytics.track,
+          {
+            page_name: 'home',
+            area: 'new_project',
+            project_source: 'create_button',
+            project_id: result.project.id,
+            project_kind: projectKindFromMetadataToTracking(metadata),
+            fidelity,
+            ...(input.pluginId ? { plugin_id: input.pluginId } : {}),
+            ...(input.pluginType ? { plugin_type: input.pluginType } : {}),
+            result: 'success',
+          },
+          { requestId: input.requestId },
+        );
+        // PluginLoopHome flow: the user already typed (or accepted) the
+        // first message on Home. Mark this project so ProjectView fires
+        // sendMessage(pendingPrompt) once on mount instead of just
+        // pre-filling the composer. Scoped to sessionStorage so a page
+        // reload after the run has started does not refire.
+        if (
+          !workingDirHandoffFailed &&
+          input.autoSendFirstMessage &&
+          (derivedPendingPrompt !== undefined || firstMessageAttachments.length > 0)
+        ) {
+          try {
+            window.sessionStorage.setItem(
+              `od:auto-send-first:${result.project.id}`,
+              '1',
+            );
+            if (derivedPendingPrompt !== undefined) {
+              window.sessionStorage.setItem(
+                `od:auto-send-prompt:${result.project.id}`,
+                derivedPendingPrompt,
+              );
+            } else {
+              window.sessionStorage.removeItem(
+                `od:auto-send-prompt:${result.project.id}`,
+              );
+            }
+            if (input.amrGatePrecheckWitness) {
+              window.sessionStorage.setItem(
+                `od:auto-send-amr-gate-witness:${result.project.id}`,
+                JSON.stringify(input.amrGatePrecheckWitness),
+              );
+            } else {
+              window.sessionStorage.removeItem(
+                `od:auto-send-amr-gate-witness:${result.project.id}`,
+              );
+            }
+            window.sessionStorage.removeItem(
+              `od:auto-send-amr-gate-ok:${result.project.id}`,
+            );
+            if (firstMessageAttachments.length > 0) {
+              window.sessionStorage.setItem(
+                `od:auto-send-attachments:${result.project.id}`,
+                JSON.stringify(firstMessageAttachments),
+              );
+            } else {
+              window.sessionStorage.removeItem(
+                `od:auto-send-attachments:${result.project.id}`,
+              );
+            }
+            if (input.initialRunContext && Object.keys(input.initialRunContext).length > 0) {
+              window.sessionStorage.setItem(
+                `od:auto-send-context:${result.project.id}`,
+                JSON.stringify(input.initialRunContext),
+              );
+            } else {
+              window.sessionStorage.removeItem(
+                `od:auto-send-context:${result.project.id}`,
+              );
+            }
+          } catch {
+            /* sessionStorage may be unavailable (e.g. SSR / private mode); fall
+               back to manual send. */
+          }
+        }
+        // Home recommendation handoff: now that the project exists and its id is
+        // known, stash the onboarding entry keyed by that id. Studio consumes it
+        // by the same id on mount. Keying by id (instead of a single global slot
+        // written before create) removes the race where opening an unrelated
+        // project mid-create could steal the personalized funnel context, and
+        // means a failed/aborted create leaves nothing behind.
+        if (input.onboardingEntry) {
+          // Cache the prefilled seed prompt WITH the entry so the first-prompt
+          // funnel's `has_prefilled_prompt` comparison base survives a
+          // reopen-before-send (project.pendingPrompt is wiped on first mount).
+          stashOnboardingEntryForProject(result.project.id, {
+            ...input.onboardingEntry,
+            ...(derivedPendingPrompt
+              ? { seedPrompt: derivedPendingPrompt.trim() }
+              : {}),
+          });
+        }
+        if (!optimisticProjectId) {
+          rememberLocalProject(project.id);
+          flushSync(() => {
+            setProjects((curr) => [
+              project,
+              ...curr.filter((candidate) => candidate.id !== project.id),
+            ]);
+          });
+        }
+      } catch (err) {
+        if (!optimisticProjectId) throw err;
+        const errorCode =
+          err instanceof Error && err.message.trim() ? err.message : 'PROJECT_SETUP_FAILED';
+        console.warn('Failed to finish setting up new project', project.id, err);
+        setProjectCreateError(errorCode);
+      } finally {
+        setPendingProjectCreation((current) =>
+          current?.projectId === optimisticProjectId ? null : current,
+        );
+      }
       const projectRoute = {
         kind: 'project',
         projectId: project.id,
         fileName: null,
       } as const;
-      openWorkspaceTab(projectRoute);
-      navigate(projectRoute);
+      // The Home auto-send path already owns this route from the optimistic
+      // handoff. Do not re-navigate after persistence: if the user deliberately
+      // backed out while creation finished, reopening the project would steal
+      // focus. Non-optimistic creation paths retain the existing navigation.
+      if (!optimisticProjectId) {
+        openWorkspaceTab(projectRoute);
+        navigate(projectRoute);
+      }
       return true;
     },
-    [analytics.track, rememberLocalProject],
+    [analytics.track, clearLocalProject, rememberLocalProject],
   );
 
   const handleCreateProjectFromDesignSystem = useCallback(
@@ -3677,8 +3845,7 @@ function AppInner() {
     // visible, because this call sent no workspace headers at all).
     const mutationContext = workspaceContextRef.current;
     const mutationAccountGeneration = currentWorkspaceAccountGeneration();
-    const ok = await deleteProjectApi(id, mutationContext);
-    if (!ok) return false;
+    await deleteProjectApi(id, mutationContext);
     if (mutationContext) {
       removeProjectFromDisplaySnapshots({
         accountGeneration: mutationAccountGeneration,
@@ -3687,6 +3854,7 @@ function AppInner() {
       });
     }
     clearLocalProject(id, { deleted: true });
+    removeWorkspaceProjectTabs(id);
     iframeKeepAlivePool.evictProject(id, { includeActive: true });
     setProjects((curr) => curr.filter((p) => p.id !== id));
     if (route.kind === 'project' && route.projectId === id) {
@@ -4633,6 +4801,19 @@ function AppInner() {
     navigate({ kind: 'home', view: 'onboarding' });
   }, []);
 
+  const handleActiveCloudSignOut = useCallback(async () => {
+    const next = resetExecutionConfigAfterSignOut(latestPersistedConfigRef.current);
+    latestPersistedConfigRef.current = next;
+    saveConfig(next);
+    setConfig(next);
+    setProviderModelsCache({});
+    setSettingsOpen(false);
+    settingsDraftConfigRef.current = null;
+    setSettingsHighlight(null);
+    navigate({ kind: 'home', view: 'onboarding' });
+    await syncConfigToDaemon(next, { allowOnboardingReset: true });
+  }, []);
+
   const renderSettingsSurface = (presentation: 'modal' | 'page') => (
     <SettingsDialog
       presentation={presentation}
@@ -4656,6 +4837,7 @@ function AppInner() {
       onPersistComposioKey={handleConfigPersistComposioKey}
       onClose={handleCloseSettings}
       onResetOnboarding={handleResetOnboarding}
+      onAmrSignedOut={handleActiveCloudSignOut}
       onRefreshAgents={refreshAgents}
       onAmrLoginStatusChange={handleAmrLoginStatusChange}
       daemonMediaProviders={daemonMediaProviders}
@@ -4749,10 +4931,21 @@ function AppInner() {
             }
           })();
         }}
-        onUsePrompt={(prompt) => {
-          // Seed the Home composer with the template's starting prompt, then hand
-          // the user into Home to review + send it (instead of dropping the pick).
-          seedHomeComposerPrompt(prompt);
+        onUsePrompt={(target) => {
+          seedHomeComposerPrompt(target.prompt);
+          stashHomePromptHandoff(createPluginUseHandoff(Date.now(), target.templateId, {
+            action: 'use',
+            chipId: target.chipId,
+            projectKind: target.projectKind,
+          }));
+          navigate({ kind: 'home', view: 'home' });
+        }}
+        onUsePlugin={(record, action, target) => {
+          stashHomePromptHandoff(createPluginUseHandoff(Date.now(), record.id, {
+            action,
+            chipId: target.chipId,
+            projectKind: target.projectKind,
+          }));
           navigate({ kind: 'home', view: 'home' });
         }}
       />
@@ -4803,6 +4996,10 @@ function AppInner() {
   } else if (route.kind === 'home' && route.view === 'settings') {
     appMain = renderSettingsSurface('page');
   } else if (route.kind === 'project') {
+    const pendingCreation =
+      activeProject && pendingProjectCreation?.projectId === activeProject.id
+        ? pendingProjectCreation
+        : null;
     const routeSurfaceState = projectRouteSurfaceState({
       projectsLoading,
       hasActiveProject: activeProject !== null,
@@ -4812,7 +5009,16 @@ function AppInner() {
           ? deepLinkResolutionFailure.failure
           : undefined,
     });
-    if (
+    if (pendingCreation && activeProject) {
+      appMain = (
+        <ProjectCreationPendingView
+          project={activeProject}
+          prompt={pendingCreation.prompt}
+          agentId={config.agentId}
+          onBack={handleBack}
+        />
+      );
+    } else if (
       routeSurfaceState === 'loading-projects'
       || routeSurfaceState === 'resolving-deep-link'
       || (
@@ -4956,6 +5162,12 @@ function AppInner() {
         agents={agents}
         agentsLoading={agentsLoading}
         amrLoggedIn={amrLoginStatus?.loggedIn ?? null}
+        amrSessionState={amrLoginStatus?.sessionState}
+        amrAccountPlan={
+          amrLoginStatus?.account?.plan?.trim()
+          || amrLoginStatus?.user?.plan?.trim()
+          || null
+        }
         config={config}
         providerModelsCache={providerModelsCache}
         onProviderModelsCacheChange={setProviderModelsCache}
@@ -5003,6 +5215,8 @@ function AppInner() {
         onPersistComposioKey={handleConfigPersistComposioKey}
         onOpenSettings={openSettings}
         onCompleteOnboarding={handleCompleteOnboarding}
+        onSignedOut={handleActiveCloudSignOut}
+        onAmrLoginStatusChange={handleAmrLoginStatusChange}
         artifactUpgradeSlot={
           amrArtifactUpgradeHomeOffer ? (
             <AmrArtifactUpgradeHomeCard
@@ -5065,6 +5279,27 @@ function AppInner() {
           onboardingCompleted={config.onboardingCompleted === true}
           identityScopeKey={workspaceTabsIdentityScopeKey}
         />
+        {/* Avatar + credits keep their home-view spot (the fixed top-right
+            corner over the tabs chrome) while a project tab is open, even
+            though EntryShell — the cluster's usual owner — is unmounted here.
+            Home and the other entry views mount theirs through EntryNavRail;
+            the routes are mutually exclusive, so exactly one is on screen. */}
+        {route.kind === 'project' ? (
+          <WorkspaceTopRightAccountCluster
+            onOpenSettings={openSettings}
+            onSignedOut={handleActiveCloudSignOut}
+            workspaceContextOverride={
+              activeProject?.workspaceId
+                ? activeProjectWorkspaceContext
+                : undefined
+            }
+            workspaceContextLoading={
+              activeProject?.workspaceId
+                ? projectRouteWorkspaceContext.loading
+                : undefined
+            }
+          />
+        ) : null}
         <div className="workspace-shell__body">
           {appMain}
         </div>
@@ -5089,7 +5324,7 @@ function AppInner() {
         plan={resolvedAmrPlan}
         planResolved={
           amrLoginStatus !== null
-          && (amrLoginStatus.loggedIn === false || resolvedAmrPlan !== null)
+          && (!isAmrSessionAuthenticated(amrLoginStatus) || resolvedAmrPlan !== null)
         }
         profile={amrLoginStatus?.profile ?? null}
         metricsConsent={config.telemetry?.metrics === true}
@@ -5126,6 +5361,14 @@ function AppInner() {
           message={workingDirError}
           role="alert"
           onDismiss={() => setWorkingDirError(null)}
+        />
+      ) : null}
+      {projectCreateError ? (
+        <Toast
+          message={projectCreateError}
+          role="alert"
+          tone="error"
+          onDismiss={() => setProjectCreateError(null)}
         />
       ) : null}
       {projectOpenError ? (

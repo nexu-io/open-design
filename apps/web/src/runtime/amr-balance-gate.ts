@@ -43,6 +43,28 @@ export type AmrBalanceGateResult =
   | { kind: 'hard'; reason: 'signed_out'; snapshot: AmrWalletSnapshot }
   | { kind: 'soft'; snapshot: AmrWalletSnapshot };
 
+export const HOME_AMR_BALANCE_RETRY_DELAYS_MS = [400, 1_200] as const;
+
+/**
+ * Home has no project queue to hold a send while a cold Workspace billing
+ * projection catches up. Give that transient state a small, bounded recovery
+ * window before returning control to the composer. Only `unavailable` is
+ * retried; definitive allow/soft/hard decisions are never delayed.
+ */
+export async function retryUnavailableAmrBalanceGate(
+  check: () => Promise<AmrBalanceGateResult>,
+): Promise<AmrBalanceGateResult> {
+  let result = await check();
+  for (const delayMs of HOME_AMR_BALANCE_RETRY_DELAYS_MS) {
+    if (result.kind !== 'unavailable') return result;
+    await new Promise<void>((resolve) => {
+      globalThis.setTimeout(resolve, delayMs);
+    });
+    result = await check();
+  }
+  return result;
+}
+
 export interface AmrBalanceGateScope {
   workspaceType: 'personal' | 'team';
   workspaceId: string;
@@ -208,7 +230,15 @@ async function fetchTeamWorkspaceWalletSnapshot(
 async function checkTeamWorkspaceBalanceGate(
   scope: AmrBalanceGateScope,
 ): Promise<AmrBalanceGateResult> {
-  let accountSnapshot = await fetchAmrWalletSnapshot().catch(() => null);
+  // The URL carries the selected workspace identity. The daemon authorizes
+  // that exact directory membership and returns a v2 identity-stamped wallet.
+  // Start it alongside the cached account snapshot: the latter preserves the
+  // existing signed-out confirmation and profile-aware recovery links, but no
+  // longer sits in front of the authoritative Workspace read.
+  let [accountSnapshot, workspaceSnapshot] = await Promise.all([
+    fetchAmrWalletSnapshot().catch(() => null),
+    fetchTeamWorkspaceWalletSnapshot(scope, null).catch(() => null),
+  ]);
   if (accountSnapshot?.status === 'signed_out') {
     const freshAccount = await fetchAmrWalletSnapshot({ refresh: true }).catch(() => null);
     if (freshAccount?.status === 'signed_out') {
@@ -220,14 +250,13 @@ async function checkTeamWorkspaceBalanceGate(
     }
     accountSnapshot = freshAccount;
   }
-
-  // The URL carries the selected workspace identity. The daemon authorizes
-  // that exact directory membership and returns a v2 identity-stamped wallet.
-  // No account number participates in this decision.
-  const workspaceSnapshot = await fetchTeamWorkspaceWalletSnapshot(
-    scope,
-    accountSnapshot,
-  ).catch(() => null);
+  if (workspaceSnapshot && accountSnapshot) {
+    workspaceSnapshot = {
+      ...workspaceSnapshot,
+      profile: accountSnapshot.profile,
+      user: accountSnapshot.user,
+    };
+  }
   const balance = amrWalletBalanceUsd(workspaceSnapshot);
   if (balance == null) return { kind: 'unavailable' };
   if (balance <= AMR_HARD_BLOCK_BALANCE_USD) {

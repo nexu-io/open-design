@@ -167,6 +167,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     error,
     projectHeader,
     onCollapse,
+    collapseControlLifted,
   }: {
     messages: ChatMessage[];
     onSend: (
@@ -178,6 +179,7 @@ vi.mock('../../src/components/ChatPane', () => ({
     error?: string | null;
     projectHeader?: ReactNode;
     onCollapse?: () => void;
+    collapseControlLifted?: boolean;
   }) => {
     const lastMessage = messages[messages.length - 1];
     const retryMessage =
@@ -204,9 +206,14 @@ vi.mock('../../src/components/ChatPane', () => ({
       >
         send
       </button>
-      <button type="button" data-testid="chat-collapse-toggle" onClick={onCollapse}>
-        collapse chat
-      </button>
+      {/* Mirrors the real ChatPane: when the collapse control is lifted into
+          the tabs dock, the header slot renders nothing — otherwise two
+          controls would share this testid. */}
+      {collapseControlLifted ? null : (
+        <button type="button" data-testid="chat-collapse-toggle" onClick={onCollapse}>
+          collapse chat
+        </button>
+      )}
       {messages.map((message) => (
         <article key={message.id} data-testid={`message-${message.role}`}>
           <span>{message.content}</span>
@@ -711,17 +718,150 @@ describe('ProjectView API empty response handling', () => {
       expect(hasSavedAssistantMessage((message) => message.runStatus === 'succeeded')).toBe(true);
     });
     await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalled());
+    expect(mockedWriteProjectTextFile.mock.calls[0]?.[1]).toBe('landing-page.html');
+    await waitFor(() => {
+      expect(screen.getByTestId('file-workspace').dataset.openRequestName).toBe(
+        'landing-page.html',
+      );
+    });
     await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('success-sound'));
     expect(mockedPlaySound).not.toHaveBeenCalledWith('failure-sound');
     expect(screen.queryByText(/provider ended the request/i)).toBeNull();
     expect(screen.queryByText('empty_response:deepseek-chat')).toBeNull();
   });
 
-  it('marks a generated artifact as failed when project persistence does not deliver it', async () => {
+  it('updates an existing project file when a chat artifact explicitly identifies it', async () => {
+    const existingIndex = {
+      name: 'index.html',
+      path: 'index.html',
+      kind: 'html',
+      mime: 'text/html',
+      size: 100,
+      mtime: 1,
+    };
+    const updatedHtml =
+      '<!doctype html><html><head><title>Updated</title></head><body><main><h1>Updated home page</h1><p>Complete replacement content for the existing project entry.</p></main></body></html>';
+    mockedFetchProjectFiles.mockResolvedValue([existingIndex] as never);
+    mockedWriteProjectTextFile.mockImplementation(
+      async (_projectId, fileName) =>
+        ({
+          ...existingIndex,
+          name: fileName,
+          path: fileName,
+          mtime: 2,
+        }) as never,
+    );
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const artifact =
+        '<artifact identifier="index" type="text/html" title="Updated Home">' +
+        updatedHtml +
+        '</artifact>';
+      options.handlers.onDelta(artifact);
+      options.handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1));
+    expect(mockedWriteProjectTextFile.mock.calls[0]?.slice(0, 3)).toEqual([
+      'project-1',
+      'index.html',
+      updatedHtml,
+    ]);
+    await waitFor(() => {
+      expect(screen.getByTestId('file-workspace').dataset.openRequestName).toBe('index.html');
+    });
+  });
+
+  it('suffixes a title-derived artifact that collides with an existing project file', async () => {
+    const existingLandingPage = {
+      name: 'landing-page.html',
+      path: 'landing-page.html',
+      kind: 'html',
+      mime: 'text/html',
+      size: 100,
+      mtime: 1,
+    };
+    const generatedHtml =
+      '<!doctype html><html><head><title>Landing</title></head><body><main><h1>New landing page</h1><p>Complete content for a distinct generated project artifact.</p></main></body></html>';
+    mockedFetchProjectFiles.mockResolvedValue([existingLandingPage] as never);
+    mockedWriteProjectTextFile.mockImplementation(
+      async (_projectId, fileName) =>
+        ({
+          ...existingLandingPage,
+          name: fileName,
+          path: fileName,
+          mtime: 2,
+        }) as never,
+    );
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      const artifact =
+        '<artifact type="text/html" title="Landing Page">' +
+        generatedHtml +
+        '</artifact>';
+      options.handlers.onDelta(artifact);
+      options.handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => expect(mockedWriteProjectTextFile).toHaveBeenCalledTimes(1));
+    expect(mockedWriteProjectTextFile.mock.calls[0]?.slice(0, 3)).toEqual([
+      'project-1',
+      'landing-page-2.html',
+      generatedHtml,
+    ]);
+    await waitFor(() => {
+      expect(screen.getByTestId('file-workspace').dataset.openRequestName).toBe(
+        'landing-page-2.html',
+      );
+    });
+  });
+
+  it('refuses invalid HTML instead of overwriting an explicitly identified project file', async () => {
+    mockedFetchProjectFiles.mockResolvedValue([
+      {
+        name: 'index.html',
+        path: 'index.html',
+        kind: 'html',
+        mime: 'text/html',
+        size: 100,
+        mtime: 1,
+      },
+    ] as never);
+    mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
+      options.handlers.onDelta(
+        '<artifact identifier="index" type="text/html" title="Updated Home">Summary only.</artifact>',
+      );
+      options.handlers.onDone('');
+    });
+    renderProjectView();
+
+    await sendTestPrompt();
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/Refused to save artifact "index"/i).length).toBeGreaterThan(0);
+    });
+    expect(mockedWriteProjectTextFile).not.toHaveBeenCalled();
+  });
+
+  it('marks an explicitly identified overwrite as failed when persistence does not deliver it', async () => {
     const artifact =
-      '<artifact identifier="landing-page" type="text/html" title="Landing Page">' +
+      '<artifact identifier="index" type="text/html" title="Updated Home">' +
       '<!doctype html><html><head><title>Landing</title></head><body><main><h1>Landing page</h1><p>Generated design artifact with enough structure to persist.</p></main></body></html>' +
       '</artifact>';
+    mockedFetchProjectFiles.mockResolvedValue([
+      {
+        name: 'index.html',
+        path: 'index.html',
+        kind: 'html',
+        mime: 'text/html',
+        size: 100,
+        mtime: 1,
+      },
+    ] as never);
     mockedWriteProjectTextFile.mockResolvedValueOnce(null);
     mockedStreamViaDaemon.mockImplementation(async (options: DaemonStreamOptions) => {
       options.handlers.onDelta(artifact);
@@ -746,6 +886,7 @@ describe('ProjectView API empty response handling', () => {
         ),
       ).toBe(true);
     });
+    expect(mockedWriteProjectTextFile.mock.calls[0]?.[1]).toBe('index.html');
     expect(screen.getAllByText(/couldn't save artifact/i).length).toBeGreaterThan(0);
     await waitFor(() => expect(mockedPlaySound).toHaveBeenCalledWith('failure-sound'));
     expect(mockedPlaySound).not.toHaveBeenCalledWith('success-sound');

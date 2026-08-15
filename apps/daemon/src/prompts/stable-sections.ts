@@ -58,6 +58,8 @@ const SECTION_INPUTS = {
     'designSystemComponentsManifest',
     'designSystemFixtureHtml',
     'designSystemPullIndex',
+    'designSystemIntentIndex',
+    'designSystemRuntimeIssue',
     'designSystemImportMode',
   ],
   skill: ['skillBody', 'skillName', 'skillMode', 'skillModes'],
@@ -81,7 +83,6 @@ const SECTION_INPUTS = {
   mcp: ['connectedExternalMcp'],
   runtime: [
     'agentId',
-    'includeCodexImagegenOverride',
     'promptCoreVariant',
     'runtimeToolPrompt',
   ],

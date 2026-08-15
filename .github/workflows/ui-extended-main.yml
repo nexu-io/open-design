@@ -1,8 +1,24 @@
-name: ui-extended-main
+name: functional-e2e
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Exact git ref to validate. Prerelease passes its resolved build commit."
+        required: true
+        type: string
+      suite:
+        description: "UI suite to run"
+        required: false
+        default: full
+        type: string
   workflow_dispatch:
     inputs:
+      ref:
+        description: "Optional git ref to validate. Empty uses the dispatched ref."
+        required: false
+        default: ""
+        type: string
       suite:
         description: "UI suite to run"
         required: true
@@ -17,12 +33,30 @@ permissions:
   contents: read
 
 concurrency:
-  group: ui-extended-main-${{ github.event_name }}-${{ github.ref || github.run_id }}
+  group: functional-e2e-${{ inputs.ref || github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
+  validate_inputs:
+    name: Validate inputs
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Validate suite
+        env:
+          SUITE: ${{ inputs.suite }}
+        run: |
+          case "$SUITE" in
+            p0|p0p1|full) ;;
+            *)
+              echo "Unsupported suite: $SUITE. Expected p0, p0p1, or full." >&2
+              exit 1
+              ;;
+          esac
+
   p0_runners:
     name: Resolve UI runner profiles
+    needs: [validate_inputs]
     if: ${{ github.repository == 'nexu-io/open-design' }}
     runs-on: ubuntu-24.04
     outputs:
@@ -31,6 +65,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Resolve runner profiles
         id: runners
@@ -40,9 +76,9 @@ jobs:
 
   ui_p0:
     name: UI P0 (${{ matrix.name }})
-    needs: [p0_runners]
-    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite != 'full' }}
-    runs-on: ${{ fromJSON(needs.p0_runners.outputs.runs_on).ui_hot }}
+    needs: [validate_inputs, p0_runners]
+    if: ${{ github.repository == 'nexu-io/open-design' && inputs.suite != 'full' }}
+    runs-on: ${{ fromJSON(needs.p0_runners.outputs.runs_on).ui_p0 }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -52,6 +88,10 @@ jobs:
             shard: entry-settings
           - name: project-workspace
             shard: project-workspace
+          - name: project-workspace-editor
+            shard: project-workspace-editor
+          - name: project-collab
+            shard: project-collab
           - name: project-runtime
             shard: project-runtime
           - name: workspace-restoration
@@ -60,6 +100,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Configure CI parallelism
         uses: ./.github/actions/configure-ci-parallelism
@@ -67,14 +109,14 @@ jobs:
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
         with:
-          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_hot) }}
+          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_p0) }}
 
       - name: Setup Playwright
         uses: ./.github/actions/setup-playwright
         with:
           package-json-path: e2e/package.json
           install-command: pnpm -C e2e exec playwright install --with-deps chromium
-          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_hot) }}
+          runner-labels: ${{ toJSON(fromJSON(needs.p0_runners.outputs.runs_on).ui_p0) }}
 
       - name: Prebuild workspace type declarations
         run: |
@@ -92,7 +134,7 @@ jobs:
         if: ${{ success() && matrix.shard == 'project-runtime' }}
         uses: actions/upload-artifact@v7
         with:
-          name: ui-extended-main-${{ github.run_id }}-p0-${{ matrix.name }}-domain
+          name: functional-e2e-${{ github.run_id }}-p0-${{ matrix.name }}-domain
           path: |
             e2e/ui/reports/playwright-html-report
             e2e/ui/reports/test-results
@@ -109,7 +151,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: ui-extended-main-${{ github.run_id }}-p0-${{ matrix.name }}
+          name: functional-e2e-${{ github.run_id }}-p0-${{ matrix.name }}
           path: |
             e2e/ui/reports/playwright-html-report
             e2e/ui/reports/test-results
@@ -120,7 +162,8 @@ jobs:
 
   ui_extended:
     name: UI P1 (${{ matrix.name }})
-    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite == 'p0p1' }}
+    needs: [validate_inputs]
+    if: ${{ github.repository == 'nexu-io/open-design' && inputs.suite == 'p0p1' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -137,6 +180,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Setup workspace
         uses: ./.github/actions/setup-workspace
@@ -163,7 +208,7 @@ jobs:
         if: ${{ always() }}
         uses: actions/upload-artifact@v7
         with:
-          name: ui-extended-main-${{ github.run_id }}-${{ matrix.part }}-${{ matrix.name }}
+          name: functional-e2e-${{ github.run_id }}-${{ matrix.part }}-${{ matrix.name }}
           path: |
             e2e/ui/reports/playwright-html-report
             e2e/ui/reports/test-results
@@ -174,8 +219,8 @@ jobs:
 
   ui_full:
     name: Full UI (shard ${{ matrix.shard }}/12)
-    needs: [p0_runners]
-    if: ${{ github.repository == 'nexu-io/open-design' && github.event_name == 'workflow_dispatch' && inputs.suite == 'full' }}
+    needs: [validate_inputs, p0_runners]
+    if: ${{ github.repository == 'nexu-io/open-design' && inputs.suite == 'full' }}
     runs-on: ${{ fromJSON(needs.p0_runners.outputs.runs_on).ui_hot }}
     timeout-minutes: 20
     strategy:
@@ -186,6 +231,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ inputs.ref || github.sha }}
 
       - name: Configure CI parallelism
         uses: ./.github/actions/configure-ci-parallelism

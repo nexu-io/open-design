@@ -18,6 +18,12 @@ import {
   uploadPluginZip,
 } from '../../src/state/projects';
 
+const analyticsTrack = vi.hoisted(() => vi.fn());
+
+vi.mock('../../src/analytics/provider', () => ({
+  useAnalytics: () => ({ track: analyticsTrack }),
+}));
+
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
 }));
@@ -98,6 +104,7 @@ const mockedUploadPluginFolder = vi.mocked(uploadPluginFolder);
 const mockedUploadPluginZip = vi.mocked(uploadPluginZip);
 
 beforeEach(() => {
+  analyticsTrack.mockClear();
   mockedListPlugins.mockResolvedValue([
     makePlugin('official-plugin', 'bundled', 'bundled'),
     makePlugin('user-plugin', 'github', 'restricted'),
@@ -279,7 +286,7 @@ describe('PluginsView', () => {
     expect(mockedInstallPluginSource).not.toHaveBeenCalled();
   });
 
-  it('installs restricted catalog entries that collide with bundled official plugin names', async () => {
+  it('uses bundled plugins instead of offering an install the daemon must reject', async () => {
     const onUsePlugin = vi.fn();
     mockedListMarketplaces.mockResolvedValue([
       {
@@ -309,16 +316,14 @@ describe('PluginsView', () => {
     expect(await screen.findByText('Team Official Plugin')).toBeTruthy();
 
     const install = screen.getByTestId('plugins-available-install-open-design/official-plugin');
-    expect(install.textContent).toBe('Install');
+    expect(install.textContent).toBe('Use');
     fireEvent.click(install);
 
-    await waitFor(() =>
-      expect(mockedInstallPluginSource).toHaveBeenCalledWith(
-        'open-design/official-plugin',
-        null,
-      ),
-    );
-    expect(onUsePlugin).not.toHaveBeenCalled();
+    expect(mockedInstallPluginSource).not.toHaveBeenCalled();
+    expect(onUsePlugin).toHaveBeenCalledWith(expect.objectContaining({
+      id: 'official-plugin',
+      sourceKind: 'bundled',
+    }), 'use');
   });
 
   it('shows all installed plugins by default on the Plugins page', async () => {
@@ -403,6 +408,42 @@ describe('PluginsView', () => {
     expect(await screen.findByText('Installed New Plugin.')).toBeTruthy();
     expect(screen.getByTestId('plugins-tab-installed').getAttribute('aria-selected')).toBe('true');
     expect(screen.getAllByText('User Plugin').length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    { errorCode: 'FETCH_FAILED', expected: 'FETCH_FAILED' },
+    { errorCode: 'UPSTREAM_abc123', expected: 'install_failed' },
+    { errorCode: 'https://private.example/error//Users/alice', expected: 'install_failed' },
+  ])('reports a bounded code instead of a URL or local path from a failed import', async ({
+    errorCode,
+    expected,
+  }) => {
+    mockedInstallPluginSource.mockResolvedValueOnce({
+      ok: false,
+      warnings: [],
+      errorCode,
+      message: 'Could not fetch https://private.example/archive into /Users/alice/plugin',
+      log: [],
+    });
+    render(<PluginsView />);
+
+    fireEvent.click(await screen.findByTestId('plugins-import-button'));
+    fireEvent.change(screen.getByLabelText('GitHub, archive, or marketplace source'), {
+      target: { value: 'github:owner/private-plugin' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
+    await waitFor(() => {
+      const resultCall = analyticsTrack.mock.calls.find(
+        ([event]) => event === 'plugin_import_result',
+      );
+      expect(resultCall?.[1]).toMatchObject({
+        result: 'failed',
+        error_code: expected,
+      });
+      expect(JSON.stringify(resultCall?.[1])).not.toContain('private.example');
+      expect(JSON.stringify(resultCall?.[1])).not.toContain('/Users/alice');
+    });
   });
 
   it('installs an available marketplace entry by name', async () => {

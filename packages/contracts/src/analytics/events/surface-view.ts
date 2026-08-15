@@ -3,7 +3,8 @@
  * surface_view event prop types and their union.
  */
 import type { TrackingOnboardingFirstLoopStep, TrackingOnboardingProductType, TrackingOnboardingRole, TrackingOnboardingUseCase } from './onboarding.js';
-import type { TrackingArtifactKind, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
+import type { TrackingRunRecoveryActionType } from './result-events.js';
+import type { TrackingArtifactKind, TrackingCampaignId, TrackingCampaignUserState, TrackingNewProjectTab, TrackingProjectKind } from './shared-enums.js';
 import type { DesignSystemsPresetBrandPickerSurfaceViewProps } from './ui-click.js';
 import type { WorkspaceSurfaceViewProps } from './workspace.js';
 // ---- surface_view --------------------------------------------------------
@@ -30,6 +31,34 @@ export interface NewProjectModalSurfaceViewProps {
 export interface PluginReplacementModalSurfaceViewProps {
   page_name: 'home';
   area: 'plugin_replacement_modal';
+}
+
+// DeepSeek V4 Flash campaign discovery surfaces. These are separate from the
+// existing amr_entry click because an impression is the denominator while an
+// AMR entry is generated only after the user actively enters the billing path.
+export interface DeepSeekCampaignModalSurfaceViewProps {
+  page_name: 'home';
+  area: 'deepseek_campaign_modal';
+  element: 'modal';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
+}
+
+export interface DeepSeekCampaignBadgeSurfaceViewProps {
+  page_name: 'home';
+  area: 'campaign_badge';
+  element: 'deepseek_v4_flash' | 'deepseek_v4_pro';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
+}
+
+export interface DeepSeekCampaignModelBenefitSurfaceViewProps {
+  page_name: 'home';
+  area: 'execution_settings_popover';
+  element: 'deepseek_v4_flash_benefit' | 'deepseek_v4_pro_benefit';
+  campaign_id: TrackingCampaignId;
+  user_state: TrackingCampaignUserState;
+  model_id: string;
 }
 
 // Impression of the plugin detail modal opened from the home Community
@@ -88,6 +117,47 @@ export interface RunFailedToastSurfaceViewProps {
   conversation_id: string | null;
   assistant_message_id: string;
   run_id: string | null;
+}
+
+export interface RunRecoveryActionSurfaceViewProps {
+  page_name: 'chat_panel';
+  area: 'chat_panel';
+  element: 'run_recovery_action';
+  task_execution_id: string;
+  recovery_action_instance_id: string;
+  recovery_action_type: TrackingRunRecoveryActionType;
+  source_run_id?: string;
+  source_agent_provider_id?: string;
+  source_model_id?: string;
+  failure_category?: string;
+  failure_reason?: string;
+}
+
+export interface RunStartBlockedSurfaceViewProps {
+  page_name: 'chat_panel';
+  area: 'chat_composer';
+  element: 'run_start_blocked';
+  task_execution_id: string;
+  recovery_action_instance_id: string;
+  block_reason: string;
+  agent_provider_id: string;
+  model_id: string;
+}
+
+// Preview-workspace status feedback for Design-mode runs. This exposure is
+// intentionally separate from `run_finished`: that event records the daemon
+// outcome, while this one measures whether the user actually saw the delivery
+// confirmation or recovery path.
+export interface PreviewRunStatusSurfaceViewProps {
+  page_name: 'file_manager';
+  area: 'preview_run_status';
+  element: 'run_status_bar';
+  status: 'generating' | 'verifying' | 'succeeded' | 'failed';
+  delivery_state?: 'delivered' | 'no_result' | 'delivery_failed';
+  project_id: string;
+  conversation_id: string | null;
+  assistant_message_id: string;
+  run_id?: string;
 }
 
 export interface AssistantFeedbackReasonPanelSurfaceViewProps {
@@ -198,6 +268,12 @@ export interface StudioOnboardingHintSurfaceViewProps {
 export type SurfaceViewProps =
   | WorkspaceSurfaceViewProps
   | RunFailedToastSurfaceViewProps
+  | RunRecoveryActionSurfaceViewProps
+  | RunStartBlockedSurfaceViewProps
+  | PreviewRunStatusSurfaceViewProps
+  | DeepSeekCampaignModalSurfaceViewProps
+  | DeepSeekCampaignBadgeSurfaceViewProps
+  | DeepSeekCampaignModelBenefitSurfaceViewProps
   | HomeRecommendationSurfaceViewProps
   | StudioOnboardingHintSurfaceViewProps
   | HelpPopoverSurfaceViewProps

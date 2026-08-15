@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "Primary and secondary HUD actions.",
+  "selectors": [".btn"],
+  "variants": {
+    "primary": { "selectors": [".btn-primary"] },
+    "secondary": { "selectors": [".btn-secondary"] }
+  },
+  "properties": {
+    "label": { "type": "string", "required": true },
+    "disabled": { "type": "boolean", "default": false }
+  },
+  "states": {
+    "hoverPrimary": { "selectors": [".btn-primary:hover"] },
+    "hoverSecondary": { "selectors": [".btn-secondary:hover"] },
+    "focus": { "selectors": [".btn:focus-visible"], "required": true }
+  },
+  "implementation": "<button class=\"btn btn-primary\" type=\"button\">{{label}}</button>",
+  "source": "components.html"
+}

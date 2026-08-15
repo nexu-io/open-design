@@ -9,6 +9,7 @@ import type {
 import { resetCoalescedGet } from '../src/lib/coalesced-get';
 import {
   lastResolvedWorkspaceContext,
+  notifyWorkspaceBillingRefresh,
   notifyWorkspaceContextRefresh,
   resetWorkspaceBillingCache,
   resetWorkspaceContextCache,
@@ -937,6 +938,162 @@ describe('useWorkspaceBilling explicit scope', () => {
       { timeout: 6_000 },
     );
   }, 7_000);
+
+  it('backs off exponentially while billing keeps failing and re-arms at the base delay after a success', async () => {
+    // Packaged-client regression (first-open loading spin): the od:// proxy
+    // answers billing with synthetic 502s under bursty first-open load, and a
+    // FIXED 5s retry cadence kept feeding the burst it was waiting out. The
+    // schedule must grow 5s → 10s → 20s → 40s … and reset once a read succeeds.
+    vi.useFakeTimers();
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden', // silence the 30s compatibility poll — this test meters retries only
+    });
+    let billingCalls = 0;
+    let failBilling = true;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
+        if (url === '/api/workspace/context') {
+          return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        const interest = billingInterestResponse(input, init);
+        if (interest) return interest;
+        if (url.startsWith('/api/workspace/billing?')) {
+          billingCalls += 1;
+          if (failBilling) {
+            return new Response(JSON.stringify({ error: 'od_protocol_proxy_failed' }), {
+              status: 502,
+              headers: { 'content-type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify(billingResponse('workspace-a', '2.50')), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+    const flush = async (ms: number) => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    };
+
+    try {
+      const hook = renderHook(() => useWorkspaceBillingResponse());
+      await flush(0);
+      await flush(0);
+      expect(billingCalls).toBe(1); // mount read failed (502)
+
+      await flush(5_000); // 1st retry at base 5s
+      expect(billingCalls).toBe(2);
+
+      await flush(5_000); // t=10s — a fixed 5s cadence would fire here
+      expect(billingCalls).toBe(2); // backed off: next retry is 10s out
+
+      await flush(5_000); // t=15s — the 10s retry lands
+      expect(billingCalls).toBe(3);
+
+      await flush(20_000); // t=35s — the 20s retry lands
+      expect(billingCalls).toBe(4);
+
+      failBilling = false;
+      await flush(40_000); // t=75s — the 40s retry lands and SUCCEEDS
+      expect(billingCalls).toBe(5);
+      expect(hook.result.current?.workspaceBalance?.balanceUsd).toBe('2.50');
+
+      // A later failure starts over at the base delay — the success reset
+      // the consecutive-failure count.
+      failBilling = true;
+      act(() => {
+        notifyWorkspaceBillingRefresh();
+      });
+      await flush(0);
+      expect(billingCalls).toBe(6); // pushed refresh failed (502)
+      await flush(5_000); // retry at base 5s again, not 60s
+      expect(billingCalls).toBe(7);
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+    }
+  }, 15_000);
+
+  it('a retry joins a concurrent consumer\'s fresh success instead of stampeding another request', async () => {
+    // De-forcing the retry path: failures are never cached, so the plain
+    // coalesced read is a genuine refetch — and when another mounted consumer
+    // just fetched a fresh success, the retry must share it (zero new network
+    // requests against a struggling transport) rather than evict it.
+    vi.useFakeTimers();
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    });
+    let billingCalls = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url === '/api/workspace/directory') {
+          return workspaceDirectoryResponse(teamContext('workspace-a'));
+        }
+        if (url === '/api/workspace/context') {
+          return new Response(JSON.stringify({ context: teamContext('workspace-a') }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        const interest = billingInterestResponse(input, init);
+        if (interest) return interest;
+        if (url.startsWith('/api/workspace/billing?')) {
+          billingCalls += 1;
+          if (billingCalls === 1) {
+            return new Response(JSON.stringify({ error: 'od_protocol_proxy_failed' }), {
+              status: 502,
+              headers: { 'content-type': 'application/json' },
+            });
+          }
+          return new Response(JSON.stringify(billingResponse('workspace-a', '2.50')), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        }
+        throw new Error(`unexpected fetch ${url}`);
+      }),
+    );
+    const flush = async (ms: number) => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    };
+
+    try {
+      const first = renderHook(() => useWorkspaceBillingResponse());
+      await flush(0);
+      await flush(0);
+      expect(billingCalls).toBe(1); // first consumer's mount read failed → retry armed at +5s
+
+      await flush(4_500);
+      const second = renderHook(() => useWorkspaceBillingResponse());
+      await flush(0);
+      await flush(0);
+      expect(billingCalls).toBe(2); // second consumer's mount read succeeded
+      expect(second.result.current?.workspaceBalance?.balanceUsd).toBe('2.50');
+
+      await flush(500); // t=5s — the first consumer's retry fires
+      expect(billingCalls).toBe(2); // joined the 0.5s-old success; no third request
+      expect(first.result.current?.workspaceBalance?.balanceUsd).toBe('2.50');
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+    }
+  }, 15_000);
 
   it('keeps daemon-authored last-good state on a retryable directory outage', async () => {
     let billingCalls = 0;

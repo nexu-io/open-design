@@ -1520,6 +1520,11 @@
   min-height: 28px;
   align-items: center;
 }
+.app .ws-tabs-actions .handoff-caret {
+  height: 28px;
+  min-height: 28px;
+  align-items: center;
+}
 .app .ws-tabs-actions .avatar-agent-trigger {
   height: 28px;
   min-height: 28px;
@@ -1530,9 +1535,10 @@
 .app .ws-tabs-actions .chrome-action > svg:first-child {
   transform: none;
 }
-/* 分享 button as a solid dark (inverted) action: black fill + white icon/label
-   in light mode; inverts cleanly to a light fill + dark content in dark mode. */
-.app .ws-tabs-actions .chrome-action-share-dark {
+/* The panel's lead action (导出) as a solid dark (inverted) button: black fill
+   + white icon/label in light mode; inverts cleanly to a light fill + dark
+   content in dark mode. Was 分享 until export took the lead slot. */
+.app .ws-tabs-actions .chrome-action-dark {
   background: var(--text-strong);
   border-color: var(--text-strong);
   color: var(--bg-app);
@@ -1540,17 +1546,17 @@
 /* Hover keeps the ink fill and flips the label/icon to brand green — the
    same black-fill + green-ink pairing as the Community selected tab and the
    page-creator 使用 button. */
-.app .ws-tabs-actions .chrome-action-share-dark:hover:not(:disabled) {
+.app .ws-tabs-actions .chrome-action-dark:hover:not(:disabled) {
   background: var(--text-strong);
   border-color: var(--text-strong);
   color: var(--brand, #87ea5c);
 }
-.app .ws-tabs-actions .chrome-action-share-dark svg,
-.app .ws-tabs-actions .chrome-action-share-dark i {
+.app .ws-tabs-actions .chrome-action-dark svg,
+.app .ws-tabs-actions .chrome-action-dark i {
   color: var(--bg-app);
 }
-.app .ws-tabs-actions .chrome-action-share-dark:hover:not(:disabled) svg,
-.app .ws-tabs-actions .chrome-action-share-dark:hover:not(:disabled) i {
+.app .ws-tabs-actions .chrome-action-dark:hover:not(:disabled) svg,
+.app .ws-tabs-actions .chrome-action-dark:hover:not(:disabled) i {
   color: var(--brand, #87ea5c);
 }
 

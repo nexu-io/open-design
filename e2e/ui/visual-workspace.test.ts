@@ -205,12 +205,9 @@ test('[P2] captures the topbar BYOK execution switcher surface', async ({ page }
   await configureVisualPage(page, {
     // No local agent, which is the premise the popover assertions below already
     // state ("a BYOK config has no local agent"). `configureVisualPage`
-    // otherwise serves `[MOCK_AGENT]` from `/api/agents`, and an installed
-    // agent wins the popover: it renders that agent's model radiogroup
-    // (`radio "Default"`) instead of the BYOK provider/model rows, so the
-    // `.inline-switcher__hint` this case waits for never exists. The chip still
-    // showed the BYOK glyph and `gpt-4o`, which is why the earlier assertions
-    // passed and only the popover shape disagreed.
+    // otherwise serves `[MOCK_AGENT]` from `/api/agents`; the popover body must
+    // derive from `config.mode` either way, so the leanest fixture is the one
+    // with nothing else to draw.
     agents: [],
     config: {
       mode: 'api',
@@ -220,6 +217,25 @@ test('[P2] captures the topbar BYOK execution switcher surface', async ({ page }
       model: 'gpt-4o',
       agentId: null,
     },
+  });
+  // Deterministic BYOK catalogue: opening the popover warms the shared
+  // provider-models cache through the daemon (`/api/provider/models`), which
+  // would otherwise forward the fixture key to the real provider endpoint.
+  // The fulfilled list is what the capture and the option assertions render.
+  await page.route('**/api/provider/models', async (route) => {
+    await route.fulfill({
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        kind: 'success',
+        latencyMs: 1,
+        models: [
+          { id: 'gpt-4o', label: 'gpt-4o' },
+          { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+          { id: 'o3', label: 'o3' },
+        ],
+      }),
+    });
   });
   await gotoVisualHome(page);
 
@@ -232,18 +248,19 @@ test('[P2] captures the topbar BYOK execution switcher surface', async ({ page }
   await chip.click();
   const popover = page.getByTestId('inline-model-switcher-popover');
   await expect(popover).toBeVisible();
-  // ef9c8cd8b's compact popover carries neither the mode segmented control nor
-  // an in-place BYOK model dropdown — a BYOK config has no local agent, so the
-  // popover is the "configure the provider in Settings" hint plus the route
-  // there. Both moved to Settings → Execution and are captured in this same
-  // lane by visual-settings.test.ts ("settings BYOK" and "settings BYOK model
-  // dropdown"), which is also why the old separate
-  // `visual-topbar-byok-model-dropdown` case is gone rather than recast: on
-  // this surface it would have re-captured exactly this popover. Its guard —
-  // no in-place dropdown in the top bar — is folded in below.
+  // The compact popover body derives from the ACTIVE execution mode: with BYOK
+  // active it offers the provider's own model catalogue in place (#6515
+  // restored this after #6142 left BYOK with only a Settings hint — or, with a
+  // CLI agent installed, that agent's cloud models). Execution configuration
+  // stays folded into Settings → Execution: neither the mode segmented control
+  // nor the provider tabs mount in the top bar, and both remain captured in
+  // this same lane by visual-settings.test.ts ("settings BYOK" and "settings
+  // BYOK model dropdown").
   await expect(popover.getByTestId('inline-model-switcher-mode-api')).toHaveCount(0);
-  await expect(popover.getByTestId('inline-model-switcher-api-model')).toHaveCount(0);
-  await expect(popover.locator('.inline-switcher__hint')).toContainText(/Settings/i);
+  await expect(popover.getByTestId('inline-model-switcher-provider-openai')).toHaveCount(0);
+  const modelPicker = popover.getByTestId('inline-model-switcher-api-model');
+  await expect(modelPicker).toBeVisible();
+  await expect(modelPicker).toContainText('gpt-4o');
   await expect(popover.getByTestId('inline-model-switcher-open-settings')).toBeVisible();
 
   await captureVisual(page, 'visual-topbar-byok-switcher');
@@ -252,6 +269,12 @@ test('[P2] captures the topbar BYOK execution switcher surface', async ({ page }
     'visual-topbar-byok-switcher-popover',
     page.getByTestId('inline-model-switcher-popover'),
   );
+
+  // The catalogue is genuinely selectable, not a readout: the dropdown opens
+  // with the provider's models on offer.
+  await modelPicker.click();
+  const modelPopover = page.getByTestId('inline-model-switcher-api-model-popover');
+  await expect(modelPopover.getByRole('option', { name: 'gpt-4o-mini' })).toBeVisible();
 });
 
 test('[P2] captures the avatar menu surface', async ({ page }) => {
@@ -319,15 +342,13 @@ test('[P1] Avatar menu stays a model picker for a signed-in Open Design account'
   await captureVisual(page, 'visual-avatar-open-design-model-picker');
 });
 
-test('[P2] captures the avatar reasoning readout surface', async ({ page }) => {
+test('[P2] captures the avatar reasoning selector surface', async ({ page }) => {
   await configureVisualPage(page, {
     // AvatarMenu only draws the reasoning row for an agent that reports
     // `reasoningOptions`, and the shared `VISUAL_CLI_AGENTS` codex entry
-    // declares models only — so the readout this capture is named for never
-    // rendered, and the assertion has been failing since 68cecac1c introduced
-    // it. The real daemon does report them (apps/daemon/src/runtimes/defs/
-    // codex.ts), so declare them here rather than widening the shared fixture
-    // that the other captures in this file share.
+    // declares models only. The real daemon does report them (apps/daemon/src/
+    // runtimes/defs/codex.ts), so declare them here rather than widening the
+    // shared fixture that the other captures in this file share.
     agents: [
       { ...VISUAL_CODEX_AGENT, reasoningOptions: VISUAL_CODEX_REASONING_OPTIONS },
       ...VISUAL_CLI_AGENTS.filter((agent) => agent.id !== 'codex'),
@@ -341,12 +362,10 @@ test('[P2] captures the avatar reasoning readout surface', async ({ page }) => {
   await gotoVisualWorkspace(page);
 
   const menu = await prepareVisualAvatarMenu(page);
-  // Reasoning effort is shown as a read-only readout; it is changed in
-  // Settings → Execution, not from the composer.
-  const reasoningReadout = menu.locator('.avatar-static-value');
-  await expect(reasoningReadout).toHaveCount(1);
-  await expect(reasoningReadout).toHaveText('Default');
-  await expect(menu.locator('.avatar-model-section select')).toHaveCount(0);
+  const reasoningSelect = menu.getByRole('combobox', { name: 'Reasoning' });
+  await expect(reasoningSelect).toHaveCount(1);
+  await expect(reasoningSelect).toHaveValue('default');
+  await expect(reasoningSelect.locator('option')).toHaveText(['Default', 'Medium', 'High']);
 
   await captureVisual(page, 'visual-avatar-local-agent-list');
   await captureVisualTarget(page, 'visual-avatar-local-agent-list-panel', menu);

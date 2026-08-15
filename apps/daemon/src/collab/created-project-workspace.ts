@@ -15,9 +15,10 @@ export type CreatedProjectWorkspaceResolution =
   | { ok: true; context: WorkspaceResourceContext | null }
   | {
       ok: false;
-      status: 400 | 403 | 503;
+      status: 400 | 401 | 403 | 503;
       code:
         | 'WORKSPACE_CONTEXT_INCOMPLETE'
+        | 'AMR_AUTH_REQUIRED'
         | 'WORKSPACE_PROJECT_PERMISSION_DENIED'
         | 'WORKSPACE_AUTHORITY_UNAVAILABLE';
       message: string;
@@ -80,6 +81,24 @@ export function resolveCreatedProjectWorkspace(
 }
 
 /**
+ * Capture optional local attribution for an ordinary local project create.
+ *
+ * PRODUCT INVARIANT: `POST /api/projects` creates local data first. Workspace
+ * identity on that request is metadata for `personal` + `local_only` routing;
+ * it is not permission to publish and must not trigger a directory/network
+ * lookup or block creation. A complete request snapshot is retained as local
+ * attribution even if its remote state may have changed; missing or partial
+ * identity produces an unbound local project. Later share/sync/move-to-Team
+ * operations perform fresh authority checks at their actual remote boundary.
+ */
+export function localProjectWorkspaceAttribution(
+  req: unknown,
+): WorkspaceResourceContext | null {
+  const context = workspaceResourceContextFromRequest(req);
+  return context === null || context === 'missing' ? null : context;
+}
+
+/**
  * Authorize an explicitly-scoped project create against the signed-in
  * membership directory. The caller-selected workspace/member pair is the
  * lookup key; the daemon's ambient active workspace is deliberately absent
@@ -105,6 +124,14 @@ export async function authorizeCreatedProjectWorkspace(
     directory = { ok: false, items: [] };
   }
   if (!directory.ok) {
+    if (directory.reason === 'unauthorized') {
+      return {
+        ok: false,
+        status: 401,
+        code: 'AMR_AUTH_REQUIRED',
+        message: 'AMR authorization expired. Sign in again to continue.',
+      };
+    }
     return {
       ok: false,
       status: 503,
@@ -216,9 +243,9 @@ export function createCreatedProjectWorkspaceResolver(deps: {
  * `GET /api/projects/:id/workspace-scope` answers `unbound` for it, which strips
  * the workspace off the run request (`ProjectView`'s `projectRunWorkspaceContext`
  * → an Open Design Cloud run nothing can bill) and blanks the balance/plan area
- * while that project is open (`AvatarMenu`). It is also denied a run outright by
- * `enforceWorkspaceResourceMutation` the moment the caller carries any workspace
- * header, because the two-key lookup comes back empty.
+ * while that project is open (`AvatarMenu`). Headerless local AMR runs may use
+ * the signed-in account wallet, but any later request that asserts a Workspace
+ * still needs an exact persisted binding before workspace mutation gates allow it.
  *
  * `context` is the caller's exact verified Workspace when the request named
  * one. A headerless legacy request supplies null and remains unbound.
@@ -242,6 +269,12 @@ export function bindCreatedProjectToWorkspace(
   now: number,
 ): void {
   if (!context) return;
+  // This row is local attribution, not publication. It keeps billing and later
+  // run routing associated with the browser's captured Workspace/member while
+  // the project remains `personal` + `local_only`. Creating it must never be
+  // interpreted as sharing the project or as authorization to use any local
+  // plugin/Skill/Design System. The move/share/sync routes own those remote
+  // authorization boundaries.
   ensureWorkspaceProject({
     projectId,
     workspaceId: context.workspaceId,

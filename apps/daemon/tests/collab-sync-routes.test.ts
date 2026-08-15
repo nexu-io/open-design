@@ -1202,7 +1202,8 @@ describe('collab sync routes', () => {
     expect(resolveSharedProjectOwnerForStatus).toHaveBeenCalledTimes(1);
   });
 
-  it('does not cache a failed status authority read', async () => {
+  it('circuits failed status authority reads and retries after the outage lease', async () => {
+    let now = 0;
     const context = teamContext('ws-1', 'wm-1');
     const fetchReadDirectory = vi
       .fn()
@@ -1223,6 +1224,10 @@ describe('collab sync routes', () => {
       fetchDirectory: fetchReadDirectory,
       identityKey: () => 'account-a:config-a',
       ttlMs: 5_000,
+      failureBackoffMinMs: 100,
+      failureBackoffMaxMs: 100,
+      now: () => now,
+      random: () => 0,
     });
     const api = await startSyncServer(
       { current: async () => context },
@@ -1241,6 +1246,10 @@ describe('collab sync routes', () => {
     );
 
     expect((await api.json('/api/projects/p1/collab/status')).status).toBe(503);
+    expect((await api.json('/api/projects/p1/collab/status')).status).toBe(503);
+    expect(fetchReadDirectory).toHaveBeenCalledOnce();
+
+    now = 100;
     expect((await api.json('/api/projects/p1/collab/status')).status).toBe(200);
     expect(fetchReadDirectory).toHaveBeenCalledTimes(2);
   });

@@ -23,6 +23,9 @@ const CURSOR_AUTH_GUIDANCE =
 const DEEPSEEK_AUTH_GUIDANCE =
   'DeepSeek TUI is installed but is not authenticated. Add or verify your API key in `~/.deepseek/config.toml` as `api_key = "..."`, or expose DEEPSEEK_API_KEY to the Open Design daemon process, then retry. If Open Design is launched outside an interactive shell, shell rc files such as ~/.zshrc may not be loaded.';
 
+const DEEPSEEK_HARNESS_AUTH_GUIDANCE =
+  'DeepSeek Harness has no model API key configured. Open a terminal and run `dsh web`, then open Settings → Models and add your DeepSeek API key. Return to Open Design and retry. For automation, expose DEEPSEEK_API_KEY to the Open Design process.';
+
 // agy's print mode (`-p`) detects a missing OAuth token, prints the
 // Google sign-in URL to stdout, waits 30s for completion, then exits
 // "Error: authentication timed out." That URL points at a callback page
@@ -62,6 +65,10 @@ export function cursorAuthGuidance(): string {
 
 export function deepseekAuthGuidance(): string {
   return DEEPSEEK_AUTH_GUIDANCE;
+}
+
+export function deepseekHarnessAuthGuidance(): string {
+  return DEEPSEEK_HARNESS_AUTH_GUIDANCE;
 }
 
 export function antigravityAuthGuidance(): string {
@@ -118,12 +125,63 @@ export function isDeepSeekAuthFailureText(text: string): boolean {
   const value = String(text || '');
   if (!value.trim()) return false;
   return (
+    /\b(?:MISSING_CREDENTIAL|DSH_PROVIDER_AUTH_FAILED)\b/i.test(value) ||
     /KEY=<your-key>/i.test(value) ||
     /api_key\s*=\s*["']<your-key>["']/i.test(value) ||
     (/~\/\.deepseek\/config\.toml/i.test(value) && /api[_ -]?key|KEY=/i.test(value)) ||
     (/DEEPSEEK_API_KEY/i.test(value) &&
       /auth|api[_ -]?key|missing|not set|required|unauthorized/i.test(value))
   );
+}
+
+type UnknownRecord = Record<string, unknown>;
+
+function unknownRecord(value: unknown): UnknownRecord | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return value as UnknownRecord;
+}
+
+function firstNonEmptyString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+export type DeepSeekHarnessFailure = {
+  code: string;
+  message: string;
+  authRequired: boolean;
+};
+
+/**
+ * Turns the profile's structured error payload into a safe user-facing error.
+ * Harness SDK errors can place an object in `message`; never coerce that object
+ * to text because it produces `[object Object]` and can expose provider data.
+ */
+export function normalizeDeepSeekHarnessFailure(payload: unknown): DeepSeekHarnessFailure {
+  const root = unknownRecord(payload);
+  const nestedError = unknownRecord(root?.error);
+  const embeddedMessage = unknownRecord(root?.message);
+  const code = firstNonEmptyString(
+    nestedError?.code,
+    root?.code,
+    embeddedMessage?.code,
+  ) ?? 'AGENT_EXECUTION_FAILED';
+  const rawMessage = firstNonEmptyString(
+    typeof payload === 'string' ? payload : undefined,
+    root?.message,
+    nestedError?.message,
+    embeddedMessage?.message,
+  );
+  const authRequired = isDeepSeekAuthFailureText(`${code}\n${rawMessage ?? ''}`);
+  return {
+    code,
+    message: authRequired
+      ? deepseekHarnessAuthGuidance()
+      : rawMessage ?? 'DeepSeek Harness profile error.',
+    authRequired,
+  };
 }
 
 export function isReasonixAuthFailureText(text: string): boolean {
@@ -186,6 +244,13 @@ export function classifyAgentAuthFailure(
       message: deepseekAuthGuidance(),
     };
   }
+  if (agentId === 'deepseek-harness') {
+    if (!isDeepSeekAuthFailureText(text)) return null;
+    return {
+      status: 'missing',
+      message: deepseekHarnessAuthGuidance(),
+    };
+  }
   if (agentId === 'antigravity') {
     if (!isAntigravityAuthFailureText(text)) return null;
     return {
@@ -234,7 +299,7 @@ const STATUS_CTX =
 
 // Authentication / authorization: a missing, invalid, or expired credential.
 const AGENT_AUTH_FAILURE_RE = new RegExp(
-  `(\\b(unauthor(?:ized|ised)|authenticat(?:e|ed|ion)|invalid[ _-]?(?:api[ _-]?)?key|incorrect api key|x-api-key|not (?:authenticated|logged[ _-]?in)|please (?:sign|log)[ _-]?in|oauth token (?:has )?expired|session expired|credentials? (?:are )?(?:missing|invalid|required))\\b|\\/login\\b|${STATUS_CTX}401\\b)`,
+  `(\\b(unauthor(?:ized|ised)|authenticat(?:e|ed|ion)|invalid[ _-]?(?:api[ _-]?)?key|incorrect api key|no api key|x-api-key|missing[ _-]?credentials?|not (?:authenticated|logged[ _-]?in)|please (?:sign|log)[ _-]?in|oauth token (?:has )?expired|session expired|credentials? (?:are )?(?:missing|invalid|required))\\b|\\/login\\b|${STATUS_CTX}401\\b)`,
   'i',
 );
 
@@ -309,6 +374,7 @@ const TAILORED_AUTH_AGENTS = new Set([
   'claude',
   'cursor-agent',
   'deepseek',
+  'deepseek-harness',
   'antigravity',
   'reasonix',
 ]);
@@ -320,12 +386,27 @@ function hasNonEmptyEnv(env: RuntimeEnv, keys: string[]): boolean {
   });
 }
 
-function hasProbeSatisfyingApiKey(agentId: string, env: RuntimeEnv): boolean {
+const CLAUDE_ENTERPRISE_PROVIDER_FLAGS = [
+  'CLAUDE_CODE_USE_BEDROCK',
+  'CLAUDE_CODE_USE_VERTEX',
+] as const;
+
+// `claude auth status` reports Claude.ai credentials only. An explicitly
+// enabled enterprise provider is therefore the authoritative authentication
+// path and must not be mistaken for a missing Claude.ai login.
+function hasClaudeEnterpriseProviderAuth(env: RuntimeEnv): boolean {
+  return CLAUDE_ENTERPRISE_PROVIDER_FLAGS.some((key) => env[key] === '1');
+}
+
+function hasProbeSatisfyingAuth(agentId: string, env: RuntimeEnv): boolean {
   if (agentId === 'codex') {
     return hasNonEmptyEnv(env, ['CODEX_API_KEY', 'OPENAI_API_KEY']);
   }
   if (agentId === 'claude') {
-    return hasNonEmptyEnv(env, ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']);
+    return (
+      hasNonEmptyEnv(env, ['ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN']) ||
+      hasClaudeEnterpriseProviderAuth(env)
+    );
   }
   return false;
 }
@@ -367,7 +448,7 @@ export async function probeAgentAuthStatus(
   // through to the generic classifier (#4456).
   const classifierId = probe.classifierAgentId ?? def.id;
   const agentName = def.name || def.id;
-  if (hasProbeSatisfyingApiKey(classifierId, env)) return { status: 'ok' };
+  if (hasProbeSatisfyingAuth(classifierId, env)) return { status: 'ok' };
   // Codex custom providers authenticate via a provider-specific `env_key` (e.g.
   // AZURE_OPENAI_API_KEY) declared in config.toml, even when `codex login
   // status` (a ChatGPT/OpenAI-login check) exits non-zero. Honor that key so a

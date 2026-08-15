@@ -216,6 +216,7 @@ function migrate(db: SqliteDb): void {
       pre_turn_file_names_json TEXT,
       session_mode TEXT,
       run_context_json TEXT,
+      task_analytics_json TEXT,
       applied_plugin_snapshot_json TEXT,
       telemetry_finalized_at INTEGER,
       started_at INTEGER,
@@ -416,6 +417,9 @@ function migrate(db: SqliteDb): void {
   }
   if (!messageCols.some((c: DbRow) => c.name === 'run_context_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN run_context_json TEXT`);
+  }
+  if (!messageCols.some((c: DbRow) => c.name === 'task_analytics_json')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN task_analytics_json TEXT`);
   }
   if (!messageCols.some((c: DbRow) => c.name === 'applied_plugin_snapshot_json')) {
     db.exec(`ALTER TABLE messages ADD COLUMN applied_plugin_snapshot_json TEXT`);
@@ -2512,6 +2516,7 @@ export function listMessages(db: SqliteDb, conversationId: string) {
               pre_turn_file_names_json AS preTurnFileNamesJson,
               session_mode AS sessionMode,
               run_context_json AS runContextJson,
+              task_analytics_json AS taskAnalyticsJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
@@ -2521,6 +2526,32 @@ export function listMessages(db: SqliteDb, conversationId: string) {
     )
     .all(conversationId) as DbRow[])
     .map(normalizeMessage);
+}
+
+export function getMessage(db: SqliteDb, id: string, conversationId?: string) {
+  const row = db
+    .prepare(
+      `SELECT id, role, content, agent_id AS agentId, agent_name AS agentName,
+              run_id AS runId, run_status AS runStatus,
+              result_delivery_state AS resultDeliveryState,
+              last_run_event_id AS lastRunEventId,
+              events_json AS eventsJson,
+              attachments_json AS attachmentsJson,
+              comment_attachments_json AS commentAttachmentsJson,
+              produced_files_json AS producedFilesJson,
+              trace_object_files_json AS traceObjectFilesJson,
+              feedback_json AS feedbackJson,
+              pre_turn_file_names_json AS preTurnFileNamesJson,
+              session_mode AS sessionMode,
+              run_context_json AS runContextJson,
+              applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
+              created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
+              position
+         FROM messages
+        WHERE id = ?${conversationId ? ' AND conversation_id = ?' : ''}`,
+    )
+    .get(conversationId ? [id, conversationId] : id) as DbRow | undefined;
+  return row ? normalizeMessage(row) : null;
 }
 
 export function conversationTurnIndexForRun(
@@ -2553,6 +2584,9 @@ export function conversationTurnIndexForRun(
 }
 
 export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
+  const persistedEvents = Array.isArray(m.events)
+    ? compactAdjacentMessageAgentEvents(m.events)
+    : m.events;
   const existing = db
     .prepare(`SELECT position FROM messages WHERE id = ?`)
     .get(m.id) as DbRow | undefined;
@@ -2565,7 +2599,8 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               events_json = ?, attachments_json = ?, comment_attachments_json = ?,
               produced_files_json = ?, trace_object_files_json = ?, feedback_json = ?,
               pre_turn_file_names_json = ?,
-              session_mode = ?, run_context_json = ?, applied_plugin_snapshot_json = ?,
+              session_mode = ?, run_context_json = ?, task_analytics_json = ?,
+              applied_plugin_snapshot_json = ?,
               telemetry_finalized_at = CASE
                 WHEN ? THEN COALESCE(telemetry_finalized_at, ?)
                 ELSE telemetry_finalized_at
@@ -2581,7 +2616,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.runStatus ?? null,
       normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
       m.lastRunEventId ?? null,
-      m.events ? JSON.stringify(m.events) : null,
+      persistedEvents ? JSON.stringify(persistedEvents) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
@@ -2590,6 +2625,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
       normalizeMessageSessionModeForStorage(m.sessionMode),
       m.runContext ? JSON.stringify(m.runContext) : null,
+      m.taskAnalytics ? JSON.stringify(m.taskAnalytics) : null,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
       m.telemetryFinalized === true ? 1 : 0,
       now,
@@ -2611,17 +2647,18 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
     // run_id, run_status, result_delivery_state, last_run_event_id, events_json, attachments_json,
     // comment_attachments_json, produced_files_json, trace_object_files_json,
     // feedback_json, pre_turn_file_names_json, session_mode, run_context_json,
-    // applied_plugin_snapshot_json, telemetry_finalized_at, started_at,
-    // ended_at, position, created_at.
+    // task_analytics_json, applied_plugin_snapshot_json,
+    // telemetry_finalized_at, started_at, ended_at, position, created_at.
     db.prepare(
       `INSERT INTO messages
          (id, conversation_id, role, content, agent_id, agent_name,
           run_id, run_status, result_delivery_state, last_run_event_id, events_json,
           attachments_json, comment_attachments_json, produced_files_json,
           trace_object_files_json, feedback_json, pre_turn_file_names_json,
-          session_mode, run_context_json, applied_plugin_snapshot_json,
+          session_mode, run_context_json, task_analytics_json,
+          applied_plugin_snapshot_json,
           telemetry_finalized_at, started_at, ended_at, position, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id,
       conversationId,
@@ -2633,7 +2670,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.runStatus ?? null,
       normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
       m.lastRunEventId ?? null,
-      m.events ? JSON.stringify(m.events) : null,
+      persistedEvents ? JSON.stringify(persistedEvents) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
@@ -2642,6 +2679,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.preTurnFileNames ? JSON.stringify(m.preTurnFileNames) : null,
       normalizeMessageSessionModeForStorage(m.sessionMode),
       m.runContext ? JSON.stringify(m.runContext) : null,
+      m.taskAnalytics ? JSON.stringify(m.taskAnalytics) : null,
       m.appliedPluginSnapshot ? JSON.stringify(m.appliedPluginSnapshot) : null,
       m.telemetryFinalized === true ? now : null,
       m.startedAt ?? null,
@@ -2670,6 +2708,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
               pre_turn_file_names_json AS preTurnFileNamesJson,
               session_mode AS sessionMode,
               run_context_json AS runContextJson,
+              task_analytics_json AS taskAnalyticsJson,
               applied_plugin_snapshot_json AS appliedPluginSnapshotJson,
               created_at AS createdAt, started_at AS startedAt, ended_at AS endedAt,
               position
@@ -2723,25 +2762,73 @@ export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event:
   return next;
 }
 
-export function appendMessageAgentEvent(db: SqliteDb, messageId: string, event: DbRow) {
-  if (!event || typeof event !== 'object') return null;
-  const kind = typeof event.kind === 'string' ? event.kind : '';
-  if (!kind) return null;
+export function compactAdjacentMessageAgentEvents(
+  incomingEvents: readonly DbRow[],
+): DbRow[] {
+  const events: DbRow[] = [];
+  for (const event of incomingEvents) {
+    const kind = typeof event?.kind === 'string' ? event.kind : '';
+    const last = events[events.length - 1];
+    const isMergeableDelta =
+      (kind === 'text' || kind === 'thinking') && typeof event?.text === 'string';
+    if (isMergeableDelta && last?.kind === kind && typeof last.text === 'string') {
+      events[events.length - 1] = { ...last, text: last.text + event.text };
+    } else {
+      events.push(event);
+    }
+  }
+  return events;
+}
+
+export function appendMessageAgentEvents(
+  db: SqliteDb,
+  messageId: string,
+  incomingEvents: readonly DbRow[],
+): DbRow[] | null {
+  if (incomingEvents.length === 0) return null;
   const row = db
     .prepare(`SELECT content, events_json AS eventsJson FROM messages WHERE id = ?`)
     .get(messageId) as DbRow | undefined;
   if (!row) return null;
   const parsed = parseJsonOrUndef(row.eventsJson);
-  const events = Array.isArray(parsed) ? parsed : [];
-  const last = events[events.length - 1];
-  if (last && JSON.stringify(last) === JSON.stringify(event)) {
-    return events;
+  const parsedEvents = Array.isArray(parsed) ? parsed : [];
+  const events = compactAdjacentMessageAgentEvents(parsedEvents);
+  let textDelta = '';
+  let changed = events.length !== parsedEvents.length;
+
+  for (const event of incomingEvents) {
+    if (!event || typeof event !== 'object') continue;
+    const kind = typeof event.kind === 'string' ? event.kind : '';
+    if (!kind) continue;
+    const last = events[events.length - 1];
+    const isMergeableDelta =
+      (kind === 'text' || kind === 'thinking') && typeof event.text === 'string';
+    if (isMergeableDelta && last?.kind === kind && typeof last.text === 'string') {
+      last.text += event.text;
+      if (kind === 'text') textDelta += event.text;
+      changed = changed || event.text.length > 0;
+      continue;
+    }
+    if (!isMergeableDelta && last && JSON.stringify(last) === JSON.stringify(event)) {
+      continue;
+    }
+    events.push(event);
+    if (kind === 'text' && typeof event.text === 'string') textDelta += event.text;
+    changed = true;
   }
-  const next = [...events, event];
-  const textDelta = kind === 'text' && typeof event.text === 'string' ? event.text : '';
+
+  if (!changed) return events;
   db.prepare(`UPDATE messages SET content = COALESCE(content, '') || ?, events_json = ? WHERE id = ?`)
-    .run(textDelta, JSON.stringify(next), messageId);
-  return next;
+    .run(textDelta, JSON.stringify(events), messageId);
+  return events;
+}
+
+export function appendMessageAgentEvent(
+  db: SqliteDb,
+  messageId: string,
+  event: DbRow,
+): DbRow[] | null {
+  return appendMessageAgentEvents(db, messageId, [event]);
 }
 
 export function deleteMessage(db: SqliteDb, id: string) {
@@ -3675,6 +3762,7 @@ function normalizeMessage(row: DbRow) {
     preTurnFileNames: parseJsonOrUndef(row.preTurnFileNamesJson),
     sessionMode: normalizeMessageSessionMode(row.sessionMode),
     runContext: parseJsonOrUndef(row.runContextJson),
+    taskAnalytics: parseJsonOrUndef(row.taskAnalyticsJson),
     appliedPluginSnapshot: parseJsonOrUndef(row.appliedPluginSnapshotJson),
     createdAt: row.createdAt ?? undefined,
     startedAt: row.startedAt ?? undefined,

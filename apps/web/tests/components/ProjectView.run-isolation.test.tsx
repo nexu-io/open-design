@@ -579,6 +579,21 @@ vi.mock('../../src/components/ChatPane', () => ({
         >
           send with context
         </button>
+        <button
+          type="button"
+          data-testid="send-message-stable-request"
+          onClick={() =>
+            onSend(
+              'hello from stable request',
+              [],
+              [],
+              { clientRequestId: 'submission-1' },
+            )
+          }
+          disabled={sendDisabled}
+        >
+          send stable request
+        </button>
         <button type="button" data-testid="new-conversation" onClick={onNewConversation}>
           new
         </button>
@@ -679,7 +694,10 @@ const succeededAssistant: ChatMessage = {
   ...runningAssistant,
   content: 'done',
   runStatus: 'succeeded',
-  endedAt: 2,
+  // Realistic terminal timestamp: a synthetic epoch value would read as years
+  // old to designDeliveryReconciliationStale's age bound and suppress the
+  // reload reconciliation these suites exercise.
+  endedAt: Date.now(),
 };
 
 const previewComment: PreviewComment = {
@@ -2026,6 +2044,48 @@ describe('ProjectView conversation run isolation', () => {
     expect(screen.getByTestId('attached-comment-count').textContent).toBe('0');
   });
 
+  it('queues a logical submission only once when its stable request id is retried', async () => {
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('send-message-stable-request'));
+    fireEvent.click(screen.getByTestId('send-message-stable-request'));
+
+    await waitFor(() => expect(screen.getByTestId('send-queued-0')).toBeTruthy());
+    expect(screen.queryByTestId('send-queued-1')).toBeNull();
+  });
+
+  it('reuses a queued submission request id when the daemon run starts', async () => {
+    let finishReattach: (() => void) | null = null;
+    let reattachHandlers: { onDone: () => void } | null = null;
+    reattachDaemonRun.mockImplementation(async (input: unknown) => {
+      reattachHandlers = (input as { handlers: { onDone: () => void } }).handlers;
+      return new Promise<void>((resolve) => {
+        finishReattach = resolve;
+      });
+    });
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('active-conversation').textContent).toBe('conv-a'));
+    await waitFor(() => expect(screen.getByTestId('streaming-state').textContent).toBe('streaming'));
+
+    fireEvent.click(screen.getByTestId('send-message-stable-request'));
+    await waitFor(() => expect(screen.getByTestId('send-queued-0')).toBeTruthy());
+
+    await act(async () => {
+      reattachHandlers?.onDone();
+      finishReattach?.();
+    });
+
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+    expect(streamViaDaemon).toHaveBeenCalledWith(expect.objectContaining({
+      clientRequestId: 'submission-1',
+    }));
+  });
+
   it('keeps newer attached comments when a queued send flushes older comment attachments', async () => {
     let finishReattach: (() => void) | null = null;
     let reattachHandlers: { onDone: () => void } | null = null;
@@ -2539,6 +2599,28 @@ describe('ProjectView conversation run isolation', () => {
     await waitFor(() => expect(screen.getByTestId('send-queued-0').textContent).toBe('hello from b'));
   });
 
+  it('restores only one queued send for each stable request id', async () => {
+    reattachDaemonRun.mockImplementation(async () => new Promise<void>(() => {}));
+    const duplicateQueuedSend = {
+      id: 'submission-1',
+      conversationId: 'conv-a',
+      prompt: 'hello from stable request',
+      attachments: [],
+      commentAttachments: [],
+      meta: { clientRequestId: 'submission-1' },
+      createdAt: 1,
+    };
+    window.localStorage.setItem(
+      'od:chat-queued-sends:project-1:v1',
+      JSON.stringify([duplicateQueuedSend, duplicateQueuedSend]),
+    );
+
+    renderProjectView();
+
+    await waitFor(() => expect(screen.getByTestId('send-queued-0')).toBeTruthy());
+    expect(screen.queryByTestId('send-queued-1')).toBeNull();
+  });
+
   it('surfaces conversation message load errors and keeps sends disabled until messages load', async () => {
     let conversationBLoadAttempts = 0;
     listMessages.mockImplementation(async (_projectId: string, conversationId: string) => {
@@ -2845,6 +2927,20 @@ describe('ProjectView conversation run isolation', () => {
           provider_id: 'openai',
           active_execution_mode: mode === 'api' ? 'byok' : 'local_cli',
         },
+        undefined,
+      );
+      expect(analyticsTrackMock).toHaveBeenCalledWith(
+        'surface_view',
+        expect.objectContaining({
+          page_name: 'chat_panel',
+          area: 'chat_composer',
+          element: 'run_start_blocked',
+          task_execution_id: expect.any(String),
+          recovery_action_instance_id: expect.stringMatching(/^blocked:/),
+          block_reason: reason,
+          agent_provider_id: 'openai',
+          model_id: model.trim() || 'default',
+        }),
         undefined,
       );
       expect(streamViaDaemon).not.toHaveBeenCalled();

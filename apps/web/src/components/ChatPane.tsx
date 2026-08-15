@@ -17,9 +17,19 @@ import { createPortal } from 'react-dom';
 import { hasOdCard } from '@open-design/contracts';
 import { useAnalytics } from '../analytics/provider';
 import { getResolvedDeviceId } from '../analytics/client';
-import { trackChatPanelClick, trackMessageQueueClick, trackRunFailedToastSurfaceView } from '../analytics/events';
+import {
+  trackChatPanelClick,
+  trackMessageQueueClick,
+  trackRunFailedToastSurfaceView,
+  trackRunRecoveryActionClick,
+  trackRunRecoveryActionSurfaceView,
+} from '../analytics/events';
+import {
+  buildRecoveryTaskAnalytics,
+  runAgentProviderId,
+} from '../analytics/run-task';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import { startersForProduct, type ProductType } from '../onboarding/recommendation';
 import { starterCopyFor } from '../onboarding/starter-copy';
 import {
@@ -45,7 +55,10 @@ import type {
   RunContextSelection,
   WorkspaceContextItem,
 } from '@open-design/contracts';
-import type { TrackingProjectKind } from '@open-design/contracts/analytics';
+import type {
+  TrackingProjectKind,
+  TrackingRunRecoveryActionType,
+} from '@open-design/contracts/analytics';
 import {
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_DESCRIPTION,
   DESIGN_SYSTEM_WORKSPACE_DISPLAY_TITLE,
@@ -71,10 +84,12 @@ import { AmrLoginPill } from './AmrLoginPill';
 import {
   AMR_LOGIN_STATUS_EVENT,
   amrLoginStatusEventReason,
+  isAmrSessionAuthenticated,
 } from './amrLoginPolling';
 import {
   amrPlansUrlForProfile,
   amrRechargeUrlForProfile,
+  formatModelWindowRetryAt,
   resolveRunFailureUi,
 } from '../runtime/amr-guidance';
 import {
@@ -507,6 +522,10 @@ interface Props {
   streaming: boolean;
   loading?: boolean;
   error: string | null;
+  // Identifies a pane-level error produced by an assistant run. This lets the
+  // pane distinguish a stale run error from a later failure with identical
+  // canonical text; non-run errors leave the source undefined.
+  errorSourceAssistantId?: string | null;
   projectId: string | null;
   sessionMode?: ChatSessionMode;
   onSessionModeChange?: (mode: ChatSessionMode) => void;
@@ -548,7 +567,10 @@ interface Props {
     commentAttachments: ChatCommentAttachment[],
     meta?: ChatSendMeta,
   ) => ChatSendOutcome | Promise<ChatSendOutcome>;
-  onRetry?: (assistantMessage: ChatMessage) => void;
+  onRetry?: (
+    assistantMessage: ChatMessage,
+    recoveryActionType?: TrackingRunRecoveryActionType,
+  ) => void;
   amrAuthRetryContinuation?: AmrAuthRetryContinuation | null;
   amrAuthRetryMountId?: string;
   amrAuthRetryWorkspaceIdentityKey?: string;
@@ -746,6 +768,9 @@ interface Props {
   /** Collapse the conversation pane into workspace-focused mode (#5517's
    *  panel-left control). Takes precedence over onBack in the header. */
   onCollapse?: () => void;
+  /** True when the collapse control renders OUTSIDE this pane (lifted into
+   *  the tabs dock row) — suppresses the header's collapse/back slot. */
+  collapseControlLifted?: boolean;
   backLabel?: string;
   projectHeader?: ReactNode;
   designSystemPicker?: ReactNode;
@@ -820,6 +845,7 @@ const HIDDEN_BRAND_ASSISTANT_STATUS_LABELS = new Set([
   'streaming',
   'starting',
   'running',
+  'working',
   'requesting',
   'thinking',
   'empty_response',
@@ -859,6 +885,7 @@ export function ChatPane({
   viewerOnly = false,
   queuedItems = [],
   error,
+  errorSourceAssistantId,
   projectId,
   sessionMode = 'design',
   onSessionModeChange,
@@ -975,13 +1002,14 @@ export function ChatPane({
   chatLogTray,
   onBack,
   onCollapse,
+  collapseControlLifted,
   backLabel,
   projectHeader,
   designSystemPicker,
   config,
 }: Props) {
   const { workspaceContext } = useProjectCollabContext();
-  const t = useT();
+  const { t, locale } = useI18n();
   const analytics = useAnalytics();
   const displayMessages = useMemo(
     () => messages.filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata)),
@@ -1002,6 +1030,7 @@ export function ChatPane({
   const queuedSendStripRef = useRef<HTMLDivElement | null>(null);
   const didInitialScrollRef = useRef(false);
   const runFailedToastSurfaceKeysRef = useRef<Set<string>>(new Set());
+  const runRecoverySurfaceKeysRef = useRef<Set<string>>(new Set());
   // Tracks whether the user is glued close enough to the bottom that
   // streamed content should auto-follow. Distinct from the jump-button
   // state below, which uses a wider threshold (120px) so the affordance
@@ -1279,6 +1308,10 @@ export function ChatPane({
         failedRunErrorEvent?.code,
         failedRunErrorEvent?.failureDetail,
         retryAssistant.agentId,
+        // The raw upstream sentence, so a failure whose copy names something the
+        // gateway reported (the instant a model window reopens) can read it back
+        // out. Same string the card renders under 「查看详情」.
+        failedRunErrorEvent?.detail,
       )
     : null;
   const hasInlineAmrAuthorizeFailure = Boolean(
@@ -1326,9 +1359,10 @@ export function ChatPane({
     retryAssistant?.id,
   ]);
   const consumeAmrAuthRetryIfAuthorized = useCallback((status: VelaLoginStatus | null) => {
-    if (status?.loggedIn === false) {
+    if (!isAmrSessionAuthenticated(status)) {
       if (
-        amrAuthRetryContinuation
+        status?.loginInFlight === true
+        && amrAuthRetryContinuation
         && amrAuthRetryContinuation.workspaceIdentityKey === 'none'
         && amrAuthRetryContinuation.originMountId === amrAuthRetryMountId
       ) {
@@ -1337,7 +1371,7 @@ export function ChatPane({
       return;
     }
     if (
-      status?.loggedIn !== true
+      !isAmrSessionAuthenticated(status)
       || !amrAuthRetryContinuation
       || !amrAuthRetryMountId
       || !amrAuthRetryWorkspaceIdentityKey
@@ -1354,7 +1388,7 @@ export function ChatPane({
     // Every continuation is consumed against the account identity returned by
     // this exact status observation. An ambient shell snapshot can belong to a
     // prior account during sign-out/sign-in transitions.
-    const loggedInAccountId = status.user?.id ?? null;
+    const loggedInAccountId = status?.user?.id ?? null;
     if (!canConsumeAmrAuthRetryContinuation(amrAuthRetryContinuation, {
       projectId,
       conversationId: activeConversationId,
@@ -1370,7 +1404,12 @@ export function ChatPane({
     }
     if (onConsumeAmrAuthRetryContinuation(amrAuthRetryContinuation)) {
       amrAuthRetrySignedOutWitnessRef.current = null;
-      onRetry(retryAssistant);
+      onRetry(
+        retryAssistant,
+        retryAssistant.agentId === 'amr'
+          ? 'authorize_and_retry'
+          : 'switch_runtime_retry',
+      );
     }
   }, [
     activeConversationId,
@@ -1384,7 +1423,7 @@ export function ChatPane({
     retryAssistant,
   ]);
   useEffect(() => {
-    if (!amrAuthRetryContinuation || inlineAmrLoginStatus?.loggedIn !== true) return;
+    if (!amrAuthRetryContinuation || !isAmrSessionAuthenticated(inlineAmrLoginStatus)) return;
     // A Settings handoff remounts the whole project surface, so there is no
     // inline AmrLoginPill callback to drive consumption. The fresh pane's own
     // status read may request the one-shot retry; the common guard above still
@@ -1442,17 +1481,41 @@ export function ChatPane({
     !!retryAssistant?.resumable &&
     !!retryAssistant?.agentId &&
     retryAssistant.agentId === config?.agentId;
+  // `error` is a shared escape hatch for both run failures and unrelated pane
+  // errors. A run error also lives durably on its assistant message. Suppress
+  // it only when its exact source assistant owns the persisted diagnostic and
+  // a later assistant has succeeded; canonical error text alone cannot prove
+  // ownership because a new run can fail with the same detail.
+  const historicalRunError = useMemo(
+    () =>
+      !retryAssistant &&
+      isRecoveredAssistantRunError(
+        displayMessages,
+        error,
+        errorSourceAssistantId,
+      ),
+    [displayMessages, error, errorSourceAssistantId, retryAssistant],
+  );
+  const currentGlobalError = historicalRunError ? null : error;
   // Prefer a case-specific message (AMR auth / balance) over the raw upstream
-  // string; fall back to the live global error (also covers conversation-load
-  // / audio errors) then the persisted run error so a reload still shows it.
-  const rawError = error ?? failedRunErrorEvent?.detail ?? null;
+  // string; otherwise keep a current pane-level error ahead of the persisted
+  // failed-run detail. Historical run errors were already removed above.
+  const rawError = currentGlobalError ?? failedRunErrorEvent?.detail ?? null;
   // Friendly agent name for {agent} interpolation in failure copy (e.g. the
   // sign-in messages). Falls back to a neutral word when unreadable, never null.
   const failedAgentLabel =
     agentDisplayName(retryAssistant?.agentId, retryAssistant?.agentName) ??
     t('chat.runError.agentFallback');
+  // Values the failure copy names, localized before interpolation: the gateway
+  // reports a UTC instant, the reader waits on their own clock.
+  const runFailureMessageVars = runFailureUi?.messageVars?.retryAt
+    ? {
+        ...runFailureUi.messageVars,
+        retryAt: formatModelWindowRetryAt(runFailureUi.messageVars.retryAt, locale),
+      }
+    : runFailureUi?.messageVars;
   const displayError = runFailureUi?.messageKey
-    ? t(runFailureUi.messageKey, { agent: failedAgentLabel })
+    ? t(runFailureUi.messageKey, { agent: failedAgentLabel, ...runFailureMessageVars })
     : rawError;
   const errorDiagnosticText = displayError
     ? buildRunErrorDiagnosticText({
@@ -1540,6 +1603,76 @@ export function ChatPane({
     showByokRecoveryAction && Boolean(onSwitchToLocalCli) && !runFailureHasAction;
   const showErrorActions = showByokRecoveryCta || runFailureHasAction;
   const showAmrGuidance = Boolean(amrSwitchPayload);
+  const visibleRecoveryActionTypes = useMemo(() => {
+    const actions: TrackingRunRecoveryActionType[] = [];
+    if (!retryAssistant || !onRetry || !runFailureUi) return actions;
+    if (runFailureUi.primaryAction === 'authorize') actions.push('authorize_and_retry');
+    if (canResumeFailedRun) actions.push('resume_run');
+    else if (runFailureUi.primaryAction === 'retry' || runFailureUi.secondaryRetry) {
+      actions.push('manual_retry');
+    }
+    if (showAmrGuidance && onSwitchToAmrAndRetry) actions.push('switch_runtime_retry');
+    return actions;
+  }, [
+    canResumeFailedRun,
+    onRetry,
+    onSwitchToAmrAndRetry,
+    retryAssistant,
+    runFailureUi,
+    showAmrGuidance,
+  ]);
+  const recoveryAnalyticsProps = useCallback((
+    assistantMessage: ChatMessage,
+    actionType: TrackingRunRecoveryActionType,
+  ) => {
+    const task = buildRecoveryTaskAnalytics(displayMessages, assistantMessage, actionType);
+    return {
+      task_execution_id: task.taskExecutionId,
+      recovery_action_instance_id: task.recoveryActionInstanceId!,
+      recovery_action_type: actionType,
+      ...(task.sourceRunId ? { source_run_id: task.sourceRunId } : {}),
+      ...(assistantMessage.agentId
+        ? { source_agent_provider_id: runAgentProviderId(assistantMessage.agentId) }
+        : {}),
+      ...(failedRunErrorEvent?.failureCategory
+        ? { failure_category: failedRunErrorEvent.failureCategory }
+        : {}),
+      ...(failedRunErrorEvent?.failureDetail
+        ? { failure_reason: failedRunErrorEvent.failureDetail }
+        : {}),
+    };
+  }, [displayMessages, failedRunErrorEvent]);
+  useEffect(() => {
+    if (!retryAssistant) return;
+    for (const actionType of visibleRecoveryActionTypes) {
+      const props = recoveryAnalyticsProps(retryAssistant, actionType);
+      const key = `${props.recovery_action_instance_id}:surface`;
+      if (runRecoverySurfaceKeysRef.current.has(key)) continue;
+      runRecoverySurfaceKeysRef.current.add(key);
+      trackRunRecoveryActionSurfaceView(analytics.track, {
+        page_name: 'chat_panel',
+        area: 'chat_panel',
+        element: 'run_recovery_action',
+        ...props,
+      });
+    }
+  }, [analytics.track, recoveryAnalyticsProps, retryAssistant, visibleRecoveryActionTypes]);
+  const trackRecoveryClick = useCallback((
+    assistantMessage: ChatMessage,
+    actionType: TrackingRunRecoveryActionType,
+    target?: { agentProviderId?: string; modelId?: string },
+  ) => {
+    trackRunRecoveryActionClick(analytics.track, {
+      page_name: 'chat_panel',
+      area: 'chat_panel',
+      element: 'run_recovery_action',
+      ...recoveryAnalyticsProps(assistantMessage, actionType),
+      ...(target?.agentProviderId
+        ? { target_agent_provider_id: target.agentProviderId }
+        : {}),
+      ...(target?.modelId ? { target_model_id: target.modelId } : {}),
+    });
+  }, [analytics.track, recoveryAnalyticsProps]);
   useEffect(() => {
     if (!displayError || !failedRunErrorEvent?.code || !retryAssistant) return;
     // The hosted-AMR nudge owns this same surface_view when it renders below
@@ -2349,7 +2482,7 @@ export function ChatPane({
   return (
     <div className="pane">
       <div className="chat-project-header">
-        {onCollapse ? (
+        {collapseControlLifted ? null : onCollapse ? (
           <button
             type="button"
             className="chat-project-back od-tooltip"
@@ -2620,7 +2753,7 @@ export function ChatPane({
                 nextStepSkills={skills}
                 toolboxSkillNames={featuredToolboxSkillNames}
                 nextStepVariant={nextStepVariant}
-                onForkFromMessage={onForkFromMessage}
+                onForkFromMessage={viewerOnly ? undefined : onForkFromMessage}
                 onAssistantFeedback={onAssistantFeedback}
                 forkingMessageId={forkingMessageId}
                 t={t}
@@ -2694,6 +2827,10 @@ export function ChatPane({
                               hideSignedOutStatus
                               revealPendingCancelAction
                               onSignInStarted={() => {
+                                trackRecoveryClick(
+                                  retryAssistant,
+                                  'authorize_and_retry',
+                                );
                                 if (
                                   projectId
                                   && activeConversationId
@@ -2820,9 +2957,11 @@ export function ChatPane({
                               type="button"
                               className="chat-error-action"
                               onClick={() =>
-                                onResumeRun
-                                  ? onResumeRun(retryAssistant)
-                                  : onSend(RESUME_CONTINUE_PROMPT, [], [])
+                                {
+                                  trackRecoveryClick(retryAssistant, 'resume_run');
+                                  if (onResumeRun) onResumeRun(retryAssistant);
+                                  else onSend(RESUME_CONTINUE_PROMPT, [], []);
+                                }
                               }
                             >
                               {t('chat.resumeRunCta')}
@@ -2832,7 +2971,10 @@ export function ChatPane({
                             <button
                               type="button"
                               className="chat-error-action chat-error-retry"
-                              onClick={() => onRetry(retryAssistant)}
+                              onClick={() => {
+                                trackRecoveryClick(retryAssistant, 'manual_retry');
+                                onRetry(retryAssistant, 'manual_retry');
+                              }}
                             >
                               {t('promptTemplates.retry')}
                             </button>
@@ -2850,6 +2992,10 @@ export function ChatPane({
                   metricsConsent={config?.telemetry?.metrics === true}
                   onActivate={() => {
                     if (retryAssistant && onSwitchToAmrAndRetry) {
+                      trackRecoveryClick(retryAssistant, 'switch_runtime_retry', {
+                        agentProviderId: 'amr',
+                        modelId: config?.agentModels?.amr?.model?.trim() || 'default',
+                      });
                       onSwitchToAmrAndRetry(retryAssistant);
                     } else {
                       onOpenAmrSettings?.();
@@ -3516,6 +3662,7 @@ function ChatRows({
                   text,
                   attachments,
                   context,
+                  m.id,
                 )
             : undefined
         }
@@ -4343,6 +4490,31 @@ export function retryableAssistantMessage(
   return isRetryableAssistantTerminalFailure(last) ? last : null;
 }
 
+function isRecoveredAssistantRunError(
+  messages: ChatMessage[],
+  error: string | null,
+  sourceAssistantId: string | null | undefined,
+): boolean {
+  const target = error?.trim();
+  if (!target || !sourceAssistantId) return false;
+  const sourceIndex = messages.findIndex(
+    (message) =>
+      message.role === 'assistant' && message.id === sourceAssistantId,
+  );
+  if (sourceIndex < 0) return false;
+  const source = messages[sourceIndex]!;
+  const ownsPersistedError = (source.events ?? []).some(
+    (event) =>
+      event.kind === 'status' &&
+      event.label === 'error' &&
+      event.detail?.trim() === target,
+  );
+  if (!ownsPersistedError) return false;
+  return messages.slice(sourceIndex + 1).some(
+    (message) => message.role === 'assistant' && message.runStatus === 'succeeded',
+  );
+}
+
 export function isAssistantMessageStreaming(
   message: ChatMessage,
   paneStreaming: boolean,
@@ -4350,12 +4522,12 @@ export function isAssistantMessageStreaming(
   forceStreamingMessageIds?: Set<string>,
 ): boolean {
   if (message.role !== 'assistant') return false;
+  if (isTerminalRunStatus(message.runStatus)) return false;
   if (forceStreamingMessageIds?.has(message.id)) return true;
   if (isActiveRunStatus(message.runStatus)) return true;
   if (message.id !== lastAssistantId) return false;
   if (!paneStreaming) return false;
   if (message.endedAt !== undefined) return false;
-  if (isTerminalRunStatus(message.runStatus)) return false;
   return true;
 }
 

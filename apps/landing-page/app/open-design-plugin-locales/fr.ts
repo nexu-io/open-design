@@ -14,7 +14,7 @@ const copy: OpenDesignPluginCopy = {
     chatgptLabel: 'application de bureau ChatGPT',
     installAria: 'Installer Open Design Cloud dans Codex/ChatGPT',
     copy: 'Copier',
-    github: 'Voir le code source sur GitHub ↗',
+    github: 'Voir le guide d’installation sur GitHub ↗',
   },
   demo: {
     title: 'Installez-le une fois. Créez depuis Codex/ChatGPT.',
@@ -29,7 +29,7 @@ const copy: OpenDesignPluginCopy = {
     installPhase: 'Installation',
     installTitle: 'Demandez à Codex de l’installer',
     installBody:
-      'Collez cette instruction dans une tâche Codex. Codex lit le parcours d’installation du dépôt, puis configure le plugin et le MCP local sans dépendre d’une publication sur une marketplace publique.',
+      'Collez cette instruction dans une tâche Codex. Codex ajoute la source Git canonique de la marketplace, installe le plugin uniquement s’il est absent et finalise la configuration du MCP local sans nécessiter de référencement dans un catalogue public.',
     installNote:
       'Collez-la une seule fois dans Codex : les détails de l’installation sont pris en charge pour vous.',
     steps: [

@@ -336,6 +336,9 @@ describe('createProjectEventsConnection', () => {
         EventSourceCtor: MockEventSource as unknown as typeof EventSource,
         initialBackoffMs: 100,
         maxBackoffMs: 800,
+        // Pin jitter to its high edge (multiplier 1.0) so the base doubling
+        // sequence is observable; the jitter range is covered separately.
+        randomFn: () => 1,
         setTimeoutFn: setTimeoutFn as unknown as typeof setTimeout,
         clearTimeoutFn: clearTimeoutFn as unknown as typeof clearTimeout,
       },
@@ -374,6 +377,7 @@ describe('createProjectEventsConnection', () => {
       {
         EventSourceCtor: MockEventSource as unknown as typeof EventSource,
         initialBackoffMs: 100,
+        randomFn: () => 1,
         setTimeoutFn: setTimeoutFn as unknown as typeof setTimeout,
       },
     );
@@ -387,6 +391,34 @@ describe('createProjectEventsConnection', () => {
     MockEventSource.instances[2]!.dispatch('error', {});
     expect(nextDelay).toBe(100);
 
+    conn.close();
+  });
+
+  it('jitters each reconnect delay within [0.5, 1.0) of the base', () => {
+    const delays: number[] = [];
+    const setTimeoutFn = vi.fn((_cb: () => void, ms: number) => {
+      delays.push(ms);
+      // Do NOT auto-fire: we only want to observe the scheduled delay per error.
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    });
+    const conn = createProjectEventsConnection(
+      'p1',
+      () => {},
+      {
+        EventSourceCtor: MockEventSource as unknown as typeof EventSource,
+        initialBackoffMs: 1000,
+        maxBackoffMs: 30_000,
+        // random() = 0 → multiplier 0.5 (the low edge of the jitter window).
+        randomFn: () => 0,
+        setTimeoutFn: setTimeoutFn as unknown as typeof setTimeout,
+      },
+    );
+    // Only one source exists (auto-fire disabled), so re-dispatch error on it to
+    // walk the backoff cursor without opening new connections.
+    const es = MockEventSource.instances[0]!;
+    for (let i = 0; i < 4; i += 1) es.dispatch('error', {});
+    // Base sequence 1000, 2000, 4000, 8000 → all halved by the low-edge jitter.
+    expect(delays).toEqual([500, 1000, 2000, 4000]);
     conn.close();
   });
 

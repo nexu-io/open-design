@@ -19,6 +19,7 @@ import type {
   AmrAuthStageSource,
 } from '@open-design/contracts/analytics';
 import type {
+  ApiErrorResponse,
   ChatAnalyticsHints,
   ChatRunCreateResponse,
   ChatRunListResponse,
@@ -68,6 +69,7 @@ import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observabil
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
 const HIGH_INPUT_TOKEN_WARNING_THRESHOLD = 200_000;
+const RUN_CREATE_AUTHORITY_RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
 const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 const API_MODE_AGENT_IDS = new Set([
   'anthropic-api',
@@ -337,6 +339,8 @@ export interface DaemonStreamOptions {
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
+  /** Authoritative project-relative artifacts created or modified by the run. */
+  onArtifactPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
   // v2 analytics context propagated to run_created / run_finished.
   // Optional; the daemon only consumes these to shape PostHog props
@@ -346,6 +350,8 @@ export interface DaemonStreamOptions {
 }
 
 export interface DaemonReattachOptions {
+  /** Runtime that owns the reattached run, when persisted with its message. */
+  agentId?: string;
   runId: string;
   projectId?: string | null;
   conversationId?: string | null;
@@ -355,6 +361,7 @@ export interface DaemonReattachOptions {
   handlers: DaemonStreamHandlers;
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
+  onArtifactPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
   /** Publish a current-run success outcome to the app-level upgrade gate. */
   publishRunFinishedEvent?: boolean;
@@ -364,6 +371,7 @@ export const RUNS_CHANGED_EVENT = 'open-design:runs-changed';
 export const DAEMON_RUN_FINISHED_EVENT = 'open-design:daemon-run-finished';
 
 export interface DaemonRunFinishedEventDetail {
+  agentId: string;
   runId: string;
   projectId: string;
   conversationId: string;
@@ -376,6 +384,7 @@ export function publishDaemonRunFinishedEvent(
 ): void {
   if (
     typeof window === 'undefined'
+    || detail.agentId !== 'amr'
     || !detail.runId.trim()
     || !detail.projectId.trim()
     || !detail.conversationId.trim()
@@ -470,6 +479,30 @@ function readNumberField(record: Record<string, unknown> | null, key: string): n
 function readBooleanField(record: Record<string, unknown> | null, key: string): boolean | null {
   const value = record?.[key];
   return typeof value === 'boolean' ? value : null;
+}
+
+function daemonCreateRunError(response: Response, responseText: string): Error {
+  let payload: ApiErrorResponse | null = null;
+  try {
+    payload = JSON.parse(responseText) as ApiErrorResponse;
+  } catch {
+    // Older daemons and proxy failures can return plain text.
+  }
+  const apiError = payload?.error;
+  if (!apiError || typeof apiError !== 'object') {
+    return new Error(`daemon ${response.status}: ${responseText || 'no body'}`);
+  }
+  const error = new Error(apiError.message || `Open Design service returned ${response.status}`) as Error & {
+    code?: string;
+    requestId?: string;
+    retryable?: boolean;
+    status?: number;
+  };
+  error.status = response.status;
+  error.code = apiError.code;
+  error.retryable = apiError.retryable === true;
+  if (apiError.requestId) error.requestId = apiError.requestId;
+  return error;
 }
 
 interface OpenCodeSessionErrorDetails {
@@ -680,6 +713,7 @@ export async function streamViaDaemon({
   initialLastEventId,
   onRunCreated,
   onRunStatus,
+  onArtifactPaths,
   onRunEventId,
   analyticsHints,
 }: DaemonStreamOptions): Promise<void> {
@@ -722,30 +756,45 @@ export async function streamViaDaemon({
   const body = JSON.stringify(request);
 
   try {
-    const createResp = await fetch('/api/runs', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Tells the daemon which front-end carrier started the run so the
-        // telemetry trace can be tagged 'client:desktop' vs 'client:web'.
-        // The daemon falls back to a User-Agent sniff when this header is
-        // absent (e.g. third-party clients), so omitting it in tests is OK.
-        'X-OD-Client': detectClientType(),
-        // Identifies the caller's workspace to the daemon's workspace-resource
-        // mutation gate (see `enforceWorkspaceProjectMutation` in
-        // apps/daemon/src/routes/runs.ts) — without it, a team member's own
-        // run on a team-bound project 401s exactly like an unauthenticated
-        // caller's would. Omitted (headers stay absent) for signed-out /
-        // personal usage, matching every other workspace-gated write.
-        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
-      },
-      body,
-    });
+    let createResp: Response;
+    for (let attempt = 0; ; attempt += 1) {
+      createResp = await fetch('/api/runs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Tells the daemon which front-end carrier started the run so the
+          // telemetry trace can be tagged 'client:desktop' vs 'client:web'.
+          // The daemon falls back to a User-Agent sniff when this header is
+          // absent (e.g. third-party clients), so omitting it in tests is OK.
+          'X-OD-Client': detectClientType(),
+          // Identifies the caller's workspace to the daemon's workspace-resource
+          // mutation gate (see `enforceWorkspaceProjectMutation` in
+          // apps/daemon/src/routes/runs.ts) — without it, a team member's own
+          // run on a team-bound project 401s exactly like an unauthenticated
+          // caller's would. Omitted (headers stay absent) for signed-out /
+          // personal usage, matching every other workspace-gated write.
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
+        body,
+      });
+      if (createResp.ok) break;
+
+      const errorBody = await createResp.clone().json().catch(() => null) as ApiErrorResponse | null;
+      const error = errorBody?.error;
+      const retryableAuthorityOutage =
+        createResp.status === 503
+        && error?.code === 'WORKSPACE_AUTHORITY_UNAVAILABLE'
+        && error.retryable === true;
+      const delayMs = RUN_CREATE_AUTHORITY_RETRY_DELAYS_MS[attempt];
+      if (!retryableAuthorityOutage || delayMs === undefined || cancelSignal?.aborted) break;
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+      if (cancelSignal?.aborted) return;
+    }
 
     if (!createResp.ok) {
       const text = await createResp.text().catch(() => '');
       emitRunStatus('failed');
-      handlers.onError(new Error(`daemon ${createResp.status}: ${text || 'no body'}`));
+      handlers.onError(daemonCreateRunError(createResp, text));
       return;
     }
 
@@ -771,6 +820,7 @@ export async function streamViaDaemon({
       handlers,
       initialLastEventId,
       onRunStatus: emitRunStatus,
+      onArtifactPaths,
       onRunEventId,
       projectId,
       conversationId,
@@ -905,6 +955,8 @@ export interface VelaLiveAccount {
 
 export interface VelaLoginStatus {
   loggedIn: boolean;
+  sessionState?: import('@open-design/contracts').AmrSessionState;
+  credentialRevision?: string;
   loginInFlight?: boolean;
   profile: string;
   user: VelaUser | null;
@@ -1160,12 +1212,13 @@ async function consumeDaemonRun({
   handlers,
   initialLastEventId,
   onRunStatus,
+  onArtifactPaths,
   onRunEventId,
   projectId,
   conversationId,
   workspaceContext,
   publishRunFinishedEvent,
-}: DaemonReattachOptions & { agentId?: string }): Promise<void> {
+}: DaemonReattachOptions): Promise<void> {
   let acc = '';
   let stderrBuf = '';
   let exitCode: number | null = null;
@@ -1196,6 +1249,13 @@ async function consumeDaemonRun({
   const reportArtifactCount = (value: unknown) => {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return;
     resolvedArtifactCount = value;
+  };
+  const reportArtifactPaths = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+    const paths = value.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    );
+    onArtifactPaths?.([...new Set(paths)]);
   };
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
@@ -1348,6 +1408,7 @@ async function consumeDaemonRun({
             if (event.data.failureCategory) endFailureCategory = event.data.failureCategory;
             if (event.data.failureDetail) endFailureDetail = event.data.failureDetail;
             reportArtifactCount(event.data.artifactCount);
+            reportArtifactPaths(event.data.artifactPaths);
             // `serverDeclaredSuccess` records whether the server explicitly
             // set `status: 'succeeded'` in the end payload — the local
             // `'succeeded'` fallback below does not count and must keep
@@ -1375,6 +1436,7 @@ async function consumeDaemonRun({
           if (status.failureCategory) endFailureCategory = status.failureCategory;
           if (status.failureDetail) endFailureDetail = status.failureDetail;
           reportArtifactCount(status.artifactCount);
+          reportArtifactPaths(status.artifactPaths);
           onRunStatus?.(endStatus);
           break;
         }
@@ -1407,6 +1469,7 @@ async function consumeDaemonRun({
         if (status.failureCategory) endFailureCategory = status.failureCategory;
         if (status.failureDetail) endFailureDetail = status.failureDetail;
         reportArtifactCount(status.artifactCount);
+        reportArtifactPaths(status.artifactPaths);
         onRunStatus?.(endStatus);
       } else {
         onRunStatus?.('failed');
@@ -1469,6 +1532,7 @@ async function consumeDaemonRun({
     }
     if (
       publishRunFinishedEvent
+      && agentId === 'amr'
       && Boolean(projectId?.trim())
       && Boolean(conversationId?.trim())
       && serverDeclaredSuccess
@@ -1477,6 +1541,7 @@ async function consumeDaemonRun({
       && resolvedArtifactCount > 0
     ) {
       publishDaemonRunFinishedEvent({
+        agentId,
         runId,
         projectId: projectId!,
         conversationId: conversationId!,

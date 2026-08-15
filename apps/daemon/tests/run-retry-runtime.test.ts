@@ -27,6 +27,7 @@ type RunStatus = {
   signal: string | null;
   error: string | null;
   errorCode: string | null;
+  terminalTrigger: string | null;
   eventsLogPath: string;
 };
 
@@ -228,6 +229,7 @@ describe('same-run retry runtime', () => {
 
     const run = await createAndWaitForRun(started.url, 'amr');
     expect(run.status).toBe('succeeded');
+    expect(run.terminalTrigger).toBeNull();
 
     const events = await readRunEvents(run.eventsLogPath);
     expect(events.filter((event) => event.event === 'start')).toHaveLength(2);
@@ -239,6 +241,7 @@ describe('same-run retry runtime', () => {
       failure_category: 'timeout',
       failure_detail: 'inactivity_timeout',
       failure_stage: 'first_token_wait',
+      terminal_trigger: 'first_output_deadline',
       retry_reason: 'transient_failure',
     });
     expect(events.find((event) => event.event === 'run_retry_finished')?.data).toMatchObject({
@@ -321,6 +324,7 @@ describe('same-run retry runtime', () => {
     const run = await createAndWaitForRun(started.url, 'amr');
     expect(run.status).toBe('failed');
     expect(run.error).toContain('without emitting a first output');
+    expect(run.terminalTrigger).toBe('first_output_deadline');
 
     const events = await readRunEvents(run.eventsLogPath);
     expect(events.filter((event) => event.event === 'start')).toHaveLength(2);
@@ -694,6 +698,12 @@ if (process.argv.includes('--version')) {
 }
 if (process.argv.includes('--help')) {
   console.log('Usage: claude -p [--include-partial-messages] [--add-dir DIR]');
+  process.exit(0);
+}
+// Auxiliary daemon invocations (memory extraction / title generation) must
+// not consume the chat-attempt counter.
+if (!process.argv.includes('--session-id') && !process.argv.includes('--resume')) {
+  process.stdout.write('{"entries":[]}');
   process.exit(0);
 }
 let attempts = 0;

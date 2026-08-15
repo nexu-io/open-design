@@ -15,6 +15,7 @@
  * after every navigation so the host can render its own counter / dots.
  */
 import { injectDeckStageFallback } from '@open-design/contracts/runtime/deck-stage-fallback';
+import { buildPreviewObservabilityBridge } from '@open-design/contracts/runtime/preview-observability';
 
 import {
   buildManualEditBridge,
@@ -37,6 +38,9 @@ export type SrcdocOptions = {
   paletteBridge?: boolean;
   initialPalette?: string | null;
   previewFocusGuard?: boolean;
+  /** Install the live-preview error and white-screen reporting bridge. Keep
+   * this disabled for exports, captures, thumbnails, and historical previews. */
+  previewObservability?: boolean;
   /**
    * Force every CSS animation/transition to complete instantly so the
    * document settles at its final visual state and stops repainting. Meant
@@ -390,7 +394,13 @@ export function buildSrcdoc(
   // is inert on documents that never self-redirect. Injected right after the
   // sandbox shim so it is installed before any author script or meta refresh.
   const withRedirectGuard = injectPreviewRedirectGuard(withShim, { blockLoadTimeScriptRedirect });
-  const withKeydownRegistry = options.deck ? injectDeckKeydownRegistryHook(withRedirectGuard) : withRedirectGuard;
+  // Runtime errors stay in the iframe's Window and never bubble to the host.
+  // Live previews opt in so exports and other off-screen srcdoc consumers do
+  // not emit diagnostics that no host observer is prepared to consume.
+  const withObservability = options.previewObservability
+    ? injectAfterHeadOpen(withRedirectGuard, buildPreviewObservabilityBridge())
+    : withRedirectGuard;
+  const withKeydownRegistry = options.deck ? injectDeckKeydownRegistryHook(withObservability) : withObservability;
   const withFocusGuard = options.previewFocusGuard
     ? injectPreviewFocusGuard(withKeydownRegistry)
     : withKeydownRegistry;
@@ -521,18 +531,20 @@ function injectSrcdocTransportActivationBridge(doc: string, generation: string):
   const encodedGeneration = JSON.stringify(generation);
   const script = `<script data-od-srcdoc-transport-activation>(function(){
   var generation = ${encodedGeneration};
-  function announceReady(){
+  function announceReady(probeId){
     if (!generation) return;
     try {
       if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'od:srcdoc-transport-activated', generation: generation }, '*');
+        var message = { type: 'od:srcdoc-transport-activated', generation: generation };
+        if (typeof probeId === 'string' && probeId) message.probeId = probeId;
+        window.parent.postMessage(message, '*');
       }
     } catch (_) { /* sandboxed parent */ }
   }
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (data && data.type === 'od:srcdoc-transport-ready-probe') {
-      if (data.generation === generation) announceReady();
+      if (data.generation === generation) announceReady(data.probeId);
       return;
     }
     if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string' || typeof data.generation !== 'string' || !data.generation) return;
@@ -542,7 +554,13 @@ function injectSrcdocTransportActivationBridge(doc: string, generation: string):
   });
   announceReady();
 })();</script>`;
-  return injectBeforeBodyEnd(doc, script);
+  // Install the activation witness before authored styles/scripts. A srcDoc
+  // navigation can otherwise be healthy but spend seconds in a blocking
+  // external script before reaching a body-end bridge, which makes the host's
+  // missing-ACK recovery indistinguishable from a genuinely aborted
+  // `about:srcdoc` navigation. Placing the bridge first also runs it before an
+  // authored meta CSP can disable later inline scripts.
+  return injectAfterHeadOpen(doc, script);
 }
 
 function injectSnapshotBridge(doc: string): string {

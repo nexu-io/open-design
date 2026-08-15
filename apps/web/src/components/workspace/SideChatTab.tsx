@@ -29,6 +29,7 @@ export interface ActiveConversationChatState {
     commentAttachments?: ChatCommentAttachment[];
   }>;
   error: string | null;
+  errorSourceAssistantId?: string | null;
   onSend: (
     prompt: string,
     attachments: ChatAttachment[],
@@ -152,6 +153,7 @@ export function SideChatTab({
           onReorderQueuedSends={controlledChat?.onReorderQueuedSends}
           onSendQueuedNow={controlledChat?.onSendQueuedNow}
           error={controlledChat ? controlledChat.error : chat.error}
+          errorSourceAssistantId={controlledChat?.errorSourceAssistantId}
           projectId={projectId}
           sessionMode={sessionMode}
           onSessionModeChange={(mode) => onSessionModeChange?.(conversationId, mode)}

@@ -86,34 +86,26 @@ export async function openNewProjectModal(page: Page): Promise<void> {
 /**
  * Puts the entry shell on its `projects` view.
  *
- * Prefers the client router (`src/router.ts` listens for `popstate`) over
- * `page.goto`: every caller already has a booted app, and a hard navigation
- * throws that tree away — plus the seconds of SPA boot it cost — to re-render
- * the very same view. Falls back to `page.goto` when the frame has no usable
- * history (a fresh context still parked on `about:blank`).
+ * Prefer a real navigation over synthetic `history.pushState` + `popstate`.
+ * Next.js App Router patches History in dev; a foreign pushState can leave
+ * `window.location` on `/` while the custom client router never commits
+ * `/projects`, which is exactly the CI signature that times out waiting for
+ * `/\/projects$/`. `page.goto` is the same path every other projects-entry
+ * helper already uses (`openNewProjectFromProjectsView`, entry-chrome).
+ *
+ * `apps/web` mounts `src/App` through `dynamic(..., { ssr: false })`, so
+ * `domcontentloaded` resolves while the DOM still holds the boot shell —
+ * wait that out with `T.long` before asserting the destination.
  */
 async function openProjectsEntryView(page: Page): Promise<void> {
-  const routed = await page
-    .evaluate(() => {
-      if (window.location.pathname.replace(/\/+$/, '') === '/projects') return true;
-      if (typeof window.history?.pushState !== 'function') return false;
-      window.history.pushState(null, '', '/projects');
-      window.dispatchEvent(new PopStateEvent('popstate'));
-      return true;
-    })
-    .catch(() => false);
-  if (!routed) {
+  const alreadyThere = /\/projects\/?$/.test(new URL(page.url()).pathname);
+  if (!alreadyThere) {
     await page.goto('/projects', { waitUntil: 'domcontentloaded' });
   }
-  // `apps/web` mounts `src/App` through `dynamic(..., { ssr: false })`, so a
-  // hard navigation resolves `domcontentloaded` while the DOM still holds
-  // nothing but the boot shell. Asserting an app testid straight after that
-  // races the boot: `expect`'s configured 10s budget is well under the
-  // `T.long` allowance every suite gives this wait, and the miss surfaces as
-  // a bare "element(s) not found" on a testid that does ship.
   await page
     .getByText('Loading Open Design…')
     .waitFor({ state: 'hidden', timeout: T.long })
     .catch(() => {});
-  await expect(page).toHaveURL(/\/projects$/, { timeout: T.medium });
+  await expect(page).toHaveURL(/\/projects\/?$/, { timeout: T.long });
+  await expect(page.getByTestId('entry-view-projects')).toBeVisible({ timeout: T.long });
 }

@@ -296,6 +296,34 @@ const GOLDEN_CASES: readonly GoldenCase[] = [
     }),
   },
   {
+    name: "pull_request infra-cancel rerun surface arms e2e Vitest topology coverage",
+    context: PR,
+    files: [".github/scripts/rerun_infra_cancel.py"],
+    expected: expectedPlan({
+      ciMode: "hot",
+      scopes: [
+        "web_tests_required",
+        "ui_critical_validation_required",
+        "workspace_validation_required",
+      ],
+      runs: ["run_e2e_vitest", "run_playwright_critical", "run_web_workspace_tests"],
+    }),
+  },
+  {
+    name: "pull_request packaged-smoke topology test change runs e2e Vitest",
+    context: PR,
+    files: ["e2e/tests/packaged-smoke-workflow.test.ts"],
+    expected: expectedPlan({
+      ciMode: "hot",
+      scopes: [
+        "web_tests_required",
+        "ui_critical_validation_required",
+        "workspace_validation_required",
+      ],
+      runs: ["run_e2e_vitest", "run_playwright_critical", "run_web_workspace_tests"],
+    }),
+  },
+  {
     // Weird-but-current: a markdown file under skills/ triggers daemon+web tests
     // through the runtime-content prefix, while its .md extension exempts it from
     // arming the ui-critical fallback. workspace_validation is then re-derived
@@ -818,45 +846,28 @@ test("the consumption guard folds repository paths while allowing sandbox fixtur
   assert.deepEqual(prose, []);
 });
 
-test("the consumption guard requires the narrow daemon test command to be exclusive", async () => {
-  const { daemonTestInvocationsFromWorkflow, workflowRunsOnlyAllowedDaemonTest } = await import(
+test("the consumption guard exempts only the promoted adapter document for its daemon consumer", async () => {
+  const { collectDisallowedCertainExemptConsumptionFromSource } = await import(
     "../../../scripts/check-certain-exempt-consumption.ts"
   );
-  const narrowCommand =
-    "pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/project-watchers.test.ts";
-  const narrowOnly = `
-jobs:
-  daemon_tests:
-    steps:
-      - name: Daemon workspace tests
-        run: ${narrowCommand}
-`;
-  assert.deepEqual(daemonTestInvocationsFromWorkflow(narrowOnly), [narrowCommand]);
-  assert.equal(workflowRunsOnlyAllowedDaemonTest(narrowOnly), true);
+  const violations = collectDisallowedCertainExemptConsumptionFromSource(
+    "apps/daemon/tests/runtimes/trae-cli.test.ts",
+    [
+      `await readRepoFile("docs/agent-adapters.md");`,
+      `await readRepoFile("docs/other.md");`,
+    ].join("\n"),
+  );
 
-  for (const broaderCommand of [
-    "pnpm --filter @open-design/daemon test",
-    "pnpm -F @open-design/daemon test",
-    "pnpm --filter=@open-design/daemon test",
-    "pnpm --dir apps/daemon test",
-    "pnpm -C apps/daemon test",
-    "pnpm --filter @open-design/daemon run test",
-    "pnpm --silent --filter @open-design/daemon test",
-    "pnpm -r --filter @open-design/daemon test",
-  ]) {
-    const narrowPlusBroader = `${narrowOnly}
-      - name: Full daemon suite
-        run: ${broaderCommand}
-`;
-    const expectedBroaderInvocation = broaderCommand.includes("run test")
-      ? "pnpm --filter @open-design/daemon run test"
-      : "pnpm --filter @open-design/daemon test";
-    assert.deepEqual(daemonTestInvocationsFromWorkflow(narrowPlusBroader), [
-      narrowCommand,
-      expectedBroaderInvocation,
-    ]);
-    assert.equal(workflowRunsOnlyAllowedDaemonTest(narrowPlusBroader), false);
-  }
+  assert.deepEqual(violations.map((violation) => violation.literal), ["docs/other.md"]);
+});
+
+test("the adapter documentation is daemon-core because daemon tests consume it", async () => {
+  const { evaluateScopeOutputs } = await import("../../../scripts/scopes.ts");
+  const plan = evaluateScopeOutputs(["docs/agent-adapters.md"], "certain", {
+    deriveWorkspaceValidationFromTestScopes: true,
+  });
+  assert.equal(plan.outputs.daemon_tests_required, true);
+  assert.deepEqual(plan.decisions[0]?.matchedRules, ["certain-daemon-core"]);
 });
 
 test("the rule table classifies every file: no path escapes both fallbacks", async () => {
@@ -947,7 +958,14 @@ test("runtime-definition shadow fails closed for mixed, unknown, empty, and unre
     assert.equal(decision.mode, "full-fallback", files.join(", "));
     assert.deepEqual(
       decision.matrix.map((entry) => entry.name),
-      ["entry-settings", "project-workspace", "project-collab", "project-runtime", "workspace-restoration"],
+      [
+        "entry-settings",
+        "project-workspace",
+        "project-workspace-editor",
+        "project-collab",
+        "project-runtime",
+        "workspace-restoration",
+      ],
     );
   }
   assert.equal(evaluateUiP0Shadow([], false).reason, "files-unresolved");

@@ -5,6 +5,7 @@ import {
   buildLegacyMaxTokensParam,
   buildMaxCompletionTokensParam,
   buildOpenAIChatTokenParam,
+  isAzureOpenAIHostname,
   isUnsupportedMaxTokensError,
 } from '../integrations/openai-chat-token-params.js';
 import {
@@ -33,7 +34,7 @@ import {
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
-import { resolveModelForServiceTier } from '../runtimes/models.js';
+import { isKnownReasoningEffort, resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
@@ -372,8 +373,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           const safeReasoning =
             def &&
             typeof body.reasoning === 'string' &&
-            Array.isArray(def.reasoningOptions)
-              ? (def.reasoningOptions.find((r: any) => r.id === body.reasoning)?.id ?? undefined)
+            isKnownReasoningEffort(def, safeModel, body.reasoning)
+              ? body.reasoning
               : undefined;
           safeModel = def
             ? resolveModelForServiceTier(
@@ -1069,15 +1070,23 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       payloadMessages.unshift({ role: 'system', content: systemPrompt });
     }
 
+    const effectiveMaxTokens =
+      typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192;
     const payload: any = {
       model,
       messages: payloadMessages,
-      ...buildOpenAIChatTokenParam(
-        model,
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
-      ),
+      ...buildOpenAIChatTokenParam(model, effectiveMaxTokens),
       stream: true,
     };
+    const retryPayload = {
+      model,
+      messages: payloadMessages,
+      ...buildMaxCompletionTokensParam(effectiveMaxTokens),
+      stream: true,
+    };
+    const canRetryUnsupportedMaxTokens = isAzureOpenAIHostname(
+      validated.parsed!.hostname,
+    );
 
     const sse = createSseResponse(res);
     let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
@@ -1085,7 +1094,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       proxyDispatcher = proxyDispatcherRequestInit();
       const signal = clientDisconnectSignal(res);
       sse.send('start', { model });
-      const response = await fetch(url, {
+      const requestInit = {
         ...proxyDispatcher.requestInit,
         signal,
         method: 'POST',
@@ -1097,21 +1106,40 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'X-Title': 'Open Design',
           } : {}),
         },
+        redirect: 'error' as const,
+      };
+      let response = await fetch(url, {
+        ...requestInit,
         body: JSON.stringify(payload),
-        redirect: 'error',
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
-        });
-        return sse.end();
+        let errorText = await response.text();
+        if (
+          canRetryUnsupportedMaxTokens &&
+          response.status === 400 &&
+          isUnsupportedMaxTokensError(errorText)
+        ) {
+          console.warn(
+            `[proxy:openai] retrying Azure-hosted request with max_completion_tokens model=${model}`,
+          );
+          response = await fetch(url, {
+            ...requestInit,
+            body: JSON.stringify(retryPayload),
+          });
+          errorText = response.ok ? '' : await response.text();
+        }
+        if (!response.ok) {
+          console.error(
+            `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+          );
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
+        }
       }
 
       let ended = false;

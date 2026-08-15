@@ -228,7 +228,12 @@ export function AmrBalanceDialog({
           ))}
         </ul>
       </div>
+      {/* Dismissal first in DOM so it lands on the left of the row and focus
+          order matches the reading order; the CTA follows on the right. */}
       <div className={styles.actions}>
+        <Button variant="ghost" className={styles.later} onClick={onClose}>
+          {t('chat.amrBalanceGate.laterCta')}
+        </Button>
         {signedOut ? (
           <AmrLoginPill
             className={styles.signInPill}
@@ -254,9 +259,6 @@ export function AmrBalanceDialog({
             {t('chat.amrBalanceGate.plansCta')}
           </Button>
         ) : null}
-        <Button variant="ghost" className={styles.later} onClick={onClose}>
-          {t('chat.amrBalanceGate.laterCta')}
-        </Button>
       </div>
       {watchingWallet ? (
         <p className={styles.watchingHint} data-testid="amr-balance-dialog-watching">

@@ -222,9 +222,13 @@ describe("release workflows", () => {
       const sidecarProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar-proto", "build"])';
       const launcherProtoBuild = 'await runPnpm(config, ["--filter", "@open-design/launcher-proto", "build"])';
       const sidecarBuild = 'await runPnpm(config, ["--filter", "@open-design/sidecar", "build"])';
+      const dshRuntimeBuild = 'await runPnpm(config, ["--filter", "@open-design/dsh-runtime", "build"])';
+      const daemonBuild = 'await runPnpm(config, ["--filter", "@open-design/daemon", "build"])';
       expect(workspaceBuild).toContain(launcherProtoBuild);
+      expect(workspaceBuild).toContain(dshRuntimeBuild);
       expect(workspaceBuild.indexOf(sidecarProtoBuild)).toBeLessThan(workspaceBuild.indexOf(launcherProtoBuild));
       expect(workspaceBuild.indexOf(launcherProtoBuild)).toBeLessThan(workspaceBuild.indexOf(sidecarBuild));
+      expect(workspaceBuild.indexOf(dshRuntimeBuild)).toBeLessThan(workspaceBuild.indexOf(daemonBuild));
     }
     expect(preview).not.toContain(".github/scripts/release/assets/mac.sh");
     expect(preview).not.toContain(".github/scripts/release/assets/mac-intel.sh");
@@ -392,6 +396,62 @@ describe("release workflows", () => {
     expect(stablePrepare).toContain('parseStableDryRunMode');
     expect(stablePrepare).toContain('setOutput("run_prepublish_jobs"');
     expect(stablePrepare).toContain('setOutput("publish_side_effects_enabled"');
+  });
+
+  it("never hands a shipping lane an empty windows smoke mode", async () => {
+    const notify = await readFile(
+      new URL("../../../.github/workflows/notify-release-feishu.yml", import.meta.url),
+      "utf8",
+    );
+
+    // A `workflow_call` `default:` applies only when an input is OMITTED, so
+    // forwarding an empty string defeats the declared `core` default. The empty
+    // value then survives `??` in the spec, `smokeProfile === 'core'` is false,
+    // and the run takes the `full` path — which demands an updater fixture only
+    // a genuine `full` request wires up, and dies before the smoke starts.
+    // That is how release/v0.18.1's first prerelease failed on its branch-cut
+    // commit; release/v0.18.0 stayed hidden behind a branch-name special case
+    // that produced `skip`, so its smoke never ran at all.
+    const modeLine = notify
+      .split("\n")
+      .find((line) => line.includes("win_x64_smoke_mode:") && line.includes("inputs.win_x64_smoke_mode"));
+    expect(modeLine, "notify-release-feishu must forward win_x64_smoke_mode").toBeDefined();
+    expect(modeLine).not.toMatch(/\|\|\s*''\s*\}\}/);
+    expect(modeLine).toMatch(/\|\|\s*'core'\s*\}\}/);
+  });
+
+  it("bakes both halves of the workspace-team gate into every shipping lane", async () => {
+    const [beta, preview, prerelease, stable] = await Promise.all([
+      readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+    ]);
+
+    // workspaceTeamTransportEnv (apps/packaged/src/workspace-team.ts) enables the
+    // four vela transports only when a known AMR profile AND a non-empty vela web
+    // origin are both baked in. A lane that bakes neither still builds, still
+    // installs, and still starts — the gap only surfaces as "Workspace Team does
+    // nothing" once a package reaches a user. So the presence of both halves is
+    // asserted per lane rather than left to the packaging step to notice.
+    for (const workflow of [beta, preview, prerelease, stable]) {
+      expect(workflow).toContain("OPEN_DESIGN_AMR_PROFILE:");
+      expect(workflow).toContain("OD_VELA_WEB_URL:");
+    }
+
+    // beta and prerelease are validation lanes and stay dispatch-driven, so an
+    // operator can aim a build at feature-test or test.
+    expect(beta).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}");
+    expect(prerelease).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}");
+
+    // preview and stable are production channels by definition. Pinning the pair
+    // instead of accepting an input removes the footgun of publishing a stable
+    // build wired to the test backend — there is no legitimate reason for one.
+    for (const workflow of [preview, stable]) {
+      expect(workflow).toContain("OPEN_DESIGN_AMR_PROFILE: prod");
+      expect(workflow).toContain("OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}");
+      expect(workflow).not.toContain("inputs.amr_profile");
+    }
   });
 
   it("passes launcher version floor repo vars through to metadata publish and verify verbatim", async () => {

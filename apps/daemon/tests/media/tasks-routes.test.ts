@@ -361,6 +361,7 @@ describe('media task route recovery', () => {
     delete process.env.HTTPS_PROXY;
     delete process.env.ALL_PROXY;
 
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const started = await startServer({ port: 0, returnServer: true }) as {
       url: string;
       server: http.Server;
@@ -382,7 +383,8 @@ describe('media task route recovery', () => {
 
       expect(response.status).toBe(400);
       expect(body.error).toBeTruthy();
-      expect(listMediaTasksByProject(db, projectId, { includeTerminal: true })).toMatchObject([
+      const failedTasks = listMediaTasksByProject(db, projectId, { includeTerminal: true });
+      expect(failedTasks).toMatchObject([
         {
           error: { status: 400 },
           file: null,
@@ -393,7 +395,17 @@ describe('media task route recovery', () => {
           surface: 'image',
         },
       ]);
+      const taskId = failedTasks[0]?.id;
+      expect(taskId).toBeTruthy();
+      const diagnostic = errorSpy.mock.calls
+        .flatMap((args) => args.map(String))
+        .find((line) => line.includes(`"task_id":"${taskId}"`) && line.includes('"event":"failed"'));
+      expect(diagnostic).toContain(`"project_id":"${projectId}"`);
+      expect(diagnostic).toContain('"model_id":"custom-image"');
+      expect(diagnostic).toContain('"provider_id":"custom-image"');
+      expect(diagnostic).toContain('"run_id":null');
     } finally {
+      errorSpy.mockRestore();
       if (originalHttpProxy === undefined) delete process.env.HTTP_PROXY;
       else process.env.HTTP_PROXY = originalHttpProxy;
       if (originalHttpsProxy === undefined) delete process.env.HTTPS_PROXY;

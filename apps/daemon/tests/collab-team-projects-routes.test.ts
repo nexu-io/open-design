@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import http from 'node:http';
 import {
@@ -9,7 +9,10 @@ import {
 } from '@open-design/contracts';
 import { createTeamProjectsLister } from '../src/collab/team-projects.js';
 import type { WorkspaceContextProvider } from '../src/collab/workspace-context.js';
-import { registerCollabContextRoutes } from '../src/routes/collab-context.js';
+import {
+  registerCollabContextRoutes,
+  type RegisterCollabContextRoutesDeps,
+} from '../src/routes/collab-context.js';
 
 const PROJECTS: TeamProject[] = [
   {
@@ -69,10 +72,20 @@ async function startServer(deps: {
       lifecycleState: 'active' | 'billing_past_due' | 'locked' | 'deleting' | 'deleted';
     }>;
   }>;
+  verifyWorkspaceReadAuthority?: RegisterCollabContextRoutesDeps['verifyWorkspaceReadAuthority'];
 }) {
   const app = express();
   app.use(express.json());
-  registerCollabContextRoutes(app, deps);
+  registerCollabContextRoutes(app, {
+    workspaceContext: deps.workspaceContext,
+    listTeamProjects: deps.listTeamProjects,
+    ...(deps.fetchWorkspaceDirectory
+      ? { fetchWorkspaceDirectory: deps.fetchWorkspaceDirectory }
+      : {}),
+    ...(deps.verifyWorkspaceReadAuthority
+      ? { verifyWorkspaceReadAuthority: deps.verifyWorkspaceReadAuthority }
+      : {}),
+  });
   server = http.createServer(app);
   await new Promise<void>((resolve) => server!.listen(0, resolve));
   const address = server.address();
@@ -92,6 +105,31 @@ async function startServer(deps: {
 }
 
 describe('GET /api/workspace/projects/team', () => {
+  it('uses the settled exact-scope verifier without listing the account directory', async () => {
+    const verified = teamContextProvider().current({});
+    const fetchWorkspaceDirectory = vi.fn(async () => {
+      throw new Error('directory should not run');
+    });
+    const get = await startServer({
+      workspaceContext: teamContextProvider(),
+      listTeamProjects: async () => PROJECTS,
+      fetchWorkspaceDirectory,
+      verifyWorkspaceReadAuthority: async () => ({
+        ok: true,
+        context: (await verified)!,
+      }),
+    });
+
+    const response = await get({
+      'x-od-workspace-id': 'ws-1',
+      'x-od-workspace-member-id': 'wm-1',
+      'x-od-workspace-type': 'team',
+    });
+
+    expect(response).toEqual({ status: 200, body: { projects: PROJECTS } });
+    expect(fetchWorkspaceDirectory).not.toHaveBeenCalled();
+  });
+
   it('uses the request workspace rather than the daemon ambient workspace', async () => {
     const seen: unknown[] = [];
     const listTeamProjects = async (scope: WorkspaceCollabContext) => {

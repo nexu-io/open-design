@@ -11,11 +11,13 @@ describe('agentDisplayName', () => {
     expect(agentDisplayName('claude')).toBe('Claude');
     expect(agentDisplayName('codex')).toBe('Codex');
     expect(agentDisplayName('cursor-agent')).toBe('Cursor');
+    expect(agentDisplayName('deepseek-harness')).toBe('DeepSeek Harness');
   });
 
   it('resolves common aliases like "claude code" and "qodercli"', () => {
     expect(agentDisplayName('Claude Code')).toBe('Claude');
     expect(agentDisplayName('qodercli')).toBe('Qoder');
+    expect(agentDisplayName('DeepSeek Harness')).toBe('DeepSeek Harness');
   });
 
   it('matches embedded substrings such as cursor-agent in a longer path', () => {

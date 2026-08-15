@@ -661,7 +661,8 @@ describe('ProjectView daemon cleanup', () => {
         runId: 'run-unverified-delivery',
         runStatus: 'succeeded',
         sessionMode: 'design',
-        startedAt: 1,
+        // Realistic start time so the reconciliation age bound sees a fresh run.
+        startedAt: Date.now(),
       }),
     ).toBe(true);
     expect(
@@ -673,6 +674,42 @@ describe('ProjectView daemon cleanup', () => {
         runStatus: 'succeeded',
         sessionMode: 'chat',
         startedAt: 1,
+      }),
+    ).toBe(false);
+  });
+
+  it('does not auto-replay a historical succeeded Design message whose delivery never materialized', () => {
+    // #6505: a Design-mode success persisted days ago with delivery metadata
+    // absent must not be replayed/reattached on every reload — only a freshly
+    // completed run gets the one bounded reconciliation. Without an age bound,
+    // `designDeliveryVerificationPending` stays true forever and ProjectView
+    // re-enters the replay path on each recovery tick.
+    expect(
+      shouldReplayTerminalRunMessage({
+        id: 'msg-historical-delivery',
+        role: 'assistant',
+        content: 'I finished the design.',
+        runId: 'run-historical-delivery',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        startedAt: 1,
+        endedAt: Date.now() - 24 * 60 * 60 * 1000,
+      }),
+    ).toBe(false);
+  });
+
+  it('does not auto-replay a legacy succeeded Design row that has no endedAt', () => {
+    // #6505 rows persisted before `endedAt` existed carry only `startedAt`; the
+    // age bound must still flag them stale so a reload stops auto-replaying.
+    expect(
+      shouldReplayTerminalRunMessage({
+        id: 'msg-legacy-no-ended-at',
+        role: 'assistant',
+        content: 'I finished the design.',
+        runId: 'run-legacy-no-ended-at',
+        runStatus: 'succeeded',
+        sessionMode: 'design',
+        startedAt: Date.now() - 24 * 60 * 60 * 1000,
       }),
     ).toBe(false);
   });

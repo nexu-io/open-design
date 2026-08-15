@@ -49,8 +49,8 @@
  *   6. The stream ended without a `ship` event → failed (`no_ship`).
  */
 
-import type { DegradedReason, PanelEvent, PanelistRole } from '@open-design/contracts/critique';
-import { CRITIQUE_PROTOCOL_VERSION } from '@open-design/contracts/critique';
+import type { CritiqueConfig, DegradedReason, PanelEvent, PanelistRole } from '@open-design/contracts/critique';
+import { CRITIQUE_PROTOCOL_VERSION, defaultCritiqueConfig } from '@open-design/contracts/critique';
 
 import { parseCritiqueStream, type ShipArtifactPayload } from './parser.js';
 import {
@@ -62,6 +62,9 @@ import {
   ADAPTER_DEGRADED_DEFAULT_TTL_MS,
   markDegraded,
 } from './adapter-degraded.js';
+import { computeComposite, type RoleScores } from './scoreboard.js';
+
+const COMPOSITE_TOLERANCE = 0.01;
 
 /**
  * Local degraded reasons. `'parser_warning'` and `'incomplete_panel'`
@@ -106,6 +109,7 @@ export interface RunConformanceParams {
   parserMaxBlockBytes?: number;
   projectId?: string;
   artifactId?: string;
+  weights?: CritiqueConfig['weights'];
 }
 
 /**
@@ -145,6 +149,10 @@ export async function runAdapterConformance(
   // that closes only some panelists cannot piggy-back on an earlier
   // round's closes (lefarcen P2 on PR #1316 follow-up).
   const closedRolesByRound = new Map<number, Set<string>>();
+  const roundScores = new Map<number, RoleScores>();
+  const computedCompositesByRound = new Map<number, number>();
+  const roundMustFixCounts = new Map<number, number>();
+  const weights = params.weights ?? defaultCritiqueConfig().weights;
   // Captured SHIP event details. Set on the first SHIP the parser
   // yields. The loop continues draining the stream so any
   // `parser_warning` that arrives AFTER the ship (notably the
@@ -190,6 +198,33 @@ export async function runAdapterConformance(
           closedRolesByRound.set(event.round, bucket);
         }
         bucket.add(event.role);
+        const scores = roundScores.get(event.round) ?? {};
+        scores[event.role] = event.score;
+        roundScores.set(event.round, scores);
+      } else if (event.type === 'panelist_must_fix') {
+        roundMustFixCounts.set(
+          event.round,
+          (roundMustFixCounts.get(event.round) ?? 0) + 1,
+        );
+      } else if (event.type === 'round_end') {
+        const computedComposite = computeComposite(
+          roundScores.get(event.round) ?? {},
+          weights,
+        );
+        computedCompositesByRound.set(event.round, computedComposite);
+        const computedMustFix = roundMustFixCounts.get(event.round) ?? 0;
+        if (
+          Math.abs(event.composite - computedComposite) > COMPOSITE_TOLERANCE
+          || event.mustFix !== computedMustFix
+        ) {
+          events.push({
+            type: 'parser_warning',
+            runId: params.runId,
+            kind: 'composite_mismatch',
+            position: 0,
+          });
+          parserWarningSeen = true;
+        }
       } else if (event.type === 'parser_warning') {
         parserWarningSeen = true;
       } else if (event.type === 'ship' && shipEvent === null) {
@@ -197,6 +232,19 @@ export async function runAdapterConformance(
         // `parser_warning` (e.g. duplicate_ship) still tightens the
         // classification to degraded.
         shipEvent = event;
+        const computedComposite = computedCompositesByRound.get(event.round);
+        if (
+          computedComposite !== undefined
+          && Math.abs(event.composite - computedComposite) > COMPOSITE_TOLERANCE
+        ) {
+          events.push({
+            type: 'parser_warning',
+            runId: params.runId,
+            kind: 'composite_mismatch',
+            position: 0,
+          });
+          parserWarningSeen = true;
+        }
       }
     }
   } catch (err) {

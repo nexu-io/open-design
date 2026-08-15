@@ -9,6 +9,7 @@ import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 import type { CritiqueAction } from './reducer';
 import { workspaceResourceUrl } from '../../../collab/workspace-identity';
+import { BackoffController } from '../../../lib/backoff';
 
 export interface CritiqueEventsConnection {
   close(): void;
@@ -24,6 +25,8 @@ export interface CritiqueEventsConnectionOptions {
   /** Test seam: setTimeout substitutes for fake timers. */
   setTimeoutFn?: typeof setTimeout;
   clearTimeoutFn?: typeof clearTimeout;
+  /** Test seam: deterministic jitter source for the reconnect backoff. */
+  randomFn?: () => number;
   /** Persisted project authority encoded into the EventSource URL. */
   workspaceContext?: WorkspaceCollabContext | null;
 }
@@ -114,13 +117,17 @@ export function createCritiqueEventsConnection(
     ?? (typeof EventSource === 'undefined' ? null : EventSource);
   if (!Ctor) return { close() { /* noop */ } };
 
-  const initialBackoff = options.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF;
-  const maxBackoff = options.maxBackoffMs ?? DEFAULT_MAX_BACKOFF;
   const setT = options.setTimeoutFn ?? setTimeout;
   const clearT = options.clearTimeoutFn ?? clearTimeout;
+  const backoff = new BackoffController({
+    initialMs: options.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF,
+    maxMs: options.maxBackoffMs ?? DEFAULT_MAX_BACKOFF,
+    factor: 2,
+    jitter: true,
+    random: options.randomFn,
+  });
 
   let cancelled = false;
-  let backoff = initialBackoff;
   let source: EventSource | null = null;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -145,7 +152,7 @@ export function createCritiqueEventsConnection(
     const es = new Ctor(critiqueEventsUrl(projectId, options.workspaceContext));
     source = es;
     es.addEventListener('ready', () => {
-      backoff = initialBackoff;
+      backoff.reset();
     });
     for (const name of CRITIQUE_SSE_EVENT_NAMES) {
       es.addEventListener(name, handleCritiqueFrame(name));
@@ -154,9 +161,7 @@ export function createCritiqueEventsConnection(
       if (cancelled) return;
       es.close();
       if (source === es) source = null;
-      const delay = backoff;
-      backoff = Math.min(backoff * 2, maxBackoff);
-      reconnectTimer = setT(connect, delay) as ReturnType<typeof setTimeout>;
+      reconnectTimer = setT(connect, backoff.nextDelay()) as ReturnType<typeof setTimeout>;
     });
   };
 

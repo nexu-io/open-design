@@ -169,7 +169,7 @@ async function openMemoryAddDialog(
   return dialog;
 }
 
-test.describe('Settings Memory and Automations flows', () => {
+test.describe('Settings Memory flows', () => {
   test('[P1] renders the new Memory information architecture with source tabs, saved stats, and tree summaries', async ({ page }) => {
     await seedSettingsBase(page);
 
@@ -599,10 +599,8 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(dialog).toBeHidden();
     await expect(settingsDialog.locator('.library-card', { hasText: 'UI preferences' })).toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await settingsDialog.getByRole('button', { name: 'Back to home', exact: true }).click();
     await expect(settingsSurface(page)).toHaveCount(0);
-    await settingsDialog.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0);
 
     const reopened = await openMemorySettings(page);
     await expect(reopened.getByText('UI preferences')).toBeVisible();
@@ -658,7 +656,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await dialog.getByLabel('Enable memory injection').uncheck();
     await expect(dialog.locator('.memory-disabled-banner')).toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Back to home', exact: true }).click();
     const reopened = await openMemorySettings(page);
     await expect(reopened.locator('.memory-disabled-banner')).toBeVisible();
   });
@@ -735,7 +733,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await dialog.getByTitle('Learn from chats').click();
     await expect(toggle).not.toBeChecked();
 
-    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await dialog.getByRole('button', { name: 'Back to home', exact: true }).click();
     const reopened = await openMemorySettings(page);
     await reopened.getByRole('tab', { name: 'How it works' }).click();
     await expect(
@@ -830,8 +828,9 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(addDialog.getByRole('heading', { name: 'Import from apps' })).toBeVisible();
     await addDialog.getByRole('button', { name: 'Manage' }).click();
 
-    await expect(dialog.getByRole('button', { name: /^Connectors$/i })).toHaveClass(/active/);
+    await expect(page).toHaveURL(/\/settings$/);
     await expect(dialog.getByText('Composio API Key', { exact: true })).toBeVisible();
+    await expect(dialog.getByRole('searchbox', { name: /Search connectors/i })).toBeVisible();
   });
 
   test('[P1] scans connected apps from Import from apps and shows suggested memories', async ({ page }) => {
@@ -1114,7 +1113,7 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(githubRow.getByRole('button', { name: 'Connect GitHub' })).toBeDisabled();
 
     await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-    await settingsDialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await settingsDialog.getByRole('button', { name: 'Back to home', exact: true }).click();
     settingsDialog = await openMemorySettings(page);
     dialog = await openMemoryAddDialog(page, 'Import from apps', settingsDialog);
 
@@ -2196,179 +2195,4 @@ test.describe('Settings Memory and Automations flows', () => {
     await expect(settingsDialog.getByText('No memory yet.')).toBeVisible();
   });
 
-  test('[P1] creates an automation from the main Automations surface and runs it now', async ({ page }) => {
-    await seedSettingsBase(page);
-
-    const projects = [{ id: 'proj-1', name: 'Routine Test Project' }];
-    let routines: Array<Record<string, unknown>> = [];
-
-    await page.route('**/api/projects', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ projects }),
-      });
-    });
-    await page.route('**/api/routines', async (route) => {
-      const method = route.request().method();
-      if (method === 'GET') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ routines }),
-        });
-        return;
-      }
-      if (method === 'POST') {
-        const payload = route.request().postDataJSON() as Record<string, unknown>;
-        const routine = {
-          id: 'routine-1',
-          name: payload.name,
-          prompt: payload.prompt,
-          schedule: payload.schedule,
-          target: payload.target,
-          enabled: true,
-          nextRunAt: Date.now() + 3600_000,
-          lastRun: null,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-        routines = [routine];
-        await route.fulfill({
-          status: 201,
-          contentType: 'application/json',
-          body: JSON.stringify({ routine }),
-        });
-        return;
-      }
-      await route.fulfill({ status: 404, body: '{}' });
-    });
-
-    await page.route('**/api/plugins', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ plugins: [] }),
-      });
-    });
-
-    await page.route('**/api/mcp/servers', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ servers: [], templates: [] }),
-      });
-    });
-
-    await page.route('**/api/routines/routine-1/run', async (route) => {
-      const startedAt = Date.now();
-      const lastRun = {
-        runId: 'run-1',
-        status: 'queued',
-        trigger: 'manual',
-        startedAt,
-        projectId: 'proj-run',
-        conversationId: 'conv-run',
-        agentRunId: 'agent-run-1',
-      };
-      routines = [{ ...routines[0], lastRun }];
-      await route.fulfill({
-        status: 202,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          routine: routines[0],
-          run: lastRun,
-        }),
-      });
-    });
-
-    await gotoEntryHome(page);
-    // #5517's rail dropped the Automations destination; /automations is still
-    // the route the view lives on.
-    await page.goto('/automations', { waitUntil: 'domcontentloaded' });
-    const view = page.getByTestId('tasks-view');
-    await expect(view.getByRole('heading', { name: 'Automations', exact: true })).toBeVisible();
-
-    await view.getByRole('button', { name: 'New automation' }).click();
-    const modal = page.getByTestId('automation-modal');
-    await modal.getByTestId('automation-modal-title').fill('Weekly digest');
-    await modal.getByTestId('automation-modal-prompt').fill('Summarize GitHub and design activity.');
-    await modal.getByRole('button', { name: 'Create' }).click();
-
-    await expect(view.getByText('Weekly digest')).toBeVisible();
-
-    const row = view.locator('.automation-row', { hasText: 'Weekly digest' }).first();
-    await expect(row).toBeVisible();
-    await row.getByRole('button', { name: 'Run' }).click();
-    await expect(row.getByText(/Last run/i)).toBeVisible();
-    await expect(row.getByRole('button', { name: 'Open result' })).toBeVisible();
-  });
-
-  test('[P1] keeps the automation modal open when creating an automation fails', async ({ page }) => {
-    await seedSettingsBase(page);
-
-    const projects = [{ id: 'proj-1', name: 'Routine Test Project' }];
-
-    await page.route('**/api/projects', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ projects }),
-      });
-    });
-
-    await page.route('**/api/routines', async (route) => {
-      const method = route.request().method();
-      if (method === 'GET') {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({ routines: [] }),
-        });
-        return;
-      }
-      if (method === 'POST') {
-        await route.fulfill({
-          status: 500,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: 'provider unavailable' }),
-        });
-        return;
-      }
-      await route.fulfill({ status: 404, body: '{}' });
-    });
-
-    await page.route('**/api/plugins', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ plugins: [] }),
-      });
-    });
-
-    await page.route('**/api/mcp/servers', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ servers: [], templates: [] }),
-      });
-    });
-
-    await gotoEntryHome(page);
-    // #5517's rail dropped the Automations destination; /automations is still
-    // the route the view lives on.
-    await page.goto('/automations', { waitUntil: 'domcontentloaded' });
-    const view = page.getByTestId('tasks-view');
-
-    await view.getByRole('button', { name: 'New automation' }).click();
-    const modal = page.getByTestId('automation-modal');
-    await modal.getByTestId('automation-modal-title').fill('Weekly digest');
-    await modal.getByTestId('automation-modal-prompt').fill('Summarize GitHub and design activity.');
-    await modal.getByRole('button', { name: 'Create' }).click();
-
-    await expect(modal.getByTestId('automation-modal-title')).toHaveValue('Weekly digest');
-    await expect(modal.getByTestId('automation-modal-prompt')).toHaveValue('Summarize GitHub and design activity.');
-    await expect(modal.getByText('provider unavailable')).toBeVisible();
-    await expect(view.getByText('No automations yet')).toBeVisible();
-  });
 });

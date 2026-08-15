@@ -61,7 +61,7 @@ docker compose up -d
 Open in your browser:
 
 ```text
-http://localhost:7456
+http://127.0.0.1:7456
 ```
 
 ### Common Commands

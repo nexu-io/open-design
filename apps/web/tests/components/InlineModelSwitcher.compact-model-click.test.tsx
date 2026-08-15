@@ -21,6 +21,7 @@ import { useRef, useState } from 'react';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mergeAgentModelChoice } from '../../src/App';
+import { DEEPSEEK_V4_FLASH_CAMPAIGN } from '../../src/campaigns/deepseek-v4-flash';
 import { InlineModelSwitcher } from '../../src/components/InlineModelSwitcher';
 import type { AgentInfo, AppConfig } from '../../src/types';
 
@@ -142,7 +143,14 @@ function isOffered(row: HTMLElement): boolean {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
+
+/** Pins the clock inside/outside the real campaign window — the ONLY lever
+ *  left for campaign visibility now that the URL review parameters are gone. */
+function mockNow(at: string): void {
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse(at));
+}
 
 describe('compact home model list — a clicked model reaches the chip', () => {
   it('never offers a model whose click the chip will not honor', () => {
@@ -238,6 +246,66 @@ describe('compact home model list — a clicked model reaches the chip', () => {
 
     expect(chipText()).toContain('deepseek-v4-flash');
     expect(screen.queryByTestId('inline-model-switcher-popover')).toBeNull();
+  });
+
+  it('shows the unlimited badge on both campaign models and keeps it in the selected chip', () => {
+    // Campaign visibility is decided by the real window alone: pin the clock
+    // inside the window instead of the removed ?campaign= review parameters.
+    mockNow(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
+    render(<StatefulSwitcher agents={[amrAgentAllEnabled]} />);
+
+    expect(chipText()).toContain('deepseek-v4-flash');
+    expect(within(screen.getByTestId('inline-model-switcher-chip')).getByText('Unlimited'))
+      .toBeInTheDocument();
+
+    // The campaign covers V4 Pro AND V4 Flash on one shared window, so a badge
+    // on only one of them would contradict every surface that advertises the
+    // pair. Exactly two — no other model may pick the promotion up.
+    const popover = openSwitcher();
+    expect(within(compactRow('deepseek-v4-pro')).getByText('Unlimited'))
+      .toBeInTheDocument();
+    expect(within(compactRow('deepseek-v4-flash')).getByText('Unlimited'))
+      .toBeInTheDocument();
+    expect(within(popover).getAllByText('Unlimited')).toHaveLength(2);
+  });
+
+  it('hides the campaign badge entirely outside the real window', () => {
+    // The half-open window: at endAtExclusive the campaign is over, and no
+    // URL parameter can bring the badge back.
+    mockNow(DEEPSEEK_V4_FLASH_CAMPAIGN.window.endAtExclusive);
+    render(<StatefulSwitcher agents={[amrAgentAllEnabled]} />);
+
+    expect(chipText()).toContain('deepseek-v4-flash');
+    expect(within(screen.getByTestId('inline-model-switcher-chip')).queryByText('Unlimited'))
+      .toBeNull();
+
+    const popover = openSwitcher();
+    expect(within(popover).queryByText('Unlimited')).toBeNull();
+  });
+
+  it('never applies the AMR campaign badge to a BYOK model', () => {
+    // BYOK deliberately retains the last local-agent model in `agentModels` so
+    // switching back to local execution restores it. That dormant AMR choice
+    // must not decorate the visible BYOK model: BYOK usage is charged by the
+    // user's own provider and is outside this hosted-model campaign.
+    mockNow(DEEPSEEK_V4_FLASH_CAMPAIGN.window.startAt);
+    render(
+      <StatefulSwitcher
+        agents={[amrAgentAllEnabled]}
+        initialConfig={{
+          mode: 'api',
+          model: 'grok-4.5',
+          agentId: 'amr',
+          agentModels: {
+            amr: { model: DEEPSEEK_V4_FLASH_CAMPAIGN.modelId },
+          },
+        }}
+      />,
+    );
+
+    const chip = screen.getByTestId('inline-model-switcher-chip');
+    expect(chip).toHaveTextContent('grok-4.5');
+    expect(within(chip).queryByText('Unlimited')).toBeNull();
   });
 
   it('still closes on a click genuinely outside the switcher', () => {
