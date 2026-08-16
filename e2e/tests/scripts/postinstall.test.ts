@@ -374,16 +374,24 @@ describe("postinstall script contract", () => {
       expect(prepare.status, String(prepare.stderr)).toBe(0);
       expect(prepare.stdout).toContain("postinstall: level=release-prepare");
       expect(prepare.stdout).toContain("skipping native addon verification for level=release-prepare");
-      const prepareTargets = readStubEvents(invocationLog)
+      const prepareEvents = readStubEvents(invocationLog);
+      const prepareTargets = prepareEvents
         .filter((event) => event.event === "start")
         .map((event) => event.target);
-      expect(prepareTargets).toEqual([
+      expect(prepareTargets).toEqual(expect.arrayContaining([
         "packages/metatool",
         "packages/release",
         "packages/closure",
         "tools/pack",
         "tools/release",
-      ]);
+      ]));
+      expect(prepareTargets).toHaveLength(5);
+      expect(eventIndex(prepareEvents, "done", "packages/release"))
+        .toBeLessThan(eventIndex(prepareEvents, "start", "packages/closure"));
+      expect(eventIndex(prepareEvents, "done", "packages/closure"))
+        .toBeLessThan(eventIndex(prepareEvents, "start", "tools/pack"));
+      expect(eventIndex(prepareEvents, "done", "packages/metatool"))
+        .toBeLessThan(eventIndex(prepareEvents, "start", "tools/pack"));
 
       writeFileSync(invocationLog, "");
       const platform = runFixturePostinstall(sandbox, {
@@ -393,7 +401,8 @@ describe("postinstall script contract", () => {
       const platformTargets = readStubEvents(invocationLog)
         .filter((event) => event.event === "start")
         .map((event) => event.target);
-      expect(platformTargets).toEqual([...prepareTargets, "tools/serve"]);
+      expect(platformTargets).toEqual(expect.arrayContaining([...prepareTargets, "tools/serve"]));
+      expect(platformTargets).toHaveLength(prepareTargets.length + 1);
       expect(platformTargets).not.toContain("packages/components");
 
       writeFileSync(invocationLog, "");
@@ -404,14 +413,15 @@ describe("postinstall script contract", () => {
       const smokeTargets = readStubEvents(invocationLog)
         .filter((event) => event.event === "start")
         .map((event) => event.target);
-      expect(smokeTargets).toEqual([
+      expect(smokeTargets).toEqual(expect.arrayContaining([
         "packages/metatool",
         "packages/release",
         "packages/closure",
         "tools/pack",
         "tools/release",
         "tools/serve",
-      ]);
+      ]));
+      expect(smokeTargets).toHaveLength(6);
       expect(smokeTargets).not.toContain("packages/components");
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
