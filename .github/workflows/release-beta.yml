@@ -368,7 +368,7 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ needs.metadata.outputs.commit }}
-      - name: Resolve and materialize exact ${{ matrix.target }}
+      - name: Resolve and materialize exact macOS ${{ matrix.target }}
         id: mac_prepare
         if: ${{ matrix.target != 'win_x64' }}
         uses: ./.github/actions/release/platform/mac/exact
@@ -403,7 +403,7 @@ jobs:
           update-metadata-url: ""
           update-target-version: ""
 
-      - name: Smoke and publish exact ${{ matrix.target }}
+      - name: Smoke and publish exact macOS ${{ matrix.target }}
         id: mac_finish
         if: ${{ matrix.target != 'win_x64' }}
         uses: ./.github/actions/release/platform/mac/exact

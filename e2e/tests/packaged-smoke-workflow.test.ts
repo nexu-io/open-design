@@ -1967,8 +1967,8 @@ process.stdin.on("end", () => {
       expect(action).toContain("phase state");
       expect(action).toContain("OD_RELEASE_EXACT_SMOKE_PROOF=");
     }
-    expect(releaseBetaWorkflow).toContain("Resolve and materialize exact ${{ matrix.target }}");
-    expect(releaseBetaWorkflow).toContain("Smoke and publish exact ${{ matrix.target }}");
+    expect(releaseBetaWorkflow).toContain("Resolve and materialize exact macOS ${{ matrix.target }}");
+    expect(releaseBetaWorkflow).toContain("Smoke and publish exact macOS ${{ matrix.target }}");
     expect(releaseBetaWorkflow).toContain("Resolve and materialize exact win_x64");
     expect(releaseBetaWorkflow).toContain("Smoke and publish exact win_x64");
     expect(releaseBetaWorkflow).toContain("phase: prepare");
