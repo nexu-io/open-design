@@ -124,7 +124,13 @@ winDescribe('packaged windows runtime smoke', () => {
         const embeddedConfig = JSON.parse(
           await readFile(join(install.installDir, 'resources', 'open-design-config.json'), 'utf8'),
         ) as Record<string, unknown>;
-        expect(embeddedConfig.updateMetadataUrl).toBe(resolveNativeAcceptanceUpdateMetadataUrl());
+        // The shipped Shell must keep following the channel after this staged
+        // release is activated. Public acceptance injects the immutable
+        // version URL only into this launch; it is not the product's durable
+        // updater feed.
+        expect(embeddedConfig.updateMetadataUrl).toBe(
+          `${process.env.RELEASE_PUBLIC_ORIGIN}/${updateScenario.channel}/latest/metadata.json`,
+        );
         expect(embeddedConfig.updateEnabled).toBeUndefined();
       }
       if (!shellAbsorbsStandaloneAcceptance) await seedConfiguredPackagedClosure();
