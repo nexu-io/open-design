@@ -18,6 +18,7 @@ import type { ClosureDistributionManifest } from "@open-design/closure/protocol"
 import {
   validateStandaloneHandoffDescriptor,
   type StandaloneHandoffDescriptor,
+  type StandalonePreparedResource,
 } from "./protocol/index.js";
 import { VELA_RUNTIME_RESOURCE_ID } from "./tool-env.js";
 import { discardUnreferencedClosureResources } from "./resource-garbage.js";
@@ -26,12 +27,7 @@ export {
   prepareStandaloneVelaRuntime,
 } from "./resource-handoff.js";
 
-export type StandalonePreparedResource = Readonly<{
-  id: string;
-  path: string;
-  reused: boolean;
-  title: string;
-}>;
+export type { StandalonePreparedResource } from "./protocol/index.js";
 
 /** Materialize one manifest-declared resource without joining the boot critical path. */
 export async function ensureStandaloneResource(input: Readonly<{

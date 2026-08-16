@@ -30,6 +30,7 @@ import {
   validateStandaloneRuntimeStatus,
   validateStandaloneShellCapabilityRequest,
   validateStandaloneShellCapabilityResult,
+  STANDALONE_BODY_BRIDGE_SERVICE,
   type StandaloneHandle,
   type StandaloneHandoff,
   type StandaloneHandoffDescriptor,
@@ -37,6 +38,8 @@ import {
   type StandaloneLifecyclePort,
   type StandaloneLifecycleTransition,
   type StandaloneProtocolJsonValue,
+  type StandalonePreparedResource,
+  type StandaloneResourceEnsureRequest,
   type StandaloneRuntimeCommandRequest,
   type StandaloneRuntimeCommandResult,
   type StandaloneRuntimeStatus,
@@ -48,9 +51,7 @@ import {
 } from "./protocol/index.js";
 
 import { createStandaloneLauncherBootstrapEnv } from "./launcher-bootstrap.js";
-import type { StandalonePreparedResource } from "./resource-runtime.js";
-
-export const STANDALONE_BODY_BRIDGE_SERVICE = "standalone-body" as const;
+export { STANDALONE_BODY_BRIDGE_SERVICE } from "./protocol/index.js";
 
 type StandaloneShellBridgeMethods = {
   invoke: SidecarMethod<StandaloneShellCapabilityRequest, StandaloneShellCapabilityResult>;
@@ -64,8 +65,6 @@ type StandaloneBodyAttachInput = Readonly<{
   descriptor: StandaloneHandoffDescriptor;
   shellService: string;
 }>;
-
-export type StandaloneResourceEnsureRequest = Readonly<{ id: string }>;
 
 export type StandaloneBodyBridgeMethods = {
   attach: SidecarMethod<StandaloneBodyAttachInput, StandaloneRuntimeStatus>;
