@@ -19,7 +19,7 @@ beforeAll(() => {
 
 afterEach(cleanup);
 
-const DECK = `<!doctype html><html><head><style>
+const DECK = `<!doctype html><html><head><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter"><style>
   :root { --bg: #fff; }
   .deck-stage { width: 1920px; height: 1080px; }
   .slide:not(.active) { display: none !important; }
@@ -58,6 +58,8 @@ describe('DeckSlideThumbnail', () => {
     expect(root.querySelector('iframe')).toBeNull();
     expect(root.querySelector('script')).toBeNull();
     expect(root.querySelector('.deck-counter')).toBeNull();
+    expect(document.head.querySelector<HTMLLinkElement>('link[data-od-deck-font]')?.referrerPolicy)
+      .toBe('no-referrer');
   });
 
   it('reconstructs the wrapper chain with data-od-thumb-wrap markers', () => {

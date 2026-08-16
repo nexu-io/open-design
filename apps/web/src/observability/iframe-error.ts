@@ -115,6 +115,7 @@ export function reportPreviewIframeMessage(
   const sanitizedSourceUrl = sanitizePreviewUrl(message.source_url);
   const sanitizedStack = sanitizePreviewText(message.stack, 2_000);
   const sanitizedResourceUrl = sanitizePreviewUrl(message.resource_url);
+  const sanitizedBlockedUrl = sanitizePreviewUrl(message.blocked_url);
   const fingerprint = [
     message.event,
     message.name ?? '',
@@ -122,6 +123,7 @@ export function reportPreviewIframeMessage(
     sanitizedSourceUrl ?? '',
     sanitizedStack ?? '',
     sanitizedResourceUrl ?? '',
+    sanitizedBlockedUrl ?? '',
   ].join('|');
   if (seen.has(fingerprint) || seen.size >= PREVIEW_REPORT_LIMIT) return false;
   seen.add(fingerprint);
@@ -153,6 +155,16 @@ export function reportPreviewIframeMessage(
       ...common,
       resource_tag: boundedText(message.resource_tag, 32),
       resource_url: sanitizedResourceUrl,
+    });
+    return true;
+  }
+
+  if (message.event === 'policy_violation') {
+    reportSafetyEvent('client_preview_policy_violation', {
+      ...common,
+      effective_directive: boundedText(message.effective_directive, 120),
+      blocked_url: sanitizedBlockedUrl,
+      disposition: boundedText(message.disposition, 32),
     });
     return true;
   }

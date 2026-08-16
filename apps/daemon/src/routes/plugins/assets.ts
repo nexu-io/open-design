@@ -3,6 +3,10 @@ import type * as BetterSqlite3 from 'better-sqlite3';
 import path from 'node:path';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import {
+  PREVIEW_RESOURCE_PROFILES,
+  buildPreviewResourceCsp,
+} from '@open-design/contracts/runtime/preview-resource-policy';
+import {
   resolveOptionalWorkspaceRequestAuthority,
   type VerifyWorkspaceRequestAuthority,
 } from '../../collab/workspace-resource-mutation.js';
@@ -195,7 +199,10 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
           } catch {}
         }
       }
-      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'");
+      res.setHeader(
+        'Content-Security-Policy',
+        buildPreviewResourceCsp(PREVIEW_RESOURCE_PROFILES.EXTENSION_PREVIEW),
+      );
       res.setHeader('X-Content-Type-Options', 'nosniff');
       const ext = path.extname(contentPath).toLowerCase();
       const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.json' ? 'application/json; charset=utf-8' : ext === '.md' || ext === '.markdown' ? 'text/markdown; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';
@@ -373,7 +380,10 @@ export function registerPluginAssetRoutes(app: Express, deps: RegisterPluginAsse
       }
       let buf;
       try { buf = await fsp.readFile(resolved); } catch { return res.status(404).json({ error: 'asset not found' }); }
-      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data: blob:; media-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'none'; frame-ancestors 'self'");
+      res.setHeader(
+        'Content-Security-Policy',
+        buildPreviewResourceCsp(PREVIEW_RESOURCE_PROFILES.EXTENSION_PREVIEW),
+      );
       res.setHeader('X-Content-Type-Options', 'nosniff');
       const ext = path.extname(resolved).toLowerCase();
       const ct = ext === '.html' ? 'text/html; charset=utf-8' : ext === '.js' ? 'application/javascript; charset=utf-8' : ext === '.css' ? 'text/css; charset=utf-8' : ext === '.json' ? 'application/json; charset=utf-8' : ext === '.md' || ext === '.markdown' ? 'text/markdown; charset=utf-8' : ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream';

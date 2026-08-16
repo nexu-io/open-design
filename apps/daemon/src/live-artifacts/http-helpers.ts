@@ -1,4 +1,8 @@
 import type { Response } from 'express';
+import {
+  PREVIEW_RESOURCE_PROFILES,
+  buildPreviewResourceCsp,
+} from '@open-design/contracts/runtime/preview-resource-policy';
 import { ConnectorServiceError } from '../connectors/service.js';
 import { sendApiError } from '../http/api-errors.js';
 import { LiveArtifactRefreshAbortError } from './refresh.js';
@@ -49,19 +53,7 @@ export function setLiveArtifactPreviewHeaders(res: Response): void {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader(
     'Content-Security-Policy',
-    [
-      "default-src 'none'",
-      "base-uri 'none'",
-      "script-src 'none'",
-      "object-src 'none'",
-      "connect-src 'none'",
-      "form-action 'none'",
-      "frame-ancestors 'self'",
-      "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      "style-src 'unsafe-inline'",
-      'sandbox allow-same-origin',
-    ].join('; '),
+    buildPreviewResourceCsp(PREVIEW_RESOURCE_PROFILES.INERT_LIVE_ARTIFACT),
   );
 }
 

@@ -130,9 +130,12 @@ describe('project preview containment routes', () => {
     expect(previewResponse.headers.get('access-control-allow-origin')).toBe('*');
     expect(previewResponse.headers.get('cache-control')).toBe('no-store');
     expect(previewResponse.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(previewResponse.headers.get('referrer-policy')).toBe('no-referrer');
     const csp = previewResponse.headers.get('content-security-policy') ?? '';
     expect(csp).toContain('sandbox allow-scripts allow-forms');
     expect(csp).toContain("connect-src 'none'");
+    expect(csp).toContain('https://fonts.googleapis.com');
+    expect(csp).toContain('https://fonts.gstatic.com');
     expect(csp).not.toContain('allow-same-origin');
     expect(await previewResponse.text()).toContain('<title>Preview</title>');
 

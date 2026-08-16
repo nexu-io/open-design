@@ -41,6 +41,20 @@ afterEach(() => {
 });
 
 describe('DesignKitView iframe sandboxing', () => {
+  it('loads only approved external font stylesheets without a referrer', () => {
+    const { unmount } = renderHook(() => useBrandFonts(undefined, [
+      { googleFontsUrl: 'https://fonts.bunny.net/css?family=inter:400' },
+      { googleFontsUrl: 'https://fonts.googleapis.com.evil.test/css?family=Inter' },
+    ]));
+
+    const links = Array.from(document.head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'));
+    expect(links.some((link) => link.href.startsWith('https://fonts.bunny.net/'))).toBe(true);
+    expect(links.some((link) => link.href.includes('evil.test'))).toBe(false);
+    expect(links.find((link) => link.href.startsWith('https://fonts.bunny.net/'))?.referrerPolicy)
+      .toBe('no-referrer');
+    unmount();
+  });
+
   it('uses dual authority for the font fetch and query scope for browser font URLs', async () => {
     const context = {
       workspaceId: 'workspace-team',

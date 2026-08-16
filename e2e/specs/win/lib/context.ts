@@ -391,6 +391,7 @@ export type WinInspectResult = {
     channel?: string;
     currentVersion?: string;
     downloadPath?: string;
+    enabled: boolean;
     error?: {
       code: string;
       message: string;

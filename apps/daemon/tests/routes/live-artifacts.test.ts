@@ -692,6 +692,8 @@ describe('live artifact tool routes', () => {
     expect(csp).toContain("default-src 'none'");
     expect(csp).toContain("script-src 'none'");
     expect(csp).toContain("frame-ancestors 'self'");
+    expect(csp).toContain('https://fonts.googleapis.com');
+    expect(csp).toContain('https://fonts.gstatic.com');
     expect(csp).toContain('sandbox allow-same-origin');
     expect(preview.body).toContain('<h1>Preview Route Artifact</h1>');
     expect(preview.body).toContain('<p>Agent</p>');

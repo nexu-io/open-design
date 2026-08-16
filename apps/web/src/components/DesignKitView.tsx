@@ -29,6 +29,7 @@ import { createPortal } from 'react-dom';
 import { Button, Textarea } from '@open-design/components';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 import type { DesignSystemEditClickProps } from '@open-design/contracts/analytics';
+import { isApprovedPreviewFontStylesheetUrl } from '@open-design/contracts/runtime/preview-resource-policy';
 import { useT } from '../i18n';
 import {
   fetchProjectFileText,
@@ -165,7 +166,7 @@ export function useBrandFonts(
   const googleUrls = useMemo(() => {
     const urls = fonts
       .map((f) => f.googleFontsUrl)
-      .filter((u): u is string => Boolean(u && /^https:\/\/fonts\.googleapis\.com\//i.test(u)));
+      .filter((u): u is string => Boolean(u && isApprovedPreviewFontStylesheetUrl(u)));
     return Array.from(new Set(urls));
   }, [fonts]);
 
@@ -174,6 +175,7 @@ export function useBrandFonts(
       const link = document.createElement('link');
       link.rel = 'stylesheet';
       link.href = href;
+      link.referrerPolicy = 'no-referrer';
       document.head.appendChild(link);
       return link;
     });

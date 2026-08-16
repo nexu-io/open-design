@@ -127,6 +127,21 @@ describe("writePackagedConfigFile", () => {
     }
   });
 
+  it("does not persist the local updater override into a release package", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-config-"));
+    try {
+      const filePath = join(root, "config", "open-design-config.json");
+      await writePackagedConfigFile(filePath, makeConfig({
+        debugChannel: "local",
+        namespace: "release-beta-win",
+        releaseVersion: "1.2.3-beta.4",
+      }), "1.2.3-beta.4");
+      expect(JSON.parse(await readFile(filePath, "utf8"))).not.toHaveProperty("updateEnabled");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("omits namespaceBaseRoot for portable builds", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-win-config-"));
     try {

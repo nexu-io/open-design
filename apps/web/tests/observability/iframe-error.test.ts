@@ -84,6 +84,26 @@ describe('preview iframe observability', () => {
     }));
   });
 
+  it('reports CSP violations without leaking query parameters or credentials', () => {
+    reportPreviewIframeMessage({
+      type: PREVIEW_OBSERVABILITY_MESSAGE_TYPE,
+      version: 1,
+      event: 'policy_violation',
+      effective_directive: 'font-src',
+      blocked_url: 'https://user:secret@fonts.example/inter.woff2?token=secret#fragment',
+      disposition: 'enforce',
+    }, { surface: 'artifact_preview', renderMode: 'url_load' });
+
+    expect(reportSafetyEvent).toHaveBeenCalledWith(
+      'client_preview_policy_violation',
+      expect.objectContaining({
+        effective_directive: 'font-src',
+        blocked_url: 'https://fonts.example/inter.woff2',
+        disposition: 'enforce',
+      }),
+    );
+  });
+
   it('deduplicates repeated failures from one preview', () => {
     const seen = new Set<string>();
     const message = {

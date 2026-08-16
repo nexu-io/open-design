@@ -16,6 +16,7 @@ await build({
     "./src/api/research.ts",
     "./src/runtime/deck-stage-fallback.ts",
     "./src/runtime/preview-observability.ts",
+    "./src/runtime/preview-resource-policy.ts",
     "./src/design-systems/components-manifest.ts",
     "./src/design-systems/derived-token-outputs.ts",
     "./src/design-systems/runtime-schema.ts",

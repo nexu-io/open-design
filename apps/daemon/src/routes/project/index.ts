@@ -7,6 +7,10 @@ import {
   buildPreviewObservabilityBridge,
 } from '@open-design/contracts/runtime/preview-observability';
 import {
+  PREVIEW_RESOURCE_PROFILES,
+  buildPreviewResourceCsp,
+} from '@open-design/contracts/runtime/preview-resource-policy';
+import {
   defaultScenarioPluginIdForProjectMetadata,
   type ChatSessionMode,
   type LocalCatalogScope,
@@ -4924,24 +4928,15 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
   const projectPreviewIframeSandbox = 'allow-scripts allow-forms';
   const HTML_PREVIEW_BRIDGE_MAX_BYTES = 2 * 1024 * 1024;
   const HTML_POWERED_PREVIEW_HINT_SCAN_MAX_BYTES = 128 * 1024 * 1024;
-  const projectPreviewCsp = [
-    `sandbox ${projectPreviewIframeSandbox}`,
-    "default-src 'self' data: blob:",
-    "img-src 'self' data: blob:",
-    "media-src 'self' data: blob:",
-    "font-src 'self' data:",
-    "style-src 'self' 'unsafe-inline'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-    "connect-src 'none'",
-    "form-action 'none'",
-    "base-uri 'none'",
-    "object-src 'none'",
-  ].join('; ');
+  const projectPreviewCsp = buildPreviewResourceCsp(
+    PREVIEW_RESOURCE_PROFILES.CONTAINED_PROJECT,
+  );
   const previewScopeRe = /^[A-Za-z0-9_-]{8,128}$/u;
 
   function setProjectPreviewHeaders(res: Response) {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Content-Security-Policy', projectPreviewCsp);
   }
 

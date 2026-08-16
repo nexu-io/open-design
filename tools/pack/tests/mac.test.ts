@@ -256,6 +256,20 @@ describe("renderMacPackagedConfig", () => {
     expect(packagedConfig.updateEnabled).toBe(false);
   });
 
+  it("does not persist the local updater override into a release package", () => {
+    const packagedConfig = JSON.parse(renderMacPackagedConfig({
+      config: makeConfig("/work", {
+        debugChannel: "local",
+        namespace: "release-beta-mac",
+        releaseVersion: "1.2.3-beta.4",
+      }),
+      shellVersion: "1.2.3-beta.4",
+      usePrebundledStandaloneWeb: true,
+    })) as Record<string, unknown>;
+
+    expect(packagedConfig).not.toHaveProperty("updateEnabled");
+  });
+
   it("leaves portable Shell bytes release-independent", () => {
     const packagedConfig = JSON.parse(renderMacPackagedConfig({
       config: makeConfig("/work", {

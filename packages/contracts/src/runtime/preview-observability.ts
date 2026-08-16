@@ -18,6 +18,7 @@ export type PreviewObservabilityEvent =
   | 'unhandled_rejection'
   | 'console_error'
   | 'resource_error'
+  | 'policy_violation'
   | 'white_screen';
 
 export interface PreviewObservabilityMessage {
@@ -32,6 +33,9 @@ export interface PreviewObservabilityMessage {
   column?: number;
   resource_tag?: string;
   resource_url?: string;
+  effective_directive?: string;
+  blocked_url?: string;
+  disposition?: string;
   ready_state?: string;
   visibility_state?: string;
   body_child_count?: number;
@@ -45,6 +49,7 @@ const EVENT_NAMES = new Set<PreviewObservabilityEvent>([
   'unhandled_rejection',
   'console_error',
   'resource_error',
+  'policy_violation',
   'white_screen',
 ]);
 
@@ -55,6 +60,9 @@ type PreviewStringField =
   | 'stack'
   | 'resource_tag'
   | 'resource_url'
+  | 'effective_directive'
+  | 'blocked_url'
+  | 'disposition'
   | 'ready_state'
   | 'visibility_state';
 
@@ -65,6 +73,9 @@ const STRING_FIELD_LIMITS: ReadonlyArray<readonly [PreviewStringField, number]> 
   ['stack', 2_000],
   ['resource_tag', 32],
   ['resource_url', 1_000],
+  ['effective_directive', 120],
+  ['blocked_url', 500],
+  ['disposition', 32],
   ['ready_state', 32],
   ['visibility_state', 32],
 ];
@@ -159,7 +170,7 @@ export function buildPreviewObservabilityBridge(): string {
   function send(event, detail){
     if (sentCount >= MAX_EVENTS) return;
     detail = detail || {};
-    var fingerprint = [event, detail.name || '', detail.message || '', detail.source_url || '', detail.stack || '', detail.resource_url || ''].join('|');
+    var fingerprint = [event, detail.name || '', detail.message || '', detail.source_url || '', detail.stack || '', detail.resource_url || '', detail.effective_directive || '', detail.blocked_url || ''].join('|');
     if (sent[fingerprint]) return;
     sent[fingerprint] = true;
     sentCount += 1;
@@ -187,6 +198,24 @@ export function buildPreviewObservabilityBridge(): string {
   }, true);
   window.addEventListener('unhandledrejection', function(event){
     send('unhandled_rejection', describe(event && event.reason));
+  });
+  function safeUrl(value){
+    var raw = text(String(value || ''), 1000);
+    if (!raw) return undefined;
+    if (/^(?:data|blob):/i.test(raw)) return '[inline-url]';
+    try {
+      var parsed = new URL(raw, window.location.href);
+      return text(parsed.origin + parsed.pathname, 500);
+    } catch (_) {
+      return text(raw.replace(/[?#].*$/, ''), 500);
+    }
+  }
+  window.addEventListener('securitypolicyviolation', function(event){
+    send('policy_violation', {
+      effective_directive: text(event && event.effectiveDirective, 120),
+      blocked_url: safeUrl(event && event.blockedURI),
+      disposition: text(event && event.disposition, 32)
+    });
   });
   if (window.console && typeof window.console.error === 'function') {
     var originalConsoleError = window.console.error;

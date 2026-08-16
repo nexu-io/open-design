@@ -54,6 +54,10 @@
       "types": "./dist/runtime/preview-observability.d.ts",
       "default": "./dist/runtime/preview-observability.mjs"
     },
+    "./runtime/preview-resource-policy": {
+      "types": "./dist/runtime/preview-resource-policy.d.ts",
+      "default": "./dist/runtime/preview-resource-policy.mjs"
+    },
     "./design-systems/components-manifest": {
       "types": "./dist/design-systems/components-manifest.d.ts",
       "default": "./dist/design-systems/components-manifest.mjs"

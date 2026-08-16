@@ -84,6 +84,7 @@ function ensureDeckFonts(parsed: ParsedDeckThumbnails): void {
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = href;
+    link.referrerPolicy = 'no-referrer';
     link.setAttribute('data-od-deck-font', '');
     head.appendChild(link);
   }

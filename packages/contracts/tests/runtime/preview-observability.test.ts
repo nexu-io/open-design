@@ -16,11 +16,29 @@ describe('preview observability contract', () => {
     expect(bridge).toContain("send('unhandled_rejection'");
     expect(bridge).toContain("send('console_error'");
     expect(bridge).toContain("send('resource_error'");
+    expect(bridge).toContain("send('policy_violation'");
     expect(bridge).toContain("send('white_screen'");
     expect(bridge).toContain('stack: text(value.stack, 2000)');
     expect(bridge).toContain('detail.source_url = text(event && event.filename, 1000)');
     expect(bridge).toContain('var MAX_EVENTS = 12');
     expect(bridge).not.toContain('JSON.stringify(arguments)');
+    expect(bridge).toContain("parsed.origin + parsed.pathname");
+  });
+
+  it('accepts bounded CSP policy violation diagnostics', () => {
+    expect(parsePreviewObservabilityMessage({
+      type: PREVIEW_OBSERVABILITY_MESSAGE_TYPE,
+      version: 1,
+      event: 'policy_violation',
+      effective_directive: 'font-src',
+      blocked_url: 'https://fonts.example/inter.woff2',
+      disposition: 'enforce',
+    })).toMatchObject({
+      event: 'policy_violation',
+      effective_directive: 'font-src',
+      blocked_url: 'https://fonts.example/inter.woff2',
+      disposition: 'enforce',
+    });
   });
 
   it('accepts only the versioned preview observability wire shape', () => {

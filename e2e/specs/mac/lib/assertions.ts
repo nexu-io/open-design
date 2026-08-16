@@ -150,6 +150,7 @@ export async function launchMacAppWithLaunchServices(installedAppPath: string): 
     expect(witness.embeddedConfig?.updateMetadataUrl).toBe(
       `${process.env.RELEASE_PUBLIC_ORIGIN}/${updateScenario.channel}/latest/metadata.json`,
     );
+    expect(witness.embeddedConfig?.updateEnabled).toBeUndefined();
   }
   if (releaseChannel === 'local') {
     expect(witness.embeddedConfig?.updateEnabled).toBe(false);

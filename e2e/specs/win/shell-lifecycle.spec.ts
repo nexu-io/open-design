@@ -120,6 +120,13 @@ winDescribe('packaged windows runtime smoke', () => {
       expect(JSON.stringify(install.registryEntries)).toContain(installIdentity.displayName);
       expect(JSON.stringify(install.registryEntries)).toContain(`Open Design-${installIdentity.namespaceToken}`);
       await assertWindowsInviteProtocolRegistration(install.installDir);
+      if (verifyPublicImmutableArtifacts) {
+        const embeddedConfig = JSON.parse(
+          await readFile(join(install.installDir, 'resources', 'open-design-config.json'), 'utf8'),
+        ) as Record<string, unknown>;
+        expect(embeddedConfig.updateMetadataUrl).toBe(resolveNativeAcceptanceUpdateMetadataUrl());
+        expect(embeddedConfig.updateEnabled).toBeUndefined();
+      }
       if (!shellAbsorbsStandaloneAcceptance) await seedConfiguredPackagedClosure();
       expect(install.installPayload.fileCount).toBeGreaterThan(0);
       expect(install.installPayload.totalBytes).toBeGreaterThan(0);
@@ -184,6 +191,7 @@ winDescribe('packaged windows runtime smoke', () => {
           });
         }
         expect(firstRunInspect.status?.state).toBe('running');
+        if (verifyPublicImmutableArtifacts) expect(firstRunInspect.update?.enabled).toBe(true);
         if (!firstRunInspect.desktopIpcUnavailable) {
           const firstRunPhase = await measureSmokeStep(timings, 'ensure first-run app shell', async () =>
             runPackagedAppShellPhase({
