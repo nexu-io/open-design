@@ -1,8 +1,10 @@
 <h1 align="center">Open Design: la alternativa de código abierto a Claude Design</h1>
 
-> ⚡ **Open Design Cloud — el servicio de modelos oficial.** Una sola recarga para usar GPT, Claude, Gemini y DeepSeek dentro de Open Design: más de 20 modelos insignia, cero configuración, facturación por uso real de tokens. [Probar Open Design Cloud](https://open-design.ai/cloud/)
+> ⚡ **[Open Design Cloud — el servicio oficial de modelos.](https://open-design.ai/zh/pricing/)** Una sola recarga permite usar modelos de agentes y de imagen dentro de Open Design: GPT, Claude y DeepSeek para agentes; GPT Image 2.0, Seedream 5.0 Pro y Nano Banana 2.0 para imágenes.
 >
-> 🏅 **El programa Open Design Fellow ya está abierto.** Si tú también crees que el diseño debe ser abierto, conviértete en Open Design Fellow, da forma al producto junto al equipo principal y ayuda a que más personas participen en definir el futuro del diseño. Detalles → [`MAINTAINERS.md`](../../MAINTAINERS.md) y [Discord](https://discord.gg/mHAjSMV6gz).
+> 🚀 **[DeepSeek V4 Flash y V4 Pro ya están disponibles.](https://open-design.ai/zh/pricing/)** Usa inteligencia de primer nivel para prototipos, presentaciones, sistemas de diseño y tareas cotidianas de agentes. Los miembros de Open Design pueden usar ambos modelos sin límites durante dos semanas, directamente en la aplicación.
+>
+> 🧩 **[DeepSeek Harness ya es compatible.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Conecta el Agent Harness oficial `dsh` de DeepSeek como runtime nativo de Open Design, con pensamiento estructurado, llamadas a herramientas, descubrimiento de modelos, cancelación y reanudación de sesiones. Los archivos generados permanecen en el flujo de Open Design para previsualización en vivo y entrega.
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
@@ -40,15 +42,15 @@ También es la **alternativa a Figma para la era de los agentes**: en lugar de e
 
 ## Recorrido por el producto
 
-Un vistazo rápido a qué es Open Design y qué hace. Comienza en **Home**, orquesta flujos de trabajo recurrentes con **Automation**, destila un contrato de marca en **Design System** y amplía con **Plugins** e **integraciones**; dentro del **Studio** de cualquier proyecto, el mismo sistema de diseño produce prototipos, artefactos en vivo, HyperFrames, presentaciones e imágenes.
+Un vistazo rápido al flujo de trabajo principal de Open Design. Comienza en **Home** con un brief, explora skills reutilizables en **Plugins** y convierte referencias de marca en un **Design System**. Después entra en el **Studio** de un proyecto para crear y perfeccionar prototipos, presentaciones, aplicaciones móviles, imágenes, documentos y HyperFrames en un solo lugar.
 
 ### Páginas principales
 
 <table>
 <tr>
 <td valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Página de inicio" /><br/>
-<sub><b>Home</b> — el punto de entrada general. Elige un skill y un sistema de diseño, escribe el brief y pon todo en marcha desde un solo lugar.</sub>
+<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
+<sub><b>Home</b> — Elige un tipo de artefacto, introduce un brief y define el sistema de diseño, el directorio de trabajo y el modelo antes de empezar.</sub>
 </td>
 </tr>
 </table>
@@ -56,53 +58,52 @@ Un vistazo rápido a qué es Open Design y qué hace. Comienza en **Home**, orqu
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Página de automatización" /><br/>
-<sub><b>Automation</b> — orquesta flujos de diseño repetitivos en automatizaciones reutilizables y programables.</sub>
+<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
+<sub><b>Plugins</b> — Explora los skills oficiales por categoría, busca en el catálogo e inicia un flujo de trabajo con <code>Try it</code>.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Página del sistema de diseño" /><br/>
-<sub><b>Design System</b> — destila el <code>DESIGN.md</code> de tu equipo en un contrato de marca que da forma a cada salida.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Página de plugins" /><br/>
-<sub><b>Plugin</b> — explora, instala y distribuye plugins de flujo de trabajo para ampliar la generación bajo demanda.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Página de integraciones" /><br/>
-<sub><b>Integrations</b> — conecta sistemas externos y herramientas MCP, y usa Open Design desde cualquier IDE, script o automatización.</sub>
+<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
+<sub><b>Design System</b> — Extrae y perfecciona el lenguaje visual de una marca, previsualiza el resultado y sigue creando con él en el mismo espacio de trabajo.</sub>
 </td>
 </tr>
 </table>
 
 ### Studio — muchos tipos de artefactos en un proyecto
 
-Dentro del Studio de un proyecto, el mismo sistema de diseño produce múltiples tipos de artefactos:
+En el Studio de un proyecto, la conversación, los archivos generados y la vista previa en vivo permanecen juntos para seis tipos de artefactos:
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="Prototipo" /><br/>
-<sub><b>Prototype</b> — artefactos HTML de una sola página que leen tu sistema de diseño y se renderizan en un iframe en entorno aislado, con vista previa instantánea y descargables como código fuente.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="Prototipo" /><br/>
+<sub><b>Prototipo</b> — Genera o reconstruye experiencias web, revisa la página renderizada e itera con el agente sin salir del lugar.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — movimiento programático y gráficos animados, renderizados a un MP4 real (p. ej. 1920×1080 · 30fps).</sub>
+<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="Presentación" /><br/>
+<sub><b>Presentación</b> — Crea presentaciones de varias diapositivas, revisa miniaturas y notas del presentador y exporta cuando estén listas.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="Presentación" /><br/>
-<sub><b>Deck</b> — presentaciones de pitch que puedes recorrer página a página, navegar con el teclado y exportar a PPTX / PDF.</sub>
+<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="Aplicación móvil" /><br/>
+<sub><b>Aplicación móvil</b> — Genera y perfecciona interfaces móviles en una vista previa de dispositivo, con la conversación, los archivos de salida y los siguientes pasos al lado.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="Imagen" /><br/>
-<sub><b>Image</b> — imágenes y recursos visuales de calidad de marca, con generación y descarga en alta resolución.</sub>
+<img src="../../docs/screenshots/product-tour/studio-image.png" alt="Imagen" /><br/>
+<sub><b>Imagen</b> — Genera recursos visuales desde la conversación del proyecto, previsualiza el resultado a tamaño completo y luego descárgalo o ábrelo.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-document.png" alt="Documento" /><br/>
+<sub><b>Documento</b> — Crea guías de varias páginas y documentos editoriales pulidos, revisa el diseño renderizado y exporta o comparte cuando estén listos.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
+<sub><b>HyperFrame</b> — Crea gráficos animados controlados por código, previsualiza la animación en Studio y exporta el vídeo terminado.</sub>
 </td>
 </tr>
 </table>
-
 ---
 
 ## Compatibilidad de plataformas
@@ -150,16 +151,6 @@ Cuatro categorías principales de producto, todas renderizadas por un agente de 
 La superficie de salida por defecto. Artefactos HTML de una sola página que leen tu `DESIGN.md` y se renderizan en un iframe en entorno aislado.
 
 <table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/01-entry-view.png" alt="Vista de entrada" /><br/>
-<sub><b>Vista de entrada</b> — elige un skill, elige un sistema de diseño, escribe el brief. Una sola superficie para prototipos, dashboards, presentaciones, apps móviles y páginas de revista.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/skills/mobile-onboarding.png" alt="Onboarding móvil" /><br/>
-<sub><b>Prototipo móvil</b> — chrome de iPhone 15 Pro con precisión de píxel, flujos multipantalla. El agente nunca redibuja el marco del teléfono; los marcos de dispositivo compartidos viven en <code>assets/frames/</code>.</sub>
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="../../docs/screenshots/skills/dating-web.png" alt="Prototipo web dating-web" /><br/>

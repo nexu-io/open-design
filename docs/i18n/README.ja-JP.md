@@ -1,8 +1,10 @@
 <h1 align="center">Open Design: オープンソースの Claude Design 代替ツール</h1>
 
-> ⚡ **Open Design Cloud——公式モデルサービス。** 一度のチャージで、Open Design の中で GPT、Claude、Gemini、DeepSeek をそのまま利用可能。20+ のフラッグシップモデル、設定ゼロ、実トークン使用量ベースの課金。[Open Design Cloud を試す](https://open-design.ai/cloud/)
+> ⚡ **[Open Design Cloud——公式モデルサービス。](https://open-design.ai/zh/pricing/)** 一度のチャージで、Open Design 内のエージェントモデルと画像モデルを利用できます。エージェントには GPT、Claude、DeepSeek、画像には GPT Image 2.0、Seedream 5.0 Pro、Nano Banana 2.0 を提供します。
 >
-> 🏅 **Open Design Fellow プログラムの募集を開始しました。** あなたもデザインはオープンであるべきだと信じるなら——Open Design Fellow となり、コアチームとともにプロダクトを形づくり、より多くの人がデザインの未来を定義することに参加できるよう手助けしてください。詳細 → [`MAINTAINERS.md`](../../MAINTAINERS.md) と [Discord](https://discord.gg/mHAjSMV6gz)。
+> 🚀 **[DeepSeek V4 Flash と V4 Pro が利用可能になりました。](https://open-design.ai/zh/pricing/)** プロトタイプ、スライド、デザインシステム、日常的なエージェントタスクに最先端の知能を活用できます。Open Design メンバーは、アプリ内で両モデルを 2 週間無制限に利用できます。
+>
+> 🧩 **[DeepSeek Harness に対応しました。](https://open-design.ai/zh/agents/deepseek-harness-design/)** DeepSeek 公式の `dsh` Agent Harness を Open Design のネイティブランタイムとして接続できます。構造化思考、ツール呼び出し、モデル検出、キャンセル、セッション再開に対応し、生成ファイルはライブプレビューと納品のため Open Design のワークフロー内に保持されます。
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
@@ -40,15 +42,15 @@ Open Design は、そのループをエージェントが読み書きできる *
 
 ## プロダクトツアー
 
-Open Design が何であり、何ができるのかを手早く見ていきましょう。**Home** から始め、**Automation** で繰り返しのワークフローをオーケストレーションし、**Design System** でブランドの契約書を抽出し、**Plugins** と **連携機能**で拡張します。どのプロジェクトの **Studio** 内でも、同じデザインシステムがプロトタイプ、ライブアーティファクト、HyperFrames、スライド、画像をストリーミング出力します。
+Open Design の中核ワークフローを手早く紹介します。**Home** でブリーフを入力し、**Plugins** で再利用可能なスキルを探し、ブランドの参考資料を **Design System** に変換します。その後、プロジェクトの **Studio** でプロトタイプ、スライド、モバイルアプリ、画像、ドキュメント、HyperFrame を一か所で作成・改善できます。
 
 ### コアページ
 
 <table>
 <tr>
 <td valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Home page" /><br/>
-<sub><b>Home</b> — 概観のエントリーポイント。スキルとデザインシステムを選び、ブリーフを入力して、すべてを一か所から始められます。</sub>
+<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
+<sub><b>Home</b> — アーティファクトの種類を選び、ブリーフを入力し、開始前にデザインシステム、作業ディレクトリ、モデルを設定します。</sub>
 </td>
 </tr>
 </table>
@@ -56,53 +58,52 @@ Open Design が何であり、何ができるのかを手早く見ていきま�
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Automation page" /><br/>
-<sub><b>Automation</b> — 繰り返しのデザインワークフローを、再利用可能でスケジュール可能な自動化へとオーケストレーションします。</sub>
+<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
+<sub><b>Plugins</b> — 公式スキルをカテゴリ別に閲覧し、カタログを検索して <code>Try it</code> からワークフローを開始します。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Design System page" /><br/>
-<sub><b>Design System</b> — チームの <code>DESIGN.md</code> を、すべての出力を形づくるブランドの契約書へと抽出します。</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Plugin page" /><br/>
-<sub><b>Plugin</b> — ワークフロープラグインを閲覧・インストール・配布し、必要に応じて生成を拡張します。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrations</b> — 外部システムや MCP ツールを接続し、任意の IDE・スクリプト・自動化から Open Design を利用できます。</sub>
+<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
+<sub><b>Design System</b> — ブランドのビジュアル言語を抽出・調整し、結果をプレビューして、同じワークスペースでそのまま制作を続けます。</sub>
 </td>
 </tr>
 </table>
 
-### Studio — 1 つのプロジェクトで多様なアーティファクトタイプを
+### Studio — 1 つのプロジェクトで多様なアーティファクトを
 
-プロジェクトの Studio 内では、同じデザインシステムが複数のアーティファクトタイプをストリーミング出力します。
+プロジェクトの Studio では、会話、生成ファイル、ライブプレビューが 6 種類のアーティファクトを通じて一か所にまとまります。
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="Prototype" /><br/>
-<sub><b>Prototype</b> — あなたのデザインシステムを読み取り、サンドボックス化された iframe にレンダリングされる単一ページの HTML アーティファクト。即座にプレビューでき、ソースとしてダウンロード可能です。</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="プロトタイプ" /><br/>
+<sub><b>プロトタイプ</b> — Web 体験を生成または再構築し、レンダリングされたページを確認しながら、その場でエージェントと反復します。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — プログラムによるモーションとアニメーショングラフィックスを、本物の MP4 にレンダリングします（例: 1920×1080 · 30fps）。</sub>
+<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="スライド" /><br/>
+<sub><b>スライド</b> — 複数スライドのプレゼンテーションを作成し、サムネイルとスピーカーノートを確認して、完成したらエクスポートします。</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="Deck" /><br/>
-<sub><b>Deck</b> — ページ送りでき、キーボードで操作でき、PPTX / PDF にエクスポートできるピッチデック。</sub>
+<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="モバイルアプリ" /><br/>
+<sub><b>モバイルアプリ</b> — デバイスプレビューでモバイル UI を生成・調整し、会話、出力ファイル、次の操作を横に表示したまま進めます。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="Image" /><br/>
-<sub><b>Image</b> — 高解像度の生成とダウンロードに対応した、ブランドグレードの画像とビジュアルアセット。</sub>
+<img src="../../docs/screenshots/product-tour/studio-image.png" alt="画像" /><br/>
+<sub><b>画像</b> — プロジェクトの会話からビジュアル素材を生成し、結果をフルサイズで確認してからダウンロードまたは開きます。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-document.png" alt="ドキュメント" /><br/>
+<sub><b>ドキュメント</b> — 洗練された複数ページのガイドや編集ドキュメントを作成し、レイアウトを確認して、完成したらエクスポートまたは共有します。</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
+<sub><b>HyperFrame</b> — コード駆動のモーショングラフィックスを作成し、Studio 内でアニメーションをプレビューして、完成した動画をエクスポートします。</sub>
 </td>
 </tr>
 </table>
-
 ---
 
 ## プラットフォーム互換性
@@ -150,16 +151,6 @@ Runtime 定義は [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 デフォルトの出力サーフェス。あなたの `DESIGN.md` を読み取り、サンドボックス化された iframe にレンダリングされる単一ページの HTML アーティファクトです。
 
 <table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
-<sub><b>エントリービュー</b> — スキルを選び、デザインシステムを選び、ブリーフを入力します。プロトタイプ、ダッシュボード、スライド、モバイルアプリ、雑誌風ページのための単一のサーフェスです。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
-<sub><b>モバイルプロトタイプ</b> — ピクセル精度の iPhone 15 Pro のクロームと、マルチスクリーンのフロー。エージェントは決して電話のフレームを描き直しません。共有されるデバイスフレームは <code>assets/frames/</code> にあります。</sub>
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="../../docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>
