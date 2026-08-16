@@ -320,6 +320,36 @@ describe("startPackedWinApp", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it("waits for a stamped payload child when the installed outer delegates and exits", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-win-lifecycle-"));
+    const config = createConfig(root);
+
+    try {
+      await writeFakeUnpackedExe(config);
+      requestJsonIpc.mockReset();
+      requestJsonIpc
+        .mockRejectedValueOnce(new Error("handoff pending"))
+        .mockResolvedValue({ state: "running", url: "od://app/" });
+      isProcessAlive.mockReset();
+      isProcessAlive.mockReturnValue(false);
+      listProcessSnapshots.mockResolvedValue([{ command: "payload", pid: 54321, ppid: 1 }]);
+      matchesStampedProcess.mockReturnValue(true);
+
+      const result = await startPackedWinApp(config);
+
+      expect(result.status).toEqual({ state: "running", url: "od://app/" });
+      expect(result.processExitedBeforeStatus).toBe(false);
+      expect(result.statusPollCount).toBe(2);
+    } finally {
+      requestJsonIpc.mockReset();
+      isProcessAlive.mockReset();
+      isProcessAlive.mockReturnValue(true);
+      listProcessSnapshots.mockResolvedValue([]);
+      matchesStampedProcess.mockReturnValue(false);
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("inspectPackedWinApp", () => {
