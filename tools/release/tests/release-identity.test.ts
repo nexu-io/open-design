@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import { readIdentityRegistry, resolveIdentityDeclaration } from "../src/identity/declaration/registry.js";
-import { resolveReleaseIdentity } from "../src/identity/resolution/resolve.js";
+import { resolveReleaseIdentity, resolveReleaseWorkspaceRoot } from "../src/identity/resolution/resolve.js";
 
 const workspaceRoot = new URL("../../..", import.meta.url).pathname;
+
+it("anchors runtime release identity to cwd rather than the bundled module location", () => {
+  expect(resolveReleaseWorkspaceRoot()).toBe(workspaceRoot.replace(/\/$/u, ""));
+  expect(resolveReleaseWorkspaceRoot(".")).toBe(process.cwd());
+});
 const sourcePath = (...segments: string[]): string => segments.join("/");
 
 describe("release identity registry", () => {

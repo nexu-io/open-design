@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   parseReleaseVersion,
@@ -11,7 +10,7 @@ import {
   type ReleaseTarget,
 } from "@open-design/release";
 
-import { resolveReleaseIdentity } from "../identity/resolution/resolve.ts";
+import { resolveReleaseIdentity, resolveReleaseWorkspaceRoot } from "../identity/resolution/resolve.ts";
 import { contentType, githubInfo, normalizePublicUrl, optional, publicUrl, required, storageConfigFromEnv, writeJson } from "./common.ts";
 import { getStorageObject, putStorageObjectWithStatus, type StorageConfig } from "./s3-upload.ts";
 
@@ -311,7 +310,7 @@ export function validateShellBuildRecord(
 
 export async function resolveShellReleaseDigest(
   plan: Pick<ShellBuildPlan, "profile" | "target">,
-  workspaceRoot = fileURLToPath(new URL("../../../..", import.meta.url)),
+  workspaceRoot = resolveReleaseWorkspaceRoot(),
 ): Promise<Digest> {
   return (await resolveReleaseIdentity({
     id: `shell.build.${plan.target}`,

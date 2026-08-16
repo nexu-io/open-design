@@ -1,9 +1,25 @@
+import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, join, parse, resolve } from "node:path";
 
 import { resolveContentIdentity, type ContentIdentityResult } from "@open-design/metatool";
 
 import { readIdentityRegistry, resolveIdentityDeclaration } from "../declaration/registry.ts";
+
+export function resolveReleaseWorkspaceRoot(root?: string): string {
+  if (root != null) return resolve(root);
+  let candidate = resolve(process.cwd());
+  while (true) {
+    if (
+      existsSync(join(candidate, "pnpm-workspace.yaml"))
+      && existsSync(join(candidate, "tools", "release", "resources", "identities.json"))
+    ) return candidate;
+    const parent = dirname(candidate);
+    if (parent === candidate || candidate === parse(candidate).root) break;
+    candidate = parent;
+  }
+  throw new Error(`unable to discover release workspace root from ${process.cwd()}`);
+}
 
 export async function resolveReleaseIdentity(options: Readonly<{
   id: string;
@@ -33,7 +49,7 @@ export async function resolveReleaseIdentityCli(options: Readonly<{
   parameters?: string;
   root?: string;
 }>): Promise<void> {
-  const workspaceRoot = resolve(options.root ?? process.cwd());
+  const workspaceRoot = resolveReleaseWorkspaceRoot(options.root);
   if (options.parameters != null && options.parameter != null) {
     throw new Error("identity resolve accepts either --parameters or --parameter, not both");
   }
@@ -77,7 +93,7 @@ export async function printReleaseIdentityDigest(options: Readonly<{
   const result = await resolveReleaseIdentity({
     id: options.id,
     parameters,
-    workspaceRoot: resolve(options.root ?? process.cwd()),
+    workspaceRoot: resolveReleaseWorkspaceRoot(options.root),
   });
   process.stdout.write(`${result.digest}\n`);
 }
