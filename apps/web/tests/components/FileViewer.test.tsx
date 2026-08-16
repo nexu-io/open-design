@@ -6810,6 +6810,7 @@ describe('FileViewer SVG artifacts', () => {
     });
     const configRequest: { body?: Record<string, unknown> } = {};
     const deployRequests: Array<Record<string, unknown>> = [];
+    const workspaceContext = teamWorkspaceContext();
     const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
       const method = init?.method || (input instanceof Request ? input.method : 'GET');
@@ -6864,10 +6865,11 @@ describe('FileViewer SVG artifacts', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(
+    renderWithProjectWorkspace(
       <FileViewer projectId="project-1" projectKind="prototype" file={file}
         liveHtml="<html><body><h1>Hello</h1></body></html>"
       />,
+      workspaceContext,
     );
 
     fireEvent.click(screen.getByRole('button', { name: /share/i }));
@@ -6897,6 +6899,16 @@ describe('FileViewer SVG artifacts', () => {
     expect((deployRequests[0]?.displayDev as Record<string, unknown>).sharedWith).toBeUndefined();
     expect((await screen.findAllByText('https://app.display.dev/owned-demo')).length).toBeGreaterThan(0);
     expect(screen.queryByText('Claim URL')).toBeNull();
+    const deploymentCalls = fetchMock.mock.calls.filter(([input]) => {
+      const url = typeof input === 'string' ? input : input instanceof Request ? input.url : String(input);
+      return url === '/api/projects/project-1/deployments';
+    });
+    expect(deploymentCalls.length).toBeGreaterThan(0);
+    for (const [, init] of deploymentCalls) {
+      const headers = new Headers(init?.headers);
+      expect(headers.get('x-od-workspace-id')).toBe(workspaceContext.workspaceId);
+      expect(headers.get('x-od-workspace-member-id')).toBe(workspaceContext.workspaceMemberId);
+    }
   });
 
   it('does not store a display.dev deploy response with incomplete authenticated metadata', async () => {

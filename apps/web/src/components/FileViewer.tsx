@@ -14398,7 +14398,7 @@ function HtmlViewer({
         (hadDisplayDevLoadWarning || (deployToken.trim() && deployToken.trim() !== deployConfig?.tokenMask));
       if (shouldReloadDisplayDevDeployments) {
         try {
-          const items = await fetchProjectDeployments(projectId);
+          const items = await fetchProjectDeployments(projectId, workspaceContext);
           const displayDevMissingAccessSettings = displayDevDeploymentMissingAccessSettingsForCurrentFile(items);
           const nextDeploymentsByProvider = deploymentMapForCurrentFile(items);
           const current = nextDeploymentsByProvider[DISPLAYDEV_PROVIDER_ID] ?? null;
