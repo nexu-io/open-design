@@ -568,7 +568,6 @@ winDescribe('packaged windows runtime smoke', () => {
           updaterRecovery = await measureSmokeStep(timings, 'same-version reinstall and clear-cache recovery', async () =>
             runSameVersionUpdaterRecoveryAcceptance({
               expectedInstalledVersion: updateScenario.expectedInstalledShellVersion,
-              expectedStandaloneVersion,
               fixture: recoveryFixture,
               installDir: install.installDir,
               persistedProjectId,

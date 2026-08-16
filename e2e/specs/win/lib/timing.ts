@@ -90,7 +90,6 @@ export type UpdaterRecoverySummary = {
 
 export async function runSameVersionUpdaterRecoveryAcceptance(options: {
   expectedInstalledVersion: string;
-  expectedStandaloneVersion: string;
   fixture: ToolsServeUpdaterFixture;
   installDir: string;
   persistedProjectId: string | null;
@@ -103,7 +102,7 @@ export async function runSameVersionUpdaterRecoveryAcceptance(options: {
   expect(start.source).toBe('installed');
   const running = await waitForHealthyDesktopShellVersion(
     options.targetVersion,
-    options.expectedStandaloneVersion,
+    options.targetVersion,
     null,
   );
 
@@ -135,7 +134,7 @@ export async function runSameVersionUpdaterRecoveryAcceptance(options: {
 
   const installer = await runInstallerFallbackAcceptance({
     expectedCurrentVersion: options.targetVersion,
-    expectedStandaloneVersion: options.expectedStandaloneVersion,
+    expectedStandaloneVersion: options.targetVersion,
     expectedVersion: options.targetVersion,
     fixture: options.fixture,
     installDir: options.installDir,
