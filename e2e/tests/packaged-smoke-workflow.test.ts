@@ -3521,7 +3521,7 @@ process.stdin.on("end", () => {
 function expectWindowsUpdaterSmokeContract(workflow: string, channel: "beta" | "preview" | "prerelease" | "stable"): void {
   if (channel === "beta") {
     expect(workflow).not.toContain("win_x64_smoke_mode:");
-    expect(workflow).toContain("smoke-mode: core");
+    expect(workflow).toContain("smoke-mode: full");
   } else {
     expect(workflow).toContain("win_x64_smoke_mode:");
     expect(workflow).toContain("win_x64_update_metadata_url:");

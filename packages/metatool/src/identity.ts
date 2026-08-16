@@ -30,11 +30,14 @@ export type ContentIdentityEntry = Readonly<{
 export type ContentIdentityResult = Readonly<{
   digest: `sha256:${string}`;
   entries: readonly ContentIdentityEntry[];
+  formatVersion: 1;
   id: string;
   parameters: Readonly<Record<string, unknown>>;
   schemaVersion: number;
   sources: readonly ContentIdentitySource[];
 }>;
+
+export const CONTENT_IDENTITY_FORMAT_VERSION = 1 as const;
 
 function sha256(value: string | Uint8Array): `sha256:${string}` {
   return `sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -104,13 +107,12 @@ async function inspectSource(root: string, source: ContentIdentitySource): Promi
     const sourceRelative = normalizePath(relative(sourcePath, relativePath));
     if (sourceRelative !== "" && isExcluded(sourceRelative, source)) return;
     const metadata = await lstat(absolutePath);
-    const mode = metadata.mode & 0o777;
     if (metadata.isSymbolicLink()) {
-      entries.push({ kind: "symlink", mode, path: relativePath, target: normalizePath(await readlink(absolutePath)) });
+      entries.push({ kind: "symlink", mode: 0o777, path: relativePath, target: normalizePath(await readlink(absolutePath)) });
       return;
     }
     if (metadata.isDirectory()) {
-      entries.push({ kind: "directory", mode, path: relativePath });
+      entries.push({ kind: "directory", mode: 0o755, path: relativePath });
       const children = (await readdir(absolutePath, { withFileTypes: true }))
         .sort((left, right) => left.name.localeCompare(right.name));
       const excludedNames = new Set(source.excludeDirectoryNames ?? []);
@@ -122,6 +124,7 @@ async function inspectSource(root: string, source: ContentIdentitySource): Promi
     }
     if (!metadata.isFile()) throw new Error(`unsupported identity input kind: ${relativePath}`);
     const body = await normalizedFileBody(absolutePath, source);
+    const mode = (metadata.mode & 0o111) === 0 ? 0o644 : 0o755;
     entries.push({ digest: sha256(body), kind: "file", mode, path: relativePath, size: body.byteLength });
   }
 
@@ -144,10 +147,19 @@ export async function resolveContentIdentity(input: ContentIdentityInput): Promi
   const parameters = canonicalize(input.parameters ?? {}) as Readonly<Record<string, unknown>>;
   const digest = sha256(canonicalJson({
     entries,
+    formatVersion: CONTENT_IDENTITY_FORMAT_VERSION,
     id: input.id,
     parameters,
     schemaVersion: input.schemaVersion,
     sources,
   }));
-  return Object.freeze({ digest, entries: Object.freeze(entries), id: input.id, parameters, schemaVersion: input.schemaVersion, sources });
+  return Object.freeze({
+    digest,
+    entries: Object.freeze(entries),
+    formatVersion: CONTENT_IDENTITY_FORMAT_VERSION,
+    id: input.id,
+    parameters,
+    schemaVersion: input.schemaVersion,
+    sources,
+  });
 }

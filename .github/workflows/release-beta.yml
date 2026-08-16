@@ -357,7 +357,7 @@ jobs:
           shell-version: ${{ needs.metadata.outputs.shell_version }}
           sign-mode: notarized
           smoke-lanes-on-miss: ${{ matrix.target == 'mac_x64' && 'shell,standalone' || '' }}
-          smoke-mode: core
+          smoke-mode: full
           target: ${{ matrix.target }}
           update-metadata-url: ""
           update-target-version: ""
@@ -375,7 +375,7 @@ jobs:
           publish: ${{ inputs.publish }}
           release-public-origin: ${{ inputs.release_public_origin }}
           sign-mode: unsigned
-          smoke-mode: core
+          smoke-mode: full
           build-target: all
           update-metadata-url: ""
           update-target-version: ""

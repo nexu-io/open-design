@@ -40,6 +40,8 @@ describe("canonical content identity", () => {
     expect((await resolveContentIdentity(input)).digest).not.toBe(initial.digest);
     await writeFile(join(root, "src", "entry.ts"), "export const value = 1;\n");
 
+    await chmod(join(root, "src", "entry.ts"), 0o600);
+    expect((await resolveContentIdentity(input)).digest).toBe(initial.digest);
     await chmod(join(root, "src", "entry.ts"), 0o755);
     expect((await resolveContentIdentity(input)).digest).not.toBe(initial.digest);
     await chmod(join(root, "src", "entry.ts"), 0o644);
