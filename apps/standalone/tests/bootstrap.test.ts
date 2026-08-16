@@ -28,7 +28,7 @@ import { resolveStandaloneBootstrap } from "../src/bootstrap.js";
 import { discardUnreferencedClosureResources } from "../src/resource-garbage.js";
 import { prepareStandaloneResourceEnv } from "../src/resource-runtime.js";
 import { STANDALONE_RESOURCE_ROOTS_ENV } from "../src/tool-env.js";
-import { prepareStandaloneUpdate } from "../src/update-runtime.js";
+import { hasModernClosureUpdateMetadata, prepareStandaloneUpdate } from "../src/update-runtime.js";
 
 const roots: string[] = [];
 
@@ -237,6 +237,30 @@ async function consumeTransition(
 }
 
 describe("Standalone unresolved bootstrap", () => {
+  it("classifies legacy update metadata without consuming legacy fields", async () => {
+    const legacyMetadata = Object.defineProperty({}, "control", {
+      enumerable: true,
+      get: () => {
+        throw new Error("Standalone consumed a legacy control field");
+      },
+    });
+    const input = {
+      channel: "beta",
+      metadata: legacyMetadata,
+      namespace: "release-beta",
+      repositoryConfigPath: "/unused/repository.json",
+      shellType: "electron",
+      shellVersion: "0.19.4-beta.1",
+      storeRoot: "/unused/store",
+      target: "darwin-arm64",
+    } as const;
+
+    expect(hasModernClosureUpdateMetadata(legacyMetadata)).toBe(false);
+    await expect(prepareStandaloneUpdate(input)).resolves.toEqual({ architecture: "legacy" });
+    await expect(prepareStandaloneUpdate({ ...input, metadata: { closure: null } }))
+      .rejects.toThrow();
+  });
+
   it("discovers mutable latest only for an empty Store and revalidates immutable metadata", async () => {
     const value = await fixture();
     const resolution = await resolveStandaloneBootstrap(request(

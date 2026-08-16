@@ -102,16 +102,17 @@ export async function commitPackagedStandaloneDistributionFixture(input: {
         repository: { localSeeds: [{ root: seedRoot }], remoteOrigins: [], schemaVersion: 1 },
       });
     }
-    const firstResource = manifest.resources[0];
-    const ensuredResource = firstResource == null
-      ? null
-      : await ensureClosureResource({
-          id: firstResource.id,
-          manifest,
-          paths,
-          repository: { localSeeds: [{ root: seedRoot }], remoteOrigins: [], schemaVersion: 1 },
-          target: input.target,
-        });
+    let ensuredResource: PackagedStandaloneDistributionFixture['ensuredResource'] = null;
+    for (const resource of manifest.resources.filter((entry) => entry.startup === 'blocking')) {
+      const ensured = await ensureClosureResource({
+        id: resource.id,
+        manifest,
+        paths,
+        repository: { localSeeds: [{ root: seedRoot }], remoteOrigins: [], schemaVersion: 1 },
+        target: input.target,
+      });
+      ensuredResource ??= ensured;
+    }
     return { ensuredResource, manifest, pointer, releaseVersion: input.releaseVersion, storePaths: paths };
   } finally {
     await rm(seedRoot, { force: true, recursive: true });

@@ -228,6 +228,7 @@ describe("updater fixture server", () => {
         channel: "beta",
         closureBlobDir: blobsRoot,
         closureDistributionManifestPath: manifestPath,
+        closureShellVersionMin: version,
         platform: "mac",
         version,
       });
@@ -243,6 +244,7 @@ describe("updater fixture server", () => {
           expect(metadata.releaseState).toBe("complete");
           expect(metadata.closure?.identity.version).toBe(version);
           expect(metadata.closure?.identity.digest).not.toBe(manifest.identity.digest);
+          expect(metadata.closure?.compatibility.shell.electron?.version.min).toBe(version);
           expect(metadata.closure?.blobs[artifacts.body.digest]?.url).toBe(
             `${server.info.origin}/beta/blobs/${artifacts.body.digest.slice("sha256:".length)}`,
           );

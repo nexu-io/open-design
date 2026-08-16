@@ -25,7 +25,7 @@ import {
   acquireStandalone,
   type StandaloneRuntimeHandle,
 } from "./runtime/index.js";
-import { prepareStandaloneUpdate } from "./update-runtime.js";
+import { hasModernClosureUpdateMetadata, prepareStandaloneUpdate } from "./update-runtime.js";
 
 type SidecarStatus = Readonly<{
   pid: number;
@@ -286,7 +286,27 @@ export async function startSidecarStandalone(
         handoff: request.handoff,
       });
       if (command.command === OPEN_DESIGN_PREPARE_UPDATE_COMMAND) {
-        if (request.closure == null || command.input == null || typeof command.input !== "object" || Array.isArray(command.input)) {
+        if (command.input == null || typeof command.input !== "object" || Array.isArray(command.input)) {
+          return {
+            attachmentId: command.attachmentId,
+            error: { code: "standalone-update-unavailable" },
+            handoff: request.handoff,
+            outcome: "failed",
+            requestId: command.requestId,
+            schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+          };
+        }
+        if (!hasModernClosureUpdateMetadata(command.input.metadata)) {
+          return {
+            attachmentId: command.attachmentId,
+            handoff: request.handoff,
+            outcome: "completed",
+            output: { architecture: "legacy" },
+            requestId: command.requestId,
+            schemaVersion: STANDALONE_HANDOFF_SCHEMA_VERSION,
+          };
+        }
+        if (request.closure == null) {
           return {
             attachmentId: command.attachmentId,
             error: { code: "standalone-update-unavailable" },

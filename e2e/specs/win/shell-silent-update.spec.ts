@@ -46,6 +46,7 @@ winDescribe("packaged windows silent update", () => {
         artifactPath: localUpdate.installerPath,
         channel: updateScenario.channel,
         ...packagedUpdaterClosureFixtureOptions(),
+        closureShellVersionMin: targetVersion,
         payloadPath: localUpdate.payloadPath,
         platform: 'win',
         version: targetVersion,
@@ -93,8 +94,8 @@ winDescribe("packaged windows silent update", () => {
       expect(silent.launcher.lastSuccessful?.version).toBe(targetVersion);
       expect(silent.launcher.attempt).toBeNull();
 
-      const terminal = await waitForTerminalUpdateState(targetVersion);
-      expect(terminal.update?.currentVersion).toBe(targetVersion);
+      const terminal = await waitForTerminalUpdateState(updateScenario.expectedCurrentVersion);
+      expect(terminal.update?.currentVersion).toBe(updateScenario.expectedCurrentVersion);
     } finally {
       restoreUpdateEnv(updateEnv);
       await payloadFixtureLocal?.close().catch((error: unknown) => {

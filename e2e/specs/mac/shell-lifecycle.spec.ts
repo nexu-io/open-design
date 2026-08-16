@@ -113,6 +113,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           payloadFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
             ...packagedUpdaterClosureFixtureOptions(),
+            closureShellVersionMin: localPayload.targetVersion,
             ...(closureBuild == null ? {} : { closureManifestPath: closureBuild.manifestPath }),
             payloadPath: localPayload.payloadPath,
             platform: packagedMacUpdaterPlatform,
@@ -359,7 +360,9 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           'post-relaunch lastSuccessful',
         );
         const terminalUpdate = await waitForUpdaterStatus(
-          (status) => status.update?.state === 'not-available' && status.update.currentVersion === updaterVersion,
+          (status) =>
+            status.update?.state === 'not-available' &&
+            status.update.currentVersion === updateScenario.expectedCurrentVersion,
           'post-relaunch updater terminal state',
         );
         if (terminalUpdate.update == null) throw new Error('mac terminal update status is missing');
@@ -392,14 +395,14 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
         expect(coldStart.appPath).toBe(install.installedAppPath);
         const coldInspect = await waitForHealthyDesktopShellVersion(
           updaterVersion,
-          updateScenario.expectedCurrentVersion,
+          updaterVersion,
           identity.pid,
         );
         const coldHealth = assertHealthEvalValue(coldInspect.eval?.value);
         await capturePackagedCheckpoint(report, 'shell-payload-cold-start', coldInspect);
         expect(coldHealth.status).toBe(200);
         expect(coldHealth.health.ok).toBe(true);
-        expect(coldHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
+        expect(coldHealth.health.version).toBe(updaterVersion);
         const coldGeneration = settledLauncherGeneration(coldInspect.launcher, updaterVersion);
         if (coldGeneration == null) throw new Error('cold-start launcher did not settle on the target version');
         expect(coldGeneration).toBeGreaterThanOrEqual(confirmedGeneration);
@@ -417,8 +420,8 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           coldIdentity,
           coldInspect.launcher,
           updaterVersion,
-          updateScenario.expectedCurrentVersion,
-          updateScenario.expectedCurrentVersion,
+          updaterVersion,
+          updaterVersion,
         );
         expect(coldIdentity.pid).not.toBe(identity.pid);
         const coldPptxInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', persistedPptxExpression]);
@@ -450,7 +453,6 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           payloadFixture = null;
           recoveryFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
-            ...packagedUpdaterClosureFixtureOptions(),
             controlInstallationVersionMin: updaterVersion,
             controlInstallationVersionUrl: 'https://example.test/updater-recovery',
             payloadPath: recoveryPayloadPath,
@@ -468,7 +470,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           expect(recoveryStart.source).toBe('installed');
           await waitForHealthyDesktopShellVersion(
             updaterVersion,
-            updateScenario.expectedCurrentVersion,
+            updaterVersion,
             coldIdentity.pid,
           );
 

@@ -45,6 +45,7 @@ export type UpdaterFixtureOptions = {
   closureBlobDir?: string;
   closureDistributionManifestPath?: string;
   closureManifestPath?: string;
+  closureShellVersionMin?: string;
   controlInstallationVersionMin?: string;
   controlInstallationVersionUrl?: string;
   host?: string;
@@ -132,13 +133,20 @@ function rebaseClosureDistributionManifest(
   manifest: ClosureDistributionManifest,
   origin: string,
   version: string,
+  shellVersionMin?: string,
 ): ClosureDistributionManifest {
+  const shell = shellVersionMin == null
+    ? manifest.compatibility.shell
+    : Object.fromEntries(Object.entries(manifest.compatibility.shell).map(([type, compatibility]) => [type, {
+        ...compatibility,
+        version: { ...compatibility.version, min: shellVersionMin },
+      }]));
   return createClosureDistributionManifest({
     blobs: Object.fromEntries(Object.entries(manifest.blobs).map(([digest, artifact]) => [digest, {
       ...artifact,
       url: `${origin}/${manifest.identity.channel}/blobs/${digest.slice("sha256:".length)}`,
     }])),
-    compatibility: manifest.compatibility,
+    compatibility: { shell },
     identity: {
       channel: manifest.identity.channel,
       protocolVersion: manifest.identity.protocolVersion,
@@ -580,7 +588,12 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     closureDistribution != null
     && (options.closureDistributionManifestPath != null || options.rebaseClosureUrl === true)
   ) {
-    closureDistribution = rebaseClosureDistributionManifest(closureDistribution, origin, version);
+    closureDistribution = rebaseClosureDistributionManifest(
+      closureDistribution,
+      origin,
+      version,
+      options.closureShellVersionMin,
+    );
   }
   if (closureManifest != null && options.rebaseClosureUrl === true) {
     const closureArchiveUrl = `${origin}/${channel}/closure/${closureManifest.identity.platform}/versions/${closureManifest.identity.version}/closure.zip`;

@@ -29,6 +29,7 @@ export async function startToolsServeUpdaterFixture(options: {
   closureBlobRoots?: readonly string[];
   closureDistributionManifestPath?: string;
   closureManifestPath?: string;
+  closureShellVersionMin?: string;
   controlInstallationVersionMin?: string;
   controlInstallationVersionUrl?: string;
   payloadPath?: string;
@@ -61,6 +62,9 @@ export async function startToolsServeUpdaterFixture(options: {
     pnpmArgs.push('--closure-distribution-manifest-path', options.closureDistributionManifestPath);
   }
   if (options.closureManifestPath != null) pnpmArgs.push('--closure-manifest-path', options.closureManifestPath);
+  if (options.closureShellVersionMin != null) {
+    pnpmArgs.push('--closure-shell-version-min', options.closureShellVersionMin);
+  }
   if (options.controlInstallationVersionMin != null) {
     pnpmArgs.push('--control-installation-version-min', options.controlInstallationVersionMin);
   }

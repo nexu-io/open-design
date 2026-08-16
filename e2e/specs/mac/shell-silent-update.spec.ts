@@ -52,6 +52,7 @@ macShellDescribe('packaged mac Shell silent update', () => {
       payloadFixtureLocal = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
         ...packagedUpdaterClosureFixtureOptions(),
+        closureShellVersionMin: targetVersion,
         payloadPath: localPayload.payloadPath,
         platform: packagedMacUpdaterPlatform,
         version: targetVersion,
@@ -116,10 +117,31 @@ macShellDescribe('packaged mac Shell silent update', () => {
       expect(silent.launcher.attempt).toBeNull();
 
       const terminal = await waitForUpdaterStatus(
-        (status) => status.update?.state === 'not-available' && status.update.currentVersion === targetVersion,
+        (status) =>
+          status.update?.state === 'not-available' &&
+          status.update.currentVersion === updateScenario.expectedCurrentVersion,
         'silent update terminal state',
       );
-      expect(terminal.update?.currentVersion).toBe(targetVersion);
+      expect(terminal.update?.currentVersion).toBe(updateScenario.expectedCurrentVersion);
+
+      // The target Closure requires the target Shell. The first cold start
+      // therefore advances only the Shell while retaining the last successful
+      // Closure; the next cold start commits the now-compatible Closure graph.
+      const convergenceStop = await runToolsPackJson<MacStopResult>('stop');
+      cleanupStarted = false;
+      expect(convergenceStop.status).not.toBe('partial');
+      const convergenceStart = await runToolsPackJson<MacStartResult>('start');
+      cleanupStarted = true;
+      expect(convergenceStart.source).toBe('installed');
+      const converged = await waitForHealthyDesktopShellVersion(
+        targetVersion,
+        targetVersion,
+        silent.status?.pid,
+      );
+      const convergedHealth = assertHealthEvalValue(converged.eval?.value);
+      await capturePackagedCheckpoint(report, 'silent-update-converged', converged);
+      expect(convergedHealth.health.version).toBe(targetVersion);
+      expect(converged.update?.currentVersion).toBe(targetVersion);
     } finally {
       restoreUpdateEnv(updateEnv);
       await payloadFixtureLocal?.close().catch((error: unknown) => {

@@ -239,7 +239,7 @@ export async function runPayloadUpdateAcceptance(options: {
     pptx = assertPptxExportEvalValue(pptxInspect.eval?.value);
     if (options.persistedProjectId != null) expect(pptx.projectId).toBe(options.persistedProjectId);
   }
-  const terminal = await waitForTerminalUpdateState(targetVersion);
+  const terminal = await waitForTerminalUpdateState(options.expectedStandaloneVersion);
   if (terminal.update == null) throw new Error('payload update terminal state did not return update status');
 
   const stop = await runToolsPackJson<WinStopResult>('stop');

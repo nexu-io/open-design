@@ -17,6 +17,7 @@ type CliOptions = {
   closureBlobDir?: string;
   closureDistributionManifestPath?: string;
   closureManifestPath?: string;
+  closureShellVersionMin?: string;
   controlInstallationVersionMin?: string;
   controlInstallationVersionUrl?: string;
   host?: string;
@@ -103,6 +104,7 @@ async function start(service: string, options: CliOptions): Promise<void> {
     closureBlobDir: options.closureBlobDir,
     closureDistributionManifestPath: options.closureDistributionManifestPath,
     closureManifestPath: options.closureManifestPath,
+    closureShellVersionMin: options.closureShellVersionMin,
     controlInstallationVersionMin: options.controlInstallationVersionMin,
     controlInstallationVersionUrl: options.controlInstallationVersionUrl,
     host: options.host,
@@ -144,6 +146,7 @@ cli
   .option("--closure-blob-dir <path>", "Serve content-addressed blobs for a Closure distribution graph")
   .option("--closure-distribution-manifest-path <path>", "Serve a version-wide Closure distribution graph beside updater metadata")
   .option("--closure-manifest-path <path>", "Serve a real Standalone Closure build beside updater metadata")
+  .option("--closure-shell-version-min <version>", "Override the fixture Closure graph's Shell compatibility floor")
   .option("--control-installation-version-min <version>", "Publish control.shell.installation.version.min in fixture metadata")
   .option("--control-installation-version-url <url>", "Publish control.shell.installation.version.url in fixture metadata")
   .option("--host <host>", "Host to bind", { default: "127.0.0.1" })

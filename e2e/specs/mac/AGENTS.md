@@ -25,11 +25,14 @@ scenario names or product success.
   ordinary app installation, data root, channel state, or running instance.
 - External accounts and agent services are synthetic by default. Declare every
   synthetic boundary and keep the response deterministic.
-- Run local saturation through `pnpm smoke:mac:local`. It builds a non-portable
-  `local` channel package so both tools-pack and a real LaunchServices restart
-  stay inside the run's isolated root. Release acceptance remains portable and
-  proves the ordinary system data root on an isolated runner. Never combine
-  those two root models in one local run.
+- Run local saturation through `pnpm smoke:mac:local`. It builds non-portable
+  packages so both tools-pack and a real LaunchServices restart stay inside the
+  run's isolated root. The default full profile uses a run-unique temporary
+  exact channel because updater metadata must retain real counted-release
+  semantics; the opt-down core profile uses `local`. Neither may borrow a real
+  release channel. Release acceptance remains portable and proves the ordinary
+  system data root on an isolated runner. Never combine those two root models
+  in one local run.
 - Use pinned immutable released artifacts and digests for predecessor behavior.
   Do not label current parser or launcher code as historical through fixture
   data alone.
