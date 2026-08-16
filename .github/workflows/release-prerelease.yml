@@ -7,6 +7,16 @@ on:
         required: false
         type: string
         default: ""
+      publish:
+        description: "Publish immutable prerelease objects. Disable for an unlisted candidate."
+        required: false
+        type: boolean
+        default: true
+      promote:
+        description: "Activate prerelease/latest after immutable publication."
+        required: false
+        type: boolean
+        default: true
       release_version:
         description: "Base version (x.y.z). Required when ref is not release/vX.Y.Z."
         required: false
@@ -62,6 +72,14 @@ on:
         required: false
         type: string
         default: ""
+      publish:
+        required: false
+        type: boolean
+        default: true
+      promote:
+        required: false
+        type: boolean
+        default: true
       release_version:
         description: "Base version (x.y.z). Required when ref is not release/vX.Y.Z."
         required: false
@@ -107,6 +125,9 @@ on:
       release_version:
         description: "The prerelease version that was built."
         value: ${{ jobs.distribute.outputs.release_version }}
+      candidate_manifest_url:
+        description: "Public unlisted candidate manifest URL when publish is false."
+        value: ${{ jobs.distribute.outputs.candidate_manifest_url }}
       channel:
         description: "The prerelease channel."
         value: ${{ jobs.distribute.outputs.channel }}
@@ -159,6 +180,8 @@ jobs:
     with:
       channel: prerelease
       enhanced_validation: true
+      publish: ${{ inputs.publish }}
+      promote: ${{ inputs.promote }}
       ref: ${{ inputs.ref }}
       release_version: ${{ inputs.release_version }}
       release_name: Open Design Prerelease
@@ -186,7 +209,8 @@ jobs:
       mac_arm64_url: ${{ needs.distribute.outputs.mac_arm64_url }}
       mac_x64_smoke: ${{ needs.distribute.outputs.mac_x64_smoke_result }}
       mac_x64_url: ${{ needs.distribute.outputs.mac_intel_url }}
-      metadata_url: ${{ needs.distribute.outputs.version_metadata_url }}
+      metadata_url: ${{ needs.distribute.outputs.version_metadata_url || needs.distribute.outputs.candidate_manifest_url }}
+      release_mode: ${{ inputs.publish && (inputs.promote && 'promote' || 'publish') || 'candidate' }}
       notification_stream: ${{ inputs.notification_stream }}
       previous_commit: ${{ needs.distribute.outputs.previous_commit }}
       release_result: ${{ needs.distribute.result }}

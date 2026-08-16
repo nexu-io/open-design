@@ -29,7 +29,10 @@ describe("release identity registry", () => {
     ]));
     expect(mac.sources.every(({ normalizePackageVersion }) => normalizePackageVersion === true)).toBe(true);
 
-    const base = { profile: { namespace: "release-beta", signing: { enabled: false } }, target: "darwin-arm64" };
+    const base = {
+      profile: { channel: "beta", namespace: "release-beta", signing: { enabled: false } },
+      target: "darwin-arm64",
+    };
     const first = await resolveReleaseIdentity({ id: "shell.build.darwin-arm64", parameters: base, workspaceRoot });
     const changed = await resolveReleaseIdentity({
       id: "shell.build.darwin-arm64",
@@ -37,6 +40,12 @@ describe("release identity registry", () => {
       workspaceRoot,
     });
     expect(changed.digest).not.toBe(first.digest);
+    const changedChannel = await resolveReleaseIdentity({
+      id: "shell.build.darwin-arm64",
+      parameters: { ...base, profile: { ...base.profile, channel: "stable" } },
+      workspaceRoot,
+    });
+    expect(changedChannel.digest).not.toBe(first.digest);
   });
 
   it("expands complete platform specs without leaking the opposite platform", async () => {

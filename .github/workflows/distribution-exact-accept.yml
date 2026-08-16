@@ -1,6 +1,32 @@
 name: distribution-exact-accept
 
 on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Candidate commit SHA from its manifest."
+        required: true
+        type: string
+      exact_name:
+        description: "Candidate channel, including prerelease or an exact channel."
+        required: true
+        type: string
+      metadata_url:
+        description: "Immutable candidate version metadata URL."
+        required: true
+        type: string
+      mutable_metadata_url:
+        description: "Acceptance discovery URL; the immutable metadata URL itself is valid."
+        required: true
+        type: string
+      public_origin:
+        description: "Release public origin."
+        required: true
+        type: string
+      release_version:
+        description: "Exact occupied candidate version."
+        required: true
+        type: string
   workflow_call:
     inputs:
       commit:
@@ -160,6 +186,30 @@ jobs:
           pattern: open-design-${{ inputs.exact_name }}-*-public-acceptance
           merge-multiple: true
           path: ${{ runner.temp }}/public-acceptance
+      - name: Issue stable qualification for accepted prerelease
+        if: ${{ inputs.exact_name == 'prerelease' }}
+        env:
+          RELEASE_MAC_ARM64_SMOKE_RESULT: success
+          RELEASE_MAC_X64_SMOKE_RESULT: success
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
+          RELEASE_METADATA_PATH: ${{ runner.temp }}/release-metadata/metadata.json
+          RELEASE_METADATA_URL: ${{ inputs.metadata_url }}
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/release-qualification/outputs.json
+          RELEASE_QUALIFICATION_WORK_DIR: ${{ runner.temp }}/release-qualification
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_WIN_X64_SMOKE_RESULT: success
+        run: |
+          set -euo pipefail
+          mkdir -p "$RELEASE_MANIFEST_DIR" "$(dirname "$RELEASE_METADATA_PATH")"
+          curl -fsSL "$RELEASE_METADATA_URL" -o "$RELEASE_METADATA_PATH"
+          for target in mac_arm64 mac_x64 win_x64; do
+            jq --arg target "$target" '.releaseTargets[$target]' "$RELEASE_METADATA_PATH" > "$RELEASE_MANIFEST_DIR/$target.json"
+          done
+          pnpm exec tools-release issue-stable-qualification
       - name: Activate accepted immutable exact metadata with CAS
         env:
           RELEASE_ACTIVATION_WORK_DIR: ${{ runner.temp }}/release-activation

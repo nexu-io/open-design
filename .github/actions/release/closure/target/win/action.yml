@@ -89,7 +89,7 @@ runs:
         }
 
     - name: Register immutable Closure target
-      if: ${{ inputs.publish-enabled == 'true' && steps.resolve.outputs.state != 'hit' }}
+      if: ${{ steps.resolve.outputs.state != 'hit' }}
       shell: pwsh
       env:
         RELEASE_CHANNEL: ${{ inputs.channel }}

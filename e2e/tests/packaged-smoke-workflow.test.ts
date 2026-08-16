@@ -2020,40 +2020,47 @@ process.stdin.on("end", () => {
     expect(prereleaseWorkflow).toContain("Required when ref is not release/vX.Y.Z");
   });
 
-  it("[P2] makes a publish=false beta dispatch retrievable on both platforms without touching a channel", async () => {
+  it("[P2] makes a publish=false exact dispatch usable on every platform without moving latest", async () => {
     const [workflow, macAction, winAction] = await Promise.all([
       readReleaseWorkflow(releaseBetaWorkflowPath, distributionBetaWorkflowPath),
       readFile(betaMacDistributionActionPath, "utf8"),
       readFile(betaWinDistributionActionPath, "utf8"),
     ]);
 
-    expect(workflow).toContain("dogfood-enabled: ${{ matrix.target == 'mac_arm64' && 'true' || 'false' }}");
-    expect(workflow).toContain("publish: ${{ inputs.publish }}");
-    expect(workflow).toContain("publish: ${{ inputs.publish }}");
+    expect(workflow).toContain('candidate-enabled: "true"');
+    expect(workflow).toContain("candidate-id: ${{ needs.metadata.outputs.candidate_id }}");
+    expect(workflow).toContain('publish: "true"');
+    expect(workflow).toContain('publish-enabled: "true"');
 
-    const macDogfood = sectionBetween(
+    const macCandidate = sectionBetween(
       macAction,
-      "    - name: Upload ${{ inputs.target }} dogfood build to release storage",
+      "    - name: Upload ${{ inputs.target }} candidate to release storage",
       "    - name: Build exact ${{ inputs.target }} update fixture",
     );
-    const winDogfood = sectionBetween(
+    const winCandidate = sectionBetween(
       winAction,
-      "    - name: Upload win_x64 dogfood build to release storage",
+      "    - name: Upload win_x64 candidate to release storage",
       "    - name: Build win_x64 exact update fixture",
     );
-    for (const [label, step] of [["mac", macDogfood], ["win", winDogfood]] as const) {
-      expect(step, label).toContain("run: pnpm exec tools-release publish-dogfood");
-      expect(step, label).toContain("DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}");
-      expect(step, label).toContain("DOGFOOD_BUILD_JSON_PATH:");
-      expect(step, label).toContain("DOGFOOD_BUILD_JSON_KEYS:");
+    for (const [label, step] of [["mac", macCandidate], ["win", winCandidate]] as const) {
+      expect(step, label).toContain("run: pnpm exec tools-release publish-candidate-target");
+      expect(step, label).toContain("RELEASE_CANDIDATE_ID: ${{ inputs.candidate-id }}");
+      expect(step, label).toContain("RELEASE_CANDIDATE_BUILD_JSON_PATH:");
+      expect(step, label).toContain("RELEASE_CANDIDATE_BUILD_JSON_KEYS:");
       for (const forbidden of ["publish-platform", "publish-metadata", "beta/latest"]) {
         expect(step, `${label} / ${forbidden}`).not.toContain(forbidden);
       }
     }
-    expect(macDogfood).toContain("inputs.publish != 'true'");
-    expect(winDogfood).toContain("inputs.publish != 'true'");
+    expect(macCandidate).toContain("inputs.candidate-enabled == 'true'");
+    expect(winCandidate).toContain("if: ${{ !cancelled() }}");
+    expect(workflow).toContain("  candidate:");
+    expect(workflow).toContain("tools-release finalize-candidate");
+    expect(workflow).toContain('RELEASE_ACTIVATE_LATEST: "false"');
     expect(workflow).not.toContain("open-design-beta-mac-arm64-dmg");
     expect(workflow).not.toContain("open-design-beta-win-x64-installer");
+    for (const forbidden of ["build_linux", "ENABLE_LINUX", "target: linux", "linux_x64"]) {
+      expect(workflow, forbidden).not.toContain(forbidden);
+    }
   });
   it("[P2] publishes release notes through one channel-neutral tools-release pipeline", async () => {
     const [betaWorkflow, prereleaseWorkflow, stableWorkflow, countedDistribution, metadataDistribution] = await Promise.all([
@@ -2080,9 +2087,7 @@ process.stdin.on("end", () => {
     expect(prereleaseWorkflow).toContain("uses: ./.github/actions/release/publish-counted");
 
     expect(stableWorkflow).toContain("Validate stable release note policy");
-    expect(stableWorkflow).toContain(
-      "RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}",
-    );
+    expect(stableWorkflow).toContain('RELEASE_PUBLISH_SIDE_EFFECTS: "true"');
   });
 
   it("[P2] requires stable release dispatch to use the release version branch", async () => {
@@ -2703,30 +2708,39 @@ process.stdin.on("end", () => {
     expect(script).toContain(".github/workflows/landing-page-staging.yml");
   });
 
-  it("[P2] supports stable metadata, prepublish, and publish dispatch modes", async () => {
-    const [workflow, script] = await Promise.all([
+  it("[P2] defaults stable to a full unlisted candidate and separates publish from promote", async () => {
+    const [workflow, script, promoter] = await Promise.all([
       readReleaseWorkflow(releaseStableWorkflowPath, distributionStableWorkflowPath),
       readFile(releaseStableScriptPath, "utf8"),
+      readFile(join(workspaceRoot, ".github", "workflows", "release-stable-promote.yml"), "utf8"),
     ]);
 
-    expect(workflow).toContain("dry_run:");
-    expect(workflow).toContain(
-      "Release mode. metadata stops after promotion metadata; prepublish runs build/smoke/report/plan without publishing; publish performs the stable release.",
-    );
-    expect(workflow).toContain("group: open-design-release-stable-${{ inputs.dry_run }}");
-    expect(workflow).toContain("type: choice");
-    expect(workflow).toContain("- metadata");
-    expect(workflow).toContain("- prepublish");
-    expect(workflow).toContain("- publish");
-    expect(workflow).toContain("default: metadata");
+    expect(workflow).toContain("Publish immutable stable version objects. Defaults off; the full candidate build still runs.");
+    expect(workflow).toContain("Activate stable/latest and expose the GitHub Release after publication.");
+    expect(workflow).toContain("group: open-design-release-stable-${{ inputs.publish && (inputs.promote && 'promote' || 'publish') || 'candidate' }}");
+    expect(workflow).toContain("publish:");
+    expect(workflow).toContain("promote:");
+    expect(workflow).toContain("type: boolean");
+    expect(workflow).toContain("default: false");
     expect(workflow).not.toContain("inputs.channel");
-    expect(workflow).toContain("OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run == 'publish' && 'false' || inputs.dry_run }}");
+    expect(workflow).toContain("OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.publish && 'false' || 'prepublish' }}");
+    expect(workflow).toContain("name: Seal stable candidate");
+    expect(workflow).toContain("candidate-id: ${{ needs.metadata.outputs.candidate_id }}");
+    expect(workflow).toContain("if: ${{ needs.metadata.outputs.github_release_enabled == 'true' && inputs.promote }}");
     expect(workflow).toContain("RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}");
     expect(workflow).toContain("run: bash .github/scripts/release/github/stable-notes.sh");
     expect(workflow).toContain("dry_run: ${{ steps.stable.outputs.dry_run }}");
     expect(workflow).toContain("dry_run_mode: ${{ steps.stable.outputs.dry_run_mode }}");
     expect(workflow).toContain("if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}");
-    expect(workflow).toContain("RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}");
+    expect(workflow).toContain('RELEASE_PUBLISH_SIDE_EFFECTS: "true"');
+    expect(promoter).toContain("tools-release materialize-stable-promotion");
+    expect(promoter).toContain("tools-release activate-stable-release");
+    expect(workflow).not.toContain("docker-image.yml");
+    expect(promoter).not.toContain("docker-image.yml");
+    for (const forbidden of ["build_linux", "ENABLE_LINUX", "target: linux", "linux_x64"]) {
+      expect(workflow, forbidden).not.toContain(forbidden);
+      expect(promoter, forbidden).not.toContain(forbidden);
+    }
 
     expect(script).toContain("function parseStableDryRunMode");
     expect(script).toContain("OPEN_DESIGN_RELEASE_DRY_RUN must be metadata, prepublish, true, or false");
@@ -2933,7 +2947,7 @@ process.stdin.on("end", () => {
     expect(betaMacAction).toContain('RELEASE_CLOSURE_ENABLED: "false"');
     expect(betaMacAction).toContain('RELEASE_SHELL_ENABLED: "true"');
     expect(betaMacAction).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
-    expect(betaMacAction).toContain("DOGFOOD_BUILD_JSON_KEYS: dmgPath");
+    expect(betaMacAction).toContain("RELEASE_CANDIDATE_BUILD_JSON_KEYS: dmgPath");
     expect(betaWinAction).toContain("uses: ./.github/actions/release/closure/target/win");
     expect(betaWinAction).toContain("Resolve immutable win_x64 Electron Shell");
     expect(betaWinAction).toContain('"tools-pack", "win", "identity"');

@@ -1,0 +1,133 @@
+name: release-stable-promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_manifest_url:
+        description: "Sealed stable candidate manifest URL from the Feishu card."
+        required: true
+        type: string
+      prerelease_version:
+        description: "Qualified prerelease version used to authorize stable promotion."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: open-design-release-stable-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote sealed stable candidate
+    if: github.repository == 'nexu-io/open-design'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      OPEN_DESIGN_AMR_PROFILE: prod
+      OPEN_DESIGN_RELEASE_CHANNEL: stable
+      OPEN_DESIGN_RELEASE_DRY_RUN: "false"
+      OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      OPEN_DESIGN_STABLE_PRERELEASE_VERSION: ${{ inputs.prerelease_version }}
+      RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+      RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+      RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+      RELEASE_STORAGE_REGION: auto
+      RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+    steps:
+      - name: Checkout promotion tooling
+        uses: actions/checkout@v6.0.2
+
+      - name: Setup release toolchain
+        uses: ./.github/actions/release/platform/setup
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Materialize sealed candidate
+        id: candidate
+        env:
+          RELEASE_CANDIDATE_MANIFEST_URL: ${{ inputs.candidate_manifest_url }}
+          RELEASE_PROMOTION_ROOT: ${{ runner.temp }}/stable-promotion
+        run: pnpm exec tools-release materialize-stable-promotion
+
+      - name: Checkout accepted release commit
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ steps.candidate.outputs.commit }}
+          fetch-depth: 0
+
+      - name: Install accepted commit dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate stable qualification and source identity
+        id: stable
+        env:
+          GITHUB_REF_NAME: release/v${{ steps.candidate.outputs.release_version }}
+          GITHUB_SHA: ${{ steps.candidate.outputs.commit }}
+          OPEN_DESIGN_STABLE_WIN_X64_SMOKE_MODE: core
+          RELEASE_MAC_ARM64_SIGN_MODE: ${{ steps.candidate.outputs.mac_arm64_sign_mode }}
+          RELEASE_MAC_X64_SIGN_MODE: ${{ steps.candidate.outputs.mac_x64_sign_mode }}
+          RELEASE_WIN_X64_SIGN_MODE: ${{ steps.candidate.outputs.win_x64_sign_mode }}
+        run: |
+          pnpm exec tools-release prepare stable
+          test "${{ steps.candidate.outputs.release_version }}" = "$(node -p 'require("./package.json").version')"
+
+      - name: Prepare exact GitHub Release assets
+        env:
+          RELEASE_CHANNEL: stable
+          RELEASE_GITHUB_ASSETS_DIR: ${{ runner.temp }}/github-release-assets
+          RELEASE_GITHUB_ASSETS_SOURCE_DIR: ${{ runner.temp }}/stable-promotion/release-assets
+          RELEASE_VERSION: ${{ steps.candidate.outputs.release_version }}
+        run: pnpm exec tools-release prepare-github-assets
+
+      - name: Write stable release notes
+        id: notes
+        env:
+          BRANCH_NAME: release/v${{ steps.candidate.outputs.release_version }}
+          GITHUB_SHA: ${{ steps.candidate.outputs.commit }}
+          RELEASE_CHANNEL: stable
+          RELEASE_MAC_ARM64_SIGN_MODE: ${{ steps.candidate.outputs.mac_arm64_sign_mode }}
+          RELEASE_MAC_X64_SIGN_MODE: ${{ steps.candidate.outputs.mac_x64_sign_mode }}
+          RELEASE_VERSION: ${{ steps.candidate.outputs.release_version }}
+          RELEASE_WIN_X64_SIGN_MODE: ${{ steps.candidate.outputs.win_x64_sign_mode }}
+          VERSION_TAG: ${{ steps.candidate.outputs.version_tag }}
+        run: bash .github/scripts/release/github/stable-notes.sh
+
+      - name: Create draft GitHub Release projection
+        id: draft
+        run: |
+          set -euo pipefail
+          tag="${{ steps.candidate.outputs.version_tag }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            projection="$(gh release view "$tag" --json isDraft,targetCommitish)"
+            is_draft="$(jq -r .isDraft <<<"$projection")"
+            [ "$is_draft" = "true" ] || { echo "$tag already exists and is not a draft" >&2; exit 1; }
+            target="$(jq -r .targetCommitish <<<"$projection")"
+            [ "$target" = "${{ steps.candidate.outputs.commit }}" ] || { echo "$tag draft targets $target, not the candidate commit" >&2; exit 1; }
+          else
+            gh release create "$tag" \
+              --target "${{ steps.candidate.outputs.commit }}" \
+              --title "Open Design ${{ steps.candidate.outputs.release_version }}" \
+              --notes-file "${{ steps.notes.outputs.notes_file }}" \
+              --draft
+          fi
+          gh release upload "$tag" "$RUNNER_TEMP/github-release-assets"/* --clobber
+
+      - name: Activate stable latest and GitHub projection
+        env:
+          RELEASE_MANIFEST_DIR: ${{ runner.temp }}/stable-promotion/release-platform-manifests
+          RELEASE_METADATA_PATH: ${{ runner.temp }}/stable-promotion/release-metadata/metadata.json
+          RELEASE_OUTPUTS_PATH: ${{ runner.temp }}/stable-promotion/activation.json
+          RELEASE_REPOSITORY: ${{ github.repository }}
+          RELEASE_VERSION: ${{ steps.candidate.outputs.release_version }}
+          VERSION_TAG: ${{ steps.candidate.outputs.version_tag }}
+        run: pnpm exec tools-release activate-stable-release
+
+      - name: Cleanup draft and tag on failure
+        if: ${{ failure() && steps.draft.outcome == 'success' }}
+        run: gh release delete "${{ steps.candidate.outputs.version_tag }}" --cleanup-tag --yes || true

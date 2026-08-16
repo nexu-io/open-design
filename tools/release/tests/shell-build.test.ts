@@ -37,7 +37,7 @@ afterEach(async () => {
 const plan = {
   artifacts: { app: "/tmp/Open Design Beta.app", dmg: "/tmp/open-design.dmg", payload: "/tmp/payload.zip", zip: null },
   outputRoot: "/tmp/out",
-  profile: { namespace: "release-beta", schemaVersion: 1 },
+  profile: { channel: "beta", namespace: "release-beta", schemaVersion: 1 },
   profileDigest: `sha256:${"d".repeat(64)}` as const,
   releaseVersion: "0.19.0-beta.2",
   runtimeNamespaceRoot: "/tmp/runtime",

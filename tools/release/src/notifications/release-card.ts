@@ -74,11 +74,13 @@ function truncate(value: string, maxLength: number): string {
   return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1).trimEnd()}…`;
 }
 
-function notificationState(input: ReleaseNotificationInput): "complete" | "failed" | "partial" | "validation" {
+function notificationState(input: ReleaseNotificationInput): "candidate" | "failed" | "partial" | "published" | "promoted" | "validation" {
   if (input.releaseResult !== "success") return "failed";
   if (input.releaseState === "partial") return "partial";
+  if (input.releaseMode === "candidate") return "candidate";
   if (["metadata", "prepublish", "validation", "false"].includes(input.releaseMode)) return "validation";
-  return input.version.length > 0 && input.metadataUrl.length > 0 ? "complete" : "validation";
+  if (input.version.length === 0 || input.metadataUrl.length === 0) return "validation";
+  return input.releaseMode === "promote" ? "promoted" : "published";
 }
 
 function coldStartFromMetadata(metadata: JsonRecord): ColdStartDetail[] {
@@ -242,11 +244,13 @@ export function buildReleaseFeishuCard(
     ["Windows x64", input.winX64Smoke],
   ].filter(([, result]) => result === "failure").map(([label]) => `${label} smoke 失败`);
   const warning = state === "partial" || smokeFailures.length > 0 || details.warnings.length > 0;
-  const icon = state === "failed" ? "🚨" : state === "validation" ? "🧪" : warning ? "⚠️" : "🚀";
+  const icon = state === "failed" ? "🚨" : state === "validation" ? "🧪" : state === "candidate" ? "📦" : warning ? "⚠️" : "🚀";
   const stateLabel = {
-    complete: warning ? "发布完成（有告警）" : "发布完成",
+    candidate: warning ? "候选就绪（有告警）" : "候选就绪 · 未公开入口",
     failed: "发布失败",
     partial: "部分完成",
+    promoted: warning ? "发布并晋升完成（有告警）" : "发布并晋升完成",
+    published: warning ? "不可变发布完成（有告警）" : "不可变发布完成 · 未晋升",
     validation: "验证完成",
   }[state];
   const shortCommit = input.commit.slice(0, 7);
@@ -297,13 +301,27 @@ export function buildReleaseFeishuCard(
     tag: "action",
     actions: downloads.map(([label, url], index) => ({
       tag: "button",
-      text: { tag: "plain_text", content: label },
+      text: { tag: "plain_text", content: state === "candidate" ? `候选 · ${label}` : label },
       type: index === 0 ? "primary" : "default",
       url,
     })),
   });
+  if (state === "candidate" && input.repository.length > 0) {
+    const workflow = input.channel === "stable"
+      ? "release-stable-promote.yml"
+      : "distribution-exact-accept.yml";
+    elements.push({
+      tag: "action",
+      actions: [{
+        tag: "button",
+        text: { tag: "plain_text", content: "发布 / 晋升候选" },
+        type: "primary",
+        url: `https://github.com/${input.repository}/actions/workflows/${workflow}`,
+      }],
+    });
+  }
   const links = [
-    input.metadataUrl.length > 0 ? `[发布详情](${input.metadataUrl})` : "",
+    input.metadataUrl.length > 0 ? `[${state === "candidate" ? "候选清单" : "发布详情"}](${input.metadataUrl})` : "",
     input.runUrl.length > 0 ? `[GitHub Actions](${input.runUrl})` : "",
   ].filter(Boolean);
   if (links.length > 0) elements.push({
@@ -313,7 +331,7 @@ export function buildReleaseFeishuCard(
   return {
     config: { wide_screen_mode: true },
     header: {
-      template: state === "failed" ? "red" : warning ? "orange" : state === "complete" ? "green" : "blue",
+      template: state === "failed" ? "red" : warning ? "orange" : state === "published" || state === "promoted" ? "green" : "blue",
       title: {
         tag: "plain_text",
         content: `${icon} ${channelLabel} ${input.version || "(未生成版本)"} ${stateLabel}`,

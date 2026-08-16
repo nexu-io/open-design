@@ -128,6 +128,7 @@ jobs:
       OPEN_DESIGN_EXACT_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/${{ inputs.exact_name }}/latest/metadata.json
       OPEN_DESIGN_STABLE_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/stable/latest/metadata.json
     outputs:
+      candidate_id: ${{ steps.candidate.outputs.candidate_id }}
       base_version: ${{ steps.exact.outputs.base_version }}
       release_version: ${{ steps.reservation.outputs.release_version || steps.exact.outputs.release_version }}
       shell_version: ${{ steps.reservation.outputs.release_version || steps.exact.outputs.release_version }}
@@ -237,9 +238,12 @@ jobs:
             echo "exact_name must be 1-12 lowercase letters or digits and cannot be stable, prerelease, or local" >&2
             exit 1
           fi
+          if [ "${{ inputs.promote }}" = "true" ] && [ "${{ inputs.publish }}" != "true" ]; then
+            echo "promote=true requires publish=true" >&2
+            exit 1
+          fi
 
       - name: Validate R2 release access
-        if: ${{ inputs.publish }}
         env:
           GITHUB_SHA: ${{ env.BUILT_SHA }}
           R2_ACCESS_PROBE_NAME: release-${{ inputs.exact_name }}
@@ -262,7 +266,6 @@ jobs:
 
       - name: Reserve immutable exact version
         id: reservation
-        if: ${{ inputs.publish }}
         env:
           BASE_VERSION: ${{ steps.exact.outputs.base_version }}
           GITHUB_SHA: ${{ env.BUILT_SHA }}
@@ -280,6 +283,41 @@ jobs:
           RELEASE_VERSION_MANUAL_OVERRIDE: "false"
         run: pnpm exec tools-release reserve-version "${{ inputs.exact_name }}"
 
+      - name: Prepare immutable candidate identity
+        id: candidate
+        env:
+          RELEASE_CANDIDATE_SPEC_PATH: ${{ runner.temp }}/release-candidate/spec.json
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$RELEASE_CANDIDATE_SPEC_PATH")"
+          jq -n \
+            --arg amrProfile "${{ inputs.amr_profile || 'test' }}" \
+            --arg channel "${{ inputs.exact_name }}" \
+            --arg closureMinShellVersion "${{ steps.exact.outputs.closure_min_shell_version }}" \
+            --arg commit "$BUILT_SHA" \
+            --arg releaseVersion "${{ steps.reservation.outputs.release_version }}" \
+            '{
+              amrProfile: $amrProfile,
+              channel: $channel,
+              closureMinShellVersion: $closureMinShellVersion,
+              commit: $commit,
+              macArm64SignMode: "notarized",
+              macX64SignMode: "notarized",
+              releaseVersion: $releaseVersion,
+              schemaVersion: 1,
+              targets: ["mac_arm64", "mac_x64", "win_x64"],
+              winX64SignMode: "unsigned"
+            }' > "$RELEASE_CANDIDATE_SPEC_PATH"
+          pnpm exec tools-release prepare-candidate
+
+      - name: Upload immutable candidate spec
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-${{ inputs.exact_name }}-candidate-spec
+          path: ${{ runner.temp }}/release-candidate/spec.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Build shared Standalone Closure
         uses: ./.github/actions/release/closure/shared
         env:
@@ -291,11 +329,11 @@ jobs:
           RELEASE_STORAGE_REGION: auto
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
           RELEASE_VERSION_LOCK_KEY: ${{ steps.reservation.outputs.version_lock_key }}
-          RELEASE_VERSION_LOCK_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
+          RELEASE_VERSION_LOCK_REQUIRED: "true"
         with:
           channel: ${{ inputs.exact_name }}
           min-shell-version: ${{ steps.exact.outputs.closure_min_shell_version }}
-          publish-enabled: ${{ inputs.publish }}
+          publish-enabled: "true"
           release-version: ${{ steps.reservation.outputs.release_version || steps.exact.outputs.release_version }}
 
   build:
@@ -322,8 +360,9 @@ jobs:
       OPEN_DESIGN_POSTINSTALL_LEVEL: release-smoke
       OD_UPDATE_METADATA_URL: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/${{ inputs.exact_name }}/latest/metadata.json
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+      RELEASE_CANDIDATE_ID: ${{ needs.metadata.outputs.candidate_id }}
       RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
-      RELEASE_VERSION_LOCK_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
+      RELEASE_VERSION_LOCK_REQUIRED: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
@@ -345,12 +384,13 @@ jobs:
           arch: ${{ matrix.target == 'mac_arm64' && 'arm64' || 'x64' }}
           artifact-id: ${{ matrix.target == 'mac_arm64' && 'mac-arm64' || 'mac-x64' }}
           build-target: ${{ matrix.target == 'mac_arm64' && 'dmg' || 'all' }}
+          candidate-id: ${{ needs.metadata.outputs.candidate_id }}
           closure-version: ${{ needs.metadata.outputs.closure_version }}
-          dogfood-enabled: ${{ matrix.target == 'mac_arm64' && 'true' || 'false' }}
+          candidate-enabled: "true"
           legacy-migration-enabled: ${{ matrix.target == 'mac_arm64' && inputs.exact_name == 'beta' && 'true' || 'false' }}
           namespace: ${{ matrix.target == 'mac_arm64' && format('release-{0}', inputs.exact_name) || format('release-{0}-x64', inputs.exact_name) }}
           platform: ${{ matrix.target == 'mac_arm64' && 'darwin-arm64' || 'darwin-x64' }}
-          publish: ${{ inputs.publish }}
+          publish: "true"
           release-public-origin: ${{ inputs.release_public_origin }}
           release-version: ${{ needs.metadata.outputs.release_version }}
           shell-smoke-matrix: ${{ matrix.target == 'mac_arm64' && 'mac-shell-v3' || 'mac-shell-v2' }}
@@ -368,11 +408,12 @@ jobs:
         uses: ./.github/actions/release/platform/win/exact
         with:
           channel: ${{ inputs.exact_name }}
+          candidate-id: ${{ needs.metadata.outputs.candidate_id }}
           release-version: ${{ needs.metadata.outputs.release_version }}
           closure-version: ${{ needs.metadata.outputs.closure_version }}
           shell-version: ${{ needs.metadata.outputs.shell_version }}
           amr-profile: ${{ inputs.amr_profile || 'test' }}
-          publish: ${{ inputs.publish }}
+          publish: "true"
           release-public-origin: ${{ inputs.release_public_origin }}
           sign-mode: unsigned
           smoke-mode: full
@@ -386,7 +427,8 @@ jobs:
         env:
           RESULT_SMOKE: ${{ steps.mac.outputs.smoke_result || steps.win.outputs.smoke_result }}
           RESULT_TARGET: ${{ matrix.target }}
-          RESULT_URL: ${{ steps.mac.outputs.dmg_url || steps.win.outputs.win_x64_url }}
+          RESULT_URL: ${{ steps.mac.outputs.dmg_url || steps.win.outputs.win_x64_url || steps.mac.outputs.candidate_primary_url || steps.win.outputs.candidate_primary_url }}
+          RESULT_CANDIDATE_MANIFEST_URL: ${{ steps.mac.outputs.candidate_manifest_url || steps.win.outputs.candidate_manifest_url }}
         with:
           script: |
             const fs = require("fs");
@@ -394,6 +436,7 @@ jobs:
             const root = path.join(process.env.RUNNER_TEMP, "release-platform-result");
             fs.mkdirSync(root, { recursive: true });
             fs.writeFileSync(path.join(root, `${process.env.RESULT_TARGET}.json`), JSON.stringify({
+              candidateManifestUrl: process.env.RESULT_CANDIDATE_MANIFEST_URL || "",
               smokeResult: process.env.RESULT_SMOKE || "",
               target: process.env.RESULT_TARGET,
               url: process.env.RESULT_URL || "",
@@ -407,6 +450,59 @@ jobs:
           path: ${{ runner.temp }}/release-platform-result/${{ matrix.target }}.json
           if-no-files-found: error
 
+  candidate:
+    name: Seal exact candidate
+    needs: [metadata, build, stage]
+    if: ${{ !cancelled() && !inputs.promote && needs.metadata.result == 'success' && needs.build.result == 'success' && needs.stage.result == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      manifest_url: ${{ steps.finalize.outputs.candidate_manifest_url }}
+      mac_arm64_url: ${{ steps.links.outputs.mac_arm64_url }}
+      mac_x64_url: ${{ steps.links.outputs.mac_x64_url }}
+      win_x64_url: ${{ steps.links.outputs.win_x64_url }}
+    steps:
+      - name: Checkout candidate finalizer
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+      - name: Setup release toolchain
+        uses: ./.github/actions/release/platform/setup
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Download candidate spec
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-${{ inputs.exact_name }}-candidate-spec
+          path: ${{ runner.temp }}/release-candidate
+      - name: Download platform results
+        uses: actions/download-artifact@v8
+        with:
+          pattern: open-design-${{ inputs.exact_name }}-*-build-result
+          path: ${{ runner.temp }}/release-platform-results
+          merge-multiple: true
+      - name: Prepare candidate target URLs and links
+        id: links
+        run: |
+          set -euo pipefail
+          jq -s '[.[].candidateManifestUrl | select(length > 0)]' "$RUNNER_TEMP"/release-platform-results/*.json > "$RUNNER_TEMP/release-candidate/target-urls.json"
+          for target in mac_arm64 mac_x64 win_x64; do
+            url="$(jq -r --arg target "$target" '. | select(.target == $target) | .url' "$RUNNER_TEMP"/release-platform-results/*.json)"
+            echo "${target}_url=$url" >> "$GITHUB_OUTPUT"
+          done
+      - name: Seal candidate manifest
+        id: finalize
+        env:
+          RELEASE_CANDIDATE_SPEC_PATH: ${{ runner.temp }}/release-candidate/spec.json
+          RELEASE_CANDIDATE_TARGET_URLS_PATH: ${{ runner.temp }}/release-candidate/target-urls.json
+          RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_VERSION_METADATA_URL: ${{ needs.stage.outputs.version_metadata_url }}
+        run: pnpm exec tools-release finalize-candidate
+
   stage:
     name: Stage exact metadata
     needs:
@@ -416,8 +512,6 @@ jobs:
       ${{
         always() &&
         !cancelled() &&
-        inputs.publish &&
-        inputs.promote &&
         needs.metadata.result == 'success' &&
         needs.build.result == 'success'
       }}
@@ -563,7 +657,7 @@ jobs:
           RELEASE_LEGACY_INSTALLATION_MIGRATION_REQUIRED: ${{ inputs.exact_name == 'beta' && 'true' || 'false' }}
           RELEASE_LATEST_CAS_REQUIRED: "true"
           RELEASE_VERSION_LOCK_KEY: ${{ needs.metadata.outputs.version_lock_key }}
-          RELEASE_VERSION_LOCK_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
+          RELEASE_VERSION_LOCK_REQUIRED: "true"
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin != '' && inputs.release_public_origin || vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
@@ -601,6 +695,7 @@ jobs:
       ${{
         !cancelled() &&
         inputs.publish &&
+        inputs.promote &&
         needs.metadata.result == 'success' &&
         needs.stage.result == 'success' &&
         needs.stage.outputs.release_state == 'complete'
@@ -620,6 +715,7 @@ jobs:
     needs:
       - metadata
       - build
+      - candidate
       - stage
       - accept
     if: ${{ always() && !cancelled() }}
@@ -629,17 +725,17 @@ jobs:
       channel: ${{ inputs.exact_name }}
       commit: ${{ needs.metadata.outputs.commit }}
       mac_arm64_smoke: ${{ needs.stage.outputs.mac_arm64_smoke_result }}
-      mac_arm64_url: ${{ needs.stage.outputs.mac_arm64_url }}
+      mac_arm64_url: ${{ !inputs.publish && needs.candidate.outputs.mac_arm64_url || needs.stage.outputs.mac_arm64_url }}
       mac_x64_smoke: ${{ needs.stage.outputs.mac_x64_smoke_result }}
-      mac_x64_url: ${{ needs.stage.outputs.mac_x64_url }}
-      metadata_url: ${{ needs.stage.outputs.version_metadata_url }}
+      mac_x64_url: ${{ !inputs.publish && needs.candidate.outputs.mac_x64_url || needs.stage.outputs.mac_x64_url }}
+      metadata_url: ${{ !inputs.publish && needs.candidate.outputs.manifest_url || needs.stage.outputs.version_metadata_url }}
       notification_stream: ${{ inputs.notification_stream || 'release' }}
       previous_commit: ${{ needs.metadata.outputs.previous_commit }}
-      release_mode: ${{ inputs.publish && 'publish' || 'validation' }}
+      release_mode: ${{ inputs.publish && (inputs.promote && 'promote' || 'publish') || 'candidate' }}
       release_result: ${{ needs.accept.result != 'skipped' && needs.accept.result || needs.stage.result != 'skipped' && needs.stage.result || needs.build.result }}
       release_state: ${{ needs.accept.result == 'success' && 'complete' || needs.stage.outputs.release_state || (needs.build.result == 'success' && 'partial' || 'failed') }}
       version: ${{ needs.metadata.outputs.release_version }}
       win_x64_smoke: ${{ needs.stage.outputs.win_x64_smoke_result }}
-      win_x64_url: ${{ needs.stage.outputs.win_x64_url }}
+      win_x64_url: ${{ !inputs.publish && needs.candidate.outputs.win_x64_url || needs.stage.outputs.win_x64_url }}
     secrets:
       bot: ${{ secrets.RELEASE_FEISHU_BETA }}

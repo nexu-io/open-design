@@ -9,6 +9,14 @@ inputs:
   channel:
     description: Registered counted release channel
     required: true
+  candidate-id:
+    description: Immutable release candidate build-spec digest
+    required: false
+    default: ""
+  candidate-enabled:
+    description: Publish a 30-day unlisted convenience projection
+    required: false
+    default: "false"
   closure-version:
     description: Exact Standalone Closure version
     required: true
@@ -57,6 +65,12 @@ inputs:
     default: "true"
 
 outputs:
+  candidate_manifest_url:
+    description: Unlisted candidate target manifest URL
+    value: ${{ steps.candidate.outputs.candidate_manifest_url }}
+  candidate_primary_url:
+    description: Unlisted candidate primary download URL
+    value: ${{ steps.candidate.outputs.candidate_primary_url }}
   smoke_result:
     description: Packaged smoke step outcome
     value: ${{ steps.smoke.outcome }}
@@ -72,7 +86,7 @@ runs:
       uses: ./.github/actions/release/platform/cache
       with:
         origin-key: ${{ github.run_id }}-${{ github.run_attempt }}
-        prefix: tools-pack-win-v2-${{ runner.os }}-${{ runner.arch }}-
+        prefix: tools-pack-win-v3-${{ inputs.channel }}-${{ runner.os }}-${{ runner.arch }}-
 
     - name: Install dependencies
       shell: pwsh
@@ -95,7 +109,7 @@ runs:
         build-target: all
         channel: ${{ inputs.channel }}
         namespace: ${{ inputs.namespace }}
-        register-enabled: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
+        register-enabled: "true"
         release-version: ${{ inputs.release-version }}
         shell-version: ${{ inputs.release-version }}
         sign-mode: ${{ inputs.sign-mode }}
@@ -216,6 +230,20 @@ runs:
         key: ${{ steps.cache.outputs.key }}
         platform: win
         prefix: ${{ steps.cache.outputs.prefix }}
+
+    - name: Upload win_x64 candidate to release storage
+      id: candidate
+      if: ${{ !cancelled() && inputs.candidate-enabled == 'true' }}
+      shell: pwsh
+      env:
+        RELEASE_CANDIDATE_BUILD_JSON_KEYS: installerPath,portableZipPath
+        RELEASE_CANDIDATE_BUILD_JSON_PATH: ${{ steps.shell.outputs.build-json-path }}
+        RELEASE_CANDIDATE_ID: ${{ inputs.candidate-id }}
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_PUBLIC_ORIGIN: ${{ env.RELEASE_PUBLIC_ORIGIN }}
+        RELEASE_TARGET: win_x64
+        RELEASE_VERSION: ${{ inputs.release-version }}
+      run: pnpm exec tools-release publish-candidate-target
 
     - name: Prepare release assets
       shell: pwsh

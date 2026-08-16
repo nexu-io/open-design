@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
+import { SIDECAR_DEFAULTS } from "@open-design/sidecar/protocol";
+
 import type { ToolPackConfig } from "./config.js";
 import { hashJson } from "./cache.js";
+import { resolveToolPackProductChannel, type ToolPackProductChannel } from "./local-runtime.js";
 import { resolveMacPaths } from "./mac/paths.js";
 import { resolveWinPaths } from "./win/paths.js";
 import { readRuntimeShellVersion } from "./versions.js";
@@ -24,6 +27,7 @@ type ShellSigningIdentity = Readonly<{
 
 export type ToolPackShellBuildProfile = Readonly<{
   amrProfile: string | null;
+  channel: ToolPackProductChannel;
   electronVersion: string;
   macCompression: string | null;
   namespace: string;
@@ -94,6 +98,10 @@ export async function resolveToolPackShellBuildPlan(config: ToolPackConfig): Pro
   } as const;
   const profile = Object.freeze({
     amrProfile: config.amrProfile ?? null,
+    // Channel and namespace are independent Shell identity inputs. Keep both
+    // explicit even for stable: release-version/namespace inference is a
+    // validation convenience, not an artifact-identity boundary.
+    channel: resolveToolPackProductChannel(config, SIDECAR_DEFAULTS.namespace),
     electronVersion: config.electronVersion,
     macCompression: config.platform === "mac" ? config.macCompression : null,
     namespace: config.namespace,

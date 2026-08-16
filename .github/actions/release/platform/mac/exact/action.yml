@@ -2,6 +2,9 @@ name: Distribute exact macOS platform
 description: Shared exact-release Closure platform orchestration
 
 inputs:
+  candidate-id:
+    description: Immutable release candidate build-spec digest
+    required: true
   channel:
     description: Validated exact release name
     required: true
@@ -21,8 +24,8 @@ inputs:
   closure-version:
     description: Exact Standalone Closure version
     required: true
-  dogfood-enabled:
-    description: Publish a dogfood projection when publish is disabled
+  candidate-enabled:
+    description: Publish an unlisted candidate projection when publish is disabled
     required: false
     default: "false"
   legacy-migration-enabled:
@@ -73,6 +76,12 @@ inputs:
     default: ""
 
 outputs:
+  candidate_manifest_url:
+    description: Unlisted candidate target manifest URL
+    value: ${{ steps.candidate.outputs.candidate_manifest_url }}
+  candidate_primary_url:
+    description: Unlisted candidate primary download URL
+    value: ${{ steps.candidate.outputs.candidate_primary_url }}
   dmg_url:
     description: Published platform DMG URL
     value: ${{ steps.platform_outputs.outputs.dmg_url }}
@@ -92,7 +101,7 @@ runs:
       uses: ./.github/actions/release/platform/cache
       with:
         origin-key: ${{ github.run_id }}-${{ github.run_attempt }}
-        prefix: tools-pack-mac-v2-${{ runner.os }}-${{ inputs.arch }}-
+        prefix: tools-pack-mac-v3-${{ inputs.channel }}-${{ runner.os }}-${{ inputs.arch }}-
     - name: Install dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
@@ -229,7 +238,7 @@ runs:
         channel: ${{ inputs.channel }}
         platform: ${{ inputs.platform }}
         public-origin: ${{ inputs.release-public-origin }}
-        publish-enabled: ${{ inputs.publish }}
+        publish-enabled: "true"
         release-version: ${{ inputs.closure-version }}
     - name: Prepare ${{ inputs.target }} Standalone smoke graph
       shell: bash
@@ -278,28 +287,27 @@ runs:
         RELEASE_STORAGE_REGION: auto
         RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
       run: pnpm exec tools-release register-shell-build
-    - name: Upload ${{ inputs.target }} dogfood build to release storage
+    - name: Upload ${{ inputs.target }} candidate to release storage
+      id: candidate
       shell: bash
-      # publish=false QA stays on the release storage plane and does not
-      # round-trip through GitHub artifacts. It writes no channel metadata or latest
-      # pointer (enforced by the guard in tools/release/src/storage/dogfood.ts),
-      # so it cannot change what an installed client sees as an available
-      # update. The publish=true pipeline is untouched.
-      if: ${{ !cancelled() && inputs.dogfood-enabled == 'true' && inputs.publish != 'true' }}
-      continue-on-error: true
+      # A 30-day convenience projection stays on the release storage plane and
+      # never writes a latest pointer. Canonical immutable version objects are
+      # staged separately so the downloaded Shell remains a usable candidate.
+      if: ${{ !cancelled() && inputs.candidate-enabled == 'true' }}
       env:
-        DOGFOOD_BUILD_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-        DOGFOOD_BUILD_JSON_KEYS: dmgPath
-        DOGFOOD_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
-        DOGFOOD_LABEL: macOS ${{ inputs.arch }} ${{ inputs.channel }} ${{ inputs.release-version }}
-        DOGFOOD_VERSION: ${{ inputs.release-version }}
+        RELEASE_CANDIDATE_BUILD_JSON_KEYS: dmgPath
+        RELEASE_CANDIDATE_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
+        RELEASE_CANDIDATE_ID: ${{ inputs.candidate-id }}
+        RELEASE_CHANNEL: ${{ inputs.channel }}
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
         RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
         RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
         RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
         RELEASE_STORAGE_REGION: auto
         RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
-      run: pnpm exec tools-release publish-dogfood
+        RELEASE_TARGET: ${{ inputs.target }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+      run: pnpm exec tools-release publish-candidate-target
     - name: Build exact ${{ inputs.target }} update fixture
       shell: bash
       id: update_fixture

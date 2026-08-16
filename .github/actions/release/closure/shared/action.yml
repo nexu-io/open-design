@@ -70,7 +70,7 @@ runs:
         cp -R "$blob_root" "$build_dir/blobs"
 
     - name: Register immutable shared Closure build
-      if: ${{ inputs.publish-enabled == 'true' && steps.closure_resolution.outputs.state != 'hit' }}
+      if: ${{ steps.closure_resolution.outputs.state != 'hit' }}
       shell: bash
       env:
         RELEASE_CHANNEL: ${{ inputs.channel }}
