@@ -631,7 +631,7 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
       'A loopback WebSocket bridge restricted by host, origin and extension ID keeps the channel local.',
     ],
     howWithAgent: [
-      'Add the plugin project to a harness profile and load the unpacked companion extension in Chrome.',
+      'Clone the repo and add the project to a harness profile, then load its browser-extension folder as an unpacked extension from chrome://extensions.',
       'Run /annotate, click elements on the page and attach a comment to each.',
       'Submit — the captured facts and viewport screenshot land in the agent’s next turn.',
     ],
@@ -641,7 +641,7 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
     repo: 'BrambleXu/dsh-annotate',
     install: {
       kind: 'installer',
-      command: 'dsh plugin --profile demo add ./dsh-annotate',
+      command: 'git clone https://github.com/BrambleXu/dsh-annotate.git && dsh plugin --profile demo add ./dsh-annotate',
     },
     license: MIT,
     upstreamDescription:
@@ -779,7 +779,7 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
       'Links, file paths and dropped files all open in the panel, so review never leaves the session.',
     ],
     howWithAgent: [
-      'Install the package into your web profile directory and mount it in the profile patch file.',
+      'Install the package into your web profile directory, then mount it by adding an insert entry named dsh-web-preview-panel to that profile’s cordis.patch.yml.',
       'Restart dsh web and open the ▶ preview button at the top right of the conversation.',
       'Run the project from the panel, annotate elements, and send logs or notes straight to the agent.',
     ],
@@ -789,7 +789,7 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
     repo: 'zoumutou/dsh-web-preview',
     install: {
       kind: 'installer',
-      command: 'npm install dsh-web-preview-panel',
+      command: 'cd ~/.dsh/profiles/web && npm install dsh-web-preview-panel',
     },
     license: MIT,
     upstreamDescription:

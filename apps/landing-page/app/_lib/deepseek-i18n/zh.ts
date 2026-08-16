@@ -325,7 +325,7 @@ export const zh: DeepseekCopyOverride = {
         '按主机、来源和扩展 ID 限制的本地回环 WebSocket 桥，让整条通道不出本机。',
       ],
       howWithAgent: [
-        '把插件项目加进一个 harness profile，在 Chrome 里加载解包的配套扩展。',
+        '克隆仓库并把项目加进一个 harness profile，然后在 chrome://extensions 里以解包扩展方式加载它的 browser-extension 文件夹。',
         '运行 /annotate，在页面上点选元素，逐个附上批注。',
         '提交——采集到的事实和视口截图会落进 Agent 的下一轮。',
       ],
@@ -355,7 +355,7 @@ export const zh: DeepseekCopyOverride = {
         '链接、文件路径和拖进来的文件都在面板里打开，评审全程不用离开会话。',
       ],
       howWithAgent: [
-        '把包装进你的 web profile 目录，在 profile 补丁文件里挂载。',
+        '把包装进你的 web profile 目录，然后在该 profile 的 cordis.patch.yml 里添加一条名为 dsh-web-preview-panel 的 insert 条目来挂载它。',
         '重启 dsh web，点开对话右上角的 ▶ 预览按钮。',
         '在面板里运行项目、标注元素，把日志或批注直接发给 Agent。',
       ],

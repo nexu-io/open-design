@@ -343,7 +343,7 @@ export const tr: DeepseekCopyOverride = {
         'Host, origin ve uzantı kimliğiyle sınırlanan bir loopback WebSocket köprüsü kanalı yerel tutar.',
       ],
       howWithAgent: [
-        'Eklenti projesini bir harness profiline ekleyin ve paketlenmemiş eşlik uzantısını Chrome’a yükleyin.',
+        'Depoyu klonlayıp projeyi bir harness profiline ekleyin, ardından browser-extension klasörünü chrome://extensions üzerinden paketlenmemiş uzantı olarak yükleyin.',
         '/annotate’i çalıştırın, sayfadaki öğelere tıklayın ve her birine bir yorum iliştirin.',
         'Gönderin — yakalanan gerçekler ve viewport ekran görüntüsü ajanın bir sonraki turuna düşer.',
       ],
@@ -375,7 +375,7 @@ export const tr: DeepseekCopyOverride = {
         'Bağlantılar, dosya yolları ve bırakılan dosyaların tümü panelde açılır; inceleme oturumdan hiç ayrılmaz.',
       ],
       howWithAgent: [
-        'Paketi web profil dizininize kurun ve profil patch dosyasında monte edin.',
+        'Paketi web profil dizininize kurun, ardından o profilin cordis.patch.yml dosyasına dsh-web-preview-panel adlı bir insert girdisi ekleyerek monte edin.',
         'dsh web’i yeniden başlatın ve konuşmanın sağ üstündeki ▶ önizleme düğmesini açın.',
         'Projeyi panelden çalıştırın, öğeleri notlayın ve logları ya da notları doğrudan ajana gönderin.',
       ],

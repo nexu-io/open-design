@@ -333,7 +333,7 @@ export const ptBr: DeepseekCopyOverride = {
         'Uma ponte WebSocket de loopback restrita por host, origem e ID de extensão mantém o canal local.',
       ],
       howWithAgent: [
-        'Adicione o projeto do plugin a um perfil do harness e carregue a extensão companheira descompactada no Chrome.',
+        'Clone o repositório e adicione o projeto a um perfil do harness; depois carregue a pasta browser-extension como extensão descompactada em chrome://extensions.',
         'Rode /annotate, clique nos elementos da página e anexe um comentário a cada um.',
         'Envie — os fatos capturados e o screenshot do viewport chegam no próximo turno do agente.',
       ],
@@ -365,7 +365,7 @@ export const ptBr: DeepseekCopyOverride = {
         'Links, caminhos de arquivo e arquivos arrastados abrem no painel, então a revisão nunca sai da sessão.',
       ],
       howWithAgent: [
-        'Instale o pacote no diretório do seu perfil web e monte-o no arquivo de patch do perfil.',
+        'Instale o pacote no diretório do seu perfil web e depois monte-o adicionando uma entrada insert chamada dsh-web-preview-panel ao cordis.patch.yml desse perfil.',
         'Reinicie o dsh web e abra o botão de preview ▶ no canto superior direito da conversa.',
         'Rode o projeto pelo painel, anote elementos e envie logs ou notas direto para o agente.',
       ],
