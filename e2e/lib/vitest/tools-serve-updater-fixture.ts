@@ -1,5 +1,8 @@
 import { spawn, type ChildProcessByStdio } from 'node:child_process';
 import { once } from 'node:events';
+import { cp, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { isAbsolute, join, resolve } from 'node:path';
 import type { Readable } from 'node:stream';
 
 import type { ReleaseChannel, ReleasePlatform } from '@open-design/release';
@@ -23,6 +26,8 @@ export type ToolsServeUpdaterFixture = {
 export async function startToolsServeUpdaterFixture(options: {
   artifactPath?: string;
   channel: ReleaseChannel;
+  closureBlobRoots?: readonly string[];
+  closureDistributionManifestPath?: string;
   closureManifestPath?: string;
   controlInstallationVersionMin?: string;
   controlInstallationVersionUrl?: string;
@@ -33,6 +38,9 @@ export async function startToolsServeUpdaterFixture(options: {
   version: string;
   workspaceRoot: string;
 }): Promise<ToolsServeUpdaterFixture> {
+  const closureBlobDir = options.closureDistributionManifestPath == null
+    ? null
+    : await materializeClosureBlobs(options);
   const pnpmArgs = [
     '--silent',
     'exec',
@@ -48,6 +56,10 @@ export async function startToolsServeUpdaterFixture(options: {
     options.platform,
   ];
   if (options.artifactPath != null) pnpmArgs.push('--artifact-path', options.artifactPath);
+  if (closureBlobDir != null) pnpmArgs.push('--closure-blob-dir', closureBlobDir);
+  if (options.closureDistributionManifestPath != null) {
+    pnpmArgs.push('--closure-distribution-manifest-path', options.closureDistributionManifestPath);
+  }
   if (options.closureManifestPath != null) pnpmArgs.push('--closure-manifest-path', options.closureManifestPath);
   if (options.controlInstallationVersionMin != null) {
     pnpmArgs.push('--control-installation-version-min', options.controlInstallationVersionMin);
@@ -75,11 +87,35 @@ export async function startToolsServeUpdaterFixture(options: {
   try {
     const info = await readStartupInfo(child, stderrChunks);
     return {
-      close: () => closeChild(child),
+      close: async () => {
+        await closeChild(child);
+        if (closureBlobDir != null) await rm(closureBlobDir, { force: true, recursive: true });
+      },
       info,
     };
   } catch (error) {
     await closeChild(child).catch(() => undefined);
+    if (closureBlobDir != null) await rm(closureBlobDir, { force: true, recursive: true });
+    throw error;
+  }
+}
+
+async function materializeClosureBlobs(options: {
+  closureBlobRoots?: readonly string[];
+  workspaceRoot: string;
+}): Promise<string> {
+  if (options.closureBlobRoots == null || options.closureBlobRoots.length === 0) {
+    throw new Error('Closure distribution fixture requires at least one blob root');
+  }
+  const target = await mkdtemp(join(tmpdir(), 'od-updater-closure-blobs-'));
+  try {
+    for (const root of options.closureBlobRoots) {
+      const source = isAbsolute(root) ? root : resolve(options.workspaceRoot, root);
+      await cp(source, target, { force: false, recursive: true });
+    }
+    return target;
+  } catch (error) {
+    await rm(target, { force: true, recursive: true });
     throw error;
   }
 }

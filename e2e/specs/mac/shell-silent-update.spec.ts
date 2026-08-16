@@ -18,7 +18,7 @@ import { shouldRunPackagedMacSmoke } from './lib/context.js';
 
 
 import type { MacInspectResult,MacInstallResult,MacStartResult,MacStopResult,MacUninstallResult } from './lib/index.js';
-import { assertHealthEvalValue,capturePackagedCheckpoint,captureUpdateEnv,closureBuildJsonPath,packagedMacUpdaterPlatform,resetPackagedRuntimeState,resolveLocalPayloadUpdateFixture,restoreUpdateEnv,runToolsPackJson,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,smokeLanes,updateFixture,updateScenario,verifyCoreOnly,waitForHealthyDesktopShellVersion,waitForUpdaterStatus,workspaceRoot } from './lib/index.js';
+import { assertHealthEvalValue,capturePackagedCheckpoint,captureUpdateEnv,closureBuildJsonPath,packagedMacUpdaterPlatform,packagedUpdaterClosureFixtureOptions,resetPackagedRuntimeState,resolveLocalPayloadUpdateFixture,restoreUpdateEnv,runToolsPackJson,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,smokeLanes,updateFixture,updateScenario,verifyCoreOnly,waitForHealthyDesktopShellVersion,waitForUpdaterStatus,workspaceRoot } from './lib/index.js';
 
 const macShellDescribe = shouldRunPackagedMacSmoke && hasPackagedSmokeLane(smokeLanes, 'shell') ? describe : describe.skip;
 const shellAbsorbsStandaloneAcceptance = hasPackagedSmokeLane(smokeLanes, 'shell')
@@ -51,6 +51,7 @@ macShellDescribe('packaged mac Shell silent update', () => {
 
       payloadFixtureLocal = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
+        ...packagedUpdaterClosureFixtureOptions(),
         payloadPath: localPayload.payloadPath,
         platform: packagedMacUpdaterPlatform,
         version: targetVersion,

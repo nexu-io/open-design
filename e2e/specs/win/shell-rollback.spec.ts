@@ -17,7 +17,7 @@ import { shouldRunPackagedWinSmoke,winProtocolDebugCase } from './lib/context.js
 
 
 import type { WinInspectResult,WinInstallResult,WinStartResult,WinStopResult,WinUninstallResult } from './lib/index.js';
-import { buildCorruptedWinPayloadFixture,buildVersionBumpedWinPayloadFixture,bumpCountedVersion,captureUpdateEnv,resetPackagedUpdaterNamespaceRoots,resolveLocalUpdateFixture,restoreUpdateEnv,runToolsPackJson,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,smokeLanes,toolsPackDir,updateFixture,updateFixtureMode,updateScenario,verifyCoreOnly,waitForDesktopGone,waitForDownloadedUpdater,waitForHealthyDesktopShellVersion,workspaceRoot } from './lib/index.js';
+import { buildCorruptedWinPayloadFixture,buildVersionBumpedWinPayloadFixture,bumpCountedVersion,captureUpdateEnv,packagedUpdaterClosureFixtureOptions,resetPackagedUpdaterNamespaceRoots,resolveLocalUpdateFixture,restoreUpdateEnv,runToolsPackJson,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,smokeLanes,toolsPackDir,updateFixture,updateFixtureMode,updateScenario,verifyCoreOnly,waitForDesktopGone,waitForDownloadedUpdater,waitForHealthyDesktopShellVersion,workspaceRoot } from './lib/index.js';
 
 const winDescribe = shouldRunPackagedWinSmoke && hasPackagedSmokeLane(smokeLanes, 'shell') && winProtocolDebugCase === 'off' ? describe : describe.skip;
 
@@ -57,6 +57,7 @@ winDescribe("packaged windows rollback recovery", () => {
       corruptFixture = await startToolsServeUpdaterFixture({
         artifactPath: localUpdate.installerPath,
         channel: updateScenario.channel,
+        ...packagedUpdaterClosureFixtureOptions(),
         payloadPath: corruptPayloadPath,
         platform: 'win',
         version: targetVersion,
@@ -126,6 +127,7 @@ winDescribe("packaged windows rollback recovery", () => {
       goodFixture = await startToolsServeUpdaterFixture({
         artifactPath: localUpdate.installerPath,
         channel: updateScenario.channel,
+        ...packagedUpdaterClosureFixtureOptions(),
         payloadPath: healedPayloadPath,
         platform: 'win',
         version: healedVersion,

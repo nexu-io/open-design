@@ -38,7 +38,7 @@ import { shouldRunPackagedWinSmoke,winProtocolDebugCase } from './lib/context.js
 
 
 import type { HealthEvalValue,InstallerFallbackSummary,LogsResult,PayloadUpdateSummary,SmokeTiming,UpdaterRecoverySummary,UpgradePersistenceSeed,WinInspectResult,WinInstallResult,WinStartResult,WinStopResult,WinUninstallResult } from './lib/index.js';
-import { activeRuntimeNamespaceRoot,assertClosureDesktopIdentity,assertHealthEvalValue,assertLauncherPointer,assertLogPathsAndContent,assertToolsServeFixtureEnabled,assertUpdateVersionPresent,assertUpgradePersistenceSeed,assertWindowsInviteProtocolRegistration,assertWindowsInviteProtocolRemoved,bundledPluginInventoryExpression,captureUpdateEnv,closureBuildJsonPath,countInviteContinuationResults,expectPathInside,expectWindowsDaemonUrl,expectWindowsFallbackWebUrl,expectWindowsPackagedRouteUrl,fileSizeBytes,formatUnknown,installIdentity,intermediateUpdateBuildJsonPath,invokeWindowsInviteDeeplink,launchNativeWindowsAcceptance,maxInstallDurationMs,maxStartDurationMs,measureSmokeStep,namespace,nativeProductUserDataRoot,nativeRuntimeNamespaceRoot,observePackagedAppShell,outputNamespaceRoot,preUpdateScreenshotPath,printLifecycleTimings,printPackagedLogs,printSmokeTimings,readDesktopIdentityMarker,readPackagedOnboardingConfig,readTiming,releaseChannel,releaseVersion,resetNativePackagedExperienceState,resetPackagedRuntimeDataRoot,resetPackagedUpdaterNamespaceRoots,resolveLocalUpdateFixture,resolveNativeAcceptanceUpdateMetadataUrl,restoreUpdateEnv,runInstallerFallbackAcceptance,runPayloadUpdateAcceptance,runSameVersionUpdaterRecoveryAcceptance,runtimeNamespaceRoot,runToolsPackJson,screenshotPath,seedConfiguredPackagedClosure,seedNativePackagedOnboardingComplete,seedPackagedOnboardingComplete,shellVersion,smokeLanes,startWindowsDesktopOrThrow,summarizeLogs,toolsPackDir,updateFixture,updateFixtureMode,updateFixturePort,updateMetadataUrl,updateScenario,updateVersion,upgradePersistenceSeedExpression,verifyCoreOnly,verifyPublicImmutableArtifacts,verifyUpgradePersistence,waitForCommittedPackagedClosureFixture,waitForDesktopStopped,waitForHealthyDesktop,waitForHealthyDesktopShellVersion,waitForInviteContinuationResult,workspaceRoot } from './lib/index.js';
+import { activeRuntimeNamespaceRoot,assertClosureDesktopIdentity,assertHealthEvalValue,assertLauncherPointer,assertLogPathsAndContent,assertToolsServeFixtureEnabled,assertUpdateVersionPresent,assertUpgradePersistenceSeed,assertWindowsInviteProtocolRegistration,assertWindowsInviteProtocolRemoved,bundledPluginInventoryExpression,captureUpdateEnv,closureBuildJsonPath,countInviteContinuationResults,expectPathInside,expectWindowsDaemonUrl,expectWindowsFallbackWebUrl,expectWindowsPackagedRouteUrl,fileSizeBytes,formatUnknown,installIdentity,intermediateUpdateBuildJsonPath,invokeWindowsInviteDeeplink,launchNativeWindowsAcceptance,maxInstallDurationMs,maxStartDurationMs,measureSmokeStep,namespace,nativeProductUserDataRoot,nativeRuntimeNamespaceRoot,observePackagedAppShell,outputNamespaceRoot,packagedUpdaterClosureFixtureOptions,preUpdateScreenshotPath,printLifecycleTimings,printPackagedLogs,printSmokeTimings,readDesktopIdentityMarker,readPackagedOnboardingConfig,readTiming,releaseChannel,releaseVersion,resetNativePackagedExperienceState,resetPackagedRuntimeDataRoot,resetPackagedUpdaterNamespaceRoots,resolveLocalUpdateFixture,resolveNativeAcceptanceUpdateMetadataUrl,restoreUpdateEnv,runInstallerFallbackAcceptance,runPayloadUpdateAcceptance,runSameVersionUpdaterRecoveryAcceptance,runtimeNamespaceRoot,runToolsPackJson,screenshotPath,seedConfiguredPackagedClosure,seedNativePackagedOnboardingComplete,seedPackagedOnboardingComplete,shellVersion,smokeLanes,startWindowsDesktopOrThrow,summarizeLogs,toolsPackDir,updateFixture,updateFixtureMode,updateFixturePort,updateMetadataUrl,updateScenario,updateVersion,upgradePersistenceSeedExpression,verifyCoreOnly,verifyPublicImmutableArtifacts,verifyUpgradePersistence,waitForCommittedPackagedClosureFixture,waitForDesktopStopped,waitForHealthyDesktop,waitForHealthyDesktopShellVersion,waitForInviteContinuationResult,workspaceRoot } from './lib/index.js';
 
 const winDescribe = shouldRunPackagedWinSmoke && hasPackagedSmokeLane(smokeLanes, 'shell') && winProtocolDebugCase === 'off' ? describe : describe.skip;
 const shellAbsorbsStandaloneAcceptance = hasPackagedSmokeLane(smokeLanes, 'shell')
@@ -248,6 +248,7 @@ winDescribe('packaged windows runtime smoke', () => {
           payloadFixture = await startToolsServeUpdaterFixture({
             artifactPath: initialUpdateFixture.installerPath,
             channel: updateScenario.channel,
+            ...packagedUpdaterClosureFixtureOptions(),
             ...(closureBuild == null ? {} : { closureManifestPath: closureBuild.manifestPath }),
             ...(updateFixtureMode === 'payload' ? { payloadPath: initialUpdateFixture.payloadPath } : {}),
             platform: 'win',
@@ -492,6 +493,7 @@ winDescribe('packaged windows runtime smoke', () => {
           payloadFixture = await startToolsServeUpdaterFixture({
             artifactPath: localUpdateFixture.installerPath,
             channel: updateScenario.channel,
+            ...packagedUpdaterClosureFixtureOptions(),
             payloadPath: localUpdateFixture.payloadPath,
             platform: 'win',
             ...(updateFixturePort == null ? {} : { port: updateFixturePort }),
@@ -541,6 +543,7 @@ winDescribe('packaged windows runtime smoke', () => {
           payloadFixture = await startToolsServeUpdaterFixture({
             artifactPath: localUpdateFixture.installerPath,
             channel: updateScenario.channel,
+            ...packagedUpdaterClosureFixtureOptions(),
             controlInstallationVersionMin: expectedPayloadUpdateVersion,
             controlInstallationVersionUrl: 'https://example.test/updater-recovery',
             payloadPath: localUpdateFixture.payloadPath,

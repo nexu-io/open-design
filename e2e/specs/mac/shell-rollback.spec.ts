@@ -20,7 +20,7 @@ import { shouldRunPackagedMacSmoke } from './lib/context.js';
 
 
 import type { MacInspectResult,MacInstallResult,MacStartResult,MacStopResult,MacUninstallResult } from './lib/index.js';
-import { assertHealthEvalValue,buildCorruptedMacPayloadFixture,buildVersionBumpedMacPayloadFixture,bumpCountedVersion,capturePackagedCheckpoint,captureUpdateEnv,closureBuildJsonPath,packagedMacUpdaterPlatform,resetPackagedRuntimeState,resolveLocalPayloadUpdateFixture,restoreUpdateEnv,runToolsPackJson,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,smokeLanes,toolsPackDir,updateFixture,updateScenario,verifyCoreOnly,waitForDesktopGone,waitForHealthyDesktopShellVersion,waitForUpdaterStatus,workspaceRoot } from './lib/index.js';
+import { assertHealthEvalValue,buildCorruptedMacPayloadFixture,buildVersionBumpedMacPayloadFixture,bumpCountedVersion,capturePackagedCheckpoint,captureUpdateEnv,closureBuildJsonPath,packagedMacUpdaterPlatform,packagedUpdaterClosureFixtureOptions,resetPackagedRuntimeState,resolveLocalPayloadUpdateFixture,restoreUpdateEnv,runToolsPackJson,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,smokeLanes,toolsPackDir,updateFixture,updateScenario,verifyCoreOnly,waitForDesktopGone,waitForHealthyDesktopShellVersion,waitForUpdaterStatus,workspaceRoot } from './lib/index.js';
 
 const macShellDescribe = shouldRunPackagedMacSmoke && hasPackagedSmokeLane(smokeLanes, 'shell') ? describe : describe.skip;
 const shellAbsorbsStandaloneAcceptance = hasPackagedSmokeLane(smokeLanes, 'shell')
@@ -57,6 +57,7 @@ macShellDescribe('packaged mac Shell rollback recovery', () => {
 
       corruptFixture = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
+        ...packagedUpdaterClosureFixtureOptions(),
         payloadPath: corruptPayloadPath,
         platform: packagedMacUpdaterPlatform,
         version: targetVersion,
@@ -133,6 +134,7 @@ macShellDescribe('packaged mac Shell rollback recovery', () => {
       corruptFixture = null;
       goodFixture = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
+        ...packagedUpdaterClosureFixtureOptions(),
         payloadPath: healedPayloadPath,
         platform: packagedMacUpdaterPlatform,
         version: healedVersion,

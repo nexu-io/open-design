@@ -18,9 +18,11 @@ import {
   isReleaseChannel,
   releaseMetadataVersionFields,
   type ReleaseChannel,
+  type ReleasePlatform,
 } from "@open-design/release";
 
 type UpdaterFixtureChannel = ReleaseChannel;
+export type UpdaterFixturePlatform = Exclude<ReleasePlatform, "linux">;
 
 type ClosureFixtureFile = {
   body?: Buffer;
@@ -48,7 +50,7 @@ export type UpdaterFixtureOptions = {
   host?: string;
   includePayload?: boolean;
   launcherSchema?: number;
-  platform?: "mac" | "win";
+  platform?: UpdaterFixturePlatform;
   payloadBody?: Buffer | string;
   payloadPath?: string;
   port?: number;
@@ -70,7 +72,7 @@ export type UpdaterFixtureInfo = {
   payloadPath: string | null;
   payloadSha256: string | null;
   payloadUrl: string | null;
-  platform: "mac" | "win";
+  platform: UpdaterFixturePlatform;
   sha256: string;
   version: string;
 };
@@ -129,6 +131,7 @@ async function inspectClosureDistributionBlobs(
 function rebaseClosureDistributionManifest(
   manifest: ClosureDistributionManifest,
   origin: string,
+  version: string,
 ): ClosureDistributionManifest {
   return createClosureDistributionManifest({
     blobs: Object.fromEntries(Object.entries(manifest.blobs).map(([digest, artifact]) => [digest, {
@@ -139,7 +142,7 @@ function rebaseClosureDistributionManifest(
     identity: {
       channel: manifest.identity.channel,
       protocolVersion: manifest.identity.protocolVersion,
-      version: manifest.identity.version,
+      version,
     },
     required: manifest.required,
     resources: manifest.resources,
@@ -303,13 +306,15 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
   const platform = options.platform ?? "mac";
   const port = options.port ?? 0;
   const version = options.version ?? "99.0.0";
-  const platformKey = platform === "win" ? "win" : "mac";
+  const platformKey = platform;
+  const releaseTarget = platform === "mac" ? "mac_arm64" : platform === "macIntel" ? "mac_x64" : "win_x64";
+  const targetArch = platform === "mac" ? "arm64" : "x64";
   const artifactKey = platform === "win" ? "installer" : "dmg";
   const artifactName = options.artifactPath != null
     ? basename(options.artifactPath)
     : platform === "win"
     ? `open-design-${version}-win-x64-setup.exe`
-    : `open-design-${version}-mac-arm64.dmg`;
+    : `open-design-${version}-mac-${targetArch}.dmg`;
   const contentType = platform === "win"
     ? "application/vnd.microsoft.portable-executable"
     : "application/x-apple-diskimage";
@@ -327,7 +332,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
   const payloadName = options.payloadPath == null
     ? platform === "win"
       ? `open-design-${version}-win-x64-payload.7z`
-      : `open-design-${version}-mac-arm64-payload.zip`
+      : `open-design-${version}-mac-${targetArch}-payload.zip`
     : basename(options.payloadPath);
   const artifactPathSegment = encodeURIComponent(artifactName);
   const payloadPathSegment = encodeURIComponent(payloadName);
@@ -343,10 +348,30 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
   const payloadSha256 = options.payloadPath == null
     ? createHash("sha256").update(payloadBody).digest("hex")
     : await sha256File(options.payloadPath);
+  if (options.closureDistributionManifestPath != null && options.closureManifestPath != null) {
+    throw new Error("updater fixture accepts either a legacy Closure manifest or a distribution manifest, not both");
+  }
   const closureRoot = options.closureManifestPath == null ? null : dirname(options.closureManifestPath);
-  let closureManifest = options.closureManifestPath == null
+  const rawClosureManifest = options.closureManifestPath == null
     ? null
-    : validateClosureCandidateManifest(JSON.parse(await readFile(options.closureManifestPath, "utf8")) as unknown);
+    : JSON.parse(await readFile(options.closureManifestPath, "utf8")) as unknown;
+  const closureManifestRecord = rawClosureManifest != null && typeof rawClosureManifest === "object"
+    ? rawClosureManifest as Record<string, unknown>
+    : null;
+  const isDistributionManifest = closureManifestRecord?.blobs != null
+    && closureManifestRecord.required != null
+    && closureManifestRecord.identity != null;
+  let closureManifest: ClosureCandidateManifest | null = rawClosureManifest == null
+    ? null
+    : isDistributionManifest
+      ? null
+      : validateClosureCandidateManifest(rawClosureManifest);
+  const rawClosureDistribution = options.closureDistributionManifestPath == null
+    ? closureManifest == null ? rawClosureManifest : null
+    : JSON.parse(await readFile(options.closureDistributionManifestPath, "utf8")) as unknown;
+  let closureDistribution: ClosureDistributionManifest | null = rawClosureDistribution == null
+    ? null
+    : validateClosureDistributionManifest(rawClosureDistribution, sha256Canonical);
   const closureFilePaths = closureRoot == null
     ? null
     : {
@@ -357,7 +382,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
       };
   let closureFiles: ClosureFixtureFiles | null = null;
   if (closureManifest != null && closureFilePaths != null) {
-    const expectedPlatform = platform === "mac" ? "darwin-arm64" : "win32-x64";
+    const expectedPlatform = platform === "mac" ? "darwin-arm64" : platform === "macIntel" ? "darwin-x64" : "win32-x64";
     if (closureManifest.identity.channel !== channel) {
       throw new Error(`Closure channel ${closureManifest.identity.channel} does not match updater channel ${channel}`);
     }
@@ -377,37 +402,30 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     }));
     closureFiles = Object.fromEntries(fileEntries) as ClosureFixtureFiles;
   }
-  if (options.closureDistributionManifestPath != null && options.closureManifestPath != null) {
-    throw new Error("updater fixture accepts either a legacy Closure manifest or a distribution manifest, not both");
-  }
-  let closureDistributionManifest = options.closureDistributionManifestPath == null
-    ? null
-    : validateClosureDistributionManifest(
-      JSON.parse(await readFile(options.closureDistributionManifestPath, "utf8")) as unknown,
-      sha256Canonical,
-    );
-  if (closureDistributionManifest != null) {
-    const expectedTarget = platform === "mac" ? "darwin-arm64" : "win32-x64";
-    if (closureDistributionManifest.identity.channel !== channel) {
+  const expectedClosureTarget = platform === "mac"
+    ? "darwin-arm64"
+    : platform === "macIntel"
+      ? "darwin-x64"
+      : "win32-x64";
+  let distributionBlobFiles = new Map<ClosureDigest, Readonly<{ path: string; size: number }>>();
+  if (closureDistribution != null) {
+    if (closureDistribution.identity.channel !== channel) {
       throw new Error(
-        `Closure distribution channel ${closureDistributionManifest.identity.channel} does not match updater channel ${channel}`,
+        `Closure channel ${closureDistribution.identity.channel} does not match updater channel ${channel}`,
       );
     }
-    if (closureDistributionManifest.identity.version !== version) {
+    if (closureDistribution.required.targets[expectedClosureTarget] == null) {
       throw new Error(
-        `Closure distribution version ${closureDistributionManifest.identity.version} does not match updater version ${version}`,
+        `Closure distribution does not contain updater target ${expectedClosureTarget}`,
       );
     }
-    if (closureDistributionManifest.required.targets[expectedTarget] == null) {
-      throw new Error(`Closure distribution does not contain updater target ${expectedTarget}`);
-    }
-    if (options.closureBlobDir == null) {
+    const closureBlobDir = options.closureBlobDir
+      ?? (options.closureManifestPath == null ? null : join(dirname(options.closureManifestPath), "blobs"));
+    if (closureBlobDir == null) {
       throw new Error("Closure distribution fixture requires --closure-blob-dir");
     }
+    distributionBlobFiles = await inspectClosureDistributionBlobs(closureDistribution, closureBlobDir);
   }
-  const closureDistributionBlobs = closureDistributionManifest == null || options.closureBlobDir == null
-    ? null
-    : await inspectClosureDistributionBlobs(closureDistributionManifest, options.closureBlobDir);
 
   let info: UpdaterFixtureInfo | null = null;
   const server = createServer((request, response) => {
@@ -426,15 +444,15 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
         channel,
         generatedAt: new Date().toISOString(),
         ...channelMetadata(channel, version),
-        ...(closureDistributionManifest == null
+        ...(closureDistribution == null
           ? {}
-          : { closure: closureDistributionManifest, releaseState: "complete" }),
+          : { closure: closureDistribution, releaseState: "complete" }),
         ...(closureManifest == null
           ? {}
           : {
               releaseState: "complete",
               releaseTargets: {
-                [platform === "mac" ? "mac_arm64" : "win_x64"]: {
+                [releaseTarget]: {
                   closure: closureReleaseMetadata(closureManifest, closureFiles!),
                   enabled: true,
                   status: "published",
@@ -464,7 +482,7 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
           : {}),
         platforms: {
           [platformKey]: {
-            arch: platform === "win" ? "x64" : "arm64",
+            arch: targetArch,
             artifacts: {
               [artifactKey]: {
                 contentType,
@@ -498,16 +516,14 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
       }));
       return;
     }
-    if (closureDistributionManifest != null && closureDistributionBlobs != null) {
-      const prefix = `/${channel}/blobs/`;
-      if (path.startsWith(prefix)) {
-        const name = path.slice(prefix.length);
-        const digest = `sha256:${name}` as ClosureDigest;
-        const blob = closureDistributionBlobs.get(digest);
-        if (blob != null && /^[0-9a-f]{64}$/u.test(name)) {
-          sendFileArtifact(request, response, blob.path, blob.size, "application/zip");
-          return;
-        }
+    if (closureDistribution != null) {
+      const blobMatch = new RegExp(`^/${channel}/blobs/([0-9a-f]{64})$`, "u").exec(path);
+      const digest = blobMatch?.[1] == null ? null : `sha256:${blobMatch[1]}` as ClosureDigest;
+      const blob = digest == null ? null : distributionBlobFiles.get(digest);
+      const artifact = digest == null ? null : closureDistribution.blobs[digest];
+      if (blob != null && artifact != null) {
+        sendFileArtifact(request, response, blob.path, blob.size, artifact.mediaType);
+        return;
       }
     }
     if (closureFiles != null && info.closureArchiveUrl != null) {
@@ -560,8 +576,11 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
 
   await listen(server, port, host);
   const origin = serverOrigin(server);
-  if (closureDistributionManifest != null) {
-    closureDistributionManifest = rebaseClosureDistributionManifest(closureDistributionManifest, origin);
+  if (
+    closureDistribution != null
+    && (options.closureDistributionManifestPath != null || options.rebaseClosureUrl === true)
+  ) {
+    closureDistribution = rebaseClosureDistributionManifest(closureDistribution, origin, version);
   }
   if (closureManifest != null && options.rebaseClosureUrl === true) {
     const closureArchiveUrl = `${origin}/${channel}/closure/${closureManifest.identity.platform}/versions/${closureManifest.identity.version}/closure.zip`;
@@ -582,6 +601,17 @@ export async function startUpdaterFixtureServer(options: UpdaterFixtureOptions =
     }
   }
   const closureArchiveUrl = closureManifest?.artifact.url ?? null;
+  if (closureDistribution != null) {
+    const foreignBlob = Object.values(closureDistribution.blobs).find(
+      (artifact) => new URL(artifact.url).origin !== origin,
+    );
+    if (foreignBlob != null) {
+      await close(server);
+      throw new Error(
+        `Closure blob URL origin ${new URL(foreignBlob.url).origin} does not match fixture origin ${origin}`,
+      );
+    }
+  }
   if (closureArchiveUrl != null && new URL(closureArchiveUrl).origin !== origin) {
     await close(server);
     throw new Error(

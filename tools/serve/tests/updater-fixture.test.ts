@@ -32,9 +32,10 @@ async function reserveLoopbackPort(): Promise<number> {
 }
 
 describe("updater fixture server", () => {
-  it("serves a rebased v2 Closure graph from latest and immutable version metadata", async () => {
+  it("reprojects a Closure graph onto the fixture release while reusing immutable blobs", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-closure-v2-fixture-"));
     const version = "2.0.0-beta.5";
+    const sourceVersion = "2.0.0-beta.4";
     const digest = (value: string): `sha256:${string}` => (
       `sha256:${createHash("sha256").update(value).digest("hex")}`
     );
@@ -58,7 +59,7 @@ describe("updater fixture server", () => {
     const manifest = createClosureDistributionManifest({
       blobs,
       compatibility: { shell: { electron: { version: { min: version } } } },
-      identity: { channel: "beta", protocolVersion: CLOSURE_PROTOCOL_VERSION, version },
+      identity: { channel: "beta", protocolVersion: CLOSURE_PROTOCOL_VERSION, version: sourceVersion },
       required: {
         body: { blob: bodyBlob, entryPath: "bootloader.mjs", treeDigest: digest("body tree") },
         launcher: {

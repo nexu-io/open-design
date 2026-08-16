@@ -15,7 +15,7 @@ import { shouldRunPackagedWinSmoke,winProtocolDebugCase } from './lib/context.js
 
 
 import type { WinInspectResult,WinInstallResult,WinStartResult,WinStopResult,WinUninstallResult } from './lib/index.js';
-import { captureUpdateEnv,resetPackagedUpdaterNamespaceRoots,resolveLocalUpdateFixture,restoreUpdateEnv,runToolsPackJson,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,smokeLanes,updateFixture,updateFixtureMode,updateScenario,verifyCoreOnly,waitForDownloadedUpdater,waitForHealthyDesktopShellVersion,waitForTerminalUpdateState,workspaceRoot } from './lib/index.js';
+import { captureUpdateEnv,packagedUpdaterClosureFixtureOptions,resetPackagedUpdaterNamespaceRoots,resolveLocalUpdateFixture,restoreUpdateEnv,runToolsPackJson,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,smokeLanes,updateFixture,updateFixtureMode,updateScenario,verifyCoreOnly,waitForDownloadedUpdater,waitForHealthyDesktopShellVersion,waitForTerminalUpdateState,workspaceRoot } from './lib/index.js';
 
 const winDescribe = shouldRunPackagedWinSmoke && hasPackagedSmokeLane(smokeLanes, 'shell') && winProtocolDebugCase === 'off' ? describe : describe.skip;
 
@@ -45,6 +45,7 @@ winDescribe("packaged windows silent update", () => {
       payloadFixtureLocal = await startToolsServeUpdaterFixture({
         artifactPath: localUpdate.installerPath,
         channel: updateScenario.channel,
+        ...packagedUpdaterClosureFixtureOptions(),
         payloadPath: localUpdate.payloadPath,
         platform: 'win',
         version: targetVersion,

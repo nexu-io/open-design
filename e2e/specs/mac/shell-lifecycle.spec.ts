@@ -45,7 +45,7 @@ import { shouldRunPackagedMacSmoke } from './lib/context.js';
 
 
 import type { LogsResult,MacInspectResult,MacInstallResult,MacStartResult,MacStopResult,MacUninstallResult,PayloadRuntimeAcceptance,UpdaterRecoverySummary,UpgradePersistenceSeed } from './lib/index.js';
-import { assertClosureDesktopIdentity,assertHealthEvalValue,assertLauncherPointer,assertLogPathsAndContent,assertMacInviteProtocolRegistration,assertPayloadDesktopIdentity,assertPptxExportEvalValue,assertSettledDesktopHandoff,assertToolsServeFixtureEnabled,assertUpdateVersionPresent,assertUpgradePersistenceSeed,bundledPluginInventoryExpression,capturePackagedCheckpoint,captureUpdateEnv,closureBuildJsonPath,existingProjectPptxExportExpression,expectPathInside,fileSizeBytes,formatUnknown,invokeMacInviteDeeplink,launchMacAppWithLaunchServices,macFocusWitness,maxStartDurationMs,namespace,outputNamespaceRoot,packagedMacClosureTarget,packagedMacUpdaterPlatform,pathExists,printPackagedLogs,readDesktopIdentityMarker,releaseChannel,releaseVersion,resetPackagedRuntimeState,resolveLocalPayloadUpdateFixture,restoreUpdateEnv,runtimeNamespaceRoot,runToolsPackJson,screenshotPath,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,shellVersion,smokeLanes,standaloneSeedEmbedded,summarizeLogs,toolsPackDir,updateFixture,updateMetadataUrl,updateScenario,updateVersion,upgradePersistenceSeedExpression,verifyCoreOnly,verifyStandaloneRuntimeBinding,waitForHealthyDesktop,waitForHealthyDesktopShellVersion,waitForUpdaterStatus,workspaceRoot } from './lib/index.js';
+import { assertClosureDesktopIdentity,assertHealthEvalValue,assertLauncherPointer,assertLogPathsAndContent,assertMacInviteProtocolRegistration,assertPayloadDesktopIdentity,assertPptxExportEvalValue,assertSettledDesktopHandoff,assertToolsServeFixtureEnabled,assertUpdateVersionPresent,assertUpgradePersistenceSeed,bundledPluginInventoryExpression,capturePackagedCheckpoint,captureUpdateEnv,closureBuildJsonPath,existingProjectPptxExportExpression,expectPathInside,fileSizeBytes,formatUnknown,invokeMacInviteDeeplink,launchMacAppWithLaunchServices,macFocusWitness,maxStartDurationMs,namespace,outputNamespaceRoot,packagedMacClosureTarget,packagedMacUpdaterPlatform,packagedUpdaterClosureFixtureOptions,pathExists,printPackagedLogs,readDesktopIdentityMarker,releaseChannel,releaseVersion,resetPackagedRuntimeState,resolveLocalPayloadUpdateFixture,restoreUpdateEnv,runtimeNamespaceRoot,runToolsPackJson,screenshotPath,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,shellVersion,smokeLanes,standaloneSeedEmbedded,summarizeLogs,toolsPackDir,updateFixture,updateMetadataUrl,updateScenario,updateVersion,upgradePersistenceSeedExpression,verifyCoreOnly,verifyStandaloneRuntimeBinding,waitForHealthyDesktop,waitForHealthyDesktopShellVersion,waitForUpdaterStatus,workspaceRoot } from './lib/index.js';
 
 const macShellDescribe = shouldRunPackagedMacSmoke && hasPackagedSmokeLane(smokeLanes, 'shell') ? describe : describe.skip;
 const shellAbsorbsStandaloneAcceptance = hasPackagedSmokeLane(smokeLanes, 'shell')
@@ -112,6 +112,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
             : null;
           payloadFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
+            ...packagedUpdaterClosureFixtureOptions(),
             ...(closureBuild == null ? {} : { closureManifestPath: closureBuild.manifestPath }),
             payloadPath: localPayload.payloadPath,
             platform: packagedMacUpdaterPlatform,
@@ -449,6 +450,7 @@ macShellDescribe('packaged mac Shell runtime smoke', () => {
           payloadFixture = null;
           recoveryFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
+            ...packagedUpdaterClosureFixtureOptions(),
             controlInstallationVersionMin: updaterVersion,
             controlInstallationVersionUrl: 'https://example.test/updater-recovery',
             payloadPath: recoveryPayloadPath,

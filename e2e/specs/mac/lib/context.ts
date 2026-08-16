@@ -55,6 +55,17 @@ export const standaloneSeedEmbedded = process.env.OD_PACKAGED_E2E_STANDALONE_SEE
 export const verifyPublicImmutableArtifacts =
   normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_SHELL_SMOKE_PROOF) === 'public-immutable-artifacts';
 export const verifyStandaloneRuntimeBinding = verifyPublicImmutableArtifacts || standaloneSeedEmbedded;
+
+export function packagedUpdaterClosureFixtureOptions(): Readonly<{
+  closureBlobRoots?: readonly string[];
+  closureDistributionManifestPath?: string;
+}> {
+  if (closureDistributionManifestPath == null) return {};
+  if (closureBlobRoots.length === 0) {
+    throw new Error('packaged updater Closure distribution requires configured blob roots');
+  }
+  return { closureBlobRoots, closureDistributionManifestPath };
+}
 export const maxStartDurationMs = 90_000;
 export const legacyDmgPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH);
 export const legacyVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_LEGACY_VERSION);

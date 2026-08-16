@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import {
+	resolveClosureStorePaths,
 	type StoredClosureVerification
 } from '@open-design/closure/store';
 
@@ -77,6 +78,17 @@ export const verifyPublicImmutableArtifacts = shellSmokeProof === 'public-immuta
 export const packagedInviteDeeplink =
   'opendesign://workspace/invite/continue?workspace_id=packaged-smoke-workspace&member_id=packaged-smoke-member&invite_id=packaged-smoke-invite&nonce=packaged-smoke-nonce';
 export const updateScenario = resolvePackagedUpdateScenario({ releaseChannel, releaseVersion, shellVersion });
+
+export function packagedUpdaterClosureFixtureOptions(): Readonly<{
+  closureBlobRoots?: readonly string[];
+  closureDistributionManifestPath?: string;
+}> {
+  if (closureDistributionManifestPath == null) return {};
+  if (closureBlobRoots.length === 0) {
+    throw new Error('packaged updater Closure distribution requires configured blob roots');
+  }
+  return { closureBlobRoots, closureDistributionManifestPath };
+}
 export const installIdentity = resolvePackagedWinInstallIdentity({
   debugChannel: releaseChannel,
   namespace,
@@ -561,9 +573,15 @@ export async function resetPackagedRuntimeNamespaceRoot(namespaceRoot: string): 
 }
 
 export async function resetPackagedUpdaterNamespaceRoots(): Promise<void> {
+  const closureNamespaceRoot = resolveClosureStorePaths({
+    channel: updateScenario.channel,
+    namespace,
+    root: join(toolsPackDir, 'runtime', 'win'),
+  }).namespaceRoot;
   await Promise.all([
     resetPackagedRuntimeNamespaceRoot(runtimeNamespaceRoot),
     resetPackagedRuntimeNamespaceRoot(launcherNamespaceRoot),
+    resetPackagedRuntimeNamespaceRoot(closureNamespaceRoot),
   ]);
 }
 
