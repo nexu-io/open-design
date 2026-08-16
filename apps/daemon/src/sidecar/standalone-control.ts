@@ -7,18 +7,17 @@ import {
 } from "@open-design/sidecar/control";
 import {
   STANDALONE_SHELL_CAPABILITIES,
+  STANDALONE_BODY_BRIDGE_SERVICE,
+  type StandalonePreparedResource,
   type StandaloneProtocolJsonValue,
   type StandaloneShellCapability,
   type StandaloneShellCapabilityInput,
   type StandaloneShellCapabilityOutput,
   type StandaloneShellCapabilityResult,
+  type StandaloneResourceEnsureRequest,
   validateStandaloneShellCapabilityInput,
   validateStandaloneShellCapabilityOutput,
 } from "@open-design/standalone/protocol";
-import {
-  STANDALONE_BODY_BRIDGE_SERVICE,
-  type StandaloneBodyBridgeMethods,
-} from "@open-design/standalone/process-bridge";
 
 import { startDaemonRuntime } from "../daemon-startup.js";
 import { setDesktopAuthSecret } from "../desktop-auth.js";
@@ -40,6 +39,10 @@ type ShellCapabilityBridgeMethods = {
     Readonly<{ attachmentId: string; capability: string; input: StandaloneProtocolJsonValue }>,
     StandaloneShellCapabilityResult
   >;
+};
+
+type StandaloneBodyBridgeMethods = {
+  ensureResource: SidecarMethod<StandaloneResourceEnsureRequest, StandalonePreparedResource>;
 };
 
 const STANDALONE_SHELL_CAPABILITY_SERVICE = "shell";

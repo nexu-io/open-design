@@ -11,6 +11,7 @@ export const STANDALONE_HANDOFF_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_UPDATER_SCHEMA_VERSION = 1 as const;
 export const STANDALONE_BOOTLOADER_ENTRY_PATH = "bootloader.mjs" as const;
 export const STANDALONE_BOOTLOADER_EXPORT_NAME = "handoff" as const;
+export const STANDALONE_BODY_BRIDGE_SERVICE = "standalone-body" as const;
 
 export type StandaloneDigest = `sha256:${string}`;
 
@@ -170,6 +171,15 @@ export type StandaloneProtocolJsonValue =
   | string
   | StandaloneProtocolJsonValue[]
   | { [key: string]: StandaloneProtocolJsonValue };
+
+export type StandaloneResourceEnsureRequest = Readonly<{ id: string }>;
+
+export type StandalonePreparedResource = Readonly<{
+  id: string;
+  path: string;
+  reused: boolean;
+  title: string;
+}>;
 
 export type StandaloneShellCapabilityExchange = Readonly<{
   attachmentId: string;

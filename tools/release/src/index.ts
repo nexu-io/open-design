@@ -322,6 +322,12 @@ cli
   });
 
 cli
+  .command("write-reuse-plan", "Write the resolved release cache and verification plan")
+  .action(async () => {
+    await import("./report/write-reuse-plan.ts");
+  });
+
+cli
   .command("notify feishu", "Send a Feishu release notification")
   .action(async () => {
     await import("./notifications/feishu.ts");

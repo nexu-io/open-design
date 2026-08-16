@@ -129,6 +129,7 @@ const cacheReport = objectOrNull(build?.cacheReport);
 const cacheEntries = arrayOrEmpty(cacheReport?.entries ?? index?.cache);
 const buildSegments = arrayOrEmpty(build?.segments ?? index?.buildSegments);
 const coldStart = objectOrNull(smokeSummary?.coldStart);
+const reusePlan = readJsonFile(join(reportRoot, "reuse-plan.json"));
 
 const report = {
   version: 1,
@@ -176,6 +177,7 @@ const report = {
     cache: cacheReport ?? (cacheEntries.length > 0 ? { entries: cacheEntries } : null),
     segments: buildSegments,
   },
+  reuse: reusePlan,
   coldStart,
   reportFiles: listFiles(reportRoot),
 };

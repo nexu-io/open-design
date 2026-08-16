@@ -368,8 +368,8 @@ jobs:
         uses: actions/checkout@v6.0.2
         with:
           ref: ${{ needs.metadata.outputs.commit }}
-      - name: Distribute exact ${{ matrix.target }}
-        id: mac
+      - name: Resolve and materialize exact macOS ${{ matrix.target }}
+        id: mac_prepare
         if: ${{ matrix.target != 'win_x64' }}
         uses: ./.github/actions/release/platform/mac/exact
         env:
@@ -390,6 +390,7 @@ jobs:
           legacy-migration-enabled: ${{ matrix.target == 'mac_arm64' && inputs.exact_name == 'beta' && 'true' || 'false' }}
           namespace: ${{ matrix.target == 'mac_arm64' && format('release-{0}', inputs.exact_name) || format('release-{0}-x64', inputs.exact_name) }}
           platform: ${{ matrix.target == 'mac_arm64' && 'darwin-arm64' || 'darwin-x64' }}
+          phase: prepare
           publish: "true"
           release-public-origin: ${{ inputs.release_public_origin }}
           release-version: ${{ needs.metadata.outputs.release_version }}
@@ -402,8 +403,37 @@ jobs:
           update-metadata-url: ""
           update-target-version: ""
 
-      - name: Distribute exact win_x64
-        id: win
+      - name: Smoke and publish exact macOS ${{ matrix.target }}
+        id: mac_finish
+        if: ${{ matrix.target != 'win_x64' }}
+        uses: ./.github/actions/release/platform/mac/exact
+        with:
+          channel: ${{ inputs.exact_name }}
+          amr-profile: ${{ inputs.amr_profile || 'test' }}
+          arch: ${{ matrix.target == 'mac_arm64' && 'arm64' || 'x64' }}
+          artifact-id: ${{ matrix.target == 'mac_arm64' && 'mac-arm64' || 'mac-x64' }}
+          build-target: ${{ matrix.target == 'mac_arm64' && 'dmg' || 'all' }}
+          candidate-id: ${{ needs.metadata.outputs.candidate_id }}
+          closure-version: ${{ needs.metadata.outputs.closure_version }}
+          candidate-enabled: "true"
+          legacy-migration-enabled: ${{ matrix.target == 'mac_arm64' && inputs.exact_name == 'beta' && 'true' || 'false' }}
+          namespace: ${{ matrix.target == 'mac_arm64' && format('release-{0}', inputs.exact_name) || format('release-{0}-x64', inputs.exact_name) }}
+          phase: finish
+          platform: ${{ matrix.target == 'mac_arm64' && 'darwin-arm64' || 'darwin-x64' }}
+          publish: "true"
+          release-public-origin: ${{ inputs.release_public_origin }}
+          release-version: ${{ needs.metadata.outputs.release_version }}
+          shell-smoke-matrix: ${{ matrix.target == 'mac_arm64' && 'mac-shell-v3' || 'mac-shell-v2' }}
+          shell-version: ${{ needs.metadata.outputs.shell_version }}
+          sign-mode: notarized
+          smoke-lanes-on-miss: ${{ matrix.target == 'mac_x64' && 'shell,standalone' || '' }}
+          smoke-mode: full
+          target: ${{ matrix.target }}
+          update-metadata-url: ""
+          update-target-version: ""
+
+      - name: Resolve and materialize exact win_x64
+        id: win_prepare
         if: ${{ matrix.target == 'win_x64' }}
         uses: ./.github/actions/release/platform/win/exact
         with:
@@ -413,6 +443,27 @@ jobs:
           closure-version: ${{ needs.metadata.outputs.closure_version }}
           shell-version: ${{ needs.metadata.outputs.shell_version }}
           amr-profile: ${{ inputs.amr_profile || 'test' }}
+          phase: prepare
+          publish: "true"
+          release-public-origin: ${{ inputs.release_public_origin }}
+          sign-mode: unsigned
+          smoke-mode: full
+          build-target: all
+          update-metadata-url: ""
+          update-target-version: ""
+
+      - name: Smoke and publish exact win_x64
+        id: win_finish
+        if: ${{ matrix.target == 'win_x64' }}
+        uses: ./.github/actions/release/platform/win/exact
+        with:
+          channel: ${{ inputs.exact_name }}
+          candidate-id: ${{ needs.metadata.outputs.candidate_id }}
+          release-version: ${{ needs.metadata.outputs.release_version }}
+          closure-version: ${{ needs.metadata.outputs.closure_version }}
+          shell-version: ${{ needs.metadata.outputs.shell_version }}
+          amr-profile: ${{ inputs.amr_profile || 'test' }}
+          phase: finish
           publish: "true"
           release-public-origin: ${{ inputs.release_public_origin }}
           sign-mode: unsigned
@@ -425,10 +476,10 @@ jobs:
         if: ${{ always() }}
         uses: actions/github-script@v8
         env:
-          RESULT_SMOKE: ${{ steps.mac.outputs.smoke_result || steps.win.outputs.smoke_result }}
+          RESULT_SMOKE: ${{ steps.mac_finish.outputs.smoke_result || steps.win_finish.outputs.smoke_result }}
           RESULT_TARGET: ${{ matrix.target }}
-          RESULT_URL: ${{ steps.mac.outputs.dmg_url || steps.win.outputs.win_x64_url || steps.mac.outputs.candidate_primary_url || steps.win.outputs.candidate_primary_url }}
-          RESULT_CANDIDATE_MANIFEST_URL: ${{ steps.mac.outputs.candidate_manifest_url || steps.win.outputs.candidate_manifest_url }}
+          RESULT_URL: ${{ steps.mac_finish.outputs.dmg_url || steps.win_finish.outputs.win_x64_url || steps.mac_prepare.outputs.candidate_primary_url || steps.win_prepare.outputs.candidate_primary_url }}
+          RESULT_CANDIDATE_MANIFEST_URL: ${{ steps.mac_prepare.outputs.candidate_manifest_url || steps.win_prepare.outputs.candidate_manifest_url }}
         with:
           script: |
             const fs = require("fs");

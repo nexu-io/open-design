@@ -41,6 +41,10 @@ inputs:
   publish:
     description: Publish versioned platform artifacts
     required: true
+  phase:
+    description: all, prepare, or finish; split calls retain one runner workspace
+    required: false
+    default: all
   release-public-origin:
     description: Optional release public origin override
     required: true
@@ -92,20 +96,32 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Validate exact macOS orchestration phase
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "${{ inputs.phase }}" in
+          all|prepare|finish) ;;
+          *) echo "unsupported exact macOS orchestration phase: ${{ inputs.phase }}" >&2; exit 1 ;;
+        esac
     - name: Setup release toolchain
+      if: ${{ inputs.phase != 'finish' }}
       uses: ./.github/actions/release/platform/setup
       with:
         dependency-cache: "true"
     - name: Restore ${{ inputs.target }} tools-pack cache
+      if: ${{ inputs.phase != 'finish' }}
       id: cache
       uses: ./.github/actions/release/platform/cache
       with:
         origin-key: ${{ github.run_id }}-${{ github.run_attempt }}
         prefix: tools-pack-mac-v3-${{ inputs.channel }}-${{ runner.os }}-${{ inputs.arch }}-
     - name: Install dependencies
+      if: ${{ inputs.phase != 'finish' }}
       shell: bash
       run: pnpm install --frozen-lockfile
     - name: Resolve ${{ inputs.target }} Shell smoke acceptance identity
+      if: ${{ inputs.phase != 'finish' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -115,11 +131,13 @@ runs:
         [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
         echo "RELEASE_SHELL_SPEC_DIGEST=$digest" >> "$GITHUB_ENV"
     - name: Download shared Standalone contract
+      if: ${{ inputs.phase != 'finish' }}
       uses: actions/download-artifact@v8
       with:
         name: open-design-${{ inputs.channel }}-closure-shared
         path: ${{ runner.temp }}/release-closure/shared
     - name: Resolve immutable ${{ inputs.target }} Electron Shell
+      if: ${{ inputs.phase != 'finish' }}
       shell: bash
       id: shell_resolution
       env:
@@ -156,12 +174,12 @@ runs:
         : > "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.log"
         pnpm exec tools-release resolve-shell-build
     - name: Prepare ${{ inputs.target }} signing certificate
-      if: ${{ steps.shell_resolution.outputs.state == 'miss' && inputs.sign-mode != 'unsigned' }}
+      if: ${{ inputs.phase != 'finish' && steps.shell_resolution.outputs.state == 'miss' && inputs.sign-mode != 'unsigned' }}
       uses: ./.github/actions/release/platform/mac/signing
     - name: Build exact ${{ inputs.target }}
       shell: bash
       id: tools_pack_build
-      if: ${{ steps.shell_resolution.outputs.state == 'miss' }}
+      if: ${{ inputs.phase != 'finish' && steps.shell_resolution.outputs.state == 'miss' }}
       continue-on-error: true
       env:
         APPLE_ID: ${{ env.APPLE_ID }}
@@ -199,7 +217,7 @@ runs:
         fi
     - name: Retry exact ${{ inputs.target }} without restored cache
       shell: bash
-      if: ${{ steps.shell_resolution.outputs.state == 'miss' && steps.tools_pack_build.outcome == 'failure' }}
+      if: ${{ inputs.phase != 'finish' && steps.shell_resolution.outputs.state == 'miss' && steps.tools_pack_build.outcome == 'failure' }}
       env:
         APPLE_ID: ${{ env.APPLE_ID }}
         APPLE_APP_SPECIFIC_PASSWORD: ${{ env.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -232,6 +250,8 @@ runs:
           exit "$build_status"
         fi
     - name: Resolve ${{ inputs.target }} Standalone target contribution
+      id: closure_target
+      if: ${{ inputs.phase != 'finish' }}
       uses: ./.github/actions/release/closure/target/mac
       with:
         build-dir: ${{ runner.temp }}/release-build/${{ inputs.target }}
@@ -240,7 +260,21 @@ runs:
         public-origin: ${{ inputs.release-public-origin }}
         publish-enabled: "true"
         release-version: ${{ inputs.closure-version }}
+    - name: Report ${{ inputs.target }} release reuse plan
+      if: ${{ inputs.phase != 'finish' }}
+      shell: bash
+      env:
+        RELEASE_CLOSURE_BUILD_STATE: ${{ steps.closure_target.outputs.resolution }}
+        RELEASE_OUTER_CACHE_EXACT_HIT: ${{ steps.cache.outputs.cache-hit }}
+        RELEASE_OUTER_CACHE_MATCHED_KEY: ${{ steps.cache.outputs.cache-matched-key }}
+        RELEASE_REUSE_PLAN_JSON_PATH: ${{ runner.temp }}/release-report/${{ inputs.target }}/reuse-plan.json
+        RELEASE_SHELL_BUILD_STATE: ${{ steps.shell_resolution.outputs.state }}
+        RELEASE_SMOKE_PROOF_STATE: ${{ steps.shell_resolution.outputs.smoke_proof }}
+        RELEASE_SMOKE_SELECTED_LANES: ${{ inputs.smoke-mode == 'skip' && 'none' || (inputs.smoke-mode == 'full' && steps.shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || (inputs.smoke-mode == 'full' && inputs.smoke-lanes-on-miss != '' && inputs.smoke-lanes-on-miss || 'profile-default')) }}
+        RELEASE_TARGET: ${{ inputs.target }}
+      run: pnpm exec tools-release write-reuse-plan
     - name: Prepare ${{ inputs.target }} Standalone smoke graph
+      if: ${{ inputs.phase != 'finish' }}
       shell: bash
       run: |
         set -euo pipefail
@@ -250,7 +284,7 @@ runs:
           --output "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-distribution.json"
     - name: Verify ${{ inputs.target }} signed and notarized artifacts
       shell: bash
-      if: ${{ inputs.sign-mode == 'notarized' }}
+      if: ${{ inputs.phase != 'finish' && inputs.sign-mode == 'notarized' }}
       run: |
         set -euo pipefail
         app_path="$(jq -er '.appPath' "$RUNNER_TEMP/release-build/${{ inputs.target }}/build.json")"
@@ -275,7 +309,7 @@ runs:
         /usr/sbin/spctl --assess --type execute --verbose=4 "$candidate_app"
     - name: Register verified immutable ${{ inputs.target }} Electron Shell
       shell: bash
-      if: ${{ steps.shell_resolution.outputs.state == 'miss' }}
+      if: ${{ inputs.phase != 'finish' && steps.shell_resolution.outputs.state == 'miss' }}
       env:
         RELEASE_CHANNEL: ${{ inputs.channel }}
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -293,7 +327,7 @@ runs:
       # A 30-day convenience projection stays on the release storage plane and
       # never writes a latest pointer. Canonical immutable version objects are
       # staged separately so the downloaded Shell remains a usable candidate.
-      if: ${{ !cancelled() && inputs.candidate-enabled == 'true' }}
+      if: ${{ inputs.phase != 'finish' && !cancelled() && inputs.candidate-enabled == 'true' }}
       env:
         RELEASE_CANDIDATE_BUILD_JSON_KEYS: dmgPath
         RELEASE_CANDIDATE_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
@@ -308,10 +342,23 @@ runs:
         RELEASE_TARGET: ${{ inputs.target }}
         RELEASE_VERSION: ${{ inputs.release-version }}
       run: pnpm exec tools-release publish-candidate-target
+    - name: Export exact macOS phase state
+      if: ${{ inputs.phase != 'finish' }}
+      shell: bash
+      run: |
+        {
+          echo "OD_RELEASE_EXACT_BUILD_OUTCOME=${{ steps.tools_pack_build.outcome }}"
+          echo "OD_RELEASE_EXACT_CACHE_HIT=${{ steps.cache.outputs.cache-hit }}"
+          echo "OD_RELEASE_EXACT_CACHE_KEY=${{ steps.cache.outputs.key }}"
+          echo "OD_RELEASE_EXACT_CACHE_PREFIX=${{ steps.cache.outputs.prefix }}"
+          echo "OD_RELEASE_EXACT_SHELL_STATE=${{ steps.shell_resolution.outputs.state }}"
+          echo "OD_RELEASE_EXACT_SHELL_VERSION=${{ steps.shell_resolution.outputs.shell_version }}"
+          echo "OD_RELEASE_EXACT_SMOKE_PROOF=${{ steps.shell_resolution.outputs.smoke_proof }}"
+        } >> "$GITHUB_ENV"
     - name: Build exact ${{ inputs.target }} update fixture
       shell: bash
       id: update_fixture
-      if: ${{ inputs.smoke-mode == 'full' && steps.shell_resolution.outputs.smoke_proof != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
+      if: ${{ inputs.phase != 'prepare' && inputs.smoke-mode == 'full' && env.OD_RELEASE_EXACT_SMOKE_PROOF != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
       run: |
         set -euo pipefail
         version="${{ inputs.release-version }}"
@@ -343,7 +390,7 @@ runs:
     - name: Materialize legacy ${{ inputs.target }} migration fixture
       shell: bash
       id: legacy_fixture
-      if: ${{ inputs.legacy-migration-enabled == 'true' && inputs.smoke-mode == 'full' && steps.shell_resolution.outputs.smoke_proof != 'hit' }}
+      if: ${{ inputs.phase != 'prepare' && inputs.legacy-migration-enabled == 'true' && inputs.smoke-mode == 'full' && env.OD_RELEASE_EXACT_SMOKE_PROOF != 'hit' }}
       env:
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       run: |
@@ -381,7 +428,7 @@ runs:
     - name: Smoke exact ${{ inputs.target }} packaged runtime
       shell: bash
       id: smoke
-      if: ${{ inputs.smoke-mode != 'skip' }}
+      if: ${{ inputs.phase != 'prepare' && inputs.smoke-mode != 'skip' }}
       working-directory: e2e
       env:
         OD_PACKAGED_E2E_BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
@@ -396,21 +443,21 @@ runs:
         OD_PACKAGED_E2E_MAC_LEGACY_DMG_PATH: ${{ steps.legacy_fixture.outputs.dmg_path }}
         OD_PACKAGED_E2E_MAC_LEGACY_VERSION: ${{ steps.legacy_fixture.outputs.version }}
         OD_PACKAGED_E2E_MAC_MIN_SHELL_VERSION: ${{ env.CLOSURE_MIN_SHELL_VERSION }}
-        OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.smoke-mode == 'full' && (steps.shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || inputs.smoke-lanes-on-miss) || '' }}
+        OD_PACKAGED_E2E_MAC_SMOKE_LANES: ${{ inputs.smoke-mode == 'full' && (env.OD_RELEASE_EXACT_SMOKE_PROOF == 'hit' && 'standalone' || inputs.smoke-lanes-on-miss) || '' }}
         OD_PACKAGED_E2E_MAC_SMOKE_PROFILE: ${{ inputs.smoke-mode }}
         OD_PACKAGED_E2E_NAMESPACE: ${{ inputs.namespace }}
         OD_PACKAGED_E2E_RELEASE_CHANNEL: ${{ inputs.channel }}
         OD_PACKAGED_E2E_RELEASE_VERSION: ${{ inputs.release-version }}
-        OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ steps.shell_resolution.outputs.smoke_proof }}
+        OD_PACKAGED_E2E_SHELL_SMOKE_PROOF: ${{ env.OD_RELEASE_EXACT_SMOKE_PROOF }}
         # Preserve the immutable outer's origin version separately from the
         # current release projection. Reinstall acceptance needs both facts.
-        OD_PACKAGED_E2E_SHELL_VERSION: ${{ steps.shell_resolution.outputs.shell_version != '' && steps.shell_resolution.outputs.shell_version || inputs.shell-version }}
+        OD_PACKAGED_E2E_SHELL_VERSION: ${{ env.OD_RELEASE_EXACT_SHELL_VERSION != '' && env.OD_RELEASE_EXACT_SHELL_VERSION || inputs.shell-version }}
         OD_PACKAGED_E2E_REPORT_DIR: ${{ runner.temp }}/release-report/${{ inputs.target }}
         OD_PACKAGED_E2E_TOOLS_PACK_DIR: ${{ runner.temp }}/tools-pack
       run: pnpm exec tsx scripts/release-smoke.ts mac specs/mac.spec.ts
     - name: Register ${{ inputs.target }} Electron Shell full-smoke proof
       shell: bash
-      if: ${{ inputs.smoke-mode == 'full' && steps.shell_resolution.outputs.smoke_proof != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
+      if: ${{ inputs.phase != 'prepare' && inputs.smoke-mode == 'full' && env.OD_RELEASE_EXACT_SMOKE_PROOF != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
       env:
         RELEASE_CHANNEL: ${{ inputs.channel }}
         RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
@@ -427,7 +474,7 @@ runs:
       run: pnpm exec tools-release register-shell-smoke
     - name: Write ${{ inputs.target }} release report
       shell: bash
-      if: ${{ always() }}
+      if: ${{ always() && (inputs.phase != 'prepare' || failure()) }}
       env:
         BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
         BUILD_LOG_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.log
@@ -444,20 +491,20 @@ runs:
       run: pnpm exec tools-release write-report
     - name: Publish ${{ inputs.target }} report summary
       shell: bash
-      if: ${{ always() }}
+      if: ${{ always() && (inputs.phase != 'prepare' || failure()) }}
       run: cat "${{ runner.temp }}/release-report/${{ inputs.target }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
     - name: Persist ${{ inputs.target }} tools-pack cache
-      if: ${{ success() }}
+      if: ${{ inputs.phase != 'prepare' && success() }}
       uses: ./.github/actions/release/platform/cache/save
       with:
-        build-failed: ${{ steps.tools_pack_build.outcome == 'failure' }}
-        cache-hit: ${{ steps.cache.outputs.cache-hit }}
-        key: ${{ steps.cache.outputs.key }}
+        build-failed: ${{ env.OD_RELEASE_EXACT_BUILD_OUTCOME == 'failure' }}
+        cache-hit: ${{ env.OD_RELEASE_EXACT_CACHE_HIT }}
+        key: ${{ env.OD_RELEASE_EXACT_CACHE_KEY }}
         platform: mac
-        prefix: ${{ steps.cache.outputs.prefix }}
+        prefix: ${{ env.OD_RELEASE_EXACT_CACHE_PREFIX }}
     - name: Prepare ${{ inputs.target }} assets
       shell: bash
-      if: ${{ inputs.publish == 'true' }}
+      if: ${{ inputs.phase != 'prepare' && inputs.publish == 'true' }}
       env:
         RELEASE_ARTIFACT_MODE: ${{ inputs.build-target == 'all' && 'all' || 'dmg-and-payload' }}
         RELEASE_ASSET_SUFFIX: ${{ inputs.sign-mode != 'unsigned' && '.signed' || '.unsigned' }}
@@ -472,7 +519,7 @@ runs:
       run: bash tools/pack/scripts/prepare-platform-assets.sh
     - name: Publish ${{ inputs.target }} platform
       shell: bash
-      if: ${{ inputs.publish == 'true' }}
+      if: ${{ inputs.phase != 'prepare' && inputs.publish == 'true' }}
       env:
         RELEASE_ASSET_SUFFIX: ${{ inputs.sign-mode != 'unsigned' && '.signed' || '.unsigned' }}
         RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/${{ inputs.target }}
@@ -497,7 +544,7 @@ runs:
       run: pnpm exec tools-release publish-platform
     - name: Read ${{ inputs.target }} platform outputs
       id: platform_outputs
-      if: ${{ inputs.publish == 'true' }}
+      if: ${{ inputs.phase != 'prepare' && inputs.publish == 'true' }}
       uses: actions/github-script@v8
       with:
         script: |
@@ -505,14 +552,14 @@ runs:
           const outputs = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/release-platform-outputs/${{ inputs.target }}.json`, "utf8"));
           for (const [key, value] of Object.entries(outputs)) core.setOutput(key, String(value));
     - name: Upload ${{ inputs.target }} publish manifest
-      if: ${{ inputs.publish == 'true' }}
+      if: ${{ inputs.phase != 'prepare' && inputs.publish == 'true' }}
       uses: actions/upload-artifact@v7
       with:
         name: open-design-${{ inputs.channel }}-${{ inputs.artifact-id }}-publish-manifest
         path: ${{ runner.temp }}/release-platform-manifests/${{ inputs.target }}.json
         if-no-files-found: error
     - name: Upload ${{ inputs.target }} Standalone contribution
-      if: ${{ inputs.publish == 'true' }}
+      if: ${{ inputs.phase != 'prepare' && inputs.publish == 'true' }}
       uses: actions/upload-artifact@v7
       with:
         name: open-design-${{ inputs.channel }}-closure-${{ inputs.platform }}
