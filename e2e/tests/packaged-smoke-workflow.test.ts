@@ -3001,6 +3001,8 @@ process.stdin.on("end", () => {
     expect(winSpec).toContain("resolveNativeAcceptanceUpdateMetadataUrl()");
     expect(winSpec).toContain("${process.env.RELEASE_PUBLIC_ORIGIN}/${updateScenario.channel}/latest/metadata.json");
     expect(winSpec).toContain("acceptance/runs/[0-9]+-[0-9]+/latest/metadata\\\\.json$");
+    expect(winSpec).toContain("firstRunInspect.status?.update");
+    expect(winSpec).not.toContain("firstRunInspect.update?.enabled");
     expect(winSpec).not.toContain("function resolveNativeAcceptanceMetadataUrl");
   });
 
