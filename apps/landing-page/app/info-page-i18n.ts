@@ -4755,6 +4755,13 @@ function compactCommon(locale: LandingLocaleCode, text: CompactInfoPageText): In
 // resolves its agent pages here instead of falling back to English.
 const LOCALIZED_AGENT_GUIDES = buildLocalizedAgentGuides(INFO_PAGE_COPY.en!.agentGuides);
 
+// zh-tw has a hand-written guide map above; supplement it with the newly
+// generated DeepSeek Harness translation so it does not fall back to zh-CN.
+const zhTwDeepSeekHarness = LOCALIZED_AGENT_GUIDES['zh-tw']?.['deepseek-harness'];
+if (zhTwDeepSeekHarness) {
+  INFO_PAGE_COPY['zh-tw']!.agentGuides['deepseek-harness'] = zhTwDeepSeekHarness;
+}
+
 function compactInfoPageCopy(
   locale: LandingLocaleCode,
   text: CompactInfoPageText,

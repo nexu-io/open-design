@@ -8,25 +8,31 @@
 #   650–900ms; Asia-Pacific users pay an additional ~200–400ms RTT.
 #
 # How edge caching here works:
-#   - `max-age=0, must-revalidate`        → browser always revalidates.
-#   - `s-maxage=3600`                     → Cloudflare edge caches HTML 1h.
-#   - `stale-while-revalidate=86400`      → if edge copy is stale, serve it
-#                                           immediately and revalidate async.
-#   Because CF Pages auto-purges the deployment on every successful build,
-#   users see new content within seconds of deploy. The 1h s-maxage is the
-#   ceiling that only matters when content is changed *without* a deploy
-#   (rare; usually impossible for this static site).
-
+#   - `max-age=0, must-revalidate` → browser always revalidates.
+#   - `s-maxage=60`                 → Cloudflare edge may cache HTML briefly
+#                                     (repeat views on the same POP stay fast).
+#   - No multi-hour `stale-while-revalidate` on HTML.
+#
+# Why not s-maxage=3600 + stale-while-revalidate=86400:
+#   That combination left different locale paths (and different edge POPs)
+#   serving different HTML for up to an hour — and SWR could keep serving
+#   stale copies even longer — after `landing-page-production` deploys.
+#   CF Pages "deploy invalidates cache" is NOT reliable enough for this
+#   custom-domain + long TTL setup (see 2026-08 DeepSeek campaign rollout).
+#   Production deploy therefore also purges `open-design.ai` by hostname
+#   (see `.github/workflows/landing-page-production.yml`). Short s-maxage is
+#   belt-and-suspenders so a missed purge self-heals within ~1 minute.
+#
 # HTML pages (Astro emits `<route>/index.html`; CF Pages serves them at
 # either `<route>/` or `<route>/index.html`).
 /
-  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+  Cache-Control: public, max-age=0, s-maxage=60, must-revalidate
 
 /*/
-  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+  Cache-Control: public, max-age=0, s-maxage=60, must-revalidate
 
 /*.html
-  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+  Cache-Control: public, max-age=0, s-maxage=60, must-revalidate
 
 # Astro hash-named bundles (e.g. `globals.CnvQ8Wom.css`). Content-addressed
 # so they can be cached forever; a new build emits new filenames.
@@ -40,15 +46,16 @@
 /enhancers/*
   Cache-Control: public, max-age=31536000, immutable
 
-# RSS / sitemap / robots — small, refresh on deploy.
+# RSS / sitemap / robots — small; keep short edge TTL so deploy freshness
+# matches HTML.
 /blog/rss.xml
-  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+  Cache-Control: public, max-age=0, s-maxage=60, must-revalidate
 
 /sitemap-index.xml
-  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+  Cache-Control: public, max-age=0, s-maxage=60, must-revalidate
 
 /sitemap-*.xml
-  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+  Cache-Control: public, max-age=0, s-maxage=60, must-revalidate
 
 /robots.txt
   Cache-Control: public, max-age=3600
@@ -59,10 +66,10 @@
 # Public pricing contract consumed by /pricing/ client-side reconciliation.
 /pricing/plans.json
   Content-Type: application/json; charset=utf-8
-  Cache-Control: public, max-age=0, s-maxage=3600, stale-while-revalidate=86400, must-revalidate
+  Cache-Control: public, max-age=0, s-maxage=60, must-revalidate
 
 # Static assets in public/. Filenames don't carry a content hash, so we use
-# a moderate browser TTL and rely on edge purge from CF Pages on deploy.
+# a moderate browser TTL. Production deploy purges the open-design.ai host.
 /favicon.png
   Cache-Control: public, max-age=86400, stale-while-revalidate=604800
 /favicon.ico

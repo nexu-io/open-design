@@ -83,32 +83,37 @@ export function exportAsHtml(html: string, title: string): void {
 export async function exportProjectAsHtml(opts: {
   projectId: string;
   filePath: string;
-  fallbackHtml: string;
   fallbackTitle: string;
   versionId?: string;
   workspaceContext?: WorkspaceCollabContext | null;
 }): Promise<void> {
-  const segments = opts.filePath
-    .split('/')
-    .filter(Boolean)
-    .map((segment) => encodeURIComponent(segment))
-    .join('/');
-  const query = new URLSearchParams({ inline: '1' });
-  if (opts.versionId) query.set('versionId', opts.versionId);
-  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/${segments}?${query.toString()}`;
-  try {
-    const resp = opts.workspaceContext
-      ? await fetch(url, {
-          headers: workspaceProjectHeaders(opts.workspaceContext),
-        })
-      : await fetch(url);
-    if (!resp.ok) throw new Error(`html export request failed (${resp.status})`);
-    const blob = await resp.blob();
-    triggerDownload(blob, `${safeFilename(opts.fallbackTitle, 'artifact')}.html`);
-  } catch (err) {
-    console.warn('[exportProjectAsHtml] falling back to source HTML export:', err);
-    exportAsHtml(opts.fallbackHtml, opts.fallbackTitle);
+  const url = `/api/projects/${encodeURIComponent(opts.projectId)}/export/html`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(opts.workspaceContext ? workspaceProjectHeaders(opts.workspaceContext) : {}),
+    },
+    body: JSON.stringify({
+      fileName: opts.filePath,
+      title: opts.fallbackTitle,
+      ...(opts.versionId ? { versionId: opts.versionId } : {}),
+    }),
+  });
+  if (!resp.ok) {
+    let message = `html export request failed (${resp.status})`;
+    try {
+      const body = await resp.json();
+      if (body?.error?.message) message = String(body.error.message);
+    } catch {
+      // Keep the status-based fallback when the response is not JSON.
+    }
+    throw new Error(message);
   }
+  const blob = await resp.blob();
+  const filename = filenameFromContentDisposition(resp)
+    ?? `${safeFilename(opts.fallbackTitle, 'artifact')}.html`;
+  triggerDownload(blob, filename);
 }
 
 // A file is treated as a preview-chrome wrapper only when it lives inside

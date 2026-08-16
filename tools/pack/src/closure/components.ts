@@ -124,6 +124,10 @@ export async function prepareClosureLauncherComponent(options: Readonly<{
       join(outputRoot, CLOSURE_LAUNCHER_ENTRY_PATH),
     ),
     copyFile(
+      join(sourceRoot, "resource-provider.mjs"),
+      join(outputRoot, "resource-provider.mjs"),
+    ),
+    copyFile(
       join(sourceRoot, "native-loader.mjs"),
       join(outputRoot, "native-loader.mjs"),
     ),

@@ -729,6 +729,14 @@ export function InlineModelSwitcher({
       : configuredModelId ?? defaultAgentModelId(currentAgent);
   const currentModelOption =
     currentAgentModels.find((m) => m.id === currentModelId) ?? null;
+  // `agentId` and `agentModels` intentionally retain the last local-agent
+  // choice while BYOK is active so switching back restores that choice. Do
+  // not let campaign UI read that dormant AMR state: in BYOK mode the visible
+  // model comes from `config.model` and usage is billed by the user's provider.
+  const deepSeekCampaignVisibleForCurrentExecution =
+    campaignVisibility.visible
+    && config.mode === 'daemon'
+    && currentAgent?.id === 'amr';
 
   useEffect(() => {
     if (!currentAgentId || !normalizedCurrentModelId) return;
@@ -800,29 +808,35 @@ export function InlineModelSwitcher({
       campaignBenefitTrackedForOpenRef.current = false;
       return;
     }
-    if (
-      !compact
-      || !campaignVisibility.visible
-      || campaignBenefitTrackedForOpenRef.current
-      || !compactModelRows.some(({ model }) => isDeepSeekV4FlashCampaignModel(model.id))
-    ) {
+    if (!compact || !deepSeekCampaignVisibleForCurrentExecution
+      || campaignBenefitTrackedForOpenRef.current) {
       return;
     }
+    // One impression per campaign model actually on screen, not one for the
+    // popover: the campaign runs two models and product compares their reach
+    // separately, so a single row-agnostic event would make Pro and Flash
+    // indistinguishable in the funnel.
+    const visibleCampaignModelIds = compactModelRows
+      .filter(({ model }) => isDeepSeekV4FlashCampaignModel(model.id))
+      .map(({ model }) => model.id);
+    if (visibleCampaignModelIds.length === 0) return;
     campaignBenefitTrackedForOpenRef.current = true;
-    trackDeepSeekCampaignModelBenefitSurfaceView(analytics.track, {
-      page_name: 'home',
-      area: 'execution_settings_popover',
-      element: 'deepseek_v4_flash_benefit',
-      campaign_id: 'deepseek_v4_flash',
-      user_state: campaignNeedsUpgrade ? 'unpaid' : 'paid',
-      model_id: 'deepseek-v4-flash',
-    });
+    for (const modelId of visibleCampaignModelIds) {
+      trackDeepSeekCampaignModelBenefitSurfaceView(analytics.track, {
+        page_name: 'home',
+        area: 'execution_settings_popover',
+        element: 'deepseek_v4_pro_benefit',
+        campaign_id: 'deepseek_v4_pro',
+        user_state: campaignNeedsUpgrade ? 'unpaid' : 'paid',
+        model_id: modelId,
+      });
+    }
   }, [
     analytics.track,
     campaignNeedsUpgrade,
-    campaignVisibility.visible,
     compact,
     compactModelRows,
+    deepSeekCampaignVisibleForCurrentExecution,
     open,
   ]);
 
@@ -839,7 +853,7 @@ export function InlineModelSwitcher({
         metricsConsent: config.telemetry?.metrics === true,
         ...(campaignNeedsUpgrade
           ? {
-              campaignId: 'deepseek_v4_flash' as const,
+              campaignId: 'deepseek_v4_pro' as const,
               conversionSource: 'deepseek_model_switcher_upgrade' as const,
             }
           : {}),
@@ -1163,7 +1177,8 @@ export function InlineModelSwitcher({
               aria-hidden="true"
             />
             <span className="inline-switcher__chip-model-name">{chipModel}</span>
-            {campaignVisibility.visible && isDeepSeekV4FlashCampaignModel(currentModelId) ? (
+            {deepSeekCampaignVisibleForCurrentExecution
+              && isDeepSeekV4FlashCampaignModel(currentModelId) ? (
               <span
                 className={`inline-switcher__campaign-badge od-tooltip${campaignBadgeStateClass}`}
                 data-tooltip={campaignModelTooltip}
@@ -1391,7 +1406,7 @@ export function InlineModelSwitcher({
                     // A model above the caller's plan is shown, but honestly:
                     // disabled with the reason the settings picker already uses,
                     // never as a normal row whose click gets reverted.
-                    const campaignModel = campaignVisibility.visible
+                    const campaignModel = deepSeekCampaignVisibleForCurrentExecution
                       && isDeepSeekV4FlashCampaignModel(m.id);
                     const lockedHint = selectable
                       ? null

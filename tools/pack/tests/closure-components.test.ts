@@ -299,13 +299,14 @@ describe("tools-pack Closure component archives", () => {
     expect(nextTarget.native.artifact.digest).toBe(firstTarget.native.artifact.digest);
   });
 
-  it("materializes only the handoff and official-Node fossil launcher entries", async () => {
+  it("materializes the fossil launcher and its lazy resource provider", async () => {
     const root = await tempRoot("launcher-layout");
     const distRoot = join(root, "dist");
     await mkdir(distRoot, { recursive: true });
     await writeFile(join(distRoot, "generation-bootloader.mjs"), "handoff\n");
     await writeFile(join(distRoot, "launcher.mjs"), "launcher\n");
     await writeFile(join(distRoot, "native-loader.mjs"), "loader\n");
+    await writeFile(join(distRoot, "resource-provider.mjs"), "resource provider\n");
     await writeFile(join(distRoot, "sidecars.mjs"), "not part of launcher\n");
 
     const launcherRoot = await prepareClosureLauncherComponent({
@@ -316,6 +317,8 @@ describe("tools-pack Closure component archives", () => {
     await expect(readFile(join(launcherRoot, "bootloader.mjs"), "utf8")).resolves.toBe("handoff\n");
     await expect(readFile(join(launcherRoot, "launcher.mjs"), "utf8")).resolves.toBe("launcher\n");
     await expect(readFile(join(launcherRoot, "native-loader.mjs"), "utf8")).resolves.toBe("loader\n");
+    await expect(readFile(join(launcherRoot, "resource-provider.mjs"), "utf8"))
+      .resolves.toBe("resource provider\n");
     await expect(readFile(join(launcherRoot, "sidecars.mjs"), "utf8")).rejects.toThrow();
   });
 

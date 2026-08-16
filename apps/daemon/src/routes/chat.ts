@@ -34,7 +34,7 @@ import {
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
-import { resolveModelForServiceTier } from '../runtimes/models.js';
+import { isKnownReasoningEffort, resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
@@ -373,8 +373,8 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           const safeReasoning =
             def &&
             typeof body.reasoning === 'string' &&
-            Array.isArray(def.reasoningOptions)
-              ? (def.reasoningOptions.find((r: any) => r.id === body.reasoning)?.id ?? undefined)
+            isKnownReasoningEffort(def, safeModel, body.reasoning)
+              ? body.reasoning
               : undefined;
           safeModel = def
             ? resolveModelForServiceTier(

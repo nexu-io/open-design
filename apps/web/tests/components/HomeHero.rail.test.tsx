@@ -185,11 +185,13 @@ describe('HomeHero intent rail', () => {
     expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Wireframe');
   });
 
-  it('lets the active creation chip be removed from the composer', () => {
-    const { onClearActiveChip } = renderHero({ activeChipId: 'prototype' });
+  it('offers no clear affordance for the active creation chip', () => {
+    // Clearing the creation type was removed (per product): the pill has no
+    // inline × and the menu has no leading Clear row.
+    renderHero({ activeChipId: 'prototype' });
+    expect(screen.queryByTestId('home-hero-template-reset')).toBeNull();
     fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
-    fireEvent.click(screen.getByTestId('home-hero-template-radial-clear'));
-    expect(onClearActiveChip).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('home-hero-template-radial-clear')).toBeNull();
   });
 
   it('tracks the committed template on the footer pill and resets it on clear', () => {

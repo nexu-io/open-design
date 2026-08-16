@@ -3,6 +3,7 @@ import { expectStableCount } from '@/playwright/assertions';
 import { applyStandardMocks, routeAgents, routeSuccessfulRuns } from '@/playwright/mock-factory';
 import { clickDeckNextSlide, openAllProjectFiles } from '@/playwright/workspace';
 import type { Page } from '@playwright/test';
+import { pathToFileURL } from 'node:url';
 import { T } from '@/timeouts';
 
 const STORAGE_KEY = 'open-design:config';
@@ -311,10 +312,42 @@ async function selectPreviewElementThroughBridge(
   await expect(page.locator('.manual-edit-modal')).toContainText(section);
 }
 
-test('[P0] @critical preview toolbar keeps share, download, comment, and zoom actions reachable', async ({ page }) => {
+test('[P0] @critical preview toolbar keeps share, download, comment, and zoom actions reachable', async ({ page }, testInfo) => {
   await routeMockAgents(page);
   const projectId = await createEmptyProject(page, 'Preview toolbar smoke');
-  await seedHtmlArtifact(page, projectId, 'toolbar-preview.html', manualEditHtml());
+  const entryHtml = manualEditHtml()
+    .replace('/hero.png', 'assets/offline.svg')
+    .replace('</head>', '<link rel="stylesheet" href="styles/offline.css"></head>')
+    .replace(
+      '</body>',
+      '<img id="offline-image" src="assets/offline.svg">' +
+        '<script type="module" src="scripts/main.js"></script></body>',
+    );
+  await seedHtmlArtifact(page, projectId, 'toolbar-preview.html', entryHtml);
+  await seedProjectFile(
+    page,
+    projectId,
+    'styles/offline.css',
+    'body{--offline-export-proof:ready;background-image:url("../assets/offline.svg")}',
+  );
+  await seedProjectFile(
+    page,
+    projectId,
+    'scripts/main.js',
+    'import { markReady } from "./motion.js"; markReady();',
+  );
+  await seedProjectFile(
+    page,
+    projectId,
+    'scripts/motion.js',
+    'export const markReady = () => { document.body.dataset.offlineMotion = "ready"; };',
+  );
+  await seedProjectFile(
+    page,
+    projectId,
+    'assets/offline.svg',
+    '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="red"/></svg>',
+  );
   await page.goto(`/projects/${projectId}/files/toolbar-preview.html`);
   await openDesignFile(page, 'toolbar-preview.html');
 
@@ -347,10 +380,39 @@ test('[P0] @critical preview toolbar keeps share, download, comment, and zoom ac
   await expect(downloadMenu).toBeVisible();
   await expect(downloadMenu.getByRole('menuitem', { name: /Export as PDF/ })).toBeVisible();
   await expect(downloadMenu.getByRole('menuitem', { name: /Download as \.zip/ })).toBeVisible();
+  const htmlExportResponse = page.waitForResponse((response) =>
+    response.url().endsWith(`/api/projects/${projectId}/export/html`),
+  );
   const htmlDownload = page.waitForEvent('download');
   await downloadMenu.getByRole('menuitem', { name: /Export as standalone HTML/ }).click();
+  const exportResponse = await htmlExportResponse;
+  expect(exportResponse.ok(), await exportResponse.text()).toBeTruthy();
   const download = await htmlDownload;
   expect(download.suggestedFilename()).toMatch(/toolbar-preview.*\.html$/i);
+  const offlinePath = testInfo.outputPath('offline-standalone.html');
+  await download.saveAs(offlinePath);
+  const offlinePage = await page.context().newPage();
+  const failedRequests: string[] = [];
+  const scriptErrors: string[] = [];
+  offlinePage.on('requestfailed', (request) => failedRequests.push(request.url()));
+  offlinePage.on('pageerror', (error) => scriptErrors.push(error.message));
+  offlinePage.on('console', (message) => {
+    if (message.type() === 'error') scriptErrors.push(message.text());
+  });
+  await offlinePage.goto(pathToFileURL(offlinePath).href, { waitUntil: 'load' });
+  try {
+    await expect.poll(() => offlinePage.locator('body').getAttribute('data-offline-motion')).toBe('ready');
+  } catch {
+    throw new Error(`offline module did not execute: ${scriptErrors.join(' | ') || 'no browser error reported'}`);
+  }
+  await expect.poll(() => offlinePage.locator('body').evaluate(
+    (body) => getComputedStyle(body).getPropertyValue('--offline-export-proof').trim(),
+  )).toBe('ready');
+  await expect.poll(() => offlinePage.locator('#offline-image').evaluate(
+    (image) => (image as HTMLImageElement).naturalWidth,
+  )).toBeGreaterThan(0);
+  expect(failedRequests).toEqual([]);
+  await offlinePage.close();
   await expect(downloadMenu).toHaveCount(0);
 
   await page.getByRole('button', { name: /^Comment$/ }).click();
@@ -502,10 +564,15 @@ test('[P1] HTML preview toolbar exposes comments, mark, and edit workflows', asy
   await page.getByTestId('comment-popover').getByRole('button', { name: /^Comment$/ }).click();
   await expect(page.getByTestId('comment-saved-marker-hero-title')).toBeVisible();
 
+  await expect(page.getByTestId('comment-side-panel')).toHaveCount(0);
+  const commentsButton = page.getByTestId('comment-panel-toggle');
+  await commentsButton.click();
+  await expect(commentsButton).toHaveAttribute('aria-pressed', 'false');
+  await commentsButton.click();
   await expect(page.getByTestId('comment-side-panel')).toBeVisible();
   await expect(page.getByTestId('comment-side-panel')).toContainText('Panel-level comment');
-  await expect(page.getByTestId('comment-panel-toggle')).toContainText('1');
-  await page.getByTestId('comment-panel-toggle').click();
+  await expect(commentsButton).toContainText('1');
+  await page.getByRole('button', { name: /hide comments/i }).click();
   await expect(page.getByTestId('chat-composer')).toBeVisible();
 
   await holdNextRunOpen(page);
@@ -910,6 +977,14 @@ async function seedHtmlArtifact(page: Page, projectId: string, fileName: string,
     },
   );
   expect(resp.ok()).toBeTruthy();
+}
+
+async function seedProjectFile(page: Page, projectId: string, fileName: string, content: string) {
+  const response = await page.request.post(`/api/projects/${projectId}/files`, {
+    data: { name: fileName, content },
+    timeout: 15_000,
+  });
+  expect(response.ok()).toBeTruthy();
 }
 
 async function latestConversationId(page: Page, projectId: string): Promise<string> {

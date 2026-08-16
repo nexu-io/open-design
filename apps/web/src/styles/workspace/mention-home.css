@@ -358,11 +358,12 @@
   z-index: 80;
   position: absolute;
   /* Anchor the panel's BOTTOM edge to the host, so it grows upward.
-     The host (`.entry-updater-menu`) sits near the bottom of the nav rail — in
-     the strip just above the account row, which is the last thing in the rail —
-     so a top-anchored panel grew down past the window edge and the 「更新已就绪」
-     copy was clipped mid-sentence. `.entry-help-popover` already anchors this
-     way for exactly the same reason. */
+     This base rule serves the signed-out fallback home, where the host
+     (`.entry-updater-menu`) sits in the rail footer at the bottom of the nav
+     rail — a top-anchored panel grew down past the window edge and the
+     「更新已就绪」 copy was clipped mid-sentence. `.entry-help-popover` already
+     anchors this way for exactly the same reason. The signed-in home (the
+     floating account row, top-right) opens downward via the override below. */
   bottom: 0;
   left: calc(100% + 12px);
   width: min(360px, calc(100vw - var(--entry-rail-width, 56px) - 24px));
@@ -393,6 +394,22 @@
 }
 
 [dir='rtl'] .entry-main__topbar .entry-updater-menu .updater-popup {
+  right: auto;
+  left: 0;
+}
+
+/* Floating account row (top-right cluster): the rocket rides right after the
+   avatar chip, hugging the viewport's right edge, so the side-flyout base
+   rule would push the panel off-screen (and `bottom: 0` would grow it past
+   the top). Open DOWNWARD instead, right-aligned to the host. */
+.entry-nav-rail__account--floating .entry-updater-menu .updater-popup {
+  top: calc(100% + 10px);
+  bottom: auto;
+  right: 0;
+  left: auto;
+}
+
+[dir='rtl'] .entry-nav-rail__account--floating .entry-updater-menu .updater-popup {
   right: auto;
   left: 0;
 }

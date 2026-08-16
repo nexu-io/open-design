@@ -15,6 +15,7 @@ vi.mock('../src/db.js', () => ({
 }));
 
 vi.mock('../src/langfuse-trace.js', () => ({
+  INPUT_MAX_BYTES: 64 * 1024,
   readFeedbackTelemetrySinkConfig: vi.fn(() => ({ kind: 'langfuse' })),
   reportRunCompleted: reportRunCompletedMock,
   reportRunFeedback: vi.fn(),
@@ -82,7 +83,7 @@ describe('langfuse-bridge non-blocking behavior', () => {
     });
   });
 
-  it.skip('passes configured AMR env only to the completed-run reporter', async () => {
+  it('passes configured AMR env only to the completed-run reporter', async () => {
     const configuredEnv = {
       VELA_CONTROL_KEY: 'ck_profile',
       VELA_API_URL: 'https://vela.example.test',
@@ -108,7 +109,7 @@ describe('langfuse-bridge non-blocking behavior', () => {
     vi.restoreAllMocks();
   });
 
-  it.skip('warns but still resolves when assistant-message lookup throws', async () => {
+  it('warns but still resolves when assistant-message lookup throws', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     listMessagesMock.mockImplementation(() => {
       throw new Error('db unavailable');
@@ -135,7 +136,7 @@ describe('langfuse-bridge non-blocking behavior', () => {
     expect(ctx.message.output).toBe('');
   });
 
-  it.skip('warns but does not throw when reportRunCompleted rejects', async () => {
+  it('warns but does not throw when reportRunCompleted rejects', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     listMessagesMock.mockReturnValue([]);
     reportRunCompletedMock.mockRejectedValue(new Error('langfuse sink offline'));

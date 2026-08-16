@@ -84,6 +84,7 @@ const AGENTS: ReadonlyArray<{ name: string; route: string }> = [
   { name: 'Grok Build', route: 'grok-design' },
   { name: 'Kimi CLI', route: 'kimi-design' },
   { name: 'DeepSeek TUI', route: 'deepseek-design' },
+  { name: 'DeepSeek Harness', route: 'deepseek-harness-design' },
   { name: 'Trae CLI', route: 'trae-cli-design' },
   { name: 'Aider', route: 'aider-design' },
   { name: 'Antigravity', route: 'antigravity-design' },
@@ -600,7 +601,7 @@ export function Header({
             aria-label={headerCopy.downloadAria}
             title={headerCopy.downloadTitle}
             data-download-cta
-            data-download-page
+            data-direct-download
             data-download-placement='nav'
           >
             {headerCopy.download}

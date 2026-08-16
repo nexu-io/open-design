@@ -186,6 +186,31 @@ describe('resolveAgentResumeContext', () => {
     expect(ctx.invalidationReason).toBeNull();
   });
 
+  it('still resumes when a profile session owns a canceled turn', () => {
+    const db = seed();
+    seedMessage(db, 'asst-canceled', 'assistant', 'canceled');
+    upsertAgentSession(db, {
+      conversationId: 'conv-1',
+      agentId: 'deepseek-harness',
+      sessionId: 'harness-session',
+      lastMessageId: 'asst-canceled',
+      model: null,
+      cwd: '/work/proj',
+      stablePromptHash: 'stable-hash',
+    });
+
+    const ctx = resolveAgentResumeContext(db, {
+      conversationId: 'conv-1',
+      agentId: 'deepseek-harness',
+      currentModel: null,
+      currentCwd: '/work/proj',
+    });
+
+    expect(ctx.isResuming).toBe(true);
+    expect(ctx.resumeSessionId).toBe('harness-session');
+    expect(ctx.invalidationReason).toBeNull();
+  });
+
   it('reseeds (conversation_advanced) when a later succeeded turn follows the stored failed turn', () => {
     const db = seed();
     // Stored session owns a failed turn (asst-1)...

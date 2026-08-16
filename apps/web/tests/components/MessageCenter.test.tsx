@@ -130,11 +130,20 @@ describe('MessageCenter', () => {
     await waitFor(() => expect(screen.getByText('All caught up')).toBeTruthy());
   });
 
-  it('opens CTA URLs with the existing external-link behavior', async () => {
+  it('expands the whole message row and opens its CTA', async () => {
     const open = vi.spyOn(window, 'open').mockImplementation(() => null);
     renderMessageCenter();
     await openCenter();
-    fireEvent.click(screen.getByRole('button', { name: /Open Design 0\.14 is available/ }));
+    const row = screen.getByRole('button', { name: /Open Design 0\.14 is available/ });
+
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'View update' })).toBeNull();
+
+    fireEvent.click(row);
+
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(row.closest('article')?.className).toContain('itemExpanded');
+    expect(screen.getByText('The new release is ready.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'View update' }));
     expect(open).toHaveBeenCalledWith('https://open-design.ai/update', '_blank', 'noopener,noreferrer');
   });

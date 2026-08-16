@@ -348,10 +348,8 @@ export function RecentProjectsStrip({
   const analyticsPage = space === 'drafts' ? 'drafts' : space === 'team' ? 'all_projects' : 'home';
   const rowRef = useRef<HTMLDivElement | null>(null);
   // Real creator resolution (replaces the demo's mock 李娜/张伟 roster): the
-  // member directory turns an ownerMemberId into a display name, and the
-  // workspace context tells us which member is "me" so the owner's own cards
-  // read "我创建" instead of their display name. Both hooks degrade to
-  // empty/null off-team, so every card safely falls back to "我创建".
+  // member directory turns an ownerMemberId into a display name, while the
+  // workspace context supplies the signed-in user's own name and profile image.
   const { resolve: resolveMember } = useTeamMembers();
   const {
     context: workspaceContext,
@@ -499,21 +497,29 @@ export function RecentProjectsStrip({
   // 全部项目 / 草稿 partition reads the very same predicate, so the badge and the
   // card's grid can no longer disagree.
   const isShared = isSharedProject ?? NOTHING_SHARED;
-  // The card's "{creator}创建" line. A project the team hub attributes to another
-  // member resolves through the directory to that member's display name; my own
-  // shares and every local (non-shared) project read "我创建". Falls back to a
-  // generic "团队成员" when a shared project's owner is not yet in the directory
-  // (off-team, or a member the daemon has not seen register), never an opaque id.
-  const resolveCreator = (projectId: string): { name: string; initial: string; ownedBySelf: boolean } => {
+  // The card's "{creator}创建" line. Self-owned projects use the account identity
+  // instead of the literal "我 / Me" (whose first letter previously produced the
+  // misleading M avatar). Other owners still resolve through the team directory.
+  const resolveCreator = (projectId: string): {
+    name: string;
+    initial: string;
+    avatarUrl: string | null;
+    ownedBySelf: boolean;
+  } => {
     const ownerMemberId = projectOwnerMemberIds?.get(projectId) ?? null;
     if (ownerMemberId === selfMemberId || (!ownerMemberId && !isShared(projectId))) {
-      const name = t('recentProjects.selfCreator');
+      const name = workspaceContext?.displayName?.trim() || t('recentProjects.selfCreator');
       const initial = Array.from(name.trim())[0]?.toUpperCase() ?? 'M';
-      return { name, initial, ownedBySelf: true };
+      return {
+        name,
+        initial,
+        avatarUrl: workspaceContext?.avatarUrl?.trim() || null,
+        ownedBySelf: true,
+      };
     }
     const name = resolveMember(ownerMemberId)?.displayName ?? t('recentProjects.teamMemberCreator');
     const initial = (Array.from(name.trim())[0] ?? 'T').toUpperCase();
-    return { name, initial, ownedBySelf: false };
+    return { name, initial, avatarUrl: null, ownedBySelf: false };
   };
   const visibleProjects = useMemo(
     () => sortedProjects
@@ -532,10 +538,14 @@ export function RecentProjectsStrip({
       kindFilter,
       ownerFilter,
       projectOwnerMemberIds,
+      resolveMember,
       resolvedLimit,
       selfMemberId,
       showOwnerFilter,
       sortedProjects,
+      t,
+      workspaceContext?.avatarUrl,
+      workspaceContext?.displayName,
     ],
   );
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
@@ -1812,6 +1822,16 @@ export function RecentProjectsStrip({
                     <div className="recent-projects__card-time">
                       <span className="recent-projects__card-owner" aria-hidden>
                         {creator.initial}
+                        {creator.avatarUrl ? (
+                          <img
+                            key={creator.avatarUrl}
+                            src={creator.avatarUrl}
+                            alt=""
+                            onError={(event) => {
+                              event.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        ) : null}
                       </span>
                       <span>{t('recentProjects.creatorLine', { name: creator.name })}</span>
                       <span className="recent-projects__card-sep" aria-hidden>·</span>

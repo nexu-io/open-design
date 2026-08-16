@@ -12,6 +12,12 @@ import {
 import { attachStandaloneBodyBridge } from "./process-bridge.js";
 
 type BootloaderModule = Readonly<Record<string, unknown>>;
+type ResourceProviderModule = Readonly<{
+  ensureStandaloneResource(input: Readonly<{
+    descriptor: ReturnType<typeof readStandaloneLauncherBootstrap>["descriptor"];
+    id: string;
+  }>): Promise<Readonly<{ id: string; path: string; reused: boolean; title: string }>>;
+}>;
 
 function bodyHandoff(module: BootloaderModule): StandaloneHandoff {
   const handoff = module[STANDALONE_BOOTLOADER_EXPORT_NAME];
@@ -33,6 +39,11 @@ async function runStandaloneLauncher(): Promise<void> {
   });
   const bridge = await attachStandaloneBodyBridge({
     descriptor: bootstrap.descriptor,
+    async ensureResource(id) {
+      const providerUrl = new URL("./resource-provider.mjs", import.meta.url).href;
+      const provider = await import(providerUrl) as ResourceProviderModule;
+      return await provider.ensureStandaloneResource({ descriptor: bootstrap.descriptor, id });
+    },
     handoff: bodyHandoff(module),
     onExitRequested: resolveExit,
   });

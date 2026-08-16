@@ -71,6 +71,11 @@ const tiers = [
 ];
 
 const allAgents = tiers.flatMap((t) => t.agents);
+// DeepSeek Harness is an official DeepSeek AI developer preview, but Open
+// Design does not ship a first-party dsh adapter yet. Surface its timely guide
+// without inflating the supported-adapter count or the ItemList schema.
+const deepSeekHarnessGuide =
+  copy.agentGuides['deepseek-harness'] ?? getInfoPageCopy('en').agentGuides['deepseek-harness']!;
 // Derive the count in the title/description from the rendered list so the
 // metadata can never drift from how many agents the hub actually shows.
 const title = page.title.replace('{count}', String(allAgents.length));
@@ -230,6 +235,17 @@ const jsonLd = [
             <p><strong>{page.credential}:</strong> {credentialLabel(a)}</p>
           </li>
         ))}
+      </ul>
+    </section>
+
+    <section class="info-section" id="deepseek-harness">
+      <h2><a class="inline-link" href={href('/agents/deepseek-harness-design/')}>{deepSeekHarnessGuide.breadcrumb}</a></h2>
+      <p>{deepSeekHarnessGuide.lead}</p>
+      <ul class="agent-grid">
+        <li class="agent-card">
+          <h3><a href={href('/agents/deepseek-harness-design/')}>{deepSeekHarnessGuide.breadcrumb}</a></h3>
+          <p>{deepSeekHarnessGuide.description}</p>
+        </li>
       </ul>
     </section>
 

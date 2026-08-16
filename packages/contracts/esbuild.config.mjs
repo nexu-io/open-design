@@ -19,6 +19,7 @@ await build({
     "./src/runtime/preview-resource-policy.ts",
     "./src/design-systems/components-manifest.ts",
     "./src/design-systems/derived-token-outputs.ts",
+    "./src/design-systems/runtime-schema.ts",
     "./src/design-systems/token-schema.ts",
     "./src/analytics/index.ts",
   ],

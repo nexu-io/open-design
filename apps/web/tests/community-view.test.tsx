@@ -413,6 +413,43 @@ describe('CommunityView remix', () => {
   });
 });
 
+describe('CommunityView use handoff', () => {
+  it('carries the selected Community type with the card prompt action', async () => {
+    const onUsePrompt = vi.fn();
+    await renderCommunity({ onUsePrompt });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Prompt' })[0]!);
+
+    expect(onUsePrompt).toHaveBeenCalledWith({
+      templateId: 'example-fundraising-deck',
+      prompt: 'A decision-grade seed round narrative.',
+      chipId: 'deck',
+      projectKind: 'deck',
+    });
+  });
+
+  it('carries Prototype through the details modal Use action', async () => {
+    const onUsePlugin = vi.fn();
+    await renderCommunity({ onUsePlugin });
+    const prototypeTab = readFacets().find(({ label }) => label === 'Prototype')!.tab;
+    fireEvent.click(prototypeTab);
+    fireEvent.click(renderedCards()[0]!);
+
+    fireEvent.click(await screen.findByTestId('plugin-details-use-example-landing-prototype'));
+
+    expect(onUsePlugin).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'example-landing-prototype' }),
+      'use',
+      {
+        templateId: 'example-landing-prototype',
+        prompt: 'A conversion-focused SaaS landing page.',
+        chipId: 'prototype',
+        projectKind: 'prototype',
+      },
+    );
+  });
+});
+
 describe('CommunityView facet counts', () => {
   it('grids only the cards belonging to the active type', async () => {
     // Regression: the badges were a hand-written lookup table unrelated to the

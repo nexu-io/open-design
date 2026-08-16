@@ -32,7 +32,8 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
-import { coalescedGet } from '../lib/coalesced-get';
+import { createPortal } from 'react-dom';
+import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import type {
   WorkspaceActiveResponse,
   WorkspaceBillingSummary,
@@ -57,17 +58,26 @@ import { MessageCenter } from './MessageCenter';
 import type { EntrySettingsSection } from './EntrySettingsMenu';
 import { useI18n } from '../i18n';
 import { useDismissOnOutsideInteraction } from '../hooks/useDismissOnOutsideInteraction';
+import { ENTRY_RAIL_TOGGLE_EVENT } from './entryRailBridge';
 import {
   beginWorkspaceScopedRead,
   notifyTeamProjectsChanged,
   notifyWorkspaceBillingRefresh,
   notifyWorkspaceContextRefresh,
+  useWorkspaceBillingResponse,
+  useWorkspaceContext,
+  workspaceBillingBalanceUsd,
+  workspaceBillingSummaryForContext,
   workspaceIdentityCacheKey,
 } from '../collab/useWorkspaceContext';
 import { canUpgradeFromPlanTier, hasTeamPlan, resolvePlanLabelTier } from '../collab/team-plan';
 import { AMR_CONSOLE_UPGRADE_INTENT, amrPlansUrlForProfile } from '../runtime/amr-guidance';
+import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import type { EntryHomeView } from '../router';
-import type { AccountMenuClickProps } from '@open-design/contracts/analytics';
+import type {
+  AccountMenuClickProps,
+  TrackingWorkspacePage,
+} from '@open-design/contracts/analytics';
 import { useAnalytics } from '../analytics/provider';
 import {
   trackAccountMenuClick,
@@ -194,6 +204,9 @@ interface Props {
   newProjectDisabled?: boolean;
   /** When false the rail is collapsed (hidden off-canvas) on the entry view. */
   open: boolean;
+  /** Extra content for the floating top-right cluster, rendered LEFT of the
+   *  account module (e.g. the DeepSeek campaign badge). */
+  topRightSlot?: ReactNode;
   /** The one shared workspace context; null → local (no cloud identity) state. */
   context: WorkspaceCollabContext | null;
   /** Account billing metadata (via the vela CLI 收口). Null → the billing
@@ -214,12 +227,12 @@ interface Props {
    * The update-ready host (`UpdaterPopup`), which renders nothing until the
    * updater reports a downloaded, unopened installer.
    *
-   * It lives in a right-aligned strip IMMEDIATELY ABOVE the account row
-   * (`.entry-nav-rail__account-updater`), per product: 「名字那个横条的上方,
-   * 靠右对齐」. #5517 parked it in the rail footer when the entry topbar was
-   * removed, which put the rocket UNDER the account row instead. The footer
-   * stays as the fallback home for the signed-out shell, which has no account
-   * row to sit above.
+   * It rides the floating account module's row IMMEDIATELY AFTER the avatar
+   * chip (`.entry-nav-rail__account-updater`), per product: 升级提醒按钮跟在
+   * 头像后边，不再单独占一行。 Earlier homes — the rail footer (#5517) and a
+   * strip above the identity row — both detached the reminder from the
+   * avatar. The footer stays as the fallback home for the signed-out shell,
+   * which has no account row at all.
    */
   updaterSlot?: ReactNode;
   /** Optional notice shown above the footer controls. */
@@ -555,58 +568,62 @@ function formatBillingTier(tier: string, t: ReturnType<typeof useI18n>['t']): st
     .join(' ');
 }
 
-export function EntryNavRail({
-  view,
-  onViewChange,
-  onNewProject,
-  onOpenSearch,
-  newProjectDisabled,
-  open,
+interface EntryTopRightClusterProps {
+  /** Analytics page the cluster reports from: the entry views map through
+   *  `entryViewToTracking`, the workspace mount reports 'project'. */
+  page: TrackingWorkspacePage;
+  context: WorkspaceCollabContext | null;
+  billing?: WorkspaceBillingSummary | null;
+  balanceUsd?: string | null;
+  /** Extra content rendered LEFT of the credits pill (e.g. the DeepSeek
+   *  campaign badge on Home). */
+  leadingSlot?: ReactNode;
+  /** Update-ready host; rides the account row right after the avatar chip. */
+  updaterSlot?: ReactNode;
+  onOpenSettings?: (section?: EntrySettingsSection) => void;
+  onSignedOut?: () => void | Promise<void>;
+}
+
+/**
+ * Top-right floating cluster (portaled to document.body): an optional leading
+ * slot, the standalone credits pill, and the avatar account module with its
+ * hover menu — one flex row riding the workbench top-right corner.
+ *
+ * Extracted from `EntryNavRail` so the WORKSPACE view (an open project tab)
+ * can mount the same avatar + credits in the same fixed position even though
+ * the entry shell — and its rail — is unmounted there (per product: 打开项目后
+ * 个人头像和积分仍显示在原来的右上角位置). Exactly one instance is on screen
+ * at a time: `EntryNavRail` renders it on the entry views, `App.tsx` (via
+ * `WorkspaceTopRightAccountCluster`) on the project route — those routes are
+ * mutually exclusive.
+ */
+export function EntryTopRightCluster({
+  page,
   context,
   billing,
   balanceUsd,
+  leadingSlot,
+  updaterSlot,
   onOpenSettings,
   onSignedOut,
-  updaterSlot,
-  footerNotice,
-}: Props) {
+}: EntryTopRightClusterProps) {
   const { t } = useI18n();
   const analytics = useAnalytics();
-  const analyticsPage = entryViewToTracking(view);
   const workspaceDimensions = workspaceAnalyticsDimensions(context);
-  const brandLabel = t('app.brand');
-  const communityLabel = t('pluginsHome.title');
-  // #5517 renamed the rail's first item from 最近 (Recents) to 首页 (Home) —
-  // the key keeps its historical name, the VALUE now reads Home in every
-  // locale (polish round 2, ref 1db2d00c2).
-  const homeLabel = t('entry.navRecents');
-  const isHome = view === 'home';
 
   const isTeam = Boolean(context) && context!.workspaceType === 'team';
   const permissions = context?.permissions;
-  // Demo `canOwnWorkspace` → real owner-level view of workspace settings. Never
-  // re-derive from role — the permission bits already fold role + lifecycle in.
-  const canViewWorkspaceSettings = Boolean(permissions?.canViewWorkspaceSettings);
-  const canInviteMembers = Boolean(permissions?.canInviteMembers);
-  const canAccessInviteFlow = canAccessWorkspaceInviteFlow(context);
   const workspaceSettingsUrl = context?.workspaceSettingsUrl?.trim() || null;
 
   // Account identity (real). No email field on the context → the head shows the
   // avatar + name only.
   const displayName = context?.displayName?.trim() || '';
-  const accountName = displayName || brandLabel;
+  const accountName = displayName || t('app.brand');
   const accountInitial = accountName.charAt(0).toUpperCase() || '·';
-
-  // The updater host has exactly one home on screen at a time. The strip above
-  // the account row is the preferred one; the footer only takes it when there is
-  // no cloud identity, because the whole account row is absent then. Deriving
-  // both from one expression is what keeps "exactly one" true — two independent
-  // renders would double the rocket.
-  const footerUpdaterSlot = context ? null : updaterSlot;
 
   // Billing chip: prefer the real summary metadata; fall back to the context
   // plan-tier hint when metadata has not loaded. Money is a separate,
-  // explicitly scoped `balanceUsd` input below.
+  // explicitly scoped `balanceUsd` input.
   // The plan id from either source goes through the same formatter — the
   // context hint is a raw id too (`team_plus`), and it used to reach the card
   // unformatted whenever billing reported an empty tier (which it does today).
@@ -624,20 +641,13 @@ export function EntryNavRail({
       ? t('entry.billingTierTeam')
       : t('entry.billingTierFree');
   const balanceLabel = formatVelaBalanceUsd(balanceUsd);
-  // #5517: wordmark badge on the account row (replaces the chevron) and a
-  // small twin inside the menu's billing card.
-  //
-  // The badge names the plan FAMILY, so a TEAM workspace draws the one `team`
-  // wordmark at every tier — free through max — while the personal ladder keeps
-  // its per-tier glyph (product ruling, see `planBadgeTierForWorkspace`). The
-  // workspace kind is passed because it is the only thing that can name the FREE
-  // team tier: B reports it with a null `planId` and an empty `membershipTier`,
-  // an id no different from a personal free account.
-  //
-  // The tier still leads with the RAW id: `rawTier` prefers billing over the
-  // context hint and is empty only when neither reported one, and the display
-  // label is a plan-family name (团队版) that carries no tier word — so the label
-  // is the last resort, never the first read.
+  // #5517: wordmark badge inside the menu's billing card. It names the plan
+  // FAMILY, so a TEAM workspace draws the one `team` wordmark at every tier —
+  // free through max — while the personal ladder keeps its per-tier glyph
+  // (product ruling, see `planBadgeTierForWorkspace`). The workspace kind is
+  // passed because it is the only thing that can name the FREE team tier: B
+  // reports it with a null `planId` and an empty `membershipTier`, an id no
+  // different from a personal free account.
   const planTier = planBadgeTierForWorkspace({
     tier: rawTier || tierLabel,
     workspaceType: context?.workspaceType,
@@ -647,22 +657,19 @@ export function EntryNavRail({
   useEffect(() => {
     if (!accountOpen) return;
     trackWorkspaceSurfaceView(analytics.track, {
-      page_name: analyticsPage,
+      page_name: page,
       area: 'account_menu',
       ...workspaceDimensions,
     });
-  }, [accountOpen, analytics.track, analyticsPage, workspaceDimensions.workspace_key]);
+  }, [accountOpen, analytics.track, page, workspaceDimensions.workspace_key]);
   // Message-center panel (opened from the account menu's 消息中心 row) and its
   // unread count, which drives the red dot on the account avatar.
   const [messageCenterOpen, setMessageCenterOpen] = useState(false);
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   // Where the message-center panel returns keyboard focus on close. The
-  // signed-in 消息中心 row cannot be it: the account menu unmounts the row before
-  // the panel opens, so the account trigger it hangs off is the stable control.
-  // Signed-out has no menu — the rail item itself stays mounted.
+  // 消息中心 row cannot be it: the account menu unmounts the row before the
+  // panel opens, so the account trigger it hangs off is the stable control.
   const accountTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const messageCenterRailRef = useRef<HTMLButtonElement | null>(null);
-  const messageCenterReturnFocusRef = context ? accountTriggerRef : messageCenterRailRef;
   // Sign-out confirm gate (recvqgMWpJZqhL): the menu item only ARMS the
   // confirmation dialog; the real logout chain runs on explicit confirm.
   const [confirmSignOut, setConfirmSignOut] = useState(false);
@@ -687,9 +694,9 @@ export function EntryNavRail({
     };
   }, [accountOpen]);
   // Hover-open for the account menu (#5517 interaction). The popover floats
-  // above the trigger, so closing is delayed just long enough for the pointer
+  // below the trigger, so closing is delayed just long enough for the pointer
   // to cross the gap; re-entering the container (menu included — it's a DOM
-  // child even though it renders above) cancels the pending close.
+  // child even though it renders beside) cancels the pending close.
   const accountCloseTimer = useRef<number | null>(null);
   const cancelAccountClose = () => {
     if (accountCloseTimer.current !== null) {
@@ -732,6 +739,479 @@ export function EntryNavRail({
     cancelAccountClose();
     setAccountOpen(false);
   });
+
+  // One decision shared with the rail's invite dialog: personal → the
+  // console's personal plan modal, team → checkout vs change-plan by
+  // subscription state. See `workspaceUpgradeUrl` for why the axis is the
+  // workspace TYPE.
+  const upgradeUrl = workspaceUpgradeUrl(context, billing);
+  const billingUpgradeUrl =
+    context?.billingRecovery?.recoveryUrl?.trim() || upgradeUrl;
+  // #62: the 积分 row links straight OUT to B's console dashboard (usage detail
+  // lives there) — no intermediate credits popover in the client, matching
+  // #5517. It used to open a wallet page; balance, top-up and the auto-recharge
+  // policy were rehomed onto the dashboard (vela #1055).
+  const billingConsoleUrl = workspaceSettingsUrl
+    ? teamConsoleUrl(workspaceSettingsUrl, 'billing')
+    : null;
+  // Product decision: plan selection / payment lives in Vela Web. The local
+  // client opens that billing surface, then refreshes billing + context when
+  // focus returns so direct web upgrades sync plan, credits, seats and gates.
+  //
+  // The gate needs all three answers: a destination exists, the caller may act
+  // on billing, AND the tier actually has somewhere to go. Without the tier
+  // question a 团队版 Max owner — the top tier, nothing above it — was offered
+  // 升级 that could only reopen the plan they already hold. It reads the tier
+  // the card LABELS, so the button and the nameplate next to it can never
+  // disagree.
+  const canUpgrade =
+    Boolean(billingUpgradeUrl && permissions?.canManageBilling)
+    && canUpgradeFromPlanTier(labelTier);
+
+  function openBillingUpgrade() {
+    if (!billingUpgradeUrl) return;
+    window.open(billingUpgradeUrl, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => {
+      notifyWorkspaceBillingRefresh();
+      notifyWorkspaceContextRefresh();
+    }, 3000);
+  }
+
+  function trackAccountAction(element: AccountMenuClickProps['element']) {
+    trackAccountMenuClick(analytics.track, {
+      page_name: page,
+      area: 'account_menu',
+      element,
+      ...(element === 'upgrade'
+        ? {
+            is_free_active:
+              workspaceDimensions.plan_bucket === 'free'
+              && context?.lifecycleState === 'active',
+          }
+        : {}),
+      ...workspaceDimensions,
+    });
+  }
+
+  if ((!leadingSlot && !context) || typeof document === 'undefined') return null;
+
+  return (
+    <>
+      {createPortal(
+        <div className="entry-top-right-cluster">
+          {leadingSlot}
+          {/* GitHub star chip: its own option in the cluster, right after the
+              campaign badge (per product) — it used to live in the account
+              menu's social row. */}
+          <a
+            className="entry-top-right-github"
+            href={REPO_URL}
+            {...externalLinkProps}
+            aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+            title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
+            data-testid="entry-top-right-github"
+            onClick={() => trackAccountAction('github')}
+          >
+            <Icon name="github-filled" size={14} />
+            <span>{githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}</span>
+          </a>
+          {/* One shared capsule for the account module (per product: 头像和积分
+              合并成一个胶囊): credits segment on the left (same availability
+              rule as the menu's billing card; clicking jumps to B's billing
+              console, mirroring the menu's 额度 row), avatar on the right.
+              The capsule owns the pill material; the segments inside are
+              chrome-free click targets. */}
+          {context ? (
+            <div className="entry-top-right-account-pill">
+          {(billing || balanceLabel) ? (
+            <button
+              type="button"
+              className="entry-top-right-credits"
+              data-testid="entry-top-right-credits"
+              aria-label={t('entry.credits')}
+              onClick={() => {
+                trackAccountAction('credits');
+                if (billingConsoleUrl) {
+                  window.open(billingConsoleUrl, '_blank', 'noopener,noreferrer');
+                }
+              }}
+            >
+              <RemixIcon name="battery-charge-line" size={13} /> {balanceLabel ?? '—'}
+            </button>
+          ) : null}
+            <div
+              ref={accountContainerRef}
+              className="entry-nav-rail__account entry-nav-rail__account--floating"
+              onMouseEnter={cancelAccountClose}
+              onMouseLeave={scheduleAccountClose}
+            >
+              <button
+                ref={accountTriggerRef}
+                type="button"
+                className="entry-nav-rail__account-trigger"
+                onClick={() => {
+                  trackEntryNavigationClick(analytics.track, {
+                    page_name: page,
+                    area: 'entry_nav',
+                    element: 'account_menu_trigger',
+                    target: 'account_menu',
+                    entry_from: 'sidebar',
+                    ...workspaceDimensions,
+                  });
+                  setAccountOpen((v) => !v);
+                }}
+                onMouseEnter={openAccountMenu}
+                aria-expanded={accountOpen}
+                aria-label={accountName}
+                data-testid="entry-nav-account"
+              >
+                <span className="entry-nav-rail__account-avatar" aria-hidden>
+                  {accountInitial}
+                  {messageUnreadCount > 0 ? (
+                    <span className="entry-nav-rail__account-avatar-dot" data-testid="account-avatar-unread-dot" />
+                  ) : null}
+                </span>
+              </button>
+              {/* Update-ready rocket, riding the same row immediately AFTER the
+                  avatar chip. It is mounted unconditionally so the row's shape
+                  is stable, and it holds no element children until the updater
+                  actually has something to show; `:empty { display: none }` is
+                  what keeps an idle slot from reserving width (plus the row's
+                  6px gap) next to the avatar.
+
+                  The rocket must never be a DESCENDANT of the trigger above:
+                  a button inside the account button would be invalid markup and
+                  would make every rocket click toggle the account menu too. */}
+              <div className="entry-nav-rail__account-updater" data-testid="entry-nav-account-updater">
+                {updaterSlot}
+              </div>
+              {accountOpen ? (
+                <>
+                  {/* No backdrop here (unlike the team menu): hover-open relies
+                      on document-level pointerover to close, and a full-screen
+                      backdrop would swallow those events and insta-close. */}
+                  <div className="entry-nav-rail__account-menu" role="menu">
+                    <div className="entry-nav-rail__account-head">
+                      <span className="entry-nav-rail__account-head-avatar" aria-hidden>{accountInitial}</span>
+                      <span className="entry-nav-rail__account-head-name">{accountName}</span>
+                      {accountEmail ? (
+                        <span className="entry-nav-rail__account-head-email">{accountEmail}</span>
+                      ) : null}
+                    </div>
+                    {/* #5517 billing card: plan (+badge) + 升级 CTA + USD balance.
+                        The balance row links out to B's console. It receives
+                        only an explicitly scoped money value; raw credits are
+                        never formatted as dollars here. */}
+                    {billing || balanceLabel ? (
+                      <div className="entry-nav-rail__menu-credits">
+                        <div className="entry-nav-rail__menu-credits-head">
+                          <span className="entry-nav-rail__menu-credits-plan">
+                            {tierLabel}
+                            {planTier ? <PlanWordmark tier={planTier} height={11} /> : null}
+                          </span>
+                          {canUpgrade ? (
+                            <button
+                              type="button"
+                              className="entry-nav-rail__menu-credits-upgrade"
+                              onClick={() => {
+                                trackAccountAction('upgrade');
+                                setAccountOpen(false);
+                                openBillingUpgrade();
+                              }}
+                            >
+                              {t('entry.creditsUpgrade')}
+                            </button>
+                          ) : null}
+                        </div>
+                        {/* #62 (product ruling): clicking the balance jumps straight to
+                            B's console dashboard for the usage detail — there is
+                            NO intermediate credits popover in the client. */}
+                        <button
+                          type="button"
+                          className="entry-nav-rail__menu-credits-row"
+                          data-testid="entry-nav-credits-row"
+                          onClick={() => {
+                            trackAccountAction('credits');
+                            setAccountOpen(false);
+                            if (billingConsoleUrl) {
+                              window.open(billingConsoleUrl, '_blank', 'noopener,noreferrer');
+                            }
+                          }}
+                        >
+                          <span className="entry-nav-rail__menu-credits-label">
+                            <RemixIcon name="battery-charge-line" size={14} /> {t('entry.credits')}
+                          </span>
+                          <span className="entry-nav-rail__menu-credits-value">
+                            {balanceLabel ?? '—'}
+                            <Icon name="chevron-right" size={14} />
+                          </span>
+                        </button>
+                      </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="entry-nav-rail__menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        trackAccountAction('settings');
+                        setAccountOpen(false);
+                        onOpenSettings?.();
+                      }}
+                    >
+                      <Icon name="settings" size={15} /> {t('entry.accountSettings')}
+                    </button>
+                    <button
+                      type="button"
+                      className="entry-nav-rail__menu-item"
+                      role="menuitem"
+                      aria-haspopup="dialog"
+                      aria-expanded={messageCenterOpen}
+                      data-testid="account-menu-message-center"
+                      onClick={() => {
+                        trackAccountAction('message_center');
+                        setAccountOpen(false);
+                        setMessageCenterOpen(true);
+                      }}
+                    >
+                      <Icon name="bell" size={15} /> {t('messageCenter.title')}
+                      {messageUnreadCount > 0 ? (
+                        <span className="entry-nav-rail__menu-item-dot" aria-hidden />
+                      ) : null}
+                    </button>
+                    {/* #5517's account menu goes 设置 → GitHub 帮助 → 功能建议 → 社交行,
+                        with no theme row, no language submenu, and no divider in
+                        between. Both controls still have a home in 设置·通用 (theme
+                        segmented control + language picker), so dropping the
+                        duplicates here costs no capability. */}
+                    <a
+                      className="entry-nav-rail__menu-item"
+                      role="menuitem"
+                      href={GITHUB_HELP_URL}
+                      {...externalLinkProps}
+                      onClick={() => {
+                        trackAccountAction('github_help');
+                        setAccountOpen(false);
+                      }}
+                    >
+                      <Icon name="comment" size={15} /> {t('entry.accountGithubHelp')}
+                    </a>
+                    <a
+                      className="entry-nav-rail__menu-item"
+                      role="menuitem"
+                      href={GITHUB_FEATURE_URL}
+                      {...externalLinkProps}
+                      onClick={() => {
+                        trackAccountAction('feature_request');
+                        setAccountOpen(false);
+                      }}
+                    >
+                      <Icon name="sparkles" size={15} /> {t('entry.accountFeatureRequest')}
+                    </a>
+                    {/* #5517: the Discord/X/mail badges move off the rail footer
+                        into a compact social row inside the account menu. GitHub
+                        left the row for its own top-right cluster chip. */}
+                    <div className="entry-nav-rail__menu-social">
+                      <a
+                        className="entry-nav-rail__menu-social-btn"
+                        role="menuitem"
+                        href={DISCORD_URL}
+                        {...externalLinkProps}
+                        aria-label={t('entry.discordAria')}
+                        title={t('entry.discordAria')}
+                        onClick={() => {
+                          trackAccountAction('discord');
+                          setAccountOpen(false);
+                        }}
+                      >
+                        <Icon name="discord" size={15} />
+                      </a>
+                      <a
+                        className="entry-nav-rail__menu-social-btn"
+                        role="menuitem"
+                        href={X_URL}
+                        {...externalLinkProps}
+                        aria-label="@OpenDesignHQ"
+                        title="@OpenDesignHQ"
+                        onClick={() => {
+                          trackAccountAction('twitter');
+                          setAccountOpen(false);
+                        }}
+                      >
+                        <span className="entry-nav-rail__menu-x" aria-hidden>X</span>
+                      </a>
+                      <a
+                        className="entry-nav-rail__menu-social-btn"
+                        role="menuitem"
+                        href={CONTACT_EMAIL_URL}
+                        aria-label={t('entry.mailAria')}
+                        title={t('entry.mailAria')}
+                        onClick={() => {
+                          trackAccountAction('email');
+                          setAccountOpen(false);
+                        }}
+                      >
+                        <Icon name="mail" size={15} />
+                      </a>
+                    </div>
+                    <div className="entry-nav-rail__menu-divider" />
+                    <button
+                      type="button"
+                      className="entry-nav-rail__menu-item"
+                      role="menuitem"
+                      onClick={() => {
+                        trackAccountAction('logout');
+                        setAccountOpen(false);
+                        // recvqgMWpJZqhL: never sign out on this click alone —
+                        // arm the confirmation dialog and let it run the logout.
+                        setConfirmSignOut(true);
+                      }}
+                    >
+                      <Icon name="log-out" size={15} /> {t('entry.accountSignOut')}
+                    </button>
+                  </div>
+                </>
+              ) : null}
+              {confirmSignOut ? (
+                <SignOutConfirmDialog
+                  onCancel={() => setConfirmSignOut(false)}
+                  onConfirm={() => {
+                    setConfirmSignOut(false);
+                    // Real sign-out: clear the vela profile auth on the
+                    // daemon, then nudge every workspace surface to re-read
+                    // (the context read now resolves to null → the shell
+                    // falls back to the signed-out local form).
+                    void velaLogout().then(async (result) => {
+                      if (!result.ok) return;
+                      await onSignedOut?.();
+                      // recvqbkcLqIFH7: a stale "dismissed" flag on the
+                      // footer's CloudSignInTip must not survive a real
+                      // sign-out, or the rail's only sign-in entry point
+                      // silently disappears with nothing left in its place.
+                      resetCloudSignInTipDismissal();
+                      notifyAmrLoginStatusChanged();
+                      notifyWorkspaceContextRefresh();
+                      notifyWorkspaceBillingRefresh();
+                      notifyTeamProjectsChanged();
+                    });
+                  }}
+                />
+              ) : null}
+            </div>
+            </div>
+          ) : null}
+        </div>,
+        document.body,
+      )}
+      {/* Panel + unread polling live here (outside the hover menu, which
+          unmounts when closed); the 消息中心 menu row above just opens it.
+          Signed-out shells have no account module — `EntryNavRail` mounts its
+          own MessageCenter for that branch, so this one is context-gated to
+          keep exactly one instance (and one unread poller) alive. */}
+      {context ? (
+        <MessageCenter
+          hideTrigger
+          returnFocusRef={accountTriggerRef}
+          open={messageCenterOpen}
+          onOpenChange={setMessageCenterOpen}
+          onUnreadCountChange={setMessageUnreadCount}
+          onOpenNotificationSettings={onOpenSettings ? () => onOpenSettings('notifications') : undefined}
+        />
+      ) : null}
+    </>
+  );
+}
+
+/** Project-view variant. Bound projects pass their route-owned Workspace
+ * authority explicitly; an unbound local project deliberately falls back to
+ * the shell's ambient account context. */
+export function WorkspaceTopRightAccountCluster({
+  onOpenSettings,
+  onSignedOut,
+  workspaceContextOverride,
+  workspaceContextLoading,
+}: {
+  onOpenSettings?: (section?: EntrySettingsSection) => void;
+  onSignedOut?: () => void | Promise<void>;
+  workspaceContextOverride?: WorkspaceCollabContext | null;
+  workspaceContextLoading?: boolean;
+}) {
+  const ambient = useWorkspaceContext();
+  const hasExplicitWorkspaceContext = workspaceContextOverride !== undefined;
+  const context = hasExplicitWorkspaceContext
+    ? workspaceContextOverride
+    : ambient.context;
+  const billingResponse = useWorkspaceBillingResponse({
+    context,
+    loading: hasExplicitWorkspaceContext
+      ? workspaceContextLoading === true
+      : ambient.loading,
+  });
+  // Plan and money are both workspace-scoped questions, so both go through a
+  // context-partitioned projection — `response.summary` on its own is an
+  // ACCOUNT read (`workspaceId: null` by contract). Same rule as EntryShell.
+  const billing = workspaceBillingSummaryForContext(billingResponse, context);
+  const balanceUsd = workspaceBillingBalanceUsd(billingResponse, context);
+  return (
+    <EntryTopRightCluster
+      page="project"
+      context={context}
+      billing={billing}
+      balanceUsd={balanceUsd}
+      onOpenSettings={onOpenSettings}
+      onSignedOut={onSignedOut}
+    />
+  );
+}
+
+export function EntryNavRail({
+  view,
+  onViewChange,
+  onNewProject,
+  onOpenSearch,
+  newProjectDisabled,
+  open,
+  topRightSlot,
+  context,
+  billing,
+  balanceUsd,
+  onOpenSettings,
+  onSignedOut,
+  updaterSlot,
+  footerNotice,
+}: Props) {
+  const { t } = useI18n();
+  const analytics = useAnalytics();
+  const analyticsPage = entryViewToTracking(view);
+  const workspaceDimensions = workspaceAnalyticsDimensions(context);
+  const communityLabel = t('pluginsHome.title');
+  // #5517 renamed the rail's first item from 最近 (Recents) to 首页 (Home) —
+  // the key keeps its historical name, the VALUE now reads Home in every
+  // locale (polish round 2, ref 1db2d00c2).
+  const homeLabel = t('entry.navRecents');
+  const isHome = view === 'home';
+
+  const isTeam = Boolean(context) && context!.workspaceType === 'team';
+  const permissions = context?.permissions;
+  // Demo `canOwnWorkspace` → real owner-level view of workspace settings. Never
+  // re-derive from role — the permission bits already fold role + lifecycle in.
+  const canViewWorkspaceSettings = Boolean(permissions?.canViewWorkspaceSettings);
+  const canInviteMembers = Boolean(permissions?.canInviteMembers);
+  const canAccessInviteFlow = canAccessWorkspaceInviteFlow(context);
+  const workspaceSettingsUrl = context?.workspaceSettingsUrl?.trim() || null;
+
+  // The updater host has exactly one home on screen at a time. The floating
+  // account row is the preferred one; the footer only takes it when there is
+  // no cloud identity, because the whole account module is absent then.
+  // Deriving both from one expression is what keeps "exactly one" true — two
+  // independent renders would double the rocket.
+  const footerUpdaterSlot = context ? null : updaterSlot;
+
+  // Message-center panel for the SIGNED-OUT shell only (its rail item under
+  // 设置 is the one opener there). The signed-in panel — plus the unread badge
+  // on the avatar — lives inside `EntryTopRightCluster` with the account menu.
+  const [messageCenterOpen, setMessageCenterOpen] = useState(false);
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const messageCenterRailRef = useRef<HTMLButtonElement | null>(null);
   const [teamOpen, setTeamOpen] = useState(false);
   useEffect(() => {
     if (!teamOpen) return;
@@ -754,33 +1234,11 @@ export function EntryNavRail({
   const [workspaceSwitchingId, setWorkspaceSwitchingId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const inviteTarget = resolveWorkspaceInviteTarget(context);
-  // One decision for both of this rail's upgrade entries (credits chip and
-  // the invite dialog's seat-gate): personal → the console's personal plan
-  // modal, team → checkout vs change-plan by subscription state. See
-  // `workspaceUpgradeUrl` for why the axis is the workspace TYPE.
+  // The invite dialog's seat-gate upgrade entry: personal → the console's
+  // personal plan modal, team → checkout vs change-plan by subscription state.
+  // See `workspaceUpgradeUrl` for why the axis is the workspace TYPE. (The
+  // credits chip's twin decision lives in `EntryTopRightCluster`.)
   const upgradeUrl = workspaceUpgradeUrl(context, billing);
-  const billingUpgradeUrl =
-    context?.billingRecovery?.recoveryUrl?.trim() || upgradeUrl;
-  // #62: the 积分 row links straight OUT to B's console dashboard (usage detail
-  // lives there) — no intermediate credits popover in the client, matching
-  // #5517. It used to open a wallet page; balance, top-up and the auto-recharge
-  // policy were rehomed onto the dashboard (vela #1055).
-  const billingConsoleUrl = workspaceSettingsUrl
-    ? teamConsoleUrl(workspaceSettingsUrl, 'billing')
-    : null;
-  // Product decision: plan selection / payment lives in Vela Web. The local
-  // client opens that billing surface, then refreshes billing + context when
-  // focus returns so direct web upgrades sync plan, credits, seats and gates.
-  //
-  // The gate needs all three answers, and used to ask only the last two: a
-  // destination exists, the caller may act on billing, AND the tier actually has
-  // somewhere to go. Without the tier question a 团队版 Max owner — the top tier,
-  // nothing above it — was offered 升级 that could only reopen the plan they
-  // already hold. It reads the tier the card LABELS, so the button and the
-  // nameplate next to it can never disagree.
-  const canUpgrade =
-    Boolean(billingUpgradeUrl && permissions?.canManageBilling)
-    && canUpgradeFromPlanTier(labelTier);
   const identityWorkspaceItems = workspaceDirectoryForIdentity(workspaceItems, context);
   const currentWorkspaceItem = context
     ? identityWorkspaceItems.find((item) => item.workspaceId === context.workspaceId) ?? null
@@ -816,7 +1274,7 @@ export function EntryNavRail({
           } satisfies WorkspaceDirectoryItem]
         : [];
 
-  async function loadWorkspaceDirectory() {
+  async function loadWorkspaceDirectory(options: { force?: boolean } = {}) {
     // Capture the identity this read is FOR, and compare against `contextRef`
     // (not the closed-over `context`, which is by definition the identity we are
     // reading for) before committing anything — see `beginWorkspaceScopedRead`.
@@ -832,12 +1290,14 @@ export function EntryNavRail({
       // module cache does: `coalescedGet` shares a settled result for a second,
       // and this read's answer depends on WHO asked.
       const cacheKey = `workspace-directory:${workspaceIdentityCacheKey(read.context)}`;
-      const items = await coalescedGet(cacheKey, async () => {
+      if (options.force) evictCoalescedGet(cacheKey);
+      const readDirectory = async () => {
         const response = await fetch('/api/workspace/directory', { cache: 'no-store' });
         if (!response.ok) throw new Error(`directory ${response.status}`);
         const body = (await response.json()) as WorkspaceDirectoryResponse;
         return body.items ?? [];
-      });
+      };
+      const items = await coalescedGet(cacheKey, readDirectory);
       // The account may have changed while this was in flight. Writing here
       // would repopulate BOTH the module cache and the visible list with the
       // previous account's names, after the identity-change effect below had
@@ -931,31 +1391,6 @@ export function EntryNavRail({
     }
   }
 
-  function openBillingUpgrade() {
-    if (!billingUpgradeUrl) return;
-    window.open(billingUpgradeUrl, '_blank', 'noopener,noreferrer');
-    window.setTimeout(() => {
-      notifyWorkspaceBillingRefresh();
-      notifyWorkspaceContextRefresh();
-    }, 3000);
-  }
-
-  function trackAccountAction(element: AccountMenuClickProps['element']) {
-    trackAccountMenuClick(analytics.track, {
-      page_name: analyticsPage,
-      area: 'account_menu',
-      element,
-      ...(element === 'upgrade'
-        ? {
-            is_free_active:
-              workspaceDimensions.plan_bucket === 'free'
-              && context?.lifecycleState === 'active',
-          }
-        : {}),
-      ...workspaceDimensions,
-    });
-  }
-
   const selectView = (next: EntryView) => {
     trackEntryNavigationClick(analytics.track, {
       page_name: analyticsPage,
@@ -985,6 +1420,25 @@ export function EntryNavRail({
     if (!teamOpen) return;
     void loadWorkspaceDirectory();
   }, [teamOpen, railIdentity]);
+
+  // The account-directory event is delivered through the already-shared local
+  // Workspace EventSource. It stays mounted while the switcher is closed, so a
+  // remote create/join/rename/removal updates the cached list immediately. A
+  // reconnect/foreground edge also re-reads once to close a missed-event gap;
+  // this is event-driven catch-up, not a timer.
+  useWorkspaceInvalidation(
+    {
+      'workspace-directory-changed': () => {
+        void loadWorkspaceDirectory({ force: true });
+      },
+    },
+    {
+      workspaceContext: context,
+      onActive: () => {
+        void loadWorkspaceDirectory({ force: true });
+      },
+    },
+  );
 
   // This rail can outlive the identity that filled its list: an account swap
   // (sign out, sign in as someone else) does not necessarily unmount it, and
@@ -1016,308 +1470,181 @@ export function EntryNavRail({
     >
       <div className="entry-nav-rail__panel">
       <div className="entry-nav-rail__group">
-        {context ? (
-          <div
-            ref={accountContainerRef}
-            className="entry-nav-rail__account"
-            onMouseEnter={cancelAccountClose}
-            onMouseLeave={scheduleAccountClose}
-          >
-            {/* Right-aligned strip directly above the identity row — the
-                update-ready rocket's home. It is mounted unconditionally so it
-                stays the trigger's immediately-preceding sibling, and it holds
-                no element children until the updater actually has something to
-                show; `:empty { display: none }` is what keeps an idle strip
-                from reserving a row's worth of height above the account.
 
-                The rocket must never be a DESCENDANT of the trigger below:
-                a button inside the account button would be invalid markup and
-                would make every rocket click toggle the account menu too. */}
-            <div className="entry-nav-rail__account-updater" data-testid="entry-nav-account-updater">
-              {updaterSlot}
-            </div>
+        {context ? (
+          <div className="entry-nav-rail__team-wrap">
             <button
-              ref={accountTriggerRef}
               type="button"
-              className="entry-nav-rail__account-trigger"
+              className="entry-nav-rail__team"
               onClick={() => {
                 trackEntryNavigationClick(analytics.track, {
                   page_name: analyticsPage,
                   area: 'entry_nav',
-                  element: 'account_menu_trigger',
-                  target: 'account_menu',
+                  element: 'workspace_switcher_trigger',
+                  target: 'workspace_switcher',
                   entry_from: 'sidebar',
                   ...workspaceDimensions,
                 });
-                setAccountOpen((v) => !v);
+                setTeamOpen((v) => !v);
               }}
-              onMouseEnter={openAccountMenu}
-              aria-expanded={accountOpen}
-              data-testid="entry-nav-account"
+              aria-expanded={teamOpen}
+              data-testid="workspace-switcher"
             >
-              <span className="entry-nav-rail__account-avatar" aria-hidden>
-                {accountInitial}
-                {messageUnreadCount > 0 ? (
-                  <span className="entry-nav-rail__account-avatar-dot" data-testid="account-avatar-unread-dot" />
-                ) : null}
-              </span>
-              <span className="entry-nav-rail__account-name">{accountName}</span>
-              {/* #5517: the plan badge replaces the chevron when a tier is
-                  known — the standalone credits chip row is gone; credits
-                  live in the account menu's billing card. */}
-              {planTier ? <PlanWordmark tier={planTier} height={17} /> : <Icon name="chevron-down" size={14} />}
+              <span className="entry-nav-rail__team-avatar" aria-hidden>{workspaceInitial}</span>
+              <span className="entry-nav-rail__team-name">{workspaceName}</span>
+              <Icon name="chevron-down" size={14} />
             </button>
-            {accountOpen ? (
+            {teamOpen ? (
               <>
-                {/* No backdrop here (unlike the team menu): hover-open relies
-                    on document-level pointerover to close, and a full-screen
-                    backdrop would swallow those events and insta-close. */}
-                <div className="entry-nav-rail__account-menu" role="menu">
-                  <div className="entry-nav-rail__account-head">
-                    <span className="entry-nav-rail__account-head-avatar" aria-hidden>{accountInitial}</span>
-                    <span className="entry-nav-rail__account-head-name">{accountName}</span>
-                    {accountEmail ? (
-                      <span className="entry-nav-rail__account-head-email">{accountEmail}</span>
+                <div className="entry-nav-rail__menu-backdrop" onClick={() => setTeamOpen(false)} />
+                <div
+                  className="entry-nav-rail__team-menu"
+                  role="menu"
+                  onKeyDown={handleWorkspaceMenuKeyDown}
+                >
+                  <div
+                    className="entry-nav-rail__workspace-list"
+                    data-testid="workspace-switcher-list"
+                  >
+                    {visibleWorkspaceItems.map((item) => {
+                      const active = item.workspaceId === context.workspaceId;
+                      // Older daemon directory payloads can omit workspaceName.
+                      // Keep those rows identifiable and actionable by falling
+                      // back to the stable workspace id instead of crashing.
+                      const itemName = item.workspaceName?.trim() || item.workspaceId;
+                      const initial = itemName.charAt(0).toUpperCase() || 'W';
+                      return (
+                        <button
+                          key={item.workspaceId}
+                          type="button"
+                          className={`entry-nav-rail__menu-item${active ? ' is-current' : ''}`}
+                          role="menuitem"
+                          aria-current={active ? 'true' : undefined}
+                          // Only the in-flight switch disables a row. Disabling the
+                          // CURRENT one made the UA grey it out, so the selected
+                          // workspace read as the inactive one and vice versa;
+                          // `.is-current` (bold + accent ✓) is the selected signal.
+                          disabled={workspaceSwitchingId === item.workspaceId}
+                          onClick={() => {
+                            void switchWorkspace(item.workspaceId);
+                          }}
+                        >
+                          <span className="entry-nav-rail__team-avatar" aria-hidden>{initial}</span>
+                          {/* #5517's switcher rows are avatar + full name + ✓ only.
+                              The raw role word ate the name's width and truncated
+                              it; the role is already on 设置·工作区. */}
+                          <span className="entry-nav-rail__workspace-menu-name">{itemName}</span>
+                          {active ? <Icon name="check" size={14} /> : null}
+                        </button>
+                      );
+                    })}
+                    {workspaceDirectoryLoading && visibleWorkspaceItems.length === 0 ? (
+                      <div className="entry-nav-rail__menu-item is-muted" role="status">
+                        {t('common.loading')}
+                      </div>
                     ) : null}
                   </div>
-                  {/* #5517 billing card: plan (+badge) + 升级 CTA + USD balance.
-                      The balance row links out to B's console. It receives
-                      only an explicitly scoped money value; raw credits are
-                      never formatted as dollars here. */}
-                  {billing || balanceLabel ? (
-                    <div className="entry-nav-rail__menu-credits">
-                      <div className="entry-nav-rail__menu-credits-head">
-                        <span className="entry-nav-rail__menu-credits-plan">
-                          {tierLabel}
-                          {planTier ? <PlanWordmark tier={planTier} height={11} /> : null}
-                        </span>
-                        {canUpgrade ? (
-                          <button
-                            type="button"
-                            className="entry-nav-rail__menu-credits-upgrade"
-                            onClick={() => {
-                              trackAccountAction('upgrade');
-                              setAccountOpen(false);
-                              openBillingUpgrade();
-                            }}
-                          >
-                            {t('entry.creditsUpgrade')}
-                          </button>
-                        ) : null}
-                      </div>
-                      {/* #62 (product ruling): clicking the balance jumps straight to
-                          B's console dashboard for the usage detail — there is
-                          NO intermediate credits popover in the client. */}
+                  <div
+                    className="entry-nav-rail__workspace-actions"
+                    data-testid="workspace-switcher-actions"
+                  >
+                    <div className="entry-nav-rail__menu-divider" />
+                    {canAccessInviteFlow && inviteTarget.kind !== 'unavailable' ? (
                       <button
                         type="button"
-                        className="entry-nav-rail__menu-credits-row"
-                        data-testid="entry-nav-credits-row"
+                        className="entry-nav-rail__menu-item"
+                        role="menuitem"
                         onClick={() => {
-                          trackAccountAction('credits');
-                          setAccountOpen(false);
-                          if (billingConsoleUrl) {
-                            window.open(billingConsoleUrl, '_blank', 'noopener,noreferrer');
+                          trackWorkspaceSwitcherClick(analytics.track, {
+                            page_name: analyticsPage,
+                            area: 'workspace_switcher',
+                            element: 'invite_teammates',
+                            ...workspaceDimensions,
+                          });
+                          setTeamOpen(false);
+                          if (inviteTarget.kind === 'vela') {
+                            window.open(inviteTarget.url, '_blank', 'noopener,noreferrer');
+                          } else if (inviteTarget.kind === 'local') {
+                            setInviteOpen(true);
                           }
                         }}
                       >
-                        <span className="entry-nav-rail__menu-credits-label">
-                          <RemixIcon name="battery-charge-line" size={14} /> {t('entry.credits')}
-                        </span>
-                        <span className="entry-nav-rail__menu-credits-value">
-                          {balanceLabel ?? '—'}
-                          <Icon name="chevron-right" size={14} />
-                        </span>
+                        <Icon name="share" size={15} /> {t('workspaceSwitcher.invite')}
                       </button>
-                    </div>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="entry-nav-rail__menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      trackAccountAction('settings');
-                      setAccountOpen(false);
-                      onOpenSettings?.();
-                    }}
-                  >
-                    <Icon name="settings" size={15} /> {t('entry.accountSettings')}
-                  </button>
-                  <button
-                    type="button"
-                    className="entry-nav-rail__menu-item"
-                    role="menuitem"
-                    aria-haspopup="dialog"
-                    aria-expanded={messageCenterOpen}
-                    data-testid="account-menu-message-center"
-                    onClick={() => {
-                      trackAccountAction('message_center');
-                      setAccountOpen(false);
-                      setMessageCenterOpen(true);
-                    }}
-                  >
-                    <Icon name="bell" size={15} /> {t('messageCenter.title')}
-                    {messageUnreadCount > 0 ? (
-                      <span className="entry-nav-rail__menu-item-dot" aria-hidden />
                     ) : null}
-                  </button>
-                  {/* #5517's account menu goes 设置 → GitHub 帮助 → 功能建议 → 社交行,
-                      with no theme row, no language submenu, and no divider in
-                      between. Both controls still have a home in 设置·通用 (theme
-                      segmented control + language picker), so dropping the
-                      duplicates here costs no capability. */}
-                  <a
-                    className="entry-nav-rail__menu-item"
-                    role="menuitem"
-                    href={GITHUB_HELP_URL}
-                    {...externalLinkProps}
-                    onClick={() => {
-                      trackAccountAction('github_help');
-                      setAccountOpen(false);
-                    }}
-                  >
-                    <Icon name="comment" size={15} /> {t('entry.accountGithubHelp')}
-                  </a>
-                  <a
-                    className="entry-nav-rail__menu-item"
-                    role="menuitem"
-                    href={GITHUB_FEATURE_URL}
-                    {...externalLinkProps}
-                    onClick={() => {
-                      trackAccountAction('feature_request');
-                      setAccountOpen(false);
-                    }}
-                  >
-                    <Icon name="sparkles" size={15} /> {t('entry.accountFeatureRequest')}
-                  </a>
-                  {/* #5517: the GitHub/Discord/X/mail badges move off the rail
-                      footer into a compact social row inside the account menu. */}
-                  <div className="entry-nav-rail__menu-social">
-                    <a
-                      className="entry-nav-rail__menu-social-btn"
-                      role="menuitem"
-                      href={REPO_URL}
-                      {...externalLinkProps}
-                      aria-label={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-                      title={`GitHub · ${githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)} stars`}
-                      onClick={() => {
-                        trackAccountAction('github');
-                        setAccountOpen(false);
-                      }}
-                    >
-                      <Icon name="github-filled" size={15} />
-                      <span className="entry-nav-rail__menu-social-count">
-                        {githubStars == null ? GITHUB_STARS_FALLBACK_LABEL : formatStars(githubStars)}
-                      </span>
-                    </a>
-                    <a
-                      className="entry-nav-rail__menu-social-btn"
-                      role="menuitem"
-                      href={DISCORD_URL}
-                      {...externalLinkProps}
-                      aria-label={t('entry.discordAria')}
-                      title={t('entry.discordAria')}
-                      onClick={() => {
-                        trackAccountAction('discord');
-                        setAccountOpen(false);
-                      }}
-                    >
-                      <Icon name="discord" size={15} />
-                    </a>
-                    <a
-                      className="entry-nav-rail__menu-social-btn"
-                      role="menuitem"
-                      href={X_URL}
-                      {...externalLinkProps}
-                      aria-label="@OpenDesignHQ"
-                      title="@OpenDesignHQ"
-                      onClick={() => {
-                        trackAccountAction('twitter');
-                        setAccountOpen(false);
-                      }}
-                    >
-                      <span className="entry-nav-rail__menu-x" aria-hidden>X</span>
-                    </a>
-                    <a
-                      className="entry-nav-rail__menu-social-btn"
-                      role="menuitem"
-                      href={CONTACT_EMAIL_URL}
-                      aria-label={t('entry.mailAria')}
-                      title={t('entry.mailAria')}
-                      onClick={() => {
-                        trackAccountAction('email');
-                        setAccountOpen(false);
-                      }}
-                    >
-                      <Icon name="mail" size={15} />
-                    </a>
+                    {/* Creating a workspace is a B console flow (its sidebar owns the
+                        create dialog; there is no route or query param that opens it
+                        directly), so this entry links OUT instead of doing local work.
+                        With no console URL there is nowhere to send the user — render
+                        nothing rather than a control that silently does nothing. */}
+                    {workspaceSettingsUrl ? (
+                      <a
+                        className="entry-nav-rail__menu-item"
+                        role="menuitem"
+                        href={teamConsoleUrl(workspaceSettingsUrl, 'create-team')}
+                        {...externalLinkProps}
+                        data-testid="entry-nav-create-team"
+                        onClick={() => {
+                          trackWorkspaceSwitcherClick(analytics.track, {
+                            page_name: analyticsPage,
+                            area: 'workspace_switcher',
+                            element: 'create_team',
+                            ...workspaceDimensions,
+                          });
+                          setTeamOpen(false);
+                        }}
+                      >
+                        <Icon name="plus" size={15} /> {t('workspaceSwitcher.createTeam')}
+                      </a>
+                    ) : null}
                   </div>
-                  <div className="entry-nav-rail__menu-divider" />
-                  <button
-                    type="button"
-                    className="entry-nav-rail__menu-item"
-                    role="menuitem"
-                    onClick={() => {
-                      trackAccountAction('logout');
-                      setAccountOpen(false);
-                      // recvqgMWpJZqhL: never sign out on this click alone —
-                      // arm the confirmation dialog and let it run the logout.
-                      setConfirmSignOut(true);
-                    }}
-                  >
-                    <Icon name="log-out" size={15} /> {t('entry.accountSignOut')}
-                  </button>
                 </div>
               </>
-            ) : null}
-            {confirmSignOut ? (
-              <SignOutConfirmDialog
-                onCancel={() => setConfirmSignOut(false)}
-                onConfirm={() => {
-                  setConfirmSignOut(false);
-                  // Real sign-out: clear the vela profile auth on the
-                  // daemon, then nudge every workspace surface to re-read
-                  // (the context read now resolves to null → the shell
-                  // falls back to the signed-out local form).
-                  void velaLogout().then(async (result) => {
-                    if (!result.ok) return;
-                    await onSignedOut?.();
-                    // recvqbkcLqIFH7: a stale "dismissed" flag on the
-                    // footer's CloudSignInTip must not survive a real
-                    // sign-out, or the rail's only sign-in entry point
-                    // silently disappears with nothing left in its place.
-                    resetCloudSignInTipDismissal();
-                    notifyAmrLoginStatusChanged();
-                    notifyWorkspaceContextRefresh();
-                    notifyWorkspaceBillingRefresh();
-                    notifyTeamProjectsChanged();
-                  });
-                }}
-              />
             ) : null}
           </div>
         ) : null}
 
-        <button
-          type="button"
-          className="entry-nav-rail__search"
-          onClick={() => {
-            trackEntryNavigationClick(analytics.track, {
-              page_name: analyticsPage,
-              area: 'entry_nav',
-              element: 'search',
-              target: 'search',
-              entry_from: 'sidebar',
-              ...workspaceDimensions,
-            });
-            onOpenSearch?.();
-          }}
-          aria-label={t('common.search')}
-          data-testid="entry-nav-search"
-        >
-          <Icon name="search" size={14} />
-          <span className="entry-nav-rail__search-placeholder">{t('common.search')}</span>
-          <span className="entry-nav-rail__search-kbd" aria-hidden>⌘K</span>
-        </button>
+        {/* Search + the rail-collapse control in one row. The collapse button
+            moved here from the chrome corner (per product: 收起按钮放在输入框
+            后边) — the corner slot is the brand logo now, and re-opening a
+            collapsed rail is what the logo does there. */}
+        <div className="entry-nav-rail__search-row">
+          <button
+            type="button"
+            className="entry-nav-rail__search"
+            onClick={() => {
+              trackEntryNavigationClick(analytics.track, {
+                page_name: analyticsPage,
+                area: 'entry_nav',
+                element: 'search',
+                target: 'search',
+                entry_from: 'sidebar',
+                ...workspaceDimensions,
+              });
+              onOpenSearch?.();
+            }}
+            aria-label={t('common.search')}
+            data-testid="entry-nav-search"
+          >
+            <Icon name="search" size={14} />
+            <span className="entry-nav-rail__search-placeholder">{t('common.search')}</span>
+            <span className="entry-nav-rail__search-kbd" aria-hidden>⌘K</span>
+          </button>
+          <button
+            type="button"
+            className="entry-nav-rail__collapse od-tooltip"
+            aria-label={t('entry.navCollapse')}
+            title={t('entry.navCollapse')}
+            data-tooltip={t('entry.navCollapse')}
+            data-tooltip-placement="bottom"
+            data-testid="entry-rail-collapse"
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent(ENTRY_RAIL_TOGGLE_EVENT));
+            }}
+          >
+            <Icon name="panel-left" size={15} />
+          </button>
+        </div>
 
         <NavButton
           active={isHome}
@@ -1340,136 +1667,6 @@ export function EntryNavRail({
 
         {context ? (
           <div className="entry-nav-rail__team-section">
-            <div className="entry-nav-rail__team-wrap">
-              <button
-                type="button"
-                className="entry-nav-rail__team"
-                onClick={() => {
-                  trackEntryNavigationClick(analytics.track, {
-                    page_name: analyticsPage,
-                    area: 'entry_nav',
-                    element: 'workspace_switcher_trigger',
-                    target: 'workspace_switcher',
-                    entry_from: 'sidebar',
-                    ...workspaceDimensions,
-                  });
-                  setTeamOpen((v) => !v);
-                }}
-                aria-expanded={teamOpen}
-                data-testid="workspace-switcher"
-              >
-                <span className="entry-nav-rail__team-avatar" aria-hidden>{workspaceInitial}</span>
-                <span className="entry-nav-rail__team-name">{workspaceName}</span>
-                <Icon name="chevron-down" size={14} />
-              </button>
-              {teamOpen ? (
-                <>
-                  <div className="entry-nav-rail__menu-backdrop" onClick={() => setTeamOpen(false)} />
-                  <div
-                    className="entry-nav-rail__team-menu"
-                    role="menu"
-                    onKeyDown={handleWorkspaceMenuKeyDown}
-                  >
-                    <div
-                      className="entry-nav-rail__workspace-list"
-                      data-testid="workspace-switcher-list"
-                    >
-                      {visibleWorkspaceItems.map((item) => {
-                        const active = item.workspaceId === context.workspaceId;
-                        // Older daemon directory payloads can omit workspaceName.
-                        // Keep those rows identifiable and actionable by falling
-                        // back to the stable workspace id instead of crashing.
-                        const itemName = item.workspaceName?.trim() || item.workspaceId;
-                        const initial = itemName.charAt(0).toUpperCase() || 'W';
-                        return (
-                          <button
-                            key={item.workspaceId}
-                            type="button"
-                            className={`entry-nav-rail__menu-item${active ? ' is-current' : ''}`}
-                            role="menuitem"
-                            aria-current={active ? 'true' : undefined}
-                            // Only the in-flight switch disables a row. Disabling the
-                            // CURRENT one made the UA grey it out, so the selected
-                            // workspace read as the inactive one and vice versa;
-                            // `.is-current` (bold + accent ✓) is the selected signal.
-                            disabled={workspaceSwitchingId === item.workspaceId}
-                            onClick={() => {
-                              void switchWorkspace(item.workspaceId);
-                            }}
-                          >
-                            <span className="entry-nav-rail__team-avatar" aria-hidden>{initial}</span>
-                            {/* #5517's switcher rows are avatar + full name + ✓ only.
-                                The raw role word ate the name's width and truncated
-                                it; the role is already on 设置·工作区. */}
-                            <span className="entry-nav-rail__workspace-menu-name">{itemName}</span>
-                            {active ? <Icon name="check" size={14} /> : null}
-                          </button>
-                        );
-                      })}
-                      {workspaceDirectoryLoading && visibleWorkspaceItems.length === 0 ? (
-                        <div className="entry-nav-rail__menu-item is-muted" role="status">
-                          {t('common.loading')}
-                        </div>
-                      ) : null}
-                    </div>
-                    <div
-                      className="entry-nav-rail__workspace-actions"
-                      data-testid="workspace-switcher-actions"
-                    >
-                      <div className="entry-nav-rail__menu-divider" />
-                      {canAccessInviteFlow && inviteTarget.kind !== 'unavailable' ? (
-                        <button
-                          type="button"
-                          className="entry-nav-rail__menu-item"
-                          role="menuitem"
-                          onClick={() => {
-                            trackWorkspaceSwitcherClick(analytics.track, {
-                              page_name: analyticsPage,
-                              area: 'workspace_switcher',
-                              element: 'invite_teammates',
-                              ...workspaceDimensions,
-                            });
-                            setTeamOpen(false);
-                            if (inviteTarget.kind === 'vela') {
-                              window.open(inviteTarget.url, '_blank', 'noopener,noreferrer');
-                            } else if (inviteTarget.kind === 'local') {
-                              setInviteOpen(true);
-                            }
-                          }}
-                        >
-                          <Icon name="share" size={15} /> {t('workspaceSwitcher.invite')}
-                        </button>
-                      ) : null}
-                      {/* Creating a workspace is a B console flow (its sidebar owns the
-                          create dialog; there is no route or query param that opens it
-                          directly), so this entry links OUT instead of doing local work.
-                          With no console URL there is nowhere to send the user — render
-                          nothing rather than a control that silently does nothing. */}
-                      {workspaceSettingsUrl ? (
-                        <a
-                          className="entry-nav-rail__menu-item"
-                          role="menuitem"
-                          href={teamConsoleUrl(workspaceSettingsUrl, 'create-team')}
-                          {...externalLinkProps}
-                          data-testid="entry-nav-create-team"
-                          onClick={() => {
-                            trackWorkspaceSwitcherClick(analytics.track, {
-                              page_name: analyticsPage,
-                              area: 'workspace_switcher',
-                              element: 'create_team',
-                              ...workspaceDimensions,
-                            });
-                            setTeamOpen(false);
-                          }}
-                        >
-                          <Icon name="plus" size={15} /> {t('workspaceSwitcher.createTeam')}
-                        </a>
-                      ) : null}
-                    </div>
-                  </div>
-                </>
-              ) : null}
-            </div>
             <NavButton
               active={view === 'drafts'}
               ariaLabel={t('entry.navDrafts')}
@@ -1623,16 +1820,20 @@ export function EntryNavRail({
       ) : null}
       </div>
 
-      {/* Panel + unread polling live here (outside the hover menu, which
-          unmounts when closed); the 消息中心 menu row above just opens it. */}
-      <MessageCenter
-        hideTrigger
-        returnFocusRef={messageCenterReturnFocusRef}
-        open={messageCenterOpen}
-        onOpenChange={setMessageCenterOpen}
-        onUnreadCountChange={setMessageUnreadCount}
-        onOpenNotificationSettings={onOpenSettings ? () => onOpenSettings('notifications') : undefined}
-      />
+      {/* Signed-out message-center panel + unread polling (the rail's bell
+          item above is its opener). Signed-in mounts move into
+          `EntryTopRightCluster` — context-gating both sides is what keeps
+          exactly one panel (and one unread poller) alive. */}
+      {context ? null : (
+        <MessageCenter
+          hideTrigger
+          returnFocusRef={messageCenterRailRef}
+          open={messageCenterOpen}
+          onOpenChange={setMessageCenterOpen}
+          onUnreadCountChange={setMessageUnreadCount}
+          onOpenNotificationSettings={onOpenSettings ? () => onOpenSettings('notifications') : undefined}
+        />
+      )}
 
       <InviteDialog
         open={inviteOpen}
@@ -1648,6 +1849,21 @@ export function EntryNavRail({
               }
             : undefined
         }
+      />
+      {/* Top-right floating cluster: campaign badge (slot) + credits pill +
+          the account module, portaled to document.body so all ride the
+          workbench top-right corner in one flex row. Extracted so the project
+          route can mount the same cluster without the rail (see
+          `EntryTopRightCluster`). */}
+      <EntryTopRightCluster
+        page={analyticsPage}
+        context={context}
+        billing={billing}
+        balanceUsd={balanceUsd}
+        leadingSlot={topRightSlot}
+        updaterSlot={updaterSlot}
+        onOpenSettings={onOpenSettings}
+        onSignedOut={onSignedOut}
       />
     </nav>
   );

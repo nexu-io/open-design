@@ -332,6 +332,46 @@ describe('AMR attribution helper', () => {
     expect(readAmrAttribution(new Date('2026-06-10T12:00:01.000Z'))).toBeNull();
   });
 
+  // A campaign entry has to outlive the ordinary window, because the campaign
+  // itself is longer than it: someone who clicks a banner on day 1 and
+  // subscribes on day 11 is a conversion the campaign earned, and a 7-day
+  // record would have dropped their entry before the payment landed —
+  // under-reporting the campaign against its own success metric.
+  it('keeps a campaign entry for the full two-week campaign window', () => {
+    const track = vi.fn();
+    const attribution = recordAmrEntry(
+      track,
+      'deepseek_workbench_badge',
+      new Date('2026-08-14T12:00:00.000Z'),
+      { campaignId: 'deepseek_v4_pro', conversionSource: 'deepseek_workbench_badge' },
+    );
+
+    // Day 11 — past the ordinary window, still inside the campaign.
+    expect(readAmrAttribution(new Date('2026-08-25T12:00:00.000Z'))).toEqual(
+      attribution,
+    );
+    // The last moment of the fourteenth day still counts.
+    expect(readAmrAttribution(new Date('2026-08-28T11:59:59.000Z'))).toEqual(
+      attribution,
+    );
+    // Past fourteen days it expires like anything else — the longer window is
+    // scoped to the campaign, not an open-ended exemption.
+    expect(readAmrAttribution(new Date('2026-08-28T12:00:01.000Z'))).toBeNull();
+  });
+
+  // The extended window is keyed on the campaign stamp, so a non-campaign entry
+  // recorded during the campaign keeps the ordinary seven days.
+  it('leaves non-campaign entries on the ordinary seven-day window', () => {
+    const track = vi.fn();
+    recordAmrEntry(
+      track,
+      'settings_amr_authorize',
+      new Date('2026-08-14T12:00:00.000Z'),
+    );
+
+    expect(readAmrAttribution(new Date('2026-08-25T12:00:00.000Z'))).toBeNull();
+  });
+
   it('adds Open Design attribution params to AMR wallet URLs', () => {
     expect(
       attributedAmrUrl('https://open-design.ai/amr/dashboard?tab=recharge', {

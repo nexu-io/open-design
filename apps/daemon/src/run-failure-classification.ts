@@ -6,6 +6,7 @@ import type {
   TrackingRunFailureUserAction,
   TrackingRunTerminalTrigger,
 } from '@open-design/contracts/analytics';
+import { isModelWindowLimitFailure } from '@open-design/contracts';
 
 import { classifyAmrAccountFailure } from './integrations/vela-errors.js';
 import { summarizeRunToolProgress } from './run-diagnostics.js';
@@ -842,6 +843,19 @@ function classifyRunFailureBase(
   }
 
   if (errorCode === 'RATE_LIMITED' || serviceFailure === 'RATE_LIMITED' || isHardQuotaText(text) || isRateLimitText(text)) {
+    // Checked BEFORE the hard-quota reading: vela phrases its rolling per-model
+    // window as "…usage limit…", which `isHardQuotaText` matches, so without
+    // this branch a self-resetting window is reported as an exhausted quota —
+    // non-retryable, and counted against reliability as a real failure.
+    if (isModelWindowLimitFailure(text)) {
+      return classification(
+        'rate_limit',
+        'model_window_limit',
+        'session_init',
+        true,
+        'retry',
+      );
+    }
     const hardQuota = isHardQuotaText(text);
     const workspaceCredits = isWorkspaceCreditsText(text);
     const retryable = hardQuota ? false : (retryableHint ?? true);

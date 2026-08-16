@@ -88,10 +88,14 @@ describe('HomeHero scenario cards', () => {
     ).toContain('Slide deck');
   });
 
-  it('leads the create rail with Website clone, then the slide deck', () => {
+  it('leads the create rail with UI Mockup, then Slide deck, and trails Website clone', () => {
     const ordered = orderedCreateChips();
-    expect(ordered[0]?.id).toBe('web-clone');
-    expect(ordered[1]?.id).toBe('deck');
+    const ids = ordered.map((chip) => chip.id);
+    expect(ids.slice(0, 2)).toEqual(['prototype', 'deck']);
+    // Website clone sits behind every other explicit rail type (only the
+    // unlisted catalog tail, e.g. Brand Kit, follows), so the visible pill
+    // row overflows it into the 全部 popover at typical widths.
+    expect(ids.indexOf('web-clone')).toBeGreaterThan(ids.indexOf('audio'));
   });
 
   it('adds the finer-grained scenarios as templates routed to a scenario plugin', () => {

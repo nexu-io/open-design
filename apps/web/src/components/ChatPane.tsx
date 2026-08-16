@@ -29,7 +29,7 @@ import {
   runAgentProviderId,
 } from '../analytics/run-task';
 import { amrHandoffDeviceId, attributedAmrUrl, recordAmrEntry } from '../analytics/amr-attribution';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import { startersForProduct, type ProductType } from '../onboarding/recommendation';
 import { starterCopyFor } from '../onboarding/starter-copy';
 import {
@@ -89,6 +89,7 @@ import {
 import {
   amrPlansUrlForProfile,
   amrRechargeUrlForProfile,
+  formatModelWindowRetryAt,
   resolveRunFailureUi,
 } from '../runtime/amr-guidance';
 import {
@@ -767,6 +768,9 @@ interface Props {
   /** Collapse the conversation pane into workspace-focused mode (#5517's
    *  panel-left control). Takes precedence over onBack in the header. */
   onCollapse?: () => void;
+  /** True when the collapse control renders OUTSIDE this pane (lifted into
+   *  the tabs dock row) — suppresses the header's collapse/back slot. */
+  collapseControlLifted?: boolean;
   backLabel?: string;
   projectHeader?: ReactNode;
   designSystemPicker?: ReactNode;
@@ -841,6 +845,7 @@ const HIDDEN_BRAND_ASSISTANT_STATUS_LABELS = new Set([
   'streaming',
   'starting',
   'running',
+  'working',
   'requesting',
   'thinking',
   'empty_response',
@@ -997,13 +1002,14 @@ export function ChatPane({
   chatLogTray,
   onBack,
   onCollapse,
+  collapseControlLifted,
   backLabel,
   projectHeader,
   designSystemPicker,
   config,
 }: Props) {
   const { workspaceContext } = useProjectCollabContext();
-  const t = useT();
+  const { t, locale } = useI18n();
   const analytics = useAnalytics();
   const displayMessages = useMemo(
     () => messages.filter((message) => !shouldHideEmptyBrandAssistantMessage(message, projectMetadata)),
@@ -1302,6 +1308,10 @@ export function ChatPane({
         failedRunErrorEvent?.code,
         failedRunErrorEvent?.failureDetail,
         retryAssistant.agentId,
+        // The raw upstream sentence, so a failure whose copy names something the
+        // gateway reported (the instant a model window reopens) can read it back
+        // out. Same string the card renders under 「查看详情」.
+        failedRunErrorEvent?.detail,
       )
     : null;
   const hasInlineAmrAuthorizeFailure = Boolean(
@@ -1496,8 +1506,16 @@ export function ChatPane({
   const failedAgentLabel =
     agentDisplayName(retryAssistant?.agentId, retryAssistant?.agentName) ??
     t('chat.runError.agentFallback');
+  // Values the failure copy names, localized before interpolation: the gateway
+  // reports a UTC instant, the reader waits on their own clock.
+  const runFailureMessageVars = runFailureUi?.messageVars?.retryAt
+    ? {
+        ...runFailureUi.messageVars,
+        retryAt: formatModelWindowRetryAt(runFailureUi.messageVars.retryAt, locale),
+      }
+    : runFailureUi?.messageVars;
   const displayError = runFailureUi?.messageKey
-    ? t(runFailureUi.messageKey, { agent: failedAgentLabel })
+    ? t(runFailureUi.messageKey, { agent: failedAgentLabel, ...runFailureMessageVars })
     : rawError;
   const errorDiagnosticText = displayError
     ? buildRunErrorDiagnosticText({
@@ -2464,7 +2482,7 @@ export function ChatPane({
   return (
     <div className="pane">
       <div className="chat-project-header">
-        {onCollapse ? (
+        {collapseControlLifted ? null : onCollapse ? (
           <button
             type="button"
             className="chat-project-back od-tooltip"
@@ -4504,12 +4522,12 @@ export function isAssistantMessageStreaming(
   forceStreamingMessageIds?: Set<string>,
 ): boolean {
   if (message.role !== 'assistant') return false;
+  if (isTerminalRunStatus(message.runStatus)) return false;
   if (forceStreamingMessageIds?.has(message.id)) return true;
   if (isActiveRunStatus(message.runStatus)) return true;
   if (message.id !== lastAssistantId) return false;
   if (!paneStreaming) return false;
   if (message.endedAt !== undefined) return false;
-  if (isTerminalRunStatus(message.runStatus)) return false;
   return true;
 }
 

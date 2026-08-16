@@ -381,17 +381,18 @@ export function chipsForGroup(group: ChipGroup): HomeHeroChip[] {
 }
 
 // Display order for the inline `create` scenario rail. The composer leads with
-// Website clone (the fastest "paste a URL, get a site" on-ramp), then the slide
-// deck ("Slides") and the core build scenarios in decreasing generality
-// (Prototype → Wireframe → Mobile → Document → Animation), then the media
+// UI Mockup, followed by Slide deck and the remaining core build scenarios
+// (Wireframe → Mobile → Document → Animation), then the media
 // scenarios. Brand Kit is intentionally omitted here so it trails the scenario
 // set — it dispatches into the Brand Kit tab rather than seeding a scenario
 // plugin. Any create chip not listed keeps its catalog order after the explicit
 // entries (see `orderedCreateChips`).
 export const CREATE_RAIL_ORDER = [
-  'web-clone',
-  'deck',
+  // UI Mockup leads and Slide deck follows. Website clone trails the whole list
+  // so at typical widths it lives in the All overflow popover rather than the
+  // visible pill row.
   'prototype',
+  'deck',
   'wireframe',
   'mobile',
   'document',
@@ -401,6 +402,7 @@ export const CREATE_RAIL_ORDER = [
   'image',
   'video',
   'audio',
+  'web-clone',
 ] as const;
 
 // Chip ids the onboarding "build a design system" teaser intentionally omits.
@@ -422,7 +424,7 @@ export const ONBOARDING_ARTIFACT_CHIP_IDS = CREATE_RAIL_ORDER.filter(
 // The `create` chips in rail-display order. Listed ids come first in
 // `CREATE_RAIL_ORDER`; any unlisted create chip (e.g. `create-brand-kit`)
 // trails in catalog order. Reordering through this helper keeps the catalog
-// data table stable while letting the rail lead with the slide deck.
+// data table stable while letting the rail lead with UI Mockup.
 export function orderedCreateChips(): HomeHeroChip[] {
   const create = chipsForGroup('create');
   const listed = CREATE_RAIL_ORDER

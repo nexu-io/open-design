@@ -1,8 +1,10 @@
 <h1 align="center">Open Design: Die quelloffene Alternative zu Claude Design</h1>
 
-> ⚡ **Open Design Cloud — der offizielle Modell-Service.** Einmal aufladen und GPT, Claude, Gemini und DeepSeek direkt in Open Design nutzen: 20+ Flaggschiff-Modelle, null Konfiguration, Abrechnung nach realem Token-Verbrauch. [Open Design Cloud ausprobieren](https://open-design.ai/cloud/)
+> ⚡ **[Open Design Cloud — der offizielle Modell-Service.](https://open-design.ai/zh/pricing/)** Einmal aufladen und Agent- sowie Bildmodelle direkt in Open Design nutzen: GPT, Claude und DeepSeek für Agents; GPT Image 2.0, Seedream 5.0 Pro und Nano Banana 2.0 für Bilder.
 >
-> 🏅 **Das Open Design Fellow-Programm ist jetzt offen.** Wenn auch du glaubst, dass Design offen sein sollte — werde Open Design Fellow, gestalte das Produkt gemeinsam mit dem Kernteam und hilf mehr Menschen dabei, die Zukunft des Designs mitzubestimmen. Details → [`MAINTAINERS.md`](../../MAINTAINERS.md) und [Discord](https://discord.gg/mHAjSMV6gz).
+> 🚀 **[DeepSeek V4 Flash und V4 Pro sind jetzt verfügbar.](https://open-design.ai/zh/pricing/)** Nutzen Sie Spitzenintelligenz für Prototypen, Präsentationen, Designsysteme und alltägliche Agent-Aufgaben. Open-Design-Mitglieder können beide Modelle zwei Wochen lang unbegrenzt direkt in der App verwenden.
+>
+> 🧩 **[DeepSeek Harness wird jetzt unterstützt.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Verbinden Sie DeepSeeks offizielles `dsh` Agent Harness als native Laufzeit mit Open Design — inklusive strukturiertem Denken, Tool-Aufrufen, Modellerkennung, Abbruch und Sitzungsfortsetzung. Generierte Dateien bleiben für Live-Vorschau und Auslieferung im Open-Design-Workflow.
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
@@ -40,15 +42,15 @@ Es ist außerdem die **Figma-Alternative für das Agent-Zeitalter** — statt Pi
 
 ## Produkt-Rundgang
 
-Ein kurzer Blick darauf, was Open Design ist und was es kann. Starte auf **Home**, orchestriere wiederkehrende Workflows mit **Automation**, destilliere einen Markenvertrag im **Design System** und erweitere mit **Plugins** und **Integrationen**; im **Studio** eines beliebigen Projekts streamt dasselbe Designsystem Prototypen, Live-Artefakte, HyperFrames, Präsentationen und Bilder heraus.
+Ein kurzer Blick auf den Kern-Workflow von Open Design. Starten Sie auf **Home** mit einem Briefing, entdecken Sie wiederverwendbare Skills unter **Plugins** und verwandeln Sie Markenreferenzen in ein **Design System**. Wechseln Sie anschließend ins **Studio** eines Projekts, um Prototypen, Präsentationen, Mobile Apps, Bilder, Dokumente und HyperFrames an einem Ort zu erstellen und weiterzuentwickeln.
 
 ### Kernseiten
 
 <table>
 <tr>
 <td valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Home page" /><br/>
-<sub><b>Home</b> — der zentrale Einstiegspunkt. Wähle einen Skill und ein Designsystem, tippe das Briefing und starte alles von einem Ort aus.</sub>
+<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
+<sub><b>Home</b> — Wählen Sie einen Artefakttyp, geben Sie ein Briefing ein und legen Sie Designsystem, Arbeitsverzeichnis und Modell fest, bevor Sie starten.</sub>
 </td>
 </tr>
 </table>
@@ -56,53 +58,52 @@ Ein kurzer Blick darauf, was Open Design ist und was es kann. Starte auf **Home*
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Automation page" /><br/>
-<sub><b>Automation</b> — orchestriere sich wiederholende Design-Workflows zu wiederverwendbaren, planbaren Automatisierungen.</sub>
+<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
+<sub><b>Plugins</b> — Durchsuchen Sie offizielle Skills nach Kategorie, durchsuchen Sie den Katalog und starten Sie mit <code>Try it</code> einen Workflow.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Design System page" /><br/>
-<sub><b>Design System</b> — destilliere die <code>DESIGN.md</code> deines Teams zu einem Markenvertrag, der jede Ausgabe formt.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Plugin page" /><br/>
-<sub><b>Plugin</b> — durchsuche, installiere und verteile Workflow-Plugins, um die Generierung bei Bedarf zu erweitern.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrationen</b> — verbinde externe Systeme und MCP-Tools und nutze Open Design aus jeder IDE, jedem Skript oder jeder Automatisierung.</sub>
+<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
+<sub><b>Design System</b> — Extrahieren und verfeinern Sie die visuelle Sprache einer Marke, prüfen Sie das Ergebnis in der Vorschau und gestalten Sie im selben Workspace damit weiter.</sub>
 </td>
 </tr>
 </table>
 
 ### Studio — viele Artefakttypen in einem Projekt
 
-Im Studio eines Projekts streamt dasselbe Designsystem mehrere Artefakttypen heraus:
+Im Studio eines Projekts bleiben Unterhaltung, generierte Dateien und Live-Vorschau für sechs Artefakttypen an einem Ort:
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="Prototype" /><br/>
-<sub><b>Prototyp</b> — einseitige HTML-Artefakte, die dein Designsystem lesen und in einem Sandboxed iframe rendern, sofort vorschaubar und als Quellcode herunterladbar.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="Prototyp" /><br/>
+<sub><b>Prototyp</b> — Generieren oder rekonstruieren Sie Web-Erlebnisse, prüfen Sie die gerenderte Seite und iterieren Sie direkt mit dem Agent.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — programmatische Bewegung und animierte Grafiken, gerendert zu einem echten MP4 (z. B. 1920×1080 · 30fps).</sub>
+<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="Präsentation" /><br/>
+<sub><b>Präsentation</b> — Erstellen Sie mehrseitige Präsentationen, prüfen Sie Miniaturen und Sprechernotizen und exportieren Sie das fertige Ergebnis.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="Deck" /><br/>
-<sub><b>Präsentation</b> — Pitch-Decks, durch die du blättern, per Tastatur navigieren und als PPTX / PDF exportieren kannst.</sub>
+<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="Mobile App" /><br/>
+<sub><b>Mobile App</b> — Generieren und verfeinern Sie mobile Oberflächen in einer Geräteansicht; Unterhaltung, Ausgabedateien und nächste Schritte bleiben daneben sichtbar.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="Image" /><br/>
-<sub><b>Bild</b> — markenreife Bilder und visuelle Assets, mit hochauflösender Generierung und Download.</sub>
+<img src="../../docs/screenshots/product-tour/studio-image.png" alt="Bild" /><br/>
+<sub><b>Bild</b> — Generieren Sie visuelle Assets aus der Projektunterhaltung, prüfen Sie das Ergebnis in voller Größe und laden oder öffnen Sie es anschließend.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-document.png" alt="Dokument" /><br/>
+<sub><b>Dokument</b> — Erstellen Sie ausgefeilte mehrseitige Leitfäden und redaktionelle Dokumente, prüfen Sie das gerenderte Layout und exportieren oder teilen Sie das Ergebnis.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
+<sub><b>HyperFrame</b> — Erstellen Sie codebasierte Motion Graphics, prüfen Sie die Animation im Studio und exportieren Sie das fertige Video.</sub>
 </td>
 </tr>
 </table>
-
 ---
 
 ## Plattform-Kompatibilität
@@ -150,16 +151,6 @@ Vier zentrale Produktkategorien, alle von einem Coding-Agent gerendert, der auf 
 Die Standard-Ausgabefläche. Einseitige HTML-Artefakte, die deine `DESIGN.md` lesen und in einem Sandboxed iframe rendern.
 
 <table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
-<sub><b>Einstiegsansicht</b> — wähle einen Skill, wähle ein Designsystem, tippe das Briefing. Eine Fläche für Prototypen, Dashboards, Präsentationen, Mobile-Apps, Magazinseiten.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
-<sub><b>Mobile-Prototyp</b> — pixelgenaues iPhone 15 Pro-Chrome, mehrbildschirmige Flows. Der Agent zeichnet den Telefonrahmen nie neu; geteilte Geräterahmen liegen in <code>assets/frames/</code>.</sub>
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="../../docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>

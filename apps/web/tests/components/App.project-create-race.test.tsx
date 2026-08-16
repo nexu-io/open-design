@@ -1778,7 +1778,7 @@ describe('App project creation routing', () => {
     expect(screen.queryByTestId('entry-project-project-existing')).toBeNull();
   });
 
-  it('does not re-add a locally deleted project when an older project list resolves stale', async () => {
+  it('removes a locally deleted project from workspace tabs and ignores a stale list', async () => {
     const initialProjects = deferred<Project[]>();
     const staleRefreshProjects = deferred<Project[]>();
     mockedListProjects
@@ -1802,6 +1802,8 @@ describe('App project creation routing', () => {
     await waitFor(() => {
       expect(screen.getByTestId('project-title').textContent).toBe('Fresh project');
     });
+    workspaceTabsHarness.projectIds.add('project-new');
+    expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(true);
 
     fireEvent.click(screen.getByRole('button', { name: 'Refresh projects' }));
     expect(mockedListProjects).toHaveBeenCalledTimes(2);
@@ -1812,6 +1814,7 @@ describe('App project creation routing', () => {
     await waitFor(() => {
       expect(mockedDeleteProject).toHaveBeenCalledWith('project-new', null);
       expect(screen.queryByTestId('entry-project-project-new')).toBeNull();
+      expect(workspaceTabsHarness.projectIds.has('project-new')).toBe(false);
     });
 
     await act(async () => {

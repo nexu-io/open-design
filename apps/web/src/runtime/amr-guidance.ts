@@ -3,6 +3,10 @@
 // the error text, and whether to show the AMR promotion card below. Kept in
 // its own module so ChatPane / ProjectView / AssistantMessage can import it
 // without a circular dependency.
+import {
+  isModelWindowLimitFailure,
+  readModelWindowResetAt,
+} from '@open-design/contracts';
 
 // AMR model-gateway console (account, balance, top-up, plans).
 // `source=open_design` tags the landing page_view so vela analytics can
@@ -192,6 +196,8 @@ export type RunFailureMessageKey =
   | 'chat.runError.promptTooLargeMessage'
   | 'chat.runError.modelUnavailableMessage'
   | 'chat.runError.rateLimitedMessage'
+  | 'chat.runError.modelWindowLimitMessage'
+  | 'chat.runError.modelWindowLimitMessageNoTime'
   | 'chat.runError.upstreamUnavailableMessage'
   | 'chat.runError.toolLoopMessage'
   | 'chat.runError.outputInvalidMessage'
@@ -216,6 +222,7 @@ export type RunFailureTitleKey =
   | 'chat.runError.title.connectionDropped'
   | 'chat.runError.title.signInRequired'
   | 'chat.runError.title.rateLimited'
+  | 'chat.runError.title.modelWindowLimit'
   | 'chat.amrBalanceGate.title'
   | 'chat.runError.title.cliMissing'
   | 'chat.runError.title.promptTooLarge'
@@ -240,11 +247,74 @@ export interface RunFailureUi {
   // Override the gray error card's text (e.g. AMR auth / balance get a clearer
   // explanation than the raw upstream string).
   messageKey: RunFailureMessageKey;
+  // Interpolation values for `messageKey`, for the cases whose copy names
+  // something the daemon read off the failure (e.g. when a rolling model window
+  // reopens). Absent for every message that is a fixed sentence.
+  messageVars?: Record<string, string>;
   // Show a secondary plain "retry" button alongside the primary action (used
   // by the recharge case, where retry is manual after topping up).
   secondaryRetry: boolean;
   // Show the AMR promotion card under the gray error card.
   showSwitchCard: boolean;
+}
+
+/**
+ * The two window-limit message keys, narrowed away from `RunFailureMessageKey`
+ * (which includes `null` for the cases that keep the raw upstream string) so
+ * callers can hand the result straight to `t()` without a non-null assertion.
+ */
+export type ModelWindowLimitMessageKey =
+  | 'chat.runError.modelWindowLimitMessage'
+  | 'chat.runError.modelWindowLimitMessageNoTime';
+
+/**
+ * The copy a rolling model-window rejection should render, or null when the
+ * text is some other failure.
+ *
+ * Two surfaces need this and they arrive from opposite directions: the chat
+ * card already knows the daemon's `model_window_limit` classification and only
+ * wants the instant, while the Home composer fails before a run exists and has
+ * nothing but the raw upstream sentence. Sharing one reader keeps them from
+ * disagreeing about what counts as a window limit.
+ */
+export function modelWindowLimitCopy(
+  rawMessage: string | null | undefined,
+): { messageKey: ModelWindowLimitMessageKey; retryAt?: string } | null {
+  if (!isModelWindowLimitFailure(rawMessage)) return null;
+  const parsed = readModelWindowResetAt(rawMessage);
+  // Shape-valid but not a real instant (`2026-13-45T…`) counts as unreadable,
+  // so the message key and the variable can never disagree about whether a
+  // time exists — the card would otherwise render "Invalid Date".
+  const retryAt = parsed && Number.isFinite(Date.parse(parsed)) ? parsed : null;
+  return retryAt
+    ? { messageKey: 'chat.runError.modelWindowLimitMessage', retryAt }
+    // Promising a time we could not read is worse than not naming one.
+    : { messageKey: 'chat.runError.modelWindowLimitMessageNoTime' };
+}
+
+/**
+ * The instant a model window reopens, rendered for a reader in `locale`.
+ *
+ * The gateway reports UTC; a user waiting on a clock needs their own. Date and
+ * time are both shown because the wait can cross midnight, and the year is left
+ * off because a rolling window never reaches one.
+ *
+ * Returns the input untouched if it cannot be formatted, so the copy degrades
+ * to a machine-readable instant rather than to a gap.
+ */
+export function formatModelWindowRetryAt(retryAt: string, locale: string): string {
+  const parsed = new Date(retryAt);
+  if (!Number.isFinite(parsed.getTime())) return retryAt;
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(parsed);
+  } catch {
+    return retryAt;
+  }
 }
 
 // Small helper for the common shape: a named failure type + actionable copy,
@@ -422,11 +492,35 @@ export function resolveRunFailureUi(
   code: string | null | undefined,
   detail: string | null | undefined,
   agentId: string | null | undefined,
+  rawMessage?: string | null,
 ): RunFailureUi {
   // Agent-agnostic codes resolve first so an AMR/Antigravity run that hits one
   // of them still gets the specific guidance instead of the generic fallback.
   const agnostic = typeof code === 'string' ? AGENT_AGNOSTIC_FAILURE_UI[code] : undefined;
   if (agnostic) return agnostic;
+  // A rolling per-model window (the hosted gateway's `model_limit_exceeded`)
+  // resolves before every agent branch. It has to: the window is the gateway's,
+  // not the agent's, and the AMR branch below ends in a catch-all that would
+  // otherwise render it as "task failed" with the raw English sentence as the
+  // body. The reset instant is read from the same upstream text the card
+  // already displays, through the shared contracts reader.
+  if (detail === 'model_window_limit') {
+    // The daemon already decided this IS a window limit, so read the instant
+    // directly rather than re-deciding from the text — an upstream rewording
+    // that the daemon still classified must not silently lose the card.
+    const parsed = readModelWindowResetAt(rawMessage);
+    const retryAt = parsed && Number.isFinite(Date.parse(parsed)) ? parsed : null;
+    return {
+      primaryAction: 'retry',
+      titleKey: 'chat.runError.title.modelWindowLimit',
+      messageKey: retryAt
+        ? 'chat.runError.modelWindowLimitMessage'
+        : 'chat.runError.modelWindowLimitMessageNoTime',
+      ...(retryAt ? { messageVars: { retryAt } } : {}),
+      secondaryRetry: false,
+      showSwitchCard: false,
+    };
+  }
   // Engine-neutral failure_detail (timeout, empty output, stale resumed session,
   // missing Git Bash) resolves before the agent branches so it applies to every
   // agent — including AMR, whose branch below otherwise returns a generic retry.

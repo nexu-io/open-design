@@ -80,6 +80,54 @@ export function buildNotInvocableDiagnostic(
   };
 }
 
+export function buildVersionDiagnostic(
+  def: Pick<RuntimeAgentDef, 'name' | 'versionPolicy'>,
+  version: string | null,
+): AgentDiagnostic {
+  const supported = def.versionPolicy?.supportedVersions ?? [];
+  const expected =
+    supported.length > 0 ? supported.join(', ') : 'a supported version';
+  if (!version) {
+    return {
+      reason: 'version-probe-failed',
+      severity: 'error',
+      message: `${def.name} was found, but Open Design could not verify its version.`,
+      detail: `Expected ${expected}.`,
+      fixActions: [
+        { kind: 'openDocs' },
+        { kind: 'openInstall' },
+        { kind: 'rescan' },
+      ],
+    };
+  }
+  return {
+    reason: 'untested-version',
+    severity: 'warning',
+    message: `${def.name} ${version} has not been tested with this Open Design build.`,
+    detail: `Tested versions: ${expected}.`,
+    fixActions: [
+      { kind: 'openDocs' },
+      { kind: 'openInstall' },
+      { kind: 'rescan' },
+    ],
+  };
+}
+
+export function buildCompatibilityDiagnostic(
+  def: Pick<RuntimeAgentDef, 'name'>,
+): AgentDiagnostic {
+  return {
+    reason: 'runtime-profile-incompatible',
+    severity: 'error',
+    message: `${def.name} is installed, but its Open Design profile is missing or incompatible.`,
+    detail: 'Install the pinned Open Design profile bundle in Harness profile `open-design`, then rescan.',
+    fixActions: [
+      { kind: 'openDocs' },
+      { kind: 'rescan' },
+    ],
+  };
+}
+
 // The agent is installed and invocable but its auth probe reported a
 // missing / unverifiable credential. Detection only reaches this helper for
 // adapters that declare a cheap, side-effect-free authProbe; until an adapter

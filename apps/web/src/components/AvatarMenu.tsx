@@ -69,9 +69,9 @@ interface Props {
 /**
  * Compact runtime control. Click opens a dropdown with the Open Design account
  * and the model picker for the active agent. Execution wiring that is not a
- * per-message choice (execution mode, which CLI agent, PATH rescan, reasoning
- * effort, BYOK model) lives in Settings → Execution; this popover stays a
- * one-decision surface.
+ * per-message choice (execution mode, which CLI agent, PATH rescan, BYOK
+ * provider setup) lives in Settings → Execution; this popover keeps the
+ * active agent's model and reasoning choices close to the composer.
  */
 export function AvatarMenu({
   config,
@@ -303,15 +303,23 @@ export function AvatarMenu({
   };
 
   // Resolve the user's model + reasoning pick for the active agent. Falls
-  // back to the agent's first declared option (`'default'`) when the user
-  // hasn't touched the picker yet so the labels don't read as empty.
+  // back to the agent's declared default when the saved effort is absent or
+  // belongs to a different model route.
   const currentChoice =
     (config.agentId && config.agentModels?.[config.agentId]) || {};
   const normalizedCurrentChoice = effectiveAgentModelChoice(currentAgent, currentChoice) ?? currentChoice;
   const currentModelId =
     normalizedCurrentChoice.model ?? defaultAgentModelId(currentAgent);
+  const activeReasoningOptions =
+    currentAgent?.models?.find((model) => model.id === currentModelId)?.reasoningOptions ??
+    currentAgent?.reasoningOptions;
   const currentReasoningId =
-    currentChoice.reasoning ?? currentAgent?.reasoningOptions?.[0]?.id ?? null;
+    activeReasoningOptions?.some(
+      (option) => option.id === normalizedCurrentChoice.reasoning,
+    )
+      ? normalizedCurrentChoice.reasoning!
+      : activeReasoningOptions?.find((option) => option.default)?.id ??
+        activeReasoningOptions?.[0]?.id ?? null;
   const currentModelOption = currentAgent?.models?.find(
     (m) => m.id === currentModelId,
   ) ?? null;
@@ -322,9 +330,6 @@ export function AvatarMenu({
   )
     ? currentChoice.serviceTier!
     : 'default';
-  const currentReasoningLabel =
-    currentAgent?.reasoningOptions?.find((option) => option.id === currentReasoningId)?.label ??
-    currentReasoningId;
   const apiModelLabel = config.model?.trim() || null;
 
   // BYOK catalogue for the composer popover. The popover is the model picker
@@ -581,15 +586,29 @@ export function AvatarMenu({
                       </div>
                     </div>
                   ) : null}
-                  {currentAgent.reasoningOptions &&
-                  currentAgent.reasoningOptions.length > 0 &&
-                  currentReasoningLabel ? (
-                    <div className="avatar-select-row">
+                  {activeReasoningOptions &&
+                  activeReasoningOptions.length > 0 &&
+                  currentReasoningId ? (
+                    <label className="avatar-select-row">
                       <span className="avatar-select-label">
                         {t('avatar.reasoningLabel')}
                       </span>
-                      <div className="avatar-static-value">{currentReasoningLabel}</div>
-                    </div>
+                      <select
+                        className="avatar-select"
+                        value={currentReasoningId}
+                        onChange={(event) =>
+                          onAgentModelChange(currentAgent.id, {
+                            reasoning: event.target.value,
+                          })
+                        }
+                      >
+                        {activeReasoningOptions.map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   ) : null}
                   {currentServiceTierOptions.length > 0 ? (
                     <label className="avatar-select-row">

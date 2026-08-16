@@ -1666,6 +1666,33 @@ describe('classifyRunFailure — AMR/vela reclassification out of execution_fail
     expect(result?.retryable).toBe(true);
   });
 
+  // vela's rolling 5-hour model window (`model_limit_exceeded`, link
+  // handlers/openai.go) is NOT a hard quota: the window resets on its own at
+  // `reset_at`, the request was never charged, and retrying after that instant
+  // succeeds. Reading it as `hard_quota` both mislabels the cause and marks the
+  // run non-retryable, which pollutes the reliability numerator.
+  it('classifies vela 5-hour model window limits as a retryable model_window_limit', () => {
+    const result = classifyForAgent(
+      'amr',
+      'RATE_LIMITED',
+      'You have reached the 5-hour usage limit for Kimi K2.6. Try again after 2026-08-12T06:34:47Z. This request was not charged to Wallet Credits.',
+    );
+    expect(result?.failure_category).toBe('rate_limit');
+    expect(result?.failure_detail).toBe('model_window_limit');
+    expect(result?.retryable).toBe(true);
+  });
+
+  // A genuine quota exhaustion must keep its existing hard_quota reading — the
+  // window-limit branch above must not swallow the whole `usage limit` family.
+  it('keeps a genuine session-limit exhaustion on hard_quota', () => {
+    const result = classify(
+      'RATE_LIMITED',
+      "You've hit your session limit; resets at 3:10am.",
+    );
+    expect(result?.failure_detail).toBe('hard_quota');
+    expect(result?.retryable).toBe(false);
+  });
+
   it('classifies a vela "model not in allowed list" rejection as model_unavailable', () => {
     const result = classify(
       'AGENT_EXECUTION_FAILED',

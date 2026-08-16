@@ -109,12 +109,22 @@ function bodyOf(
 
 describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
   let dataDir: string;
+  let telemetryRelayUrl: string | undefined;
+  let objectRelayUrl: string | undefined;
 
   beforeEach(async () => {
+    telemetryRelayUrl = process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    objectRelayUrl = process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
     dataDir = await mkdtemp(path.join(tmpdir(), 'od-bridge-'));
   });
 
   afterEach(async () => {
+    if (telemetryRelayUrl === undefined) delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    else process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = telemetryRelayUrl;
+    if (objectRelayUrl === undefined) delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
+    else process.env.OPEN_DESIGN_OBJECT_RELAY_URL = objectRelayUrl;
     await rm(dataDir, { recursive: true, force: true });
     vi.restoreAllMocks();
   });
@@ -169,7 +179,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it.skip('does nothing when no app-config.json exists (fresh install)', async () => {
+  it('does nothing when no app-config.json exists (fresh install)', async () => {
     const fetchSpy = vi.fn();
     await reportRunCompletedFromDaemon({
       db: makeDb(),
@@ -180,7 +190,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it.skip('builds a ReportContext from db + app-config and POSTs the trace', async () => {
+  it('builds a ReportContext from db + app-config and POSTs the trace', async () => {
     await writeAppCfg({
       installationId: 'install-uuid-1',
       telemetry: { metrics: true, content: true, artifactManifest: true },
@@ -545,7 +555,7 @@ describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
     expect(names).not.toContain('agent-status:tool_call_update');
   });
 
-  it.skip('marks trace-safe object manifests partial when object accounting is incomplete', async () => {
+  it('marks trace-safe object manifests partial when object accounting is incomplete', async () => {
     await writeAppCfg({
       installationId: 'install-uuid-1',
       telemetry: { metrics: true, content: true, artifactManifest: true },

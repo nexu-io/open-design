@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "Full-pill Uber primary and secondary actions.",
+  "selectors": [".btn"],
+  "variants": {
+    "primary": { "selectors": [".btn-black"] },
+    "secondary": { "selectors": [".btn-white"] }
+  },
+  "properties": {
+    "label": { "type": "string", "required": true },
+    "disabled": { "type": "boolean", "default": false }
+  },
+  "states": {
+    "hoverPrimary": { "selectors": [".btn-black:hover"] },
+    "hoverSecondary": { "selectors": [".btn-white:hover"] },
+    "focus": { "selectors": [".btn:focus-visible"], "required": true }
+  },
+  "implementation": "<button class=\"btn btn-black\" type=\"button\">{{label}}</button>",
+  "source": "components.html"
+}

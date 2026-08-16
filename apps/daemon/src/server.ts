@@ -39,6 +39,7 @@ import {
   type StableSectionHashes,
 } from './prompts/stable-sections.js';
 import { emittedRenderableQuestionForm } from './question-form-detect.js';
+import { runHadFailedDesignSystemWrapper } from './runtimes/run-artifacts.js';
 import { resolveProjectRoot } from './project-root.js';
 import { OPEN_DESIGN_PLUGIN_ID } from './mcp-observability.js';
 import {
@@ -127,6 +128,7 @@ import {
 import {
   daemonAgentPayloadToPersistedAgentEvent,
   persistRunEventToAssistantMessage,
+  flushRunMessageEvents,
   persistRunFailureClassification,
   pinAssistantMessageOnRunCreate,
 } from './runtimes/chat-run-messages.js';
@@ -198,6 +200,7 @@ import {
   detectAgents,
   getAgentDef,
   isKnownModel,
+  isKnownReasoningEffort,
   isKnownServiceTier,
   openDesignAmrRunAttempt,
   openDesignAmrTraceEnv,
@@ -310,6 +313,7 @@ import {
   createUserDesignSystem,
   deleteUserDesignSystem,
   digestDesignSystemContext,
+  isDesignTokenChannelEnabled,
   isTeamSyncedUserDesignSystem,
   LEGACY_DESIGN_SYSTEM_ARTIFACTS,
   linkUserDesignSystemProject,
@@ -322,6 +326,7 @@ import {
   readUserDesignSystemFile,
   readUserDesignSystemFileBytes,
   resolveDesignSystemAssets,
+  resolveDesignSystemRuntimePromptContext,
   stripPrefixAndValidateId,
   syncUserDesignSystemAssetsFromFiles,
   updateUserDesignSystem,
@@ -333,6 +338,10 @@ import {
   deleteWorkspaceOwnedDesignSystem as removeWorkspaceOwnedDesignSystem,
 } from './design-systems/workspace-owned-create.js';
 import { createDesignSystemGenerationJobStore } from './design-systems/generation-jobs.js';
+import {
+  pinRunDesignSystemScope,
+  resolvePinnedRunDesignSystemScope,
+} from './design-systems/run-scope.js';
 import { createDesignSystemServerServices } from './design-systems/server-services.js';
 import {
   designSystemIdFromWorkspaceTeamBinding,
@@ -408,6 +417,7 @@ import {
 import { runAutoExtractionCleanup } from './memory-cleanup.js';
 import { attachAcpSession } from './agent-protocol/index.js';
 import { attachPiRpcSession } from './agent-protocol/index.js';
+import { attachDshProfileSession } from './agent-protocol/index.js';
 import { stageAmrImagePaths } from './media/amr-image-staging.js';
 import { ingestRoutineConnectorEvolution } from './automation-routine-evolution.js';
 import { createClaudeStreamHandler } from './runtimes/claude-stream.js';
@@ -436,6 +446,7 @@ import {
   classifyAgentAuthFailure,
   classifyAgentServiceFailure,
   cursorAuthGuidance,
+  normalizeDeepSeekHarnessFailure,
 } from './runtimes/auth.js';
 import { readOpenCodeServiceFailure } from './runtimes/opencode-log.js';
 import { createAgentStderrVisibilityFilter } from './amr-stderr-filter.js';
@@ -445,6 +456,7 @@ import { importFigmaFromBytes } from './figma/figma-import.js';
 import { renderDesignSystemPreview } from './design-systems/preview.js';
 import { renderDesignSystemShowcase } from './design-systems/showcase.js';
 import { createChatRunService } from './runtimes/runs.js';
+import { runtimeResumesSessionById } from './runtimes/types.js';
 import {
   createRunLifecycleTracer,
   runLifecycleMarkersForStreamEvent,
@@ -746,6 +758,7 @@ import {
   type TeamMirrorPullScope,
 } from './routes/collab-sync.js';
 import {
+  emitWorkspaceEventToAllScopes,
   emitWorkspaceEventToScope,
   registerCollabContextRoutes,
 } from './routes/collab-context.js';
@@ -779,6 +792,7 @@ import {
   createWorkspaceDirectoryAuthorityBroker,
   createWorkspaceContextProviderFromEnv,
   fetchVelaWorkspaceDirectory,
+  resolveVelaWorkspaceHubEventsEndpoint,
   velaWorkspaceDirectoryIdentity,
   workspaceContextFromDirectoryItem,
 } from './collab/vela-workspace-context.js';
@@ -791,6 +805,7 @@ import {
 import {
   AUTHORITATIVE_PROJECT_PRESENCE_CAPABILITY,
   startHubEventsSubscriber,
+  WORKSPACE_DIRECTORY_EVENTS_CAPABILITY,
 } from './collab/hub-events-subscriber.js';
 import {
   createWorkspaceAuthorityHealthCoordinator,
@@ -847,9 +862,13 @@ import {
 } from './collab/remembered-team-resource-scopes.js';
 import { readVelaControlApiContext } from './integrations/vela.js';
 import {
+  fetchVelaBillingSummary,
   fetchVelaWorkspaceBillingProjection,
   isVelaWorkspaceAuthorizationError,
 } from './integrations/vela-billing.js';
+import { createAccountBillingSummaryCache } from './collab/account-billing-summary-cache.js';
+import { createEventRefreshCoordinator } from './collab/event-refresh-coordinator.js';
+import { createWorkspaceExactAuthorityCache } from './collab/workspace-exact-authority-cache.js';
 import { createCollabPublishWatcher } from './collab/collab-publish-watcher.js';
 import {
   isUnmaterializedSharedPlaceholder,
@@ -1430,6 +1449,63 @@ function emitWorkspaceEvent(
   );
 }
 
+function emitWorkspaceDirectoryChanged(): boolean {
+  return emitWorkspaceEventToAllScopes(workspaceEventSinks, {
+    type: 'workspace-directory-changed',
+    at: Date.now(),
+  });
+}
+
+function hubEventRefreshToken(event: {
+  type?: string;
+  revision?: string;
+  revisionClock?: { epoch: string; counter: string };
+  workspaceMemberId?: string;
+  memberId?: string;
+  projectId?: string;
+  resourceId?: string;
+  seq?: number;
+  version?: number;
+  at?: string;
+}): string | undefined {
+  const scope = [
+    event.type ?? '',
+    event.workspaceMemberId ?? '',
+    event.memberId ?? '',
+    event.projectId ?? '',
+    event.resourceId ?? '',
+  ].join(':');
+  if (event.revisionClock) {
+    return `${scope}:clock:${event.revisionClock.epoch}:${event.revisionClock.counter}`;
+  }
+  if (event.revision) return `${scope}:revision:${event.revision}`;
+  if (event.seq != null) return `${scope}:seq:${event.seq}`;
+  if (event.version != null) return `${scope}:version:${event.version}`;
+  if (event.at) return `${scope}:at:${event.at}`;
+  return undefined;
+}
+
+function accountBillingInvalidationToken(event: {
+  type: 'billing-changed' | 'billing-subscription-changed' | 'wallet-balance-changed';
+  revision?: string;
+  revisionClock?: { epoch: string; counter: string };
+  at?: string;
+}): string | undefined {
+  let revision: string | undefined;
+  if (event.revisionClock) {
+    revision = `clock:${event.revisionClock.epoch}:${event.revisionClock.counter}`;
+  } else if (event.revision) {
+    revision = `revision:${event.revision}`;
+  } else if (event.at) {
+    revision = `at:${event.at}`;
+  }
+  if (!revision) return undefined;
+  // Current Vela producers emit a subscription mutation under both names.
+  // Wallet clocks are independent and therefore need a separate domain.
+  const domain = event.type === 'wallet-balance-changed' ? 'wallet' : 'billing';
+  return `${domain}:${revision}`;
+}
+
 /**
  * Hub → daemon handling for the `workspace-context-changed` event (see
  * `startHubEventsSubscriber`'s `onEvent` below). Vela sends this same event
@@ -1446,7 +1522,7 @@ export function handleHubWorkspaceContextChanged(
   workspaceId: string,
   pollWorkspaceInvalidation: () => Promise<void>,
   invalidateWorkspaceDirectory: () => void = () => undefined,
-): void {
+): Promise<void> {
   // Retire the settled authority generation before either the web or the
   // daemon can start a refresh. A directory request that began before this
   // event is allowed to finish for its original caller, but the broker will
@@ -1456,7 +1532,7 @@ export function handleHubWorkspaceContextChanged(
     workspaceId,
     { type: 'workspace-context-changed', at: Date.now() },
   );
-  void pollWorkspaceInvalidation().catch(() => undefined);
+  return pollWorkspaceInvalidation().catch(() => undefined);
 }
 
 /** Terminal counterpart to workspace-context-changed. Vela has already
@@ -1864,16 +1940,21 @@ export function composeChatUserRequestForAgent(
   currentPrompt,
   options: { skipTranscript?: boolean } = {},
 ) {
-  // When the adapter resumes its own session (today: `agy -c`), the
+  // When the adapter resumes its own session, the
   // daemon-rendered `## user` / `## assistant` transcript is a duplicate
   // of what the upstream CLI already has in memory — and the embedded
   // copy carries the literal `<question-form>` markup the agent emitted
   // on turn 1, which the model then re-emits on turn 2. Send only the
-  // latest user turn (`currentPrompt`) in that case; the upstream
-  // session memory provides the rest. See
-  // `RuntimeAgentDef.resumesSessionViaCli`.
+  // latest user turn (`currentPrompt`) in that case; the external runtime's
+  // native session memory provides the rest.
   const skip = options.skipTranscript === true;
-  const bodySource = skip ? currentPrompt : message;
+  // Native-session clients normally provide `currentPrompt`, but headless
+  // callers such as `od run start --message` only populate `message`. On a
+  // resumed session that value is the latest turn, not a rendered transcript,
+  // so dropping it would send the misleading empty-turn placeholder instead.
+  const bodySource = skip
+    ? (typeof currentPrompt === 'string' ? currentPrompt : message)
+    : message;
   const body =
     typeof bodySource === 'string' && bodySource.trim()
       ? bodySource
@@ -2468,6 +2549,7 @@ export interface StartServerOptions {
   desktopArtifactExporter?: DesktopArtifactExporter | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
   desktopSlideRenderer?: DesktopSlideRenderer | null;
+  ensureClosureResource?: ((id: string) => Promise<Readonly<{ path: string }>>) | null;
   host?: string;
   port?: number;
   returnServer?: boolean;
@@ -2489,6 +2571,7 @@ export async function startServer({
   desktopPdfExporter = null,
   desktopSlideRenderer = null,
   desktopArtifactExporter = null,
+  ensureClosureResource = null,
   runtime = null,
   staticDir = STATIC_DIR,
 }: StartServerOptions = {}) {
@@ -3081,6 +3164,12 @@ export async function startServer({
   const workspaceTypes = createWorkspaceTypeRegistry();
   const configuredAmrEnv = () =>
     agentCliEnvForAgent(readAppConfigSync(RUNTIME_DATA_DIR).agentCliEnv, 'amr');
+  const workspaceExactAuthorityCache = createWorkspaceExactAuthorityCache({
+    identity: () => velaWorkspaceDirectoryIdentity(
+      readVelaControlApiContext,
+      configuredAmrEnv(),
+    ),
+  });
   const workspaceDirectoryAuthority = createWorkspaceDirectoryAuthorityBroker({
     fetchDirectory: async () => {
       const result = await fetchVelaWorkspaceDirectory({
@@ -3105,21 +3194,29 @@ export async function startServer({
       mode: workspaceAuthorityCacheMode,
       ...input,
     }),
+    onAcceptedResult: (result, identity) =>
+      workspaceExactAuthorityCache.observe(identity, result.items),
   });
   const fetchWorkspaceDirectory = workspaceDirectoryAuthority.read;
   const fetchFreshMutationWorkspaceDirectory =
     workspaceDirectoryAuthority.fresh;
+  const fetchFreshBackgroundWorkspaceDirectory =
+    workspaceDirectoryAuthority.backgroundFresh;
+  let workspaceHubSubscriptions: WorkspaceHubSubscriptionManager | null = null;
   const verifyExplicitWorkspaceRequestContext = async (input: {
     req: any;
     requireTeam?: boolean;
-  }, options: { fresh?: boolean } = {}) => {
+  }, options: { fresh?: boolean; backgroundFresh?: boolean } = {}) => {
     if (process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela') {
+      let fetchDirectory = fetchFreshMutationWorkspaceDirectory;
+      if (options.fresh === false) {
+        fetchDirectory = fetchWorkspaceDirectory;
+      } else if (options.backgroundFresh) {
+        fetchDirectory = fetchFreshBackgroundWorkspaceDirectory;
+      }
       return verifyWorkspaceRequestContext({
         ...input,
-        fetchWorkspaceDirectory:
-          options.fresh === false
-            ? fetchWorkspaceDirectory
-            : fetchFreshMutationWorkspaceDirectory,
+        fetchWorkspaceDirectory: fetchDirectory,
       });
     }
     // Local/dev has no signed membership directory. Its explicit request
@@ -3197,15 +3294,17 @@ export async function startServer({
   };
   const resolveAuthoritativeTeamWorkspaceContext = async (
     workspaceId: string | null | undefined,
-    options: { fresh?: boolean } = {},
+    options: { fresh?: boolean; backgroundFresh?: boolean } = {},
   ): Promise<WorkspaceCollabContext | null> => {
     const requestedWorkspaceId = workspaceId?.trim() ?? '';
     if (!requestedWorkspaceId) return null;
-    const directory = await (
-      options.fresh
-        ? fetchFreshMutationWorkspaceDirectory()
-        : fetchWorkspaceDirectory()
-    ).catch(() => ({
+    let fetchDirectory = fetchWorkspaceDirectory;
+    if (options.fresh) {
+      fetchDirectory = options.backgroundFresh
+        ? fetchFreshBackgroundWorkspaceDirectory
+        : fetchFreshMutationWorkspaceDirectory;
+    }
+    const directory = await fetchDirectory().catch(() => ({
       ok: false as const,
       items: [],
     }));
@@ -3369,11 +3468,35 @@ export async function startServer({
       ...input,
     }),
   });
+  let workspaceHubAccountIdentity = velaWorkspaceDirectoryIdentity(
+    readVelaControlApiContext,
+    configuredAmrEnv(),
+  );
+  const resetWorkspaceIdentityCaches = (): void => {
+    workspaceDirectoryAuthority.resetIdentity();
+    workspaceExactAuthorityCache.resetIdentity();
+    workspaceExactContextCache.resetIdentity();
+  };
+  const refreshWorkspaceHubAccountIdentity = (): void => {
+    const currentIdentity = velaWorkspaceDirectoryIdentity(
+      readVelaControlApiContext,
+      configuredAmrEnv(),
+    );
+    if (currentIdentity === workspaceHubAccountIdentity) return;
+    workspaceHubAccountIdentity = currentIdentity;
+    resetWorkspaceIdentityCaches();
+    workspaceHubSubscriptions?.refreshEndpoints();
+  };
+  const fetchWorkspaceDirectoryForAccountSurface = () => {
+    refreshWorkspaceHubAccountIdentity();
+    return fetchWorkspaceDirectory();
+  };
   const workspaceContextProvider = workspaceExactContextCache.provider;
   const cachedWorkspaceContextForRequest = (
     req: unknown,
     requestedWorkspaceId?: string,
   ): WorkspaceCollabContext | null => {
+    refreshWorkspaceHubAccountIdentity();
     const claimed = workspaceResourceContextFromRequest(req);
     if (!claimed || claimed === 'missing') return null;
     if (
@@ -3391,8 +3514,22 @@ export async function startServer({
       : null;
   };
   const verifyWorkspaceContextReadAuthority = async (req: unknown) => {
-    const cached = cachedWorkspaceContextForRequest(req);
-    if (cached) return { ok: true as const, context: cached };
+    refreshWorkspaceHubAccountIdentity();
+    const claimed = workspaceResourceContextFromRequest(req);
+    if (claimed && claimed !== 'missing') {
+      const cached = workspaceExactAuthorityCache.cached(
+        claimed.workspaceId,
+        claimed.workspaceMemberId,
+      );
+      if (cached) {
+        return {
+          ok: true as const,
+          context: workspaceContextFromDirectoryItem(cached),
+        };
+      }
+    }
+    // The exact cache is directory-sourced and usable only under strict SSE
+    // health. Every miss preserves the legacy directory verification.
     return verifyWorkspaceReadAuthority(req);
   };
   /**
@@ -3610,7 +3747,10 @@ export async function startServer({
     if (!workspaceId) return null;
     const directory = await (
       options.fresh
-        ? fetchFreshMutationWorkspaceDirectory()
+        // `fresh` is requested only by the durable comment-outbox recovery
+        // service. It must bypass a settled success lease but share the daemon's
+        // account-wide outage circuit with other background recovery work.
+        ? fetchFreshBackgroundWorkspaceDirectory()
         : fetchWorkspaceDirectory()
     ).catch(() => ({
       ok: false as const,
@@ -3663,7 +3803,7 @@ export async function startServer({
         resolveCommentRelayWorkspaceContext: async (queuedIdentity) => {
           const context = await resolveAuthoritativeTeamWorkspaceContext(
             queuedIdentity.workspaceId,
-            { fresh: true },
+            { fresh: true, backgroundFresh: true },
           );
           const principal = contextToResourceHubPrincipal(context);
           if (
@@ -4150,7 +4290,7 @@ export async function startServer({
   const verifyPresenceWorkspaceRequest = async (
     req: any,
     projectId: string,
-    options: { fresh?: boolean } = {},
+    options: { fresh?: boolean; backgroundFresh?: boolean } = {},
   ) => {
     const verified = await verifyExplicitWorkspaceRequestContext(
       { req },
@@ -4178,7 +4318,9 @@ export async function startServer({
     // `createCollabPresenceCloudClient` for the invariant.
     cloud: createCollabPresenceCloudClient(velaCliCollabClient, presenceScopeFor),
     verifyWorkspaceRequest: (req, projectId) =>
-      verifyPresenceWorkspaceRequest(req, projectId),
+      verifyPresenceWorkspaceRequest(req, projectId, { fresh: false }),
+    verifyWorkspaceLeaveRequest: (req, projectId) =>
+      verifyPresenceWorkspaceRequest(req, projectId, { fresh: true }),
     verifyWorkspaceReadRequest: (req, projectId) =>
       verifyPresenceWorkspaceRequest(req, projectId, { fresh: false }),
     isProjectShared: async (projectId, context) => {
@@ -4838,7 +4980,13 @@ export async function startServer({
     if (!teamMembersCache) return [];
     return context ? teamMembersCache(context) : [];
   };
-  let workspaceHubSubscriptions: WorkspaceHubSubscriptionManager | null = null;
+  const accountBillingSummary = createAccountBillingSummaryCache({
+    identity: () => velaWorkspaceDirectoryIdentity(
+      readVelaControlApiContext,
+      configuredAmrEnv(),
+    ),
+    fetch: () => fetchVelaBillingSummary(),
+  });
   const workspaceBillingRuntime = createWorkspaceBillingRuntimeCoordinator({
     fetchProjection: async ({ workspaceId }) => {
       try {
@@ -4855,6 +5003,7 @@ export async function startServer({
     },
     onAccessRevoked: ({ workspaceId }) => {
       workspaceDirectoryAuthority.invalidate('auth_reject');
+      workspaceExactAuthorityCache.invalidate(workspaceId);
       workspaceExactContextCache.invalidate(workspaceId, 'auth_reject');
     },
     onStateChange: (state) => {
@@ -4921,11 +5070,12 @@ export async function startServer({
     // Warm only the directory-verified id announced by that request; the
     // daemon-global legacy pin is neither read nor updated.
     onWorkspaceSwitched: (workspaceId) => warmWorkspaceDigestFaces(workspaceId),
+    fetchBilling: accountBillingSummary.read,
     billingRuntime: workspaceBillingRuntime,
     // Same directory read the route would have made on its own, wrapped so every
     // workspace type it carries is memoized for the team-share invariant.
     listWorkspaceDirectory,
-    fetchWorkspaceDirectory,
+    fetchWorkspaceDirectory: fetchWorkspaceDirectoryForAccountSurface,
     refreshWorkspaceDirectoryAfterMutation:
       workspaceDirectoryAuthority.refreshAfterMutation,
     // Reuse the shared team-projects lister (which holds the shared vela-cli
@@ -4941,6 +5091,9 @@ export async function startServer({
     // registers/deregisters its sink here; the poller below feeds them.
     createSseResponse,
     workspaceEventSinks,
+    retainWorkspaceEventInterest: (workspaceId) =>
+      workspaceHubSubscriptions?.retainEventInterest(workspaceId)
+      ?? (() => undefined),
     observeWorkspace: async (req, context, properties) => {
       const service = workspaceAnalyticsService;
       const analyticsContext = readAnalyticsContext(req);
@@ -5014,7 +5167,18 @@ export async function startServer({
       // A healthy transport is not enough to suppress legacy polling. First
       // cross a fresh directory boundary and close the exact Workspace gap.
       workspaceDirectoryAuthority.invalidate('catch_up');
+      workspaceExactAuthorityCache.invalidate(workspaceId);
       workspaceExactContextCache.invalidate(workspaceId, 'catch_up');
+      const directory = await fetchFreshBackgroundWorkspaceDirectory();
+      const membership = directory.ok
+        ? directory.items.find((item) =>
+            item.workspaceId === workspaceId
+            && item.memberStatus === 'active'
+            && item.lifecycleState !== 'deleted')
+        : undefined;
+      if (!membership) {
+        throw new Error('exact workspace directory catch-up was unavailable');
+      }
       const exactContext = await workspaceExactContextCache.refresh(
         { workspaceId },
         'catch_up',
@@ -5024,7 +5188,6 @@ export async function startServer({
       }
       await refreshWorkspaceDigestFaces(workspaceId, {
         revalidate: true,
-        freshAuthority: true,
       });
       await pollWorkspaceInvalidationForWorkspace(workspaceId);
       workspaceBillingRuntime.reconnect(workspaceId);
@@ -5033,8 +5196,10 @@ export async function startServer({
       workspaceInvalidationPollerFor(workspaceId).setRealtimeHealthy(healthy),
     setBillingPollingHealthy: (workspaceId, healthy) =>
       workspaceBillingRuntime.setRealtimeHealthy(workspaceId, healthy),
-    setContextCachingHealthy: (workspaceId, healthy) =>
-      workspaceExactContextCache.setRealtimeHealthy(workspaceId, healthy),
+    setContextCachingHealthy: (workspaceId, healthy) => {
+      workspaceExactAuthorityCache.setRealtimeHealthy(workspaceId, healthy);
+      workspaceExactContextCache.setRealtimeHealthy(workspaceId, healthy);
+    },
     onDecision: (input) => recordWorkspaceAuthorityDecision({
       mode: workspaceAuthorityCacheMode,
       ...input,
@@ -5052,6 +5217,59 @@ export async function startServer({
   // interest; reconnect/source-gap handlers run one exact-scope poller cycle
   // to close the disconnect gap.
   const dirtyCommentProjects = new Set<string>();
+  // Thin events are invalidation hints, so repeated events for one resource
+  // may share refresh work. Authorization revocation and project content stay
+  // outside this coordinator: both have immediate, domain-specific handling.
+  const hubEventRefreshes = createEventRefreshCoordinator({
+    onError: (error, key) => {
+      console.warn(`[od] hub event refresh failed key=${key}:`, String(error));
+    },
+  });
+  const workspaceDirectoryRefreshes = createEventRefreshCoordinator({
+    // Directory events are account-wide and can be duplicated over several
+    // Workspace streams. Preserve an immediate leading refresh plus the final
+    // state while bounding a sustained storm to one upstream read per second.
+    minIntervalMs: 1_000,
+    onError: (error) => {
+      console.warn('[od] workspace directory event refresh failed:', String(error));
+    },
+  });
+  const directoryConnectionIdentities = new Map<string, string>();
+  const directoryHealthyConnections = new Set<string>();
+  const directoryConnectionKey = (
+    workspaceId: string,
+    identityKey: string,
+  ) => `${identityKey}\0${workspaceId}`;
+  const currentWorkspaceDirectoryIdentity = () =>
+    velaWorkspaceDirectoryIdentity(
+      readVelaControlApiContext,
+      configuredAmrEnv(),
+    );
+  const syncWorkspaceDirectoryRealtimeHealth = (): void => {
+    const currentIdentity = currentWorkspaceDirectoryIdentity();
+    workspaceDirectoryAuthority.setRealtimeHealthy(
+      [...directoryHealthyConnections].some((key) =>
+        key.startsWith(`${currentIdentity}\0`)),
+    );
+  };
+  const requestWorkspaceDirectoryRefresh = (
+    reason: 'event_dirty' | 'auth_reject' | 'catch_up',
+    token?: string,
+    expectedIdentity = currentWorkspaceDirectoryIdentity(),
+  ): void => {
+    workspaceDirectoryRefreshes.request(
+      'workspace-directory',
+      async () => {
+        if (currentWorkspaceDirectoryIdentity() !== expectedIdentity) return;
+        workspaceDirectoryAuthority.invalidate(reason);
+        const directory = await fetchFreshBackgroundWorkspaceDirectory();
+        if (currentWorkspaceDirectoryIdentity() !== expectedIdentity) return;
+        if (!directory.ok) return;
+        emitWorkspaceDirectoryChanged();
+      },
+      token,
+    );
+  };
   const restoreDirtyCommentProject = (projectId: string) => {
     dirtyCommentProjects.add(projectId);
     // The upstream hub event has already proved that this project changed.
@@ -5086,29 +5304,70 @@ export async function startServer({
       // Same gating as the workspace-context provider: only the vela source
       // has a hub to subscribe to (dev daemons must not dial production).
       if (process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() !== 'vela') return null;
-      const session = readVelaControlApiContext(process.env);
-      if (!session?.controlKey || !session.apiUrl) return null;
-      return {
-        url: new URL('/api/v1/collab/events', session.apiUrl).toString(),
-        workspaceId: subscribedWorkspaceId,
-        headers: {
-          authorization: `Bearer ${session.controlKey}`,
-          'x-vela-workspace-id': subscribedWorkspaceId,
-        },
-      };
+      return resolveVelaWorkspaceHubEventsEndpoint(
+        subscribedWorkspaceId,
+        process.env,
+        configuredAmrEnv(),
+      );
     },
-    onStateChange: (state) => {
+    onStateChange: (state, connection) => {
       if (state === 'disconnected') {
         authoritativePresenceWorkspaces.delete(subscribedWorkspaceId);
+        const identityKey =
+          connection.identityKey
+          ?? directoryConnectionIdentities.get(subscribedWorkspaceId);
+        if (
+          !identityKey
+          || directoryConnectionIdentities.get(subscribedWorkspaceId)
+            === identityKey
+        ) {
+          directoryConnectionIdentities.delete(subscribedWorkspaceId);
+        }
+        if (identityKey) {
+          directoryHealthyConnections.delete(
+            directoryConnectionKey(subscribedWorkspaceId, identityKey),
+          );
+        }
+        syncWorkspaceDirectoryRealtimeHealth();
       }
       console.info(`[od] hub events channel ${state}`);
     },
     onAuthorityHealthChange: ({
       workspaceId,
+      identityKey,
       healthy,
       capabilities,
       listenerStatus,
     }) => {
+      if (
+        identityKey
+        && identityKey !== currentWorkspaceDirectoryIdentity()
+      ) {
+        return;
+      }
+      const exactWorkspaceId = workspaceId ?? subscribedWorkspaceId;
+      const exactIdentityKey =
+        identityKey
+        ?? directoryConnectionIdentities.get(exactWorkspaceId)
+        ?? currentWorkspaceDirectoryIdentity();
+      if (capabilities.includes(WORKSPACE_DIRECTORY_EVENTS_CAPABILITY)) {
+        directoryConnectionIdentities.set(exactWorkspaceId, exactIdentityKey);
+      } else {
+        directoryConnectionIdentities.delete(exactWorkspaceId);
+      }
+      const connectionKey = directoryConnectionKey(
+        exactWorkspaceId,
+        exactIdentityKey,
+      );
+      if (
+        healthy
+        && capabilities.includes(WORKSPACE_DIRECTORY_EVENTS_CAPABILITY)
+      ) {
+        directoryHealthyConnections.add(connectionKey);
+      } else {
+        directoryHealthyConnections.delete(connectionKey);
+      }
+      syncWorkspaceDirectoryRealtimeHealth();
       recordWorkspaceAuthorityRealtimeTransition({
         mode: workspaceAuthorityCacheMode,
         healthy,
@@ -5119,16 +5378,43 @@ export async function startServer({
         sourceGap: listenerStatus?.sourceGap === true,
       });
       void workspaceAuthorityHealth.update({
-        workspaceId: workspaceId ?? subscribedWorkspaceId,
+        workspaceId: exactWorkspaceId,
         healthy,
       });
     },
-    onConnect: ({ reconnect, workspaceId, capabilities }) => {
+    onConnect: ({ reconnect, workspaceId, identityKey, capabilities }) => {
+      if (
+        identityKey
+        && identityKey !== currentWorkspaceDirectoryIdentity()
+      ) {
+        return;
+      }
       const verifiedWorkspaceId = workspaceId ?? subscribedWorkspaceId;
+      const verifiedIdentityKey =
+        identityKey ?? currentWorkspaceDirectoryIdentity();
       if (capabilities.includes(AUTHORITATIVE_PROJECT_PRESENCE_CAPABILITY)) {
         authoritativePresenceWorkspaces.add(verifiedWorkspaceId);
       } else {
         authoritativePresenceWorkspaces.delete(verifiedWorkspaceId);
+      }
+      if (capabilities.includes(WORKSPACE_DIRECTORY_EVENTS_CAPABILITY)) {
+        const hadDirectoryCarrier = [
+          ...directoryConnectionIdentities.values(),
+        ].includes(verifiedIdentityKey);
+        directoryConnectionIdentities.set(
+          verifiedWorkspaceId,
+          verifiedIdentityKey,
+        );
+        // One account signal is fanned to every capable stream. Only the first
+        // live carrier needs a snapshot boundary; additional Workspace streams
+        // would produce the same GET and are intentionally free.
+        if (!hadDirectoryCarrier) {
+          requestWorkspaceDirectoryRefresh(
+            'catch_up',
+            undefined,
+            verifiedIdentityKey,
+          );
+        }
       }
       console.info(
         `[od] hub events workspace verified workspaceId=${workspaceId ?? 'unknown'} reconnect=${reconnect}`,
@@ -5151,7 +5437,13 @@ export async function startServer({
           `actualWorkspaceId=${actualWorkspaceId ?? 'unknown'}`,
       );
     },
-    onAccessRevoked: ({ workspaceId, reason }) => {
+    onAccessRevoked: ({ workspaceId, identityKey, reason }) => {
+      if (
+        identityKey
+        && identityKey !== currentWorkspaceDirectoryIdentity()
+      ) {
+        return;
+      }
       const revocationReceivedAt = performance.now();
       const exactWorkspaceId = workspaceId ?? subscribedWorkspaceId;
       console.info(
@@ -5162,6 +5454,7 @@ export async function startServer({
         () => pollWorkspaceInvalidationForWorkspace(exactWorkspaceId),
         () => {
           workspaceDirectoryAuthority.invalidate('auth_reject');
+          workspaceExactAuthorityCache.invalidate(exactWorkspaceId);
           workspaceExactContextCache.invalidate(
             exactWorkspaceId,
             'auth_reject',
@@ -5177,8 +5470,33 @@ export async function startServer({
         workspaceAuthorityCacheMode,
         performance.now() - revocationReceivedAt,
       );
+      requestWorkspaceDirectoryRefresh(
+        'auth_reject',
+        `revoked:${exactWorkspaceId}`,
+      );
     },
-    onEvent: (event) => {
+    onDirectoryEvent: (event, connection) => {
+      if (
+        connection.identityKey
+        && connection.identityKey !== currentWorkspaceDirectoryIdentity()
+      ) {
+        return;
+      }
+      requestWorkspaceDirectoryRefresh(
+        'event_dirty',
+        event.at
+          ? [event.type, event.workspaceId, event.change, event.at].join(':')
+          : undefined,
+        connection.identityKey ?? currentWorkspaceDirectoryIdentity(),
+      );
+    },
+    onEvent: (event, connection) => {
+      if (
+        connection.identityKey
+        && connection.identityKey !== currentWorkspaceDirectoryIdentity()
+      ) {
+        return;
+      }
       const eventWorkspaceId =
         event.workspaceId ?? subscribedWorkspaceId;
       console.info(
@@ -5191,17 +5509,21 @@ export async function startServer({
           // Catalog changed (share/unshare). Refresh the display cache and
           // signal the web, AND run a real `workspace_projects`
           // reconciliation pass — see `collab/workspace-projects-reconciler.ts`.
-          handleHubTeamProjectsChanged(
-            () => emitTeamProjectsChanged(
-              eventWorkspaceId,
-              {
-                ...(event.projectId ? { projectId: event.projectId } : {}),
-                kind: 'catalog',
-              },
+          hubEventRefreshes.request(
+            `team-projects:${eventWorkspaceId}`,
+            () => handleHubTeamProjectsChanged(
+              () => emitTeamProjectsChanged(
+                eventWorkspaceId,
+                {
+                  ...(event.projectId ? { projectId: event.projectId } : {}),
+                  kind: 'catalog',
+                },
+              ),
+              () => reconcileWorkspaceProjectsFromRemote(
+                eventWorkspaceId,
+              ),
             ),
-            () => reconcileWorkspaceProjectsFromRemote(
-              eventWorkspaceId,
-            ),
+            hubEventRefreshToken(event),
           );
           // Hub catalog writes carry the affected project id on current Vela
           // deployments, so keep the latency-sensitive recovery targeted. An
@@ -5234,14 +5556,18 @@ export async function startServer({
               });
             }
           };
-          handleHubProjectMetadataChanged(
-            emitMetadataChanged,
-            targetProjectId
-              ? () => reconcileWorkspaceProjectMetadataFromRemote(
-                  eventWorkspaceId,
-                  targetProjectId,
-                )
-              : async () => false,
+          hubEventRefreshes.request(
+            `project-metadata:${eventWorkspaceId}:${targetProjectId || '*'}`,
+            () => handleHubProjectMetadataChanged(
+              emitMetadataChanged,
+              targetProjectId
+                ? () => reconcileWorkspaceProjectMetadataFromRemote(
+                    eventWorkspaceId,
+                    targetProjectId,
+                  )
+                : async () => false,
+            ),
+            hubEventRefreshToken(event),
           );
           break;
         }
@@ -5330,16 +5656,22 @@ export async function startServer({
           break;
         }
         case 'workspace-context-changed':
-          handleHubWorkspaceContextChanged(
+          // Cache invalidation is an authorization boundary and must happen for
+          // every event in the caller's turn. Only the downstream snapshot work
+          // is coalesced below.
+          workspaceDirectoryAuthority.invalidate('event_dirty');
+          workspaceExactAuthorityCache.invalidate(eventWorkspaceId);
+          workspaceExactContextCache.invalidate(
             eventWorkspaceId,
-            () => pollWorkspaceInvalidationForWorkspace(subscribedWorkspaceId),
-            () => {
-              workspaceDirectoryAuthority.invalidate('event_dirty');
-              workspaceExactContextCache.invalidate(
-                eventWorkspaceId,
-                'event_dirty',
-              );
-            },
+            'event_dirty',
+          );
+          hubEventRefreshes.request(
+            `workspace-context:${eventWorkspaceId}`,
+            () => handleHubWorkspaceContextChanged(
+              eventWorkspaceId,
+              () => pollWorkspaceInvalidationForWorkspace(eventWorkspaceId),
+            ),
+            hubEventRefreshToken(event),
           );
           // Revalidate exact membership before the next billing projection.
           // A removed/rebound member must clear money and entitlement state,
@@ -5347,16 +5679,19 @@ export async function startServer({
           workspaceBillingRuntime.reconnect(subscribedWorkspaceId);
           break;
         case 'workspace-members-changed':
-          handleHubWorkspaceContextChanged(
+          workspaceDirectoryAuthority.invalidate('event_dirty');
+          workspaceExactAuthorityCache.invalidate(eventWorkspaceId);
+          workspaceExactContextCache.invalidate(
             eventWorkspaceId,
-            () => pollWorkspaceInvalidationForWorkspace(subscribedWorkspaceId),
-            () => {
-              workspaceDirectoryAuthority.invalidate('event_dirty');
-              workspaceExactContextCache.invalidate(
-                eventWorkspaceId,
-                'event_dirty',
-              );
-            },
+            'event_dirty',
+          );
+          hubEventRefreshes.request(
+            `workspace-context:${eventWorkspaceId}`,
+            () => handleHubWorkspaceContextChanged(
+              eventWorkspaceId,
+              () => pollWorkspaceInvalidationForWorkspace(eventWorkspaceId),
+            ),
+            hubEventRefreshToken(event),
           );
           // A role update or removal changes both authorization and the
           // billing member projection even when no billing event accompanies
@@ -5364,6 +5699,7 @@ export async function startServer({
           workspaceBillingRuntime.reconnect(subscribedWorkspaceId);
           break;
         case 'billing-changed':
+          accountBillingSummary.invalidate(accountBillingInvalidationToken(event));
           workspaceBillingRuntime.invalidate({
             domain: 'legacy',
             ...(event.workspaceId ? { workspaceId: event.workspaceId } : {}),
@@ -5371,15 +5707,22 @@ export async function startServer({
             ...(event.revisionClock ? { revisionClock: event.revisionClock } : {}),
             reason: 'vela-billing-changed',
           });
-          emitWorkspaceEvent(eventWorkspaceId, {
-            type: 'billing-changed',
-            workspaceId: eventWorkspaceId,
-            ...(event.revision ? { revision: event.revision } : {}),
-            at: Date.now(),
-          });
+          hubEventRefreshes.request(
+            `billing-signal:${eventWorkspaceId}`,
+            () => {
+              emitWorkspaceEvent(eventWorkspaceId, {
+                type: 'billing-changed',
+                workspaceId: eventWorkspaceId,
+                ...(event.revision ? { revision: event.revision } : {}),
+                at: Date.now(),
+              });
+            },
+            hubEventRefreshToken(event),
+          );
           break;
         case 'billing-subscription-changed':
           if (!event.workspaceId) break;
+          accountBillingSummary.invalidate(accountBillingInvalidationToken(event));
           workspaceBillingRuntime.invalidate({
             domain: 'subscription',
             workspaceId: event.workspaceId,
@@ -5387,15 +5730,22 @@ export async function startServer({
             ...(event.revisionClock ? { revisionClock: event.revisionClock } : {}),
             reason: 'vela-billing-subscription-changed',
           });
-          emitWorkspaceEvent(event.workspaceId, {
-            type: 'billing-subscription-changed',
-            workspaceId: event.workspaceId,
-            ...(event.revision ? { revision: event.revision } : {}),
-            at: Date.now(),
-          });
+          hubEventRefreshes.request(
+            `billing-signal:${event.workspaceId}`,
+            () => {
+              emitWorkspaceEvent(event.workspaceId!, {
+                type: 'billing-subscription-changed',
+                workspaceId: event.workspaceId!,
+                ...(event.revision ? { revision: event.revision } : {}),
+                at: Date.now(),
+              });
+            },
+            hubEventRefreshToken(event),
+          );
           break;
         case 'wallet-balance-changed':
           if (!event.workspaceId || !event.workspaceMemberId) break;
+          accountBillingSummary.invalidate(accountBillingInvalidationToken(event));
           workspaceBillingRuntime.invalidate({
             domain: 'wallet',
             workspaceId: event.workspaceId,
@@ -5404,13 +5754,19 @@ export async function startServer({
             ...(event.revisionClock ? { revisionClock: event.revisionClock } : {}),
             reason: 'vela-wallet-balance-changed',
           });
-          emitWorkspaceEvent(event.workspaceId, {
-            type: 'wallet-balance-changed',
-            workspaceId: event.workspaceId,
-            workspaceMemberId: event.workspaceMemberId,
-            ...(event.revision ? { revision: event.revision } : {}),
-            at: Date.now(),
-          });
+          hubEventRefreshes.request(
+            `billing-signal:${event.workspaceId}:${event.workspaceMemberId}`,
+            () => {
+              emitWorkspaceEvent(event.workspaceId!, {
+                type: 'wallet-balance-changed',
+                workspaceId: event.workspaceId!,
+                workspaceMemberId: event.workspaceMemberId!,
+                ...(event.revision ? { revision: event.revision } : {}),
+                at: Date.now(),
+              });
+            },
+            hubEventRefreshToken(event),
+          );
           break;
         case 'team-resources-changed': {
           // Project publish/retract operations are Resource Hub mutations and
@@ -5419,15 +5775,19 @@ export async function startServer({
           // generic resource coordinator intentionally handles only design
           // systems, plugins, and skills.
           if (event.resourceKind === 'project') {
-            handleHubTeamProjectsChanged(
-              () => emitTeamProjectsChanged(
-                eventWorkspaceId,
-                {
-                  ...(event.projectId ? { projectId: event.projectId } : {}),
-                  kind: 'catalog',
-                },
+            hubEventRefreshes.request(
+              `team-projects:${eventWorkspaceId}`,
+              () => handleHubTeamProjectsChanged(
+                () => emitTeamProjectsChanged(
+                  eventWorkspaceId,
+                  {
+                    ...(event.projectId ? { projectId: event.projectId } : {}),
+                    kind: 'catalog',
+                  },
+                ),
+                () => reconcileWorkspaceProjectsFromRemote(eventWorkspaceId),
               ),
-              () => reconcileWorkspaceProjectsFromRemote(eventWorkspaceId),
+              hubEventRefreshToken(event),
             );
             break;
           }
@@ -5440,17 +5800,27 @@ export async function startServer({
           // callback only ever RUNS once an actual SSE event arrives, well
           // after the rest of `startServer`'s synchronous setup — including
           // that declaration — has completed).
-          void reconcileTeamResourcesFromRemote(
-            event.resourceKind,
-            eventWorkspaceId,
-            'push',
-            event.resourceId,
-          ).catch(() => undefined);
+          hubEventRefreshes.request(
+            `team-resources:${eventWorkspaceId}:${event.resourceKind ?? '*'}`,
+            () => reconcileTeamResourcesFromRemote(
+              event.resourceKind,
+              eventWorkspaceId,
+              'push',
+              event.resourceId,
+            ),
+            hubEventRefreshToken(event),
+          );
           break;
         }
       }
     },
-    onReconnect: () => {
+    onReconnect: (connection) => {
+      if (
+        connection.identityKey
+        && connection.identityKey !== currentWorkspaceDirectoryIdentity()
+      ) {
+        return;
+      }
       // Close the disconnect gap: one catch-up cycle over the same reads the
       // pollers watch, plus a comment pull for open projects.
       void refreshWorkspaceDigestFaces(
@@ -5474,12 +5844,23 @@ export async function startServer({
       void reconcileTeamResourcesFromRemote(undefined, subscribedWorkspaceId, 'catch-up')
         .catch(() => undefined);
     },
-    onSourceGap: ({ workspaceId, listenerEpoch }) => {
+    onSourceGap: ({ workspaceId, identityKey, listenerEpoch }) => {
+      if (
+        identityKey
+        && identityKey !== currentWorkspaceDirectoryIdentity()
+      ) {
+        return;
+      }
       console.warn(
         `[od] hub source gap detected listenerEpoch=${listenerEpoch} ` +
           `workspaceId=${workspaceId ?? 'unknown'}`,
       );
       const exactWorkspaceId = workspaceId ?? subscribedWorkspaceId;
+      requestWorkspaceDirectoryRefresh(
+        'catch_up',
+        `source-gap:${listenerEpoch}`,
+        identityKey ?? currentWorkspaceDirectoryIdentity(),
+      );
       void refreshWorkspaceDigestFaces(exactWorkspaceId, { revalidate: true })
         .then(() => pollWorkspaceInvalidationForWorkspace(exactWorkspaceId))
         .catch(() => undefined);
@@ -6877,13 +7258,18 @@ export async function startServer({
 
   registerDaemonRoutes(app, {
     db,
-    paths: { RUNTIME_DATA_DIR },
+    paths: {
+      PROJECT_ROOT,
+      RESOURCE_ROOT: DAEMON_RESOURCE_ROOT ?? PROJECT_ROOT,
+      RUNTIME_DATA_DIR,
+    },
     http: { requireLocalDaemonRequest, sendApiError },
     host,
     getResolvedPort: () => resolvedPort,
     getDaemonShuttingDown: () => daemonShuttingDown,
     sandboxRuntime: SANDBOX_RUNTIME,
     env: process.env,
+    ensureClosureResource,
   });
 
   const openDesignPublicMetadata = createOpenDesignPublicMetadataService();
@@ -7158,6 +7544,10 @@ export async function startServer({
     readAppConfig,
     writeAppConfig,
     onAppConfigWritten: () => {
+      // AMR credentials may be overridden through Settings. Observe every
+      // completed write so even an A -> B -> A transition with no intervening
+      // directory/status read fences exact authority from the old A session.
+      refreshWorkspaceHubAccountIdentity();
       void attributionService.processPending().catch((err: unknown) => {
         console.warn('[attribution] pending claim failed', err);
       });
@@ -7768,8 +8158,28 @@ export async function startServer({
   registerDesignSystemToolRoutes(app, {
     auth: authDeps,
     http: httpDeps,
-    paths: pathDeps,
+    paths: {
+      ...pathDeps,
+      resolveUserDesignSystemsRoot: (grant, designSystemId) => {
+        if (!designSystemId.startsWith('user:')) {
+          return { ok: true, root: USER_DESIGN_SYSTEMS_DIR };
+        }
+        const resolved = resolvePinnedRunDesignSystemScope({
+          db,
+          scope: grant.designSystemScope,
+          designSystemId,
+          userRoot: USER_DESIGN_SYSTEMS_DIR,
+        });
+        return resolved.ok
+          ? { ok: true, root: resolved.root }
+          : resolved;
+      },
+    },
     projects: { getProject: (id: string) => getProject(db, id) },
+    runs: { getRun: (id: string) => design.runs.get(id) },
+    features: {
+      isDesignSystemRuntimeEnabled: () => isDesignTokenChannelEnabled(process.env),
+    },
   });
   app.use('/artifacts', express.static(ARTIFACTS_DIR));
   app.use(
@@ -7870,6 +8280,7 @@ export async function startServer({
     appConfig: { readAppConfig },
     http: { getPublicBaseUrl },
     env: process.env,
+    onCredentialStateObserved: refreshWorkspaceHubAccountIdentity,
   });
 
   const allowScopedPluginReplace = (
@@ -8391,22 +8802,20 @@ export async function startServer({
     freeformDeckSignal,
     mediaHintSignal,
     platformHintSignal,
+    workspaceScope,
+    designSystemScope,
   }) => {
     const project =
       typeof projectId === 'string' && projectId
         ? getProject(db, projectId)
         : null;
-    const projectWorkspaceBinding =
-      typeof projectId === 'string' && projectId
-        ? getWorkspaceProjectByProjectId(db, projectId)
-        : null;
     const projectWorkspaceId =
-      typeof projectWorkspaceBinding?.workspaceId === 'string'
-        ? projectWorkspaceBinding.workspaceId.trim()
+      typeof workspaceScope?.workspaceId === 'string'
+        ? workspaceScope.workspaceId.trim()
         : '';
     const projectCreatorMemberId =
-      typeof projectWorkspaceBinding?.createdByWorkspaceMemberId === 'string'
-        ? projectWorkspaceBinding.createdByWorkspaceMemberId.trim()
+      typeof workspaceScope?.workspaceMemberId === 'string'
+        ? workspaceScope.workspaceMemberId.trim()
         : '';
     const metadata = project?.metadata;
     const localCatalogScope = (value) => {
@@ -8521,18 +8930,11 @@ export async function startServer({
           allowAppDefault: project === null,
         });
     const effectiveDesignSystemId = designSystemSelection.id;
-    const projectResourceScope =
-      typeof projectId === 'string' && projectId
-        ? getWorkspaceProjectByProjectId(db, projectId)
-        : null;
     const skillResourceScope = skillCatalogScope ?? (
-      projectResourceScope?.workspaceId
+      projectWorkspaceId
         ? {
-            workspaceId: String(projectResourceScope.workspaceId),
-            workspaceMemberId:
-              typeof projectResourceScope.createdByWorkspaceMemberId === 'string'
-                ? projectResourceScope.createdByWorkspaceMemberId
-                : null,
+            workspaceId: projectWorkspaceId,
+            workspaceMemberId: projectCreatorMemberId || null,
           }
         : null
     );
@@ -8791,23 +9193,83 @@ export async function startServer({
     let designSystemComponentsManifest;
     let designSystemFixtureHtml;
     let designSystemPullIndex;
+    let designSystemIntentIndex;
+    let designSystemRuntimeIssue;
     let designSystemImportMode;
     let designSystemCraftApplies = [];
     let designSystemCraftExemptions = [];
     let activeDesignSystemId = null;
     let designSystemDigest = null;
     if (effectiveDesignSystemId) {
-      const designSystemListOptions = designSystemWorkspaceId
-        ? {
-            workspaceId: designSystemWorkspaceId,
-            workspaceMemberId: designSystemMemberId || null,
-          }
-        : {};
+      const userDesignSystem = effectiveDesignSystemId.startsWith('user:');
+      // A run with a captured scope must resolve that exact resource even if
+      // the project was later rebound. A legacy, unbound run without a
+      // catalog provenance remains local. Projects created during Workspace
+      // identity transitions intentionally use their immutable local catalog
+      // provenance instead: it identifies a local record, not Workspace
+      // membership or billing authority.
+      const localCatalogDesignSystemRun =
+        designSystemScope?.kind === 'local' && Boolean(designSystemCatalogScope);
+      const usePinnedDesignSystemScope = userDesignSystem
+        && !localCatalogDesignSystemRun
+        && (
+          designSystemScope !== null && designSystemScope !== undefined
+          || (!designSystemCatalogScope && !projectWorkspaceId)
+        );
+      const effectivePinnedScope = usePinnedDesignSystemScope
+        ? designSystemScope
+          ?? (
+            !projectWorkspaceId
+              ? {
+                  schemaVersion: 1,
+                  kind: 'local',
+                  projectId: typeof projectId === 'string' ? projectId : '',
+                  designSystemId: effectiveDesignSystemId,
+                }
+              : null
+          )
+        : null;
+      const pinnedResolution = usePinnedDesignSystemScope
+        ? resolvePinnedRunDesignSystemScope({
+            db,
+            scope: effectivePinnedScope,
+            designSystemId: effectiveDesignSystemId,
+            userRoot: USER_DESIGN_SYSTEMS_DIR,
+          })
+        : null;
+      const designSystemListOptions = usePinnedDesignSystemScope
+        ? pinnedResolution?.ok && pinnedResolution.visibility === 'team'
+          ? {
+              workspaceId: pinnedResolution.workspaceId,
+              workspaceMemberId: pinnedResolution.workspaceMemberId,
+              exactTeam: true,
+            }
+          : pinnedResolution?.ok && pinnedResolution.visibility === 'personal'
+            ? {
+                workspaceId: pinnedResolution.workspaceId,
+                workspaceMemberId: pinnedResolution.workspaceMemberId,
+                exactPersonal: true,
+              }
+            : {}
+        : designSystemWorkspaceId
+          ? {
+              workspaceId: designSystemWorkspaceId,
+              workspaceMemberId: designSystemMemberId || null,
+            }
+          : {};
+      const designSystemVisibleForRun = (system) => {
+        if (!usePinnedDesignSystemScope) return designSystemVisibleToRun(system);
+        if (system?.source === 'built-in') return true;
+        if (!pinnedResolution?.ok) return false;
+        return pinnedResolution.visibility === 'team'
+          ? system.teamSynced === true
+          : system.teamSynced !== true;
+      };
       let systems = await listAllDesignSystems(designSystemListOptions);
       let summary = systems.find(
         (system) =>
           system.id === effectiveDesignSystemId
-          && designSystemVisibleToRun(system),
+          && designSystemVisibleForRun(system),
       );
       if (summary?.source === 'user' && summary.teamSynced !== true) {
         await ensureUserDesignSystemWorkspaceProject(db, effectiveDesignSystemId);
@@ -8815,7 +9277,7 @@ export async function startServer({
         summary = systems.find(
           (system) =>
             system.id === effectiveDesignSystemId
-            && designSystemVisibleToRun(system),
+            && designSystemVisibleForRun(system),
         );
       }
       const editingOwnDraftDesignSystem =
@@ -8841,18 +9303,36 @@ export async function startServer({
         // from real disk fixtures (see `tests/design-system-assets.test.ts`).
         const resourceBinding = projectDesignSystemBinding(summary);
         const scopedUserDesignSystemsRoot =
-          designSystemWorkspaceId && resourceBinding?.visibility === 'team'
-            ? teamResourceWorkspaceRoot(USER_DESIGN_SYSTEMS_DIR, designSystemWorkspaceId)
-            : USER_DESIGN_SYSTEMS_DIR;
+          usePinnedDesignSystemScope && pinnedResolution?.ok
+            ? pinnedResolution.root
+            : designSystemWorkspaceId && resourceBinding?.visibility === 'team'
+              ? teamResourceWorkspaceRoot(USER_DESIGN_SYSTEMS_DIR, designSystemWorkspaceId)
+              : USER_DESIGN_SYSTEMS_DIR;
         const assets = await resolveDesignSystemAssets(
+          effectiveDesignSystemId,
+          DESIGN_SYSTEMS_DIR,
+          scopedUserDesignSystemsRoot,
+        );
+        const runtimePromptContext = await resolveDesignSystemRuntimePromptContext(
           effectiveDesignSystemId,
           DESIGN_SYSTEMS_DIR,
           scopedUserDesignSystemsRoot,
         );
         designSystemUsageMd = assets.usageMd;
         designSystemTokensCss = assets.tokensCss;
-        designSystemComponentsManifest = assets.componentsManifest;
-        designSystemFixtureHtml = assets.fixtureHtml;
+        // A package has exactly one component-selection authority. Legacy
+        // packages keep the derived manifest / fixture prompt path. Once a
+        // package declares the structured runtime, valid or not, that legacy
+        // evidence must not compete with the intent resolver or mask a broken
+        // runtime as a usable component map.
+        if (runtimePromptContext.mode === 'legacy') {
+          designSystemComponentsManifest = assets.componentsManifest;
+          designSystemFixtureHtml = assets.fixtureHtml;
+        } else if (runtimePromptContext.mode === 'structured') {
+          designSystemIntentIndex = runtimePromptContext.intentIndex;
+        } else {
+          designSystemRuntimeIssue = runtimePromptContext.issue;
+        }
         designSystemPullIndex = assets.pullIndex;
         designSystemImportMode = assets.importMode;
         designSystemCraftApplies = Array.isArray(assets.craftApplies) ? assets.craftApplies : [];
@@ -8868,6 +9348,8 @@ export async function startServer({
             componentsManifest: designSystemComponentsManifest,
             fixtureHtml: designSystemFixtureHtml,
             pullIndex: designSystemPullIndex,
+            intentIndex: designSystemIntentIndex,
+            runtimeIssue: designSystemRuntimeIssue,
             importMode: designSystemImportMode,
           });
         }
@@ -9056,6 +9538,8 @@ export async function startServer({
       designSystemComponentsManifest,
       designSystemFixtureHtml,
       designSystemPullIndex,
+      designSystemIntentIndex,
+      designSystemRuntimeIssue,
       designSystemImportMode,
       craftBody,
       craftSections,
@@ -9261,17 +9745,57 @@ export async function startServer({
     if (typeof clientRequestId === 'string' && clientRequestId)
       run.clientRequestId = clientRequestId;
     if (typeof agentId === 'string' && agentId) run.agentId = agentId;
+    const finishRun = (status, code = null, signal = null) => {
+      flushRunMessageEvents(run);
+      return design.runs.finish(run, status, code, signal);
+    };
     // Freeze the billing address once, before the first asynchronous setup
     // step. HTTP-created runs already carry the scope captured by the request
     // authorization transaction. Internal runs pin here. Retries reuse the
     // existing property and therefore never consult a later project rebind.
+    let runScopeChanged = false;
     if (!Object.prototype.hasOwnProperty.call(run, 'workspaceScope')) {
       run.workspaceScope =
         typeof projectId === 'string' && projectId
           ? pinRunWorkspaceScopeForProject(db, projectId)
           : null;
-      design.runs.persistState(run);
+      runScopeChanged = true;
     }
+    if (!Object.prototype.hasOwnProperty.call(run, 'designSystemScope')) {
+      const scopeProject =
+        typeof projectId === 'string' && projectId
+          ? getProject(db, projectId)
+          : null;
+      let scopePluginDesignSystemId = null;
+      if (run?.appliedPluginSnapshotId) {
+        try {
+          scopePluginDesignSystemId = designSystemIdFromPluginSnapshot(
+            getSnapshot(db, run.appliedPluginSnapshotId),
+          );
+        } catch {
+          scopePluginDesignSystemId = null;
+        }
+      }
+      const scopeSelection = scopeProject?.metadata?.intent === 'web-clone'
+        ? { id: null }
+        : resolveEffectiveDesignSystemSelection({
+            requestDesignSystemId: designSystemId,
+            pluginDesignSystemId: scopePluginDesignSystemId,
+            projectDesignSystemId: scopeProject?.designSystemId,
+            allowAppDefault: false,
+          });
+      run.designSystemScope =
+        typeof projectId === 'string' && projectId
+          ? pinRunDesignSystemScope({
+              db,
+              projectId,
+              designSystemId: scopeSelection.id,
+              workspaceScope: run.workspaceScope,
+            })
+          : null;
+      runScopeChanged = true;
+    }
+    if (runScopeChanged) design.runs.persistState(run);
     // Stash the original user prompt + per-turn config so the
     // langfuse-bridge report path can include them without reaching back
     // into chatBody across the createChatRunService boundary. Each field
@@ -9498,12 +10022,26 @@ export async function startServer({
         };
       }
     }
+    const toolWorkspaceId = typeof run.workspaceScope?.workspaceId === 'string'
+      ? run.workspaceScope.workspaceId.trim()
+      : '';
+    const toolWorkspaceMemberId =
+      typeof run.workspaceScope?.workspaceMemberId === 'string'
+        ? run.workspaceScope.workspaceMemberId.trim()
+        : '';
     const inactivityTimeoutMs = resolveChatRunInactivityTimeoutMs(def.inactivityTimeoutMs);
     const toolTokenTtlMs = resolveChatToolTokenTtlMs(inactivityTimeoutMs);
     const toolTokenGrant = cwd && typeof projectId === 'string' && projectId
       ? toolTokenRegistry.mint({
           runId,
           projectId,
+          ...(toolWorkspaceId ? { workspaceId: toolWorkspaceId } : {}),
+          ...(toolWorkspaceMemberId
+            ? { workspaceMemberId: toolWorkspaceMemberId }
+            : {}),
+          ...(run.designSystemScope
+            ? { designSystemScope: run.designSystemScope }
+            : {}),
           allowedEndpoints: CHAT_TOOL_ENDPOINTS,
           allowedOperations: CHAT_TOOL_OPERATIONS,
           ttlMs: toolTokenTtlMs,
@@ -9670,6 +10208,8 @@ export async function startServer({
         freeformDeckSignal: intentSignals.deck,
         mediaHintSignal: intentSignals.media,
         platformHintSignal: intentSignals.platform,
+        workspaceScope: run.workspaceScope,
+        designSystemScope: run.designSystemScope,
       });
 
     run.designSystemId = designSystemSelection?.id ?? null;
@@ -9902,7 +10442,7 @@ export async function startServer({
     // prompt-composition skipTranscript choice, the buildArgs flags, and the
     // create-turn persistence below.
     const agentSupportsSessionResume =
-      def.resumesSessionViaCli === true ||
+      runtimeResumesSessionById(def) ||
       def.streamFormat === 'pi-rpc' ||
       def.resumesSessionViaAcpLoad === true;
     // Capture-style adapters (codex) mint their OWN session id and report it on
@@ -9953,8 +10493,9 @@ export async function startServer({
       process.env[def.defaultModelEnvVar]?.trim(),
     );
     const safeReasoning =
-      typeof reasoning === 'string' && Array.isArray(def.reasoningOptions)
-        ? (def.reasoningOptions.find((r) => r.id === reasoning)?.id ?? null)
+      typeof reasoning === 'string' &&
+      isKnownReasoningEffort(def, safeModel, reasoning, requestedLiveModelScope)
+        ? reasoning
         : null;
     safeModel = resolveModelForServiceTier(
       def,
@@ -10028,7 +10569,7 @@ export async function startServer({
     // directly. Public chat requests cannot reach this branch.
     const forceInternalResume =
       pendingNativeSessionContinue != null &&
-      def.resumesSessionViaCli === true &&
+      runtimeResumesSessionById(def) &&
       pendingNativeSessionContinue.sessionId.length > 0;
     const agentResumeCtx = forceInternalResume
       ? {
@@ -10535,6 +11076,7 @@ export async function startServer({
     };
     const finishWithRetryDecision = (status, code = null, signal = null) => {
       lifecycle.mark('finalize_start');
+      flushRunMessageEvents(run);
       // Persist the transport-level close mechanism before classifying this
       // attempt. Runtime fatal/stream signals are only known in the close
       // handler, and the retry classifier reads this diagnostic to distinguish
@@ -10605,7 +11147,7 @@ export async function startServer({
           run.nativeSessionContinueAttemptCount ?? 0,
         totalRetryAttemptCount: run.retryAttemptCount ?? 0,
         sideEffects,
-        supportsNativeSessionContinue: def.resumesSessionViaCli === true,
+        supportsNativeSessionContinue: runtimeResumesSessionById(def),
         hasNativeSession: !!run.conversationId && !!liveSessionId,
       });
       if (
@@ -10715,7 +11257,7 @@ export async function startServer({
       );
       const resumableFailure =
         result === 'failed' &&
-        def.resumesSessionViaCli === true &&
+        runtimeResumesSessionById(def) &&
         !!run.conversationId &&
         !!liveSessionId &&
         committedWorkSeen &&
@@ -10769,7 +11311,7 @@ export async function startServer({
           });
         }
       }
-      design.runs.finish(run, status, code, signal);
+      finishRun(status, code, signal);
       return false;
     };
     const mcpServers = buildLiveArtifactsMcpServersForAgent(def, {
@@ -10913,7 +11455,7 @@ export async function startServer({
           { retryable: false },
         ),
       );
-      return design.runs.finish(run, 'failed', 1, null);
+      return finishRun('failed', 1, null);
     }
 
     let mmdRouteLaunchEnv = null;
@@ -11041,7 +11583,7 @@ export async function startServer({
                 'AMR sign-in is required. Sign in to AMR Cloud again, then retry this run.',
               action: 'relogin',
             });
-            return design.runs.finish(run, 'failed', 1, null);
+            return finishRun('failed', 1, null);
           }
         }
         // Logged in but no catalog at all AND no resolvable model: only now is
@@ -11050,7 +11592,7 @@ export async function startServer({
           send('error', createAmrModelUnavailablePayload(safeModel, {
             reason: 'model_catalog_unavailable',
           }));
-          return design.runs.finish(run, 'failed', 1, null);
+          return finishRun('failed', 1, null);
         }
         // Otherwise fall through with the user's selected model and let vela's
         // `session/set_model` be the authoritative gate.
@@ -11060,7 +11602,7 @@ export async function startServer({
           typeof model === 'string' && model.trim() ? model : safeModel,
           { availableModels: [...liveModelIds] },
         ));
-        return design.runs.finish(run, 'failed', 1, null);
+        return finishRun('failed', 1, null);
       }
       // NOTE: when the selected model is absent from the (possibly preset-only
       // or stale) catalog we intentionally do NOT fail-close. The cached/preset
@@ -11272,7 +11814,7 @@ export async function startServer({
           { retryable: false },
         ),
       );
-      return design.runs.finish(run, 'failed', 1, null);
+      return finishRun('failed', 1, null);
     }
 
     // Companion guard for non-shim Windows installs (e.g. a cargo-built
@@ -11300,11 +11842,11 @@ export async function startServer({
           { retryable: false },
         ),
       );
-      return design.runs.finish(run, 'failed', 1, null);
+      return finishRun('failed', 1, null);
     }
 
     let persistDeliveredAgentSessionState = () => {};
-    if (def.resumesSessionViaCli === true && run.conversationId) {
+    if (runtimeResumesSessionById(def) && run.conversationId) {
       let persisted = false;
       persistDeliveredAgentSessionState = () => {
         if (persisted) return;
@@ -11657,7 +12199,7 @@ export async function startServer({
           'Install it and refresh the agent list (GET /api/agents) before retrying.',
         { retryable: true },
       ));
-      return design.runs.finish(run, 'failed', 1, null);
+      return finishRun('failed', 1, null);
     }
     const browserUseRuntimeEnv = run.browserUse
       ? {
@@ -11690,7 +12232,7 @@ export async function startServer({
           message: 'AMR sign-in is required. Sign in to AMR Cloud again, then retry this run.',
           action: 'relogin',
         });
-        return design.runs.finish(run, 'failed', 1, null);
+        return finishRun('failed', 1, null);
       }
     }
     const odMediaEnv = createOpenDesignToolEnv({
@@ -11744,7 +12286,9 @@ export async function startServer({
       // Prompt delivery via stdin is now the universal default. This bypasses
       // both the cmd.exe 8KB limit and the CreateProcess 32KB limit.
       const stdinMode =
-        def.promptViaStdin || def.streamFormat === 'acp-json-rpc'
+        def.promptViaStdin ||
+        def.streamFormat === 'acp-json-rpc' ||
+        def.streamFormat === 'dsh-profile-jsonl'
           ? 'pipe'
           : 'ignore';
       const env = applyAgentLaunchEnv({
@@ -11896,7 +12440,12 @@ export async function startServer({
           releaseOnce();
         });
       }
-      if (def.promptViaStdin && child.stdin && def.streamFormat !== 'pi-rpc') {
+      if (
+        def.promptViaStdin &&
+        child.stdin &&
+        def.streamFormat !== 'pi-rpc' &&
+        def.streamFormat !== 'dsh-profile-jsonl'
+      ) {
         // EPIPE from a fast-exiting CLI (bad auth, missing model, exit on
         // launch) would otherwise surface as an unhandled stream error and
         // crash the daemon. Swallow it — the regular exit/close handlers
@@ -11931,7 +12480,7 @@ export async function startServer({
           ? err.message
           : `spawn failed: ${err.message}`,
       ));
-      design.runs.finish(run, 'failed', 1, null);
+      finishRun('failed', 1, null);
       return;
     }
 
@@ -12179,16 +12728,16 @@ export async function startServer({
           const succeeded = orchestratorResult.status === 'shipped'
             || orchestratorResult.status === 'below_threshold';
           if (run.cancelRequested) {
-            design.runs.finish(run, 'canceled', 1, null);
+            finishRun('canceled', 1, null);
           } else if (succeeded) {
-            design.runs.finish(run, 'succeeded', 0, null);
+            finishRun('succeeded', 0, null);
           } else {
-            design.runs.finish(run, 'failed', 1, null);
+            finishRun('failed', 1, null);
           }
         } catch (err) {
           flushVisibleAgentStderr();
           send('error', createSseErrorPayload('AGENT_EXECUTION_FAILED', err instanceof Error ? err.message : String(err)));
-          design.runs.finish(run, 'failed', 1, null);
+          finishRun('failed', 1, null);
         } finally {
           critiqueRunRegistry.unregister(critiqueProjectKey, critiqueRunId);
         }
@@ -12581,7 +13130,7 @@ export async function startServer({
           // resume_failed suppression below; the close handler stays the sole
           // authority on how a resume failure ends.
           if (
-            (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
+            (runtimeResumesSessionById(def) || def.resumesSessionViaAcpLoad === true) &&
             agentResumeCtx.isResuming &&
             !run.resumeAutoReseeded &&
             isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
@@ -12848,6 +13397,59 @@ export async function startServer({
         },
         ...(acpStageTimeoutMs !== undefined ? { stageTimeoutMs: acpStageTimeoutMs } : {}),
       });
+    } else if (def.streamFormat === 'dsh-profile-jsonl') {
+      trackingSubstantiveOutput = true;
+      acpSession = attachDshProfileSession({
+        child,
+        requestId: run.id,
+        prompt: composed,
+        cwd: effectiveCwd,
+        model: safeModel,
+        reasoningEffort: safeReasoning,
+        ...(agentResumeCtx.isResuming && agentResumeCtx.resumeSessionId
+          ? { resumeSessionId: agentResumeCtx.resumeSessionId }
+          : {}),
+        onReady: () => noteCliReadyAt(),
+        onSession: () => noteSessionInitDoneAt(),
+        onComplete: () => clearFirstOutputWatchdog(),
+        send: (event, data) => {
+          noteAgentActivity();
+          if (event === 'agent') {
+            sendAgentEvent(data);
+            return;
+          }
+          if (event === 'error') {
+            const failure = normalizeDeepSeekHarnessFailure(data);
+            const { code, message } = failure;
+            agentStreamError = message;
+            agentStreamErrorObservedBeforeCancellation = !run.cancelRequested;
+            acpFatalErrorObservedBeforeCancellation = !run.cancelRequested;
+            run.runtimeFailureObservedBeforeCancellation = !run.cancelRequested;
+            agentStdoutTail = `${agentStdoutTail}\n${code}`.slice(-2000);
+            if (
+              agentResumeCtx.isResuming &&
+              !run.resumeAutoReseeded &&
+              /^DSH_PROFILE_RESUME_(?:REJECTED|MISMATCH)$/.test(code)
+            ) {
+              design.runs.emit(run, 'diagnostic', {
+                type: 'agent_resume_failed_suppressed',
+                agent_id: def.id,
+                reason: 'resume_failed',
+                previous_session_id: agentResumeCtx.resumeSessionId ?? null,
+              });
+              return;
+            }
+            if (!run.cancelRequested) {
+              send('error', createSseErrorPayload(code, message, {
+                retryable:
+                  failure.authRequired || code === 'DSH_PROFILE_RESUME_REJECTED',
+              }));
+            }
+            return;
+          }
+          send(event, data);
+        },
+      });
     } else if (def.streamFormat === 'json-event-stream') {
       // Pipe through sendAgentEvent so the OpenCode `type:'error'` frame
       // (now emitted as a real error event by json-event-stream.ts after
@@ -12922,6 +13524,19 @@ export async function startServer({
     ): boolean => {
       if (!run.cancelRequested) return false;
       if (!design.runs.isTerminal(run.status)) {
+        // Harness has already durably established the session by the time its
+        // validated `session` frame reaches `capturedSessionId`. Preserve that
+        // handle when the user cancels the current process so a later OD run
+        // can cold-resume the same conversation. Keep this scoped to the
+        // profile-stdio contract: other capture-style CLIs do not promise that
+        // a session interrupted mid-turn is safe to continue.
+        if (def.resumesSessionViaProfileStdio === true && capturedSessionId) {
+          try {
+            persistDeliveredAgentSessionState();
+          } catch (err) {
+            console.warn('[sessions] canceled profile session persistence failed', err);
+          }
+        }
         markRpcCloseReason('cancel_requested');
         finishWithRetryDecision('canceled', code, signal);
       }
@@ -12968,7 +13583,7 @@ export async function startServer({
       // re-seed the full transcript: one cold turn, never a broken conversation.
       if (
         !run.cancelRequested &&
-        (def.resumesSessionViaCli === true || def.resumesSessionViaAcpLoad === true) &&
+        (runtimeResumesSessionById(def) || def.resumesSessionViaAcpLoad === true) &&
         agentResumeCtx.isResuming &&
         run.conversationId &&
         isAgentResumeFailure(def.id, agentStderrTail, agentStdoutTail)
@@ -13012,7 +13627,7 @@ export async function startServer({
           'The previous session could not be resumed (it may have expired). Resend your message to continue with a fresh session.',
           { retryable: true },
         ));
-        return design.runs.finish(run, 'failed', code ?? 1, signal ?? null);
+        return finishRun('failed', code ?? 1, signal ?? null);
       }
       if (acpFatalErrorObservedBeforeCancellation && acpSession?.hasFatalError()) {
         markRpcCloseReason('fatal_rpc_error');
@@ -13201,6 +13816,29 @@ export async function startServer({
           runArtifactSideEffects.artifactWriteSeen ||
           runArtifactSideEffects.liveArtifactSeen,
       });
+      // Codex reports shell failures as ordinary command_execution items and
+      // can still close the overall turn with code 0. For a structured DS run,
+      // a failed read/resolve/validate wrapper followed by zero artifacts is a
+      // failed delivery, not a successful text-only turn. Resolve the
+      // filesystem diff before finalizing so the run cannot surface as green
+      // merely because the agent explained why it stopped. A later successful
+      // retry that produced an artifact remains a normal success.
+      if (
+        status === 'succeeded'
+        && runHadFailedDesignSystemWrapper(run.events)
+        && !emittedRenderableQuestionForm(clarifyingQuestionText)
+      ) {
+        const artifactOutcome = await resolveRunArtifactOutcomeBeforeFinishAsync();
+        if (!artifactOutcome || artifactOutcome.artifactCount <= 0) {
+          markRpcCloseReason('design_system_wrapper_failed');
+          send('error', createSseErrorPayload(
+            'AGENT_EXECUTION_FAILED',
+            'The agent could not access the active design-system runtime and produced no deliverable. Retry after checking the local agent tool environment.',
+            { retryable: true },
+          ));
+          return finishWithRetryDecision('failed', code, signal);
+        }
+      }
       // Skip the close-handler failure emit when the run is already
       // terminal: the inactivity watchdog (failForInactivity) finishes the
       // run — sending its error and clearing run.clients/eventsLogStream —
@@ -13487,7 +14125,7 @@ export async function startServer({
               ...(details ? { details } : {}),
             },
           ));
-          design.runs.finish(run, 'failed', 1, signal);
+          finishRun('failed', 1, signal);
           return;
         }
         try {
@@ -14307,6 +14945,8 @@ export async function startServer({
       routineService?.stop();
       clearInterval(teamResourcesPollTimer);
       workspaceHubSubscriptions?.dispose();
+      hubEventRefreshes.dispose();
+      workspaceDirectoryRefreshes.dispose();
       workspaceBillingRuntime.dispose();
       proactiveContentPull.dispose();
       collabCloud?.dispose();

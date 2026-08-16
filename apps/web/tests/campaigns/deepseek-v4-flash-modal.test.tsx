@@ -78,7 +78,7 @@ describe('paid 立即使用 switches the workbench onto the campaign model', () 
       // 产品拍板 D5: the CTA performs the real switch, not a picker tour.
       expect(onUseCampaignModel).toHaveBeenCalledWith(
         'amr',
-        'deepseek-v4-flash',
+        'deepseek-v4-pro',
       );
       // The analytics element stays `use_now`.
       expect(trackSpy).toHaveBeenCalledWith(
@@ -106,13 +106,29 @@ describe('the modal never re-opens for a seen campaign (no URL override left)', 
     // back open. That backdoor is gone: frequency control is the only input.
     window.history.replaceState({}, '', '/?campaign=deepseek-v4-flash');
     window.localStorage.setItem(
-      'open-design:campaign-seen:deepseek-v4-flash-unlimited-2026',
+      'open-design:campaign-seen:deepseek-v4-dual-unlimited-2026',
       '1',
     );
 
     render(<DeepSeekV4FlashCampaign audience="paid" active />);
 
     expect(screen.queryByTestId(DIALOG)).toBeNull();
+  });
+
+  // Frequency control is keyed on the campaign id, and this campaign is NOT the
+  // 8/6–8/13 free week that preceded it. A user who dismissed that one has
+  // never seen this offer, so its single showing is still owed to them —
+  // otherwise the whole returning-user segment silently loses the announcement
+  // (PRD F-14: 旧 Flash 记录不影响本活动).
+  it('still shows once to a user who dismissed the previous campaign', () => {
+    window.localStorage.setItem(
+      'open-design:campaign-seen:deepseek-v4-flash-unlimited-2026',
+      '1',
+    );
+
+    render(<DeepSeekV4FlashCampaign audience="paid" active />);
+
+    expect(screen.queryByTestId(DIALOG)).not.toBeNull();
   });
 });
 
@@ -136,7 +152,7 @@ describe('unpaid upgrade path carries telemetry consent', () => {
 
     expect(open).toHaveBeenCalledTimes(1);
     const url = new URL(String(open.mock.calls[0]?.[0]));
-    expect(url.searchParams.get('od_campaign_id')).toBe('deepseek_v4_flash');
+    expect(url.searchParams.get('od_campaign_id')).toBe('deepseek_v4_pro');
     expect(url.searchParams.get('od_conversion_source')).toBe('deepseek_unpaid_modal');
     expect(url.searchParams.get('od_device_id')).toBe('install-abc123');
   });
@@ -159,7 +175,7 @@ describe('unpaid upgrade path carries telemetry consent', () => {
     const url = new URL(String(open.mock.calls[0]?.[0]));
     expect(url.searchParams.get('od_device_id')).toBeNull();
     // Attribution itself is consent-independent.
-    expect(url.searchParams.get('od_campaign_id')).toBe('deepseek_v4_flash');
+    expect(url.searchParams.get('od_campaign_id')).toBe('deepseek_v4_pro');
   });
 });
 

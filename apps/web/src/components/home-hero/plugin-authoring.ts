@@ -1,4 +1,4 @@
-import type { SkillSummary } from '@open-design/contracts';
+import type { ProjectKind, SkillSummary } from '@open-design/contracts';
 import type { PluginUseAction } from '../plugins-home/useActions';
 
 export type HomePromptHandoff =
@@ -18,6 +18,9 @@ export type HomePromptHandoff =
     source: 'plugin-use';
     action: PluginUseAction;
     inputs?: Record<string, unknown>;
+    /** Preserve the Home creation type when a template is picked elsewhere. */
+    chipId?: string;
+    projectKind?: ProjectKind;
   }
   | {
     id: number;
@@ -119,6 +122,8 @@ export function createPluginUseHandoff(
   options: {
     action?: PluginUseAction;
     inputs?: Record<string, unknown>;
+    chipId?: string;
+    projectKind?: ProjectKind;
   } = {},
 ): HomePromptHandoff {
   return {
@@ -126,6 +131,8 @@ export function createPluginUseHandoff(
     pluginId,
     action: options.action ?? 'use',
     ...(options.inputs ? { inputs: options.inputs } : {}),
+    ...(options.chipId ? { chipId: options.chipId } : {}),
+    ...(options.projectKind ? { projectKind: options.projectKind } : {}),
     focus: true,
     source: 'plugin-use',
   };

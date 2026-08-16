@@ -336,6 +336,31 @@ describe('EntryShell settings menu', () => {
   });
 });
 
+describe('EntryShell navigation shortcuts', () => {
+  afterEach(() => {
+    window.localStorage.removeItem('od.entry.railOpen');
+  });
+
+  it('leaves the rail unchanged when the composer owns Cmd/Ctrl+B', async () => {
+    window.localStorage.setItem('od.entry.railOpen', 'false');
+    renderHome();
+
+    const entry = document.querySelector('.entry');
+    expect(entry).toBeInstanceOf(HTMLElement);
+    expect(entry?.classList.contains('entry--rail-open')).toBe(false);
+
+    const editor = await screen.findByTestId('home-hero-input');
+    fireEvent.keyDown(editor, {
+      key: 'b',
+      ...(/Mac|iPod|iPhone|iPad/.test(navigator.platform)
+        ? { metaKey: true }
+        : { ctrlKey: true }),
+    });
+
+    expect(entry?.classList.contains('entry--rail-open')).toBe(false);
+  });
+});
+
 describe('EntryShell design systems view', () => {
   it('leaves workspace-scoped design-system activation to the mounted tab', async () => {
     const onDesignSystemsRefresh = vi.fn();

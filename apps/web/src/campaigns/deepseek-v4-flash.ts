@@ -1,16 +1,29 @@
 /**
- * DeepSeek V4 Flash free-week campaign — identity, window, and pure helpers.
+ * DeepSeek V4 unlimited-access campaign — identity, window, and pure helpers.
+ *
+ * Now covers TWO models. The free week that ran 8/6–8/13 offered V4 Flash
+ * alone; the two-week window that starts the instant that one ends offers V4
+ * Pro alongside it, on one shared window that opens and closes for both models
+ * at once. The module keeps its `…V4Flash` names so this stays a content change
+ * rather than a rename across 28 i18n keys × 19 locales; the names are due for
+ * a cleanup pass once the campaign is off.
  *
  * User-visible copy lives in i18n (`campaign.deepseekV4Flash.*`). Keep this
  * module free of locale strings so workbench surfaces follow the active UI
  * language (19 locales under apps/web/src/i18n/locales).
  */
 export const DEEPSEEK_V4_FLASH_CAMPAIGN = {
-  id: 'deepseek-v4-flash-unlimited-2026',
-  modelId: 'deepseek-v4-flash',
+  id: 'deepseek-v4-dual-unlimited-2026',
+  /**
+   * The model a paid user is switched to when they accept the campaign. Pro is
+   * the headline benefit, so it is the one 「立即使用」 lands on.
+   */
+  modelId: 'deepseek-v4-pro',
+  /** Both campaign models, in the order product presents them: Pro then Flash. */
+  modelIds: ['deepseek-v4-pro', 'deepseek-v4-flash'],
   window: {
-    startAt: '2026-08-06T00:00:00+08:00',
-    endAtExclusive: '2026-08-13T20:00:00+08:00',
+    startAt: '2026-08-13T20:00:00+08:00',
+    endAtExclusive: '2026-08-27T20:00:00+08:00',
   },
 } as const;
 
@@ -104,5 +117,7 @@ export function resolveDeepSeekV4FlashCampaignAudience(input: {
 }
 
 export function isDeepSeekV4FlashCampaignModel(modelId: string | null | undefined): boolean {
-  return modelId?.trim().toLowerCase() === DEEPSEEK_V4_FLASH_CAMPAIGN.modelId;
+  const normalized = modelId?.trim().toLowerCase();
+  if (!normalized) return false;
+  return DEEPSEEK_V4_FLASH_CAMPAIGN.modelIds.some((id) => id === normalized);
 }

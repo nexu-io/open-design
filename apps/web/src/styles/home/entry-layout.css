@@ -190,43 +190,50 @@
 
 /* ── Collapse cascade ──────────────────────────────────────────────────────
    Clicking collapse plays a top-to-bottom sequence: each rail row fades and
-   lifts a few px, staggered by its document order (search → nav items → team
-   items → footer), so the sidebar empties from the top down before the track
-   squeezes shut. Expanding is instant (no per-row delay) to stay snappy. */
-.entry-nav-rail__group > .entry-nav-rail__search,
-.entry-nav-rail__group > .entry-nav-rail__btn,
-.entry-nav-rail__group > .entry-nav-rail__team-wrap,
-.entry-nav-rail__section-divider,
+   lifts a few px, staggered by its VISUAL order (workspace switcher → search
+   row → nav items → team items → footer), so the sidebar empties from the
+   top down before the track squeezes shut. Expanding is instant (no per-row
+   delay) to stay snappy.
+
+   Two structural facts drive the selectors, and both have drifted before —
+   revisit them when the rail's tree changes again:
+   • the signed-in tree nests 个人项目…设置 inside .entry-nav-rail__team-wrap's
+     sibling .entry-nav-rail__team-section, so those rows fade INDIVIDUALLY
+     (the wrapper itself must not also fade, or the block would double-fade
+     and pop out of order);
+   • the search box sits inside .entry-nav-rail__search-row (search +
+     collapse control), so the ROW is the faded unit, not the box. */
+.entry-nav-rail__group > *,
+.entry-nav-rail__team-section > *,
 .entry-nav-rail__footer {
   transition:
     opacity 150ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 150ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > .entry-nav-rail__search,
-.entry:not(.entry--rail-open) .entry-nav-rail__group > .entry-nav-rail__btn,
-.entry:not(.entry--rail-open) .entry-nav-rail__group > .entry-nav-rail__team-wrap,
-.entry:not(.entry--rail-open) .entry-nav-rail__section-divider,
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:not(.entry-nav-rail__team-section),
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *,
 .entry:not(.entry--rail-open) .entry-nav-rail__footer {
   opacity: 0;
   transform: translateY(-4px);
 }
 /* Per-row stagger — applied only while collapsing so the cascade runs
-   top→bottom. Our rail keeps every row (search → nav items → team switcher →
-   team items → divider …) as direct children of one __group, so a single
-   nth-child run covers the whole sequence (the designer branch split this
-   across a group + team-section pair). Child 1 is the brand slot, which does
-   not fade, so the sequence starts at child 2. */
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(2) { transition-delay: 0ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(3) { transition-delay: 15ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(4) { transition-delay: 30ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(5) { transition-delay: 45ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(6) { transition-delay: 60ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(7) { transition-delay: 75ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(8) { transition-delay: 90ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(9) { transition-delay: 105ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(10) { transition-delay: 120ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(11) { transition-delay: 135ms; }
-.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(n + 12) { transition-delay: 150ms; }
+   top→bottom. Direct group rows first (signed-in: switcher, search row, 首页,
+   社区; signed-out: the full flat button list)… */
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(1) { transition-delay: 0ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(2) { transition-delay: 15ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(3) { transition-delay: 30ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(4) { transition-delay: 45ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(5) { transition-delay: 60ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(6) { transition-delay: 75ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(7) { transition-delay: 90ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__group > *:nth-child(n + 8) { transition-delay: 105ms; }
+/* …then the team-section rows pick the sequence up where the group left off
+   (the section is group child 5, delay 60ms — its rows continue from 75ms). */
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *:nth-child(1) { transition-delay: 75ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *:nth-child(2) { transition-delay: 90ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *:nth-child(3) { transition-delay: 105ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *:nth-child(4) { transition-delay: 120ms; }
+.entry:not(.entry--rail-open) .entry-nav-rail__team-section > *:nth-child(n + 5) { transition-delay: 135ms; }
 .entry:not(.entry--rail-open) .entry-nav-rail__footer { transition-delay: 165ms; }
 /* Footer finale: after the rows have cascaded out top-to-bottom, the account
    底卡 does NOT fade up with them — it stays fully opaque and slides left as
@@ -237,15 +244,14 @@
   transform: translateX(-36px);
 }
 @media (prefers-reduced-motion: reduce) {
-  .entry-nav-rail__group > .entry-nav-rail__search,
-  .entry-nav-rail__group > .entry-nav-rail__btn,
-  .entry-nav-rail__group > .entry-nav-rail__team-wrap,
-  .entry-nav-rail__section-divider,
+  .entry-nav-rail__group > *,
+  .entry-nav-rail__team-section > *,
   .entry-nav-rail__footer {
     transition: none;
     transform: none;
   }
-  .entry:not(.entry--rail-open) .entry-nav-rail__group > * { transition-delay: 0ms; }
+  .entry:not(.entry--rail-open) .entry-nav-rail__group > *,
+  .entry:not(.entry--rail-open) .entry-nav-rail__team-section > * { transition-delay: 0ms; }
   .entry:not(.entry--rail-open) .entry-nav-rail__footer { transition-delay: 0ms; }
   .entry-shell--no-header .entry { transition-delay: 0ms; }
 }
@@ -889,6 +895,40 @@
   cursor: pointer;
   text-align: left;
 }
+/* Search + rail-collapse in one row: the input keeps its own bordered look
+   and flexes; the collapse control sits after it (per product: 收起按钮放在
+   输入框后边) as a ghost icon button matching the input's height. The row
+   owns the vertical margins the lone search box used to carry. */
+.entry-nav-rail__search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+.entry-nav-rail__search-row .entry-nav-rail__search {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.entry-nav-rail__collapse {
+  appearance: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-large, 8px);
+  background: transparent;
+  color: var(--text-muted);
+}
+.entry-nav-rail__collapse:hover {
+  background: var(--bg-fill-secondary);
+  color: var(--text);
+}
 .entry-nav-rail__search:hover {
   border-color: var(--border-strong);
 }
@@ -1079,23 +1119,52 @@
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  /* Never a horizontal page scrollbar. Leaving overflow-x unset makes the
+     spec coerce it from `visible` to `auto` (because overflow-y is auto), so
+     decorative bleed — the home hero's type fan spreads wider than its
+     column by design — grew a full-width scrollbar at the page bottom.
+     Off-edge content clips instead, which is what a bleed should do. */
+  overflow-x: hidden;
   /* Always reserve the scrollbar's width so switching between views/tabs with
      different content heights (e.g. Community categories) can't toggle the
      scrollbar and shift the centered content sideways — that read as a jitter. */
   scrollbar-gutter: stable;
 }
 
-.entry-deepseek-campaign-badge {
+/* Floating top-right cluster (portaled to document.body): campaign badge on
+   the left, account module on the right, one flex row. Owns the fixed
+   position + z-index that used to live on the badge itself. Must clear
+   .workspace-tabs-chrome (z-index: 120).
+
+   `top` vertically centers the cluster's 26px pills in the 44px tabs-chrome
+   row — (44 − 26) / 2 = 9 — so their centerline matches the pinned Home
+   tab's (32px, strip-centered). The chrome height is a hard 44px in shell.css; its
+   --workspace-tabs-chrome-height var is scoped to .workspace-shell and
+   unreadable from this body-level portal. */
+.entry-top-right-cluster {
   position: fixed;
-  /* Portaled to document.body. Must clear .workspace-tabs-chrome (z-index: 120). */
   z-index: 150;
-  top: 18px;
+  top: 9px;
   right: 22px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+/* The cluster overlaps the desktop window's draggable chrome strip
+   (.workspace-tabs-chrome). app-region is not inherited, so without an
+   explicit no-drag on every node the drag region swallows hover/click —
+   the account menu could never open. */
+.entry-top-right-cluster,
+.entry-top-right-cluster * {
+  -webkit-app-region: no-drag;
+}
+
+.entry-deepseek-campaign-badge {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 32px;
-  padding: 7px 11px 7px 13px;
+  min-height: 26px;
+  padding: 4px 11px 4px 13px;
   border: 1px solid color-mix(in srgb, var(--brand) 42%, var(--border));
   border-radius: var(--radius-pill);
   color: var(--brand-text);
@@ -1139,9 +1208,12 @@
 }
 
 @media (max-width: 760px) {
-  .entry-deepseek-campaign-badge {
-    top: 12px;
+  /* Tighter right inset only — the vertical centering against the 44px
+     chrome row is the same at every width. */
+  .entry-top-right-cluster {
     right: 12px;
+  }
+  .entry-deepseek-campaign-badge {
     max-width: calc(100vw - 88px);
   }
 }
@@ -2455,7 +2527,38 @@
   width: 168px;
   height: auto;
   display: block;
-  object-fit: contain;
+}
+.entry-blank__mark-line {
+  stroke-width: 0.78;
+  /* pathLength=1 normalizes every stroke, so dasharray 1 = the full path.
+     Resting offset 0 keeps the mark fully drawn — identical before, during
+     idle, and after the hover demo. */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+.entry-blank__mark-line--cursor {
+  stroke-width: 0.7;
+}
+/* Hovering the mark replays a draw-on demo (outline → circle → cursor).
+   It settles at the resting frame; nothing about the mark persists changed. */
+@media (prefers-reduced-motion: no-preference) {
+  .entry-blank__mark:hover .entry-blank__mark-line {
+    animation: entry-blank-mark-draw 760ms var(--ease-out) backwards;
+  }
+  .entry-blank__mark:hover .entry-blank__mark-line:nth-child(2) {
+    animation-delay: 120ms;
+  }
+  .entry-blank__mark:hover .entry-blank__mark-line:nth-child(3) {
+    animation-delay: 260ms;
+  }
+}
+@keyframes entry-blank-mark-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
 }
 .entry-blank__desc {
   margin: 0;
@@ -5567,23 +5670,23 @@
   margin: auto 0 0;
   padding-top: var(--spacing-10);
 }
-/* Update-ready strip: its own line directly above the identity row, with the
-   rocket pushed to the right edge (`flex-end` rather than a hardcoded side, so
-   RTL follows the writing direction). The rocket used to sit BELOW the account
-   row, in `.entry-nav-rail__footer` (#5517 fallout).
+/* Update-ready slot: rides the floating account row immediately AFTER the
+   avatar chip (per product: 升级提醒按钮跟在头像后边). Earlier homes — the
+   rail footer (#5517) and a strip on its own line above the identity row —
+   both detached the reminder from the avatar.
 
    This stays a global selector next to the rest of the account block rather
    than a CSS Module: its only child is `.entry-updater-menu`, itself a global
    positioning contract, so a module would need a `:global()` escape to reach
    it.
 
-   `:empty` is load-bearing, not tidiness. The strip is mounted unconditionally
-   so it remains the trigger's immediately-preceding sibling, and the updater
-   host renders nothing until an installer is downloaded and unopened — so
-   without this rule an idle rail would reserve a row of height plus the
-   container's 6px `gap` above the account, shifting the whole account area for
-   a control that is not there. `display: none` (not `height: 0`) is what drops
-   it out of flex layout so the `gap` collapses with it. */
+   `:empty` is load-bearing, not tidiness. The slot is mounted unconditionally
+   so the row's shape is stable, and the updater host renders nothing until an
+   installer is downloaded and unopened — so without this rule an idle account
+   row would reserve the slot's width plus the container's 6px `gap` next to
+   the avatar, shifting the whole cluster for a control that is not there.
+   `display: none` (not `width: 0`) is what drops it out of flex layout so the
+   `gap` collapses with it. */
 .entry-nav-rail__account-updater {
   display: flex;
   align-items: center;
@@ -5909,6 +6012,162 @@
 .entry-nav-rail__account .entry-nav-rail__account-menu {
   top: auto;
   bottom: calc(100% + 4px);
+}
+/* Floating account module (top-right cluster): compact pill trigger that
+   matches the campaign badge's height/material, and a downward,
+   right-aligned menu instead of the rail-bottom upward one. Lays out as a
+   ROW so the update rocket sits inline after the avatar chip instead of
+   stacking above it (the base class is a column for the rail-era layout). */
+.entry-nav-rail__account--floating {
+  order: 0;
+  margin: 0;
+  padding-top: 0;
+  width: auto;
+  flex-direction: row;
+  align-items: center;
+}
+/* One capsule for credits + avatar (per product: 头像和积分合并成一个胶囊).
+   The capsule owns the shared pill material; the two segments inside are
+   chrome-free click targets — the credits text jumps to the billing console,
+   the avatar opens the account menu. With no credits segment (billing
+   unavailable) the capsule collapses to a 26px circle around the avatar.
+   No padding: the avatar sits flush against the capsule border, so the shell
+   adds no visible air above or below the head (per feedback: 头像外的壳不能
+   比头像高出一圈). */
+/* Credits and the avatar read as two separate controls (per product): the
+   wrapper is a bare flex row — each child paints its own surface. */
+/* Standalone GitHub star chip in the top-right cluster, sitting between the
+   campaign badge and the account capsule. Same pill material as the capsule
+   so the three read as one row of chips. */
+.entry-top-right-github {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--material-separator);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.entry-top-right-github svg {
+  color: var(--text-soft);
+}
+.entry-top-right-github:hover {
+  border-color: var(--border-strong);
+}
+
+.entry-top-right-account-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  /* ONE shared capsule around credits + avatar (per product: 两个合成一个
+     胶囊) — the pill material lives here; the segments inside stay
+     chrome-free click targets. */
+  min-height: 30px;
+  padding: 2px 3px 2px 10px;
+  border: 1px solid var(--material-separator);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-elevated) 86%, transparent);
+  box-shadow: var(--shadow-xs);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+/* Avatar-only trigger at the capsule's right end: a circle sized to the
+   capsule's inner height — the name/email/plan all live in the hover menu. */
+.entry-nav-rail__account--floating .entry-nav-rail__account-trigger {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+}
+.entry-nav-rail__account--floating .entry-nav-rail__account-avatar {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  border-radius: 50%;
+  font-size: 11px;
+}
+/* Credits segment, left of the avatar inside the capsule. */
+.entry-top-right-credits {
+  appearance: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* Chrome-free segment inside the shared capsule — the wrapper
+     (.entry-top-right-account-pill) owns the pill material. */
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  box-shadow: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--text-strong);
+  white-space: nowrap;
+}
+.entry-top-right-credits svg {
+  color: var(--text-soft);
+}
+/* No hover fill on the credits segment — the shared capsule stays calm;
+   the pointer cursor alone signals clickability. Needs an explicit :hover
+   override: the primitives.css `button:hover:not(:disabled)` gray fill
+   outranks the bare class rule above. */
+.entry-top-right-credits:hover:not(:disabled) {
+  background: transparent;
+  border-color: transparent;
+}
+/* Doubled class on the container: the rail-era
+   `.entry-nav-rail__account .entry-nav-rail__account-menu` sizing rule
+   (left/right: 0, min-width: 0) sits LATER in this file at equal
+   specificity, so the floating variant needs one extra class to win. */
+.entry-nav-rail__account.entry-nav-rail__account--floating .entry-nav-rail__account-menu {
+  /* 100% is the 24px trigger row nested flush inside the capsule (1px
+     border only) — +7px keeps a ~6px visible gap below the capsule edge. */
+  top: calc(100% + 7px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+  /* The containing block is now just the pill (~100px), so shrink-to-fit
+     would crush the menu into a one-word-per-line column. max-content frees
+     the width from that cap; the viewport clamp keeps it on screen. */
+  width: max-content;
+  min-width: 200px;
+  max-width: min(232px, calc(100vw - 44px));
+}
+/* Narrow floating menu: the head name must truncate instead of driving the
+   menu width (the email row below it already does). */
+.entry-nav-rail__account.entry-nav-rail__account--floating .entry-nav-rail__account-head-name {
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The hover bridge spans the float gap. The rail menu opened UPWARD (bridge
+   below, top: 100%); the floating menu opens DOWNWARD, so the 6px gap to
+   cover sits ABOVE the menu. */
+.entry-nav-rail__account.entry-nav-rail__account--floating .entry-nav-rail__account-menu::before {
+  top: auto;
+  bottom: 100%;
 }
 .entry-nav-rail__team-menu {
   left: 0;

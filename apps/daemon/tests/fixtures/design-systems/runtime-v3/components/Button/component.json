@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "Primary and secondary actions.",
+  "selectors": [
+    ".button"
+  ],
+  "variants": {
+    "primary": {
+      "selectors": [
+        ".button--primary"
+      ]
+    },
+    "secondary": {
+      "selectors": [
+        ".button--secondary"
+      ]
+    }
+  },
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "states": {
+    "hover": {
+      "selectors": [
+        ".button--primary:hover"
+      ],
+      "required": true
+    },
+    "focus": {
+      "selectors": [
+        ".button:focus-visible"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<button class=\"button button--primary\">{{label}}</button>"
+}

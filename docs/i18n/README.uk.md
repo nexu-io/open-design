@@ -1,8 +1,10 @@
 <h1 align="center">Open Design: відкрита альтернатива Claude Design</h1>
 
-> ⚡ **Open Design Cloud — офіційний сервіс моделей.** Одне поповнення — і GPT, Claude, Gemini та DeepSeek доступні просто в Open Design: 20+ флагманських моделей, нуль налаштувань, оплата за реальне використання токенів. [Спробувати Open Design Cloud](https://open-design.ai/cloud/)
+> ⚡ **[Open Design Cloud — офіційний сервіс моделей.](https://open-design.ai/zh/pricing/)** Одне поповнення відкриває доступ до агентних і графічних моделей в Open Design: GPT, Claude та DeepSeek для агентів; GPT Image 2.0, Seedream 5.0 Pro та Nano Banana 2.0 для зображень.
 >
-> 🏅 **Програма Open Design Fellow тепер відкрита.** Якщо ви теж вірите, що дизайн має бути відкритим — станьте Open Design Fellow, формуйте продукт разом із основною командою та допомагайте більшій кількості людей брати участь у визначенні майбутнього дизайну. Деталі → [`MAINTAINERS.md`](../../MAINTAINERS.md) та [Discord](https://discord.gg/mHAjSMV6gz).
+> 🚀 **[DeepSeek V4 Flash і V4 Pro вже доступні.](https://open-design.ai/zh/pricing/)** Використовуйте передовий інтелект для прототипів, презентацій, дизайн-систем і щоденних агентних завдань. Учасники Open Design можуть користуватися обома моделями без обмежень два тижні безпосередньо в застосунку.
+>
+> 🧩 **[DeepSeek Harness тепер підтримується.](https://open-design.ai/zh/agents/deepseek-harness-design/)** Підключіть офіційний Agent Harness `dsh` від DeepSeek до Open Design як нативне середовище виконання зі структурованим мисленням, викликами інструментів, пошуком моделей, скасуванням і відновленням сесії. Створені файли залишаються в робочому процесі Open Design для живого попереднього перегляду й передачі результату.
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
@@ -40,15 +42,15 @@ Open Design перетворює цей цикл на **файлову сист�
 
 ## Огляд продукту
 
-Швидкий погляд на те, що таке Open Design і що він робить. Почніть з **Home**, оркеструйте повторювані робочі процеси за допомогою **Automation**, виокремте контракт бренду в **Design System** та розширюйте можливості за допомогою **Plugins** і **integrations**; усередині **Studio** будь-якого проєкту та сама дизайн-система передає потоком прототипи, живі артефакти, HyperFrames, презентації та зображення.
+Короткий огляд основного робочого процесу Open Design. Почніть із брифу на **Home**, знайдіть багаторазові навички в **Plugins** і перетворіть матеріали бренду на **Design System**. Потім перейдіть до **Studio** проєкту, щоб створювати й удосконалювати прототипи, презентації, мобільні застосунки, зображення, документи та HyperFrame в одному місці.
 
 ### Основні сторінки
 
 <table>
 <tr>
 <td valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Home page" /><br/>
-<sub><b>Home</b> — оглядова точка входу. Виберіть навичку та дизайн-систему, введіть бриф і запустіть усе з одного місця.</sub>
+<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
+<sub><b>Home</b> — Виберіть тип артефакту, введіть бриф і задайте дизайн-систему, робочий каталог та модель перед початком роботи.</sub>
 </td>
 </tr>
 </table>
@@ -56,53 +58,52 @@ Open Design перетворює цей цикл на **файлову сист�
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Automation page" /><br/>
-<sub><b>Automation</b> — оркеструйте повторювані дизайн-процеси в багаторазові автоматизації з можливістю планування.</sub>
+<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
+<sub><b>Plugins</b> — Переглядайте офіційні навички за категоріями, шукайте в каталозі та запускайте робочий процес за допомогою <code>Try it</code>.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Design System page" /><br/>
-<sub><b>Design System</b> — виокремте <code>DESIGN.md</code> вашої команди в контракт бренду, який формує кожен результат.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Plugin page" /><br/>
-<sub><b>Plugin</b> — переглядайте, встановлюйте та поширюйте плагіни робочих процесів, щоб розширювати генерацію на вимогу.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrations</b> — підключайте зовнішні системи та інструменти MCP й використовуйте Open Design з будь-якого IDE, скрипта чи автоматизації.</sub>
+<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
+<sub><b>Design System</b> — Виділіть і вдоскональте візуальну мову бренду, перегляньте результат і продовжуйте створювати з нею в тому самому робочому просторі.</sub>
 </td>
 </tr>
 </table>
 
 ### Studio — багато типів артефактів в одному проєкті
 
-Усередині Studio проєкту та сама дизайн-система передає потоком кілька типів артефактів:
+У Studio проєкту розмова, створені файли та живий попередній перегляд залишаються разом для шести типів артефактів:
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="Prototype" /><br/>
-<sub><b>Prototype</b> — односторінкові HTML-артефакти, які зчитують вашу дизайн-систему та рендеряться в iframe-пісочниці, доступні для миттєвого перегляду й завантаження як вихідний код.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="Прототип" /><br/>
+<sub><b>Прототип</b> — Створюйте або відтворюйте вебінтерфейси, перевіряйте відрендерену сторінку та продовжуйте ітерації з агентом на місці.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — програмний рух і анімована графіка, відрендерені у справжній MP4 (наприклад, 1920×1080 · 30fps).</sub>
+<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="Презентація" /><br/>
+<sub><b>Презентація</b> — Створюйте багатослайдові презентації, перевіряйте мініатюри й нотатки доповідача та експортуйте готовий результат.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="Deck" /><br/>
-<sub><b>Deck</b> — презентації, які можна гортати, навігувати з клавіатури та експортувати в PPTX / PDF.</sub>
+<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="Мобільний застосунок" /><br/>
+<sub><b>Мобільний застосунок</b> — Створюйте й удосконалюйте мобільні інтерфейси в попередньому перегляді пристрою, залишаючи поруч розмову, вихідні файли та наступні дії.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="Image" /><br/>
-<sub><b>Image</b> — зображення та візуальні ресурси брендового рівня з генерацією та завантаженням у високій роздільності.</sub>
+<img src="../../docs/screenshots/product-tour/studio-image.png" alt="Зображення" /><br/>
+<sub><b>Зображення</b> — Створюйте візуальні матеріали з розмови проєкту, переглядайте результат у повному розмірі, а потім завантажуйте або відкривайте його.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-document.png" alt="Документ" /><br/>
+<sub><b>Документ</b> — Створюйте опрацьовані багатосторінкові посібники та редакційні документи, перевіряйте макет і експортуйте або діліться готовим результатом.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
+<sub><b>HyperFrame</b> — Створюйте керовану кодом анімаційну графіку, переглядайте анімацію в Studio та експортуйте готове відео.</sub>
 </td>
 </tr>
 </table>
-
 ---
 
 ## Сумісність платформ
@@ -150,16 +151,6 @@ Open Design перетворює цей цикл на **файлову сист�
 Типова поверхня виведення. Односторінкові HTML-артефакти, які зчитують ваш `DESIGN.md` і рендеряться в iframe-пісочниці.
 
 <table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
-<sub><b>Вікно входу</b> — виберіть навичку, виберіть дизайн-систему, введіть бриф. Єдина поверхня для прототипів, дашбордів, презентацій, мобільних застосунків, журнальних сторінок.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
-<sub><b>Мобільний прототип</b> — піксельно точна оболонка iPhone 15 Pro, багатоекранні потоки. Агент ніколи не перемальовує рамку телефона; спільні рамки пристроїв містяться в <code>assets/frames/</code>.</sub>
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="../../docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>

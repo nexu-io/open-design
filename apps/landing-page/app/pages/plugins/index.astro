@@ -126,6 +126,17 @@ const tiles = [
     </div>
   </a>
 
+  {/* Featured curated collection — DeepSeek Harness design. */}
+  <a class="plugins-feature" href={href('/plugins/deepseek-harness-design-plugins/')}>
+    <img class="plugins-feature-cover" src="/plugins/covers/deepseek-harness-design.webp" alt="" width="640" height="427" loading="lazy" decoding="async" />
+    <div class="plugins-feature-body">
+      <span class="plugins-feature-eyebrow">{pcopy.hubFeatureDshEyebrow}</span>
+      <h2 class="plugins-feature-title">{pcopy.hubFeatureDshTitle}</h2>
+      <p class="plugins-feature-blurb">{pcopy.hubFeatureDshBlurb}</p>
+      <span class="plugins-feature-cta">{pcopy.hubFeatureDshCta} →</span>
+    </div>
+  </a>
+
   {/* Browse by category — each collection leads with an on-brand cover. */}
   <section class="plugins-tile-grid" aria-label={pcopy.hubLabel}>
     {tiles.map((tile) => (

@@ -572,16 +572,19 @@ describe('exportProjectAsHtml', () => {
     await exportProjectAsHtml({
       projectId: 'proj 1',
       filePath: 'screens/main page.html',
-      fallbackHtml: '<script type="module" src="/src/main.tsx"></script>',
       fallbackTitle: 'Main Page',
     });
 
-    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/screens/main%20page.html?inline=1');
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/html', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ fileName: 'screens/main page.html', title: 'Main Page' }),
+    });
     expect(capturedFilename).toBe('Main-Page.html');
     expect(await capturedBlob!.text()).toBe('<!doctype html><p>inlined</p>');
   });
 
-  it('passes versionId to the daemon inline HTML export endpoint', async () => {
+  it('passes versionId so the daemon can explicitly reject mixed-version dependencies', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html><p>version</p>', {
       headers: { 'content-type': 'text/html' },
       status: 200,
@@ -590,29 +593,36 @@ describe('exportProjectAsHtml', () => {
     await exportProjectAsHtml({
       projectId: 'proj 1',
       filePath: 'screens/main page.html',
-      fallbackHtml: '<main>fallback</main>',
       fallbackTitle: 'Main Page v1',
       versionId: 'v1',
     });
 
-    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/screens/main%20page.html?inline=1&versionId=v1');
+    expect(fetch).toHaveBeenCalledWith('/api/projects/proj%201/export/html', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        fileName: 'screens/main page.html',
+        title: 'Main Page v1',
+        versionId: 'v1',
+      }),
+    });
     expect(capturedFilename).toBe('Main-Page-v1.html');
     expect(await capturedBlob!.text()).toBe('<!doctype html><p>version</p>');
   });
 
-  it('falls back to the source HTML export when the daemon inline endpoint fails', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.stubGlobal('fetch', vi.fn(async () => new Response('nope', { status: 500 })));
+  it('surfaces structured daemon failures instead of downloading broken source HTML', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({
+      error: { message: 'missing local dependency: assets/hero.png' },
+    }, { status: 422 })));
 
-    await exportProjectAsHtml({
+    await expect(exportProjectAsHtml({
       projectId: 'proj-1',
       filePath: 'index.html',
-      fallbackHtml: '<main>fallback</main>',
       fallbackTitle: 'Fallback',
-    });
+    })).rejects.toThrow('missing local dependency: assets/hero.png');
 
-    expect(capturedFilename).toBe('Fallback.html');
-    expect(await capturedBlob!.text()).toContain('<main>fallback</main>');
+    expect(capturedFilename).toBeUndefined();
+    expect(capturedBlob).toBeUndefined();
   });
 });
 
@@ -743,7 +753,7 @@ describe('binary project/design-system downloads', () => {
           { status: 501 },
         );
       }
-      if (url.includes('/export/') && url.includes('?inline=1')) {
+      if (url.endsWith('/export/html')) {
         return new Response('<!doctype html><p>exported</p>', { status: 200 });
       }
       return new Response('archive-or-rendered-bytes', {
@@ -759,7 +769,6 @@ describe('binary project/design-system downloads', () => {
     await exportProjectAsHtml({
       projectId: 'project-a',
       filePath: 'index.html',
-      fallbackHtml: '<p>fallback</p>',
       fallbackTitle: 'HTML',
       workspaceContext,
     });

@@ -11,7 +11,7 @@ import type { ClosurePlatformTarget } from "./platform.js";
 export const CLOSURE_BUILD_SOURCE_PATHS = [
   "apps/daemon", "apps/standalone", "apps/web",
   "packages/agui-adapter", "packages/components", "packages/contracts", "packages/diagnostics",
-  "packages/host", "packages/platform", "packages/plugin-runtime", "packages/registry-protocol",
+  "packages/dsh-runtime", "packages/host", "packages/platform", "packages/plugin-runtime", "packages/registry-protocol",
   "packages/release", "packages/sidecar",
   "tools/pack/package.json", "tools/pack/resources",
   "tools/pack/src/closure", "tools/pack/src/resources.ts",

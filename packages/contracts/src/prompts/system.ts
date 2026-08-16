@@ -35,6 +35,7 @@ import { OFFICIAL_DESIGNER_PROMPT, renderOfficialDesignerPrompt } from './offici
 import { DISCOVERY_AND_PHILOSOPHY } from './discovery.js';
 import { DECK_FRAMEWORK_DIRECTIVE } from './deck-framework.js';
 import { MEDIA_GENERATION_CONTRACT } from './media-contract.js';
+import { SETTINGS_MEDIA_PROVIDERS_PATH } from '../settings-nav.js';
 
 export const BASE_SYSTEM_PROMPT = OFFICIAL_DESIGNER_PROMPT;
 const ELEVENLABS_VOICE_PROMPT_OPTION_LIMIT = 100;
@@ -111,7 +112,7 @@ export function formatElevenLabsVoiceOptionsErrorForPrompt(
   if (!trimmed) return undefined;
 
   if (/no ElevenLabs API key/i.test(trimmed)) {
-    return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX} because the ElevenLabs API key is missing. Tell the user to configure it in Settings or paste a voice id manually.`;
+    return `${ELEVENLABS_VOICE_OPTIONS_PROMPT_PREFIX} because the ElevenLabs API key is missing. Tell the user to configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or paste a voice id manually.`;
   }
 
   const statusMatch = trimmed.match(

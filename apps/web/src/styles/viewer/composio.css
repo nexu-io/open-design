@@ -3347,10 +3347,13 @@ body.entry-resizing { cursor: col-resize; user-select: none; }
   display: flex;
   flex-direction: column;
   gap: 1px;
-  padding: 3px 6px 6px;
+  /* 8px sides so row edges line up with the search field above
+     (.chat-history-search margins 8px). No scrollbar-gutter: with classic
+     scrollbars enabled it reserves a right-side strip even when nothing
+     overflows, leaving rows visibly narrower than the search field. */
+  padding: 3px 8px 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
 }
 .chat-history-list.is-virtualized {
   gap: 0;

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "od-design-system-components/v1",
+  "components": [
+    { "id": "Button", "path": "components/Button/component.json" },
+    { "id": "Field", "path": "components/Field/component.json" },
+    { "id": "Status", "path": "components/Status/component.json" },
+    { "id": "Surface", "path": "components/Surface/component.json" }
+  ]
+}

@@ -37,7 +37,16 @@
   backdrop-filter: none;
   overflow: hidden;
 }
+/* The shell grid owns exactly two children: the tabs chrome and the body.
+   Pin each to its row so a stray extra shell child (e.g. an inline popover
+   anchor mounted at shell level — the floating account cluster renders its
+   MessageCenter anchor there) falls into a zero-height implicit row instead
+   of auto-placing into (and stealing) the 1fr body row. */
+.workspace-shell > .workspace-tabs-chrome {
+  grid-row: 1;
+}
 .workspace-shell__body {
+  grid-row: 2;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -491,6 +500,40 @@ html.od-radial-open .workspace-shell {
   color: var(--text);
   box-shadow: none;
 }
+/* Home glyph riding the chrome's corner buttons (pinned Home pill + the
+   docked-mode stand-in). Plain currentColor icon, sized to match the old
+   14-16px chrome icons. */
+.workspace-chrome-logo {
+  display: block;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  user-select: none;
+}
+/* Home view with the rail open: the logo has nothing to do (collapse lives in
+   the rail's search row) — drop the button affordance so it reads as a mark,
+   not a control. */
+.workspace-tab__rail-toggle.is-inert {
+  cursor: default;
+}
+.workspace-tab__rail-toggle.is-inert:hover:not(:disabled) {
+  background: transparent;
+}
+/* Collapsed rail: hovering the corner swaps the logo for the expand-sidebar
+   glyph, so the button telegraphs its one action. The rail-open (.is-inert)
+   button never swaps — it is a mark, not a control. */
+.workspace-chrome-logo-swap {
+  display: none;
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+}
+.workspace-tab__rail-toggle:not(.is-inert):hover .workspace-chrome-logo {
+  display: none;
+}
+.workspace-tab__rail-toggle:not(.is-inert):hover .workspace-chrome-logo-swap {
+  display: block;
+}
 .workspace-tab__close {
   width: 18px;
   height: 18px;
@@ -907,14 +950,6 @@ html.od-radial-open .workspace-shell {
      menu never had this because it kept the shared `right: 0`. */
   right: 0;
   left: auto;
-}
-.comment-left-host .comment-side-header {
-  min-height: 40px;
-}
-.comment-left-host .comment-side-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  padding: 16px 12px;
 }
 .comment-side-composer {
   flex: 0 0 auto;
@@ -2354,27 +2389,51 @@ a.avatar-item:visited {
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
 }
-.comment-left-host {
-  position: absolute;
-  inset: 0;
-  z-index: 30;
+/* Full-screen preview: the chat column (the comment panel's usual dock) is
+   hidden, so the panel floats as a card over the workspace instead of being
+   occluded by it. Fixed to the viewport's right edge, clear of the workspace
+   chrome rows above. */
+.comment-float-host {
+  position: fixed;
+  z-index: 60;
+  top: 96px;
+  right: 16px;
+  bottom: 16px;
   display: flex;
-  width: 100%;
-  height: 100%;
+  width: min(360px, calc(100vw - 32px));
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: var(--bg-panel);
+  box-shadow: var(--shadow-lg);
 }
-.comment-left-host > .comment-side-dock {
+/* The portal target is pre-mounted so opening comments never waits a frame
+   for parent state. An empty host must be visually and interactively absent. */
+.comment-float-host:empty {
+  display: none;
+}
+/* Collapsed: the host steps back to a bare frame around the 42px rail — the
+   rail brings its own pill chrome, and it sizes off the host's height, so
+   only the width and the card decoration come off here. */
+.comment-float-host:has(.comment-side-rail) {
+  width: auto;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+.comment-float-host > .comment-side-dock {
   flex: 1 1 auto;
   width: 100%;
   height: 100%;
   min-width: 0;
   min-height: 0;
 }
-.comment-left-host > .comment-side-panel,
-.comment-left-host > .comment-side-dock > .comment-side-panel {
+.comment-float-host > .comment-side-panel,
+.comment-float-host > .comment-side-dock > .comment-side-panel {
   position: relative;
   top: auto;
   right: auto;
@@ -2388,16 +2447,18 @@ a.avatar-item:visited {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  background: transparent;
   z-index: 20;
 }
-.comment-left-host .comment-side-header {
+.comment-float-host .comment-side-header {
   min-height: 40px;
 }
-.comment-left-host .comment-side-list {
+.comment-float-host .comment-side-list {
   flex: 1 1 auto;
   min-height: 0;
-  padding: 16px 12px;
+  padding: 16px 12px 12px;
 }
+
 .comment-side-composer {
   flex: 0 0 auto;
   padding: 12px;

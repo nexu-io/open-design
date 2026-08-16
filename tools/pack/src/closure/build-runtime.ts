@@ -98,6 +98,7 @@ export async function buildClosureWorkspace(workspaceRoot: string): Promise<void
 export async function buildClosureDistributionWorkspace(workspaceRoot: string): Promise<void> {
   await runClosurePnpm(workspaceRoot, ["--filter", "@open-design/daemon...", "build"]);
   await runClosurePnpm(workspaceRoot, ["--filter", "@open-design/standalone", "build"]);
+  await runClosurePnpm(workspaceRoot, ["--filter", "@open-design/dsh-runtime", "build"]);
   await runClosurePnpm(
     workspaceRoot,
     ["--filter", "@open-design/web...", "build"],

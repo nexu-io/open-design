@@ -508,6 +508,7 @@ describe('community template Use lands a sendable composer', () => {
       workspaceName: 'Design Team',
     };
     view.rerender(tree());
+    await waitFor(() => expect(submit).toBeEnabled());
     fireEvent.click(submit);
 
     await waitFor(() => {

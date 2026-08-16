@@ -84,8 +84,13 @@ const AMR_ENTRY_SOURCE_PAGES: ReadonlySet<AmrEntrySourcePageName> = new Set([
   'home',
 ]);
 
+// Fail-closed: an id missing here voids the WHOLE entry, not just its campaign
+// field, so a live campaign left out loses every attributed entry it produces.
+// Both are listed because entries minted during the finished free week can
+// still arrive within their attribution window.
 const AMR_ENTRY_CAMPAIGN_IDS: ReadonlySet<TrackingCampaignId> = new Set([
   'deepseek_v4_flash',
+  'deepseek_v4_pro',
 ]);
 
 const AMR_ENTRY_CAMPAIGN_CONVERSION_SOURCES: ReadonlySet<TrackingCampaignConversionSource> =

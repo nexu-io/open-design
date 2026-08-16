@@ -18,6 +18,7 @@ import { kiroAgentDef } from './defs/kiro.js';
 import { kiloAgentDef } from './defs/kilo.js';
 import { vibeAgentDef } from './defs/vibe.js';
 import { deepseekAgentDef } from './defs/deepseek.js';
+import { deepseekHarnessAgentDef } from './defs/deepseek-harness.js';
 import { aiderAgentDef } from './defs/aider.js';
 import { antigravityAgentDef } from './defs/antigravity.js';
 import { codebuddyAgentDef } from './defs/codebuddy.js';
@@ -48,6 +49,7 @@ const BASE_AGENT_DEFS: RuntimeAgentDef[] = [
   kiloAgentDef,
   vibeAgentDef,
   deepseekAgentDef,
+  deepseekHarnessAgentDef,
   aiderAgentDef,
   antigravityAgentDef,
   reasonixAgentDef,

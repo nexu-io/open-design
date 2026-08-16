@@ -33,6 +33,27 @@ interface SyncAmrProfileOptions {
 const AMR_ATTRIBUTION_STORAGE_KEY = 'open-design:amr-entry-attribution:v1';
 const AMR_ATTRIBUTION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * How long a CAMPAIGN entry survives, as opposed to the ordinary window above.
+ *
+ * A campaign runs longer than seven days, so the ordinary window would drop a
+ * visitor's entry while the campaign that produced it is still running: click
+ * the banner on day 1, subscribe on day 11, and the payment arrives with no
+ * entry left to attribute it to. The campaign then under-reports against the
+ * very metric it is judged on.
+ *
+ * Scoped to entries carrying a `campaignId` rather than raised globally, so
+ * every other entry point keeps the attribution window its dashboards were
+ * built on.
+ */
+const AMR_CAMPAIGN_ATTRIBUTION_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+function amrAttributionTtlMs(attribution: Pick<AmrEntryAttribution, 'campaignId'>): number {
+  return attribution.campaignId
+    ? AMR_CAMPAIGN_ATTRIBUTION_TTL_MS
+    : AMR_ATTRIBUTION_TTL_MS;
+}
+
 const ENTRY_PAGE_BY_SOURCE: Record<TrackingAmrEntrySource, TrackingPageName> = {
   onboarding_amr_card: 'onboarding',
   onboarding_amr_sign_in_continue: 'onboarding',
@@ -137,7 +158,7 @@ export function readAmrAttribution(now: Date = new Date()): AmrEntryAttribution 
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<AmrEntryAttribution>;
     if (!isValidAmrAttribution(parsed)) return null;
-    if (now.getTime() - Date.parse(parsed.occurredAt) > AMR_ATTRIBUTION_TTL_MS) {
+    if (now.getTime() - Date.parse(parsed.occurredAt) > amrAttributionTtlMs(parsed)) {
       window.localStorage.removeItem(AMR_ATTRIBUTION_STORAGE_KEY);
       return null;
     }

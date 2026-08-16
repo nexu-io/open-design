@@ -43,6 +43,7 @@ import type { Locale } from '../i18n';
 import type { Dict } from '../i18n/types';
 import { AgentIcon } from './AgentIcon';
 import { AgentDiagnosticRow } from './AgentDiagnosticRow';
+import { DeepSeekHarnessSetupDialog } from './DeepSeekHarnessSetupDialog';
 import { AmrLoginPill } from './AmrLoginPill';
 import { PlanBadge } from './PlanBadge';
 import { orderAgentsWithOpenDesignFirst } from './agentOrdering';
@@ -57,8 +58,9 @@ import {
   formatVelaBalanceUsd,
   type VelaLoginStatus,
 } from '../providers/daemon';
+import { installDeepSeekHarnessCompanion } from '../providers/agent-companion';
 import { amrProfileBadgeLabel } from '../runtime/amr-guidance';
-import { isVisibleLocalCliAgent } from '../utils/visibleAgents';
+import { deepSeekHarnessNeedsSetup, isVisibleLocalCliAgent } from '../utils/visibleAgents';
 import { ExportDiagnosticsRow } from './ExportDiagnosticsButton';
 import { Icon } from './Icon';
 import { defaultAgentModelId, effectiveAgentModelChoice } from './agentModelSelection';
@@ -1689,6 +1691,7 @@ export function SettingsDialog({
   // authorize button — once the user has found it, the hint has done its job.
   const [amrCoachmarkDismissed, setAmrCoachmarkDismissed] = useState(false);
   const [agentRescanRunning, setAgentRescanRunning] = useState(false);
+  const [dshSetup, setDshSetup] = useState<{ busy: boolean; error: string | null } | null>(null);
   const [agentRescanNotice, setAgentRescanNotice] =
     useState<RescanNotice | null>(null);
   const [agentTestState, setAgentTestState] = useState<TestState>({
@@ -2341,6 +2344,36 @@ export function SettingsDialog({
       setAgentRescanNotice({ kind: 'error' });
     } finally {
       setAgentRescanRunning(false);
+    }
+  };
+  const handleConfirmDshSetup = async () => {
+    if (dshSetup?.busy) return;
+    setDshSetup({ busy: true, error: null });
+    try {
+      await installDeepSeekHarnessCompanion();
+      const refreshed = await onRefreshAgents(agentRefreshOptionsForConfig(cfg));
+      const nextAgents = Array.isArray(refreshed) ? refreshed : agents;
+      const installed = nextAgents.find(
+        (agent) => agent.id === 'deepseek-harness' && agent.available,
+      );
+      if (!installed) throw new Error(t('settings.dshSetupRequired'));
+      setCfg((current) => ({ ...current, agentId: installed.id, mode: 'daemon' }));
+      setDshSetup(null);
+      setAgentTestState({ status: 'running' });
+      const choice = cfg.agentModels?.[installed.id] ?? {};
+      const result = await testAgent({
+        agentId: installed.id,
+        model: choice.model || undefined,
+        reasoning: choice.reasoning || undefined,
+        serviceTier: choice.serviceTier || undefined,
+        agentCliEnv: cfg.agentCliEnv ?? {},
+      });
+      setAgentTestState({ status: 'done', result });
+    } catch (error) {
+      setDshSetup({
+        busy: false,
+        error: error instanceof Error ? error.message : t('settings.dshSetupRequired'),
+      });
     }
   };
   const attributedAmrSettingsUrl = (
@@ -3851,9 +3884,11 @@ export function SettingsDialog({
   const activeHeader = sectionHeader[activeSection];
   const visibleAgents = agents.filter(isVisibleLocalCliAgent);
   const installedAgents = orderAgentsWithOpenDesignFirst(
-    visibleAgents.filter((a) => a.available),
+    visibleAgents.filter((agent) => agent.available || deepSeekHarnessNeedsSetup(agent)),
   );
-  const unavailableAgents = visibleAgents.filter((a) => !a.available);
+  const unavailableAgents = visibleAgents.filter(
+    (agent) => !agent.available && !deepSeekHarnessNeedsSetup(agent),
+  );
   const initialAgentScanRunning = agentsLoading && agents.length === 0;
   const agentModelOptionLabel = (
     model: ProviderModelOption | undefined,
@@ -3883,9 +3918,15 @@ export function SettingsDialog({
   const renderAgentModelConfig = (selected: AgentInfo) => {
     const hasModels =
       Array.isArray(selected.models) && selected.models.length > 0;
+    const configuredModelId =
+      cfg.agentModels?.[selected.id]?.model ?? defaultAgentModelId(selected);
+    const modelReasoningOptions = selected.models?.find(
+      (model) => model.id === configuredModelId,
+    )?.reasoningOptions;
+    const activeReasoningOptions = modelReasoningOptions ?? selected.reasoningOptions;
     const hasReasoning =
-      Array.isArray(selected.reasoningOptions) &&
-      selected.reasoningOptions.length > 0;
+      Array.isArray(activeReasoningOptions) &&
+      activeReasoningOptions.length > 0;
     // AMR's live catalog only lands a beat after sign-in. While the user is
     // signed in but the model list hasn't arrived yet, show the picker in a
     // loading state instead of hiding it — so the dropdown appears at sign-in
@@ -3975,9 +4016,10 @@ export function SettingsDialog({
         : configuredModel ?? defaultAgentModelId(selected) ?? '';
     const modelValue = customModelDraft ?? fallbackModelValue;
     const reasoningValue =
-      effectiveChoice.reasoning ??
-      choice.reasoning ??
-      selected.reasoningOptions?.[0]?.id ?? '';
+      activeReasoningOptions?.some((option) => option.id === effectiveChoice.reasoning)
+        ? effectiveChoice.reasoning!
+        : activeReasoningOptions?.find((option) => option.default)?.id ??
+          activeReasoningOptions?.[0]?.id ?? '';
     const customActive =
       allowCustomModel &&
       hasModels &&
@@ -4117,7 +4159,7 @@ export function SettingsDialog({
                   setChoice({ reasoning: e.target.value })
                 }
               >
-                {selected.reasoningOptions!.map((r) => (
+                {activeReasoningOptions!.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.label}
                   </option>
@@ -4582,7 +4624,8 @@ export function SettingsDialog({
                     {installedAgents.length > 0 ? (
                       <div className="agent-grid agent-grid-installed">
                         {installedAgents.map((a) => {
-                          const active = cfg.agentId === a.id;
+                          const needsSetup = deepSeekHarnessNeedsSetup(a);
+                          const active = !needsSetup && cfg.agentId === a.id;
                           const running =
                             active && agentTestState.status === 'running';
                           const isAmrAgent = a.id === 'amr';
@@ -4725,6 +4768,7 @@ export function SettingsDialog({
                               className={
                                 'agent-card agent-card-installed' +
                                 (active ? ' active' : '') +
+                                (needsSetup ? ' agent-card-needs-setup' : '') +
                                 (amrHighlighted ? ' agent-card--amr-highlight' : '')
                               }
                               onMouseEnter={() => {
@@ -4749,6 +4793,10 @@ export function SettingsDialog({
                                       cli_provider_id: agentIdToTracking(a.id),
                                       install_status: 'installed',
                                     });
+                                    if (needsSetup) {
+                                      setDshSetup({ busy: false, error: null });
+                                      return;
+                                    }
                                     if (isAmrAgent) {
                                       recordAmrEntry(
                                         analytics.track,
@@ -4810,7 +4858,11 @@ export function SettingsDialog({
                                           </VisuallyHidden>
                                         ) : null}
                                       </div>
-                                      {metaLabel ? (
+                                      {needsSetup ? (
+                                        <div className="agent-card-meta">
+                                          <span>{t('settings.dshSetupRequired')}</span>
+                                        </div>
+                                      ) : metaLabel ? (
                                         <div className="agent-card-meta">
                                           <span title={metaTitle}>
                                             {metaLabel}
@@ -6161,6 +6213,16 @@ export function SettingsDialog({
     return (
       <div className="settings-page-shell">
         {surface}
+        {dshSetup ? (
+          <DeepSeekHarnessSetupDialog
+            busy={dshSetup.busy}
+            error={dshSetup.error}
+            onCancel={() => {
+              if (!dshSetup.busy) setDshSetup(null);
+            }}
+            onConfirm={() => void handleConfirmDshSetup()}
+          />
+        ) : null}
       </div>
     );
   }
@@ -6168,6 +6230,16 @@ export function SettingsDialog({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       {surface}
+      {dshSetup ? (
+        <DeepSeekHarnessSetupDialog
+          busy={dshSetup.busy}
+          error={dshSetup.error}
+          onCancel={() => {
+            if (!dshSetup.busy) setDshSetup(null);
+          }}
+          onConfirm={() => void handleConfirmDshSetup()}
+        />
+      ) : null}
     </div>
   );
 }

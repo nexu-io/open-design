@@ -11,6 +11,11 @@ import {
   type ClosureDigest,
 } from "@open-design/closure/protocol";
 import { describe, expect, it } from "vitest";
+import {
+  CLOSURE_DISTRIBUTION_SCHEMA_VERSION,
+  CLOSURE_PROTOCOL_VERSION,
+  createClosureDistributionManifest,
+} from "@open-design/closure-proto";
 
 import { startUpdaterFixtureServer } from "../src/updater-fixture.js";
 

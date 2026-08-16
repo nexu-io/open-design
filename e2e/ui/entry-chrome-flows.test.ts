@@ -393,9 +393,8 @@ test('[P1] entry top navigation matches the current home tab structure', async (
   await expect(page.locator('.entry-nav-rail__footer').getByTestId('entry-nav-plugins')).toHaveCount(0);
 
   await expect(page.getByTestId('home-hero-template-picker')).toBeVisible();
-  // Nothing is applied on a fresh Home: no template pill reset, no plugin
-  // chip, no template-driven footer options or presets.
-  await expect(page.getByTestId('home-hero-template-reset')).toHaveCount(0);
+  // Nothing is applied on a fresh Home: no plugin chip, no template-driven
+  // footer options or presets.
   await expect(page.getByTestId('home-hero-active-plugin')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-footer-options')).toHaveCount(0);
   await expect(page.getByTestId('home-hero-plugin-presets')).toHaveCount(0);
@@ -1084,7 +1083,7 @@ test('[P1] rail destinations navigate and Home keeps its composer execution pill
   await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
 });
 
-test('[P0] @critical home composer routes free-form prompts through the design router by default', async ({ page }) => {
+test('[P0] @critical home composer routes free-form prompts through the default deck scenario', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
@@ -1103,13 +1102,15 @@ test('[P0] @critical home composer routes free-form prompts through the design r
     pendingPrompt?: string;
     conversationMode?: string;
     pluginId?: string | null;
+    pluginInputs?: Record<string, unknown>;
     metadata?: { kind?: string };
   };
-  expect(body.name).toBe('Infographic 5 Habits Effective Code Reviewers');
+  expect(body.name).toBe('Write an Operating Review like a Disciplined COO');
   expect(body.pendingPrompt).toBe(prompt);
   expect(body.conversationMode).toBe('design');
-  expect(body.pluginId).toBe('od-default');
-  expect(body.metadata?.kind).toBe('other');
+  expect(body.pluginId).toBe('example-simple-deck');
+  expect(body.pluginInputs).toMatchObject({ deckType: 'pitch deck' });
+  expect(body.metadata?.kind).toBe('deck');
 });
 
 test('[P0] @critical home working directory creates the project with linked dirs instead of importing files', async ({ page }) => {
@@ -1315,7 +1316,15 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
 
   const input = page.getByTestId('home-hero-file-input');
   const submit = page.getByTestId('home-hero-submit');
-  await expect(submit).toBeEnabled();
+  // Fresh Home now locks submit until its default deck route has resolved.
+  // Under the grouped CI pool that catalogue binding can outlive Playwright's
+  // default assertion timeout, so wait on the user-visible routed state before
+  // checking the attachment lifecycle rather than racing the seed effect.
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(
+    /Slide deck|幻灯片|投影片/i,
+    { timeout: T.long },
+  );
+  await expect(submit).toBeEnabled({ timeout: T.long });
 
   await input.setInputFiles({
     name: 'brief.txt',

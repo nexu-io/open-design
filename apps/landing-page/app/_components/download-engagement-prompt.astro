@@ -158,7 +158,8 @@ const DOWNLOAD_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
         // installer CTA on its neutral /download/ fallback for touch-capable
         // iPads instead of handing them an unusable macOS .dmg.
         const isIpadOS = navigator.maxTouchPoints > 1 && /mac/.test(p);
-        if (isIpadOS || /iphone|ipad|ipod/.test(ua)) return null;
+        const isMobileDevice = /iphone|ipad|ipod|android|mobile/.test(ua);
+        if (isIpadOS || isMobileDevice) return null;
         if (/win/.test(p) || /windows/.test(ua)) {
           return { key: 'windows', label: 'Windows', match: (name) => /win.*setup\.exe$/i.test(name) };
         }
@@ -174,7 +175,7 @@ const DOWNLOAD_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
             ? { key: 'macX64', label: 'macOS (Intel)', match: (name) => /mac-x64\.dmg$/i.test(name) }
             : { key: 'macArm64', label: 'macOS (Apple Silicon)', match: (name) => /mac-arm64\.dmg$/i.test(name) };
         }
-        if (/linux/.test(p) || (/linux/.test(ua) && !/android/.test(ua))) {
+        if ((/linux/.test(p) || /linux/.test(ua)) && !/android/.test(ua)) {
           return { key: 'linux', label: 'Linux', match: (name) => /\.appimage$/i.test(name) };
         }
         return null;

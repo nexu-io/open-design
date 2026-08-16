@@ -31,8 +31,10 @@ import { WORKSPACE_ROOT } from "../config.js";
 import { resolveShellDepsDigestFromWorkspace } from "../workspace-build.js";
 import {
   BUNDLED_RESOURCE_GROUPS,
+  DSH_RUNTIME_RESOURCE_ID,
   copyBundledResourceGroup,
   copyBundledResourceTrees,
+  packBundledDshRuntime,
 } from "../resources.js";
 import {
   buildClosureDistributionSharedContribution,
@@ -369,6 +371,15 @@ export async function buildClosureDistributionShared(
     await copyBundledResourceGroup({ id: group.id, resourceRoot, workspaceRoot });
     resources.push({ id: group.id, root: resourceRoot, startup: group.startup, title: group.title });
   }
+  const dshRuntimeRoot = join(resourcesRoot, DSH_RUNTIME_RESOURCE_ID);
+  await mkdir(dshRuntimeRoot, { recursive: true });
+  await packBundledDshRuntime({ resourceRoot: dshRuntimeRoot, workspaceRoot });
+  resources.push({
+    id: DSH_RUNTIME_RESOURCE_ID,
+    root: dshRuntimeRoot,
+    startup: "lazy",
+    title: "DeepSeek Harness connection",
+  });
   const contribution = await buildClosureDistributionSharedContribution({
     archiveTarget,
     blobOrigin: options.blobOrigin,

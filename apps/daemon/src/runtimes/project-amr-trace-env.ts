@@ -7,6 +7,7 @@ export type PinnedRunWorkspaceScope = Readonly<{
   schemaVersion: 1;
   projectId: string;
   workspaceId: string;
+  workspaceMemberId?: string;
   source: 'persisted_project_binding';
 }>;
 
@@ -86,10 +87,16 @@ export function pinRunWorkspaceScopeForProject(
       ? binding.workspaceId.trim()
       : null;
   if (!workspaceId) return null;
+  const workspaceMemberId =
+    typeof binding?.createdByWorkspaceMemberId === 'string'
+    && binding.createdByWorkspaceMemberId.trim()
+      ? binding.createdByWorkspaceMemberId.trim()
+      : null;
   return Object.freeze({
     schemaVersion: 1,
     projectId: normalizedProjectId,
     workspaceId,
+    ...(workspaceMemberId ? { workspaceMemberId } : {}),
     source: 'persisted_project_binding',
   });
 }

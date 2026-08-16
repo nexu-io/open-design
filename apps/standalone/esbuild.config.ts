@@ -25,6 +25,22 @@ await build({
   target: "node24",
 });
 
+// Loaded only by an explicit ensureResource bridge call. Keeping the update
+// stack in a sibling bundle preserves the fossil launcher's cold-start floor.
+await build({
+  banner: {
+    js: 'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);',
+  },
+  bundle: true,
+  entryPoints: { "resource-provider": "./src/resource-provider.ts" },
+  format: "esm",
+  outdir: "./dist",
+  outExtension: { ".js": ".mjs" },
+  packages: "bundle",
+  platform: "node",
+  target: "node24",
+});
+
 // launcher.mjs is the fossil-thin official-Node entry. Bundle every workspace
 // dependency so it does not depend on the body package graph it is about to
 // select and enter.

@@ -2,9 +2,11 @@
 
 <h1 align="center">Open Design: البديل مفتوح المصدر لـ Claude Design</h1>
 
-> ⚡ **‏Open Design Cloud — خدمة النماذج الرسمية.** شحنة واحدة لاستخدام GPT وClaude وGemini وDeepSeek داخل Open Design: أكثر من 20 نموذجًا رائدًا، بدون أي إعداد، وفوترة حسب الاستخدام الفعلي للرموز. [جرّب Open Design Cloud](https://open-design.ai/cloud/)
+> ⚡ **[‏Open Design Cloud — خدمة النماذج الرسمية.](https://open-design.ai/zh/pricing/)** شحنة واحدة لاستخدام نماذج الوكلاء والصور داخل Open Design: ‏GPT وClaude وDeepSeek للوكلاء؛ وGPT Image 2.0 وSeedream 5.0 Pro وNano Banana 2.0 للصور.
 >
-> 🏅 **برنامج Open Design Fellow مفتوح الآن.** إن كنت تؤمن أنت أيضًا بأن التصميم يجب أن يكون مفتوحًا — كُن Open Design Fellow، وشارك في تشكيل المنتج جنبًا إلى جنب مع الفريق الأساسي، وساعد المزيد من الناس على المشاركة في تحديد مستقبل التصميم. التفاصيل ← [`MAINTAINERS.md`](../../MAINTAINERS.md) و[Discord](https://discord.gg/mHAjSMV6gz).
+> 🚀 **[أصبح DeepSeek V4 Flash وV4 Pro متاحين الآن.](https://open-design.ai/zh/pricing/)** استخدم ذكاءً من الطراز الأول للنماذج الأولية والعروض التقديمية وأنظمة التصميم ومهام الوكلاء اليومية. يمكن لأعضاء Open Design استخدام النموذجين بلا حدود لمدة أسبوعين مباشرة داخل التطبيق.
+>
+> 🧩 **[أصبح DeepSeek Harness مدعومًا الآن.](https://open-design.ai/zh/agents/deepseek-harness-design/)** صِل Agent Harness الرسمي `dsh` من DeepSeek بـ Open Design كبيئة تشغيل أصلية، مع التفكير المنظم واستدعاءات الأدوات واكتشاف النماذج والإلغاء واستئناف الجلسات. تبقى الملفات الناتجة ضمن سير عمل Open Design للمعاينة الحية والتسليم.
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
@@ -42,15 +44,15 @@
 
 ## جولة في المنتج
 
-نظرة سريعة على ماهية Open Design وما يفعله. ابدأ من **الصفحة الرئيسية**، ونسّق سير العمل المتكرر عبر **الأتمتة**، واستخلص عقد علامة تجارية في **نظام التصميم**، ووسّع الإمكانات عبر **الإضافات** و**عمليات التكامل**؛ وداخل **الاستوديو** الخاص بأي مشروع، يبثّ نظام التصميم نفسه نماذج أولية ومخرجات حية وHyperFrames وعروضًا تقديمية وصورًا.
+نظرة سريعة على سير العمل الأساسي في Open Design. ابدأ بموجز من **الصفحة الرئيسية**، واستكشف المهارات القابلة لإعادة الاستخدام في **الإضافات**، وحوّل مراجع العلامة التجارية إلى **نظام تصميم**. ثم ادخل إلى **الاستوديو** في أي مشروع لإنشاء النماذج الأولية والعروض التقديمية وتطبيقات الجوال والصور والمستندات وHyperFrames وتحسينها في مكان واحد.
 
 ### الصفحات الأساسية
 
 <table>
 <tr>
 <td valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Home page" /><br/>
-<sub><b>الصفحة الرئيسية</b> — نقطة الدخول للنظرة العامة. اختر مهارة ونظام تصميم، واكتب الموجز، وانطلق بكل شيء من مكان واحد.</sub>
+<img src="../../docs/screenshots/product-tour/home.png" alt="الصفحة الرئيسية" /><br/>
+<sub><b>الصفحة الرئيسية</b> — اختر نوع المخرَج، وأدخل الموجز، وحدد نظام التصميم ودليل العمل والنموذج قبل البدء.</sub>
 </td>
 </tr>
 </table>
@@ -58,53 +60,52 @@
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Automation page" /><br/>
-<sub><b>الأتمتة</b> — حوّل سير عمل التصميم المتكرر إلى أتمتة قابلة لإعادة الاستخدام والجدولة.</sub>
+<img src="../../docs/screenshots/product-tour/plugins.png" alt="الإضافات" /><br/>
+<sub><b>الإضافات</b> — تصفح المهارات الرسمية حسب الفئة، وابحث في الكتالوج، وابدأ سير عمل عبر <code>Try it</code>.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Design System page" /><br/>
-<sub><b>نظام التصميم</b> — استخلص ملف <code>DESIGN.md</code> الخاص بفريقك إلى عقد علامة تجارية يشكّل كل مخرَج.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Plugin page" /><br/>
-<sub><b>الإضافة</b> — تصفّح وثبّت ووزّع إضافات سير العمل لتوسيع التوليد عند الطلب.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>عمليات التكامل</b> — اربط الأنظمة الخارجية وأدوات MCP، واستخدم Open Design من أي بيئة تطوير أو سكربت أو أتمتة.</sub>
+<img src="../../docs/screenshots/product-tour/design-system.png" alt="نظام التصميم" /><br/>
+<sub><b>نظام التصميم</b> — استخرج اللغة البصرية للعلامة التجارية وحسّنها، وعاين النتيجة، ثم واصل الإنشاء بها في مساحة العمل نفسها.</sub>
 </td>
 </tr>
 </table>
 
-### الاستوديو — أنواع مخرجات متعددة في مشروع واحد
+### الاستوديو — أنواع متعددة من المخرجات في مشروع واحد
 
-داخل استوديو المشروع، يبثّ نظام التصميم نفسه أنواعًا متعددة من المخرجات:
+داخل استوديو المشروع، تبقى المحادثة والملفات الناتجة والمعاينة الحية معًا عبر ستة أنواع من المخرجات:
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="Prototype" /><br/>
-<sub><b>النموذج الأولي</b> — مخرجات HTML من صفحة واحدة تقرأ نظام التصميم لديك وتُعرَض في iframe معزول، قابلة للمعاينة فورًا وللتنزيل كمصدر.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="النموذج الأولي" /><br/>
+<sub><b>النموذج الأولي</b> — أنشئ تجارب الويب أو أعد بناءها، وافحص الصفحة المعروضة، وكرّر العمل مع الوكيل في المكان نفسه.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — حركة ورسوميات متحركة برمجية، تُصيَّر إلى ملف MP4 حقيقي (مثل 1920×1080 · 30fps).</sub>
+<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="العرض التقديمي" /><br/>
+<sub><b>العرض التقديمي</b> — أنشئ عروضًا تقديمية متعددة الشرائح، وراجع الصور المصغرة وملاحظات المتحدث، ثم صدّرها عند الجاهزية.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="Deck" /><br/>
-<sub><b>العرض التقديمي</b> — عروض تقديمية يمكنك تصفّحها صفحة صفحة، والتنقل فيها بلوحة المفاتيح، وتصديرها إلى PPTX / PDF.</sub>
+<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="تطبيق الجوال" /><br/>
+<sub><b>تطبيق الجوال</b> — أنشئ واجهات الجوال وحسّنها في معاينة الجهاز، مع إبقاء المحادثة وملفات الإخراج والإجراءات التالية بجانبها.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="Image" /><br/>
-<sub><b>الصورة</b> — صور وأصول بصرية بجودة العلامة التجارية، مع توليد عالي الدقة وتنزيل.</sub>
+<img src="../../docs/screenshots/product-tour/studio-image.png" alt="الصورة" /><br/>
+<sub><b>الصورة</b> — أنشئ أصولًا بصرية من محادثة المشروع، وعاين النتيجة بالحجم الكامل، ثم نزّلها أو افتحها.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-document.png" alt="المستند" /><br/>
+<sub><b>المستند</b> — أنشئ أدلة متعددة الصفحات ومستندات تحريرية مصقولة، وافحص التخطيط المعروض، ثم صدّرها أو شاركها عند الجاهزية.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
+<sub><b>HyperFrame</b> — أنشئ رسومًا متحركة موجهة بالبرمجة، وعاين الحركة داخل الاستوديو، ثم صدّر الفيديو النهائي.</sub>
 </td>
 </tr>
 </table>
-
 ---
 
 ## توافق المنصات
@@ -152,16 +153,6 @@
 سطح المخرجات الافتراضي. مخرجات HTML من صفحة واحدة تقرأ ملف `DESIGN.md` لديك وتُعرَض في iframe معزول.
 
 <table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
-<sub><b>واجهة الدخول</b> — اختر مهارة، اختر نظام تصميم، اكتب الموجز. سطح واحد للنماذج الأولية ولوحات المعلومات والعروض التقديمية وتطبيقات الجوال وصفحات المجلات.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
-<sub><b>نموذج أولي للجوال</b> — هيكل iPhone 15 Pro دقيق بالبكسل، وتدفقات متعددة الشاشات. لا يعيد الوكيل أبدًا رسم إطار الهاتف؛ إذ تقيم إطارات الأجهزة المشتركة في <code>assets/frames/</code>.</sub>
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="../../docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>

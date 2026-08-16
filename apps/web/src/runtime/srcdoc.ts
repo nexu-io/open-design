@@ -531,18 +531,20 @@ function injectSrcdocTransportActivationBridge(doc: string, generation: string):
   const encodedGeneration = JSON.stringify(generation);
   const script = `<script data-od-srcdoc-transport-activation>(function(){
   var generation = ${encodedGeneration};
-  function announceReady(){
+  function announceReady(probeId){
     if (!generation) return;
     try {
       if (window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: 'od:srcdoc-transport-activated', generation: generation }, '*');
+        var message = { type: 'od:srcdoc-transport-activated', generation: generation };
+        if (typeof probeId === 'string' && probeId) message.probeId = probeId;
+        window.parent.postMessage(message, '*');
       }
     } catch (_) { /* sandboxed parent */ }
   }
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (data && data.type === 'od:srcdoc-transport-ready-probe') {
-      if (data.generation === generation) announceReady();
+      if (data.generation === generation) announceReady(data.probeId);
       return;
     }
     if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string' || typeof data.generation !== 'string' || !data.generation) return;

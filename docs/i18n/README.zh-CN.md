@@ -1,8 +1,10 @@
 <h1 align="center">Open Design：The open-source Claude Design alternative</h1>
 
-> ⚡ **Open Design Cloud——官方模型服务。** 一次充值，即可在 Open Design 里直接使用 GPT、Claude、Gemini 与 DeepSeek：20+ 旗舰模型、零配置、按真实 token 用量计费。[立即体验](https://open-design.ai/cloud/)
+> ⚡ **[Open Design Cloud——官方模型服务。](https://open-design.ai/zh/pricing/)** 一次充值，即可在 Open Design 里直接使用 Agent 与图像模型：GPT、Claude 与 DeepSeek Agent 模型，以及 GPT Image 2.0、Seedream 5.0 Pro 与 Nano Banana 2.0 图像模型。
 >
-> 🏅 **Open Design Fellow 计划正式开放。** 如果你也相信设计应该是开放的，欢迎成为 Open Design Fellow，和核心团队一起打磨产品，让更多人参与并定义设计的未来。详情 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 与 [Discord](https://discord.gg/mHAjSMV6gz)。
+> 🚀 **[DeepSeek V4 Flash 与 V4 Pro 现已上线。](https://open-design.ai/zh/pricing/)** 面向原型、演示文稿、设计系统与日常 Agent 任务，直接使用顶级智能。Open Design 会员可在应用内无限量使用两周。
+>
+> 🧩 **[现已支持 DeepSeek Harness。](https://open-design.ai/zh/agents/deepseek-harness-design/)** 将 DeepSeek 官方 `dsh` Agent Harness 作为原生运行时接入 Open Design，支持结构化思考、工具调用、模型发现、取消与会话恢复；生成文件仍进入 Open Design 的实时预览与交付流程。
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
@@ -13,6 +15,7 @@
   <a href="https://open-design.ai/">下载</a> ·
   <a href="https://open-design.ai/cloud/">Open Design Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
+  <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=c06v4df1-9676-4672-8c77-7a30eab76154">飞书中文社区</a> ·
   <a href="https://x.com/OpenDesignHQ">关注 @OpenDesignHQ</a>
 </p>
 
@@ -29,7 +32,7 @@
 
 ## 什么是 Open Design
 
-🎨 **本地优先、开源的 Claude Design 替代品。** &nbsp;🖥️ **macOS 与 Windows 原生桌面应用。** &nbsp;⚡ **100+ 功能技能 + 独立渲染模板目录** · ✨ **151 个品牌级设计系统包** · 📦 **277 个开箱即用的插件。** &nbsp;🖼️ 可生成 **Web · 桌面 · 移动端原型**、**实时仪表盘 / 工件**、**演示文稿**、**图片**、**视频**，以及 **HyperFrames** 动态图形。🔒 沙箱 iframe 预览 · HTML / PDF / PPTX / MP4 导出。&nbsp;🤖 **运行于 Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 25 个不同的本地 CLI 可执行程序**，或通过 BYOK 接入任何 OpenAI 兼容端点。
+🎨 **本地优先、开源的 Claude Design 替代品。** &nbsp;🖥️ **macOS 与 Windows 原生桌面应用。** &nbsp;⚡ **100+ 功能技能 + 独立渲染模板目录** · ✨ **151 个品牌级设计系统包** · 📦 **277 个开箱即用的插件。** &nbsp;🖼️ 可生成 **Web · 桌面 · 移动端原型**、**实时仪表盘 / 工件**、**演示文稿**、**图片**、**视频**，以及 **HyperFrames** 动态图形。🔒 沙箱 iframe 预览 · HTML / PDF / PPTX / MP4 导出。&nbsp;🤖 **运行于 DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 26 个不同的本地 CLI 可执行程序**，或通过 BYOK 接入任何 OpenAI 兼容端点。
 
 Open Design 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agent 原生**循环——发现需求、锁定方向、流式输出工件、评审、交付——不再封闭，而是变成了一个由**功能技能、渲染设计模板、设计系统和插件组成的文件系统**，你笔记本电脑上已有的编码 Agent 就能读取、编写和混搭。你的 CLI 变成设计引擎，你的笔记本变成工作坊，团队的 `DESIGN.md` 变成品牌契约。
 
@@ -40,15 +43,15 @@ Open Design 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agen
 
 ## 产品速览
 
-快速看懂 Open Design 长什么样、能做什么。从 **Home** 发起创作，用 **Automation** 编排重复流程，在 **Design System** 沉淀品牌契约，靠 **Plugin** 与 **集成** 扩展能力；进入任一项目的 **Studio**，同一套设计系统即可流式产出原型、实时工件、HyperFrame、演示文稿与图片。
+快速看懂 Open Design 的核心工作流：从 **Home** 输入需求，在 **Plugins** 中探索可复用技能，并把品牌参考沉淀为 **Design System**；进入任一项目的 **Studio** 后，即可在一处创建和迭代原型、演示文稿、移动应用、图片、文档与 HyperFrame。
 
 ### 核心页面
 
 <table>
 <tr>
 <td valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Home 页" /><br/>
-<sub><b>Home</b>——总览入口。选择技能与设计系统，输入需求，一处发起所有创作。</sub>
+<img src="../../docs/screenshots/product-tour/home.png" alt="Open Design Home 页，包含产物类型、需求输入、模型选择和示例" /><br/>
+<sub><b>Home</b>——选择产物类型并输入需求，再设定设计系统、工作目录与模型，即可开始创作。</sub>
 </td>
 </tr>
 </table>
@@ -56,49 +59,49 @@ Open Design 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agen
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Automation 页" /><br/>
-<sub><b>Automation</b>——把重复的设计流程编排成可复用、可定时的自动化任务。</sub>
+<img src="../../docs/screenshots/product-tour/plugins.png" alt="Open Design Plugins 页的官方技能目录" /><br/>
+<sub><b>Plugins</b>——按类别浏览官方技能、搜索目录，并通过 <code>Try it</code> 直接启动工作流。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Design System 页" /><br/>
-<sub><b>Design System</b>——把团队的 <code>DESIGN.md</code> 沉淀为品牌契约，所有产物据此塑形。</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Plugin 页" /><br/>
-<sub><b>Plugin</b>——浏览、安装并分发工作流插件，按需扩展生成能力。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations 页" /><br/>
-<sub><b>集成</b>——接入外部系统与 MCP 工具，把 Open Design 用到任意 IDE、脚本与自动化中。</sub>
+<img src="../../docs/screenshots/product-tour/design-system.png" alt="Open Design Studio 中的 Shopify 设计系统预览" /><br/>
+<sub><b>Design System</b>——提取并完善品牌视觉语言，预览结果，再在同一工作区中继续创作。</sub>
 </td>
 </tr>
 </table>
 
 ### Studio——一个项目里的多种产物
 
-进入某个项目的 Studio，同一套设计系统可流式产出多种类型的工件：
+进入某个项目的 Studio，对话、生成文件与实时预览会围绕六种产物集中在同一工作区：
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="原型" /><br/>
-<sub><b>原型</b>——读取你的设计系统、在沙箱 iframe 中渲染的单页 HTML 工件，可即时预览、下载源码。</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="Open Design Studio 中的 Web 原型预览" /><br/>
+<sub><b>原型</b>——生成或重建 Web 体验，查看渲染后的页面，并在原处继续与 Agent 迭代。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b>——程序化动效与动态图形，渲染为真实 MP4（如 1920×1080 · 30fps）。</sub>
+<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="Open Design Studio 中的多页演示文稿预览" /><br/>
+<sub><b>演示文稿</b>——创建多页演示文稿，检查缩略图与演讲者备注，完成后直接导出。</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="演示文稿" /><br/>
-<sub><b>演示文稿</b>——可逐页预览、键盘翻页、导出 PPTX / PDF 的 pitch deck。</sub>
+<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="Open Design Studio 中的移动应用预览" /><br/>
+<sub><b>移动应用</b>——在设备预览中生成和打磨移动界面，旁边同步保留对话、输出文件与后续操作。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="图片" /><br/>
-<sub><b>图片</b>——品牌级图片与视觉素材，支持高分辨率生成与下载。</sub>
+<img src="../../docs/screenshots/product-tour/studio-image.png" alt="Open Design Studio 中的生成图片预览" /><br/>
+<sub><b>图片</b>——从项目对话中生成视觉素材，全尺寸预览结果，然后下载或打开。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-document.png" alt="Open Design Studio 中的多页文档预览" /><br/>
+<sub><b>文档</b>——创建精致的多页指南与编辑型文档，检查渲染布局，完成后导出或分享。</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="Open Design Studio 中的 HyperFrame 动态图形预览" /><br/>
+<sub><b>HyperFrame</b>——创建代码驱动的动态图形，在 Studio 中预览动画，并导出最终视频。</sub>
 </td>
 </tr>
 </table>
@@ -107,13 +110,14 @@ Open Design 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agen
 
 ## 平台兼容性
 
-> Open Design 以 **技能、CLI 和 MCP 服务器**的形式交付，主流编码 Agent 可原生消费。装好 OD 后，一行 `od mcp install <agent>` 把 MCP 服务器 wire 进对应 Agent 的配置，任何 Agent 内调用相同工具。
+> Open Design 通过两种方式连接主流编码 Agent：可由 Agent 调用的**技能、CLI 和 MCP**，以及由 OD 直接启动 Agent 的**原生运行时适配器**。DeepSeek Harness 通过官方 `dsh` CLI 作为一等原生运行时，支持结构化流式输出、模型发现、取消与会话恢复。
 
-| 编码 Agent / 平台 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 状态 &nbsp;&nbsp; | 一行命令安装 MCP 服务器 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
+| 编码 Agent / 平台 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 状态 &nbsp;&nbsp; | 快速接入 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ 支持 | `od mcp install claude` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ 支持 | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ 支持 | `od mcp install reasonix` |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | ✅ 原生运行时 | `od agent setup deepseek-harness` |
 | [Raven](https://github.com/EverMind-AI/Raven) | ✅ 支持 | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ 支持 | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ 支持 | `od mcp install copilot` |
@@ -129,10 +133,10 @@ Open Design 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agen
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ 支持 | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ 支持 | `od mcp install hermes` |
 
-`od mcp install <agent> --print` 干跑预览 · `--uninstall` 卸载 · 完整清单 `od mcp install --help`。
+使用 DeepSeek Harness 时，请先安装官方 `dsh` CLI，再在 Open Design 中选择它，或运行 `od agent setup deepseek-harness` 安装/修复 OD 连接组件。MCP 集成可用 `od mcp install <agent> --print` 干跑预览 · `--uninstall` 卸载 · 完整清单 `od mcp install --help`。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="Open Design 支持的 25 个编码 Agent CLI — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="Open Design 支持的 26 个编码 Agent CLI — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **未安装任何 CLI？** `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` 的 BYOK 代理提供同样的循环（无需 spawn 进程）——粘贴 `baseUrl` + `apiKey` + `model`，支持 OpenAI、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM 或任何 OpenAI 兼容端点。每个目标的 SSRF 防护在守护进程边缘拦截内网 IP / link-local / CGNAT。
@@ -150,16 +154,6 @@ Open Design 是这样一种产物：Anthropic 随 Claude Design 推出的 **Agen
 默认输出面。读取你的 `DESIGN.md` 并在沙箱 iframe 中渲染的单页 HTML 工件。
 
 <table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/01-entry-view.png" alt="入口视图" /><br/>
-<sub><b>入口视图</b>——选择技能、选择设计系统、输入需求。一个界面承载原型、仪表盘、演示文稿、移动应用、杂志页面。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/skills/mobile-onboarding.png" alt="移动端 Onboarding" /><br/>
-<sub><b>移动端原型</b>——像素级精确的 iPhone 15 Pro 外框、多屏流程。Agent 不会重绘手机外框；共享设备边框位于 <code>assets/frames/</code>。</sub>
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="../../docs/screenshots/skills/dating-web.png" alt="Web 原型 dating-web" /><br/>
@@ -547,8 +541,8 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
              ▼
    ┌──────────────────────────────────────────────────────────────────────┐
    │  Local runtime definitions come from runtimes/registry.ts;                 │
-   │  the base registry has 26 definitions (including byok-opencode),           │
-   │  backed by 25 distinct local CLI executables because byok-opencode shares │
+   │  the base registry has 27 definitions (including byok-opencode),           │
+   │  backed by 26 distinct local CLI executables because byok-opencode shares │
    │  the OpenCode executable. See docs/agent-adapters.md.                     │
    │  组合功能技能或设计模板 + DESIGN.md，并将规范文件写入磁盘                   │
    └──────────────────────────────────────────────────────────────────────┘
@@ -570,7 +564,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## 路线图
 
-- [x] 守护进程 + 25 个不同 CLI 可执行程序上的 26 个 runtime 定义 + 技能/设计模板注册中心 + 设计系统目录
+- [x] 守护进程 + 26 个不同 CLI 可执行程序上的 27 个 runtime 定义 + 技能/设计模板注册中心 + 设计系统目录
 - [x] Web 应用 + 聊天 + 问题表单 + 5 方向选择器 + 待办进度 + 沙箱预览
 - [x] 100+ 功能技能 · 独立渲染模板目录 · 151 个设计系统包 · 5 视觉方向 · 5 设备外框
 - [x] SQLite 支撑的项目 · 会话 · 消息 · 标签页 · 模板

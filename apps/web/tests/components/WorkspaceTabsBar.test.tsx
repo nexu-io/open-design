@@ -2,7 +2,7 @@
 // @vitest-environment jsdom
 
 import { StrictMode } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -12,6 +12,11 @@ import {
 } from '../../src/components/WorkspaceTabsBar';
 import { navigate, type Route } from '../../src/router';
 import type { Project } from '../../src/types';
+import { setWorkspaceTabsDock } from '../../src/components/workspaceTabsDock';
+
+afterEach(() => {
+  setWorkspaceTabsDock(null);
+});
 
 vi.mock('../../src/i18n', () => ({
   useI18n: () => ({
@@ -199,6 +204,38 @@ describe('WorkspaceTabsBar navigation semantics', () => {
       expect(screen.getAllByTestId('workspace-home-rail-toggle')).toHaveLength(1);
       expect(labels.filter((label) => label.includes('Project Alpha'))).toHaveLength(1);
     });
+  });
+
+  it('closes the dock dropdown when its route-owned dock is removed', async () => {
+    const firstDock = document.createElement('div');
+    const secondDock = document.createElement('div');
+    document.body.append(firstDock, secondDock);
+    setWorkspaceTabsDock(firstDock);
+
+    const { rerender } = render(
+      <WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />,
+    );
+
+    const trigger = await screen.findByTestId('workspace-tabs-dropdown-trigger');
+    fireEvent.click(trigger);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+
+    act(() => setWorkspaceTabsDock(null));
+    rerender(
+      <WorkspaceTabsBar route={{ kind: 'home', view: 'home' }} projects={[project]} />,
+    );
+    expect(screen.queryByRole('listbox')).toBeNull();
+
+    act(() => setWorkspaceTabsDock(secondDock));
+    rerender(
+      <WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />,
+    );
+    const restoredTrigger = await screen.findByTestId('workspace-tabs-dropdown-trigger');
+    expect(restoredTrigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('listbox')).toBeNull();
+
+    firstDock.remove();
+    secondDock.remove();
   });
 
   // recvq5eKj2kdF0: Home's own project fetch (recent/drafts, capped) replaces

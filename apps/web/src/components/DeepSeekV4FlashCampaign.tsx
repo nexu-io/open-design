@@ -130,7 +130,7 @@ export function DeepSeekV4FlashCampaign({
       page_name: 'home',
       area: 'deepseek_campaign_modal',
       element: 'modal',
-      campaign_id: 'deepseek_v4_flash',
+      campaign_id: 'deepseek_v4_pro',
       user_state: audience === 'paid' ? 'paid' : 'unpaid',
     });
     const panel = document.getElementById(dialogId);
@@ -179,7 +179,7 @@ export function DeepSeekV4FlashCampaign({
       page_name: 'home',
       area: 'deepseek_campaign_modal',
       element,
-      campaign_id: 'deepseek_v4_flash',
+      campaign_id: 'deepseek_v4_pro',
       user_state: paid ? 'paid' : 'unpaid',
     });
   };
@@ -210,7 +210,7 @@ export function DeepSeekV4FlashCampaign({
       new Date(),
       {
         metricsConsent,
-        campaignId: 'deepseek_v4_flash',
+        campaignId: 'deepseek_v4_pro',
         conversionSource: 'deepseek_unpaid_modal',
       },
     );

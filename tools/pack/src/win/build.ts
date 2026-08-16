@@ -106,7 +106,12 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
   });
   const shellBuildIdentity = await runPhase("workspace-build", async () => ensureWinWorkspaceBuild(config, cache));
   const resourceTree = await runPhase("resource-tree", async () =>
-    prepareResourceTree(config, paths, cache, { materialize: config.to !== "dir" })
+    prepareResourceTree(
+      config,
+      paths,
+      cache,
+      { materialize: config.to !== "dir" },
+    )
   );
   await runPhase("win-icon", async () => {
     await copyWinIcon(paths);

@@ -661,6 +661,9 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var activeCommentElementId = null;
   var activeCommentSelector = null;
   var activeTargetPending = false;
+  function postReady(){
+    window.parent.postMessage({ type: 'od:url-selection-bridge-ready', href: window.location.href }, '*');
+  }
   function esc(value){
     try { return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\\\"'); }
     catch (_) { return String(value); }
@@ -1006,7 +1009,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
     var data = ev && ev.data;
     if (!data || !data.type) return;
     if (data.type === 'od:url-selection-bridge-probe') {
-      window.parent.postMessage({ type: 'od:url-selection-bridge-ready' }, '*');
+      postReady();
       return;
     }
     if (data.type === 'od:preview-runtime-state-capture' && data.id) {
@@ -1140,7 +1143,7 @@ const URL_PREVIEW_SELECTION_BRIDGE = `<script data-od-url-selection-bridge>
   var mo = new MutationObserver(schedulePostTargets);
   mo.observe(document.documentElement, { subtree: true, childList: true });
   ensureStyle();
-  window.parent.postMessage({ type: 'od:url-selection-bridge-ready' }, '*');
+  postReady();
 })();
 </script>`;
 

@@ -105,6 +105,32 @@ describe('scanRunEventsForUsageAnalytics', () => {
     expect(result.cache_hit_ratio).toBeUndefined();
   });
 
+  it('uses provider-qualified model attribution from DeepSeek Harness usage', () => {
+    const result = scanRunEventsForUsageAnalytics(
+      [
+        {
+          event: 'agent',
+          data: {
+            type: 'usage',
+            provider: 'deepseek-official',
+            model: 'deepseek-v4-flash',
+            usage: {
+              input_tokens: 300,
+              output_tokens: 30,
+            },
+          },
+        },
+      ],
+      'default',
+      10,
+    );
+
+    expect(result.agent_reported_model).toBe(
+      'deepseek-official/deepseek-v4-flash',
+    );
+    expect(result.token_count_source).toBe('provider_usage');
+  });
+
   it('treats normalized cached_read_tokens / cached_write_tokens aliases as input subsets', () => {
     const result = scanRunEventsForUsageAnalytics(
       [

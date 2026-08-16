@@ -1455,7 +1455,8 @@ test('[P0] successful first-open materialization opens one read-only local mirro
 
   await expect.poll(() => pullAttempts).toBe(1);
   await expect(page).toHaveURL(new RegExp(`/projects/${remoteProject.projectId}$`));
-  await expect(page.getByText(remoteProject.name, { exact: true }).first()).toBeVisible();
+  await expect(page.getByTestId('file-workspace')).toBeVisible({ timeout: T.long });
+  await expect(page.getByTestId('project-title')).toHaveText(remoteProject.name);
   await expect(page.getByText('Stale pulled title', { exact: true })).toHaveCount(0);
 
   await page.goto('/all-projects');

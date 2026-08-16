@@ -109,7 +109,7 @@ describe('hub events onEvent switch (source boundary)', () => {
   const source = fs.readFileSync(serverSourcePath, 'utf8');
 
   function extractOnEventSwitchBody(): string {
-    const anchor = 'onEvent: (event) => {';
+    const anchor = 'onEvent: (event, connection) => {';
     const start = source.indexOf(anchor);
     expect(start, 'expected to find the hub events onEvent handler in server.ts').toBeGreaterThan(-1);
     const switchStart = source.indexOf('switch (event.type) {', start);

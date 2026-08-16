@@ -1,8 +1,10 @@
 <h1 align="center">Open Design: 오픈소스 Claude Design 대안</h1>
 
-> ⚡ **Open Design Cloud — 공식 모델 서비스.** 한 번의 충전으로 Open Design 안에서 GPT, Claude, Gemini, DeepSeek를 바로 사용하세요. 20+ 플래그십 모델, 무설정, 실제 토큰 사용량 기반 과금. [Open Design Cloud 사용해 보기](https://open-design.ai/cloud/)
+> ⚡ **[Open Design Cloud — 공식 모델 서비스.](https://open-design.ai/zh/pricing/)** 한 번 충전하면 Open Design 안에서 에이전트 모델과 이미지 모델을 함께 사용할 수 있습니다. 에이전트용 GPT, Claude, DeepSeek와 이미지용 GPT Image 2.0, Seedream 5.0 Pro, Nano Banana 2.0을 지원합니다.
 >
-> 🏅 **Open Design Fellow 프로그램이 지금 열렸습니다.** 디자인은 열려 있어야 한다고 믿으신다면 — Open Design Fellow가 되어 핵심 팀과 함께 제품을 빚어내고, 더 많은 사람이 디자인의 미래를 정의하는 일에 참여하도록 도와주세요. 자세히 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 및 [Discord](https://discord.gg/mHAjSMV6gz).
+> 🚀 **[DeepSeek V4 Flash와 V4 Pro를 사용할 수 있습니다.](https://open-design.ai/zh/pricing/)** 프로토타입, 덱, 디자인 시스템, 일상적인 에이전트 작업에 최상급 지능을 활용하세요. Open Design 회원은 앱에서 두 모델을 2주 동안 무제한으로 사용할 수 있습니다.
+>
+> 🧩 **[DeepSeek Harness를 지원합니다.](https://open-design.ai/zh/agents/deepseek-harness-design/)** DeepSeek 공식 `dsh` Agent Harness를 Open Design의 네이티브 런타임으로 연결하고 구조화된 사고, 도구 호출, 모델 검색, 취소, 세션 재개를 사용할 수 있습니다. 생성된 파일은 라이브 미리보기와 전달을 위해 Open Design 워크플로 안에 유지됩니다.
 
 <p align="center">
   <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
@@ -40,15 +42,15 @@ Open Design는 그 루프를 에이전트가 읽고 쓸 수 있는 **기능 스�
 
 ## 제품 둘러보기
 
-Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Home**에서 시작해 **Automation**으로 반복 워크플로를 조율하고, **Design System**에서 브랜드 계약을 정제하며, **Plugins**와 **통합**으로 확장하세요. 어떤 프로젝트의 **Studio** 안에서든 동일한 디자인 시스템이 프로토타입, 라이브 아티팩트, HyperFrames, 덱, 이미지를 스트리밍해 냅니다.
+Open Design의 핵심 워크플로를 빠르게 살펴봅니다. **Home**에서 브리프를 입력하고, **Plugins**에서 재사용 가능한 스킬을 찾고, 브랜드 참고 자료를 **Design System**으로 전환하세요. 그런 다음 프로젝트의 **Studio**에서 프로토타입, 덱, 모바일 앱, 이미지, 문서, HyperFrame을 한곳에서 만들고 다듬을 수 있습니다.
 
 ### 핵심 페이지
 
 <table>
 <tr>
 <td valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Home page" /><br/>
-<sub><b>Home</b> — 개요 진입점. 스킬과 디자인 시스템을 고르고, 브리프를 입력한 뒤, 한곳에서 모든 것을 시작하세요.</sub>
+<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
+<sub><b>Home</b> — 아티팩트 유형을 선택하고 브리프를 입력한 다음 시작 전에 디자인 시스템, 작업 디렉터리, 모델을 설정합니다.</sub>
 </td>
 </tr>
 </table>
@@ -56,53 +58,52 @@ Open Design가 무엇이고 무엇을 하는지 빠르게 살펴봅니다. **Hom
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Automation page" /><br/>
-<sub><b>Automation</b> — 반복적인 디자인 워크플로를 재사용 가능하고 예약 가능한 자동화로 조율합니다.</sub>
+<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
+<sub><b>Plugins</b> — 공식 스킬을 카테고리별로 살펴보고 카탈로그를 검색한 뒤 <code>Try it</code>으로 워크플로를 시작합니다.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Design System page" /><br/>
-<sub><b>Design System</b> — 팀의 <code>DESIGN.md</code>를 모든 출력물을 빚어내는 브랜드 계약으로 정제합니다.</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Plugin page" /><br/>
-<sub><b>Plugin</b> — 워크플로 플러그인을 둘러보고, 설치하고, 배포하여 필요에 따라 생성 기능을 확장합니다.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>Integrations</b> — 외부 시스템과 MCP 도구를 연결하고, 어떤 IDE, 스크립트, 자동화에서든 Open Design를 사용합니다.</sub>
+<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
+<sub><b>Design System</b> — 브랜드의 시각 언어를 추출하고 다듬은 뒤 결과를 미리 보고 같은 워크스페이스에서 계속 제작합니다.</sub>
 </td>
 </tr>
 </table>
 
-### Studio — 한 프로젝트 안의 다양한 아티팩트 유형
+### Studio — 한 프로젝트의 다양한 아티팩트
 
-프로젝트의 Studio 안에서는 동일한 디자인 시스템이 여러 아티팩트 유형을 스트리밍해 냅니다:
+프로젝트의 Studio에서는 대화, 생성 파일, 라이브 미리보기가 여섯 가지 아티팩트 유형에 걸쳐 한곳에 유지됩니다.
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="Prototype" /><br/>
-<sub><b>Prototype</b> — 당신의 디자인 시스템을 읽어 샌드박스 iframe에 렌더링되는 단일 페이지 HTML 아티팩트로, 즉시 미리보고 소스로 다운로드할 수 있습니다.</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="프로토타입" /><br/>
+<sub><b>프로토타입</b> — 웹 경험을 생성하거나 재구성하고 렌더링된 페이지를 확인하며 그 자리에서 에이전트와 반복 작업합니다.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b> — 프로그래밍 방식의 모션과 애니메이션 그래픽으로, 실제 MP4(예: 1920×1080 · 30fps)로 렌더링됩니다.</sub>
+<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="덱" /><br/>
+<sub><b>덱</b> — 여러 슬라이드로 된 프레젠테이션을 만들고 썸네일과 발표자 노트를 검토한 뒤 준비되면 내보냅니다.</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="Deck" /><br/>
-<sub><b>Deck</b> — 한 장씩 넘겨 보고, 키보드로 탐색하며, PPTX / PDF로 내보낼 수 있는 피치 덱입니다.</sub>
+<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="모바일 앱" /><br/>
+<sub><b>모바일 앱</b> — 디바이스 미리보기에서 모바일 인터페이스를 생성하고 다듬으며 대화, 출력 파일, 다음 단계 작업을 옆에 유지합니다.</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="Image" /><br/>
-<sub><b>Image</b> — 고해상도 생성과 다운로드를 지원하는 브랜드급 이미지와 비주얼 에셋입니다.</sub>
+<img src="../../docs/screenshots/product-tour/studio-image.png" alt="이미지" /><br/>
+<sub><b>이미지</b> — 프로젝트 대화에서 시각 자료를 생성하고 결과를 전체 크기로 미리 본 뒤 다운로드하거나 엽니다.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-document.png" alt="문서" /><br/>
+<sub><b>문서</b> — 완성도 높은 여러 페이지 가이드와 편집 문서를 만들고 렌더링된 레이아웃을 확인한 뒤 내보내거나 공유합니다.</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
+<sub><b>HyperFrame</b> — 코드 기반 모션 그래픽을 만들고 Studio 안에서 애니메이션을 미리 본 뒤 완성된 영상을 내보냅니다.</sub>
 </td>
 </tr>
 </table>
-
 ---
 
 ## 플랫폼 호환성
@@ -150,16 +151,6 @@ Runtime 정의는 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 기본 출력 표면입니다. 당신의 `DESIGN.md`를 읽어 샌드박스 iframe에 렌더링되는 단일 페이지 HTML 아티팩트입니다.
 
 <table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
-<sub><b>Entry view</b> — 스킬을 고르고, 디자인 시스템을 고르고, 브리프를 입력합니다. 프로토타입, 대시보드, 덱, 모바일 앱, 매거진 페이지를 위한 하나의 표면입니다.</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
-<sub><b>모바일 프로토타입</b> — 픽셀 단위로 정확한 iPhone 15 Pro 크롬과 다중 화면 흐름. 에이전트는 폰 프레임을 다시 그리는 법이 없으며, 공유 디바이스 프레임은 <code>assets/frames/</code>에 있습니다.</sub>
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="../../docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>
