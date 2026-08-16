@@ -2,14 +2,14 @@
   "$schema": "https://open-design.ai/schemas/marketplace.v1.json",
   "specVersion": "1.0.0",
   "name": "open-design-community",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "owner": {
     "name": "Open Design Community",
     "url": "https://open-design.ai/marketplace/community"
   },
   "metadata": {
     "description": "Default community plugin registry seed. Entries here are discoverable by default but remain restricted until the user installs and trusts them.",
-    "version": "0.2.7"
+    "version": "0.2.8"
   },
   "plugins": [
     {
@@ -115,8 +115,8 @@
     {
       "name": "community/handoff-od",
       "title": "Handoff to OpenCode",
-      "version": "0.1.6",
-      "source": "github:ross-sec/handoff-od@v0.1.6",
+      "version": "0.1.7",
+      "source": "github:ross-sec/handoff-od@v0.1.7",
       "publisher": {
         "id": "ross-technologies",
         "github": "ross-sec",
