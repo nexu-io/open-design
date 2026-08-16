@@ -16,6 +16,7 @@ import { assertHealthEvalValue,assertPayloadDesktopIdentity,assertPptxExportEval
 import type { DesktopIdentityMarker,DirectInstallerResult,HealthEvalValue,LauncherSnapshot,PptxExportEvalValue,SmokeTiming,WinInspectResult,WinListResult,WinStartResult,WinStopResult } from './context.js';
 import { existingProjectPptxExportExpression,formatUnknown,installIdentity,namespace,portableNsisLogPath,pptxExportExpression,runtimeNamespaceRoot,sha256File } from './context.js';
 import { readPackagedOnboardingConfig,waitForHealthyDesktopShellVersion,waitForTerminalUpdateState } from './runtime.js';
+import { ensureWindowsRuntimeAfterInstaller } from './installer-runtime.js';
 
 export async function measureSmokeStep<T>(timings: SmokeTiming[], step: string, run: () => Promise<T>): Promise<T> {
   const startedAt = Date.now();
@@ -340,9 +341,15 @@ export async function runInstallerFallbackAcceptance(options: {
   assertWorkingWinInstallerOverwriteLog(install.nsisLogTail);
   process.env.OD_UPDATE_CURRENT_VERSION = targetVersion;
 
-  const start = await runToolsPackJsonForVersion<WinStartResult>('start', targetVersion);
-  expect(start.source).toBe('installed');
-  expect(start.executablePath).toBe(join(options.installDir, 'Open Design.exe'));
+  const expectedInstalledExecutablePath = join(options.installDir, 'Open Design.exe');
+  const continuity = await ensureWindowsRuntimeAfterInstaller({
+    inspect: async () => await runToolsPackJsonForVersion<WinInspectResult>('inspect', targetVersion),
+    start: async () => await runToolsPackJsonForVersion<WinStartResult>('start', targetVersion),
+  });
+  if (continuity.start != null) {
+    expect(continuity.start.source).toBe('installed');
+    expect(continuity.start.executablePath).toBe(expectedInstalledExecutablePath);
+  }
   // The updater-owned installer may preserve the already-confirmed payload
   // desktop while replacing the physical outer. Verify continuity here; the
   // explicit full stop + installed-outer cold start below owns the stronger
@@ -358,10 +365,15 @@ export async function runInstallerFallbackAcceptance(options: {
   expect(health.status).toBe(200);
   expect(health.health.ok).toBe(true);
   expect(health.health.version).toBe(standaloneVersion);
+  if (continuity.probe.status?.state === 'running') {
+    expect(postInstallInspect.status?.pid).toBe(continuity.probe.status.pid);
+  } else if ((continuity.probe.managedProcessPids?.length ?? 0) > 0) {
+    expect(continuity.probe.managedProcessPids).toContain(postInstallInspect.status?.pid);
+  }
 
   const list = await runToolsPackJsonForVersion<WinListResult>('list', targetVersion);
   expect(list.current.installedExeExists).toBe(true);
-  expect(list.current.installedExePath).toBe(start.executablePath);
+  expect(list.current.installedExePath).toBe(expectedInstalledExecutablePath);
   expect(list.current.installDir).toBe(options.installDir);
   expect(list.current.registryEntries).toHaveLength(1);
   expect(list.current.registryResidues).toHaveLength(1);
