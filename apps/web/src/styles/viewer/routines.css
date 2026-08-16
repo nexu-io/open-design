@@ -536,7 +536,9 @@
 
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) .routines-field select,
-  html:not([data-theme]) .routines-project-select {
+  html:not([data-theme]) .routines-project-select,
+  html[data-theme='system'] .routines-field select,
+  html[data-theme='system'] .routines-project-select {
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
   }
 }
@@ -1371,7 +1373,8 @@
   --workspace-glide-frost: var(--glass-regular);
 }
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .workspace-shell .workspace-tabs-chrome {
+  html:not([data-theme]) .workspace-shell .workspace-tabs-chrome,
+  html[data-theme='system'] .workspace-shell .workspace-tabs-chrome {
     --workspace-glide-frost: var(--glass-regular);
   }
 }
@@ -1560,7 +1563,8 @@
   background: var(--material-regular);
 }
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .app .split-chat-slot > .pane {
+  html:not([data-theme]) .app .split-chat-slot > .pane,
+  html[data-theme='system'] .app .split-chat-slot > .pane {
     background: var(--material-regular);
   }
 }
@@ -1599,7 +1603,8 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .app .split-resize-handle {
+  html:not([data-theme]) .app .split-resize-handle,
+  html[data-theme='system'] .app .split-resize-handle {
     --split-resize-gradient-surface: var(--bg-panel);
   }
 }
@@ -2306,7 +2311,10 @@
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) .app .chat-log,
   html:not([data-theme]) .chat-composer-fixed-layer .composer,
-  html:not([data-theme]) .chat-composer-fixed-layer .composer-shell {
+  html:not([data-theme]) .chat-composer-fixed-layer .composer-shell,
+  html[data-theme="system"] .app .chat-log,
+  html[data-theme="system"] .chat-composer-fixed-layer .composer,
+  html[data-theme="system"] .chat-composer-fixed-layer .composer-shell {
     background: var(--bg-panel);
   }
 }

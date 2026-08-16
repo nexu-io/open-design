@@ -189,9 +189,10 @@
   --code-body-bg: #18181b;
 }
 
-/* System mode: follow OS preference when no explicit data-theme is set. */
+/* System mode: follow OS preference when data-theme is system or absent. */
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) {
+  html:not([data-theme]),
+  html[data-theme="system"] {
     color-scheme: dark;
     --bg: #202020;
     --bg-app: #202020;

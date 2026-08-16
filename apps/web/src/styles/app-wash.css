@@ -51,7 +51,8 @@
   --wash-mist: rgba(100, 130, 172, 0.09);
 }
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) {
+  html:not([data-theme]),
+  html[data-theme='system'] {
     --wash-base: #202020;
     --wash-blue: rgba(96, 126, 178, 0.14);
     --wash-pink: rgba(168, 110, 142, 0.1);
