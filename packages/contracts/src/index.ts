@@ -10,6 +10,7 @@ export * from './api/amrWallet.js';
 export * from './api/amr-auth.js';
 export * from './api/automations.js';
 export * from './api/artifacts.js';
+export * from './api/artifact-lint.js';
 export * from './api/brands.js';
 export * from './api/brief.js';
 export * from './api/chat.js';
