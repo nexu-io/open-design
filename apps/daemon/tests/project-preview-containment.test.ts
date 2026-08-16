@@ -263,6 +263,39 @@ describe('project preview containment routes', () => {
     expect(borrowedTokenResponse.status).toBe(404);
   });
 
+  it('skips rewriting url() inside <script> blocks to prevent JS corruption', async () => {
+    const workspaceId = `workspace-${randomUUID()}`;
+    const workspaceMemberId = `member-${randomUUID()}`;
+    const projectId = await createProject({ entryFile: 'index.html' });
+    await writeProjectFile(
+      projectId,
+      'index.html',
+      [
+        '<!doctype html><html><head><title>Test</title></head><body>',
+        '<script>',
+        '  var url = "http://example.com";',
+        '  URL.revokeObjectURL(url);',
+        '</script>',
+        '</body></html>',
+      ].join(''),
+    );
+    bindPersonalProject(projectId, workspaceId, workspaceMemberId);
+
+    const scopeQuery = new URLSearchParams({
+      workspaceId,
+      workspaceMemberId,
+      odPreviewBridge: 'scroll',
+    });
+    const response = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/index.html?${scopeQuery}`,
+    );
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    // Verify script content is preserved verbatim and not rewritten
+    expect(html).toContain('URL.revokeObjectURL(url)');
+    expect(html).not.toContain('URL.revokeObjecturl(');
+  });
+
   it('serves minted preview HTML and assets without bearer headers when API token auth is enabled', async () => {
     const previousToken = process.env.OD_API_TOKEN;
     const token = `preview-token-${randomUUID()}`;
