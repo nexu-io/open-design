@@ -181,6 +181,7 @@ runs:
         verify-notarization: ${{ inputs.verify-notarization }}
 
     - name: Resolve Standalone target contribution
+      id: closure_target
       uses: ./.github/actions/release/closure/target/mac
       with:
         build-dir: ${{ steps.platform.outputs.build_dir }}
@@ -189,6 +190,19 @@ runs:
         public-origin: ${{ env.RELEASE_PUBLIC_ORIGIN }}
         publish-enabled: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
         release-version: ${{ inputs.closure-version }}
+
+    - name: Report ${{ inputs.target }} release reuse plan
+      shell: bash
+      env:
+        RELEASE_CLOSURE_BUILD_STATE: ${{ steps.closure_target.outputs.resolution }}
+        RELEASE_OUTER_CACHE_EXACT_HIT: ${{ steps.cache.outputs.cache-hit }}
+        RELEASE_OUTER_CACHE_MATCHED_KEY: ${{ steps.cache.outputs.cache-matched-key }}
+        RELEASE_REUSE_PLAN_JSON_PATH: ${{ steps.platform.outputs.report_dir }}/reuse-plan.json
+        RELEASE_SHELL_BUILD_STATE: ${{ steps.shell.outputs.state }}
+        RELEASE_SMOKE_PROOF_STATE: ${{ steps.shell.outputs['smoke-proof'] }}
+        RELEASE_SMOKE_SELECTED_LANES: ${{ inputs.smoke-enabled == 'true' && 'profile-default' || 'none' }}
+        RELEASE_TARGET: ${{ inputs.target }}
+      run: pnpm exec tools-release write-reuse-plan
 
     - name: Prepare Standalone smoke graph
       shell: bash

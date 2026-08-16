@@ -1937,9 +1937,13 @@ process.stdin.on("end", () => {
     expect(releaseBetaWorkflow).toContain("namespace: ${{ matrix.target == 'mac_arm64' && format('release-{0}', inputs.exact_name) || format('release-{0}-x64', inputs.exact_name) }}");
     expect(betaMacAction).toContain("RELEASE_NAMESPACE: ${{ inputs.namespace }}");
     expect(betaMacAction).toContain("RELEASE_TARGET: ${{ inputs.target }}");
+    expect(macAction).toContain("Report ${{ inputs.target }} release reuse plan");
+    expect(macAction).toContain("RELEASE_OUTER_CACHE_MATCHED_KEY: ${{ steps.cache.outputs.cache-matched-key }}");
     expect(betaMacAction).not.toMatch(/^\s+description:.*\$\{\{/mu);
     expect(betaWinAction).toContain("RELEASE_NAMESPACE: release-${{ inputs.channel }}-win");
     expect(betaWinAction).toContain("RELEASE_TARGET: win_x64");
+    expect(winAction).toContain("Report win_x64 release reuse plan");
+    expect(winAction).toContain("RELEASE_OUTER_CACHE_MATCHED_KEY: ${{ steps.cache.outputs.cache-matched-key }}");
 
     expect(releaseBetaWorkflow).toContain("shell-smoke-matrix: ${{ matrix.target == 'mac_arm64' && 'mac-shell-v3' || 'mac-shell-v2' }}");
     expect(betaMacAction).toContain("Resolve ${{ inputs.target }} Shell smoke acceptance identity");
@@ -1947,9 +1951,30 @@ process.stdin.on("end", () => {
     expect(betaMacAction).toContain("Register ${{ inputs.target }} Electron Shell full-smoke proof");
     expect(betaWinAction).toContain("RELEASE_SHELL_SMOKE_MATRIX: win-shell-v2");
     expect(betaWinAction).toContain("Register win_x64 Electron Shell full-smoke proof");
+    expect(betaWinAction).toContain("Report win_x64 release reuse plan");
+    expect(betaWinAction).toContain("RELEASE_OUTER_CACHE_MATCHED_KEY: ${{ steps.cache.outputs.cache-matched-key }}");
+    expect(betaWinAction).toContain("pnpm.cmd exec tools-release write-reuse-plan");
+    expect(betaMacAction).toContain("Report ${{ inputs.target }} release reuse plan");
+    expect(betaMacAction).toContain("RELEASE_OUTER_CACHE_MATCHED_KEY: ${{ steps.cache.outputs.cache-matched-key }}");
+    expect(betaMacAction).toContain("pnpm exec tools-release write-reuse-plan");
     expect(betaWinAction).toContain(
-      "OD_PACKAGED_E2E_WIN_SMOKE_LANES: ${{ inputs.smoke-mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof == 'hit' && 'standalone' || '' }}",
+      "OD_PACKAGED_E2E_WIN_SMOKE_LANES: ${{ inputs.smoke-mode == 'full' && env.OD_RELEASE_EXACT_SMOKE_PROOF == 'hit' && 'standalone' || '' }}",
     );
+
+    for (const action of [betaMacAction, betaWinAction]) {
+      expect(action).toContain("description: all, prepare, or finish; split calls retain one runner workspace");
+      expect(action).toContain("default: all");
+      expect(action).toContain("phase state");
+      expect(action).toContain("OD_RELEASE_EXACT_SMOKE_PROOF=");
+    }
+    expect(releaseBetaWorkflow).toContain("Resolve and materialize exact ${{ matrix.target }}");
+    expect(releaseBetaWorkflow).toContain("Smoke and publish exact ${{ matrix.target }}");
+    expect(releaseBetaWorkflow).toContain("Resolve and materialize exact win_x64");
+    expect(releaseBetaWorkflow).toContain("Smoke and publish exact win_x64");
+    expect(releaseBetaWorkflow).toContain("phase: prepare");
+    expect(releaseBetaWorkflow).toContain("phase: finish");
+    expect(releaseBetaWorkflow).toContain("steps.mac_finish.outputs.smoke_result || steps.win_finish.outputs.smoke_result");
+    expect(releaseBetaWorkflow).toContain("steps.mac_prepare.outputs.candidate_manifest_url || steps.win_prepare.outputs.candidate_manifest_url");
 
     expectWindowsUpdaterSmokeContract(`${releaseBetaWorkflow}\n${betaWinAction}`, "beta");
     expectWindowsUpdaterSmokeContract(`${releasePrereleaseWorkflow}\n${winAction}`, "prerelease");
@@ -2052,7 +2077,7 @@ process.stdin.on("end", () => {
       }
     }
     expect(macCandidate).toContain("inputs.candidate-enabled == 'true'");
-    expect(winCandidate).toContain("if: ${{ !cancelled() }}");
+    expect(winCandidate).toContain("if: ${{ inputs.phase != 'finish' && !cancelled() }}");
     expect(workflow).toContain("  candidate:");
     expect(workflow).toContain("tools-release finalize-candidate");
     expect(workflow).toContain('RELEASE_ACTIVATE_LATEST: "false"');
@@ -3052,6 +3077,9 @@ process.stdin.on("end", () => {
     expect(runner).toContain("result.exitCode === 0 && cleanupError != null ? 1 : result.exitCode");
     expect(runner).toContain("cleanupError,");
     expect(runner).toContain("const terminationSignals = ['SIGINT', 'SIGTERM', 'SIGHUP'] as const");
+    expect(runner).toContain("startSmokeHeartbeat");
+    expect(runner).toContain("describe('heartbeat')");
+    expect(runner).toContain("clearInterval(heartbeat)");
     expect(builder).toContain("extendInfo: config.macBackgroundAgent === true ? { LSUIElement: true } : undefined");
     expect(shellEntry).not.toContain("setActivationPolicy");
     expect(macSpec).toContain("new MacFocusWitness(toolsPackDir)");

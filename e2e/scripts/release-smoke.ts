@@ -92,10 +92,23 @@ async function main(): Promise<void> {
   await saveOptionalSource(report, 'tools-pack.log', process.env.OD_PACKAGED_E2E_BUILD_LOG_PATH);
 
   const startedAt = Date.now();
-  const result = await runVitest(spec, vitestResultPath).catch((error: unknown) => ({
-    exitCode: 1,
-    log: formatUnknown(error),
-  }));
+  const heartbeat = startSmokeHeartbeat({
+    namespace,
+    platform,
+    profile: smokeProfile,
+    selectedLanes,
+    shellProof: process.env.OD_PACKAGED_E2E_SHELL_SMOKE_PROOF ?? 'not-requested',
+    spec,
+    startedAt,
+  });
+  let result: { exitCode: number; log: string };
+  try {
+    result = await runVitest(spec, vitestResultPath);
+  } catch (error) {
+    result = { exitCode: 1, log: formatUnknown(error) };
+  } finally {
+    clearInterval(heartbeat);
+  }
   let cleanupError: string | null = null;
   await stopPackagedRuntime(platform, namespace).catch((error: unknown) => {
     cleanupError = formatUnknown(error);
@@ -125,6 +138,30 @@ async function main(): Promise<void> {
   if (exitCode !== 0) {
     process.exitCode = exitCode;
   }
+}
+
+function startSmokeHeartbeat(input: {
+  namespace: string;
+  platform: Platform;
+  profile: string;
+  selectedLanes: string[];
+  shellProof: string;
+  spec: string;
+  startedAt: number;
+}): NodeJS.Timeout {
+  const lanes = input.selectedLanes.length > 0 ? input.selectedLanes.join(',') : 'none';
+  const describe = (kind: 'heartbeat' | 'start'): string =>
+    `[release-smoke] ${kind} platform=${input.platform} profile=${input.profile} lanes=${lanes}`
+      + ` shell_proof=${input.shellProof} namespace=${input.namespace} spec=${input.spec}`
+      + ` elapsed=${Math.round((Date.now() - input.startedAt) / 1_000)}s`;
+  console.log(describe('start'));
+  const configuredInterval = Number(process.env.OD_PACKAGED_E2E_HEARTBEAT_MS ?? 60_000);
+  const intervalMs = Number.isFinite(configuredInterval) && configuredInterval >= 5_000
+    ? configuredInterval
+    : 60_000;
+  const heartbeat = setInterval(() => console.log(describe('heartbeat')), intervalMs);
+  heartbeat.unref();
+  return heartbeat;
 }
 
 async function saveRequiredSource(
