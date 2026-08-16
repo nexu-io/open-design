@@ -41,4 +41,24 @@ describe('preview modal interaction regressions (OPEND-6791)', () => {
     // Must keep its top:50% vertical centering transform and ignore the global 1px translate
     expect(ruleValue(handleActive, 'transform')).toMatch(/translateY\(-50%\)/);
   });
+
+  // OPEND-6791 follow-up: the responsive preview layout repositions the
+  // handle (translateX instead of translateY). The same global 1px press
+  // translate would otherwise break the click, so the narrow-layout
+  // variants must keep their own centering transform on :active.
+  it('keeps the narrow-layout is-expand handle centered during press', () => {
+    const expandActive = cssBlock(
+      expandedIndexCss,
+      '.ds-modal-stage-handle.is-expand:active:not(:disabled)',
+    );
+    expect(ruleValue(expandActive, 'transform')).toMatch(/translateX\(50%\)/);
+  });
+
+  it('keeps the narrow-layout is-collapse handle centered during press', () => {
+    const collapseActive = cssBlock(
+      expandedIndexCss,
+      '.ds-modal-stage-handle.is-collapse:active:not(:disabled)',
+    );
+    expect(ruleValue(collapseActive, 'transform')).toMatch(/translateX\(-50%\)/);
+  });
 });
