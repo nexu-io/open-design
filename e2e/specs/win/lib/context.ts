@@ -281,6 +281,14 @@ export type DesktopStatus = {
   standalone?: unknown;
   state?: string;
   title?: string | null;
+  update?: {
+    channel: string;
+    currentVersion: string;
+    enabled: boolean;
+    mode: string;
+    supported: boolean;
+  };
+  updateStatusError?: string;
   url?: string | null;
   windowVisible?: boolean;
 };

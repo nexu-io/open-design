@@ -197,7 +197,16 @@ winDescribe('packaged windows runtime smoke', () => {
           });
         }
         expect(firstRunInspect.status?.state).toBe('running');
-        if (verifyPublicImmutableArtifacts) expect(firstRunInspect.update?.enabled).toBe(true);
+        if (verifyPublicImmutableArtifacts) {
+          expect(firstRunInspect.status?.updateStatusError).toBeUndefined();
+          expect(firstRunInspect.status?.update).toMatchObject({
+            channel: releaseChannel,
+            currentVersion: releaseVersion,
+            enabled: true,
+            mode: 'package-launcher',
+            supported: true,
+          });
+        }
         if (!firstRunInspect.desktopIpcUnavailable) {
           const firstRunPhase = await measureSmokeStep(timings, 'ensure first-run app shell', async () =>
             runPackagedAppShellPhase({

@@ -456,7 +456,18 @@ describe("inspectPackedWinApp", () => {
         if (payload.type === SIDECAR_MESSAGES.STATUS) {
           if (ipc.includes("daemon")) return { state: "running", url: "http://127.0.0.1:1234" };
           if (ipc.includes("web")) return { state: "running", url: "http://127.0.0.1:5678" };
-          return { pid: 12345, state: "running", url: "od://app/" };
+          return {
+            pid: 12345,
+            state: "running",
+            update: {
+              channel: "beta",
+              currentVersion: "0.10.0-beta.1",
+              enabled: true,
+              mode: "package-launcher",
+              supported: true,
+            },
+            url: "od://app/",
+          };
         }
         if (payload.type === SIDECAR_MESSAGES.EVAL) {
           return {
@@ -477,7 +488,18 @@ describe("inspectPackedWinApp", () => {
         timeoutMs: 1000,
       });
 
-      expect(result.status).toEqual({ pid: 12345, state: "running", url: "od://app/" });
+      expect(result.status).toEqual({
+        pid: 12345,
+        state: "running",
+        update: {
+          channel: "beta",
+          currentVersion: "0.10.0-beta.1",
+          enabled: true,
+          mode: "package-launcher",
+          supported: true,
+        },
+        url: "od://app/",
+      });
       expect(result.eval?.ok).toBe(true);
       expect(result.wait.attempts).toBe(1);
       expect(result.wait.intervalMs).toBe(1);
