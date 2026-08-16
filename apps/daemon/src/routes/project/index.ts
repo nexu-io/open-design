@@ -5462,7 +5462,16 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       return `${scoped}&${suffix.slice(1)}`;
     };
 
-    let next = html.replace(
+    // Extract and preserve script blocks to avoid corrupting JavaScript source
+    // when replacing cssUrl patterns (which might match e.g. URL.revokeObjectURL(url)).
+    const scriptBlocks: string[] = [];
+    const placeholder = (index: number) => `<!--OD-SCRIPT-PLACEHOLDER-${index}-->`;
+    let htmlWithoutScripts = html.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (match) => {
+      scriptBlocks.push(match);
+      return placeholder(scriptBlocks.length - 1);
+    });
+
+    let next = htmlWithoutScripts.replace(
       assetAttr,
       (match, space: string, name: string, eq: string, quote: string, value: string) => {
         const rewritten = rewrite(value);
@@ -5494,10 +5503,17 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         .join(',');
       return rewritten === value ? match : `${prefix}${quote}${rewritten}${quote}`;
     });
-    return next.replace(cssUrl, (match, quote: string, value: string) => {
+    next = next.replace(cssUrl, (match, quote: string, value: string) => {
       const rewritten = rewrite(value);
       return rewritten === value ? match : `url(${quote}${rewritten}${quote})`;
     });
+
+    // Restore preserved script blocks
+    for (let i = 0; i < scriptBlocks.length; i++) {
+      next = next.replace(placeholder(i), () => scriptBlocks[i]);
+    }
+
+    return next;
   }
 
   async function maybeResolveVitePreviewHtml({
