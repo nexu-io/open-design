@@ -1,6 +1,6 @@
 import { Icon, type IconName } from './Icon';
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import type { InstalledPluginRecord } from '@open-design/contracts';
+import type { InstalledPluginRecord, ProjectKind } from '@open-design/contracts';
 import { useI18n } from '../i18n';
 import { listPlugins } from '../state/projects';
 import {
@@ -22,6 +22,31 @@ import { useAnalytics } from '../analytics/provider';
 import { trackCommunityTemplateClick, trackPageView } from '../analytics/events';
 import { workspaceAnalyticsDimensions } from '../analytics/workspace';
 
+export interface CommunityTemplateUseTarget {
+  templateId: string;
+  prompt: string;
+  chipId: string;
+  projectKind: ProjectKind;
+}
+
+const TEMPLATE_HOME_TARGET: Record<TemplateType, Pick<CommunityTemplateUseTarget, 'chipId' | 'projectKind'>> = {
+  'Prototype': { chipId: 'prototype', projectKind: 'prototype' },
+  'Live Artifact': { chipId: 'live-artifact', projectKind: 'prototype' },
+  'Slides': { chipId: 'deck', projectKind: 'deck' },
+  'Image': { chipId: 'image', projectKind: 'image' },
+  'Video': { chipId: 'video', projectKind: 'video' },
+  'HyperFrames': { chipId: 'hyperframes', projectKind: 'video' },
+  'Audio': { chipId: 'audio', projectKind: 'audio' },
+};
+
+function templateUseTarget(template: TemplateDemo): CommunityTemplateUseTarget {
+  return {
+    templateId: template.id,
+    prompt: template.prompt,
+    ...TEMPLATE_HOME_TARGET[template.type],
+  };
+}
+
 /** Each tab carries the same icon the home composer's creation-type radial
  *  uses for that artifact kind (see home-hero/chips.ts), so the two surfaces
  *  read as one taxonomy. */
@@ -42,12 +67,16 @@ interface CommunityViewProps {
   onRemixTemplate?: (remix: { templateId: string; prompt: string }) => void;
   /** Send this template's prompt to the home composer input, without
    *  remixing straight into a project. */
-  onUsePrompt?: (prompt: string) => void;
+  onUsePrompt?: (target: CommunityTemplateUseTarget) => void;
   /** Route this plugin as the Home composer's active driver (the detail
    *  modal's Use split action). Provided by shells that own a Home hand-off
    *  (EntryShell); when absent, Use falls back to seeding the composer with
    *  the template's prompt via `onUsePrompt`. */
-  onUsePlugin?: (record: InstalledPluginRecord, action: PluginUseAction) => void;
+  onUsePlugin?: (
+    record: InstalledPluginRecord,
+    action: PluginUseAction,
+    target: CommunityTemplateUseTarget,
+  ) => void;
 }
 
 export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: CommunityViewProps) {
@@ -191,12 +220,14 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
    *  card's own prompt button uses). */
   const handleDetailsUse = (record: InstalledPluginRecord, action: PluginUseAction) => {
     setDetailsRecord(null);
+    const template = templateById(record.id);
+    if (!template) return;
+    const target = templateUseTarget(template);
     if (onUsePlugin) {
-      onUsePlugin(record, action);
+      onUsePlugin(record, action, target);
       return;
     }
-    const template = templateById(record.id);
-    if (template) onUsePrompt?.(template.prompt);
+    onUsePrompt?.(target);
   };
   /** The detail modal's Remix menu item keeps the EXACT community remix
    *  semantic (create a project seeded with the template prompt), including
@@ -332,7 +363,7 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
                       resource_scope: templateScope(template.id),
                       ...workspaceDimensions,
                     });
-                    onUsePrompt?.(template.prompt);
+                    onUsePrompt?.(templateUseTarget(template));
                   }}
                 >
                   {t('community.usePrompt')}

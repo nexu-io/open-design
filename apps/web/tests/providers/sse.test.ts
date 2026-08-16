@@ -1844,6 +1844,103 @@ describe('streamViaDaemon', () => {
     expect(handlers.onDone).not.toHaveBeenCalled();
   });
 
+  it('automatically retries a retryable workspace-authority outage before creating the run', async () => {
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const onRunStatus = vi.fn();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify({
+          error: {
+            code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+            message: 'workspace membership authority is temporarily unavailable',
+            retryable: true,
+          },
+        }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        }))
+        .mockResolvedValueOnce(jsonResponse({ runId: 'run-after-recovery' }))
+        .mockResolvedValueOnce(sseResponse(
+          'event: end\ndata: {"code":0,"status":"succeeded"}\n\n',
+        ));
+      vi.stubGlobal('fetch', fetchMock);
+
+      const streaming = streamViaDaemon({
+        agentId: 'amr',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+        clientRequestId: 'request-1',
+        onRunStatus,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
+
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+      const firstCreate = fetchMock.mock.calls[0] as unknown as [RequestInfo | URL, RequestInit];
+      const retriedCreate = fetchMock.mock.calls[1] as unknown as [RequestInfo | URL, RequestInit];
+      expect(firstCreate[0]).toBe('/api/runs');
+      expect(retriedCreate[0]).toBe('/api/runs');
+      expect(retriedCreate[1].body).toBe(firstCreate[1].body);
+      expect(JSON.parse(String(retriedCreate[1].body)).clientRequestId).toBe('request-1');
+      expect(onRunStatus).not.toHaveBeenCalledWith('failed');
+      expect(handlers.onError).not.toHaveBeenCalled();
+      expect(handlers.onDone).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('surfaces the structured authority error after automatic run-create retries are exhausted', async () => {
+    vi.useFakeTimers();
+    try {
+      const handlers = createDaemonHandlers();
+      const onRunStatus = vi.fn();
+      const outage = () => new Response(JSON.stringify({
+        error: {
+          code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+          message: 'workspace membership authority is temporarily unavailable',
+          retryable: true,
+        },
+      }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      });
+      const fetchMock = vi.fn()
+        .mockImplementationOnce(async () => outage())
+        .mockImplementationOnce(async () => outage())
+        .mockImplementationOnce(async () => outage())
+        .mockImplementationOnce(async () => outage());
+      vi.stubGlobal('fetch', fetchMock);
+
+      const streaming = streamViaDaemon({
+        agentId: 'amr',
+        history: [{ id: '1', role: 'user', content: 'hello' }],
+        systemPrompt: '',
+        signal: new AbortController().signal,
+        handlers,
+        clientRequestId: 'request-1',
+        onRunStatus,
+      });
+      await vi.runAllTimersAsync();
+      await streaming;
+
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+      expect(onRunStatus).toHaveBeenCalledWith('failed');
+      expect(handlers.onError).toHaveBeenCalledWith(expect.objectContaining({
+        message: 'workspace membership authority is temporarily unavailable',
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        retryable: true,
+        status: 503,
+      }));
+      expect(handlers.onDone).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('marks invalid create-run JSON as failed', async () => {
     const handlers = createDaemonHandlers();
     const onRunStatus = vi.fn();

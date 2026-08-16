@@ -10,6 +10,7 @@ import { TERMINAL_RUN_STATUSES } from '../../runtimes/runs.js';
 import { registerProjectCommentRoutes } from './comments.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
 import {
+  compactAdjacentMessageAgentEvents,
   deleteConversationAndRepairTeamCommentAnchor,
   isProjectCommentAnchorConversationId,
 } from '../../db.js';
@@ -548,8 +549,11 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
     if (existing === null && getMessage(db, req.params.mid) !== null) {
       return res.status(404).json({ error: 'message not found' });
     }
+    const normalizedMessage = Array.isArray(m.events)
+      ? { ...m, events: compactAdjacentMessageAgentEvents(m.events) }
+      : m;
     const saved = upsertMessage(db, req.params.cid, {
-      ...mergeMessageWriteForDaemonBacked(existing, m),
+      ...mergeMessageWriteForDaemonBacked(existing, normalizedMessage),
       id: req.params.mid,
     });
     // Bump the parent project's updatedAt so the project list re-orders.

@@ -9,7 +9,7 @@
  * Tests redirect HOME via env so we never touch the real user file.
  */
 
-import { mkdtempSync, rmSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, readFileSync, writeFileSync, existsSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +22,8 @@ import {
   peekVelaLiveAccount,
   readVelaControlApiContext,
   readVelaCredentialRevision,
+  clearVelaAuthorizationState,
+  markVelaAuthorizationExpired,
   readVelaLoginStatus,
   resolveAmrProfile,
   setVelaLiveAccount,
@@ -106,6 +108,61 @@ describe('resolveAmrProfile', () => {
 });
 
 describe('readVelaLoginStatus', () => {
+  afterEach(() => clearVelaAuthorizationState());
+
+  it('marks only the rejected credential revision as requiring sign-in again', () => {
+    const firstEnv = {
+      OPEN_DESIGN_AMR_PROFILE: 'local',
+      VELA_RUNTIME_KEY: 'expired-runtime-key',
+      VELA_LINK_URL: 'https://link.example/v1',
+    };
+    markVelaAuthorizationExpired(firstEnv);
+    expect(readVelaLoginStatus(firstEnv)).toMatchObject({
+      loggedIn: true,
+      sessionState: 'reauth_required',
+    });
+
+    expect(readVelaLoginStatus({
+      ...firstEnv,
+      VELA_RUNTIME_KEY: 'rotated-runtime-key',
+    })).toMatchObject({
+      loggedIn: true,
+      sessionState: 'authenticated',
+    });
+  });
+
+  it('recognizes a rotated file credential even when the config mtime is unchanged', () => {
+    const file = writeConfig({
+      profiles: {
+        local: {
+          runtimeKey: 'expired-file-key',
+          controlKey: 'expired-control-key',
+          linkUrl: 'https://link.example/v1',
+          user: { id: 'user-1', email: 'user@example.com' },
+        },
+      },
+    });
+    const fixedTime = new Date('2026-08-12T03:57:36Z');
+    utimesSync(file, fixedTime, fixedTime);
+    const env = { OPEN_DESIGN_AMR_PROFILE: 'local' };
+
+    markVelaAuthorizationExpired(env);
+    expect(readVelaLoginStatus(env).sessionState).toBe('reauth_required');
+
+    writeConfig({
+      profiles: {
+        local: {
+          runtimeKey: 'rotated-file-key',
+          controlKey: 'rotated-control-key',
+          linkUrl: 'https://link.example/v1',
+          user: { id: 'user-1', email: 'user@example.com' },
+        },
+      },
+    });
+    utimesSync(file, fixedTime, fixedTime);
+
+    expect(readVelaLoginStatus(env).sessionState).toBe('authenticated');
+  });
   it('returns loggedIn=false when ~/.amr/config.json is absent', () => {
     const status = readVelaLoginStatus({ OPEN_DESIGN_AMR_PROFILE: 'local' });
     expect(status.loggedIn).toBe(false);

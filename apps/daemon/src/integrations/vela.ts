@@ -16,6 +16,7 @@ import type {
   TrackingCampaignId,
   TrackingPageName,
 } from '@open-design/contracts/analytics';
+import type { AmrSessionState } from '@open-design/contracts';
 
 import { resolveAgentLaunch } from '../runtimes/launch.js';
 import { spawnEnvForAgent } from '../runtimes/env.js';
@@ -83,8 +84,13 @@ const AMR_ENTRY_SOURCE_PAGES: ReadonlySet<AmrEntrySourcePageName> = new Set([
   'home',
 ]);
 
+// Fail-closed: an id missing here voids the WHOLE entry, not just its campaign
+// field, so a live campaign left out loses every attributed entry it produces.
+// Both are listed because entries minted during the finished free week can
+// still arrive within their attribution window.
 const AMR_ENTRY_CAMPAIGN_IDS: ReadonlySet<TrackingCampaignId> = new Set([
   'deepseek_v4_flash',
+  'deepseek_v4_pro',
 ]);
 
 const AMR_ENTRY_CAMPAIGN_CONVERSION_SOURCES: ReadonlySet<TrackingCampaignConversionSource> =
@@ -240,6 +246,8 @@ export interface VelaUser {
 
 export interface VelaLoginStatus {
   loggedIn: boolean;
+  sessionState?: AmrSessionState;
+  credentialRevision?: string;
   loginInFlight: boolean;
   profile: string;
   user: VelaUser | null;
@@ -357,7 +365,9 @@ export interface VelaCredentialRevision {
    * in app-config, not just process env). Env-backed sessions report
    * `user: null`, so without this an account switch that only rewrites the
    * Settings-backed env (leaving `~/.amr/config.json` untouched) would reuse the
-   * previous account's cached plan/balance. Empty for non-env auth.
+   * previous account's cached plan/balance. File-backed sessions fingerprint
+   * the stored keys as well, so a successful login is recognized even when a
+   * filesystem preserves the config mtime.
    */
   credentialFingerprint: string;
 }
@@ -446,6 +456,32 @@ export function readVelaLoginStatus(
   env: NodeJS.ProcessEnv = process.env,
   configuredEnv: Record<string, string> = {},
 ): VelaLoginStatus {
+  const rawStatus = readRawVelaLoginStatus(env, configuredEnv);
+  const credentialRevision = velaCredentialRevisionDigest(
+    readRawVelaCredentialRevision(env, configuredEnv, rawStatus),
+  );
+  let sessionState: AmrSessionState = 'authenticated';
+  if (!rawStatus.loggedIn) {
+    sessionState = 'signed_out';
+  } else if (expiredVelaCredentialRevisions.has(credentialRevision)) {
+    sessionState = 'reauth_required';
+  }
+  return {
+    ...rawStatus,
+    // `loggedIn` remains the backwards-compatible "credential is present"
+    // projection. Routing must not treat an expired credential like a brand
+    // new user and throw them back into first-run onboarding; new callers use
+    // `sessionState` for authoritative validity.
+    loggedIn: rawStatus.loggedIn,
+    sessionState,
+    credentialRevision,
+  };
+}
+
+function readRawVelaLoginStatus(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): Omit<VelaLoginStatus, 'sessionState' | 'credentialRevision'> {
   const mergedEnv = mergeVelaEnv(env, configuredEnv);
   const profile = resolveAmrProfile(mergedEnv);
   const configPath = amrConfigPath();
@@ -611,21 +647,40 @@ export function readVelaCredentialRevision(
   env: NodeJS.ProcessEnv = process.env,
   configuredEnv: Record<string, string> = {},
 ): VelaCredentialRevision {
+  return readRawVelaCredentialRevision(
+    env,
+    configuredEnv,
+    readRawVelaLoginStatus(env, configuredEnv),
+  );
+}
+
+function readRawVelaCredentialRevision(
+  env: NodeJS.ProcessEnv,
+  configuredEnv: Record<string, string>,
+  status: Omit<VelaLoginStatus, 'sessionState' | 'credentialRevision'>,
+): VelaCredentialRevision {
   const mergedEnv = mergeVelaEnv(env, configuredEnv);
-  const status = readVelaLoginStatus(env, configuredEnv);
   const hasEnvCredentials =
     (mergedEnv.VELA_RUNTIME_KEY?.trim() ?? '').length > 0 &&
     (mergedEnv.VELA_LINK_URL?.trim() ?? '').length > 0;
   // One-way hash (never the raw key) so the cache key distinguishes env-backed
   // accounts whose only difference is the configured runtime credential.
-  const credentialFingerprint = hasEnvCredentials
-    ? createHash('sha256')
-        .update(
-          `${mergedEnv.VELA_RUNTIME_KEY ?? ''}\n${mergedEnv.VELA_LINK_URL ?? ''}`,
-        )
-        .digest('hex')
-        .slice(0, 16)
-    : '';
+  const fileProfile = hasEnvCredentials
+    ? undefined
+    : readConfigFile()?.profiles?.[status.profile];
+  const credentialFingerprint = createHash('sha256')
+    .update(
+      hasEnvCredentials
+        ? `${mergedEnv.VELA_RUNTIME_KEY ?? ''}\n${mergedEnv.VELA_LINK_URL ?? ''}`
+        : [
+            fileProfile?.runtimeKey ?? '',
+            fileProfile?.controlKey ?? '',
+            fileProfile?.linkUrl ?? '',
+            fileProfile?.apiUrl ?? '',
+          ].join('\n'),
+    )
+    .digest('hex')
+    .slice(0, 16);
   return {
     authSource: hasEnvCredentials ? 'env' : status.loggedIn ? 'file' : 'none',
     profile: status.profile,
@@ -644,7 +699,51 @@ export function readVelaCredentialRevision(
   };
 }
 
+const expiredVelaCredentialRevisions = new Set<string>();
+const expiredVelaControlKeys = new Set<string>();
+
+function velaCredentialRevisionDigest(revision: VelaCredentialRevision): string {
+  return createHash('sha256')
+    .update(JSON.stringify(revision))
+    .digest('hex')
+    .slice(0, 20);
+}
+
+/** Mark only the currently-active credential revision as rejected upstream. */
+export function markVelaAuthorizationExpired(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): string {
+  const revision = velaCredentialRevisionDigest(readVelaCredentialRevision(env, configuredEnv));
+  expiredVelaCredentialRevisions.add(revision);
+  const control = readRawVelaControlApiContext(env, configuredEnv);
+  if (control) expiredVelaControlKeys.add(velaControlKeyDigest(control.controlKey));
+  return revision;
+}
+
+/** Test/logout seam. A rotated credential naturally has a different revision. */
+export function clearVelaAuthorizationState(): void {
+  expiredVelaCredentialRevisions.clear();
+  expiredVelaControlKeys.clear();
+}
+
+function velaControlKeyDigest(controlKey: string): string {
+  return createHash('sha256').update(controlKey).digest('hex').slice(0, 20);
+}
+
 export function readVelaControlApiContext(
+  env: NodeJS.ProcessEnv = process.env,
+  configuredEnv: Record<string, string> = {},
+): VelaControlApiContext | null {
+  const context = readRawVelaControlApiContext(env, configuredEnv);
+  if (
+    context
+    && expiredVelaControlKeys.has(velaControlKeyDigest(context.controlKey))
+  ) return null;
+  return context;
+}
+
+function readRawVelaControlApiContext(
   env: NodeJS.ProcessEnv = process.env,
   configuredEnv: Record<string, string> = {},
 ): VelaControlApiContext | null {
@@ -653,7 +752,7 @@ export function readVelaControlApiContext(
   const envControlKey = mergedEnv.VELA_CONTROL_KEY?.trim() ?? '';
   const envApiUrl = mergedEnv.VELA_API_URL?.trim() ?? '';
   if (envControlKey) {
-    const status = readVelaLoginStatus(env, configuredEnv);
+    const status = readRawVelaLoginStatus(env, configuredEnv);
     return {
       profile,
       apiUrl: envApiUrl || 'https://amr-api.open-design.ai',

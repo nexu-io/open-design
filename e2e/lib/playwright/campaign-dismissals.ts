@@ -19,7 +19,12 @@ import type { BrowserContext } from '@playwright/test';
  *   therefore never sees the suite fixture)
  */
 export const CAMPAIGN_DISMISSAL_STORAGE: Record<string, string> = {
+  // Finished 8/6-8/13 free week.
   'open-design:campaign-seen:deepseek-v4-flash-unlimited-2026': '1',
+  // Live 8/13-8/27 two-model window. Frequency control is keyed on the campaign
+  // id, so a new campaign needs its own entry here — otherwise its modal opens
+  // over every spec on the first home render, exactly what this file prevents.
+  'open-design:campaign-seen:deepseek-v4-dual-unlimited-2026': '1',
 };
 
 export async function seedCampaignDismissals(context: BrowserContext): Promise<void> {

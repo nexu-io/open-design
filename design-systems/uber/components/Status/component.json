@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Status",
+  "name": "Status",
+  "description": "Uber pill status treatment.",
+  "selectors": [".chip"],
+  "properties": {
+    "label": { "type": "string", "required": true }
+  },
+  "states": {
+    "hover": { "selectors": [".chip:hover"], "required": true },
+    "active": { "selectors": [".chip.active"] }
+  },
+  "implementation": "<span class=\"chip active\">{{label}}</span>",
+  "source": "components.html"
+}

@@ -94,6 +94,10 @@ vi.mock('../../src/providers/registry', () => ({
 
 afterEach(() => {
   cleanup();
+  Object.assign(recentWorkspaceState.context, {
+    displayName: undefined,
+    avatarUrl: undefined,
+  });
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.mocked(invalidateProjectFilesCache).mockClear();
@@ -268,6 +272,25 @@ describe('RecentProjectsStrip', () => {
         }),
       }),
     );
+  });
+
+  it('renders the signed-in creator name and profile image for a self-owned project', async () => {
+    Object.assign(recentWorkspaceState.context, {
+      displayName: 'Elian Zhang',
+      avatarUrl: 'https://example.com/elian.png',
+    });
+
+    const { container } = render(
+      <RecentProjectsStrip
+        projects={[project({ id: 'project-owned', name: 'Owned project' })]}
+        onOpen={() => {}}
+      />,
+    );
+
+    await screen.findByText('Created by Elian Zhang');
+    expect(screen.queryByText('Created by Me')).toBeNull();
+    const avatar = container.querySelector<HTMLImageElement>('.recent-projects__card-owner img');
+    expect(avatar?.src).toBe('https://example.com/elian.png');
   });
 
   it('refreshes only the card named by team-project-content-ready', async () => {

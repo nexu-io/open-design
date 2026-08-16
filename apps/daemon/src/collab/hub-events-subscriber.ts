@@ -22,6 +22,13 @@ import type { WorkspaceBillingRevisionClock } from '@open-design/contracts';
 
 export type HubResourceStatus = 'shared' | 'retracted';
 export type HubWorkspaceMemberChange = 'added' | 'removed' | 'updated';
+export type HubWorkspaceDirectoryChange =
+  | 'created'
+  | 'updated'
+  | 'deleted'
+  | 'membership-added'
+  | 'membership-updated'
+  | 'membership-removed';
 export type HubListenerHealth = 'starting' | 'healthy' | 'reconnecting' | 'stopped';
 
 export interface HubListenerStatus {
@@ -43,6 +50,8 @@ const WORKSPACE_EVENT_LISTENER_STATUS_CAPABILITY =
   'workspace-event-listener-status-v1';
 export const AUTHORITATIVE_PROJECT_PRESENCE_CAPABILITY =
   'authoritative-project-presence-v1';
+export const WORKSPACE_DIRECTORY_EVENTS_CAPABILITY =
+  'workspace-directory-events-v1';
 const MAX_HANDLED_SOURCE_GAP_EPOCHS = 64;
 
 export interface HubWorkspaceEvent {
@@ -83,6 +92,14 @@ export interface HubWorkspaceEvent {
   at?: string;
 }
 
+/** Account-scoped dirty signal multiplexed onto any verified Workspace SSE. */
+export interface HubWorkspaceDirectoryEvent {
+  type: 'workspace-directory-changed';
+  workspaceId: string;
+  change: HubWorkspaceDirectoryChange;
+  at?: string;
+}
+
 const HUB_EVENT_TYPES = new Set<HubWorkspaceEvent['type']>([
   'team-projects-changed',
   'comment-changed',
@@ -102,6 +119,14 @@ const HUB_WORKSPACE_MEMBER_CHANGES = new Set<HubWorkspaceMemberChange>([
   'added',
   'removed',
   'updated',
+]);
+const HUB_WORKSPACE_DIRECTORY_CHANGES = new Set<HubWorkspaceDirectoryChange>([
+  'created',
+  'updated',
+  'deleted',
+  'membership-added',
+  'membership-updated',
+  'membership-removed',
 ]);
 
 export function parseHubWorkspaceEvent(data: string): HubWorkspaceEvent | null {
@@ -143,6 +168,31 @@ export function parseHubWorkspaceEvent(data: string): HubWorkspaceEvent | null {
   } catch {
     return null;
   }
+}
+
+export function parseHubWorkspaceDirectoryEvent(
+  data: string,
+): HubWorkspaceDirectoryEvent | null {
+  const parsed = parseJsonRecord(data);
+  const workspaceId =
+    typeof parsed?.workspaceId === 'string' ? parsed.workspaceId.trim() : '';
+  const change = parsed?.change;
+  if (
+    parsed?.type !== 'workspace-directory-changed'
+    || !workspaceId
+    || typeof change !== 'string'
+    || !HUB_WORKSPACE_DIRECTORY_CHANGES.has(
+      change as HubWorkspaceDirectoryChange,
+    )
+  ) {
+    return null;
+  }
+  return {
+    type: 'workspace-directory-changed',
+    workspaceId,
+    change: change as HubWorkspaceDirectoryChange,
+    ...(typeof parsed.at === 'string' ? { at: parsed.at } : {}),
+  };
 }
 
 export function parseHubReadyFrame(data: string): HubReadyFrame | null {
@@ -221,6 +271,8 @@ export interface HubEventsEndpoint {
   /** Expected workspace carried by the server's `ready` frame. Catch-up and
    *  events stay gated until the stream proves this exact scope. */
   workspaceId?: string;
+  /** Opaque local credential identity; never sent to or read from Vela. */
+  identityKey?: string;
 }
 
 export interface HubEventsSubscriberOptions {
@@ -230,20 +282,33 @@ export interface HubEventsSubscriberOptions {
    * max backoff; it keeps re-resolving so a later sign-in picks up.
    */
   resolveEndpoint: () => Promise<HubEventsEndpoint | null>;
-  onEvent: (event: HubWorkspaceEvent) => void;
+  onEvent: (
+    event: HubWorkspaceEvent,
+    connection: { identityKey?: string },
+  ) => void;
+  /** Account-directory dirty signal carried by any verified Workspace stream. */
+  onDirectoryEvent?: (
+    event: HubWorkspaceDirectoryEvent,
+    connection: { identityKey?: string },
+  ) => void;
   /** Terminal authorization signal emitted immediately before Vela closes a
    * revoked member's verified stream. */
   onAccessRevoked?: (revocation: {
     workspaceId?: string;
+    identityKey?: string;
     reason?: string;
   }) => void;
   /** Channel health transitions — drives poll-cadence switching. */
-  onStateChange?: (state: 'connected' | 'disconnected') => void;
+  onStateChange?: (
+    state: 'connected' | 'disconnected',
+    connection: { identityKey?: string },
+  ) => void;
   /** Strict authority health for adaptive polling. `healthy` is true only
    * after exact-scope verification, required roster/listener capabilities,
    * and a healthy gap-free producer status are all present. */
   onAuthorityHealthChange?: (health: {
     workspaceId?: string;
+    identityKey?: string;
     healthy: boolean;
     capabilities: readonly string[];
     listenerStatus: HubListenerStatus | null;
@@ -253,10 +318,15 @@ export interface HubEventsSubscriberOptions {
   onConnect?: (connection: {
     reconnect: boolean;
     workspaceId?: string;
+    identityKey?: string;
     capabilities: readonly string[];
   }) => void;
   /** One catch-up nudge per healthy producer-listener epoch that reports a gap. */
-  onSourceGap?: (gap: { workspaceId?: string; listenerEpoch: string }) => void;
+  onSourceGap?: (gap: {
+    workspaceId?: string;
+    identityKey?: string;
+    listenerEpoch: string;
+  }) => void;
   /** Secret-free parser/scope diagnostics. Raw payloads are never exposed. */
   onDrop?: (drop: {
     reason: 'invalid-ready' | 'workspace-mismatch' | 'unverified-scope' | 'invalid-payload';
@@ -269,13 +339,15 @@ export interface HubEventsSubscriberOptions {
    * events may have been missed. The caller should run one catch-up cycle
    * (its pollers' `pollOnce`).
    */
-  onReconnect?: () => void;
+  onReconnect?: (connection: { identityKey?: string }) => void;
   onError?: (error: unknown) => void;
   fetchImpl?: typeof fetch;
   /** Abort the stream when no frame (event OR heartbeat) arrives for this long. */
   heartbeatTimeoutMs?: number;
   backoffMinMs?: number;
   backoffMaxMs?: number;
+  /** Injectable jitter source for deterministic reconnect tests. */
+  random?: () => number;
 }
 
 export interface HubEventsSubscriber {
@@ -290,6 +362,7 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
   const heartbeatTimeoutMs = options.heartbeatTimeoutMs ?? 45_000;
   const backoffMinMs = options.backoffMinMs ?? 1_000;
   const backoffMaxMs = options.backoffMaxMs ?? 30_000;
+  const random = options.random ?? Math.random;
 
   let stopped = false;
   let isConnected = false;
@@ -300,10 +373,12 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
   let endpointGeneration = 0;
   const handledSourceGapEpochs = new Set<string>();
 
-  const setConnected = (next: boolean) => {
+  const setConnected = (next: boolean, identityKey?: string) => {
     if (isConnected === next) return;
     isConnected = next;
-    options.onStateChange?.(next ? 'connected' : 'disconnected');
+    options.onStateChange?.(next ? 'connected' : 'disconnected', {
+      ...(identityKey ? { identityKey } : {}),
+    });
   };
 
   const sleep = (ms: number) =>
@@ -319,6 +394,13 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
         resolve();
       };
     });
+  const jitteredBackoff = (ms: number): number =>
+    Math.max(
+      1,
+      Math.floor(
+        ms * (1 + Math.min(0.999_999, Math.max(0, random())) * 0.5),
+      ),
+    );
 
   async function consumeStream(
     endpoint: HubEventsEndpoint,
@@ -349,6 +431,7 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
       try {
         options.onAuthorityHealthChange?.({
           ...(verifiedWorkspaceId ? { workspaceId: verifiedWorkspaceId } : {}),
+          ...(endpoint.identityKey ? { identityKey: endpoint.identityKey } : {}),
           healthy,
           capabilities: [...verifiedCapabilities],
           listenerStatus: status,
@@ -405,6 +488,7 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
         if (!suppressCallback) {
           options.onSourceGap?.({
             ...(verifiedWorkspaceId ? { workspaceId: verifiedWorkspaceId } : {}),
+            ...(endpoint.identityKey ? { identityKey: endpoint.identityKey } : {}),
             listenerEpoch: status.listenerEpoch,
           });
         }
@@ -421,9 +505,16 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
           options.onConnect?.({
             reconnect,
             ...(workspaceId ? { workspaceId } : {}),
+            ...(endpoint.identityKey ? { identityKey: endpoint.identityKey } : {}),
             capabilities: [...capabilities],
           });
-          if (reconnect) options.onReconnect?.();
+          if (reconnect) {
+            options.onReconnect?.({
+              ...(endpoint.identityKey
+                ? { identityKey: endpoint.identityKey }
+                : {}),
+            });
+          }
         } catch (error) {
           options.onError?.(error);
         }
@@ -478,7 +569,7 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
             // failures. Terminal revocation below deliberately overrides this
             // with the maximum retry delay.
             backoffMs = backoffMinMs;
-            setConnected(true);
+            setConnected(true, endpoint.identityKey);
             revisionClocksEnabled = ready.capabilities.includes(
               BILLING_REVISION_CLOCKS_CAPABILITY,
             );
@@ -525,15 +616,49 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
                 ...(verifiedWorkspaceId
                   ? { workspaceId: verifiedWorkspaceId }
                   : {}),
+                ...(endpoint.identityKey
+                  ? { identityKey: endpoint.identityKey }
+                  : {}),
                 ...(reason ? { reason } : {}),
               });
             } catch (error) {
               options.onError?.(error);
             }
             publishAuthorityHealth(lastListenerStatus, true);
-            setConnected(false);
+            setConnected(false, endpoint.identityKey);
             abortController?.abort();
             return 'revoked';
+          }
+          if (eventName === 'workspace-directory-changed') {
+            if (!scopeVerified) {
+              options.onDrop?.({
+                reason: 'unverified-scope',
+                eventName,
+                ...(endpoint.workspaceId
+                  ? { expectedWorkspaceId: endpoint.workspaceId }
+                  : {}),
+              });
+              continue;
+            }
+            if (
+              !verifiedCapabilities.includes(
+                WORKSPACE_DIRECTORY_EVENTS_CAPABILITY,
+              )
+            ) {
+              options.onDrop?.({ reason: 'invalid-payload', eventName });
+              continue;
+            }
+            const directoryEvent = parseHubWorkspaceDirectoryEvent(data);
+            if (!directoryEvent) {
+              options.onDrop?.({ reason: 'invalid-payload', eventName });
+              continue;
+            }
+            // Its workspace may be brand new and therefore intentionally does
+            // NOT have to match the stream that carried the account signal.
+            options.onDirectoryEvent?.(directoryEvent, {
+              ...(endpoint.identityKey ? { identityKey: endpoint.identityKey } : {}),
+            });
+            continue;
           }
           if (eventName !== 'workspace-event') continue;
           if (!scopeVerified) {
@@ -566,9 +691,17 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
           }
           if (!revisionClocksEnabled && event.revisionClock) {
             const { revisionClock: _, ...legacyEvent } = event;
-            options.onEvent(legacyEvent);
+            options.onEvent(legacyEvent, {
+              ...(endpoint.identityKey
+                ? { identityKey: endpoint.identityKey }
+                : {}),
+            });
           } else {
-            options.onEvent(event);
+            options.onEvent(event, {
+              ...(endpoint.identityKey
+                ? { identityKey: endpoint.identityKey }
+                : {}),
+            });
           }
         }
       }
@@ -577,7 +710,7 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
       if (watchdog) clearTimeout(watchdog);
       abortController = null;
       if (scopeVerified) publishAuthorityHealth(lastListenerStatus, true);
-      setConnected(false);
+      setConnected(false, endpoint.identityKey);
     }
   }
 
@@ -592,7 +725,7 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
         if (generation !== endpointGeneration) continue;
         if (!endpoint) {
           // Signed out / no team workspace — idle at max backoff, keep probing.
-          await sleep(backoffMaxMs);
+          await sleep(jitteredBackoff(backoffMaxMs));
           continue;
         }
         const outcome = await consumeStream(endpoint);
@@ -615,7 +748,7 @@ export function startHubEventsSubscriber(options: HubEventsSubscriberOptions): H
         backoffMs = backoffMinMs;
         continue;
       }
-      await sleep(backoffMs);
+      await sleep(jitteredBackoff(backoffMs));
       backoffMs = Math.min(backoffMs * 2, backoffMaxMs);
     }
   })();

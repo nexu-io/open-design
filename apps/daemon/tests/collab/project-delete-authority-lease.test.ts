@@ -139,6 +139,7 @@ describe('personal local-only project delete authority lease', () => {
       503,
       'WORKSPACE_AUTHORITY_UNAVAILABLE',
       expect.any(String),
+      { retryable: true },
     );
   });
 

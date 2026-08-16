@@ -192,9 +192,14 @@ const BADGE_VIEWBOX_WIDTH: Record<string, string> = {
   team: '0 0 136 49',
 };
 
+// 320a36ac1 moved the account module into the floating top-right cluster and
+// made its trigger avatar-only — the nameplate (label + badge) now lives in
+// the hover menu's billing card, which the harness already opens and scopes
+// through `billingCard()`. Read the badge from there; the trigger no longer
+// renders one.
 function accountRowBadgeViewBox(): string | null {
   const badge = document
-    .querySelector('.entry-nav-rail__account-trigger')
+    .querySelector('.entry-nav-rail__menu-credits-plan')
     ?.querySelector('svg.plan-wordmark');
   return badge?.getAttribute('viewBox') ?? null;
 }

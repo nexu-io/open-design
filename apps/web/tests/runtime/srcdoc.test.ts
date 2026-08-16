@@ -107,6 +107,16 @@ describe('buildSrcdoc', () => {
     expect(buildSrcdoc(html)).not.toContain('data-od-preview-observability');
   });
 
+  it('echoes the host challenge token from the srcDoc transport readiness probe', () => {
+    const srcdoc = buildSrcdoc('<main>Preview</main>', {
+      transportActivationGeneration: 'generation-42',
+    });
+
+    expect(srcdoc).toContain("data.type === 'od:srcdoc-transport-ready-probe'");
+    expect(srcdoc).toContain('announceReady(data.probeId)');
+    expect(srcdoc).toContain('message.probeId = probeId');
+  });
+
   it('paints an opaque background before drawing so empty rasters never flatten to black', () => {
     const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
 

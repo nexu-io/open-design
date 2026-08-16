@@ -159,8 +159,8 @@ export const PRICING_SNAPSHOT: PricingContract = {
       recommended: false,
       minSeats: 3,
       monthlyCreditsPerSeatUsd: 0,
-      monthly: { priceUsd: 20, introPriceUsd: 16 },
-      yearly: { priceUsd: 240, introPriceUsd: 168, discountPct: 30 },
+      monthly: { priceUsd: 5, introPriceUsd: 4 },
+      yearly: { priceUsd: 60, introPriceUsd: 42, discountPct: 30 },
     },
     {
       tier: 'team_plus',
@@ -168,8 +168,8 @@ export const PRICING_SNAPSHOT: PricingContract = {
       recommended: false,
       minSeats: 3,
       monthlyCreditsPerSeatUsd: 20,
-      monthly: { priceUsd: 40, introPriceUsd: 32 },
-      yearly: { priceUsd: 480, introPriceUsd: 336, discountPct: 30 },
+      monthly: { priceUsd: 25, introPriceUsd: 20 },
+      yearly: { priceUsd: 300, introPriceUsd: 210, discountPct: 30 },
     },
     {
       tier: 'team_pro',
@@ -177,8 +177,8 @@ export const PRICING_SNAPSHOT: PricingContract = {
       recommended: true,
       minSeats: 3,
       monthlyCreditsPerSeatUsd: 100,
-      monthly: { priceUsd: 120, introPriceUsd: 84 },
-      yearly: { priceUsd: 1440, introPriceUsd: 864, discountPct: 40 },
+      monthly: { priceUsd: 105, introPriceUsd: 73.5 },
+      yearly: { priceUsd: 1260, introPriceUsd: 756, discountPct: 40 },
     },
     {
       tier: 'team_max',
@@ -186,20 +186,32 @@ export const PRICING_SNAPSHOT: PricingContract = {
       recommended: false,
       minSeats: 3,
       monthlyCreditsPerSeatUsd: 200,
-      monthly: { priceUsd: 220, introPriceUsd: 132 },
-      yearly: { priceUsd: 2640, introPriceUsd: 1296, discountPct: 51 },
+      monthly: { priceUsd: 205, introPriceUsd: 123 },
+      // The yearly Max coupon caps at 50.91%, so the first-year seat price does
+      // not divide evenly into twelve months — keep the exact cloud amount.
+      yearly: { priceUsd: 2460, introPriceUsd: 1207.61, discountPct: 51 },
     },
   ],
 };
 
-/** Whole-dollar USD, no trailing cents (prices are whole-dollar by design). */
+/**
+ * USD with cents only when the amount actually has them. Individual plans are
+ * whole-dollar, but Team seat prices are percentage-derived off the cloud
+ * catalog and land on cents ($73.50 / seat / month, $100.63 / seat / month on
+ * the yearly Max coupon), so silently rounding them would misquote the price.
+ */
 export function formatUsd(amount: number): string {
-  return `$${Math.round(amount).toLocaleString('en-US')}`;
+  const cents = Math.round(amount * 100);
+  const value = cents / 100;
+  return `$${value.toLocaleString('en-US', {
+    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
-/** Monthly-equivalent of an annual price, rounded to whole dollars. */
+/** Monthly-equivalent of an annual price, to the cent. */
 export function yearlyMonthlyEquivalent(yearlyPriceUsd: number): number {
-  return Math.round(yearlyPriceUsd / 12);
+  return Math.round((yearlyPriceUsd / 12) * 100) / 100;
 }
 
 /** Introductory Team charge for the selected billing period and seat count. */

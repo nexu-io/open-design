@@ -33,6 +33,8 @@ export interface WorkspaceExactContextCache {
   ): Promise<WorkspaceCollabContext | null>;
   cached(workspaceId: string): WorkspaceCollabContext | null;
   setRealtimeHealthy(workspaceId: string, healthy: boolean): void;
+  /** Retire every snapshot and health grant across a credential transition. */
+  resetIdentity(): void;
   invalidate(
     workspaceId?: string,
     reason?: 'event_dirty' | 'auth_reject' | 'catch_up',
@@ -64,6 +66,13 @@ export function createWorkspaceExactContextCache(
     const generation = (generations.get(key) ?? 0) + 1;
     generations.set(key, generation);
     return generation;
+  };
+  const resetIdentity = (): void => {
+    // Keep generation tombstones so an old identity's in-flight response can
+    // never reseed its partition after A -> B -> A returns to the same key.
+    for (const key of generations.keys()) advanceGeneration(key);
+    entries.clear();
+    healthyIdentities.clear();
   };
 
   const refresh = async (
@@ -172,6 +181,7 @@ export function createWorkspaceExactContextCache(
         entries.delete(key);
       }
     },
+    resetIdentity,
     invalidate(workspaceIdInput, reason = 'event_dirty'): void {
       const workspaceId = workspaceIdInput?.trim() ?? '';
       options.onInvalidation?.({ source: 'current', reason });

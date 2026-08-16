@@ -3346,6 +3346,24 @@ describe('parseAmrEntryAnalyticsPayload — entry sources added in this PR', () 
     });
   });
 
+  // The ingest allowlist is fail-closed: an unrecognised campaign id voids the
+  // WHOLE entry, not just its campaign field. So a live campaign missing from
+  // the set loses every attributed entry it produces — and the campaign's own
+  // success metrics (活动归因付费人数 / 金额) are defined as payments carrying
+  // its `campaign_id`, which means the campaign would report zero while
+  // converting normally.
+  it('accepts the current campaign id, not only the finished one', () => {
+    const parsed = parseAmrEntryAnalyticsPayload({
+      ...payloadFor('deepseek_workbench_badge', 'home'),
+      campaignId: 'deepseek_v4_pro',
+      conversionSource: 'deepseek_workbench_badge',
+    });
+    expect(parsed).toMatchObject({
+      campaignId: 'deepseek_v4_pro',
+      conversionSource: 'deepseek_workbench_badge',
+    });
+  });
+
   it('rejects unknown campaign dimensions rather than silently dropping them', () => {
     expect(
       parseAmrEntryAnalyticsPayload({

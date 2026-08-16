@@ -3,12 +3,16 @@
  * The shared Dialog chrome supplies the backdrop, elevation, and the
  * 220ms pop-in (scale 0.97 + opacity, custom cubic-bezier). */
 
+/* 480px, not 400: the insufficient-balance line carries an inline amount, so it
+ * always wraps — the narrower panel broke it mid-phrase ("升级套 / 餐"). The
+ * extra width gives the wrap a clean phrase boundary and lets the benefits card
+ * and the side-by-side action row breathe. */
 .panel {
   position: relative;
-  width: min(400px, calc(100vw - 32px));
+  width: min(480px, calc(100vw - 32px));
   align-items: center;
   text-align: center;
-  padding: 36px 32px 24px;
+  padding: 36px 24px 24px;
   gap: 0;
   overflow: hidden;
 }
@@ -17,7 +21,7 @@
  * so the artwork reaches the dialog's rounded corners; .panel's overflow:
  * hidden clips it to match instead of duplicating the radius here. */
 .banner {
-  margin: -36px -32px 24px;
+  margin: -36px -24px 24px;
 }
 
 /* No object-fit crop — width:100% + height:auto keeps the source's native
@@ -64,7 +68,7 @@
 }
 
 .message {
-  margin: 0 0 24px;
+  margin: 0 0 14px;
   font-size: 13.5px;
   line-height: 1.6;
   color: var(--text-muted);
@@ -74,8 +78,8 @@
 
 .benefitsCard {
   width: 100%;
-  margin: 0 0 22px;
-  padding: 16px 18px;
+  margin: 0 0 18px;
+  padding: 12px 16px;
   text-align: start;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
@@ -87,7 +91,7 @@
  * to the check icons and CTA without competing with the main title. */
 .benefitsTitle {
   display: block;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -137,21 +141,28 @@
   width: 22px;
   height: 22px;
   flex: none;
-  border-radius: var(--radius-sm);
+  /* Full radius: a circular tick chip, matching the pill action row below. */
+  border-radius: var(--radius-pill, 999px);
   color: var(--accent);
   background: var(--accent-tint);
 }
 
+/* Side-by-side pair: dismissal on the left, the upgrade CTA on the right,
+ * which is also their DOM order so focus follows what the eye reads. The CTA
+ * keeps the dominant share of the row via `flex: 1`. */
 .actions {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
   width: 100%;
 }
 
 .cta {
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
   height: 40px;
+  border-radius: var(--radius-pill, 999px);
   font-size: 13.5px;
   box-shadow:
     inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent),
@@ -174,7 +185,8 @@
  * dialog's full-width primary CTA (the pill supplies the vela-login flow,
  * activation-link fallback, and polling; we only restyle its button). */
 .signInPill {
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
 }
 
 .signInPill :global(.amr-account-control) {
@@ -186,7 +198,7 @@
   width: 100%;
   height: 40px;
   font-size: 13.5px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-pill, 999px);
   border: none;
   background: var(--accent);
   color: #fff;
@@ -211,11 +223,15 @@
 
 /* Quiet text button: the bordered ghost chrome would compete with the CTA.
  * Scoped under .actions to outrank the shared Button variant class. Sits a
- * size step down from the CTA so the pair reads as primary/secondary, not
- * two equally-weighted buttons stacked back to back. */
+ * size step down from the CTA so the pair reads as primary/secondary rather
+ * than two equally-weighted buttons sharing the row. Content-width (not
+ * flexed) so the CTA takes the remaining space. */
 .actions .later {
-  width: 100%;
-  padding-top: 2px;
+  flex: 0 0 auto;
+  width: auto;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill, 999px);
   color: var(--text-muted);
   font-size: 12.5px;
   border-color: transparent;

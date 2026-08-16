@@ -50,6 +50,12 @@ export interface PluginsCopy {
   hubFeatureBlurb: string;
   hubFeatureCta: string;
 
+  /** Second featured curated-collection banner (DeepSeek Harness design). */
+  hubFeatureDshEyebrow: string;
+  hubFeatureDshTitle: string;
+  hubFeatureDshBlurb: string;
+  hubFeatureDshCta: string;
+
   /** Hub hero + explore section. EN baseline; zh localized, rest fall back to EN. */
   hubEyebrow: string;
   hubUnitPlugins: string;
@@ -255,6 +261,11 @@ const en: PluginsCopy = {
   hubFeatureBlurb:
     'A hand-picked set of plugins — aesthetic skills and design-system rules — that give OpenAI Codex taste. Install one, or run them all inside Open Design.',
   hubFeatureCta: 'Explore the collection',
+  hubFeatureDshEyebrow: 'Curated · DeepSeek Harness design',
+  hubFeatureDshTitle: 'DeepSeek Harness plugins for design',
+  hubFeatureDshBlurb:
+    'Native dsh plugins for design work — vision bridges, editable canvases, generative UI — plus the SKILL.md canon it shares with Claude Code and Codex.',
+  hubFeatureDshCta: 'Explore the collection',
 
   hubEyebrow: 'Plugin library',
   hubUnitPlugins: 'plugins',
@@ -589,6 +600,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     hubFeatureBlurb:
       '一组精挑细选的插件——审美类 Skill 和设计系统规则——让 OpenAI Codex 有审美。装一个，或者在 Open Design 里全部跑起来。',
     hubFeatureCta: '浏览精选合集',
+    hubFeatureDshEyebrow: '精选 · DeepSeek Harness 设计',
+    hubFeatureDshTitle: 'DeepSeek Harness 设计插件',
+    hubFeatureDshBlurb:
+      '一组原生 dsh 设计插件——视觉桥、可编辑画布、生成式 UI——外加与 Claude Code、Codex 通用的 SKILL.md 技能生态。',
+    hubFeatureDshCta: '浏览精选合集',
     hubLabel: 'Agent 设计插件库',
     hubHeading: () => `Agent 设计插件库`,
     hubLead:
@@ -929,6 +945,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     hubFeatureBlurb:
       'OpenAI Codex にセンスを与える、厳選したプラグイン集 — 美意識のスキルとデザインシステムのルール。ひとつだけ入れるのも、Open Design ですべて動かすのも自由です。',
     hubFeatureCta: 'コレクションを見る',
+    hubFeatureDshEyebrow: 'キュレーション · DeepSeek Harness デザイン',
+    hubFeatureDshTitle: 'デザインのための DeepSeek Harness プラグイン',
+    hubFeatureDshBlurb:
+      'ビジョンブリッジ、編集可能なキャンバス、生成 UI などデザイン向けネイティブプラグインに加え、Claude Code・Codex と共通の SKILL.md スキルもそのまま使えます。',
+    hubFeatureDshCta: 'コレクションを見る',
     hubMetaTitle: (n) => `Claude Code プラグイン & Skills マーケットプレイス — ${n}+ | Open Design`,
     hubMetaDescription: 'オープンソースの Claude skills マーケットプレイス——デザイン skills、デザインシステム、テンプレート、craft を coding agent が直接実行。Claude、Codex、Cursor に対応。',
     skillsMetaTitle: (n) => `Claude Code & Codex デザインスキル — ${n} 個のオープンソース skills | Open Design`,
@@ -1098,6 +1119,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     hubFeatureBlurb:
       'OpenAI Codex에 안목을 더해 주는 엄선된 플러그인 모음 — 미감을 잡아 주는 스킬과 디자인 시스템 규칙. 하나만 설치하거나, Open Design 안에서 전부 실행하세요.',
     hubFeatureCta: '컬렉션 둘러보기',
+    hubFeatureDshEyebrow: '큐레이션 · DeepSeek Harness 디자인',
+    hubFeatureDshTitle: '디자인을 위한 DeepSeek Harness 플러그인',
+    hubFeatureDshBlurb:
+      '비전 브리지, 편집 가능한 캔버스, 생성형 UI 등 디자인용 네이티브 플러그인과 함께 Claude Code·Codex와 공유하는 SKILL.md 스킬 생태계까지.',
+    hubFeatureDshCta: '컬렉션 둘러보기',
     hubMetaTitle: (n) => `Claude Code 플러그인 & Skills 마켓플레이스 — ${n}+ | Open Design`,
     hubMetaDescription: '오픈소스 Claude skills 마켓플레이스 둘러보기——디자인 skills, 디자인 시스템, 템플릿, craft를 coding agent가 바로 실행합니다. Claude, Codex, Cursor 지원.',
     skillsMetaTitle: (n) => `Claude Code & Codex 디자인 스킬 — 오픈소스 skills ${n}개 | Open Design`,
@@ -1267,6 +1293,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     hubFeatureBlurb:
       'Eine handverlesene Sammlung von Plugins — ästhetische Skills und Design-System-Regeln —, die OpenAI Codex Geschmack geben. Installiere eines oder lass sie alle in Open Design laufen.',
     hubFeatureCta: 'Sammlung entdecken',
+    hubFeatureDshEyebrow: 'Kuratiert · DeepSeek Harness Design',
+    hubFeatureDshTitle: 'DeepSeek-Harness-Plugins für Design',
+    hubFeatureDshBlurb:
+      'Native Harness-Plugins für Designarbeit — Vision-Bridges, editierbare Canvases, generative UI — plus der SKILL.md-Kanon, den es mit Claude Code und Codex teilt.',
+    hubFeatureDshCta: 'Sammlung entdecken',
     hubMetaTitle: (n) => `Claude Code Plugins & Skills-Marktplatz — ${n}+ für Design | Open Design`,
     hubMetaDescription: 'Durchstöbere den Open-Source-Marktplatz für Claude skills——Design-skills, Designsysteme, Vorlagen und craft, die dein coding agent direkt ausführt. Funktioniert mit Claude, Codex, Cursor.',
     skillsMetaTitle: (n) => `Claude Code & Codex Design-Skills — ${n} Open-Source-skills | Open Design`,
@@ -1437,6 +1468,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     hubFeatureBlurb:
       'Une sélection de plugins — des skills esthétiques et des règles de design system — qui donnent du goût à OpenAI Codex. Installez-en un, ou faites-les tourner tous dans Open Design.',
     hubFeatureCta: 'Explorer la collection',
+    hubFeatureDshEyebrow: 'Sélection · DeepSeek Harness design',
+    hubFeatureDshTitle: 'Les plugins DeepSeek Harness pour le design',
+    hubFeatureDshBlurb:
+      'Des plugins natifs pour le design — ponts de vision, canevas éditables, UI générative — plus le canon SKILL.md partagé avec Claude Code et Codex.',
+    hubFeatureDshCta: 'Explorer la collection',
     hubMetaTitle: (n) => `Plugins Claude Code & marketplace de skills — ${n}+ pour le design | Open Design`,
     hubMetaDescription: 'Explorez la marketplace open source de Claude skills——skills de design, design systems, modèles et craft que votre coding agent exécute directement. Compatible Claude, Codex, Cursor.',
     skillsMetaTitle: (n) => `Skills design pour Claude Code & Codex — ${n} skills open source | Open Design`,
@@ -1606,6 +1642,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     hubFeatureBlurb:
       'Отобранный вручную набор плагинов — скиллы для эстетики и правила дизайн-систем, — которые дают OpenAI Codex вкус. Поставьте один или запустите их все внутри Open Design.',
     hubFeatureCta: 'Смотреть подборку',
+    hubFeatureDshEyebrow: 'Подборка · Дизайн для DeepSeek Harness',
+    hubFeatureDshTitle: 'Плагины DeepSeek Harness для дизайна',
+    hubFeatureDshBlurb:
+      'Нативные плагины для дизайна — зрительные мосты, редактируемые холсты, генеративный UI — плюс общий с Claude Code и Codex каталог SKILL.md.',
+    hubFeatureDshCta: 'Смотреть подборку',
     hubMetaTitle: (n) => `Плагины Claude Code и маркетплейс skills — ${n}+ для дизайна | Open Design`,
     hubMetaDescription: 'Откройте опенсорсный маркетплейс Claude skills——дизайн-skills, дизайн-системы, шаблоны и craft, которые ваш coding agent запускает напрямую. Работает с Claude, Codex, Cursor.',
     skillsMetaTitle: (n) => `Дизайн-skills для Claude Code и Codex — ${n} опенсорсных skills | Open Design`,
@@ -1776,6 +1817,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     hubFeatureBlurb:
       'Una selección de plugins — skills de estética y reglas de design system — que le dan criterio a OpenAI Codex. Instala uno o ejecútalos todos dentro de Open Design.',
     hubFeatureCta: 'Explorar la colección',
+    hubFeatureDshEyebrow: 'Selección · DeepSeek Harness design',
+    hubFeatureDshTitle: 'Plugins de DeepSeek Harness para diseño',
+    hubFeatureDshBlurb:
+      'Plugins nativos para diseñar — puentes de visión, lienzos editables, UI generativa — más el canon SKILL.md que comparte con Claude Code y Codex.',
+    hubFeatureDshCta: 'Explorar la colección',
     hubMetaTitle: (n) => `Plugins de Claude Code y marketplace de skills — ${n}+ para diseño | Open Design`,
     hubMetaDescription: 'Explora el marketplace open source de Claude skills——skills de diseño, design systems, plantillas y craft que tu coding agent ejecuta directamente. Compatible con Claude, Codex, Cursor.',
     skillsMetaTitle: (n) => `Skills de diseño para Claude Code y Codex — ${n} skills open source | Open Design`,
@@ -1945,6 +1991,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     hubFeatureBlurb:
       'Uma seleção a dedo de plugins — skills de estética e regras de design system — que dão bom gosto ao OpenAI Codex. Instale um ou rode todos dentro do Open Design.',
     hubFeatureCta: 'Explorar a coleção',
+    hubFeatureDshEyebrow: 'Curadoria · DeepSeek Harness design',
+    hubFeatureDshTitle: 'Plugins do DeepSeek Harness para design',
+    hubFeatureDshBlurb:
+      'Plugins nativos para design — pontes de visão, telas editáveis, UI generativa — além do cânone SKILL.md compartilhado com Claude Code e Codex.',
+    hubFeatureDshCta: 'Explorar a coleção',
     hubMetaTitle: (n) => `Plugins do Claude Code e marketplace de skills — ${n}+ para design | Open Design`,
     hubMetaDescription: 'Explore o marketplace open source de Claude skills——skills de design, design systems, templates e craft que seu coding agent executa direto. Funciona com Claude, Codex, Cursor.',
     skillsMetaTitle: (n) => `Skills de design para Claude Code e Codex — ${n} skills open source | Open Design`,
@@ -2114,6 +2165,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     hubFeatureBlurb:
       'Una selezione ragionata di plugin — skill estetiche e regole di design system — che danno gusto a OpenAI Codex. Installane uno, oppure usali tutti dentro Open Design.',
     hubFeatureCta: 'Esplora la raccolta',
+    hubFeatureDshEyebrow: 'Selezione · DeepSeek Harness design',
+    hubFeatureDshTitle: 'Plugin DeepSeek Harness per il design',
+    hubFeatureDshBlurb:
+      'Plugin nativi per il design — bridge di visione, canvas modificabili, UI generativa — più il canone SKILL.md condiviso con Claude Code e Codex.',
+    hubFeatureDshCta: 'Esplora la raccolta',
     hubMetaTitle: (n) => `Plugin Claude Code e marketplace di skills — ${n}+ per il design | Open Design`,
     hubMetaDescription: 'Esplora il marketplace open source di Claude skills——skills di design, design system, template e craft che il tuo coding agent esegue direttamente. Compatibile con Claude, Codex, Cursor.',
     skillsMetaTitle: (n) => `Skills di design per Claude Code e Codex — ${n} skills open source | Open Design`,
@@ -2742,6 +2798,11 @@ const overrides: Partial<Record<LandingLocaleCode, Partial<PluginsCopy>>> = {
     hubFeatureBlurb:
       'OpenAI Codex’e zevk kazandıran, elle seçilmiş eklentiler — estetik skill’ler ve tasarım sistemi kuralları. Birini kurun ya da hepsini Open Design içinde çalıştırın.',
     hubFeatureCta: 'Koleksiyonu keşfet',
+    hubFeatureDshEyebrow: 'Seçki · DeepSeek Harness tasarım',
+    hubFeatureDshTitle: 'Tasarım için DeepSeek Harness eklentileri',
+    hubFeatureDshBlurb:
+      'Tasarım için yerel eklentiler — görü köprüleri, düzenlenebilir tuvaller, üretken arayüzler — artı Claude Code ve Codex ile ortak SKILL.md beceri kanonu.',
+    hubFeatureDshCta: 'Koleksiyonu keşfet',
     hubMetaTitle: (n) => `Claude Code Eklentileri ve Skills Pazarı — ${n}+ Tasarım Eklentisi | Open Design`,
     hubMetaDescription: 'Açık kaynaklı Claude skills pazarına göz atın——coding agent\'ınızın doğrudan çalıştırdığı tasarım skills, tasarım sistemleri, şablonlar ve craft. Claude, Codex, Cursor ile çalışır.',
     skillsMetaTitle: (n) => `Claude Code ve Codex için Tasarım Skills — ${n} Açık Kaynak skills | Open Design`,

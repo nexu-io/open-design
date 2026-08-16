@@ -2584,6 +2584,9 @@ export function conversationTurnIndexForRun(
 }
 
 export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
+  const persistedEvents = Array.isArray(m.events)
+    ? compactAdjacentMessageAgentEvents(m.events)
+    : m.events;
   const existing = db
     .prepare(`SELECT position FROM messages WHERE id = ?`)
     .get(m.id) as DbRow | undefined;
@@ -2613,7 +2616,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.runStatus ?? null,
       normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
       m.lastRunEventId ?? null,
-      m.events ? JSON.stringify(m.events) : null,
+      persistedEvents ? JSON.stringify(persistedEvents) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
@@ -2667,7 +2670,7 @@ export function upsertMessage(db: SqliteDb, conversationId: string, m: DbRow) {
       m.runStatus ?? null,
       normalizeResultDeliveryStateForStorage(m.resultDeliveryState),
       m.lastRunEventId ?? null,
-      m.events ? JSON.stringify(m.events) : null,
+      persistedEvents ? JSON.stringify(persistedEvents) : null,
       m.attachments ? JSON.stringify(m.attachments) : null,
       m.commentAttachments ? JSON.stringify(m.commentAttachments) : null,
       m.producedFiles ? JSON.stringify(m.producedFiles) : null,
@@ -2759,25 +2762,73 @@ export function appendMessageStatusEvent(db: SqliteDb, messageId: string, event:
   return next;
 }
 
-export function appendMessageAgentEvent(db: SqliteDb, messageId: string, event: DbRow) {
-  if (!event || typeof event !== 'object') return null;
-  const kind = typeof event.kind === 'string' ? event.kind : '';
-  if (!kind) return null;
+export function compactAdjacentMessageAgentEvents(
+  incomingEvents: readonly DbRow[],
+): DbRow[] {
+  const events: DbRow[] = [];
+  for (const event of incomingEvents) {
+    const kind = typeof event?.kind === 'string' ? event.kind : '';
+    const last = events[events.length - 1];
+    const isMergeableDelta =
+      (kind === 'text' || kind === 'thinking') && typeof event?.text === 'string';
+    if (isMergeableDelta && last?.kind === kind && typeof last.text === 'string') {
+      events[events.length - 1] = { ...last, text: last.text + event.text };
+    } else {
+      events.push(event);
+    }
+  }
+  return events;
+}
+
+export function appendMessageAgentEvents(
+  db: SqliteDb,
+  messageId: string,
+  incomingEvents: readonly DbRow[],
+): DbRow[] | null {
+  if (incomingEvents.length === 0) return null;
   const row = db
     .prepare(`SELECT content, events_json AS eventsJson FROM messages WHERE id = ?`)
     .get(messageId) as DbRow | undefined;
   if (!row) return null;
   const parsed = parseJsonOrUndef(row.eventsJson);
-  const events = Array.isArray(parsed) ? parsed : [];
-  const last = events[events.length - 1];
-  if (last && JSON.stringify(last) === JSON.stringify(event)) {
-    return events;
+  const parsedEvents = Array.isArray(parsed) ? parsed : [];
+  const events = compactAdjacentMessageAgentEvents(parsedEvents);
+  let textDelta = '';
+  let changed = events.length !== parsedEvents.length;
+
+  for (const event of incomingEvents) {
+    if (!event || typeof event !== 'object') continue;
+    const kind = typeof event.kind === 'string' ? event.kind : '';
+    if (!kind) continue;
+    const last = events[events.length - 1];
+    const isMergeableDelta =
+      (kind === 'text' || kind === 'thinking') && typeof event.text === 'string';
+    if (isMergeableDelta && last?.kind === kind && typeof last.text === 'string') {
+      last.text += event.text;
+      if (kind === 'text') textDelta += event.text;
+      changed = changed || event.text.length > 0;
+      continue;
+    }
+    if (!isMergeableDelta && last && JSON.stringify(last) === JSON.stringify(event)) {
+      continue;
+    }
+    events.push(event);
+    if (kind === 'text' && typeof event.text === 'string') textDelta += event.text;
+    changed = true;
   }
-  const next = [...events, event];
-  const textDelta = kind === 'text' && typeof event.text === 'string' ? event.text : '';
+
+  if (!changed) return events;
   db.prepare(`UPDATE messages SET content = COALESCE(content, '') || ?, events_json = ? WHERE id = ?`)
-    .run(textDelta, JSON.stringify(next), messageId);
-  return next;
+    .run(textDelta, JSON.stringify(events), messageId);
+  return events;
+}
+
+export function appendMessageAgentEvent(
+  db: SqliteDb,
+  messageId: string,
+  event: DbRow,
+): DbRow[] | null {
+  return appendMessageAgentEvents(db, messageId, [event]);
 }
 
 export function deleteMessage(db: SqliteDb, id: string) {

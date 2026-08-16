@@ -10,6 +10,7 @@ import {
   openDatabase,
 } from '../../src/db.js';
 import {
+  accountScopedRunWorkspaceScopeForProject,
   openDesignAmrTraceEnvForRun,
   pinRunWorkspaceScopeForProject,
 } from '../../src/runtimes/project-amr-trace-env.js';
@@ -118,17 +119,30 @@ describe('openDesignAmrTraceEnvForRun', () => {
     expect(env.OPEN_DESIGN_WORKSPACE_ID).toBe('workspace-personal');
   });
 
-  it('refuses a truly unbound project instead of spawning AMR on the account wallet', async () => {
+  it('spawns a truly unbound local project on the signed-in account wallet', async () => {
     const db = projectDb({ projectId: 'project-legacy' });
-    await expect(openDesignAmrTraceEnvForRun({
+    const env = await openDesignAmrTraceEnvForRun({
       agentId: 'amr',
       runId: 'run-legacy',
       runAttempt: 0,
       projectId: 'project-legacy',
-      workspaceScope: pinRunWorkspaceScopeForProject(db, 'project-legacy'),
+      workspaceScope: accountScopedRunWorkspaceScopeForProject('project-legacy'),
+    });
+    expect(env.OPEN_DESIGN_RUN_ID).toBe('run-legacy');
+    expect(env).not.toHaveProperty('OPEN_DESIGN_WORKSPACE_ID');
+  });
+
+  it('does not infer account scope from a missing run proof', async () => {
+    projectDb({ projectId: 'project-proof-missing' });
+    await expect(openDesignAmrTraceEnvForRun({
+      agentId: 'amr',
+      runId: 'run-proof-missing',
+      runAttempt: 0,
+      projectId: 'project-proof-missing',
+      workspaceScope: null,
     })).rejects.toMatchObject({
       code: 'AMR_WORKSPACE_SCOPE_REQUIRED',
-      projectId: 'project-legacy',
+      projectId: 'project-proof-missing',
     });
   });
 

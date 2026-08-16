@@ -1,3 +1,10 @@
+import type {
+  ResolveDesignSystemIntentApiResponse,
+  ResolveDesignSystemIntentRequest,
+  ValidateDesignSystemAdherenceApiResponse,
+  ValidateDesignSystemAdherenceRequest,
+} from '@open-design/contracts';
+
 type JsonObject = Record<string, unknown>;
 
 interface ToolCliResult {
@@ -7,12 +14,17 @@ interface ToolCliResult {
 interface ParsedOptions {
   command: string | undefined;
   path?: string;
+  intent?: string;
+  artifacts: string[];
   designSystemId?: string;
+  json: boolean;
   help: boolean;
 }
 
 const DESIGN_SYSTEMS_USAGE = `Usage:
   od tools design-systems read --path <manifest-declared-path> [--design-system <id>]
+  od tools design-systems resolve --intent <canonical-intent> [--design-system <id>] [--json]
+  od tools design-systems validate --intent <canonical-intent> --artifact <project-relative-file> [--artifact <file>...] [--design-system <id>] [--json]
 
 Environment:
   OD_NODE_BIN     Node-compatible runtime for agent wrapper invocations
@@ -22,6 +34,8 @@ Environment:
 
 Agent runtime invocation:
   "$OD_NODE_BIN" "$OD_BIN" tools design-systems read --path preview/colors.html
+  "$OD_NODE_BIN" "$OD_BIN" tools design-systems resolve --intent account.settings.save
+  "$OD_NODE_BIN" "$OD_BIN" tools design-systems validate --intent account.settings.save --artifact account-settings.html --artifact styles.css
 `;
 
 function writeJson(value: unknown, stream: NodeJS.WriteStream = process.stdout): void {
@@ -37,6 +51,8 @@ function parseOptions(args: string[]): ParsedOptions | { error: string } {
   const [command, ...rest] = args;
   const options: ParsedOptions = {
     command: command === '-h' || command === '--help' ? undefined : command,
+    artifacts: [],
+    json: false,
     help: command === '-h' || command === '--help',
   };
 
@@ -46,10 +62,20 @@ function parseOptions(args: string[]): ParsedOptions | { error: string } {
       const value = rest[++index];
       if (!value) return { error: '--path requires a relative file path' };
       options.path = value;
+    } else if (arg === '--intent') {
+      const value = rest[++index];
+      if (!value) return { error: '--intent requires a canonical intent id' };
+      options.intent = value;
+    } else if (arg === '--artifact') {
+      const value = rest[++index];
+      if (!value) return { error: '--artifact requires a project-relative file path' };
+      options.artifacts.push(value);
     } else if (arg === '--design-system') {
       const value = rest[++index];
       if (!value) return { error: '--design-system requires an id' };
       options.designSystemId = value;
+    } else if (arg === '--json') {
+      options.json = true;
     } else if (arg === '-h' || arg === '--help') {
       options.help = true;
     } else {
@@ -86,7 +112,7 @@ function endpoint(baseUrl: URL, pathname: string): string {
   return url.toString();
 }
 
-async function requestJson(baseUrl: URL, token: string, pathname: string, init: RequestInit = {}): Promise<{ status: number; body: unknown }> {
+async function requestJson<TBody = unknown>(baseUrl: URL, token: string, pathname: string, init: RequestInit = {}): Promise<{ status: number; body: TBody }> {
   const response = await fetch(endpoint(baseUrl, pathname), {
     ...init,
     headers: {
@@ -105,7 +131,7 @@ async function requestJson(baseUrl: URL, token: string, pathname: string, init: 
       body = { message: text };
     }
   }
-  return { status: response.status, body };
+  return { status: response.status, body: body as TBody };
 }
 
 function normalizeCliError(body: unknown): JsonObject {
@@ -132,6 +158,19 @@ async function printApiResult(response: { status: number; body: unknown }): Prom
   return { exitCode: 0 };
 }
 
+async function printAdherenceResult(response: { status: number; body: unknown }): Promise<ToolCliResult> {
+  if (response.status < 200 || response.status >= 300) return printApiResult(response);
+  const body = response.body && typeof response.body === 'object' && !Array.isArray(response.body)
+    ? response.body as JsonObject
+    : { result: response.body };
+  const report = body.report && typeof body.report === 'object' && !Array.isArray(body.report)
+    ? body.report as JsonObject
+    : undefined;
+  const passed = report?.status === 'passed';
+  writeJson({ ok: passed, ...body });
+  return { exitCode: passed ? 0 : 2 };
+}
+
 export async function runDesignSystemsToolCli(args: string[]): Promise<ToolCliResult> {
   const options = parseOptions(args);
   if ('error' in options) return fail(options.error);
@@ -144,6 +183,38 @@ export async function runDesignSystemsToolCli(args: string[]): Promise<ToolCliRe
   if ('error' in baseUrl) return fail(baseUrl.error);
   const token = toolToken();
   if (typeof token !== 'string') return fail(token.error);
+
+  if (options.command === 'resolve') {
+    if (!options.intent) return fail('resolve requires --intent <canonical-intent>');
+    const request: ResolveDesignSystemIntentRequest = {
+      intent: options.intent,
+      ...(options.designSystemId ? { designSystemId: options.designSystemId } : {}),
+    };
+    return printApiResult(
+      await requestJson<ResolveDesignSystemIntentApiResponse>(baseUrl, token, '/api/tools/design-systems/resolve-intent', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      }),
+    );
+  }
+
+  if (options.command === 'validate') {
+    if (!options.intent) return fail('validate requires --intent <canonical-intent>');
+    if (options.artifacts.length === 0) {
+      return fail('validate requires at least one --artifact <project-relative-file>');
+    }
+    const request: ValidateDesignSystemAdherenceRequest = {
+      intent: options.intent,
+      artifacts: options.artifacts,
+      ...(options.designSystemId ? { designSystemId: options.designSystemId } : {}),
+    };
+    return printAdherenceResult(
+      await requestJson<ValidateDesignSystemAdherenceApiResponse>(baseUrl, token, '/api/tools/design-systems/validate-adherence', {
+        method: 'POST',
+        body: JSON.stringify(request),
+      }),
+    );
+  }
 
   if (options.command !== 'read') return fail(`unknown design-systems command: ${options.command}`);
   if (!options.path) return fail('read requires --path <manifest-declared-path>');

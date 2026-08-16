@@ -109,12 +109,22 @@ function bodyOf(
 
 describe('langfuse-bridge.reportRunCompletedFromDaemon', () => {
   let dataDir: string;
+  let telemetryRelayUrl: string | undefined;
+  let objectRelayUrl: string | undefined;
 
   beforeEach(async () => {
+    telemetryRelayUrl = process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    objectRelayUrl = process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
+    delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
     dataDir = await mkdtemp(path.join(tmpdir(), 'od-bridge-'));
   });
 
   afterEach(async () => {
+    if (telemetryRelayUrl === undefined) delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
+    else process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL = telemetryRelayUrl;
+    if (objectRelayUrl === undefined) delete process.env.OPEN_DESIGN_OBJECT_RELAY_URL;
+    else process.env.OPEN_DESIGN_OBJECT_RELAY_URL = objectRelayUrl;
     await rm(dataDir, { recursive: true, force: true });
     vi.restoreAllMocks();
   });

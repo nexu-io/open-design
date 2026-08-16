@@ -342,15 +342,13 @@ test('[P1] Avatar menu stays a model picker for a signed-in Open Design account'
   await captureVisual(page, 'visual-avatar-open-design-model-picker');
 });
 
-test('[P2] captures the avatar reasoning readout surface', async ({ page }) => {
+test('[P2] captures the avatar reasoning selector surface', async ({ page }) => {
   await configureVisualPage(page, {
     // AvatarMenu only draws the reasoning row for an agent that reports
     // `reasoningOptions`, and the shared `VISUAL_CLI_AGENTS` codex entry
-    // declares models only — so the readout this capture is named for never
-    // rendered, and the assertion has been failing since 68cecac1c introduced
-    // it. The real daemon does report them (apps/daemon/src/runtimes/defs/
-    // codex.ts), so declare them here rather than widening the shared fixture
-    // that the other captures in this file share.
+    // declares models only. The real daemon does report them (apps/daemon/src/
+    // runtimes/defs/codex.ts), so declare them here rather than widening the
+    // shared fixture that the other captures in this file share.
     agents: [
       { ...VISUAL_CODEX_AGENT, reasoningOptions: VISUAL_CODEX_REASONING_OPTIONS },
       ...VISUAL_CLI_AGENTS.filter((agent) => agent.id !== 'codex'),
@@ -364,12 +362,10 @@ test('[P2] captures the avatar reasoning readout surface', async ({ page }) => {
   await gotoVisualWorkspace(page);
 
   const menu = await prepareVisualAvatarMenu(page);
-  // Reasoning effort is shown as a read-only readout; it is changed in
-  // Settings → Execution, not from the composer.
-  const reasoningReadout = menu.locator('.avatar-static-value');
-  await expect(reasoningReadout).toHaveCount(1);
-  await expect(reasoningReadout).toHaveText('Default');
-  await expect(menu.locator('.avatar-model-section select')).toHaveCount(0);
+  const reasoningSelect = menu.getByRole('combobox', { name: 'Reasoning' });
+  await expect(reasoningSelect).toHaveCount(1);
+  await expect(reasoningSelect).toHaveValue('default');
+  await expect(reasoningSelect.locator('option')).toHaveText(['Default', 'Medium', 'High']);
 
   await captureVisual(page, 'visual-avatar-local-agent-list');
   await captureVisualTarget(page, 'visual-avatar-local-agent-list-panel', menu);

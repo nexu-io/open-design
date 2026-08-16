@@ -105,6 +105,7 @@ describe('useWorkspaceContext invalidation freshness', () => {
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
     resetCoalescedGet();
     resetWorkspaceContextCache();
@@ -206,5 +207,80 @@ describe('useWorkspaceContext invalidation freshness', () => {
         permissions: { canInviteMembers: true },
       });
     });
+  });
+
+  it('uses an exact-scope safety read without relisting the account while SSE is connected', async () => {
+    vi.useFakeTimers();
+    OpeningEventSource.autoOpen = false;
+    let directoryReads = 0;
+    let contextReads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/workspace/directory') {
+        directoryReads += 1;
+        return jsonResponse(workspaceDirectoryFixture([TEAM_CONTEXT]));
+      }
+      if (url === '/api/workspace/context') {
+        contextReads += 1;
+        return jsonResponse({ context: TEAM_CONTEXT });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    const hook = renderHook(() => useWorkspaceContext());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(hook.result.current.context?.workspaceId).toBe(TEAM_CONTEXT.workspaceId);
+    expect(directoryReads).toBe(1);
+    expect(contextReads).toBe(1);
+
+    await act(async () => {
+      OpeningEventSource.instances[0]?.open();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(directoryReads).toBe(2);
+    expect(contextReads).toBe(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120_000);
+    });
+    expect(directoryReads).toBe(2);
+    expect(contextReads).toBe(3);
+  });
+
+  it('uses an exact-scope read on focus while the stream remains connected', async () => {
+    OpeningEventSource.autoOpen = false;
+    let clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+    let directoryReads = 0;
+    let contextReads = 0;
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/workspace/directory') {
+        directoryReads += 1;
+        return jsonResponse(workspaceDirectoryFixture([TEAM_CONTEXT]));
+      }
+      if (url === '/api/workspace/context') {
+        contextReads += 1;
+        return jsonResponse({ context: TEAM_CONTEXT });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }));
+
+    const hook = renderHook(() => useWorkspaceContext());
+    await waitFor(() => {
+      expect(hook.result.current.context?.workspaceId).toBe(TEAM_CONTEXT.workspaceId);
+    });
+    act(() => OpeningEventSource.instances[0]?.open());
+    await waitFor(() => expect(directoryReads).toBe(2));
+    expect(contextReads).toBe(2);
+
+    // Outside forceCoalescedGet's same-transition burst window, this is a
+    // genuinely separate ambient safety check.
+    clock = 251;
+    act(() => window.dispatchEvent(new Event('focus')));
+    await waitFor(() => expect(contextReads).toBe(3));
+    expect(directoryReads).toBe(2);
   });
 });

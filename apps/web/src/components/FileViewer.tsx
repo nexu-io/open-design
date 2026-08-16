@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type CSSProperties, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import { Button, Input, Select } from '@open-design/components';
 import { CenteredLoader } from './Loading';
@@ -618,6 +618,7 @@ const htmlPreviewZoomState = new Map<string, { zoom: number; zoomMode: 'auto' | 
 const MAX_CACHED_PREVIEW_CONTENT_WIDTHS = 128;
 const PREVIEW_CONTENT_WIDTH_CACHE_VERSION = 2;
 const SRC_DOC_ACTIVATION_RECOVERY_TIMEOUT_MS = 1500;
+const SRC_DOC_READY_PROBE_TIMEOUT_MS = 1500;
 let previewContentMeasurementDocumentEpochSequence = 0;
 let previewContentMeasurementHostInstanceSequence = 0;
 let previewTransportGenerationSequence = 0;
@@ -4190,17 +4191,19 @@ function FileVersionManagerModal({
               <span className="share-menu-icon"><RemixIcon name="file-zip-line" size={15} /></span>
               <span>{t('fileViewer.exportZip')}</span>
             </button>
-            <button
-              type="button"
-              className="share-menu-item"
-              role="menuitem"
-              onClick={() => {
-                exportVersionHtml(selectedVersion);
-              }}
-            >
-              <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
-              <span>{t('fileViewer.exportHtml')}</span>
-            </button>
+            {selectedVersion.current ? (
+              <button
+                type="button"
+                className="share-menu-item"
+                role="menuitem"
+                onClick={() => {
+                  exportVersionHtml(selectedVersion);
+                }}
+              >
+                <span className="share-menu-icon"><RemixIcon name="file-code-line" size={15} /></span>
+                <span>{t('fileViewer.exportHtml')}</span>
+              </button>
+            ) : null}
           </div>
         ) : null}
       </aside>
@@ -4402,6 +4405,7 @@ export function CommentSidePanel({
   activeCommentId,
   collapsed,
   onCollapsedChange,
+  onDismiss,
   onToggleSelect,
   onSelectAll,
   onClearSelection,
@@ -4426,6 +4430,10 @@ export function CommentSidePanel({
   activeCommentId: string | null;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  /** Closes the panel outright. The floating card uses this so its collapse
+   *  control hides the card instead of parking a full-height rail on the
+   *  right edge; the toolbar's comment button is the way back. */
+  onDismiss?: () => void;
   onToggleSelect: (commentId: string) => void;
   onSelectAll: () => void;
   canSendComment?: (comment: PreviewComment) => boolean;
@@ -4584,23 +4592,26 @@ export function CommentSidePanel({
   }
 
   return (
-    <aside id={panelId} className="comment-side-panel" data-testid="comment-side-panel" aria-label={commentsLabel}>
+    <aside
+      id={panelId}
+      className="comment-side-panel"
+      data-testid="comment-side-panel"
+      aria-label={commentsLabel}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !onDismiss) return;
+        event.preventDefault();
+        event.stopPropagation();
+        onDismiss();
+      }}
+    >
       <div className="comment-side-header">
         <div className="comment-side-title">
           <RemixIcon name="message-3-line" size={15} />
           <span>{commentsLabel}</span>
         </div>
         <div className="comment-side-header-actions">
-          {sendableCount > 0 ? (
-            <button
-              type="button"
-              className="comment-side-select-all"
-              disabled={allSelected}
-              onClick={onSelectAll}
-            >
-              {t('chat.comments.selectAll')}
-            </button>
-          ) : null}
+          {/* The header's right slot owns collapse; select all moved below
+              the divider. */}
           <button
             ref={expandedToggleRef}
             type="button"
@@ -4609,12 +4620,30 @@ export function CommentSidePanel({
             aria-controls={panelId}
             aria-expanded={true}
             title={t('preview.hideSidebar', { label: commentsLabel })}
-            onClick={() => handleCollapsedChange(true, 'collapsed')}
+            onClick={() => {
+              if (onDismiss) {
+                onDismiss();
+                return;
+              }
+              handleCollapsedChange(true, 'collapsed');
+            }}
           >
             <Icon name="chevron-right" size={14} />
           </button>
         </div>
       </div>
+      {sendableCount > 0 ? (
+        <div className="comment-side-toolbar">
+          <button
+            type="button"
+            className="comment-side-select-all"
+            disabled={allSelected}
+            onClick={onSelectAll}
+          >
+            {t('chat.comments.selectAll')}
+          </button>
+        </div>
+      ) : null}
       <div
         className="comment-side-list"
         onDragLeave={(event) => {
@@ -4882,6 +4911,7 @@ function CommentSideDock({
   activeCommentId,
   collapsed,
   onCollapsedChange,
+  onDismiss,
   onToggleSelect,
   onSelectAll,
   onClearSelection,
@@ -4906,6 +4936,7 @@ function CommentSideDock({
   activeCommentId: string | null;
   collapsed: boolean;
   onCollapsedChange: (collapsed: boolean) => void;
+  onDismiss?: () => void;
   onToggleSelect: (commentId: string) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
@@ -4939,6 +4970,7 @@ function CommentSideDock({
         activeCommentId={activeCommentId}
         collapsed={collapsed}
         onCollapsedChange={onCollapsedChange}
+        onDismiss={onDismiss}
         onToggleSelect={onToggleSelect}
         onSelectAll={onSelectAll}
         onClearSelection={onClearSelection}
@@ -7788,6 +7820,7 @@ function HtmlViewer({
   // surface_view impression can carry entry_from.
   const [toolbarMoreOpen, setToolbarMoreOpen] = useState(false);
   const toolbarMoreRef = useRef<HTMLDivElement | null>(null);
+  const toolbarMoreTriggerRef = useRef<HTMLButtonElement | null>(null);
   useDismissOnOutsideInteraction(toolbarMoreOpen, toolbarMoreRef, () => setToolbarMoreOpen(false));
   const [versionModalOpen, setVersionModalOpen] = useState<false | 'toolbar' | 'more_menu'>(false);
   const [exportReadyNudge, setExportReadyNudge] = useState(false);
@@ -8148,6 +8181,9 @@ function HtmlViewer({
   const [urlPreviewFirstLoadPending, setUrlPreviewFirstLoadPending] = useState(false);
   const [boardMode, setBoardMode] = useState(false);
   const [commentPanelOpen, setCommentPanelOpen] = useState(false);
+  const commentPanelToggleRef = useRef<HTMLButtonElement | null>(null);
+  const commentPanelReturnFocusRef = useRef<HTMLElement | null>(null);
+  const pendingCommentPanelFocusRef = useRef<HTMLElement | null>(null);
   const [commentCreateMode, setCommentCreateMode] = useState(false);
   const [boardTool, setBoardTool] = useState<BoardTool>('inspect');
   const [inspectMode, setInspectMode] = useState(false);
@@ -8522,7 +8558,7 @@ function HtmlViewer({
   useEffect(() => () => {
     onCommentModeChange?.(false);
   }, [onCommentModeChange]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!commentPanelOpen || !commentPortalId) {
       setCommentPortalHost(null);
       return;
@@ -8542,6 +8578,15 @@ function HtmlViewer({
       setCommentPortalHost(null);
     };
   }, [commentPanelOpen, commentPortalId]);
+  useLayoutEffect(() => {
+    if (commentPanelOpen) return;
+    const target = pendingCommentPanelFocusRef.current;
+    if (!target) return;
+    pendingCommentPanelFocusRef.current = null;
+    const fallback = commentPanelToggleRef.current ?? toolbarMoreTriggerRef.current;
+    const next = target.isConnected ? target : fallback;
+    next?.focus();
+  }, [commentPanelOpen]);
   const capturePreviewScrollPosition = useCallback(() => {
     const host = previewBodyRef.current;
     let frameLeft = 0;
@@ -8854,7 +8899,11 @@ function HtmlViewer({
   const [commentSidePanelCollapsed, setCommentSidePanelCollapsed] = useState(false);
   const [strokePoints, setStrokePoints] = useState<StrokePoint[]>([]);
   const previewStateKey = `${projectId}:${file.name}`;
-  const localCommentSideDockActive = commentPanelOpen && !commentPortalHost;
+  // A configured portal is an overlay contract from the first render, even
+  // before the host DOM node has been resolved. Treating that lookup window as
+  // a local dock briefly shrinks the preview and shifts centered desktop or
+  // mobile content left before the floating card appears.
+  const localCommentSideDockActive = commentPanelOpen && !commentPortalId;
   const boardPreviewCanvasSize = commentPreviewCanvasSize(previewBodySize, {
     boardMode: localCommentSideDockActive,
     sidePanelCollapsed: commentSidePanelCollapsed,
@@ -10088,6 +10137,8 @@ function HtmlViewer({
     workspaceContext,
   ]);
 
+  const srcDocBaseHref = effectiveScopedSrcDocPreviewBase
+    ?? projectRawUrl(projectId, baseDirFor(file.name), workspaceContext);
   const srcDocTransportGeneration = useMemo(
     () => nextPreviewTransportGeneration(),
     [
@@ -10098,10 +10149,9 @@ function HtmlViewer({
       reloadKey,
       transportPreviewMeasurementDocumentEpoch,
       workspaceContext,
+      srcDocBaseHref,
     ],
   );
-  const srcDocBaseHref = effectiveScopedSrcDocPreviewBase
-    ?? projectRawUrl(projectId, baseDirFor(file.name), workspaceContext);
   const srcDoc = useMemo(
     () => (previewSource ? buildSrcdoc(previewSource, {
       deck: effectiveDeck,
@@ -10146,15 +10196,29 @@ function HtmlViewer({
     frame: HTMLIFrameElement;
     generation: string;
   } | null>(null);
+  // Eager readiness keeps the existing bridge features responsive. Navigation
+  // recovery uses the separately challenged witness below because Chromium can
+  // abort about:srcdoc after the head bridge has already announced itself.
+  const verifiedSrcDocTransportRef = useRef<{
+    frame: HTMLIFrameElement;
+    generation: string;
+  } | null>(null);
+  const srcDocTransportProbeSequenceRef = useRef(0);
+  const pendingSrcDocTransportProbeRef = useRef<{
+    frame: HTMLIFrameElement;
+    generation: string;
+    probeId: string;
+    recoverOnFailure: boolean;
+  } | null>(null);
   const replayPreviewBridgeModes = useCallback((target: HTMLIFrameElement | null) => {
     if (!workspaceActive) return;
     const win = target?.contentWindow;
     if (!win) return;
-    const ready = readySrcDocTransportRef.current;
+    const verified = verifiedSrcDocTransportRef.current;
     if (
       target === srcDocPreviewIframeRef.current
-      && ready?.frame === target
-      && ready.generation === expectedSrcDocTransportGenerationRef.current
+      && verified?.frame === target
+      && verified.generation === expectedSrcDocTransportGenerationRef.current
     ) {
       postAndConsumePreviewRuntimeState(target);
     }
@@ -10254,16 +10318,71 @@ function HtmlViewer({
       return;
     }
     const frame = srcDocPreviewIframeRef.current;
-    const ready = readySrcDocTransportRef.current;
-    if (frame && ready?.frame === frame && ready.generation === generation) return;
+    const verified = verifiedSrcDocTransportRef.current;
+    if (frame && verified?.frame === frame && verified.generation === generation) return;
     if (srcDocRecoveryAttemptedGenerationRef.current === generation) return;
     srcDocRecoveryAttemptedGenerationRef.current = generation;
+    pendingSrcDocTransportProbeRef.current = null;
+    verifiedSrcDocTransportRef.current = null;
     readySrcDocTransportRef.current = null;
     activatedSrcDocTransportHtmlRef.current = null;
     setSrcDocShellReady(false);
     setSrcDocRecoveryGeneration(generation);
     setSrcDocTransportResetKey((key) => key + 1);
   }, []);
+  const probeSrcDocTransport = useCallback((
+    generation: string,
+    recoverOnFailure: boolean,
+  ) => {
+    if (
+      !workspaceActiveRef.current
+      || expectedSrcDocTransportGenerationRef.current !== generation
+    ) {
+      return;
+    }
+    const frame = srcDocPreviewIframeRef.current;
+    if (!frame) return;
+    const pending = pendingSrcDocTransportProbeRef.current;
+    const pendingRecoveryProbeMatches = (
+      pending?.frame === frame
+      && pending.generation === generation
+      && pending.recoverOnFailure
+    );
+    // Recovery probes can be shared by the timer and onLoad paths. A passive
+    // prewarm probe may target the lazy shell, so the real srcDoc must replace it.
+    if (pendingRecoveryProbeMatches) return;
+    srcDocTransportProbeSequenceRef.current += 1;
+    const probeId = `${generation}:probe-${srcDocTransportProbeSequenceRef.current}`;
+    pendingSrcDocTransportProbeRef.current = {
+      frame,
+      generation,
+      probeId,
+      recoverOnFailure,
+    };
+    // An eager acknowledgement from the injected head bridge is provisional:
+    // Chromium can still abort the about:srcdoc navigation after it was sent.
+    // Only this exact challenge response proves the current browsing context is
+    // alive after the navigation had a chance to commit.
+    verifiedSrcDocTransportRef.current = null;
+    frame.contentWindow?.postMessage({
+      type: 'od:srcdoc-transport-ready-probe',
+      generation,
+      probeId,
+    }, '*');
+    window.setTimeout(() => {
+      const pending = pendingSrcDocTransportProbeRef.current;
+      if (
+        !pending
+        || pending.frame !== frame
+        || pending.generation !== generation
+        || pending.probeId !== probeId
+      ) {
+        return;
+      }
+      pendingSrcDocTransportProbeRef.current = null;
+      if (pending.recoverOnFailure) recoverUnacknowledgedSrcDocTransport(generation);
+    }, SRC_DOC_READY_PROBE_TIMEOUT_MS);
+  }, [recoverUnacknowledgedSrcDocTransport]);
   // Sticky once the srcDoc iframe has materialized the real artifact for the
   // first time (i.e. the first entry into Mark/Edit/Comment/Inspect). Until
   // then the srcDoc iframe stays on the lazy shell — so passive preview never
@@ -10318,7 +10437,12 @@ function HtmlViewer({
     function onMessage(ev: MessageEvent) {
       const frame = srcDocPreviewIframeRef.current;
       if (ev.source !== frame?.contentWindow) return;
-      const data = ev.data as { type?: unknown; generation?: unknown } | null;
+      const data = ev.data as {
+        type?: unknown;
+        generation?: unknown;
+        probeId?: unknown;
+      } | null;
+      const pending = pendingSrcDocTransportProbeRef.current;
       if (
         data?.type !== 'od:srcdoc-transport-activated'
         || typeof data.generation !== 'string'
@@ -10327,32 +10451,45 @@ function HtmlViewer({
         return;
       }
       readySrcDocTransportRef.current = { frame, generation: data.generation };
+      if (
+        typeof data.probeId === 'string'
+        && pending
+        && pending.frame === frame
+        && pending.generation === data.generation
+        && pending.probeId === data.probeId
+      ) {
+        pendingSrcDocTransportProbeRef.current = null;
+        verifiedSrcDocTransportRef.current = { frame, generation: data.generation };
+      }
       if (frame === iframeRef.current) replayPreviewBridgeModes(frame);
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
   }, [replayPreviewBridgeModes, workspaceActive]);
   // React can commit a fresh `srcdoc` attribute while Chromium aborts the
-  // corresponding about:srcdoc navigation. The host then believes the latest
-  // revision is applied, but the iframe stays on its old/empty document until
-  // Code -> Preview happens to remount it. Every real srcDoc carries an exact
-  // generation ACK; if the active frame never acknowledges that generation,
-  // retry through the small lazy shell automatically; Chromium can commit that
-  // shell even when it aborts a large direct srcDoc navigation, after which the
-  // existing ready handshake safely document.write's the latest HTML. One
-  // fallback per generation avoids a loop when an authored document is
-  // fundamentally unable to execute scripts.
+  // corresponding about:srcdoc navigation. The injected head bridge may run
+  // and announce eagerly before that abort, so a plain generation ACK is not a
+  // committed-document witness. Challenge the current browsing context after
+  // the navigation had time to settle and require the exact probe token back;
+  // otherwise retry through the small lazy shell automatically. Chromium can
+  // commit that shell even when it aborts a large direct srcDoc navigation,
+  // after which the existing ready handshake safely document.write's the
+  // latest HTML. One fallback per generation avoids a loop when an authored
+  // document is fundamentally unable to execute scripts.
   useEffect(() => {
     if (!workspaceActive || mode !== 'preview' || useUrlLoadPreview || !srcDoc) return;
     const generation = srcDocTransportGeneration;
     if (srcDocRecoveryAttemptedGenerationRef.current === generation) return;
     const timeout = window.setTimeout(() => {
-      recoverUnacknowledgedSrcDocTransport(generation);
+      const frame = srcDocPreviewIframeRef.current;
+      const verified = verifiedSrcDocTransportRef.current;
+      if (frame && verified?.frame === frame && verified.generation === generation) return;
+      probeSrcDocTransport(generation, true);
     }, SRC_DOC_ACTIVATION_RECOVERY_TIMEOUT_MS);
     return () => window.clearTimeout(timeout);
   }, [
     mode,
-    recoverUnacknowledgedSrcDocTransport,
+    probeSrcDocTransport,
     srcDoc,
     srcDocTransportGeneration,
     useUrlLoadPreview,
@@ -10364,8 +10501,19 @@ function HtmlViewer({
       const frame = urlPreviewIframeRef.current;
       if (ev.source !== frame?.contentWindow) return;
       if (frame.getAttribute('src') === 'about:blank') return;
-      const data = ev.data as { type?: string } | null;
+      const data = ev.data as { type?: string; href?: string } | null;
       if (data?.type !== 'od:url-selection-bridge-ready') return;
+      // The latch must describe the currently committed document's bridge, so
+      // the ready must carry and match the document href.
+      if (typeof data.href !== 'string' || data.href.length === 0) return;
+      let matches: boolean;
+      try {
+        matches = new URL(data.href, window.location.href).href
+          === new URL(frame.getAttribute('src') ?? '', window.location.href).href;
+      } catch {
+        return;
+      }
+      if (!matches) return;
       setUrlSelectionBridgeReady(true);
     }
     window.addEventListener('message', onMessage);
@@ -10532,21 +10680,7 @@ function HtmlViewer({
   function verifyLoadedSrcDocTransport(target: HTMLIFrameElement | null) {
     if (!target || target !== srcDocPreviewIframeRef.current) return;
     const generation = srcDocTransportGeneration;
-    if (!useUrlLoadPreview && srcDoc) {
-      // `load` may belong to a provisional about:blank/about:srcdoc document.
-      // Drop any earlier ACK and require the document that actually completed
-      // this load to answer the generation probe. This closes the window where
-      // a provisional document announces from its head and is then aborted.
-      readySrcDocTransportRef.current = null;
-    }
-    target.contentWindow?.postMessage({
-      type: 'od:srcdoc-transport-ready-probe',
-      generation,
-    }, '*');
-    if (useUrlLoadPreview || !srcDoc) return;
-    window.setTimeout(() => {
-      recoverUnacknowledgedSrcDocTransport(generation);
-    }, SRC_DOC_ACTIVATION_RECOVERY_TIMEOUT_MS);
+    probeSrcDocTransport(generation, !useUrlLoadPreview && Boolean(srcDoc));
   }
   useEffect(() => {
     if (useUrlLoadPreview) {
@@ -10820,11 +10954,11 @@ function HtmlViewer({
     const target = iframeRef.current;
     const win = target?.contentWindow;
     if (!win) return;
-    const ready = readySrcDocTransportRef.current;
+    const verified = verifiedSrcDocTransportRef.current;
     if (
       target === srcDocPreviewIframeRef.current
-      && ready?.frame === target
-      && ready.generation === expectedSrcDocTransportGenerationRef.current
+      && verified?.frame === target
+      && verified.generation === expectedSrcDocTransportGenerationRef.current
     ) {
       postAndConsumePreviewRuntimeState(target);
     }
@@ -13154,7 +13288,8 @@ function HtmlViewer({
     activateComment();
   }
 
-  function activateCommentCreateTool() {
+  function activateCommentCreateTool(returnFocusTarget?: HTMLElement | null) {
+    if (returnFocusTarget) commentPanelReturnFocusRef.current = returnFocusTarget;
     fireArtifactToolbarClick('comment');
     capturePreviewScrollPosition();
     if (boardMode && commentCreateMode) {
@@ -13183,6 +13318,21 @@ function HtmlViewer({
       return;
     }
     activateCommentCreate();
+  }
+
+  function dismissFloatingCommentPanel() {
+    pendingCommentPanelFocusRef.current =
+      commentPanelReturnFocusRef.current
+      ?? commentPanelToggleRef.current
+      ?? toolbarMoreTriggerRef.current;
+    setCommentPanelOpen(false);
+    // Dismissing the panel must not close an active composer popover. The
+    // panel may have been opened from that popover's View all comments action,
+    // so tearing down board mode here would interrupt composition.
+    if (activeCommentTarget) return;
+    setCommentCreateMode(false);
+    setBoardMode(false);
+    clearBoardComposer();
   }
 
   function activateManualEditTool() {
@@ -13338,8 +13488,6 @@ function HtmlViewer({
         setActiveCommentExistingAttachments(saved.attachments ?? []);
         setBoardMode(true);
         setCommentCreateMode(true);
-        setCommentPanelOpen(true);
-        setCommentSidePanelCollapsed(false);
         setActivePreviewCommentId(saved.id);
         setCommentSavedToast(isFreePin ? t('chat.comments.pinSavedToast') : t('chat.comments.savedToast'));
       }
@@ -13489,7 +13637,6 @@ function HtmlViewer({
     fireShareExport('html', () => exportProjectAsHtml({
       projectId,
       filePath: file.name,
-      fallbackHtml: context?.content ?? source ?? '',
       fallbackTitle: context?.title ?? exportTitle,
       workspaceContext,
       ...(context?.versionId ? { versionId: context.versionId } : {}),
@@ -14389,6 +14536,11 @@ function HtmlViewer({
         setHoveredPodMemberId((current) => (current === elementId ? null : current));
       }}
       onHoverMember={setHoveredPodMemberId}
+      onViewAllComments={(returnFocusTarget) => {
+        commentPanelReturnFocusRef.current = returnFocusTarget ?? null;
+        setCommentPanelOpen(true);
+        setCommentSidePanelCollapsed(false);
+      }}
       onDeleteComment={onRemovePreviewComment ? async (commentId) => {
         const removed = await onRemovePreviewComment(commentId);
         if (!removed) return;
@@ -14461,8 +14613,17 @@ function HtmlViewer({
       projectId={projectId}
       selectedIds={selectedSideCommentIds}
       activeCommentId={activeSideCommentId}
-      collapsed={commentPortalHost ? false : commentSidePanelCollapsed}
+      // The panel used to be pinned open whenever it was portaled (it docked
+      // into a full-height column, where a collapsed rail made no sense). It
+      // now always floats as a card, so its collapse control has to actually
+      // collapse — forcing `false` here made every click a no-op.
+      collapsed={commentSidePanelCollapsed}
       onCollapsedChange={setCommentSidePanelCollapsed}
+      // On a floating card, collapse closes the card and mirrors the toolbar
+      // toggle's OFF branch so one click reopens it. Closing only the panel
+      // would leave create/board mode on and consume that next click. The local
+      // dock keeps its collapse-to-rail behaviour.
+      onDismiss={commentPortalHost ? dismissFloatingCommentPanel : undefined}
       onToggleSelect={(commentId) => {
         setSelectedSideCommentIds((current) => {
           const next = new Set(current);
@@ -14809,6 +14970,7 @@ function HtmlViewer({
               </button>
               <span className="viewer-toolbar-tool-divider" aria-hidden />
               <button
+                ref={commentPanelToggleRef}
                 type="button"
                 className={`viewer-action viewer-comment-count-trigger viewer-comment-toggle od-tooltip${boardMode && commentCreateMode ? ' active' : ''}`}
                 data-testid="comment-panel-toggle"
@@ -14817,7 +14979,7 @@ function HtmlViewer({
                 title={t('chat.tabComments')}
                 aria-label={`${t('chat.tabComments')} (${visibleSideComments.length})`}
                 aria-pressed={boardMode && commentCreateMode}
-                onClick={activateCommentCreateTool}
+                onClick={(event) => activateCommentCreateTool(event.currentTarget)}
               >
                 <RemixIcon name="message-3-line" size={15} />
                 <span className="viewer-comment-count" aria-hidden>{visibleSideComments.length}</span>
@@ -14868,6 +15030,7 @@ function HtmlViewer({
           ) : null}
           <div className="viewer-toolbar-more" ref={toolbarMoreRef}>
             <button
+              ref={toolbarMoreTriggerRef}
               type="button"
               className="viewer-action viewer-action-icon od-tooltip"
               aria-label={t('nextStep.more')}
@@ -14995,7 +15158,7 @@ function HtmlViewer({
                       className={`viewer-toolbar-more-item${boardMode && commentCreateMode ? ' active' : ''}`}
                       role="menuitem"
                       onClick={() => {
-                        activateCommentCreateTool();
+                        activateCommentCreateTool(toolbarMoreTriggerRef.current);
                         setToolbarMoreOpen(false);
                       }}
                     >
@@ -15566,7 +15729,6 @@ function HtmlViewer({
                       fireShareExport('html', () => exportProjectAsHtml({
                         projectId,
                         filePath: file.name,
-                        fallbackHtml: source ?? '',
                         fallbackTitle: exportTitle,
                         workspaceContext,
                       }));

@@ -29,7 +29,7 @@
 
 ## What is Open Design
 
-🎨 **The open-source Claude Design alternative.** &nbsp;🖥️ **Local-first native desktop app for macOS and Windows.** &nbsp;⚡ **Composable skills, brand-grade `DESIGN.md` design systems, and ready-to-use plugins.** &nbsp;🖼️ Generates **web · desktop · mobile prototypes**, **live dashboards / artifacts**, **decks**, **images**, **video**, plus **HyperFrames** motion graphics. 🔒 Sandboxed iframe preview · HTML / PDF / PPTX / MP4 export. &nbsp;🤖 **Runs on Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity and 25 distinct local CLI executables**, or any OpenAI-compatible endpoint via BYOK.
+🎨 **The open-source Claude Design alternative.** &nbsp;🖥️ **Local-first native desktop app for macOS and Windows.** &nbsp;⚡ **Composable skills, brand-grade `DESIGN.md` design systems, and ready-to-use plugins.** &nbsp;🖼️ Generates **web · desktop · mobile prototypes**, **live dashboards / artifacts**, **decks**, **images**, **video**, plus **HyperFrames** motion graphics. 🔒 Sandboxed iframe preview · HTML / PDF / PPTX / MP4 export. &nbsp;🤖 **Runs on DeepSeek Harness (`dsh`) · Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity and 26 distinct local CLI executables**, or any OpenAI-compatible endpoint via BYOK.
 
 Open Design is what you get when the **agent-native** loop Anthropic shipped with Claude Design — discover the brief, lock the direction, stream the artifact, critique, deliver — stops being closed and becomes a **filesystem of functional skills, rendering design templates, design systems, and plugins** that the coding agents already on your laptop can read, write, and remix. Your CLI becomes the design engine, your laptop becomes the studio, and your team's `DESIGN.md` becomes the brand contract.
 
@@ -107,14 +107,15 @@ Inside a project's Studio, the same design system streams out multiple artifact 
 
 ## Platform Compatibility
 
-> Open Design ships as **skills, a CLI, and an MCP server** that mainstream coding agents consume natively. Once OD is installed, a single `od mcp install <agent>` wires the MCP server into that agent's config, and you call the same tools from inside any agent.
+> Open Design connects to mainstream coding agents in two ways: **skills, CLI, and MCP** for agents that consume OD, plus **native runtime adapters** for agents that OD launches directly. DeepSeek Harness is a first-class native runtime through the official `dsh` CLI, with structured streaming, model discovery, cancellation, and session resume.
 
-| Coding agent / platform &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Status &nbsp;&nbsp; | One-line MCP server install &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
+| Coding agent / platform &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | Status &nbsp;&nbsp; | Quick setup &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | ✅ Supported | `od mcp install claude` |
 | [Claude Desktop](https://claude.ai/download) | ✅ Supported¹ | `od mcp install claude-desktop` |
 | [Codex CLI](https://github.com/openai/codex) | ✅ Supported | `od mcp install codex` |
 | [DeepSeek Reasonix](https://github.com/esengine/DeepSeek-Reasonix) | ✅ Supported | `od mcp install reasonix` |
+| [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | ✅ Native runtime | `od agent setup deepseek-harness` |
 | [Raven](https://github.com/EverMind-AI/Raven) | ✅ Supported | `od mcp install raven` |
 | [Cursor](https://www.cursor.com/cli) | ✅ Supported | `od mcp install cursor` |
 | [VS Code + GitHub Copilot](https://github.com/features/copilot) | ✅ Supported | `od mcp install copilot` |
@@ -130,12 +131,12 @@ Inside a project's Studio, the same design system streams out multiple artifact 
 | [Mistral Vibe CLI](https://github.com/mistralai/mistral-vibe) | ✅ Supported | `od mcp install vibe` |
 | [Hermes Agent](https://github.com/nousresearch/hermes-agent) | ✅ Supported | `od mcp install hermes` |
 
-`od mcp install <agent> --print` for a dry-run preview · `--uninstall` to remove · full list with `od mcp install --help`.
+For DeepSeek Harness, install the official `dsh` CLI first, then select it in Open Design or run `od agent setup deepseek-harness` to install/repair OD's connection component. For MCP integrations: `od mcp install <agent> --print` for a dry-run preview · `--uninstall` to remove · full list with `od mcp install --help`.
 
 ¹ Automatic MCP configuration for Claude Desktop is currently supported on macOS and Windows only.
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 26 coding-agent CLIs Open Design supports — DeepSeek Harness · Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **No CLI installed?** The BYOK proxy at `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` gives you the same loop (no process spawn) — paste `baseUrl` + `apiKey` + `model`, with presets for OpenAI, Atlas Cloud, Anthropic, Azure OpenAI, Google Gemini, Ollama, LM Studio, vLLM, or any OpenAI-compatible endpoint. Atlas Cloud uses `https://api.atlascloud.ai/v1` with your own key and OpenAI-compatible model ids such as `qwen/qwen3.5-flash`. Per-target SSRF protection blocks internal IPs / link-local / CGNAT at the daemon edge.
@@ -576,8 +577,8 @@ Plugin registry endpoint: `GET /api/plugins`. Directory overview → [`plugins/R
              ▼
    ┌──────────────────────────────────────────────────────────────────┐
    │  Local runtime definitions come from runtimes/registry.ts;                 │
-   │  the base registry has 26 definitions (including byok-opencode),           │
-   │  backed by 25 distinct local CLI executables because byok-opencode shares │
+   │  the base registry has 27 definitions (including byok-opencode),           │
+   │  backed by 26 distinct local CLI executables because byok-opencode shares │
    │  the OpenCode executable. See docs/agent-adapters.md.                     │
    │  composes a functional skill or design template + DESIGN.md; writes files │
    └──────────────────────────────────────────────────────────────────┘
@@ -599,7 +600,7 @@ Full architecture → [`docs/architecture.md`](docs/architecture.md). Skill prot
 
 ## Roadmap
 
-- [x] Daemon + 26 runtime definitions across 25 distinct coding-agent CLI executables + skill/design-template registries + design-system catalog
+- [x] Daemon + 27 runtime definitions across 26 distinct coding-agent CLI executables + skill/design-template registries + design-system catalog
 - [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
 - [x] 100+ functional skills · separate rendering-template catalog · 151 design-system packages · 5 visual directions · 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates

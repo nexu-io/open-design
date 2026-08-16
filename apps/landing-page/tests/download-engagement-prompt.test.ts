@@ -12,6 +12,10 @@ const componentSource = readFileSync(
   new URL('../app/_components/download-engagement-prompt.astro', import.meta.url),
   'utf8',
 );
+const headerEnhancerSource = readFileSync(
+  new URL('../app/_components/header-enhancer.astro', import.meta.url),
+  'utf8',
+);
 const homePageSource = readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
 const homeIndexSource = readFileSync(new URL('../app/pages/index.astro', import.meta.url), 'utf8');
 const homeStylesSource = readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
@@ -27,6 +31,21 @@ assert.ok(enhancerStart >= 0 && enhancerEnd > enhancerStart, 'prompt enhancer sc
 const enhancerSource = componentSource.slice(
   enhancerStart,
   enhancerEnd + enhancerEndMarker.length,
+);
+const headerDownloadEnhancerStart = headerEnhancerSource.indexOf(
+  '    const navDownload = document.querySelector(',
+);
+const headerDownloadEnhancerEnd = headerEnhancerSource.indexOf(
+  '    const chrome = document.querySelector(',
+  headerDownloadEnhancerStart,
+);
+assert.ok(
+  headerDownloadEnhancerStart >= 0 && headerDownloadEnhancerEnd > headerDownloadEnhancerStart,
+  'header download enhancer not found',
+);
+const headerDownloadEnhancerSource = headerEnhancerSource.slice(
+  headerDownloadEnhancerStart,
+  headerDownloadEnhancerEnd,
 );
 const homeDownloadEnhancerStart = homeIndexSource.indexOf(
   '        const enhanceDownloadCta = () => {',
@@ -56,6 +75,8 @@ function runPromptEnhancer(options: {
   sessionStorage: ReturnType<typeof createMemoryStorage>;
   pageName?: string;
   runPageCountTimeout?: boolean;
+  runHeaderFirst?: boolean;
+  device?: { userAgent: string; platform: string; maxTouchPoints: number };
 }) {
   const attributes = new Map<string, string>();
   const cta = {
@@ -84,7 +105,13 @@ function runPromptEnhancer(options: {
   const document = {
     visibilityState: 'visible',
     documentElement: { classList: { add() {}, remove() {} } },
-    querySelector: () => dialog,
+    querySelector: (selector: string) => {
+      if (selector === '[data-download-engagement-prompt]') return dialog;
+      if (selector === '[data-direct-download][data-download-placement="nav"]') {
+        return directLink;
+      }
+      return null;
+    },
     querySelectorAll: (selector: string) =>
       selector === '[data-direct-download]' || selector.startsWith('[data-download-cta]')
         ? [directLink]
@@ -109,13 +136,31 @@ function runPromptEnhancer(options: {
     __odDownloadPrompt: undefined,
   };
   const navigator = {
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Version/18.0 Mobile/15E148 Safari/604.1',
-    platform: 'MacIntel',
-    maxTouchPoints: 5,
+    userAgent: options.device?.userAgent ??
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Version/18.0 Mobile/15E148 Safari/604.1',
+    platform: options.device?.platform ?? 'MacIntel',
+    maxTouchPoints: options.device?.maxTouchPoints ?? 5,
   };
+  const directAssets = {
+    macArm64: 'https://example.com/open-design-mac-arm64.dmg',
+    macX64: 'https://example.com/open-design-mac-x64.dmg',
+    windows: 'https://example.com/open-design-win-x64-setup.exe',
+    linux: 'https://example.com/open-design-x86_64.AppImage',
+  };
+  const fetch = async () => ({ ok: true, json: async () => ({ assets: [] }) });
 
-  // Execute the production inline enhancer with a wide iPadOS fixture. Its
-  // touch-capable MacIntel signature must never be rewritten to a macOS DMG.
+  if (options.runHeaderFirst) {
+    // Execute the production header download block first, matching page order.
+    // eslint-disable-next-line no-new-func
+    new Function('document', 'navigator', 'directAssets', headerDownloadEnhancerSource)(
+      document,
+      navigator,
+      directAssets,
+    );
+  }
+
+  // Execute the production prompt enhancer after the header block. The default
+  // fixture is wide iPadOS; matrix tests can supply other browser signatures.
   // eslint-disable-next-line no-new-func
   new Function(
     'window',
@@ -130,6 +175,7 @@ function runPromptEnhancer(options: {
     'DISMISS_COOLDOWN_MS',
     'DOWNLOAD_COOLDOWN_MS',
     'directAssets',
+    'fetch',
     'Element',
     enhancerSource,
   )(
@@ -144,7 +190,8 @@ function runPromptEnhancer(options: {
     3,
     7 * 24 * 60 * 60 * 1000,
     30 * 24 * 60 * 60 * 1000,
-    { macArm64: 'https://example.com/open-design-mac-arm64.dmg' },
+    directAssets,
+    fetch,
     class Element {},
   );
 
@@ -329,6 +376,71 @@ test('download prompt: later homepage enhancement preserves the wide-iPadOS fall
   assert.equal(result.directLink.href, '/download/');
   assert.equal(result.linkAttributes.has('download'), false);
   assert.equal(result.linkAttributes.has('data-download-platform-label'), false);
+});
+
+test('download prompt: header and prompt keep mobile fallbacks aligned in document order', () => {
+  const fixtures = [
+    {
+      name: 'Firefox Android',
+      device: {
+        userAgent: 'Mozilla/5.0 (Android 14; Mobile; rv:129.0) Gecko/129.0 Firefox/129.0',
+        platform: 'Linux armv81',
+        maxTouchPoints: 5,
+      },
+      expectedHref: '/download/',
+    },
+    {
+      name: 'Chrome Android without userAgentData',
+      device: {
+        userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/127.0 Mobile Safari/537.36',
+        platform: 'Linux armv8l',
+        maxTouchPoints: 5,
+      },
+      expectedHref: '/download/',
+    },
+    {
+      name: 'iPadOS desktop mode',
+      device: {
+        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15) Version/18.0 Mobile/15E148 Safari/604.1',
+        platform: 'MacIntel',
+        maxTouchPoints: 5,
+      },
+      expectedHref: '/download/',
+    },
+    {
+      name: 'Windows desktop',
+      device: {
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        platform: 'Win32',
+        maxTouchPoints: 0,
+      },
+      expectedHref: 'https://example.com/open-design-win-x64-setup.exe',
+    },
+    {
+      name: 'Linux desktop',
+      device: {
+        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/127.0 Safari/537.36',
+        platform: 'Linux x86_64',
+        maxTouchPoints: 0,
+      },
+      expectedHref: 'https://example.com/open-design-x86_64.AppImage',
+    },
+  ];
+
+  for (const fixture of fixtures) {
+    const result = runPromptEnhancer({
+      sessionStorage: createMemoryStorage(),
+      runHeaderFirst: true,
+      device: fixture.device,
+    });
+
+    assert.equal(result.directLink.href, fixture.expectedHref, fixture.name);
+    assert.equal(
+      result.linkAttributes.has('download'),
+      fixture.expectedHref !== '/download/',
+      fixture.name,
+    );
+  }
 });
 
 test('download prompt: three repeated visits to the same route trigger page-count lifecycle', () => {

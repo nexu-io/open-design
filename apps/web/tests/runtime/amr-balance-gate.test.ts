@@ -4,12 +4,14 @@ import type { AmrWalletSnapshot } from '@open-design/contracts';
 import {
   AMR_HARD_BLOCK_BALANCE_USD,
   AMR_LOW_BALANCE_WARN_USD,
+  HOME_AMR_BALANCE_RETRY_DELAYS_MS,
   amrBalanceGateScopeForWorkspaceContext,
   amrBalanceGateScopesMatch,
   amrWalletBalanceInsufficient,
   amrWalletBalanceUsd,
   checkAmrBalanceGate,
   isAmrLowBalanceWarnOptedOut,
+  retryUnavailableAmrBalanceGate,
   setAmrLowBalanceWarnOptedOut,
 } from '../../src/runtime/amr-balance-gate';
 import { fetchAmrWalletSnapshot } from '../../src/providers/daemon';
@@ -19,6 +21,14 @@ vi.mock('../../src/providers/daemon', () => ({
 }));
 
 const mockedFetch = vi.mocked(fetchAmrWalletSnapshot);
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
 
 function snapshot(overrides: Partial<AmrWalletSnapshot> = {}): AmrWalletSnapshot {
   return {
@@ -268,11 +278,14 @@ describe('checkAmrBalanceGate', () => {
     });
   });
 
-  it('gates a team run from its explicit workspace balance, not the healthy account balance', async () => {
-    mockedFetch.mockResolvedValue(snapshot({ balanceUsd: '247.50' }));
+  it('starts the authoritative workspace request in parallel with the account snapshot', async () => {
+    const accountRead = deferred<AmrWalletSnapshot>();
+    mockedFetch.mockReturnValue(accountRead.promise);
+    let workspaceReadStarted = false;
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
+        workspaceReadStarted = true;
         expect(input.toString()).toBe(
           '/api/workspace/billing?scope=workspace&workspaceId=ws-team-a&freshness=authoritative',
         );
@@ -311,15 +324,20 @@ describe('checkAmrBalanceGate', () => {
       }),
     );
 
-    const result = await checkAmrBalanceGate({
+    const pendingResult = checkAmrBalanceGate({
       workspaceType: 'team',
       workspaceId: 'ws-team-a',
       workspaceMemberId: 'wm-a',
     });
+    await Promise.resolve();
+    expect(workspaceReadStarted).toBe(true);
+    accountRead.resolve(snapshot({ balanceUsd: '247.50' }));
+    const result = await pendingResult;
     expect(result.kind).toBe('soft');
     if (result.kind === 'soft') {
       expect(result.snapshot.balanceUsd).toBe('1.25');
     }
+    expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 
   it('does not authorize a positive balance from a daemon that cannot prove an authoritative read', async () => {
@@ -498,5 +516,57 @@ describe('checkAmrBalanceGate', () => {
     const resultA = await teamA;
     expect(resultA.kind).toBe('soft');
     if (resultA.kind === 'soft') expect(resultA.snapshot.balanceUsd).toBe('1.50');
+  });
+});
+
+describe('retryUnavailableAmrBalanceGate', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('keeps one Home submit pending across the bounded cold-start retries', async () => {
+    const check = vi.fn()
+      .mockResolvedValueOnce({ kind: 'unavailable' } as const)
+      .mockResolvedValueOnce({ kind: 'unavailable' } as const)
+      .mockResolvedValueOnce({ kind: 'allow' } as const);
+
+    const result = retryUnavailableAmrBalanceGate(check);
+    await Promise.resolve();
+    expect(check).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(HOME_AMR_BALANCE_RETRY_DELAYS_MS[0] - 1);
+    expect(check).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(check).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(HOME_AMR_BALANCE_RETRY_DELAYS_MS[1] - 1);
+    expect(check).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(result).resolves.toEqual({ kind: 'allow' });
+    expect(check).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns a definitive decision immediately without scheduling a retry', async () => {
+    const check = vi.fn().mockResolvedValue({ kind: 'allow' } as const);
+
+    await expect(retryUnavailableAmrBalanceGate(check)).resolves.toEqual({ kind: 'allow' });
+
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('returns unavailable after exhausting the bounded retry budget', async () => {
+    const check = vi.fn().mockResolvedValue({ kind: 'unavailable' } as const);
+
+    const result = retryUnavailableAmrBalanceGate(check);
+    await vi.runAllTimersAsync();
+
+    await expect(result).resolves.toEqual({ kind: 'unavailable' });
+    expect(check).toHaveBeenCalledTimes(3);
   });
 });

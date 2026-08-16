@@ -181,10 +181,10 @@ test('[P0] @critical AMR insufficient-balance failures surface Top up AMR and re
   await expect(page.getByText('AMR balance retry recovered.').first()).toBeVisible({ timeout: T.long });
 });
 
-test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in and auto-recover', async ({ page }) => {
+test('[P0] @critical AMR auth failures return to the existing sign-in gate without auto-retry', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
-  let loggedIn = false;
+  let loggedIn = true;
   let loginRequested = false;
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
@@ -224,24 +224,19 @@ test('[P0] @critical AMR auth failures offer inline Authorize & retry sign-in an
   });
 
   await gotoProject(page, amr.projectId);
+  loggedIn = false;
   await sendPrompt(page, 'AMR auth failure recovery smoke');
-
-  const authorizeAndRetry = page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first();
-  await expect(authorizeAndRetry).toBeVisible({ timeout: T.long });
-  await authorizeAndRetry.click();
-
-  // New inline flow: clicking Authorize & retry starts vela login in place (it
-  // POSTs /login directly) instead of bouncing the user out to the Settings
-  // dialog. The run then auto-retries once /status reports signed in.
-  await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
-  await expect(settingsSurface(page)).toHaveCount(0);
-  await expect(page.getByText('AMR auth auto retry recovered.').first()).toBeVisible({ timeout: T.long });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.long });
+  await expect(page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i })).toBeVisible();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  expect(loginRequested).toBe(false);
 });
 
-test('[P0] @critical AMR model catalog invalid-key failures authorize and auto-recover', async ({ page }) => {
+test('[P0] @critical AMR model catalog invalid-key failures return to sign-in without auto-retry', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
-  let loggedIn = false;
+  let loggedIn = true;
   let loginRequested = false;
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
@@ -327,19 +322,15 @@ test('[P0] @critical AMR model catalog invalid-key failures authorize and auto-r
   expect(assistantMsgRes.ok(), `upsert assistant msg: ${await assistantMsgRes.text()}`).toBeTruthy();
 
   await gotoProject(page, projectId);
-
-  const authorizeAndRetry = page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first();
-  await expect(authorizeAndRetry).toBeVisible({ timeout: T.long });
-  await expect(page.getByRole('button', { name: /^Retry$|^重试$|^重試$/i })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /Switch to Open Design Cloud & retry/i })).toHaveCount(0);
-
-  await authorizeAndRetry.click();
-  await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
-  await expect(settingsSurface(page)).toHaveCount(0);
-  await expect(page.getByText('AMR model catalog auth retry recovered.').first()).toBeVisible({ timeout: T.long });
+  loggedIn = false;
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page).toHaveURL(/\/onboarding$/, { timeout: T.long });
+  await expect(page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i })).toBeVisible();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  expect(loginRequested).toBe(false);
 });
 
-test('[P0] @critical non-AMR model failures promote Open Design AMR and auto-retry after sign-in', async ({ page }) => {
+test('[P0] @critical non-AMR model failures stay recoverable while Cloud is signed out', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
   let loggedIn = false;
@@ -432,27 +423,17 @@ test('[P0] @critical non-AMR model failures promote Open Design AMR and auto-ret
 
   await expect
     .poll(() => new URL(page.url()).pathname, { timeout: T.medium })
-    .toBe('/settings');
-  const settings = settingsSurface(page);
-  await expect(settings).toBeVisible({ timeout: T.long });
+    .toBe('/onboarding');
+  await expect(page.getByRole('heading', { name: /Sign in to Open Design|登录 Open Design/i })).toBeVisible();
   await expect
     .poll(async () => {
       const raw = await page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY);
       return raw ? JSON.parse(raw).agentId : null;
     })
     .toBe('amr');
-
-  await settings.getByTestId('settings-agent-select-amr').click();
-  await settings.getByRole('button', { name: /^(Authorize|Sign in)$/ }).first().click();
-
-  await expect.poll(() => loginRequested, { timeout: T.medium }).toBe(true);
-  await expect.poll(() => runRequests.bodies.filter((body) => body.agentId === 'amr').length, { timeout: T.long }).toBe(1);
-  expect(runRequests.bodies.filter((body) => body.agentId === 'amr')[0]).toMatchObject({
-    agentId: 'amr',
-    currentPrompt: 'please recover this failed non-AMR model run',
-  });
+  expect(loginRequested).toBe(false);
+  expect(runRequests.bodies.filter((body) => body.agentId === 'amr')).toHaveLength(0);
   runRequests.dispose?.();
-  await expect(page.getByText('AMR promotion retry recovered.').first()).toBeVisible({ timeout: T.long });
 });
 
 test('[P0] @critical Settings reopens AMR with the configured profile, account badge, and model catalog', async ({ page }) => {
@@ -699,17 +680,18 @@ test('[P0] @critical Settings preserves AMR account, recharge shortcut, and mode
 test('[P0] after an AMR failure the user can switch to Codex and complete a fresh run', async ({ page }) => {
   await stubCatalogsEmpty(page);
   await stubRuntimeAgents(page);
-  // AMR_AUTH_REQUIRED means the AMR session is invalid, so /status reports
-  // signed-out — the inline auth card then offers the Authorize & retry action.
+  // The user can still leave a failed Cloud run by selecting a local runtime;
+  // keep the status response authenticated until that switch is complete so
+  // the mandatory Cloud sign-in gate does not preempt the Settings action.
   await page.route('**/api/integrations/vela/status', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        loggedIn: false,
+        loggedIn: true,
         profile: 'local',
         configPath: '/tmp/.amr/config.json',
-        user: null,
+        user: { id: 'switch-to-codex', email: 'switch-to-codex@example.com', plan: 'free' },
       }),
     });
   });
@@ -722,8 +704,6 @@ test('[P0] after an AMR failure the user can switch to Codex and complete a fres
     /Open Design agent isn't signed in yet|AMR sign-in is required/i,
     { timeout: T.long },
   );
-  await expect(page.getByRole('button', { name: /Authorize.*retry|授权并重试/i }).first()).toBeVisible();
-
   const settings = await openExecutionSettingsDialog(page);
   await settings.getByTestId('settings-agent-select-codex').click();
   await expect

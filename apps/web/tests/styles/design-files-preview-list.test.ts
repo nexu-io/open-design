@@ -50,7 +50,7 @@ describe('Design Files preview list styles', () => {
     );
   });
 
-  it('pins the category tab bar, not the batch bar, and colors the glyph row checkboxes', () => {
+  it('scrolls both bars with the content and colors the glyph row checkboxes', () => {
     const tabs = cssDeclarations(designFilesCss, '.df-tabs');
     const batchBar = cssDeclarations(designFilesCss, '.df-batch-bar');
     const row = cssDeclarations(designFilesCss, '.df-row');
@@ -62,10 +62,14 @@ describe('Design Files preview list styles', () => {
     );
     const rowSize = cssDeclarations(designFilesCss, '.df-row-size');
 
-    // The sticky top slot belongs to the category tab bar; the batch bar
-    // scrolls with the content so the two never pin over each other.
-    expect(ruleValue(tabs, 'position')).toBe('sticky');
-    expect(ruleValue(tabs, 'top')).toBe('0');
+    // Neither bar pins any more (320a36ac1): the category tab bar's sticky
+    // near-opaque strip read as a full-width gray band, so it now scrolls
+    // with the content and paints nothing, letting the panel's veil wash
+    // show through behind the tab pills. See the two obsolete cases this
+    // replaces — the "which bar owns the sticky slot" and "keep the sticky
+    // bar opaque" invariants both died with the sticky bar itself.
+    expect(tabs).not.toMatch(/position\s*:/);
+    expect(tabs).not.toMatch(/background\s*:/);
     expect(batchBar).not.toMatch(/position\s*:/);
     expect(ruleValue(row, 'grid-template-columns')).toContain('minmax(56px, auto)');
     expect(ruleValue(selectedRow, 'border-radius')).toBe('8px');
@@ -73,31 +77,6 @@ describe('Design Files preview list styles', () => {
     // The Remix checkbox glyph carries the box shape; the check span colors it.
     expect(ruleValue(checkedRowCheck, 'color')).toBe('var(--accent-strong)');
     expect(ruleValue(rowSize, 'text-align')).toBe('right');
-  });
-
-  // recvqat3n4iNZn: the sticky category tab bar used a flat, 66%-alpha
-  // `var(--glass-regular)` background and leaned on `backdrop-filter` to hide
-  // the card grid scrolling underneath it. backdrop-filter on a `position:
-  // sticky` element can fail to recomposite every frame while its scroll
-  // container moves beneath it, which is exactly what the report's recording
-  // showed: the raw, unblurred grid bleeding straight through the bar
-  // mid-scroll instead of staying occluded. The bar's own background must be
-  // mostly opaque on its own, so occlusion no longer depends on
-  // backdrop-filter working correctly every frame.
-  it('backs the sticky category tab bar with a mostly-opaque color instead of translucent glass alone', () => {
-    const tabs = cssDeclarations(designFilesCss, '.df-tabs');
-    const background = ruleValue(tabs, 'background');
-
-    expect(background).not.toBe('var(--glass-regular)');
-    // Mixing mostly `--bg-elevated` (fully opaque) with only a slice of the
-    // translucent glass tint keeps the frosted look without letting scrolled
-    // content ever fully show through, even if the backdrop blur itself
-    // glitches mid-scroll.
-    expect(background).toMatch(
-      /^color-mix\(in srgb, var\(--bg-elevated\) 8\d%, var\(--glass-regular\)\)$/,
-    );
-    // backdrop-filter stays as a bonus frost on top of that opaque base.
-    expect(ruleValue(tabs, 'backdrop-filter')).toBe('var(--glass-backdrop)');
   });
 
   it('opens the working directory menu below the top chrome instead of behind it', () => {

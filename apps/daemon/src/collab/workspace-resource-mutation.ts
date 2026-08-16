@@ -47,7 +47,7 @@ export type WorkspaceRequestAuthorityResult =
   | { ok: true; context: WorkspaceCollabContext }
   | {
       ok: false;
-      status: 400 | 403 | 503;
+      status: 400 | 401 | 403 | 503;
       code: string;
       message: string;
       retryable?: true;
@@ -520,7 +520,13 @@ function workspaceResourceMutationAllowed(
 export type BoundWorkspaceResourceMutationGate = (
   req: any,
   res: Response,
-  sendApiError: (res: Response, status: number, code: string, message: string) => unknown,
+  sendApiError: (
+    res: Response,
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) => unknown,
   getWorkspaceResource: (db: unknown, workspaceId: string, resourceId: string) => WorkspaceResourceAccessInput | null | undefined,
   getWorkspaceResourceByResourceId: (db: unknown, resourceId: string) => WorkspaceResourceAccessInput | null | undefined,
   db: unknown,
@@ -612,7 +618,13 @@ export async function enforceVerifiedWorkspaceResourceMutation(
   resourceType: string,
   req: any,
   res: Response,
-  sendApiError: (res: Response, status: number, code: string, message: string) => unknown,
+  sendApiError: (
+    res: Response,
+    status: number,
+    code: string,
+    message: string,
+    details?: Record<string, unknown>,
+  ) => unknown,
   getWorkspaceResource: (
     db: unknown,
     workspaceId: string,
@@ -664,7 +676,13 @@ export async function enforceVerifiedWorkspaceResourceMutation(
     verifyWorkspaceRequestAuthority,
   );
   if (!verified.ok) {
-    sendApiError(res, verified.status, verified.code, verified.message);
+    sendApiError(
+      res,
+      verified.status,
+      verified.code,
+      verified.message,
+      verified.retryable ? { retryable: true } : {},
+    );
     return false;
   }
 

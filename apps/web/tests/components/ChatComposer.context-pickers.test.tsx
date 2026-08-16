@@ -220,7 +220,10 @@ beforeEach(() => {
         headers: { 'content-type': 'application/json' },
       });
     }
-    if (url.includes('/api/plugins/') && url.endsWith('/apply')) {
+    if (
+      url.includes('/api/plugins/')
+      && (url.endsWith('/apply') || url.endsWith('/apply-local'))
+    ) {
       return new Response(JSON.stringify(APPLY_RESULT), {
         status: 200,
         headers: { 'content-type': 'application/json' },

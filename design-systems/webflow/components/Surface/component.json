@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Surface",
+  "name": "Surface",
+  "description": "Sharp Webflow card with restrained radius and layered elevation.",
+  "selectors": [".card"],
+  "properties": {
+    "title": { "type": "string", "required": true },
+    "description": { "type": "string" }
+  },
+  "states": {
+    "hover": { "selectors": [".card:hover"], "required": true }
+  },
+  "implementation": "<article class=\"card\"><h3>{{title}}</h3><p class=\"body-muted body-sm\">{{description}}</p></article>",
+  "source": "components.html"
+}

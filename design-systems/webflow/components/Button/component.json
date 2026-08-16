@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "Precise Webflow primary and secondary actions.",
+  "selectors": [".btn"],
+  "variants": {
+    "primary": { "selectors": [".btn-primary"] },
+    "secondary": { "selectors": [".btn-secondary"] }
+  },
+  "properties": {
+    "label": { "type": "string", "required": true },
+    "disabled": { "type": "boolean", "default": false }
+  },
+  "states": {
+    "hoverPrimary": { "selectors": [".btn-primary:hover"] },
+    "activePrimary": { "selectors": [".btn-primary:active"] },
+    "hoverSecondary": { "selectors": [".btn-secondary:hover"] },
+    "focus": { "selectors": [".btn:focus-visible"], "required": true }
+  },
+  "implementation": "<button class=\"btn btn-primary\" type=\"button\">{{label}}<span class=\"btn-icon\" aria-hidden=\"true\">→</span></button>",
+  "source": "components.html"
+}

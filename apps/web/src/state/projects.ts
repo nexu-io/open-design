@@ -21,6 +21,7 @@ import type {
   ImportFolderRequest,
   ImportFolderResponse,
   InstalledPluginRecord,
+  LocalCatalogScope,
   PluginDuplicateProjectResponse,
   PluginInstallOutcome,
   PluginShareAction,
@@ -93,7 +94,7 @@ export type WorkspaceContextForWrite = {
   context: WorkspaceCollabContext | null;
   loading: boolean;
   identityChangePending?: boolean;
-  failure?: 'unsupported' | 'unavailable';
+  failure?: 'unsupported' | 'unavailable' | 'reauth-required';
   /**
    * The directory-verified identity the retained `context` was resolved under,
    * carrying the generation token it belongs to. Present on production state
@@ -139,13 +140,11 @@ export type WorkspaceContextWriteResolutionOptions = {
  * When the read is momentarily blocked (loading, a pending identity change, or
  * a transient `unavailable` outage) but the shell still holds a directory-
  * verified last-good context that belongs to the CURRENT identity generation,
- * that context is honored instead of throwing. The daemon re-verifies the
- * claimed identity on the write (`authorizeCreatedProjectWorkspace`: valid →
- * allow, cross-workspace → 403, authority down → 503 retryable), so a
- * client-side fail-closed here is a redundant second lock that, under a flaky
- * network, only turns a create the server would have honored into a dead
- * button + retry storm. A context from a RETIRED generation (an account switch
- * bumped the token) still fails closed — that is the cross-account guard.
+ * that context is honored instead of throwing. Remote mutation routes still
+ * re-verify authority at their network boundary; ordinary `POST /api/projects`
+ * is deliberately local-first and no longer uses this helper or performs that
+ * verification. A context from a RETIRED generation (an account switch bumped
+ * the token) still fails closed — that is the cross-account guard.
  */
 export function resolvedWorkspaceContextForWrite(
   state: WorkspaceContextForWrite,
@@ -155,6 +154,7 @@ export function resolvedWorkspaceContextForWrite(
     state.loading
     || state.identityChangePending === true
     || state.failure === 'unavailable'
+    || state.failure === 'reauth-required'
   ) {
     if (writeContextBelongsToCurrentGeneration(state)) return state.context;
     if (options.unavailablePolicy === 'unscoped') return null;
@@ -557,26 +557,75 @@ function defaultRetrySleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Next's same-origin API proxy turns a missing local daemon into a plain-text
+ * 502 instead of rejecting `fetch`. Recognize only its connection-level errno
+ * shape; an upstream/product 502 (normally JSON) remains a business response.
+ */
+async function isLocalDaemonProxyFailure(resp: Response): Promise<boolean> {
+  if (resp.status !== 502) return false;
+  const contentType = resp.headers.get('content-type')?.toLowerCase() ?? '';
+  if (!contentType.startsWith('text/plain')) return false;
+  try {
+    const body = await resp.clone().text();
+    return /\b(?:ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT)\b/u.test(body);
+  } catch {
+    return false;
+  }
+}
+
 /** Parse a create/write error body into a UI message + the retryable flag. */
 async function readWorkspaceWriteError(
   resp: Response,
   fallbackMessage: string,
-): Promise<{ message: string; retryable: boolean }> {
+): Promise<{
+  message: string;
+  retryable: boolean;
+  code: ApiErrorCode | null;
+  requestId: string | null;
+}> {
   let message = fallbackMessage;
   let retryable = false;
+  let code: ApiErrorCode | null = null;
+  let requestId: string | null = null;
   try {
     const body = (await resp.json()) as { error?: unknown };
     if (body.error && typeof body.error === 'object') {
-      const error = body.error as { message?: unknown; retryable?: unknown };
+      const error = body.error as {
+        code?: unknown;
+        message?: unknown;
+        requestId?: unknown;
+        retryable?: unknown;
+      };
       if (typeof error.message === 'string' && error.message.trim()) {
         message = error.message;
       }
       if (error.retryable === true) retryable = true;
+      if (
+        typeof error.code === 'string'
+        && (API_ERROR_CODES as readonly string[]).includes(error.code)
+      ) code = error.code as ApiErrorCode;
+      if (typeof error.requestId === 'string' && error.requestId.trim()) {
+        requestId = error.requestId;
+      }
     }
   } catch {
     // Keep the generic fallback when the error body is absent or invalid.
   }
-  return { message, retryable };
+  return { message, retryable, code, requestId };
+}
+
+export class ProjectCreateError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null,
+    readonly code: ApiErrorCode | null,
+    readonly retryable: boolean,
+    readonly requestId: string | null,
+  ) {
+    super(message);
+    this.name = 'ProjectCreateError';
+  }
 }
 
 /**
@@ -596,7 +645,9 @@ export async function createProject(
     name: string;
     projectLocationId?: string;
     skillId: string | null;
+    skillCatalogScope?: LocalCatalogScope | null;
     designSystemId: string | null;
+    designSystemCatalogScope?: LocalCatalogScope | null;
     pendingPrompt?: string;
     metadata?: ProjectMetadata;
     conversationMode?: ChatSessionMode;
@@ -604,6 +655,7 @@ export async function createProject(
     // (or pre-applied snapshot id) to resolve and pin a plugin to the new
     // project. Used by the PluginLoopHome flow on Home.
     pluginId?: string;
+    pluginSource?: string;
     appliedPluginSnapshotId?: string;
     pluginInputs?: Record<string, unknown>;
     workspaceContext?: WorkspaceCollabContext | null;
@@ -649,7 +701,16 @@ export async function createProject(
         markProjectCreatedByViewer(created.project.id, input.workspaceContext ?? null);
         return created;
       }
-      const { message, retryable } = await readWorkspaceWriteError(
+      if (await isLocalDaemonProxyFailure(resp)) {
+        throw new ProjectCreateError(
+          'Could not reach the local Open Design service',
+          null,
+          null,
+          true,
+          null,
+        );
+      }
+      const { message, retryable, code, requestId } = await readWorkspaceWriteError(
         resp,
         'Could not create project',
       );
@@ -657,7 +718,7 @@ export async function createProject(
         await sleep(backoff.nextDelay());
         continue;
       }
-      throw new Error(message);
+      throw new ProjectCreateError(message, resp.status, code, retryable, requestId);
     }
   } catch (err) {
     throw err instanceof Error ? err : new Error('Could not create project');
@@ -1573,9 +1634,10 @@ export async function persistTabsToDaemonNow(
 // Plan §3.C1 — plugin discovery + apply.
 //
 // applyPlugin() is the canonical entry point for both the inline rail
-// (NewProjectPanel + ChatComposer) and the marketplace detail page. It
-// hits POST /api/plugins/:id/apply, which is the same pure resolver
-// the daemon uses; the response carries everything the composer needs:
+// (NewProjectPanel + ChatComposer) and the marketplace detail page. A caller
+// with a catalogue record supplies its exact local source; id-only callers
+// retain the Workspace-scoped compatibility route. Both return everything the
+// composer needs:
 //   - query (pre-filled brief)
 //   - contextItems (chip strip)
 //   - inputs (form fields)
@@ -2036,8 +2098,8 @@ export type PluginShareProjectOutcome =
  * `workspaceContext` MUST be attached, for the same reason every sibling create
  * in this file attaches it: the project this endpoint creates gets a
  * `workspace_projects` binding from the request's own identity, and a headerless
- * create leaves it unbound — denied its first run by the daemon's workspace gate
- * and carrying no workspace to bill on any run that does get through. This call
+ * create leaves it unbound — its first run can use the signed-in account wallet,
+ * but it has no pinned Workspace for later Team billing or mutations. This call
  * was the one create in this file with no `workspaceContext` parameter at all,
  * so it was permanently unbound rather than merely racy.
  */
@@ -2430,28 +2492,37 @@ export async function applyPlugin(
     projectId?: string;
     grantCaps?: string[];
     locale?: string;
+    pluginSource?: string;
     workspaceContext?: WorkspaceCollabContext | null;
   } = {},
 ): Promise<ApplyResult | null> {
   try {
-    const resp = await fetch(
-      `/api/plugins/${encodeURIComponent(pluginId)}/apply`,
+    const requestBody = JSON.stringify({
+      ...(options.pluginSource ? { source: options.pluginSource } : {}),
+      inputs: options.inputs ?? {},
+      projectId: options.projectId,
+      grantCaps: options.grantCaps ?? [],
+      locale: options.locale,
+    });
+    const pluginUrl = `/api/plugins/${encodeURIComponent(pluginId)}`;
+    let resp = await fetch(
+      `${pluginUrl}/${options.pluginSource ? 'apply-local' : 'apply'}`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(options.workspaceContext
+          ...(!options.pluginSource && options.workspaceContext
             ? workspaceProjectHeaders(options.workspaceContext)
             : {}),
         },
-        body: JSON.stringify({
-          inputs: options.inputs ?? {},
-          projectId: options.projectId,
-          grantCaps: options.grantCaps ?? [],
-          locale: options.locale,
-        }),
+        body: requestBody,
       },
     );
+    // Exact-source requests must never degrade to the legacy ID-only route:
+    // its response cannot prove which same-ID local record it applied. New
+    // daemons still accept old ID-only clients through /apply; during the brief
+    // new-Web/old-daemon upgrade window, omitting the plugin is safer than
+    // silently substituting different local bytes.
     if (!resp.ok) return null;
     const json = (await resp.json()) as ApplyResult & { ok?: boolean };
     return json;

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "od-design-system-lint/v1",
+  "requireMappedComponentReuse": true,
+  "requireTokenReferences": true,
+  "forbidUnauthorizedColorLiteralsOutsideTokenDefinitions": true,
+  "requireDeclaredStates": true
+}

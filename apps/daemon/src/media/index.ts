@@ -56,6 +56,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { Agent as UndiciAgent } from 'undici';
+import { SETTINGS_MEDIA_PROVIDERS_PATH } from '@open-design/contracts';
 import {
   AUDIO_DURATIONS_SEC,
   type AudioKind,
@@ -195,7 +196,7 @@ class StubProviderDisabledError extends Error {
   status = 503;
   constructor(model: string) {
     super(
-      `provider not configured: ${model}. Add your API key in Settings -> Media Providers to enable real generation.`,
+      `provider not configured: ${model}. Add your API key in ${SETTINGS_MEDIA_PROVIDERS_PATH} to enable real generation.`,
     );
     this.name = 'StubProviderDisabledError';
   }
@@ -893,7 +894,7 @@ function withMediaRequestInit(
 }
 
 const OPENAI_IMAGE_NO_CREDENTIAL_MESSAGE =
-  'no OpenAI credential - configure an API key in Settings or set OPENAI_API_KEY.';
+  `no OpenAI credential — configure an API key in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OPENAI_API_KEY.`;
 
 async function renderOpenAIImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
@@ -983,7 +984,7 @@ async function renderOpenAIImage(ctx: MediaContext, credentials: ProviderConfig)
 async function renderImageRouterImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no ImageRouter API key — configure it in Settings or set OD_IMAGEROUTER_API_KEY',
+      `no ImageRouter API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_IMAGEROUTER_API_KEY`,
     );
   }
   const baseUrl = (credentials.baseUrl || IMAGEROUTER_DEFAULT_BASE_URL).trim();
@@ -1018,7 +1019,7 @@ async function renderImageRouterImage(ctx: MediaContext, credentials: ProviderCo
 async function renderImageRouterVideo(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no ImageRouter API key — configure it in Settings or set OD_IMAGEROUTER_API_KEY',
+      `no ImageRouter API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_IMAGEROUTER_API_KEY`,
     );
   }
   const baseUrl = (credentials.baseUrl || IMAGEROUTER_DEFAULT_BASE_URL).trim();
@@ -1054,7 +1055,7 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
   const baseUrl = (credentials.baseUrl || '').trim();
   if (!baseUrl) {
     throw new Error(
-      'Custom Image API base URL required — configure an OpenAI-compatible /v1/images/generations or /v1/images/edits endpoint in Settings',
+      `Custom Image API base URL required — configure an OpenAI-compatible /v1/images/generations or /v1/images/edits endpoint in ${SETTINGS_MEDIA_PROVIDERS_PATH}`,
     );
   }
   const wireModel = (
@@ -1063,7 +1064,7 @@ async function renderCustomOpenAIImage(ctx: MediaContext, credentials: ProviderC
   ).trim();
   if (!wireModel) {
     throw new Error(
-      'Custom Image API model required — configure the provider model in Settings',
+      `Custom Image API model required — configure the provider model in ${SETTINGS_MEDIA_PROVIDERS_PATH}`,
     );
   }
 
@@ -1316,7 +1317,7 @@ function openaiSpeechFormatFor(fileName: string): string {
 
 async function renderOpenAISpeech(ctx: MediaContext, credentials: ProviderConfig, fileName: string): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no OpenAI credential — configure an API key in Settings or set OPENAI_API_KEY');
+    throw new Error(`no OpenAI credential — configure an API key in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OPENAI_API_KEY`);
   }
   const rawBase = credentials.baseUrl || 'https://api.openai.com/v1';
   const azure = detectAzureEndpoint(rawBase);
@@ -1398,7 +1399,7 @@ async function renderOpenAISpeech(ctx: MediaContext, credentials: ProviderConfig
 async function renderVolcengineVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no Volcengine Ark API key — configure it in Settings or set ARK_API_KEY',
+      `no Volcengine Ark API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set ARK_API_KEY`,
     );
   }
   const baseUrl = (credentials.baseUrl || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
@@ -1541,7 +1542,7 @@ function volcengineRatioFor(aspect?: string): string {
 // POST /api/v3/images/generations (OpenAI-compatible payload).
 async function renderVolcengineImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no Volcengine Ark API key — configure it in Settings or set ARK_API_KEY');
+    throw new Error(`no Volcengine Ark API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set ARK_API_KEY`);
   }
   const baseUrl = (credentials.baseUrl || 'https://ark.cn-beijing.volces.com/api/v3').replace(/\/$/, '');
 
@@ -1612,7 +1613,7 @@ async function renderVolcengineImage(ctx: MediaContext, credentials: ProviderCon
 async function renderGrokImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
+      `no xAI credentials — sign in with your SuperGrok subscription (in OD or via \`hermes auth add xai-oauth\`), set XAI_API_KEY, or configure a key in ${SETTINGS_MEDIA_PROVIDERS_PATH}`,
     );
   }
   const baseUrl = (credentials.baseUrl || 'https://api.x.ai/v1').replace(/\/$/, '');
@@ -1671,7 +1672,7 @@ async function renderNanoBananaImage(ctx: MediaContext, credentials: ProviderCon
   const apiKey = credentials.apiKey;
   if (!apiKey) {
     throw new Error(
-      'no Nano Banana API key — configure it in Settings or set OD_NANOBANANA_API_KEY',
+      `no Nano Banana API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_NANOBANANA_API_KEY`,
     );
   }
 
@@ -1813,7 +1814,7 @@ async function renderOpenRouterImage(
 ): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no OpenRouter API key — configure it in Settings or set OPENROUTER_API_KEY',
+      `no OpenRouter API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OPENROUTER_API_KEY`,
     );
   }
   const baseUrl = (credentials.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
@@ -1944,7 +1945,7 @@ async function renderOpenRouterVideo(
 ): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no OpenRouter API key — configure it in Settings or set OPENROUTER_API_KEY',
+      `no OpenRouter API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OPENROUTER_API_KEY`,
     );
   }
   const baseUrl = (credentials.baseUrl || 'https://openrouter.ai/api/v1').replace(/\/$/, '');
@@ -2173,7 +2174,7 @@ function openRouterAspectFor(aspect?: string): string {
 async function renderLeonardoImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no Leonardo.ai API key — configure it in Settings or set LEONARDO_API_KEY',
+      `no Leonardo.ai API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set LEONARDO_API_KEY`,
     );
   }
   const baseUrl = (credentials.baseUrl || 'https://cloud.leonardo.ai/api/rest/v1').replace(/\/$/, '');
@@ -2302,7 +2303,7 @@ async function renderLeonardoImage(ctx: MediaContext, credentials: ProviderConfi
 async function renderGrokVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
+      `no xAI credentials — sign in with your SuperGrok subscription (in OD or via \`hermes auth add xai-oauth\`), set XAI_API_KEY, or configure a key in ${SETTINGS_MEDIA_PROVIDERS_PATH}`,
     );
   }
   const baseUrl = (credentials.baseUrl || 'https://api.x.ai/v1').replace(/\/$/, '');
@@ -2467,7 +2468,7 @@ const XAI_TTS_DEFAULT_LANGUAGE = 'en';
 async function renderXAITTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no xAI credentials — sign in with your SuperGrok subscription (in OD or via `hermes auth add xai-oauth`), set XAI_API_KEY, or configure a key in Settings',
+      `no xAI credentials — sign in with your SuperGrok subscription (in OD or via \`hermes auth add xai-oauth\`), set XAI_API_KEY, or configure a key in ${SETTINGS_MEDIA_PROVIDERS_PATH}`,
     );
   }
   const baseUrl = (credentials.baseUrl || XAI_TTS_DEFAULT_BASE_URL).replace(
@@ -2569,7 +2570,7 @@ function assertElevenLabsSfxPromptLength(text: string) {
 async function renderElevenLabsTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no ElevenLabs API key - configure it in Settings or set OD_ELEVENLABS_API_KEY',
+      `no ElevenLabs API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_ELEVENLABS_API_KEY`,
     );
   }
 
@@ -2622,7 +2623,7 @@ async function renderElevenLabsTTS(ctx: MediaContext, credentials: ProviderConfi
 async function renderElevenLabsSfx(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no ElevenLabs API key - configure it in Settings or set OD_ELEVENLABS_API_KEY',
+      `no ElevenLabs API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_ELEVENLABS_API_KEY`,
     );
   }
 
@@ -2712,7 +2713,7 @@ const MINIMAX_IMAGE_MODEL_MAP = {
 async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
+      `no MiniMax API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_MINIMAX_API_KEY`,
     );
   }
   const baseUrl = (credentials.baseUrl || MINIMAX_DEFAULT_BASE_URL).replace(
@@ -2820,7 +2821,7 @@ async function renderMinimaxTTS(ctx: MediaContext, credentials: ProviderConfig):
 async function renderMinimaxImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no MiniMax API key — configure it in Settings or set OD_MINIMAX_API_KEY',
+      `no MiniMax API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_MINIMAX_API_KEY`,
     );
   }
   // Base URL precedence:
@@ -2958,7 +2959,7 @@ const SENSEAUDIO_TTS_MODEL_MAP = {
 async function renderSenseAudioTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no SenseAudio API key — configure it in Settings or set OD_SENSEAUDIO_API_KEY',
+      `no SenseAudio API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_SENSEAUDIO_API_KEY`,
     );
   }
   const baseUrl = (credentials.baseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(
@@ -3068,7 +3069,7 @@ function senseAudioImageSize(aspect?: string): string {
 async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no SenseAudio API key — configure it in Settings or set OD_SENSEAUDIO_API_KEY',
+      `no SenseAudio API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_SENSEAUDIO_API_KEY`,
     );
   }
   const baseUrl = (credentials.baseUrl || SENSEAUDIO_DEFAULT_BASE_URL).replace(
@@ -3164,7 +3165,7 @@ async function renderSenseAudioImage(ctx: MediaContext, credentials: ProviderCon
 
 async function renderAIHubMixImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+    throw new Error(`no AIHubMix API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_AIHUBMIX_API_KEY`);
   }
   const baseUrl = credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL;
   const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
@@ -3238,7 +3239,7 @@ async function renderAIHubMixGeminiImage(
   wireModel: string,
 ): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+    throw new Error(`no AIHubMix API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_AIHUBMIX_API_KEY`);
   }
   const aspect = ctx.aspect || '1:1';
   const bytes = await aihubmixGeminiImageBytes(
@@ -3260,7 +3261,7 @@ async function renderAIHubMixGeminiImage(
 
 async function renderAIHubMixTTS(ctx: MediaContext, credentials: ProviderConfig, fileName: string): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+    throw new Error(`no AIHubMix API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_AIHUBMIX_API_KEY`);
   }
   const baseUrl = credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL;
   const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
@@ -3316,7 +3317,7 @@ async function renderAIHubMixVideo(
   onProgress?: ProgressFn,
 ): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no AIHubMix API key — configure it in Settings or set OD_AIHUBMIX_API_KEY');
+    throw new Error(`no AIHubMix API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_AIHUBMIX_API_KEY`);
   }
   const baseUrl = (credentials.baseUrl || AIHUBMIX_DEFAULT_BASE_URL).replace(/\/$/, '');
   const wireModel = aihubmixWireModel(credentials.model || ctx.wireModel);
@@ -3477,7 +3478,7 @@ const FISHAUDIO_TTS_MODEL_MAP = {
 async function renderFishAudioTTS(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
     throw new Error(
-      'no FishAudio API key — configure it in Settings or set OD_FISHAUDIO_API_KEY',
+      `no FishAudio API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set OD_FISHAUDIO_API_KEY`,
     );
   }
   const baseUrl = (credentials.baseUrl || FISHAUDIO_DEFAULT_BASE_URL).replace(
@@ -3694,7 +3695,7 @@ function falQueueBase(baseUrl: string): string {
 
 async function renderFalImage(ctx: MediaContext, credentials: ProviderConfig): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no Fal API key — configure it in Settings or set FAL_KEY');
+    throw new Error(`no Fal API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set FAL_KEY`);
   }
   const queueBase = falQueueBase((credentials.baseUrl || 'https://fal.run').replace(/\/$/, ''));
   const endpoint = FAL_ENDPOINTS[ctx.model] ?? ctx.model;
@@ -3735,7 +3736,7 @@ async function renderFalImage(ctx: MediaContext, credentials: ProviderConfig): P
 
 async function renderFalVideo(ctx: MediaContext, credentials: ProviderConfig, onProgress?: ProgressFn): Promise<RenderResult> {
   if (!credentials.apiKey) {
-    throw new Error('no Fal API key — configure it in Settings or set FAL_KEY');
+    throw new Error(`no Fal API key — configure it in ${SETTINGS_MEDIA_PROVIDERS_PATH} or set FAL_KEY`);
   }
   const queueBase = falQueueBase((credentials.baseUrl || 'https://fal.run').replace(/\/$/, ''));
   const endpoint = FAL_ENDPOINTS[ctx.model] ?? ctx.model;

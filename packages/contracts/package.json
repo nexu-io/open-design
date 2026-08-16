@@ -1,6 +1,6 @@
 {
   "name": "@open-design/contracts",
-  "version": "0.18.2",
+  "version": "0.19.2",
   "private": true,
   "type": "module",
   "description": "Shared pure TypeScript contracts for the Open Design web/daemon boundary.",
@@ -61,6 +61,10 @@
     "./design-systems/derived-token-outputs": {
       "types": "./dist/design-systems/derived-token-outputs.d.ts",
       "default": "./dist/design-systems/derived-token-outputs.mjs"
+    },
+    "./design-systems/runtime-schema": {
+      "types": "./dist/design-systems/runtime-schema.d.ts",
+      "default": "./dist/design-systems/runtime-schema.mjs"
     },
     "./design-systems/token-schema": {
       "types": "./dist/design-systems/token-schema.d.ts",

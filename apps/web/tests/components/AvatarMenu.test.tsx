@@ -136,6 +136,25 @@ const claudeAgent: AgentInfo = {
   ],
 };
 
+const deepSeekHarnessAgent: AgentInfo = {
+  id: 'deepseek-harness',
+  name: 'DeepSeek Harness',
+  bin: 'dsh',
+  available: true,
+  version: '0.1.0-rc.6',
+  models: [
+    {
+      id: 'deepseek/deepseek-v4-flash',
+      label: 'DeepSeek-V4-Flash · DeepSeek',
+      reasoningOptions: [
+        { id: 'off', label: 'Off' },
+        { id: 'high', label: 'High', default: true },
+        { id: 'max', label: 'Max' },
+      ],
+    },
+  ],
+};
+
 const baseConfig: AppConfig = {
   mode: 'daemon',
   apiKey: '',
@@ -326,21 +345,35 @@ describe('AvatarMenu', () => {
     expect(screen.queryByRole('link', { name: 'settings.amrUpgrade' })).toBeNull();
   });
 
-  it('renders the active reasoning effort as a read-only readout', () => {
-    renderMenu();
+  it('changes reasoning effort from the composer popover', () => {
+    const { onAgentModelChange } = renderMenu({
+      config: {
+        ...baseConfig,
+        agentId: 'deepseek-harness',
+        agentModels: {
+          'deepseek-harness': {
+            model: 'deepseek/deepseek-v4-flash',
+            reasoning: 'high',
+          },
+        },
+      },
+      agents: [deepSeekHarnessAgent],
+    });
 
     const menu = openMenu();
-    const rows = Array.from(menu.querySelectorAll('.avatar-select-row'));
-    const reasoningRow = rows.find((row) =>
-      row.querySelector('.avatar-select-label')?.textContent ===
+    const reasoningSelect = within(menu).getByLabelText(
       'avatar.reasoningLabel',
     );
-    expect(reasoningRow).toBeTruthy();
+    expect(reasoningSelect).toHaveValue('high');
     expect(
-      reasoningRow!.querySelector('.avatar-static-value')?.textContent,
-    ).toBe('Default');
-    // Read-only: no control to change it from the composer.
-    expect(reasoningRow!.querySelector('select')).toBeNull();
+      within(reasoningSelect).getAllByRole('option').map((option) => option.textContent),
+    ).toEqual(['Off', 'High', 'Max']);
+
+    fireEvent.change(reasoningSelect, { target: { value: 'max' } });
+
+    expect(onAgentModelChange).toHaveBeenCalledWith('deepseek-harness', {
+      reasoning: 'max',
+    });
   });
 
   it('selects a model from the inline list and dismisses the popover', () => {

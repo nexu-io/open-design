@@ -872,7 +872,7 @@ export function registerCollabSyncRoutes(
     | { ok: true; principal: ResourceHubPrincipal }
     | {
         ok: false;
-        status: 400 | 403 | 503;
+        status: 400 | 401 | 403 | 503;
         error: string;
         message?: string;
         retryable?: true;

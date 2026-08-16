@@ -60,6 +60,7 @@ const PACKAGED_CHILD_ENV_ALLOWLIST = [
   "http_proxy",
   "https_proxy",
   "no_proxy",
+  "OD_ALLOWED_INTERNAL_HOSTS",
 ] as const;
 
 // The daemon owns the historical-outer compatibility handoff. Preserve the

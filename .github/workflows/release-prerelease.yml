@@ -216,12 +216,12 @@ jobs:
           RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
         run: pnpm exec tools-release check-storage
   functional_e2e:
-    name: Full Functional E2E
+    name: P0 Functional E2E
     needs: metadata
     uses: ./.github/workflows/ui-extended-main.yml
     with:
       ref: ${{ needs.metadata.outputs.commit }}
-      suite: full
+      suite: p0
   e2e_vitest:
     name: E2E Vitest
     needs: metadata

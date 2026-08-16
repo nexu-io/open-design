@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { classifyAgentServiceFailure } from '../../src/runtimes/auth.js';
 
 describe('classifyAgentServiceFailure', () => {
+  it('classifies the official DeepSeek Harness missing-credential failure', () => {
+    expect(
+      classifyAgentServiceFailure(
+        'dsh: MISSING_CREDENTIAL: llm-deepseek: no API key for provider route "deepseek-official"; export DEEPSEEK_API_KEY',
+      ),
+    ).toBe('AGENT_AUTH_REQUIRED');
+  });
+
   it('classifies auth failures (Claude Code / codex style)', () => {
     for (const text of [
       'Error: 401 {"type":"authentication_error","message":"invalid x-api-key"}',

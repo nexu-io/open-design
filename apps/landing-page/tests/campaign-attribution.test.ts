@@ -27,7 +27,7 @@ test('campaign attribution carries the consented device id across Pricing → Cl
 
 test('campaign membership is explicit on each click, not inherited from a stale inbound id', () => {
   // A desktop-badge URL can outlive the campaign window. Pricing then passes
-  // campaignId only while campaignActive; the helper must not fall back to
+  // campaignId only while campaignEligible; the helper must not fall back to
   // inbound od_campaign_id and re-attach the closed campaign to the payment.
   assert.match(tracker, /campaign_id:\s*campaignId\s*\|\|\s*undefined/);
   assert.doesNotMatch(

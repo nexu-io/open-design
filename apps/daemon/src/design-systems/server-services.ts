@@ -11,6 +11,7 @@ import {
   getWorkspaceResourceByResourceId,
 } from '../db.js';
 import { workspaceTeamSkillBindingAllowsRead } from '../skills/workspace-team-binding.js';
+import { workspaceTeamDesignSystemBindingAllowsRead } from './workspace-team-binding.js';
 
 type JsonRecord = Record<string, unknown>;
 type SkillEntry = { id: string; dir?: string } & JsonRecord;
@@ -360,6 +361,7 @@ export function createDesignSystemServerServices({
     workspaceId?: string | null;
     workspaceMemberId?: string | null;
     exactTeam?: boolean;
+    exactPersonal?: boolean;
   } = {}) {
     const builtIn = (await designSystems.listDesignSystems(paths.DESIGN_SYSTEMS_DIR)).map((s) => ({
       ...s,
@@ -379,7 +381,7 @@ export function createDesignSystemServerServices({
       // User directory may not exist yet or be unreadable.
     }
     const workspaceId = options.workspaceId?.trim();
-    if (workspaceId) {
+    if (workspaceId && !options.exactPersonal) {
       try {
         const team = await designSystems.listDesignSystems(
           teamResourceWorkspaceRoot(paths.USER_DESIGN_SYSTEMS_DIR, workspaceId),
@@ -391,8 +393,21 @@ export function createDesignSystemServerServices({
             workspaceId,
           },
         );
-        const teamIds = new Set(team.map((system) => system.id));
-        const teamSystems = team.map((system) => ({ ...system, teamSynced: true }));
+        // Team directories are intentionally retained after reconciliation so
+        // offline/local data is recoverable. Availability comes from the local
+        // binding row: filter both after async filesystem parsing and before
+        // exposing the catalogue, matching the Skill catalogue's boundary.
+        // This is local SSE/poll state, not a network membership check.
+        const teamDb = getDb?.();
+        const reconciledTeam = teamDb
+          ? team.filter((system) => workspaceTeamDesignSystemBindingAllowsRead(
+              teamDb,
+              workspaceId,
+              system.id,
+            ))
+          : team;
+        const teamIds = new Set(reconciledTeam.map((system) => system.id));
+        const teamSystems = reconciledTeam.map((system) => ({ ...system, teamSynced: true }));
         installed = options.exactTeam
           ? teamSystems
           : [
@@ -445,11 +460,21 @@ export function createDesignSystemServerServices({
 
   async function readAvailableDesignSystem(
     id: string,
-    options: { workspaceId?: string | null; workspaceMemberId?: string | null; exactTeam?: boolean } = {},
+    options: {
+      workspaceId?: string | null;
+      workspaceMemberId?: string | null;
+      exactTeam?: boolean;
+      exactPersonal?: boolean;
+    } = {},
   ) {
     const db = getDb?.();
     const workspaceId = options.workspaceId?.trim();
-    if (workspaceId && typeof id === 'string' && id.startsWith('user:')) {
+    if (
+      workspaceId
+      && !options.exactPersonal
+      && typeof id === 'string'
+      && id.startsWith('user:')
+    ) {
       const scoped = await designSystems.readDesignSystem(
         teamResourceWorkspaceRoot(paths.USER_DESIGN_SYSTEMS_DIR, workspaceId),
         id,
@@ -539,6 +564,11 @@ export function createDesignSystemServerServices({
       workspaceMemberId?: string | null;
     } = {},
   ) {
+    // Product boundary: this validator identifies the item in the daemon's
+    // locally reconciled catalog; it is not a fresh Team-authorization gate.
+    // A not-yet-reconciled local copy remains usable, while a locally recorded
+    // tombstone removes it from future selection. Never add a network
+    // membership check to this project-create path.
     if (id === undefined || id === null || id === '') return { ok: true, id: null };
     if (typeof id !== 'string') {
       return {
@@ -570,6 +600,11 @@ export function createDesignSystemServerServices({
     id: unknown,
     options: { workspaceId?: string | null } = {},
   ) {
+    // Same invariant as Design Systems and exact-source plugins: project
+    // creation follows locally reconciled content. Team membership is checked
+    // by remote install/pull/sync/share operations, not by Send. Eventual
+    // consistency is intentional: a stale local copy remains usable until
+    // reconciliation records the retraction in the local catalog.
     if (id === undefined || id === null || id === '') {
       return { ok: true, id: null };
     }

@@ -336,6 +336,31 @@ describe('EntryShell settings menu', () => {
   });
 });
 
+describe('EntryShell navigation shortcuts', () => {
+  afterEach(() => {
+    window.localStorage.removeItem('od.entry.railOpen');
+  });
+
+  it('leaves the rail unchanged when the composer owns Cmd/Ctrl+B', async () => {
+    window.localStorage.setItem('od.entry.railOpen', 'false');
+    renderHome();
+
+    const entry = document.querySelector('.entry');
+    expect(entry).toBeInstanceOf(HTMLElement);
+    expect(entry?.classList.contains('entry--rail-open')).toBe(false);
+
+    const editor = await screen.findByTestId('home-hero-input');
+    fireEvent.keyDown(editor, {
+      key: 'b',
+      ...(/Mac|iPod|iPhone|iPad/.test(navigator.platform)
+        ? { metaKey: true }
+        : { ctrlKey: true }),
+    });
+
+    expect(entry?.classList.contains('entry--rail-open')).toBe(false);
+  });
+});
+
 describe('EntryShell design systems view', () => {
   it('leaves workspace-scoped design-system activation to the mounted tab', async () => {
     const onDesignSystemsRefresh = vi.fn();
@@ -643,10 +668,9 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     ) as typeof fetch;
     const config = baseConfig({
       onboardingCompleted: true,
-      mode: 'api',
-      apiKey: 'persisted-key',
-      baseUrl: 'https://api.anthropic.com',
-      model: 'claude-sonnet-4-5',
+      mode: 'daemon',
+      agentId: 'amr',
+      model: 'claude-opus-4-5',
     });
     const props = renderHome({ config, amrLoggedIn: false });
 
@@ -657,6 +681,27 @@ describe('EntryShell onboarding Open Design AMR runtime', () => {
     expect(props.onConfigPersist).not.toHaveBeenCalled();
     expect(props.onModeChange).not.toHaveBeenCalled();
     expect(props.onAgentChange).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['Local CLI', baseConfig({ mode: 'daemon', agentId: 'claude-code' })],
+    ['BYOK', baseConfig({
+      mode: 'api',
+      agentId: 'amr',
+      apiKey: 'persisted-key',
+      baseUrl: 'https://api.anthropic.com',
+      model: 'claude-sonnet-4-5',
+    })],
+  ])('keeps Home available for signed-out %s execution', async (_label, config) => {
+    globalThis.fetch = vi.fn(async () => jsonResponse({})) as typeof fetch;
+
+    renderHome({ config, amrLoggedIn: false });
+
+    expect(await screen.findByTestId('home-hero-input')).toBeTruthy();
+    expect(window.location.pathname).toBe('/');
+    expect(
+      screen.queryByRole('heading', { name: 'Sign in to Open Design' }),
+    ).toBeNull();
   });
 
   it('shows the model-source chooser after Cloud sign-in without exposing legacy onboarding steps', async () => {

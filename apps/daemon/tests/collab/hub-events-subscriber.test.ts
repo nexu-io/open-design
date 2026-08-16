@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  parseHubWorkspaceDirectoryEvent,
   parseHubWorkspaceEvent,
   startHubEventsSubscriber,
   type HubEventsSubscriber,
@@ -193,9 +194,56 @@ describe('parseHubWorkspaceEvent', () => {
       memberChange: 'removed',
     });
   });
+
+  it('parses account directory invalidations without requiring the carrier workspace', () => {
+    expect(
+      parseHubWorkspaceDirectoryEvent(
+        '{"type":"workspace-directory-changed","workspaceId":"workspace-new","change":"created","at":"2026-08-14T00:00:00.000Z"}',
+      ),
+    ).toEqual({
+      type: 'workspace-directory-changed',
+      workspaceId: 'workspace-new',
+      change: 'created',
+      at: '2026-08-14T00:00:00.000Z',
+    });
+    expect(
+      parseHubWorkspaceDirectoryEvent(
+        '{"type":"workspace-directory-changed","workspaceId":"workspace-new","change":"mystery"}',
+      ),
+    ).toBeNull();
+  });
 });
 
 describe('startHubEventsSubscriber', () => {
+  it('jitters transport reconnects so simultaneous daemons do not retry in lockstep', async () => {
+    vi.useFakeTimers();
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockRejectedValue(new TypeError('fetch failed'));
+    subscriber = startHubEventsSubscriber({
+      resolveEndpoint: async () => ({ url: 'https://hub/events', headers: {} }),
+      onEvent: () => undefined,
+      fetchImpl,
+      backoffMinMs: 1_000,
+      backoffMaxMs: 8_000,
+      random: () => 0.5,
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1_249);
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+    // The un-jittered cursor still doubles to 2s; the deterministic draw turns
+    // the next retry into 2.5s and proves the fleet phase is randomized.
+    await vi.advanceTimersByTimeAsync(2_499);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
   it('uses revision clocks only when the ready frame advertises the capability', async () => {
     const clockEvent =
       'event: workspace-event\ndata: {"type":"billing-subscription-changed","workspaceId":"w1","revision":"billing:v1:2","revisionClock":{"epoch":"billing-epoch-a","counter":"2"}}\n\n';
@@ -351,6 +399,63 @@ describe('startHubEventsSubscriber', () => {
     ]);
     expect(states).toEqual(['connected']);
     expect(subscriber.connected()).toBe(true);
+  });
+
+  it('delivers a capable account-directory event even when its new workspace differs from the carrier', async () => {
+    const directoryEvents: unknown[] = [];
+    let resolveDone!: () => void;
+    const done = new Promise<void>((resolve) => {
+      resolveDone = resolve;
+    });
+    subscriber = startHubEventsSubscriber({
+      resolveEndpoint: async () => ({
+        url: 'https://hub/events',
+        headers: {},
+        workspaceId: 'w1',
+      }),
+      onEvent: () => undefined,
+      onDirectoryEvent: (event) => {
+        directoryEvents.push(event);
+        resolveDone();
+      },
+      fetchImpl: async () => sseResponse([
+        'event: ready\ndata: {"workspaceId":"w1","capabilities":["workspace-directory-events-v1"]}\n\n',
+        'event: workspace-directory-changed\ndata: {"type":"workspace-directory-changed","workspaceId":"workspace-new","change":"created","at":"2026-08-14T00:00:00.000Z"}\n\n',
+      ], { holdOpen: true }),
+    });
+
+    await done;
+    expect(directoryEvents).toEqual([{
+      type: 'workspace-directory-changed',
+      workspaceId: 'workspace-new',
+      change: 'created',
+      at: '2026-08-14T00:00:00.000Z',
+    }]);
+  });
+
+  it('drops account-directory frames from an old server that did not advertise the capability', async () => {
+    const onDirectoryEvent = vi.fn();
+    const onDrop = vi.fn();
+    subscriber = startHubEventsSubscriber({
+      resolveEndpoint: async () => ({
+        url: 'https://hub/events',
+        headers: {},
+        workspaceId: 'w1',
+      }),
+      onEvent: () => undefined,
+      onDirectoryEvent,
+      onDrop,
+      fetchImpl: async () => sseResponse([
+        'event: ready\ndata: {"workspaceId":"w1","capabilities":[]}\n\n',
+        'event: workspace-directory-changed\ndata: {"type":"workspace-directory-changed","workspaceId":"workspace-new","change":"created"}\n\n',
+      ], { holdOpen: true }),
+    });
+
+    await vi.waitFor(() => expect(onDrop).toHaveBeenCalledWith({
+      reason: 'invalid-payload',
+      eventName: 'workspace-directory-changed',
+    }));
+    expect(onDirectoryEvent).not.toHaveBeenCalled();
   });
 
   it('reports terminal access revocation only after exact-scope ready verification', async () => {

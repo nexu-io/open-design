@@ -18,13 +18,16 @@ import type { AppConfig, ChatMessage } from '../../src/types';
 // distinct from the from-scratch Retry. On origin/main there is no `resumable`
 // field, no `onResumeRun` prop, and no such button, so this goes red there.
 
+const translate = (key: string, vars?: Record<string, string | number>) => {
+  if (vars && Object.keys(vars).length > 0) {
+    return `${key} ${Object.values(vars).join(' ')}`;
+  }
+  return key;
+};
+
 vi.mock('../../src/i18n', () => ({
-  useT: () => (key: string, vars?: Record<string, string | number>) => {
-    if (vars && Object.keys(vars).length > 0) {
-      return `${key} ${Object.values(vars).join(' ')}`;
-    }
-    return key;
-  },
+  useI18n: () => ({ locale: 'en', setLocale: () => undefined, t: translate }),
+  useT: () => translate,
 }));
 
 vi.mock('../../src/components/AssistantMessage', () => ({

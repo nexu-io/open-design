@@ -290,6 +290,17 @@ describe('packaged child Vite+ environment forwarding', () => {
     expect(env.NODE_USE_ENV_PROXY).toBeUndefined();
   });
 
+  it('forwards OD_ALLOWED_INTERNAL_HOSTS so the daemon can resolve trusted loopback hosts in packaged sidecars', () => {
+    const env = resolvePackagedChildBaseEnv({
+      HOME: '/Users/tester',
+      OD_ALLOWED_INTERNAL_HOSTS: '127.0.0.1,localhost',
+      RANDOM_INTERNAL_FLAG: 'drop-me',
+    });
+
+    expect(env.OD_ALLOWED_INTERNAL_HOSTS).toBe('127.0.0.1,localhost');
+    expect(env.RANDOM_INTERNAL_FLAG).toBeUndefined();
+  });
+
   it('adds custom VP_HOME/bin to the packaged PATH builder', () => {
     const vpHome = mkdtempSync(join(tmpdir(), 'od-packaged-vp-home-'));
     const originalVpHome = process.env.VP_HOME;
