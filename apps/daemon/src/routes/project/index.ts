@@ -5510,7 +5510,10 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
     // Restore preserved script blocks
     for (let i = 0; i < scriptBlocks.length; i++) {
-      next = next.replace(placeholder(i), () => scriptBlocks[i]);
+      const block = scriptBlocks[i];
+      if (block !== undefined) {
+        next = next.replace(placeholder(i), () => block);
+      }
     }
 
     return next;
