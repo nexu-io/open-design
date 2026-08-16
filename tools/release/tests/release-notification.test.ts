@@ -161,7 +161,11 @@ describe("release Feishu notification", () => {
   });
 
   it("renders complete, partial, failed, and validation terminal states from one capability", () => {
-    expect(releaseNotificationInternals.notificationState(input())).toBe("complete");
+    expect(releaseNotificationInternals.notificationState(input())).toBe("published");
+    expect(releaseNotificationInternals.notificationState(input({ releaseMode: "promote" }))).toBe("promoted");
+    expect(releaseNotificationInternals.notificationState(input({ releaseMode: "candidate" }))).toBe("candidate");
+    expect(JSON.stringify(buildReleaseFeishuCard(input({ releaseMode: "candidate" }), emptyDetails)))
+      .toContain("distribution-exact-accept.yml");
     expect(releaseNotificationInternals.notificationState(input({ releaseState: "partial" }))).toBe("partial");
     expect(releaseNotificationInternals.notificationState(input({ releaseResult: "failure" }))).toBe("failed");
     expect(releaseNotificationInternals.notificationState(input({ releaseMode: "prepublish" }))).toBe("validation");

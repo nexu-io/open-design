@@ -7,15 +7,16 @@ on:
         description: "Exact validated prerelease version to promote, for example 0.5.1-prerelease.3."
         required: true
         type: string
-      dry_run:
-        description: "Release mode. metadata stops after promotion metadata; prepublish runs build/smoke/report/plan without publishing; publish performs the stable release."
+      publish:
+        description: "Publish immutable stable version objects. Defaults off; the full candidate build still runs."
         required: false
-        type: choice
-        options:
-          - metadata
-          - prepublish
-          - publish
-        default: metadata
+        type: boolean
+        default: false
+      promote:
+        description: "Activate stable/latest and expose the GitHub Release after publication."
+        required: false
+        type: boolean
+        default: false
       ref:
         description: "Stable release branch to build, for example release/v0.5.1. Empty builds the dispatch ref, which must also be release/vX.Y.Z."
         required: false
@@ -64,11 +65,14 @@ on:
         description: "Exact validated prerelease version to promote."
         required: true
         type: string
-      dry_run:
-        description: "Release mode: metadata, prepublish, or publish. The legacy false value is also accepted for callers."
+      publish:
         required: false
-        type: string
-        default: "metadata"
+        type: boolean
+        default: false
+      promote:
+        required: false
+        type: boolean
+        default: false
       ref:
         description: "Stable release branch to build. Empty builds the caller's ref, which must also be release/vX.Y.Z."
         required: false
@@ -118,12 +122,9 @@ on:
       commit:
         description: "The commit SHA that was built."
         value: ${{ jobs.distribute.outputs.commit }}
-      dry_run:
-        description: "Whether this run is a dry-run."
-        value: ${{ jobs.distribute.outputs.dry_run }}
-      dry_run_mode:
-        description: "The stable dry-run boundary: metadata or prepublish."
-        value: ${{ jobs.distribute.outputs.dry_run_mode }}
+      candidate_manifest_url:
+        description: "Public unlisted candidate manifest URL when publish is false."
+        value: ${{ jobs.distribute.outputs.candidate_manifest_url }}
       previous_commit:
         description: "Commit SHA of the previously published prerelease (changelog baseline); empty on cold start."
         value: ${{ jobs.distribute.outputs.previous_commit }}
@@ -147,7 +148,7 @@ permissions:
   packages: write
 
 concurrency:
-  group: open-design-release-stable-${{ inputs.dry_run }}
+  group: open-design-release-stable-${{ inputs.publish && (inputs.promote && 'promote' || 'publish') || 'candidate' }}
   cancel-in-progress: false
 
 jobs:
@@ -157,7 +158,8 @@ jobs:
     secrets: inherit
     with:
       prerelease_version: ${{ inputs.prerelease_version }}
-      dry_run: ${{ inputs.dry_run }}
+      publish: ${{ inputs.publish }}
+      promote: ${{ inputs.promote }}
       ref: ${{ inputs.ref }}
       mac_arm64_sign_mode: ${{ inputs.mac_arm64_sign_mode }}
       mac_x64_sign_mode: ${{ inputs.mac_x64_sign_mode }}
@@ -177,10 +179,10 @@ jobs:
       commit: ${{ needs.distribute.outputs.commit }}
       mac_arm64_url: ${{ needs.distribute.outputs.mac_arm64_url }}
       mac_x64_url: ${{ needs.distribute.outputs.mac_intel_url }}
-      metadata_url: ${{ needs.distribute.outputs.version_metadata_url }}
+      metadata_url: ${{ needs.distribute.outputs.version_metadata_url || needs.distribute.outputs.candidate_manifest_url }}
       notification_stream: ${{ inputs.notification_stream }}
       previous_commit: ${{ needs.distribute.outputs.previous_commit }}
-      release_mode: ${{ needs.distribute.outputs.dry_run_mode || inputs.dry_run }}
+      release_mode: ${{ inputs.publish && (inputs.promote && 'promote' || 'publish') || 'candidate' }}
       release_result: ${{ needs.distribute.result }}
       version: ${{ needs.distribute.outputs.release_version }}
       win_x64_url: ${{ needs.distribute.outputs.win_url }}

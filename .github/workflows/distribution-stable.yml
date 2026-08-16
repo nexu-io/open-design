@@ -7,11 +7,16 @@ on:
         description: "Exact validated prerelease version to promote."
         required: true
         type: string
-      dry_run:
-        description: "Release mode: metadata, prepublish, or publish. The legacy false value is also accepted for callers."
+      publish:
+        description: "Publish immutable stable version objects. False seals an unlisted candidate."
         required: false
-        type: string
-        default: "metadata"
+        type: boolean
+        default: false
+      promote:
+        description: "Activate stable/latest and expose the GitHub Release after publication."
+        required: false
+        type: boolean
+        default: false
       ref:
         description: "Stable release branch to build. Empty builds the caller's ref, which must also be release/vX.Y.Z."
         required: false
@@ -51,6 +56,12 @@ on:
       release_version:
         description: "The stable version that was validated or published."
         value: ${{ jobs.metadata.outputs.release_version }}
+      candidate_id:
+        description: "Immutable candidate build-spec digest."
+        value: ${{ jobs.metadata.outputs.candidate_id }}
+      candidate_manifest_url:
+        description: "Public unlisted candidate manifest URL when publish is false."
+        value: ${{ jobs.candidate.outputs.manifest_url }}
       channel:
         description: "The stable release channel."
         value: ${{ jobs.metadata.outputs.channel }}
@@ -71,16 +82,16 @@ on:
         value: ${{ jobs.metadata.outputs.previous_commit }}
       version_metadata_url:
         description: "Public R2 URL of this build's version metadata.json."
-        value: ${{ jobs.publish.outputs.version_metadata_url }}
+        value: ${{ inputs.publish && jobs.publish.outputs.version_metadata_url || '' }}
       mac_arm64_url:
         description: "macOS arm64 dmg download URL."
-        value: ${{ jobs.publish.outputs.mac_arm64_url }}
+        value: ${{ inputs.publish && jobs.publish.outputs.mac_arm64_url || jobs.candidate.outputs.mac_arm64_url }}
       mac_intel_url:
         description: "macOS x64 (Intel) dmg download URL."
-        value: ${{ jobs.publish.outputs.mac_intel_url }}
+        value: ${{ inputs.publish && jobs.publish.outputs.mac_intel_url || jobs.candidate.outputs.mac_x64_url }}
       win_url:
         description: "Windows x64 installer download URL."
-        value: ${{ jobs.publish.outputs.win_url }}
+        value: ${{ inputs.publish && jobs.publish.outputs.win_url || jobs.candidate.outputs.win_x64_url }}
 
 permissions:
   actions: write
@@ -145,7 +156,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GITHUB_REPOSITORY: ${{ github.repository }}
       OPEN_DESIGN_PRERELEASE_METADATA_URL: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}/prerelease/latest/metadata.json
-      OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.dry_run == 'publish' && 'false' || inputs.dry_run }}
+      OPEN_DESIGN_RELEASE_DRY_RUN: ${{ inputs.publish && 'false' || 'prepublish' }}
       OPEN_DESIGN_RELEASE_CHANNEL: stable
       OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
       OPEN_DESIGN_STABLE_WIN_X64_SMOKE_MODE: ${{ inputs.win_x64_smoke_mode }}
@@ -155,6 +166,7 @@ jobs:
       branch: ${{ steps.stable.outputs.branch }}
       channel: ${{ steps.stable.outputs.channel }}
       commit: ${{ steps.stable.outputs.commit }}
+      candidate_id: ${{ steps.candidate.outputs.candidate_id }}
       dry_run: ${{ steps.stable.outputs.dry_run }}
       dry_run_mode: ${{ steps.stable.outputs.dry_run_mode }}
       github_release_enabled: ${{ steps.stable.outputs.github_release_enabled }}
@@ -198,6 +210,12 @@ jobs:
       - name: Resolve built commit
         run: echo "BUILT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
 
+      - name: Validate publication mode
+        if: ${{ inputs.promote && !inputs.publish }}
+        run: |
+          echo "promote=true requires publish=true" >&2
+          exit 1
+
       # Capture the previously published prerelease commit BEFORE this run overwrites
       # prerelease/latest/metadata.json, so the notification can diff the changelog
       # against the last package. Empty on cold start (HTTP 404).
@@ -216,6 +234,30 @@ jobs:
           GITHUB_REF_NAME: ${{ inputs.ref != '' && inputs.ref || github.ref_name }}
         run: pnpm exec tools-release prepare stable
 
+      - name: Prepare immutable candidate identity
+        id: candidate
+        env:
+          RELEASE_CANDIDATE_SPEC_PATH: ${{ runner.temp }}/release-candidate/spec.json
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$RELEASE_CANDIDATE_SPEC_PATH")"
+          jq -n \
+            --arg commit "$BUILT_SHA" \
+            --arg releaseVersion "${{ steps.stable.outputs.release_version }}" \
+            --arg macArm64SignMode "${{ inputs.mac_arm64_sign_mode }}" \
+            --arg macX64SignMode "${{ inputs.mac_x64_sign_mode }}" \
+            --arg winX64SignMode "${{ inputs.win_x64_sign_mode }}" \
+            '{amrProfile: "prod", channel: "stable", closureMinShellVersion: "${{ vars.RELEASE_SHELL_VERSION_MIN_STABLE }}", commit: $commit, macArm64SignMode: $macArm64SignMode, macX64SignMode: $macX64SignMode, releaseVersion: $releaseVersion, schemaVersion: 1, targets: ["mac_arm64", "mac_x64", "win_x64"], winX64SignMode: $winX64SignMode}' > "$RELEASE_CANDIDATE_SPEC_PATH"
+          pnpm exec tools-release prepare-candidate
+
+      - name: Upload immutable candidate spec
+        uses: actions/upload-artifact@v7
+        with:
+          name: open-design-stable-candidate-spec
+          path: ${{ runner.temp }}/release-candidate/spec.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Validate stable release note policy
         env:
           RELEASE_CHANNEL: stable
@@ -224,7 +266,6 @@ jobs:
         run: pnpm exec tools-release prepare-release-note
 
       - name: Validate R2 release access
-        if: ${{ steps.stable.outputs.publish_side_effects_enabled == 'true' }}
         env:
           GITHUB_SHA: ${{ env.BUILT_SHA }}
           R2_ACCESS_PROBE_NAME: ${{ steps.stable.outputs.namespace }}
@@ -261,7 +302,7 @@ jobs:
         with:
           channel: stable
           min-shell-version: ${{ vars.RELEASE_SHELL_VERSION_MIN_STABLE }}
-          publish-enabled: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
+          publish-enabled: "true"
           release-version: ${{ needs.metadata.outputs.release_version }}
 
   verify:
@@ -322,6 +363,9 @@ jobs:
     needs: [metadata, closure_shared, verify]
     if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}
     runs-on: macos-14
+    outputs:
+      candidate_manifest_url: ${{ steps.platform.outputs.candidate_manifest_url }}
+      candidate_primary_url: ${{ steps.platform.outputs.candidate_primary_url }}
     env:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -333,7 +377,7 @@ jobs:
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
       RELEASE_DRY_RUN_MODE: ${{ needs.metadata.outputs.dry_run_mode }}
       RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-      RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
+      RELEASE_PUBLISH_SIDE_EFFECTS: "true"
       RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
       RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
       RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -346,13 +390,16 @@ jobs:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
       - name: Distribute stable mac_arm64
+        id: platform
         uses: ./.github/actions/release/platform/mac
         with:
           app-name: Open Design.app
           artifact-id: mac-arm64
           bundle-artifact-name: open-design-release-mac-release-assets
-          cache-enabled: "false"
+          cache-enabled: "true"
           channel: stable
+          candidate-id: ${{ needs.metadata.outputs.candidate_id }}
+          candidate-enabled: "true"
           closure-version: ${{ needs.metadata.outputs.release_version }}
           diagnostics: "true"
           diagnostics-artifact-name: open-design-release-mac-arm64-build-diagnostics
@@ -374,6 +421,9 @@ jobs:
     needs: [metadata, closure_shared, verify]
     if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}
     runs-on: macos-15-intel
+    outputs:
+      candidate_manifest_url: ${{ steps.platform.outputs.candidate_manifest_url }}
+      candidate_primary_url: ${{ steps.platform.outputs.candidate_primary_url }}
     env:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
@@ -385,7 +435,7 @@ jobs:
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
       RELEASE_DRY_RUN_MODE: ${{ needs.metadata.outputs.dry_run_mode }}
       RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-      RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
+      RELEASE_PUBLISH_SIDE_EFFECTS: "true"
       RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
       RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
       RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -398,13 +448,16 @@ jobs:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
       - name: Distribute stable mac_x64
+        id: platform
         uses: ./.github/actions/release/platform/mac
         with:
           app-name: Open Design.app
           artifact-id: mac-x64
           bundle-artifact-name: open-design-release-mac-intel-release-assets
-          cache-enabled: "false"
+          cache-enabled: "true"
           channel: stable
+          candidate-id: ${{ needs.metadata.outputs.candidate_id }}
+          candidate-enabled: "true"
           closure-version: ${{ needs.metadata.outputs.release_version }}
           manifest-artifact-name: open-design-release-mac-x64-publish-manifest
           namespace: ${{ needs.metadata.outputs.mac_intel_namespace }}
@@ -421,13 +474,16 @@ jobs:
     needs: [metadata, closure_shared, verify]
     if: ${{ needs.metadata.outputs.run_prepublish_jobs == 'true' }}
     runs-on: windows-latest
+    outputs:
+      candidate_manifest_url: ${{ steps.platform.outputs.candidate_manifest_url }}
+      candidate_primary_url: ${{ steps.platform.outputs.candidate_primary_url }}
     env:
       GH_TOKEN: ${{ github.token }}
       RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
       RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
       RELEASE_DRY_RUN_MODE: ${{ needs.metadata.outputs.dry_run_mode }}
       RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-      RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
+      RELEASE_PUBLISH_SIDE_EFFECTS: "true"
       RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
       RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
       RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
@@ -440,10 +496,13 @@ jobs:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
       - name: Distribute stable win_x64
+        id: platform
         uses: ./.github/actions/release/platform/win
         with:
           bundle-artifact-name: open-design-release-win-release-assets
           channel: stable
+          candidate-id: ${{ needs.metadata.outputs.candidate_id }}
+          candidate-enabled: "true"
           closure-version: ${{ needs.metadata.outputs.release_version }}
           manifest-artifact-name: open-design-release-win-x64-publish-manifest
           namespace: ${{ needs.metadata.outputs.win_namespace }}
@@ -457,30 +516,49 @@ jobs:
           update-version-policy: patch
           write-report: "false"
 
-  publish_docker_image:
-    name: Publish stable Docker image
-    needs:
-      - metadata
-      - publish
-    if: >-
-      ${{
-        always() &&
-        !cancelled() &&
-        needs.metadata.outputs.dry_run != 'true' &&
-        needs.metadata.outputs.github_release_enabled == 'true' &&
-        needs.metadata.result == 'success' &&
-        needs.publish.result == 'success'
-      }}
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-    uses: ./.github/workflows/docker-image.yml
-    secrets: inherit
-    with:
-      ref: ${{ needs.metadata.outputs.commit }}
-      release_version: ${{ needs.metadata.outputs.stable_version }}
-      publish_latest: true
+  candidate:
+    name: Seal stable candidate
+    needs: [metadata, build_mac, build_mac_intel, build_win, publish]
+    if: ${{ !cancelled() && !inputs.promote && needs.metadata.result == 'success' && needs.build_mac.result == 'success' && needs.build_mac_intel.result == 'success' && needs.build_win.result == 'success' && needs.publish.result == 'success' }}
+    runs-on: ubuntu-latest
+    outputs:
+      manifest_url: ${{ steps.finalize.outputs.candidate_manifest_url }}
+      mac_arm64_url: ${{ needs.build_mac.outputs.candidate_primary_url }}
+      mac_x64_url: ${{ needs.build_mac_intel.outputs.candidate_primary_url }}
+      win_x64_url: ${{ needs.build_win.outputs.candidate_primary_url }}
+    steps:
+      - name: Checkout candidate finalizer
+        uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.metadata.outputs.commit }}
+      - name: Setup release toolchain
+        uses: ./.github/actions/release/platform/setup
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Download candidate spec
+        uses: actions/download-artifact@v8
+        with:
+          name: open-design-stable-candidate-spec
+          path: ${{ runner.temp }}/release-candidate
+      - name: Prepare candidate target URLs
+        env:
+          MAC_ARM64_MANIFEST: ${{ needs.build_mac.outputs.candidate_manifest_url }}
+          MAC_X64_MANIFEST: ${{ needs.build_mac_intel.outputs.candidate_manifest_url }}
+          WIN_X64_MANIFEST: ${{ needs.build_win.outputs.candidate_manifest_url }}
+        run: jq -n '[env.MAC_ARM64_MANIFEST, env.MAC_X64_MANIFEST, env.WIN_X64_MANIFEST]' > "$RUNNER_TEMP/release-candidate/target-urls.json"
+      - name: Seal candidate manifest
+        id: finalize
+        env:
+          RELEASE_CANDIDATE_SPEC_PATH: ${{ runner.temp }}/release-candidate/spec.json
+          RELEASE_CANDIDATE_TARGET_URLS_PATH: ${{ runner.temp }}/release-candidate/target-urls.json
+          RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+          RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}
+          RELEASE_STORAGE_BUCKET: ${{ secrets.CLOUDFLARE_R2_RELEASES_BUCKET }}
+          RELEASE_STORAGE_ENDPOINT: ${{ secrets.CLOUDFLARE_R2_RELEASES_URL }}
+          RELEASE_STORAGE_REGION: auto
+          RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_RELEASES_SK }}
+          RELEASE_VERSION_METADATA_URL: ${{ needs.publish.outputs.version_metadata_url }}
+        run: pnpm exec tools-release finalize-candidate
 
   publish:
     name: Finalize ${{ needs.metadata.outputs.channel }} release plan
@@ -712,9 +790,9 @@ jobs:
           RELEASE_INSTALLATION_VERSION_MIN_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_STABLE }}
           RELEASE_INSTALLATION_VERSION_MIN_URL_STABLE: ${{ vars.RELEASE_LAUNCHER_VERSION_MIN_URL_STABLE }}
           RELEASE_LEGACY_INSTALLATION_MIGRATION_REQUIRED: "true"
-          RELEASE_PUBLISH_SIDE_EFFECTS: ${{ needs.metadata.outputs.publish_side_effects_enabled }}
+          RELEASE_PUBLISH_SIDE_EFFECTS: "true"
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
-          RELEASE_METADATA_PATH: ${{ needs.metadata.outputs.publish_side_effects_enabled == 'true' && '' || format('{0}/release-metadata/metadata.json', runner.temp) }}
+          RELEASE_METADATA_PATH: ""
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_REPOSITORY: ${{ github.repository }}
           RELEASE_RUN_ATTEMPT: ${{ github.run_attempt }}
@@ -732,7 +810,7 @@ jobs:
           VERSION_TAG: ${{ needs.metadata.outputs.version_tag }}
 
       - name: Activate stable release
-        if: ${{ needs.metadata.outputs.github_release_enabled == 'true' }}
+        if: ${{ needs.metadata.outputs.github_release_enabled == 'true' && inputs.promote }}
         env:
           RELEASE_MANIFEST_DIR: ${{ runner.temp }}/release-platform-manifests
           RELEASE_METADATA_PATH: ${{ runner.temp }}/release-metadata/metadata.json

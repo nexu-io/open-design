@@ -285,6 +285,7 @@ async function validateStablePrereleaseMetadata(options: {
   prereleaseVersionInput: string | undefined;
   publicOrigin: string | undefined;
   repository: string;
+  requireQualification: boolean;
 }): Promise<StablePrereleaseValidation> {
   if (options.commit.length === 0) {
     fail("GITHUB_SHA is required to validate the stable channel prerelease gate");
@@ -403,18 +404,20 @@ async function validateStablePrereleaseMetadata(options: {
   requireVersionedUrlField(winInstaller, "sha256Url", expectedVersionUrl, `${sourceName}.platforms.win.artifacts.installer`);
 
   const qualificationUrl = `${expectedVersionUrl}/qualification.json`;
-  const qualificationJson = await fetchOptionalHttpsText(qualificationUrl);
-  if (qualificationJson == null) {
-    fail(`required stable qualification was not found: ${qualificationUrl}`);
-  }
-  try {
-    validateStableQualification({
-      metadataBytes: Buffer.from(metadataJson, "utf8"),
-      metadataUrl,
-      qualification: parseJsonRecord(qualificationJson, "R2 stable qualification"),
-    });
-  } catch (error) {
-    fail(error instanceof Error ? error.message : String(error));
+  if (options.requireQualification) {
+    const qualificationJson = await fetchOptionalHttpsText(qualificationUrl);
+    if (qualificationJson == null) {
+      fail(`required stable qualification was not found: ${qualificationUrl}`);
+    }
+    try {
+      validateStableQualification({
+        metadataBytes: Buffer.from(metadataJson, "utf8"),
+        metadataUrl,
+        qualification: parseJsonRecord(qualificationJson, "R2 stable qualification"),
+      });
+    } catch (error) {
+      fail(error instanceof Error ? error.message : String(error));
+    }
   }
 
   return {
@@ -543,11 +546,14 @@ if (channel === "prerelease") {
     prereleaseVersionInput: process.env.OPEN_DESIGN_STABLE_PRERELEASE_VERSION,
     publicOrigin: process.env.OPEN_DESIGN_RELEASES_PUBLIC_ORIGIN,
     repository,
+    requireQualification: publishSideEffectsEnabled,
   });
   stateSource = `R2 prerelease metadata ${stablePrerelease.prereleaseVersion}`;
   log(`validated prerelease: ${stablePrerelease.prereleaseVersion}`);
   log(`validated prerelease metadata: ${stablePrerelease.metadataUrl}`);
-  log(`validated stable qualification: ${stablePrerelease.qualificationUrl}`);
+  log(publishSideEffectsEnabled
+    ? `validated stable qualification: ${stablePrerelease.qualificationUrl}`
+    : `stable qualification deferred until publish: ${stablePrerelease.qualificationUrl}`);
 }
 
 log(`channel: ${channel}`);

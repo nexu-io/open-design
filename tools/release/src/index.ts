@@ -63,6 +63,30 @@ cli
   });
 
 cli
+  .command("prepare-candidate", "Validate a release candidate spec and derive its immutable id")
+  .action(async () => {
+    await import("./candidate/prepare.ts");
+  });
+
+cli
+  .command("publish-candidate-target", "Upload one unpublished candidate target without changing a release channel")
+  .action(async () => {
+    await import("./candidate/publish-target.ts");
+  });
+
+cli
+  .command("finalize-candidate", "Seal one complete multi-target candidate manifest")
+  .action(async () => {
+    await import("./candidate/finalize.ts");
+  });
+
+cli
+  .command("materialize-stable-promotion", "Materialize a sealed stable candidate for projection activation")
+  .action(async () => {
+    await import("./candidate/materialize-stable-promotion.ts");
+  });
+
+cli
   .command("check-storage", "Validate release storage write access")
   .action(async () => {
     await import("./storage/check-storage.ts");
