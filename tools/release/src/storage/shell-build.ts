@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   parseReleaseVersion,
@@ -10,6 +11,7 @@ import {
   type ReleaseTarget,
 } from "@open-design/release";
 
+import { resolveReleaseIdentity } from "../identity/resolution/resolve.ts";
 import { contentType, githubInfo, normalizePublicUrl, optional, publicUrl, required, storageConfigFromEnv, writeJson } from "./common.ts";
 import { getStorageObject, putStorageObjectWithStatus, type StorageConfig } from "./s3-upload.ts";
 
@@ -28,10 +30,10 @@ type ShellIdentity = {
 export type ShellBuildPlan = {
   artifacts: Record<string, string | null>;
   outputRoot: string;
-  profileDigest: Digest;
+  profile: Record<string, unknown>;
   releaseVersion: string | null;
   runtimeNamespaceRoot: string;
-  schemaVersion: 3;
+  schemaVersion: 4;
   shell: ShellIdentity;
   target: ShellTarget;
   to: string;
@@ -58,8 +60,8 @@ export type ShellBuildRecord = {
   channel: string;
   createdAt: string;
   provenance: Record<string, unknown>;
-  profileDigest: Digest;
-  schemaVersion: 3;
+  releaseDigest: Digest;
+  schemaVersion: 4;
   shell: ShellIdentity;
   target: ShellTarget;
 };
@@ -69,11 +71,11 @@ export type ShellSmokeProofRecord = {
   channel: string;
   createdAt: string;
   matrix: string;
-  profileDigest: Digest;
   provenance: Record<string, unknown>;
+  releaseDigest: Digest;
   releaseVersion: string;
   scenarios: string[];
-  schemaVersion: 4;
+  schemaVersion: 5;
   shell: ShellIdentity;
   standaloneProtocolVersion: number;
   target: ShellTarget;
@@ -82,6 +84,7 @@ export type ShellSmokeProofRecord = {
 const digestPattern = /^sha256:[0-9a-f]{64}$/;
 const tokenPattern = /^[a-z][a-z0-9-]*$/;
 const artifactKindPattern = /^[a-z][A-Za-z0-9]*$/;
+const SHELL_BUILD_STORAGE_EPOCH = 1 as const;
 
 function assertRecord(value: unknown, label: string): asserts value is Record<string, unknown> {
   if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -106,14 +109,21 @@ function requiredPositiveInteger(name: string): number {
 export function shellBuildIndexObjectKey(
   channel: string,
   shellType: string,
-  buildDigest: Digest,
-  profileDigest: Digest,
+  releaseDigest: Digest,
   target: ShellTarget,
 ): string {
-  validateDigest(buildDigest, "Shell build digest");
-  validateDigest(profileDigest, "Shell profile digest");
+  validateDigest(releaseDigest, "Shell release digest");
   if (!tokenPattern.test(shellType)) throw new Error(`invalid Shell type: ${shellType}`);
-  return `${channel}/shells/${shellType}/builds/${buildDigest.slice("sha256:".length)}/profiles/${profileDigest.slice("sha256:".length)}/artifacts/${target}.json`;
+  const storageDigest = shellBuildStorageDigest(releaseDigest);
+  return `${channel}/shells/${shellType}/builds/${storageDigest.slice("sha256:".length)}/artifacts/${target}.json`;
+}
+
+export function shellBuildStorageDigest(releaseDigest: Digest): Digest {
+  validateDigest(releaseDigest, "Shell release digest");
+  return sha256(Buffer.from(JSON.stringify({
+    releaseDigest,
+    storageEpoch: SHELL_BUILD_STORAGE_EPOCH,
+  })));
 }
 
 export function shellBuildVersionPrefix(channel: string, shellType: string, version: string, target: ShellTarget): string {
@@ -130,22 +140,21 @@ export function shellBuildVersionPrefix(channel: string, shellType: string, vers
 export function shellSmokeProofObjectKey(
   channel: string,
   shellType: string,
-  buildDigest: Digest,
-  profileDigest: Digest,
+  releaseDigest: Digest,
   target: ShellTarget,
   matrix: string,
   specDigest: Digest,
   standaloneProtocolVersion: number,
 ): string {
-  validateDigest(buildDigest, "Shell build digest");
-  validateDigest(profileDigest, "Shell profile digest");
+  validateDigest(releaseDigest, "Shell release digest");
   validateDigest(specDigest, "Shell spec digest");
   if (!tokenPattern.test(shellType)) throw new Error(`invalid Shell type: ${shellType}`);
   if (!tokenPattern.test(matrix)) throw new Error(`invalid Shell smoke matrix: ${matrix}`);
   if (!Number.isSafeInteger(standaloneProtocolVersion) || standaloneProtocolVersion < 1) {
     throw new Error("Shell smoke Standalone protocol version must be a positive integer");
   }
-  return `${channel}/shells/${shellType}/builds/${buildDigest.slice("sha256:".length)}/profiles/${profileDigest.slice("sha256:".length)}/spec/${target}/${matrix}/standalone-v${standaloneProtocolVersion}/${specDigest.slice("sha256:".length)}.json`;
+  const storageDigest = shellBuildStorageDigest(releaseDigest);
+  return `${channel}/shells/${shellType}/builds/${storageDigest.slice("sha256:".length)}/spec/${target}/${matrix}/standalone-v${standaloneProtocolVersion}/${specDigest.slice("sha256:".length)}.json`;
 }
 
 function requiredShellSmokeScenarioEntries(matrix: string): Array<{ lane: "migration" | "shell"; step: string }> {
@@ -190,8 +199,9 @@ function requiredShellSmokeScenarios(matrix: string): string[] {
 
 export function validateShellSmokeProofRecord(
   value: unknown,
-  expected: Pick<ShellBuildPlan, "profileDigest" | "shell" | "target">,
+  expected: Pick<ShellBuildPlan, "shell" | "target">,
   channel: ReleaseChannel,
+  releaseDigest: Digest,
   matrix: string,
   specDigest: Digest,
   standaloneProtocolVersion: number,
@@ -199,21 +209,16 @@ export function validateShellSmokeProofRecord(
   assertRecord(value, "Shell smoke proof");
   assertRecord(value.shell, "Shell smoke proof shell");
   if (
-    value.schemaVersion !== 4
+    value.schemaVersion !== 5
     || value.channel !== channel
+    || value.releaseDigest !== releaseDigest
     || value.matrix !== matrix
     || value.specDigest !== specDigest
     || value.standaloneProtocolVersion !== standaloneProtocolVersion
     || value.target !== expected.target
-    || value.profileDigest !== expected.profileDigest
     || value.shell.type !== expected.shell.type
-    || value.shell.buildDigest !== expected.shell.buildDigest
-    || value.shell.capabilityDigest !== expected.shell.capabilityDigest
-    || value.shell.carrierDigest !== expected.shell.carrierDigest
-    || value.shell.depsDigest !== expected.shell.depsDigest
-    || value.shell.sourceDigest !== expected.shell.sourceDigest
   ) throw new Error("Shell smoke proof identity does not match the requested build");
-  validateDigest(value.profileDigest, "Shell smoke proof profileDigest");
+  validateDigest(value.releaseDigest, "Shell smoke proof releaseDigest");
   validateDigest(value.specDigest, "Shell smoke proof specDigest");
   validateDigest(value.shell.buildDigest, "Shell smoke proof buildDigest");
   validateDigest(value.shell.capabilityDigest, "Shell smoke proof capabilityDigest");
@@ -235,13 +240,13 @@ export function validateShellBuildPlan(value: unknown, channel: ReleaseChannel):
   assertRecord(value, "Shell build plan");
   assertRecord(value.shell, "Shell build plan shell");
   assertRecord(value.artifacts, "Shell build plan artifacts");
+  assertRecord(value.profile, "Shell build plan profile");
   validateDigest(value.shell.buildDigest, "Shell build plan buildDigest");
   validateDigest(value.shell.capabilityDigest, "Shell build plan capabilityDigest");
   validateDigest(value.shell.carrierDigest, "Shell build plan carrierDigest");
   validateDigest(value.shell.depsDigest, "Shell build plan depsDigest");
   validateDigest(value.shell.sourceDigest, "Shell build plan sourceDigest");
-  validateDigest(value.profileDigest, "Shell build plan profileDigest");
-  if (value.schemaVersion !== 3) throw new Error("unsupported Shell build plan schemaVersion");
+  if (value.schemaVersion !== 4) throw new Error("unsupported Shell build plan schemaVersion");
   if (!tokenPattern.test(String(value.shell.type))) throw new Error("invalid Shell build plan type");
   if (value.target !== "darwin-arm64" && value.target !== "darwin-x64" && value.target !== "win32-x64") {
     throw new Error(`unsupported Shell target: ${String(value.target)}`);
@@ -258,30 +263,32 @@ export function validateShellBuildPlan(value: unknown, channel: ReleaseChannel):
   return value as ShellBuildPlan;
 }
 
-export function validateShellBuildRecord(value: unknown, expected: Pick<ShellBuildPlan, "profileDigest" | "shell" | "target">, channel: ReleaseChannel): ShellBuildRecord {
+export function validateShellBuildRecord(
+  value: unknown,
+  expected: Pick<ShellBuildPlan, "shell" | "target">,
+  channel: ReleaseChannel,
+  releaseDigest: Digest,
+): ShellBuildRecord {
   assertRecord(value, "Shell build record");
   assertRecord(value.shell, "Shell build record shell");
   assertRecord(value.artifacts, "Shell build record artifacts");
-  if (value.schemaVersion !== 3 || value.channel !== channel || value.target !== expected.target) {
+  if (
+    value.schemaVersion !== 4
+    || value.channel !== channel
+    || value.releaseDigest !== releaseDigest
+    || value.target !== expected.target
+  ) {
     throw new Error("Shell build record scope does not match the requested build");
   }
-  if (
-    value.shell.type !== expected.shell.type
-    || value.shell.buildDigest !== expected.shell.buildDigest
-    || value.shell.capabilityDigest !== expected.shell.capabilityDigest
-    || value.shell.carrierDigest !== expected.shell.carrierDigest
-    || value.shell.depsDigest !== expected.shell.depsDigest
-    || value.shell.sourceDigest !== expected.shell.sourceDigest
-  ) {
+  if (value.shell.type !== expected.shell.type) {
     throw new Error("Shell build record identity does not match the requested source");
   }
+  validateDigest(value.releaseDigest, "Shell build record releaseDigest");
   validateDigest(value.shell.buildDigest, "Shell build record buildDigest");
   validateDigest(value.shell.capabilityDigest, "Shell build record capabilityDigest");
   validateDigest(value.shell.carrierDigest, "Shell build record carrierDigest");
   validateDigest(value.shell.depsDigest, "Shell build record depsDigest");
   validateDigest(value.shell.sourceDigest, "Shell build record sourceDigest");
-  validateDigest(value.profileDigest, "Shell build record profileDigest");
-  if (value.profileDigest !== expected.profileDigest) throw new Error("Shell build record profile does not match the requested build");
   parseReleaseVersion(String(value.shell.version), channel);
   const artifacts: Record<string, ShellBuildArtifactRecord> = {};
   for (const [kind, raw] of Object.entries(value.artifacts)) {
@@ -300,6 +307,17 @@ export function validateShellBuildRecord(value: unknown, expected: Pick<ShellBui
     artifacts[kind] = { ...(raw as ShellBuildArtifactRecord), url: normalizePublicUrl(raw.url) };
   }
   return { ...(value as ShellBuildRecord), artifacts };
+}
+
+export async function resolveShellReleaseDigest(
+  plan: Pick<ShellBuildPlan, "profile" | "target">,
+  workspaceRoot = fileURLToPath(new URL("../../../..", import.meta.url)),
+): Promise<Digest> {
+  return (await resolveReleaseIdentity({
+    id: `shell.build.${plan.target}`,
+    parameters: { profile: plan.profile, target: plan.target },
+    workspaceRoot,
+  })).digest;
 }
 
 function sha256(bytes: Buffer): Digest {
@@ -371,8 +389,7 @@ function createReusedBuildReport(
         shellBuildIndexObjectKey(
           record.channel,
           record.shell.type,
-          record.shell.buildDigest,
-          record.profileDigest,
+          record.releaseDigest,
           record.target,
         ),
       ),
@@ -380,7 +397,7 @@ function createReusedBuildReport(
       state: "reused",
     },
     runtimeNamespaceRoot: plan.runtimeNamespaceRoot,
-    shell: record.shell,
+    shell: { ...plan.shell, version: record.shell.version },
     timings: [{ durationMs, phase: "remote-shell-materialize" }],
     to: plan.to,
   };
@@ -416,12 +433,12 @@ export async function resolveShellBuild(): Promise<void> {
   const standaloneProtocolVersion = smokeMatrix.length > 0
     ? requiredPositiveInteger("RELEASE_STANDALONE_PROTOCOL_VERSION")
     : null;
+  const releaseDigest = await resolveShellReleaseDigest(plan);
   const storage = storageConfigFromEnv();
   const indexKey = shellBuildIndexObjectKey(
     channel,
     plan.shell.type,
-    plan.shell.buildDigest,
-    plan.profileDigest,
+    releaseDigest,
     plan.target,
   );
   const object = await getStorageObject({ ...storage, objectKey: indexKey });
@@ -432,37 +449,17 @@ export async function resolveShellBuild(): Promise<void> {
     console.log(`Shell build miss: ${indexKey}`);
     return;
   }
-  const record = validateShellBuildRecord(JSON.parse(object.text) as unknown, plan, channel);
+  const record = validateShellBuildRecord(JSON.parse(object.text) as unknown, plan, channel, releaseDigest);
   requirePlannedArtifacts(plan, record.artifacts);
   for (const [kind, artifact] of Object.entries(record.artifacts)) {
     const targetPath = plan.artifacts[kind];
     if (targetPath == null) continue;
     const remote = await getStorageObject({ ...storage, objectKey: artifact.objectKey });
     if (remote == null) {
-      writeJson(outputPath, {
-        indexKey,
-        reason: `cached Shell ${kind} artifact is missing: ${artifact.objectKey}`,
-        shell: plan.shell,
-        state: "miss",
-        target: plan.target,
-      });
-      writeGithubOutput("state", "miss");
-      if (smokeMatrix.length > 0) writeGithubOutput("smoke_proof", "miss");
-      console.log(`Shell build cache is incomplete; rebuilding: ${artifact.objectKey}`);
-      return;
+      throw new Error(`immutable Shell ${kind} artifact is missing: ${artifact.objectKey}`);
     }
     if (remote.bytes.byteLength !== artifact.size || sha256(remote.bytes) !== artifact.digest) {
-      writeJson(outputPath, {
-        indexKey,
-        reason: `cached Shell ${kind} artifact failed digest verification`,
-        shell: plan.shell,
-        state: "miss",
-        target: plan.target,
-      });
-      writeGithubOutput("state", "miss");
-      if (smokeMatrix.length > 0) writeGithubOutput("smoke_proof", "miss");
-      console.log(`Shell build cache failed verification; rebuilding: ${artifact.objectKey}`);
-      return;
+      throw new Error(`immutable Shell ${kind} artifact failed digest verification: ${artifact.objectKey}`);
     }
     mkdirSync(dirname(targetPath), { recursive: true });
     writeFileSync(targetPath, remote.bytes);
@@ -480,8 +477,7 @@ export async function resolveShellBuild(): Promise<void> {
     const proofKey = shellSmokeProofObjectKey(
       channel,
       plan.shell.type,
-      plan.shell.buildDigest,
-      plan.profileDigest,
+      releaseDigest,
       plan.target,
       smokeMatrix,
       specDigest,
@@ -502,6 +498,7 @@ export async function resolveShellBuild(): Promise<void> {
         JSON.parse(proofObject.text) as unknown,
         plan,
         channel,
+        releaseDigest,
         smokeMatrix,
         specDigest,
         protocolVersion,
@@ -576,16 +573,17 @@ export async function registerShellSmokeProof(): Promise<void> {
   if (missing.length > 0) throw new Error(`Shell smoke proof is missing successful scenarios: ${missing.join(", ")}`);
   const releaseVersion = String(build.releaseVersion ?? plan.releaseVersion ?? "");
   parseReleaseVersion(releaseVersion, channel);
+  const releaseDigest = await resolveShellReleaseDigest(plan);
   const record: ShellSmokeProofRecord = {
     specDigest,
     channel,
     createdAt: new Date().toISOString(),
     matrix,
-    profileDigest: plan.profileDigest,
     provenance: githubInfo(),
+    releaseDigest,
     releaseVersion,
     scenarios,
-    schemaVersion: 4,
+    schemaVersion: 5,
     shell: build.shell,
     standaloneProtocolVersion,
     target: plan.target,
@@ -594,8 +592,7 @@ export async function registerShellSmokeProof(): Promise<void> {
   const objectKey = shellSmokeProofObjectKey(
     channel,
     build.shell.type,
-    build.shell.buildDigest,
-    plan.profileDigest,
+    releaseDigest,
     plan.target,
     matrix,
     specDigest,
@@ -618,6 +615,7 @@ export async function registerShellSmokeProof(): Promise<void> {
       JSON.parse(existing.text) as unknown,
       plan,
       channel,
+      releaseDigest,
       matrix,
       specDigest,
       standaloneProtocolVersion,
@@ -644,11 +642,18 @@ export async function registerShellBuild(): Promise<void> {
     || typeof build.shell.version !== "string"
   ) throw new Error("built Shell report does not match the resolved Shell source identity");
   parseReleaseVersion(build.shell.version, channel);
+  const releaseDigest = await resolveShellReleaseDigest(plan);
   const storage = storageConfigFromEnv();
   if (plan.releaseVersion == null) {
     throw new Error("public Shell registration requires a release version");
   }
-  const prefix = shellBuildVersionPrefix(channel, build.shell.type, plan.releaseVersion, plan.target);
+  const indexKey = shellBuildIndexObjectKey(
+    channel,
+    build.shell.type,
+    releaseDigest,
+    plan.target,
+  );
+  const prefix = `${indexKey.slice(0, -".json".length)}/blobs`;
   const artifacts: Record<string, ShellBuildArtifactRecord> = {};
   for (const [kind, raw] of Object.entries(build.artifacts ?? {})) {
     if (raw == null) continue;
@@ -657,9 +662,9 @@ export async function registerShellBuild(): Promise<void> {
     const digest = sha256(bytes);
     if (digest !== raw.digest || bytes.byteLength !== raw.size) throw new Error(`built Shell ${kind} descriptor does not match bytes`);
     const name = basename(raw.path);
-    const objectKey = `${prefix}/${name}`;
+    const objectKey = `${prefix}/${digest.slice("sha256:".length)}-${name}`;
     await putImmutable(storage, { bodyPath: raw.path, contentType: contentType(name), objectKey });
-    artifacts[kind] = { contentType: contentType(name), digest, name, objectKey, size: raw.size, url: publicUrl(publicOrigin, prefix, name) };
+    artifacts[kind] = { contentType: contentType(name), digest, name, objectKey, size: raw.size, url: publicUrl(publicOrigin, "", objectKey) };
   }
   requirePlannedArtifacts(plan, artifacts);
   const record: ShellBuildRecord = {
@@ -667,18 +672,11 @@ export async function registerShellBuild(): Promise<void> {
     channel,
     createdAt: new Date().toISOString(),
     provenance: githubInfo(),
-    profileDigest: plan.profileDigest,
-    schemaVersion: 3,
+    releaseDigest,
+    schemaVersion: 4,
     shell: build.shell,
     target: plan.target,
   };
-  const indexKey = shellBuildIndexObjectKey(
-    channel,
-    build.shell.type,
-    build.shell.buildDigest,
-    plan.profileDigest,
-    plan.target,
-  );
   const bytes = Buffer.from(`${JSON.stringify(record, null, 2)}\n`);
   const result = await putStorageObjectWithStatus({
     ...storage,
@@ -693,8 +691,15 @@ export async function registerShellBuild(): Promise<void> {
     if (result.status !== 412) throw new Error(`Shell build record PUT failed with HTTP ${result.status}: ${result.body}`);
     const existing = await getStorageObject({ ...storage, objectKey: indexKey });
     if (existing == null) throw new Error(`Shell build record disappeared after conflict: ${indexKey}`);
-    const current = validateShellBuildRecord(JSON.parse(existing.text) as unknown, plan, channel);
-    const comparable = (value: ShellBuildRecord) => JSON.stringify({ artifacts: value.artifacts, channel: value.channel, profileDigest: value.profileDigest, schemaVersion: value.schemaVersion, shell: value.shell, target: value.target });
+    const current = validateShellBuildRecord(JSON.parse(existing.text) as unknown, plan, channel, releaseDigest);
+    const comparable = (value: ShellBuildRecord) => JSON.stringify({
+      artifacts: value.artifacts,
+      channel: value.channel,
+      releaseDigest: value.releaseDigest,
+      schemaVersion: value.schemaVersion,
+      shellType: value.shell.type,
+      target: value.target,
+    });
     if (comparable(current) !== comparable(record)) throw new Error(`Shell build record conflicts: ${indexKey}`);
     committedRecord = current;
   }

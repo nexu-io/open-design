@@ -50,7 +50,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
-        cache_ids="$(gh cache list --key "${{ inputs.prefix }}" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq '.[1:] | .[].id')"
+        cache_ids="$(gh cache list --key "${{ inputs.prefix }}" --sort created_at --order desc --limit 100 --json id,key,createdAt --jq '.[2:] | .[].id')"
         while IFS= read -r cache_id; do
           if [ -n "$cache_id" ]; then gh cache delete "$cache_id"; fi
         done <<< "$cache_ids"
@@ -63,4 +63,4 @@ runs:
         GH_TOKEN: ${{ github.token }}
       run: |
         $caches = @(gh cache list --key "${{ inputs.prefix }}" --sort created_at --order desc --limit 100 --json id,key,createdAt | ConvertFrom-Json)
-        foreach ($cache in @($caches | Select-Object -Skip 1)) { gh cache delete $cache.id }
+        foreach ($cache in @($caches | Select-Object -Skip 2)) { gh cache delete $cache.id }

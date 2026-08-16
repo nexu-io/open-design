@@ -24,6 +24,10 @@ Read `tools/pack/CACHE.md` before changing any build-cache node key, adding a ca
 
 ## Rules
 
+- Content/build identity declarations should describe stable ownership boundaries, not mirror today's file list. Prefer a package or feature `src/` directory when the whole directory affects the artifact; use individual paths only for the few root-level files that cross otherwise clean ownership boundaries.
+- Keep process-cache inputs and release-artifact inputs as separate declarations even when they observe some of the same source directories. `tools-pack` process-cache keys are disposable acceleration state; `tools-release` artifact identities are immutable publication state. They must not share digests, epochs, hit/miss state, fallback behavior, or cache availability assumptions.
+- Treat a growing identity `paths` file list as architecture feedback. When related exceptions keep accumulating, move the code into a clearly owned directory and replace the enumeration with that directory boundary. Do not normalize permanent mapping sprawl as the cost of precise hashing.
+- Exclusions should name a real opposing responsibility (for example process-cache mechanics excluded from a release artifact identity), not compensate for an overly broad declaration. Keep the exceptional boundary small, documented, and covered by an identity witness test.
 - Do not hand-build `--od-stamp-*` args; use `createProcessStampArgs` with `OPEN_DESIGN_SIDECAR_CONTRACT`.
 - Do not use port numbers in data/log/runtime/cache path decisions. Namespace decides paths; ports are only transient transports.
 - Public release artifacts must use channel-specific app identity: stable uses `Open Design`, prerelease uses `Open Design Prerelease`, and exact derives a distinct identity from its name (for example `Open Design Beta`). Local tools-pack installs may still use namespace-scoped install paths only as a developer multi-instance validation convention.

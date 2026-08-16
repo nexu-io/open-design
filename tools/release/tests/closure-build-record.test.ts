@@ -155,11 +155,11 @@ describe("immutable Closure build record", () => {
       expect(launcherObjectKey).toBeDefined();
       objects.set(launcherObjectKey!, Buffer.from("corrupt"));
       process.env.RELEASE_VERSION = "0.19.4-beta.3";
-      await resolveClosureBuild();
+      await expect(resolveClosureBuild()).rejects.toThrow(/immutable Closure build artifact is missing or corrupt/u);
       expect(await readFile(join(resolvedBlobRoot, bodyDigest.slice(7)))).toEqual(bodyBytes);
       expect(await readFile(join(resolvedBlobRoot, launcherDigest.slice(7)))).toEqual(launcherBytes);
       expect(JSON.parse(await readFile(resolvedContributionPath, "utf8")).version).toBe("0.19.4-beta.2");
-      expect(await readFile(join(root, "github-output.txt"), "utf8")).toContain("state=miss");
+      expect(await readFile(join(root, "github-output.txt"), "utf8")).not.toContain("state=miss");
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -1,0 +1,117 @@
+name: Resolve macOS Closure target
+description: Resolve, build on first identity, register, and project one macOS Closure target
+
+inputs:
+  build-dir:
+    required: true
+  channel:
+    required: true
+  platform:
+    description: darwin-arm64 or darwin-x64
+    required: true
+  public-origin:
+    required: false
+    default: ""
+  publish-enabled:
+    required: true
+  release-version:
+    required: true
+
+outputs:
+  resolution:
+    value: ${{ steps.resolve.outputs.state }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve Closure target identity
+      id: identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        digest="$(pnpm exec tools-release identity digest closure.target.${{ inputs.platform }} \
+          --parameter nodeModulesAbi=$(node -p 'process.versions.modules') \
+          --parameter nodeNapi=$(node -p 'process.versions.napi') \
+          --parameter nodeVersion=$(node -p 'process.version') \
+          --parameter packageManager=$(node -p 'require("./package.json").packageManager') \
+          --parameter target=${{ inputs.platform }})"
+        [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+        echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve immutable Closure target
+      id: resolve
+      shell: bash
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ inputs.build-dir }}/closure-blobs
+        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.identity.outputs.digest }}
+        RELEASE_CLOSURE_BUILD_KIND: target
+        RELEASE_CLOSURE_BUILD_TOKEN: target-${{ inputs.platform }}
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ inputs.build-dir }}/target-contribution.json
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.public-origin != '' && inputs.public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.RELEASE_STORAGE_ACCESS_KEY_ID != '' && env.RELEASE_STORAGE_ACCESS_KEY_ID || env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.RELEASE_STORAGE_BUCKET != '' && env.RELEASE_STORAGE_BUCKET || env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.RELEASE_STORAGE_ENDPOINT != '' && env.RELEASE_STORAGE_ENDPOINT || env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.RELEASE_STORAGE_SECRET_ACCESS_KEY != '' && env.RELEASE_STORAGE_SECRET_ACCESS_KEY || env.CLOUDFLARE_R2_RELEASES_SK }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+      run: pnpm exec tools-release resolve-closure-build
+
+    - name: Build Closure target
+      if: ${{ steps.resolve.outputs.state != 'hit' }}
+      shell: bash
+      env:
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.public-origin != '' && inputs.public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      run: |
+        set -euo pipefail
+        mkdir -p "${{ inputs.build-dir }}"
+        pnpm exec tools-pack closure build-distribution-target \
+          --blob-origin "$RELEASE_PUBLIC_ORIGIN" \
+          --channel "${{ inputs.channel }}" \
+          --dir "$RUNNER_TEMP/tools-pack" \
+          --platform "${{ inputs.platform }}" \
+          --version "${{ inputs.release-version }}" \
+          --json > "${{ inputs.build-dir }}/closure-target.json"
+        contribution_path="$(jq -er '.contributionPath' "${{ inputs.build-dir }}/closure-target.json")"
+        blob_root="$(jq -er '.blobRoot' "${{ inputs.build-dir }}/closure-target.json")"
+        cp "$contribution_path" "${{ inputs.build-dir }}/target-contribution.json"
+        mkdir -p "${{ inputs.build-dir }}/closure-blobs"
+        jq -er '[.contribution.native.artifact, .contribution.resources[].artifact] | .[].digest' \
+          "${{ inputs.build-dir }}/closure-target.json" | while IFS= read -r digest; do
+          cp "$blob_root/${digest#sha256:}" "${{ inputs.build-dir }}/closure-blobs/${digest#sha256:}"
+        done
+
+    - name: Register immutable Closure target
+      if: ${{ inputs.publish-enabled == 'true' && steps.resolve.outputs.state != 'hit' }}
+      shell: bash
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ inputs.build-dir }}/closure-blobs
+        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.identity.outputs.digest }}
+        RELEASE_CLOSURE_BUILD_KIND: target
+        RELEASE_CLOSURE_BUILD_TOKEN: target-${{ inputs.platform }}
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ inputs.build-dir }}/target-contribution.json
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.RELEASE_STORAGE_ACCESS_KEY_ID != '' && env.RELEASE_STORAGE_ACCESS_KEY_ID || env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.RELEASE_STORAGE_BUCKET != '' && env.RELEASE_STORAGE_BUCKET || env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.RELEASE_STORAGE_ENDPOINT != '' && env.RELEASE_STORAGE_ENDPOINT || env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.RELEASE_STORAGE_SECRET_ACCESS_KEY != '' && env.RELEASE_STORAGE_SECRET_ACCESS_KEY || env.CLOUDFLARE_R2_RELEASES_SK }}
+      run: pnpm exec tools-release register-closure-build
+
+    - name: Publish versioned Closure target blobs
+      if: ${{ inputs.publish-enabled == 'true' }}
+      shell: bash
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ inputs.build-dir }}/closure-blobs
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ inputs.build-dir }}/target-contribution.json
+        RELEASE_CLOSURE_CONTRIBUTION_KIND: target
+        RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ inputs.build-dir }}/closure-publication.json
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.public-origin != '' && inputs.public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.RELEASE_STORAGE_ACCESS_KEY_ID != '' && env.RELEASE_STORAGE_ACCESS_KEY_ID || env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.RELEASE_STORAGE_BUCKET != '' && env.RELEASE_STORAGE_BUCKET || env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.RELEASE_STORAGE_ENDPOINT != '' && env.RELEASE_STORAGE_ENDPOINT || env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.RELEASE_STORAGE_SECRET_ACCESS_KEY != '' && env.RELEASE_STORAGE_SECRET_ACCESS_KEY || env.CLOUDFLARE_R2_RELEASES_SK }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+      run: pnpm exec tools-release publish-closure-contribution

@@ -11,6 +11,10 @@ It records **current state only**, not change history — same convention as
 Out of scope: the GitHub Actions cache that wraps this store. That layer is
 owned by `.github/`; it restores and saves the store as an opaque directory and
 carries no correctness obligation (see **Why coarse restore is safe** below).
+Release build records are also out of scope. `tools-release` derives its own
+storage identity from release-owned source declarations plus the raw,
+version-neutral artifact profile and owns immutable remote resolve/register
+semantics. No tools-pack digest, cache epoch, or hit state is an S3 key.
 
 ## Cache model
 
@@ -22,6 +26,9 @@ A node is `{ id, key, outputs, build, invalidate }`, acquired through
 - An entry is accepted only when `manifest.key === node.key` exactly. A
   mismatch is reported as `key mismatch` and the node rebuilds
   (`cache.ts:270-282`). There is no fuzzy or prefix matching inside the store.
+- `<platform>.workspace-build` wraps the Shell recipe digest in its own
+  `WORKSPACE_BUILD_CACHE_EPOCH`; changing this local cache schema must not
+  change the tools-release storage identity contract.
 - `invalidate` is an additional per-node veto applied to an otherwise-valid
   entry (for example `win.packaged-app` re-validates its native rebuild
   output).

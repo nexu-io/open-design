@@ -71,8 +71,8 @@ runs:
       id: cache
       uses: ./.github/actions/release/platform/cache
       with:
-        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/scripts/release/cache/win.ps1') }}
-        prefix: tools-pack-win-v1-${{ inputs.channel }}-${{ runner.os }}-
+        origin-key: ${{ github.run_id }}-${{ github.run_attempt }}
+        prefix: tools-pack-win-v2-${{ runner.os }}-${{ runner.arch }}-
 
     - name: Install dependencies
       shell: pwsh
@@ -100,53 +100,23 @@ runs:
         shell-version: ${{ inputs.release-version }}
         sign-mode: ${{ inputs.sign-mode }}
 
-    - name: Build Standalone target contribution
+    - name: Resolve Standalone target contribution
+      uses: ./.github/actions/release/closure/target/win
+      with:
+        build-dir: ${{ runner.temp }}\release-build\win_x64
+        channel: ${{ inputs.channel }}
+        public-origin: ${{ env.RELEASE_PUBLIC_ORIGIN }}
+        publish-enabled: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
+        release-version: ${{ inputs.closure-version }}
+
+    - name: Prepare Standalone smoke graph
       shell: pwsh
       run: |
-        $ErrorActionPreference = "Stop"
         $buildDir = "${{ runner.temp }}\release-build\win_x64"
-        $closureOutput = pnpm.cmd exec tools-pack closure build-distribution-target `
-          --blob-origin $env:RELEASE_PUBLIC_ORIGIN `
-          --channel "${{ inputs.channel }}" `
-          --dir "${{ runner.temp }}\tools-pack" `
-          --platform win32-x64 `
-          --version "${{ inputs.closure-version }}" `
-          --json
-        if ($LASTEXITCODE -ne 0) { throw "Standalone Closure build failed with exit code $LASTEXITCODE" }
-        $reportPath = Join-Path $buildDir "closure-target.json"
-        $closureOutput | Set-Content -Path $reportPath -Encoding utf8
-        $report = $closureOutput | ConvertFrom-Json
-        Copy-Item -LiteralPath $report.contributionPath -Destination (Join-Path $buildDir "target-contribution.json")
-        $targetBlobRoot = Join-Path $buildDir "closure-blobs"
-        New-Item -ItemType Directory -Force -Path $targetBlobRoot | Out-Null
-        $artifacts = @($report.contribution.native.artifact) + @($report.contribution.resources | ForEach-Object { $_.artifact })
-        foreach ($artifact in $artifacts) {
-          $digest = [string]$artifact.digest
-          Copy-Item -LiteralPath (Join-Path $report.blobRoot $digest.Substring(7)) -Destination (Join-Path $targetBlobRoot $digest.Substring(7))
-        }
         pnpm.cmd exec tools-release merge-closure-distribution `
           "${{ runner.temp }}\release-closure\shared\shared-contribution.json" `
           (Join-Path $buildDir "target-contribution.json") `
           --output (Join-Path $buildDir "closure-distribution.json")
-
-    - name: Publish verified Standalone target blobs
-      if: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
-      shell: pwsh
-      env:
-        RELEASE_CHANNEL: ${{ inputs.channel }}
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}\tools-pack\out\closure-distribution\${{ inputs.channel }}\win32-x64\versions\${{ inputs.closure-version }}\blobs
-        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\target-contribution.json
-        RELEASE_CLOSURE_CONTRIBUTION_KIND: target
-        RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\closure-publication.json
-        RELEASE_VERSION: ${{ inputs.closure-version }}
-      run: pnpm.cmd exec tools-release publish-closure-contribution
-
-    - name: Delete failed tools-pack cache
-      if: ${{ steps.shell.outputs.build-outcome == 'failure' && steps.cache.outputs.cache-matched-key != '' }}
-      uses: ./.github/actions/release/platform/cache/delete-failed
-      with:
-        matched-key: ${{ steps.cache.outputs.cache-matched-key }}
-        platform: win
 
     - name: Build updater fixture
       if: ${{ inputs.smoke-mode == 'full' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}

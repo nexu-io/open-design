@@ -91,8 +91,8 @@ runs:
       id: cache
       uses: ./.github/actions/release/platform/cache
       with:
-        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/mac.sh') }}
-        prefix: tools-pack-mac-v1-${{ inputs.channel }}-${{ runner.os }}-${{ inputs.arch }}-
+        origin-key: ${{ github.run_id }}-${{ github.run_attempt }}
+        prefix: tools-pack-mac-v2-${{ runner.os }}-${{ inputs.arch }}-
     - name: Install dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
@@ -222,78 +222,15 @@ runs:
           printf '%s\n' "$build_output"
           exit "$build_status"
         fi
-    - name: Resolve ${{ inputs.target }} Closure target identity
-      id: closure_identity
-      shell: bash
-      run: |
-        set -euo pipefail
-        digest="$(pnpm exec tools-release identity digest closure.target.${{ inputs.platform }} \
-          --parameter nodeModulesAbi=$(node -p 'process.versions.modules') \
-          --parameter nodeNapi=$(node -p 'process.versions.napi') \
-          --parameter nodeVersion=$(node -p 'process.version') \
-          --parameter packageManager=$(node -p 'require("./package.json").packageManager') \
-          --parameter target=${{ inputs.platform }})"
-        [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
-        echo "digest=$digest" >> "$GITHUB_OUTPUT"
-    - name: Resolve immutable ${{ inputs.target }} Closure target
-      id: target_closure_resolution
-      if: ${{ inputs.publish == 'true' }}
-      shell: bash
-      env:
-        RELEASE_CHANNEL: ${{ inputs.channel }}
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/release-build/${{ inputs.target }}/closure-blobs
-        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.closure_identity.outputs.digest }}
-        RELEASE_CLOSURE_BUILD_KIND: target
-        RELEASE_CLOSURE_BUILD_TOKEN: target-${{ inputs.platform }}
-        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/target-contribution.json
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
-        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
-        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
-        RELEASE_STORAGE_REGION: auto
-        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
-        RELEASE_VERSION: ${{ inputs.closure-version }}
-      run: pnpm exec tools-release resolve-closure-build
-    - name: Build exact ${{ inputs.target }} Standalone target contribution
-      if: ${{ steps.target_closure_resolution.outputs.state != 'hit' }}
-      shell: bash
-      env:
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-      run: |
-        set -euo pipefail
-        version="${{ inputs.closure-version }}"
-        mkdir -p "$RUNNER_TEMP/release-build/${{ inputs.target }}"
-        pnpm exec tools-pack closure build-distribution-target \
-          --blob-origin "$RELEASE_PUBLIC_ORIGIN" \
-          --channel "${{ inputs.channel }}" \
-          --dir "$RUNNER_TEMP/tools-pack" \
-          --platform ${{ inputs.platform }} \
-          --version "$version" \
-          --json > "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json"
-        contribution_path="$(jq -er '.contributionPath' "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json")"
-        blob_root="$(jq -er '.blobRoot' "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json")"
-        cp "$contribution_path" "$RUNNER_TEMP/release-build/${{ inputs.target }}/target-contribution.json"
-        mkdir -p "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-blobs"
-        jq -er '[.contribution.native.artifact, .contribution.resources[].artifact] | .[].digest' \
-          "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-target.json" | while IFS= read -r digest; do
-          cp "$blob_root/${digest#sha256:}" "$RUNNER_TEMP/release-build/${{ inputs.target }}/closure-blobs/${digest#sha256:}"
-        done
-    - name: Register immutable ${{ inputs.target }} Closure target
-      if: ${{ inputs.publish == 'true' && steps.target_closure_resolution.outputs.state != 'hit' }}
-      shell: bash
-      env:
-        RELEASE_CHANNEL: ${{ inputs.channel }}
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/release-build/${{ inputs.target }}/closure-blobs
-        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.closure_identity.outputs.digest }}
-        RELEASE_CLOSURE_BUILD_KIND: target
-        RELEASE_CLOSURE_BUILD_TOKEN: target-${{ inputs.platform }}
-        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/target-contribution.json
-        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
-        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
-        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
-        RELEASE_STORAGE_REGION: auto
-        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
-      run: pnpm exec tools-release register-closure-build
+    - name: Resolve ${{ inputs.target }} Standalone target contribution
+      uses: ./.github/actions/release/closure/target/mac
+      with:
+        build-dir: ${{ runner.temp }}/release-build/${{ inputs.target }}
+        channel: ${{ inputs.channel }}
+        platform: ${{ inputs.platform }}
+        public-origin: ${{ inputs.release-public-origin }}
+        publish-enabled: ${{ inputs.publish }}
+        release-version: ${{ inputs.closure-version }}
     - name: Prepare ${{ inputs.target }} Standalone smoke graph
       shell: bash
       run: |
@@ -341,23 +278,6 @@ runs:
         RELEASE_STORAGE_REGION: auto
         RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
       run: pnpm exec tools-release register-shell-build
-    - name: Publish verified ${{ inputs.target }} Standalone target blobs
-      shell: bash
-      if: ${{ inputs.publish == 'true' }}
-      env:
-        RELEASE_CHANNEL: ${{ inputs.channel }}
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/release-build/${{ inputs.target }}/closure-blobs
-        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/target-contribution.json
-        RELEASE_CLOSURE_CONTRIBUTION_KIND: target
-        RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/closure-publication.json
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
-        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
-        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
-        RELEASE_STORAGE_REGION: auto
-        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
-        RELEASE_VERSION: ${{ inputs.closure-version }}
-      run: pnpm exec tools-release publish-closure-contribution
     - name: Upload ${{ inputs.target }} dogfood build to release storage
       shell: bash
       # publish=false QA stays on the release storage plane and does not
@@ -380,12 +300,6 @@ runs:
         RELEASE_STORAGE_REGION: auto
         RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
       run: pnpm exec tools-release publish-dogfood
-    - name: Delete failed ${{ inputs.target }} tools-pack cache
-      if: ${{ steps.tools_pack_build.outcome == 'failure' && steps.cache.outputs.cache-matched-key != '' }}
-      uses: ./.github/actions/release/platform/cache/delete-failed
-      with:
-        matched-key: ${{ steps.cache.outputs.cache-matched-key }}
-        platform: mac
     - name: Build exact ${{ inputs.target }} update fixture
       shell: bash
       id: update_fixture

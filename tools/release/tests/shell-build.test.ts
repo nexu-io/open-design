@@ -8,11 +8,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   shellBuildIndexObjectKey,
+  shellBuildStorageDigest,
   shellBuildVersionPrefix,
   shellSmokeProofObjectKey,
   registerShellBuild,
   registerShellSmokeProof,
   resolveShellBuild,
+  resolveShellReleaseDigest,
   validateShellBuildPlan,
   validateShellBuildRecord,
   validateShellSmokeProofRecord,
@@ -21,6 +23,8 @@ import {
 const sourceDigest = `sha256:${"a".repeat(64)}` as const;
 const depsDigest = `sha256:${"b".repeat(64)}` as const;
 const buildDigest = `sha256:${"c".repeat(64)}` as const;
+const releaseDigest = `sha256:${"9".repeat(64)}` as const;
+const storageDigest = shellBuildStorageDigest(releaseDigest);
 const capabilityDigest = `sha256:${"f".repeat(64)}` as const;
 const carrierDigest = `sha256:${"1".repeat(64)}` as const;
 const specDigest = `sha256:${"e".repeat(64)}` as const;
@@ -33,10 +37,11 @@ afterEach(async () => {
 const plan = {
   artifacts: { app: "/tmp/Open Design Beta.app", dmg: "/tmp/open-design.dmg", payload: "/tmp/payload.zip", zip: null },
   outputRoot: "/tmp/out",
+  profile: { namespace: "release-beta", schemaVersion: 1 },
   profileDigest: `sha256:${"d".repeat(64)}` as const,
   releaseVersion: "0.19.0-beta.2",
   runtimeNamespaceRoot: "/tmp/runtime",
-  schemaVersion: 3 as const,
+  schemaVersion: 4 as const,
   shell: {
     buildDigest,
     capabilityDigest,
@@ -52,8 +57,8 @@ const plan = {
 
 describe("immutable Shell build storage", () => {
   it("keeps source lookup and physical version paths separate", () => {
-    expect(shellBuildIndexObjectKey("beta", "electron", buildDigest, plan.profileDigest, "darwin-arm64")).toBe(
-      `beta/shells/electron/builds/${"c".repeat(64)}/profiles/${"d".repeat(64)}/artifacts/darwin-arm64.json`,
+    expect(shellBuildIndexObjectKey("beta", "electron", releaseDigest, "darwin-arm64")).toBe(
+      `beta/shells/electron/builds/${storageDigest.slice(7)}/artifacts/darwin-arm64.json`,
     );
     expect(shellBuildVersionPrefix("beta", "electron", "0.19.0-beta.2", "darwin-arm64")).toBe(
       "beta/versions/0.19.0-beta.2/shells/electron/mac_arm64",
@@ -61,19 +66,17 @@ describe("immutable Shell build storage", () => {
     expect(shellSmokeProofObjectKey(
       "beta",
       "electron",
-      buildDigest,
-      plan.profileDigest,
+      releaseDigest,
       "darwin-arm64",
       "mac-shell-v3",
       specDigest,
       1,
     )).toBe(
-      `beta/shells/electron/builds/${"c".repeat(64)}/profiles/${"d".repeat(64)}/spec/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
+      `beta/shells/electron/builds/${storageDigest.slice(7)}/spec/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
     );
     expect(shellSmokeProofObjectKey(
       "beta",
       "electron",
-      buildDigest,
       `sha256:${"2".repeat(64)}`,
       "darwin-arm64",
       "mac-shell-v3",
@@ -82,8 +85,7 @@ describe("immutable Shell build storage", () => {
     )).not.toBe(shellSmokeProofObjectKey(
       "beta",
       "electron",
-      buildDigest,
-      plan.profileDigest,
+      releaseDigest,
       "darwin-arm64",
       "mac-shell-v3",
       specDigest,
@@ -108,25 +110,27 @@ describe("immutable Shell build storage", () => {
       createdAt: "2026-08-09T00:00:00.000Z",
       provenance: {},
       profileDigest: plan.profileDigest,
-      schemaVersion: 3,
+      releaseDigest,
+      schemaVersion: 4,
       shell: { ...plan.shell, version: "0.19.0-beta.1" },
       target: "darwin-arm64",
-    }, validatedPlan, "beta");
+    }, validatedPlan, "beta", releaseDigest);
     expect(record.shell.version).toBe("0.19.0-beta.1");
     expect(record.artifacts.dmg.url).toContain("Open%20Design.dmg");
   });
 
-  it("fails closed for a mismatched target or source identity", () => {
+  it("fails closed for a mismatched release identity", () => {
     expect(() => validateShellBuildRecord({
       artifacts: {},
       channel: "beta",
       createdAt: "2026-08-09T00:00:00.000Z",
       provenance: {},
       profileDigest: plan.profileDigest,
-      schemaVersion: 3,
+      releaseDigest,
+      schemaVersion: 4,
       shell: { ...plan.shell, sourceDigest: `sha256:${"c".repeat(64)}` },
       target: "darwin-arm64",
-    }, plan, "beta")).toThrow(/identity/);
+    }, plan, "beta", `sha256:${"8".repeat(64)}`)).toThrow(/scope/);
   });
 
   it("binds the Windows Shell proof to lifecycle, update, rollback, native installer boundaries, and migration", () => {
@@ -138,6 +142,7 @@ describe("immutable Shell build storage", () => {
       matrix: "win-shell-v2",
       profileDigest: windowsPlan.profileDigest,
       provenance: {},
+      releaseDigest,
       releaseVersion: "0.19.0-beta.2",
       scenarios: [
         "win-shell-lifecycle",
@@ -146,11 +151,11 @@ describe("immutable Shell build storage", () => {
         "win-native-install-boundaries",
         "win-legacy-migration",
       ],
-      schemaVersion: 4,
+      schemaVersion: 5,
       shell: windowsPlan.shell,
       standaloneProtocolVersion: 1,
       target: "win32-x64",
-    }, windowsPlan, "beta", "win-shell-v2", specDigest, 1);
+    }, windowsPlan, "beta", releaseDigest, "win-shell-v2", specDigest, 1);
 
     expect(proof.scenarios).toEqual([
       "win-shell-lifecycle",
@@ -163,6 +168,7 @@ describe("immutable Shell build storage", () => {
       { ...proof, scenarios: proof.scenarios.filter((scenario) => scenario !== "win-native-install-boundaries") },
       windowsPlan,
       "beta",
+      releaseDigest,
       "win-shell-v2",
       specDigest,
       1,
@@ -225,6 +231,8 @@ describe("immutable Shell build storage", () => {
         ...plan,
         artifacts: { ...plan.artifacts, dmg: dmgPath, payload: payloadPath },
       };
+      const actualReleaseDigest = await resolveShellReleaseDigest(registeredPlan);
+      const actualStorageDigest = shellBuildStorageDigest(actualReleaseDigest);
       await writeFile(planPath, `${JSON.stringify(registeredPlan)}\n`);
       await writeFile(buildPath, `${JSON.stringify({
         artifacts: { dmg: await describe(dmgPath), payload: await describe(payloadPath), zip: null },
@@ -253,7 +261,7 @@ describe("immutable Shell build storage", () => {
         expect(registered.resolution.state).toBe("registered");
         expect(Date.parse(registered.resolution.createdAt)).not.toBeNaN();
         expect(registered.resolution.artifacts.dmg.url).toBe(
-          "https://releases.example/beta/versions/0.19.0-beta.2/shells/electron/mac_arm64/Open%20Design-release-beta.dmg",
+          `https://releases.example/beta/shells/electron/builds/${actualStorageDigest.slice(7)}/artifacts/darwin-arm64/blobs/${registered.resolution.artifacts.dmg.digest.slice(7)}-Open%20Design-release-beta.dmg`,
         );
         const reusedDmgPath = join(outputRoot, "Open Design-release-beta.dmg");
         const reusedPayloadPath = join(outputRoot, "Open Design-release-beta-payload.zip");
@@ -312,13 +320,12 @@ describe("immutable Shell build storage", () => {
           matrix: "mac-shell-v3",
           standaloneProtocolVersion: 1,
           state: "hit",
-          url: `https://releases.example/beta/shells/electron/builds/${"c".repeat(64)}/profiles/${"d".repeat(64)}/spec/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
+          url: `https://releases.example/beta/shells/electron/builds/${actualStorageDigest.slice(7)}/spec/darwin-arm64/mac-shell-v3/standalone-v1/${"e".repeat(64)}.json`,
         });
         const proofKey = shellSmokeProofObjectKey(
           "beta",
           "electron",
-          buildDigest,
-          plan.profileDigest,
+          actualReleaseDigest,
           "darwin-arm64",
           "mac-shell-v3",
           specDigest,
@@ -328,6 +335,7 @@ describe("immutable Shell build storage", () => {
           JSON.parse(objects.get(proofKey)!.toString("utf8")),
           plan,
           "beta",
+          actualReleaseDigest,
           "mac-shell-v3",
           specDigest,
           1,

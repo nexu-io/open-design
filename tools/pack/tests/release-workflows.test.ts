@@ -103,21 +103,31 @@ describe("release workflow topology", () => {
   });
 
   it("uses exact platform composites and dynamic release identity", async () => {
-    const [distribution, mac, win] = await Promise.all([
+    const [distribution, mac, win, standardMac, standardWin] = await Promise.all([
       read(".github/workflows/release-beta.yml"),
       read(".github/actions/release/platform/mac/exact/action.yml"),
       read(".github/actions/release/platform/win/exact/action.yml"),
+      read(".github/actions/release/platform/mac/action.yml"),
+      read(".github/actions/release/platform/win/action.yml"),
     ]);
 
     expect(distribution).toContain("uses: ./.github/actions/release/platform/mac/exact");
     expect(distribution).toContain("uses: ./.github/actions/release/platform/win/exact");
     expect(distribution).toContain("channel: ${{ inputs.exact_name }}");
-    expect(mac).toContain('prefix: tools-pack-mac-v1-${{ inputs.channel }}-');
-    expect(mac).toContain('--channel "${{ inputs.channel }}"');
-    expect(win).toContain('prefix: tools-pack-win-v1-${{ inputs.channel }}-');
+    expect(mac).toContain('prefix: tools-pack-mac-v2-${{ runner.os }}-${{ inputs.arch }}-');
+    expect(mac).not.toContain('prefix: tools-pack-mac-v2-${{ inputs.channel }}-');
+    expect(mac).toContain("uses: ./.github/actions/release/closure/target/mac");
+    expect(mac).toContain("channel: ${{ inputs.channel }}");
+    expect(win).toContain('prefix: tools-pack-win-v2-${{ runner.os }}-${{ runner.arch }}-');
+    expect(win).not.toContain('prefix: tools-pack-win-v2-${{ inputs.channel }}-');
     expect(win).toContain('"release-${{ inputs.channel }}-win"');
     expect(mac).toContain("uses: ./.github/actions/release/platform/cache/save");
     expect(win).toContain("uses: ./.github/actions/release/platform/cache/save");
+    expect(standardMac).toContain('prefix: tools-pack-mac-v2-${{ runner.os }}-${{ steps.platform.outputs.arch }}-');
+    expect(standardWin).toContain('prefix: tools-pack-win-v2-${{ runner.os }}-${{ runner.arch }}-');
+    for (const action of [mac, win, standardMac, standardWin]) {
+      expect(action).not.toContain("hashFiles(");
+    }
   });
 
   it("validates a real installation with embedded config through mutable discovery and immutable binding", async () => {
@@ -165,10 +175,10 @@ describe("release workflow topology", () => {
     expect(exact).not.toMatch(/CLOSURE_MIN_SHELL_VERSION:\s+[^$\n]/u);
   });
 
-  it("retains only the newest outer tools-pack cache", async () => {
+  it("retains two disposable outer tools-pack cache candidates", async () => {
     const cache = await read(".github/actions/release/platform/cache/save/action.yml");
-    expect(cache).toContain(".[1:] | .[].id");
-    expect(cache).toContain("Select-Object -Skip 1");
+    expect(cache).toContain(".[2:] | .[].id");
+    expect(cache).toContain("Select-Object -Skip 2");
     expect(cache).not.toContain("keep=3");
     expect(cache).not.toContain("$keep = 3");
   });

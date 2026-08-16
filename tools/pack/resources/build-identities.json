@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "defaults": {
+    "excludeDirectoryNames": [".next", ".od", ".tmp", "__tests__", "coverage", "dist", "node_modules", "out", "test", "tests"]
+  },
+  "sourceSets": {
+    "shell.source.common": {
+      "normalizePackageVersion": true,
+      "paths": [
+        "packages/release/src",
+        "packages/contracts/src",
+        "packages/sidecar/src",
+        "packages/shell/src",
+        "packages/platform/src",
+        "packages/download/src",
+        "packages/host/src",
+        "packages/diagnostics/src",
+        "packages/closure/src",
+        "shells/electron/package.json",
+        "shells/electron/src",
+        "apps/standalone/package.json",
+        "apps/standalone/esbuild.config.ts",
+        "apps/standalone/tsconfig.json",
+        "apps/standalone/src/protocol",
+        "apps/standalone/src/runtime",
+        "apps/standalone/src/bootloader.ts",
+        "apps/standalone/src/bootstrap-entry.ts",
+        "apps/standalone/src/bootstrap.ts",
+        "apps/standalone/src/fossil-bootloader.ts",
+        "apps/standalone/src/generation-bootloader.ts",
+        "apps/standalone/src/launcher-bootstrap.ts",
+        "apps/standalone/src/launcher.ts",
+        "apps/standalone/src/native-loader.ts",
+        "apps/standalone/src/process-bridge.ts"
+      ]
+    },
+    "shell.source.mac": {
+      "inherits": ["shell.source.common"],
+      "paths": ["tools/pack/resources/mac", "tools/pack/src/mac"]
+    },
+    "shell.source.win": {
+      "inherits": ["shell.source.common"],
+      "paths": ["tools/pack/resources/win", "tools/pack/src/win"]
+    },
+    "shell.capability": {
+      "normalizePackageVersion": true,
+      "normalizeTextLineEndings": true,
+      "paths": [
+        "apps/standalone/package.json",
+        "apps/standalone/src/bootloader.ts",
+        "apps/standalone/src/bootstrap-entry.ts",
+        "apps/standalone/src/launcher-bootstrap.ts",
+        "apps/standalone/src/process-bridge.ts",
+        "apps/standalone/src/protocol",
+        "shells/electron/src/desktop-capability-adapter.ts",
+        "shells/electron/src/shell-capabilities.ts",
+        "shells/electron/src/standalone-bootstrap.ts",
+        "shells/electron/src/standalone-commands.ts",
+        "shells/electron/src/standalone-handoff.ts",
+        "shells/electron/src/standalone-launcher-entry.ts",
+        "shells/electron/src/standalone-launcher.ts",
+        "tools/pack/src/closure/components.ts",
+        "tools/pack/src/closure/distribution.ts",
+        "tools/pack/src/shell-build-plan.ts",
+        "tools/pack/src/standalone-seed.ts"
+      ]
+    },
+    "shell.carrier.common": {
+      "normalizeTextLineEndings": true,
+      "paths": [
+        ".node-version",
+        "apps/standalone/src/bootstrap-entry.ts",
+        "apps/standalone/src/fossil-bootloader.ts",
+        "apps/standalone/src/generation-bootloader.ts",
+        "apps/standalone/src/launcher.ts",
+        "apps/standalone/src/native-loader.ts",
+        "packages/closure/src/store",
+        "packages/closure/src/update",
+        "packages/shell/src/update",
+        "tools/pack/src/closure/components.ts",
+        "tools/pack/src/closure/platform.ts"
+      ]
+    },
+    "shell.carrier.mac": {
+      "inherits": ["shell.carrier.common"],
+      "paths": ["tools/pack/src/mac/payload.ts", "tools/pack/src/mac/paths.ts"]
+    },
+    "shell.carrier.win": {
+      "inherits": ["shell.carrier.common"],
+      "paths": ["tools/pack/src/win/payload.ts", "tools/pack/src/win/paths.ts"]
+    },
+    "shell.dependencies": {
+      "normalizePackageVersion": true,
+      "paths": [".node-version", "apps/daemon/package.json", "package.json", "pnpm-lock.yaml"]
+    }
+  },
+  "identities": {
+    "shell.source.mac": {
+      "schemaVersion": 1,
+      "sourceSets": ["shell.source.mac"],
+      "parameters": ["buildCommand", "shell"]
+    },
+    "shell.source.win": {
+      "schemaVersion": 1,
+      "sourceSets": ["shell.source.win"],
+      "parameters": ["buildCommand", "shell"]
+    },
+    "shell.capability": {
+      "schemaVersion": 1,
+      "sourceSets": ["shell.capability"],
+      "parameters": []
+    },
+    "shell.carrier.mac": {
+      "schemaVersion": 1,
+      "sourceSets": ["shell.carrier.mac"],
+      "parameters": ["platform"]
+    },
+    "shell.carrier.win": {
+      "schemaVersion": 1,
+      "sourceSets": ["shell.carrier.win"],
+      "parameters": ["platform"]
+    },
+    "shell.dependencies": {
+      "schemaVersion": 1,
+      "sourceSets": ["shell.dependencies"],
+      "parameters": ["nativeDependencies", "nodeModulesAbi", "nodeNapi", "nodeVersion", "packageManager"]
+    }
+  }
+}

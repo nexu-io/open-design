@@ -111,8 +111,8 @@ runs:
       id: cache
       uses: ./.github/actions/release/platform/cache
       with:
-        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/scripts/release/cache/mac.sh') }}
-        prefix: tools-pack-mac-v1-${{ inputs.channel }}-${{ runner.os }}-${{ steps.platform.outputs.arch }}-
+        origin-key: ${{ github.run_id }}-${{ github.run_attempt }}
+        prefix: tools-pack-mac-v2-${{ runner.os }}-${{ steps.platform.outputs.arch }}-
 
     - name: Install dependencies
       shell: bash
@@ -166,49 +166,25 @@ runs:
         target: ${{ inputs.target }}
         verify-notarization: ${{ inputs.verify-notarization }}
 
-    - name: Build Standalone target contribution
+    - name: Resolve Standalone target contribution
+      uses: ./.github/actions/release/closure/target/mac
+      with:
+        build-dir: ${{ steps.platform.outputs.build_dir }}
+        channel: ${{ inputs.channel }}
+        platform: ${{ steps.platform.outputs.closure_platform }}
+        public-origin: ${{ env.RELEASE_PUBLIC_ORIGIN }}
+        publish-enabled: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
+        release-version: ${{ inputs.closure-version }}
+
+    - name: Prepare Standalone smoke graph
       shell: bash
       run: |
         set -euo pipefail
         build_dir="${{ steps.platform.outputs.build_dir }}"
-        pnpm exec tools-pack closure build-distribution-target \
-          --blob-origin "$RELEASE_PUBLIC_ORIGIN" \
-          --channel "${{ inputs.channel }}" \
-          --dir "$RUNNER_TEMP/tools-pack" \
-          --platform "${{ steps.platform.outputs.closure_platform }}" \
-          --version "${{ inputs.closure-version }}" \
-          --json > "$build_dir/closure-target.json"
-        contribution_path="$(jq -er '.contributionPath' "$build_dir/closure-target.json")"
-        blob_root="$(jq -er '.blobRoot' "$build_dir/closure-target.json")"
-        cp "$contribution_path" "$build_dir/target-contribution.json"
-        mkdir -p "$build_dir/closure-blobs"
-        jq -er '[.contribution.native.artifact, .contribution.resources[].artifact] | .[].digest' \
-          "$build_dir/closure-target.json" | while IFS= read -r digest; do
-          cp "$blob_root/${digest#sha256:}" "$build_dir/closure-blobs/${digest#sha256:}"
-        done
         pnpm exec tools-release merge-closure-distribution \
           "$RUNNER_TEMP/release-closure/shared/shared-contribution.json" \
           "$build_dir/target-contribution.json" \
           --output "$build_dir/closure-distribution.json"
-
-    - name: Publish verified Standalone target blobs
-      if: ${{ env.RELEASE_PUBLISH_SIDE_EFFECTS != 'false' }}
-      shell: bash
-      env:
-        RELEASE_CHANNEL: ${{ inputs.channel }}
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}/tools-pack/out/closure-distribution/${{ inputs.channel }}/${{ steps.platform.outputs.closure_platform }}/versions/${{ inputs.closure-version }}/blobs
-        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ steps.platform.outputs.build_dir }}/target-contribution.json
-        RELEASE_CLOSURE_CONTRIBUTION_KIND: target
-        RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ steps.platform.outputs.build_dir }}/closure-publication.json
-        RELEASE_VERSION: ${{ inputs.closure-version }}
-      run: pnpm exec tools-release publish-closure-contribution
-
-    - name: Delete failed tools-pack cache
-      if: ${{ inputs.cache-enabled == 'true' && steps.shell.outputs.build-outcome == 'failure' && steps.cache.outputs.cache-matched-key != '' }}
-      uses: ./.github/actions/release/platform/cache/delete-failed
-      with:
-        matched-key: ${{ steps.cache.outputs.cache-matched-key }}
-        platform: mac
 
     - name: Capture framework diagnostics
       if: ${{ failure() && inputs.diagnostics == 'true' }}

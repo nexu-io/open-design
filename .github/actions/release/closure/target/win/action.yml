@@ -1,0 +1,124 @@
+name: Resolve Windows Closure target
+description: Resolve, build on first identity, register, and project the Windows Closure target
+
+inputs:
+  build-dir:
+    required: true
+  channel:
+    required: true
+  public-origin:
+    required: false
+    default: ""
+  publish-enabled:
+    required: true
+  release-version:
+    required: true
+
+outputs:
+  resolution:
+    value: ${{ steps.resolve.outputs.state }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve Closure target identity
+      id: identity
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = "Stop"
+        $nodeModulesAbi = node -p "process.versions.modules"
+        $nodeNapi = node -p "process.versions.napi"
+        $nodeVersion = node -p "process.version"
+        $packageManager = node -p "require('./package.json').packageManager"
+        $digest = (pnpm.cmd exec tools-release identity digest closure.target.win32-x64 `
+          --parameter "nodeModulesAbi=$nodeModulesAbi" `
+          --parameter "nodeNapi=$nodeNapi" `
+          --parameter "nodeVersion=$nodeVersion" `
+          --parameter "packageManager=$packageManager" `
+          --parameter target=win32-x64).Trim()
+        if ($LASTEXITCODE -ne 0 -or $digest -notmatch '^sha256:[0-9a-f]{64}$') {
+          throw "invalid win32-x64 Closure identity: $digest"
+        }
+        "digest=$digest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+    - name: Resolve immutable Closure target
+      id: resolve
+      shell: pwsh
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ inputs.build-dir }}\closure-blobs
+        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.identity.outputs.digest }}
+        RELEASE_CLOSURE_BUILD_KIND: target
+        RELEASE_CLOSURE_BUILD_TOKEN: target-win32-x64
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ inputs.build-dir }}\target-contribution.json
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.public-origin != '' && inputs.public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.RELEASE_STORAGE_ACCESS_KEY_ID != '' && env.RELEASE_STORAGE_ACCESS_KEY_ID || env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.RELEASE_STORAGE_BUCKET != '' && env.RELEASE_STORAGE_BUCKET || env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.RELEASE_STORAGE_ENDPOINT != '' && env.RELEASE_STORAGE_ENDPOINT || env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.RELEASE_STORAGE_SECRET_ACCESS_KEY != '' && env.RELEASE_STORAGE_SECRET_ACCESS_KEY || env.CLOUDFLARE_R2_RELEASES_SK }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+      run: pnpm.cmd exec tools-release resolve-closure-build
+
+    - name: Build Closure target
+      if: ${{ steps.resolve.outputs.state != 'hit' }}
+      shell: pwsh
+      env:
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.public-origin != '' && inputs.public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+      run: |
+        $ErrorActionPreference = "Stop"
+        New-Item -ItemType Directory -Force -Path "${{ inputs.build-dir }}" | Out-Null
+        $closureOutput = pnpm.cmd exec tools-pack closure build-distribution-target `
+          --blob-origin $env:RELEASE_PUBLIC_ORIGIN `
+          --channel "${{ inputs.channel }}" `
+          --dir "${{ runner.temp }}\tools-pack" `
+          --platform win32-x64 `
+          --version "${{ inputs.release-version }}" `
+          --json
+        if ($LASTEXITCODE -ne 0) { throw "Standalone Closure build failed with exit code $LASTEXITCODE" }
+        $reportPath = "${{ inputs.build-dir }}\closure-target.json"
+        $closureOutput | Set-Content -Path $reportPath -Encoding utf8
+        $report = $closureOutput | ConvertFrom-Json
+        Copy-Item -LiteralPath $report.contributionPath -Destination "${{ inputs.build-dir }}\target-contribution.json"
+        $blobRoot = "${{ inputs.build-dir }}\closure-blobs"
+        New-Item -ItemType Directory -Force -Path $blobRoot | Out-Null
+        $artifacts = @($report.contribution.native.artifact) + @($report.contribution.resources | ForEach-Object { $_.artifact })
+        foreach ($artifact in $artifacts) {
+          $digest = [string]$artifact.digest
+          Copy-Item -LiteralPath (Join-Path $report.blobRoot $digest.Substring(7)) -Destination (Join-Path $blobRoot $digest.Substring(7))
+        }
+
+    - name: Register immutable Closure target
+      if: ${{ inputs.publish-enabled == 'true' && steps.resolve.outputs.state != 'hit' }}
+      shell: pwsh
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ inputs.build-dir }}\closure-blobs
+        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.identity.outputs.digest }}
+        RELEASE_CLOSURE_BUILD_KIND: target
+        RELEASE_CLOSURE_BUILD_TOKEN: target-win32-x64
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ inputs.build-dir }}\target-contribution.json
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.RELEASE_STORAGE_ACCESS_KEY_ID != '' && env.RELEASE_STORAGE_ACCESS_KEY_ID || env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.RELEASE_STORAGE_BUCKET != '' && env.RELEASE_STORAGE_BUCKET || env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.RELEASE_STORAGE_ENDPOINT != '' && env.RELEASE_STORAGE_ENDPOINT || env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.RELEASE_STORAGE_SECRET_ACCESS_KEY != '' && env.RELEASE_STORAGE_SECRET_ACCESS_KEY || env.CLOUDFLARE_R2_RELEASES_SK }}
+      run: pnpm.cmd exec tools-release register-closure-build
+
+    - name: Publish versioned Closure target blobs
+      if: ${{ inputs.publish-enabled == 'true' }}
+      shell: pwsh
+      env:
+        RELEASE_CHANNEL: ${{ inputs.channel }}
+        RELEASE_CLOSURE_BLOB_ROOT: ${{ inputs.build-dir }}\closure-blobs
+        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ inputs.build-dir }}\target-contribution.json
+        RELEASE_CLOSURE_CONTRIBUTION_KIND: target
+        RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ inputs.build-dir }}\closure-publication.json
+        RELEASE_PUBLIC_ORIGIN: ${{ inputs.public-origin != '' && inputs.public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
+        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.RELEASE_STORAGE_ACCESS_KEY_ID != '' && env.RELEASE_STORAGE_ACCESS_KEY_ID || env.CLOUDFLARE_R2_RELEASES_AK }}
+        RELEASE_STORAGE_BUCKET: ${{ env.RELEASE_STORAGE_BUCKET != '' && env.RELEASE_STORAGE_BUCKET || env.CLOUDFLARE_R2_RELEASES_BUCKET }}
+        RELEASE_STORAGE_ENDPOINT: ${{ env.RELEASE_STORAGE_ENDPOINT != '' && env.RELEASE_STORAGE_ENDPOINT || env.CLOUDFLARE_R2_RELEASES_URL }}
+        RELEASE_STORAGE_REGION: auto
+        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.RELEASE_STORAGE_SECRET_ACCESS_KEY != '' && env.RELEASE_STORAGE_SECRET_ACCESS_KEY || env.CLOUDFLARE_R2_RELEASES_SK }}
+        RELEASE_VERSION: ${{ inputs.release-version }}
+      run: pnpm.cmd exec tools-release publish-closure-contribution

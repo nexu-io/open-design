@@ -7,19 +7,19 @@ import {
   type ContentIdentityResult,
 } from "@open-design/metatool";
 
-export async function resolveDeclaredReleaseIdentity(input: Readonly<{
+export async function resolveDeclaredBuildIdentity(input: Readonly<{
   id: string;
   parameters: Readonly<Record<string, unknown>>;
   workspaceRoot: string;
 }>): Promise<ContentIdentityResult> {
   const registry = await readContentIdentityRegistry(fileURLToPath(
-    new URL("../../release/resources/identities.json", import.meta.url),
+    new URL("../resources/build-identities.json", import.meta.url),
   ));
   const resolved = resolveContentIdentityDeclaration(registry, input.id);
   const expected = [...resolved.declaration.parameters].sort();
   const actual = Object.keys(input.parameters).sort();
   if (JSON.stringify(expected) !== JSON.stringify(actual)) {
-    throw new Error(`release identity ${input.id} parameters must be exactly: ${expected.join(", ")}`);
+    throw new Error(`build identity ${input.id} parameters must be exactly: ${expected.join(", ")}`);
   }
   return await resolveContentIdentity({
     id: input.id,

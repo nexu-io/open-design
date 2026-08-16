@@ -58,8 +58,8 @@ runs:
       id: cache
       uses: ./.github/actions/release/platform/cache
       with:
-        origin-key: ${{ hashFiles('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'apps/daemon/**', 'apps/web/**', 'shells/electron/**', 'packages/agui-adapter/**', 'packages/contracts/**', 'packages/plugin-runtime/**', 'packages/sidecar/**', 'packages/shell/**', 'packages/platform/**', 'tools/pack/bin/**', 'tools/pack/package.json', 'tools/pack/resources/**', 'tools/pack/src/**', 'tools/pack/tsconfig.json', 'assets/community-pets/**', 'assets/frames/**', 'craft/**', 'design-systems/**', 'design-templates/**', 'plugins/_official/**', 'plugins/registry/**', 'prompt-templates/**', 'skills/**', '.github/actions/release/platform/**', '.github/workflows/release-beta.yml', '.github/scripts/release/cache/win.ps1') }}
-        prefix: tools-pack-win-v1-${{ inputs.channel }}-${{ runner.os }}-
+        origin-key: ${{ github.run_id }}-${{ github.run_attempt }}
+        prefix: tools-pack-win-v2-${{ runner.os }}-${{ runner.arch }}-
     - name: Install dependencies
       shell: pwsh
       run: pnpm install --frozen-lockfile
@@ -159,80 +159,14 @@ runs:
         RELEASE_STORAGE_REGION: auto
         RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
       run: pnpm exec tools-release register-shell-build
-    - name: Resolve win_x64 Closure target identity
-      id: closure_identity
-      shell: pwsh
-      run: |
-        $ErrorActionPreference = "Stop"
-        $nodeModulesAbi = node -p "process.versions.modules"
-        $nodeNapi = node -p "process.versions.napi"
-        $nodeVersion = node -p "process.version"
-        $packageManager = node -p "require('./package.json').packageManager"
-        $digest = (pnpm.cmd exec tools-release identity digest closure.target.win32-x64 --parameter "nodeModulesAbi=$nodeModulesAbi" --parameter "nodeNapi=$nodeNapi" --parameter "nodeVersion=$nodeVersion" --parameter "packageManager=$packageManager" --parameter target=win32-x64).Trim()
-        if ($LASTEXITCODE -ne 0 -or $digest -notmatch '^sha256:[0-9a-f]{64}$') { throw "invalid win_x64 Closure identity: $digest" }
-        "digest=$digest" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-    - name: Resolve immutable win_x64 Closure target
-      id: target_closure_resolution
-      if: ${{ inputs.publish == 'true' }}
-      shell: pwsh
-      env:
-        RELEASE_CHANNEL: ${{ inputs.channel }}
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}\release-build\win_x64\closure-blobs
-        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.closure_identity.outputs.digest }}
-        RELEASE_CLOSURE_BUILD_KIND: target
-        RELEASE_CLOSURE_BUILD_TOKEN: target-win32-x64
-        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\target-contribution.json
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
-        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
-        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
-        RELEASE_STORAGE_REGION: auto
-        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
-        RELEASE_VERSION: ${{ inputs.closure-version }}
-      run: pnpm.cmd exec tools-release resolve-closure-build
-    - name: Build exact win_x64 Standalone target contribution
-      if: ${{ steps.target_closure_resolution.outputs.state != 'hit' }}
-      shell: pwsh
-      env:
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-      run: |
-        $ErrorActionPreference = "Stop"
-        $version = "${{ inputs.closure-version }}"
-        $closureOutput = pnpm.cmd exec tools-pack closure build-distribution-target `
-          --blob-origin $env:RELEASE_PUBLIC_ORIGIN `
-          --channel "${{ inputs.channel }}" `
-          --dir "${{ runner.temp }}\tools-pack" `
-          --platform win32-x64 `
-          --version $version `
-          --json
-        if ($LASTEXITCODE -ne 0) { throw "Standalone Closure build failed with exit code $LASTEXITCODE" }
-        $reportPath = "${{ runner.temp }}\release-build\win_x64\closure-target.json"
-        $closureOutput | Set-Content -Path $reportPath -Encoding utf8
-        $report = $closureOutput | ConvertFrom-Json
-        Copy-Item -LiteralPath $report.contributionPath -Destination "${{ runner.temp }}\release-build\win_x64\target-contribution.json"
-        $targetBlobRoot = "${{ runner.temp }}\release-build\win_x64\closure-blobs"
-        New-Item -ItemType Directory -Force -Path $targetBlobRoot | Out-Null
-        $artifacts = @($report.contribution.native.artifact) + @($report.contribution.resources | ForEach-Object { $_.artifact })
-        foreach ($artifact in $artifacts) {
-          $digest = [string]$artifact.digest
-          Copy-Item -LiteralPath (Join-Path $report.blobRoot $digest.Substring(7)) -Destination (Join-Path $targetBlobRoot $digest.Substring(7))
-        }
-    - name: Register immutable win_x64 Closure target
-      if: ${{ inputs.publish == 'true' && steps.target_closure_resolution.outputs.state != 'hit' }}
-      shell: pwsh
-      env:
-        RELEASE_CHANNEL: ${{ inputs.channel }}
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}\release-build\win_x64\closure-blobs
-        RELEASE_CLOSURE_BUILD_DIGEST: ${{ steps.closure_identity.outputs.digest }}
-        RELEASE_CLOSURE_BUILD_KIND: target
-        RELEASE_CLOSURE_BUILD_TOKEN: target-win32-x64
-        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\target-contribution.json
-        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
-        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
-        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
-        RELEASE_STORAGE_REGION: auto
-        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
-      run: pnpm.cmd exec tools-release register-closure-build
+    - name: Resolve win_x64 Standalone target contribution
+      uses: ./.github/actions/release/closure/target/win
+      with:
+        build-dir: ${{ runner.temp }}\release-build\win_x64
+        channel: ${{ inputs.channel }}
+        public-origin: ${{ inputs.release-public-origin }}
+        publish-enabled: ${{ inputs.publish }}
+        release-version: ${{ inputs.closure-version }}
     - name: Prepare win_x64 Standalone smoke graph
       shell: pwsh
       run: |
@@ -240,23 +174,6 @@ runs:
           "${{ runner.temp }}\release-closure\shared\shared-contribution.json" `
           "${{ runner.temp }}\release-build\win_x64\target-contribution.json" `
           --output "${{ runner.temp }}\release-build\win_x64\closure-distribution.json"
-    - name: Publish verified win_x64 Standalone target blobs
-      shell: pwsh
-      if: ${{ inputs.publish == 'true' }}
-      env:
-        RELEASE_CHANNEL: ${{ inputs.channel }}
-        RELEASE_CLOSURE_BLOB_ROOT: ${{ runner.temp }}\release-build\win_x64\closure-blobs
-        RELEASE_CLOSURE_CONTRIBUTION_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\target-contribution.json
-        RELEASE_CLOSURE_CONTRIBUTION_KIND: target
-        RELEASE_CLOSURE_PUBLICATION_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\closure-publication.json
-        RELEASE_PUBLIC_ORIGIN: ${{ inputs.release-public-origin != '' && inputs.release-public-origin || env.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
-        RELEASE_STORAGE_ACCESS_KEY_ID: ${{ env.CLOUDFLARE_R2_RELEASES_AK }}
-        RELEASE_STORAGE_BUCKET: ${{ env.CLOUDFLARE_R2_RELEASES_BUCKET }}
-        RELEASE_STORAGE_ENDPOINT: ${{ env.CLOUDFLARE_R2_RELEASES_URL }}
-        RELEASE_STORAGE_REGION: auto
-        RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
-        RELEASE_VERSION: ${{ inputs.closure-version }}
-      run: pnpm.cmd exec tools-release publish-closure-contribution
     - name: Upload win_x64 dogfood build to release storage
       shell: pwsh
       # publish=false only. Artifact paths come from the build's own --json
@@ -279,12 +196,6 @@ runs:
         RELEASE_STORAGE_REGION: auto
         RELEASE_STORAGE_SECRET_ACCESS_KEY: ${{ env.CLOUDFLARE_R2_RELEASES_SK }}
       run: pnpm exec tools-release publish-dogfood
-    - name: Delete failed Windows tools-pack cache
-      if: ${{ steps.win_tools_pack_build.outcome == 'failure' && steps.cache.outputs.cache-matched-key != '' }}
-      uses: ./.github/actions/release/platform/cache/delete-failed
-      with:
-        matched-key: ${{ steps.cache.outputs.cache-matched-key }}
-        platform: win
     - name: Build win_x64 exact update fixture
       if: ${{ inputs.smoke-mode == 'full' && steps.win_x64_shell_resolution.outputs.smoke_proof != 'hit' && inputs.update-metadata-url == '' && inputs.update-target-version == '' }}
       shell: pwsh

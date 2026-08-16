@@ -6,7 +6,7 @@ import type { ToolPackConfig } from "./config.js";
 import { hashText } from "./lib/hash.js";
 import { toolPackShellDefinition } from "./shells.js";
 import { readRuntimeShellVersion, versionFamilyForShellVersion } from "./versions.js";
-import { resolveDeclaredReleaseIdentity } from "./release-identity.js";
+import { resolveDeclaredBuildIdentity } from "./build-identity.js";
 
 type WorkspaceBuildMetadata = {
   builtAt: string;
@@ -19,7 +19,8 @@ type WorkspaceBuildArtifact = {
   workspacePath: string;
 };
 
-export const SHELL_BUILD_EPOCH = 2 as const;
+export const SHELL_BUILD_RECIPE_EPOCH = 3 as const;
+export const WORKSPACE_BUILD_CACHE_EPOCH = 1 as const;
 
 export type ToolPackShellBuildIdentity = Readonly<{
   buildDigest: `sha256:${string}`;
@@ -67,7 +68,7 @@ async function readPackageManager(workspaceRoot: string): Promise<unknown> {
 export async function resolveStandaloneCapabilityDigest(
   workspaceRoot: string,
 ): Promise<`sha256:${string}`> {
-  return (await resolveDeclaredReleaseIdentity({
+  return (await resolveDeclaredBuildIdentity({
     id: "shell.capability",
     parameters: {},
     workspaceRoot,
@@ -77,7 +78,7 @@ export async function resolveStandaloneCapabilityDigest(
 export async function resolveStandaloneCarrierDigest(
   config: Pick<ToolPackConfig, "platform" | "workspaceRoot">,
 ): Promise<`sha256:${string}`> {
-  return (await resolveDeclaredReleaseIdentity({
+  return (await resolveDeclaredBuildIdentity({
     id: `shell.carrier.${config.platform}`,
     parameters: { platform: config.platform },
     workspaceRoot: config.workspaceRoot,
@@ -86,7 +87,7 @@ export async function resolveStandaloneCarrierDigest(
 
 export async function resolveShellSourceDigest(config: ToolPackConfig): Promise<`sha256:${string}`> {
   const definition = toolPackShellDefinition(config.shell);
-  return (await resolveDeclaredReleaseIdentity({
+  return (await resolveDeclaredBuildIdentity({
     id: `shell.source.${config.platform}`,
     parameters: { buildCommand: definition.buildCommand, shell: config.shell },
     workspaceRoot: config.workspaceRoot,
@@ -118,7 +119,7 @@ export async function resolveShellDepsDigestFromWorkspace(input: Readonly<{
   const napi = process.versions.napi;
   if (modules == null || napi == null) throw new Error("Shell Node ABI identity is unavailable");
   const packageManager = await readPackageManager(input.workspaceRoot);
-  return (await resolveDeclaredReleaseIdentity({
+  return (await resolveDeclaredBuildIdentity({
     id: "shell.dependencies",
     parameters: {
       nativeDependencies,
@@ -146,7 +147,7 @@ export async function resolveShellBuildIdentity(config: ToolPackConfig): Promise
   ]);
   return Object.freeze({
     buildDigest: `sha256:${hashJson({
-      buildEpoch: SHELL_BUILD_EPOCH,
+      buildEpoch: SHELL_BUILD_RECIPE_EPOCH,
       capabilityDigest,
       carrierDigest,
       depsDigest,
@@ -219,7 +220,10 @@ export async function ensureWorkspaceBuildArtifacts(
   build: () => Promise<void>,
 ): Promise<ToolPackShellBuildIdentity> {
   const identity = await resolveShellBuildIdentity(config);
-  const key = identity.buildDigest;
+  const key = hashJson({
+    cacheEpoch: WORKSPACE_BUILD_CACHE_EPOCH,
+    recipeDigest: identity.buildDigest,
+  });
   const nodeId = `${config.platform}.workspace-build`;
   const artifacts = workspaceBuildArtifacts();
   const versionFamily = await resolveWorkspaceBuildVersionFamily(config);

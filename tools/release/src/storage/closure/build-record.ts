@@ -187,9 +187,7 @@ export async function resolveClosureBuild(): Promise<void> {
     for (const artifact of record.artifacts) {
       const remote = await getStorageObject({ ...storage, objectKey: artifact.objectKey });
       if (remote == null || remote.bytes.byteLength !== artifact.size || digest(remote.bytes) !== artifact.digest) {
-        githubOutput("state", "miss");
-        console.log(`Closure build cache is incomplete: ${artifact.objectKey}`);
-        return;
+        throw new Error(`immutable Closure build artifact is missing or corrupt: ${artifact.objectKey}`);
       }
       await writeFile(join(pendingRoot, artifact.digest.slice("sha256:".length)), remote.bytes);
     }

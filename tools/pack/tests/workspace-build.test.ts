@@ -229,6 +229,22 @@ describe("Electron Shell workspace build cache", () => {
     }
   });
 
+  it("keeps package version projection outside the reusable Shell recipe", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-shell-version-projection-"));
+    try {
+      await writeWorkspace(root);
+      const config = createConfig(root, join(root, ".cache"));
+      const before = await resolveShellBuildIdentity(config);
+      const manifestPath = join(root, "shells/electron/package.json");
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+      await writeFile(manifestPath, `${JSON.stringify({ ...manifest, version: "99.0.0" })}\n`);
+      const after = await resolveShellBuildIdentity(config);
+      expect(after).toEqual(before);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
   it("keeps shared inputs coupled while scoping platform-owned sources and resources", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-shell-platform-"));
     try {
@@ -252,6 +268,10 @@ describe("Electron Shell workspace build cache", () => {
       expect(macAfterMacChange).not.toBe(initialMac);
 
       await writeFile(join(root, "tools/pack/src/index.ts"), "export const pack = 2;\n");
+      expect(await resolveShellSourceDigest(mac)).toBe(macAfterMacChange);
+      expect(await resolveShellSourceDigest(win)).toBe(winAfterWinChange);
+
+      await writeFile(join(root, "packages/shell/src/index.ts"), "export const shared = 2;\n");
       expect(await resolveShellSourceDigest(mac)).not.toBe(macAfterMacChange);
       expect(await resolveShellSourceDigest(win)).not.toBe(winAfterWinChange);
     } finally {

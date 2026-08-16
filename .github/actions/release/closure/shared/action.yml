@@ -39,7 +39,6 @@ runs:
 
     - name: Resolve immutable shared Closure build
       id: closure_resolution
-      if: ${{ inputs.publish-enabled == 'true' }}
       shell: bash
       env:
         RELEASE_CHANNEL: ${{ inputs.channel }}

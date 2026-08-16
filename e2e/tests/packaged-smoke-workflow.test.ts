@@ -92,6 +92,26 @@ const betaWinDistributionActionPath = join(
   "exact",
   "action.yml",
 );
+const closureTargetMacActionPath = join(
+  workspaceRoot,
+  ".github",
+  "actions",
+  "release",
+  "closure",
+  "target",
+  "mac",
+  "action.yml",
+);
+const closureTargetWinActionPath = join(
+  workspaceRoot,
+  ".github",
+  "actions",
+  "release",
+  "closure",
+  "target",
+  "win",
+  "action.yml",
+);
 const macDistributionActionPath = join(
   workspaceRoot,
   ".github",
@@ -2014,12 +2034,12 @@ process.stdin.on("end", () => {
     const macDogfood = sectionBetween(
       macAction,
       "    - name: Upload ${{ inputs.target }} dogfood build to release storage",
-      "    - name: Delete failed ${{ inputs.target }} tools-pack cache",
+      "    - name: Build exact ${{ inputs.target }} update fixture",
     );
     const winDogfood = sectionBetween(
       winAction,
       "    - name: Upload win_x64 dogfood build to release storage",
-      "    - name: Delete failed Windows tools-pack cache",
+      "    - name: Build win_x64 exact update fixture",
     );
     for (const [label, step] of [["mac", macDogfood], ["win", winDogfood]] as const) {
       expect(step, label).toContain("run: pnpm exec tools-release publish-dogfood");
@@ -2831,11 +2851,13 @@ process.stdin.on("end", () => {
   });
 
   it("publishes one shared-plus-target Standalone graph in release-beta", async () => {
-    const [workflow, betaMacAction, betaWinAction, sharedClosureAction, winSpec] = await Promise.all([
+    const [workflow, betaMacAction, betaWinAction, sharedClosureAction, targetMacAction, targetWinAction, winSpec] = await Promise.all([
       readReleaseWorkflow(releaseBetaWorkflowPath, distributionBetaWorkflowPath),
       readFile(betaMacDistributionActionPath, "utf8"),
       readFile(betaWinDistributionActionPath, "utf8"),
       readFile(join(workspaceRoot, ".github", "actions", "release", "closure", "shared", "action.yml"), "utf8"),
+      readFile(closureTargetMacActionPath, "utf8"),
+      readFile(closureTargetWinActionPath, "utf8"),
       readTypeScriptSourceGraph(packagedWinSpecRoot),
     ]);
     const sharedJob = sectionBetween(workflow, "  metadata:", "  build:");
@@ -2875,6 +2897,7 @@ process.stdin.on("end", () => {
     expect(sharedJob).toContain("Build shared Standalone Closure");
     expect(sharedJob).toContain("uses: ./.github/actions/release/closure/shared");
     expect(sharedClosureAction).toContain("Build shared Closure components");
+    expect(sharedClosureAction).not.toMatch(/id: closure_resolution\n\s+if:/u);
     expect(sharedClosureAction).toContain("tools-pack closure build-distribution-shared");
     expect(sharedClosureAction).toContain("tools-release publish-closure-contribution");
     expect(sharedClosureAction).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: shared");
@@ -2886,34 +2909,24 @@ process.stdin.on("end", () => {
     expect(buildJob).toContain("runner: macos-15-intel");
     expect(buildJob).toContain("target: win_x64");
     expect(buildJob).toContain("runner: windows-latest");
-    for (const targetContributionStep of [
-      sectionBetween(
-        betaMacAction,
-        "    - name: Build exact ${{ inputs.target }} Standalone target contribution",
-        "    - name: Prepare ${{ inputs.target }} Standalone smoke graph",
-      ),
-      sectionBetween(
-        betaWinAction,
-        "    - name: Build exact win_x64 Standalone target contribution",
-        "    - name: Prepare win_x64 Standalone smoke graph",
-      ),
-    ]) {
-      expect(targetContributionStep).toContain("tools-pack closure build-distribution-target");
-      expect(targetContributionStep).toContain("contribution.resources");
+    for (const targetAction of [targetMacAction, targetWinAction]) {
+      expect(targetAction).toContain("tools-release resolve-closure-build");
+      expect(targetAction).not.toMatch(/id: resolve\n\s+if:/u);
+      expect(targetAction).toContain("tools-pack closure build-distribution-target");
+      expect(targetAction).toContain("contribution.resources");
+      expect(targetAction).toContain("tools-release register-closure-build");
+      expect(targetAction).toContain("tools-release publish-closure-contribution");
+      expect(targetAction).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: target");
     }
-    expect(betaMacAction).toContain("Build exact ${{ inputs.target }} Standalone target contribution");
+    expect(betaMacAction).toContain("uses: ./.github/actions/release/closure/target/mac");
     expect(betaMacAction).toContain("Resolve immutable ${{ inputs.target }} Electron Shell");
     expect(betaMacAction).toContain("tools-pack mac identity");
     expect(betaMacAction).toContain("tools-release resolve-shell-build");
     expect(betaMacAction).toContain("Register verified immutable ${{ inputs.target }} Electron Shell");
     expect(betaMacAction).toContain("tools-release register-shell-build");
-    expect(betaMacAction).toContain("tools-pack closure build-distribution-target");
-    expect(betaMacAction).toContain("--platform ${{ inputs.platform }}");
+    expect(betaMacAction).toContain("platform: ${{ inputs.platform }}");
     expect(betaMacAction).toContain("Prepare ${{ inputs.target }} Standalone smoke graph");
     expect(betaMacAction).toContain("tools-release merge-closure-distribution");
-    expect(betaMacAction).toContain("Publish verified ${{ inputs.target }} Standalone target blobs");
-    expect(betaMacAction).toContain("tools-release publish-closure-contribution");
-    expect(betaMacAction).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: target");
     expect(buildJob).toContain("needs.metadata.outputs.closure_version");
     expect(betaMacAction).toContain("OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH:");
     expect(betaMacAction).toContain("OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON:");
@@ -2921,19 +2934,14 @@ process.stdin.on("end", () => {
     expect(betaMacAction).toContain('RELEASE_SHELL_ENABLED: "true"');
     expect(betaMacAction).toContain("RELEASE_SHELL_BUILD_JSON_PATH:");
     expect(betaMacAction).toContain("DOGFOOD_BUILD_JSON_KEYS: dmgPath");
-    expect(betaWinAction).toContain("Build exact win_x64 Standalone target contribution");
+    expect(betaWinAction).toContain("uses: ./.github/actions/release/closure/target/win");
     expect(betaWinAction).toContain("Resolve immutable win_x64 Electron Shell");
     expect(betaWinAction).toContain('"tools-pack", "win", "identity"');
     expect(betaWinAction).toContain("tools-release resolve-shell-build");
     expect(betaWinAction).toContain("Register verified immutable win_x64 Electron Shell");
     expect(betaWinAction).toContain("tools-release register-shell-build");
-    expect(betaWinAction).toContain("tools-pack closure build-distribution-target");
-    expect(betaWinAction).toContain("--platform win32-x64");
     expect(betaWinAction).toContain("Prepare win_x64 Standalone smoke graph");
     expect(betaWinAction).toContain("tools-release merge-closure-distribution");
-    expect(betaWinAction).toContain("Publish verified win_x64 Standalone target blobs");
-    expect(betaWinAction).toContain("tools-release publish-closure-contribution");
-    expect(betaWinAction).toContain("RELEASE_CLOSURE_CONTRIBUTION_KIND: target");
     expect(buildJob).toContain("closure-version: ${{ needs.metadata.outputs.closure_version }}");
     expect(betaWinAction).toContain("OD_PACKAGED_E2E_CLOSURE_DISTRIBUTION_MANIFEST_PATH:");
     expect(betaWinAction).toContain("$env:OD_PACKAGED_E2E_CLOSURE_BLOB_ROOTS_JSON = @(");
