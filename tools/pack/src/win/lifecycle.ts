@@ -138,7 +138,14 @@ async function waitForDesktopStatus(
       return { durationMs: Date.now() - startedAt, pollCount, processExited: false, status };
     } catch {
       if (!isProcessAlive(pid)) {
-        return { durationMs: Date.now() - startedAt, pollCount, processExited: true, status: null };
+        // The installed outer deliberately exits after spawning an active
+        // payload. Preserve its launch-context transaction while that stamped
+        // child is still taking over; only a fully vanished process tree is a
+        // terminal pre-status exit.
+        const managedPids = await findManagedDesktopProcessTree(config);
+        if (managedPids.length === 0) {
+          return { durationMs: Date.now() - startedAt, pollCount, processExited: true, status: null };
+        }
       }
       await new Promise((resolveWait) => setTimeout(resolveWait, 200));
     }

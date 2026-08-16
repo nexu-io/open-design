@@ -249,14 +249,14 @@ export async function runPayloadUpdateAcceptance(options: {
   expect(start.source).toBe('installed');
   const coldInspect = await waitForHealthyDesktopShellVersion(
     targetVersion,
-    options.expectedStandaloneVersion,
+    targetVersion,
     identity.pid,
   );
   const coldHealth = assertHealthEvalValue(coldInspect.eval?.value);
   expectWindowsHealthyRendererUrl(coldHealth.href);
   expect(coldHealth.status).toBe(200);
   expect(coldHealth.health.ok).toBe(true);
-  expect(coldHealth.health.version).toBe(options.expectedStandaloneVersion);
+  expect(coldHealth.health.version).toBe(targetVersion);
   expect(packagedOnboardingCompletedFromProbe(await readPackagedOnboardingConfig())).toBe(true);
   const coldGeneration = settledLauncherGeneration(coldInspect.launcher, targetVersion);
   if (coldGeneration == null) throw new Error('cold-start launcher did not settle on the target version');
@@ -281,8 +281,8 @@ export async function runPayloadUpdateAcceptance(options: {
     coldIdentity,
     coldInspect.launcher,
     targetVersion,
-    options.expectedStandaloneVersion,
-    options.expectedClosureReleaseVersion,
+    targetVersion,
+    targetVersion,
     options.legacyInstalledExecutablePath,
   );
   expect(coldIdentity.pid).not.toBe(identity.pid);
