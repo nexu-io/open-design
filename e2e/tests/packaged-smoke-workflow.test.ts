@@ -1966,6 +1966,7 @@ process.stdin.on("end", () => {
       expect(action).toContain("default: all");
       expect(action).toContain("phase state");
       expect(action).toContain("OD_RELEASE_EXACT_SMOKE_PROOF=");
+      expect(action.match(/if: \$\{\{ always\(\) && \(inputs\.phase != 'prepare' \|\| failure\(\)\) \}\}/gmu)).toHaveLength(2);
     }
     expect(releaseBetaWorkflow).toContain("Resolve and materialize exact macOS ${{ matrix.target }}");
     expect(releaseBetaWorkflow).toContain("Smoke and publish exact macOS ${{ matrix.target }}");

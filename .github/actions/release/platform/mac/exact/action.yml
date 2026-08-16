@@ -474,7 +474,7 @@ runs:
       run: pnpm exec tools-release register-shell-smoke
     - name: Write ${{ inputs.target }} release report
       shell: bash
-      if: ${{ inputs.phase != 'prepare' && always() }}
+      if: ${{ always() && (inputs.phase != 'prepare' || failure()) }}
       env:
         BUILD_JSON_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.json
         BUILD_LOG_PATH: ${{ runner.temp }}/release-build/${{ inputs.target }}/build.log
@@ -491,7 +491,7 @@ runs:
       run: pnpm exec tools-release write-report
     - name: Publish ${{ inputs.target }} report summary
       shell: bash
-      if: ${{ inputs.phase != 'prepare' && always() }}
+      if: ${{ always() && (inputs.phase != 'prepare' || failure()) }}
       run: cat "${{ runner.temp }}/release-report/${{ inputs.target }}/summary.md" >> "$GITHUB_STEP_SUMMARY"
     - name: Persist ${{ inputs.target }} tools-pack cache
       if: ${{ inputs.phase != 'prepare' && success() }}

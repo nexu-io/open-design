@@ -340,7 +340,7 @@ runs:
       run: pnpm exec tools-release register-shell-smoke
     - name: Write win_x64 release report
       shell: pwsh
-      if: ${{ inputs.phase != 'prepare' && always() }}
+      if: ${{ always() && (inputs.phase != 'prepare' || failure()) }}
       env:
         BUILD_JSON_PATH: ${{ runner.temp }}\release-build\win_x64\build.json
         RELEASE_BUILD_TARGET: ${{ inputs.build-target }}
@@ -355,7 +355,7 @@ runs:
         REPORT_TITLE: win_x64 ${{ inputs.channel }} build
       run: pnpm exec tools-release write-report
     - name: Publish win_x64 report summary
-      if: ${{ inputs.phase != 'prepare' && always() }}
+      if: ${{ always() && (inputs.phase != 'prepare' || failure()) }}
       shell: pwsh
       run: Get-Content "${{ runner.temp }}\release-report\win_x64\summary.md" | Add-Content $env:GITHUB_STEP_SUMMARY
     - name: Persist Windows tools-pack cache
