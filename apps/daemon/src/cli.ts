@@ -923,6 +923,11 @@ function printRootHelp() {
       (no model/agent calls). Mirrors the web Download menu; rasterization uses
       the desktop runtime's bundled Chromium.
 
+  od lint <file.html|-> [--fail-on <p0|p1|p2|none>] [--json]
+      Run the daemon's anti-slop artifact linter against an HTML file or stdin
+      (no model/agent calls; headless-safe). Exits 1 when findings meet the
+      --fail-on threshold, so it can gate cron/CI render pipelines.
+
   "$OD_NODE_BIN" "$OD_BIN" tools ...
       Recommended agent-runtime form; avoids relying on user PATH for od or node.
 
