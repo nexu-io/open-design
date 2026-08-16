@@ -327,7 +327,7 @@ export const tr: DeepseekCopyOverride = {
         'Dört görsel profilli bir DESIGN.md sistemi, üretilen uygulamaları tek bir tasarım dilinde tutar.',
       ],
       howWithAgent: [
-        'Eklentiyi ekleyin ve Chromium denetim adımını kurun.',
+        'Kurulum komutunu çalıştırın — eklentiyi ekler, ardından Playwright için gereken Chromium’u kurar.',
         'Etkileşimin işe yaradığı yerde bir arayüz isteyin: bir seçici, keşfedilebilir bir model, bir kod yolu gezgini.',
         'Etkileşin, sonra devam edin — ajan tekrarlamanızı istemek yerine seçtiklerinizi okur.',
       ],

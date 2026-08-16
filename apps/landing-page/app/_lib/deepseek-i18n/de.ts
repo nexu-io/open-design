@@ -311,7 +311,7 @@ export const de: DeepseekCopyOverride = {
         'Ein DESIGN.md-System mit vier visuellen Profilen hält generierte Apps auf einer gemeinsamen Designsprache.',
       ],
       howWithAgent: [
-        'Füg das Plugin hinzu und installiere seinen Chromium-Check-Schritt.',
+        'Führ den Installationsbefehl aus — er fügt das Plugin hinzu und installiert dann das Chromium, das Playwright braucht.',
         'Frag nach einem Interface, wenn Interaktion hilft: ein Picker, ein erkundbares Modell, ein Code-Pfad-Explorer.',
         'Interagiere und frag dann nach — der Agent liest, was du ausgewählt hast, statt dich alles wiederholen zu lassen.',
       ],

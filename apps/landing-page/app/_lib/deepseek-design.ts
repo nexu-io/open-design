@@ -478,7 +478,7 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
       'A DESIGN.md system with four visual profiles keeps generated apps on one design language.',
     ],
     howWithAgent: [
-      'Add the plugin and install its Chromium check step.',
+      'Run the install command — it adds the plugin, then installs the Chromium that Playwright needs.',
       'Ask for an interface when interaction helps: a picker, an explorable model, a code-path explorer.',
       'Interact, then follow up — the agent reads what you selected instead of asking you to repeat it.',
     ],
@@ -495,7 +495,7 @@ export const DEEPSEEK_SKILLS: readonly DeepseekSkill[] = [
     repo: 'pengyue-polaron/deepseek-harness-genui',
     install: {
       kind: 'installer',
-      command: 'dsh plugin --profile web add dsh-plugin-genui',
+      command: 'dsh plugin --profile web add dsh-plugin-genui && dsh plugin --profile web exec playwright install chromium',
     },
     license: MIT,
     upstreamDescription:

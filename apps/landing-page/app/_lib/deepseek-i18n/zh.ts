@@ -310,7 +310,7 @@ export const zh: DeepseekCopyOverride = {
         '一套带四种视觉 profile 的 DESIGN.md 体系，让生成的应用保持同一种设计语言。',
       ],
       howWithAgent: [
-        '添加插件，并装好它的 Chromium 检查步骤。',
+        '运行安装命令——它会添加插件，然后装好 Playwright 所需的 Chromium。',
         '在交互更高效的时候要一个界面：一个选择器、一个可探索的模型、一个代码路径浏览器。',
         '操作完接着聊——Agent 会直接读到你的选择，不用你再复述一遍。',
       ],
