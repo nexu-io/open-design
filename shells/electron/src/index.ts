@@ -182,6 +182,9 @@ async function main(): Promise<void> {
     delegated,
     resume: handoffResume,
   });
+  if (shellRuntime.source === "payload" && !shellRuntime.payloadDesktopProcess) {
+    await parkPackagedLaunchContext(packageConfig.launchContext);
+  }
   if (await launchPackagedPayloadDesktop(shellRuntime, stamp)) {
     app.exit(0);
     return;

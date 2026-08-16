@@ -6,6 +6,7 @@ import {
   PACKAGED_LAUNCH_CONTEXT_FILE,
   beginPackagedLaunchContext,
   markPackagedLaunchContextRelaunchable,
+  rearmPackagedLaunchContext,
   restorePackagedLaunchContext,
   type PackagedLaunchContext,
 } from "@open-design/shell/launch-context";
@@ -55,6 +56,14 @@ export async function beginToolPackDebugSession(config: ToolPackConfig): Promise
     );
   }
   await mkdir(config.roots.runtime.namespaceBaseRoot, { recursive: true });
+  const rearmed = await rearmPackagedLaunchContext({
+    path: resolveToolPackLaunchContextPath(config),
+    target: {
+      namespace: config.namespace,
+      namespaceBaseRoot: config.roots.runtime.namespaceBaseRoot,
+    },
+  });
+  if (rearmed != null) return rearmed;
   return await beginPackagedLaunchContext({
     path: resolveToolPackLaunchContextPath(config),
     target: {

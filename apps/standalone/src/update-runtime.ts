@@ -27,6 +27,17 @@ export type StandaloneUpdatePreparation = Readonly<
     }
 >;
 
+/**
+ * The sole legacy discriminator is absence of the modern Closure envelope.
+ * Standalone never reads legacy control fields; Shell remains their owner.
+ */
+export function hasModernClosureUpdateMetadata(metadata: unknown): metadata is Record<string, unknown> {
+  return metadata != null
+    && typeof metadata === "object"
+    && !Array.isArray(metadata)
+    && Object.hasOwn(metadata, "closure");
+}
+
 export async function prepareStandaloneUpdate(input: Readonly<{
   activationSource?: "silent-policy" | "user-restart";
   channel: string;
@@ -39,11 +50,12 @@ export async function prepareStandaloneUpdate(input: Readonly<{
   storeRoot: string;
   target: string;
 }>): Promise<StandaloneUpdatePreparation> {
+  if (!hasModernClosureUpdateMetadata(input.metadata)) return { architecture: "legacy" };
   const candidate = selectClosureDistributionReleaseCandidate(input.metadata, {
     channel: input.channel,
     target: input.target,
   });
-  if (candidate == null) return { architecture: "legacy" };
+  if (candidate == null) throw new Error("Modern Closure update metadata is invalid");
   const minimumShellVersion = resolveClosureShellMinimumVersion(candidate.manifest, input.shellType);
   if (
     minimumShellVersion == null

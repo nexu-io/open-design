@@ -288,6 +288,36 @@ export async function beginPackagedLaunchContext(input: {
   });
 }
 
+/** Re-arm a parked transaction so an external launcher can hand it to the next process. */
+export async function rearmPackagedLaunchContext(input: {
+  owner?: LaunchContextOwner;
+  path: string;
+  runtime?: LaunchContextRuntime;
+  target: LaunchContextTarget;
+}): Promise<PackagedLaunchContext | null> {
+  return await withLock(input.path, input.runtime ?? {}, async (runtime) => {
+    const parsed = await readContext(input.path);
+    if (parsed == null || !await isUsable(parsed.context, runtime)) return null;
+    const context = parsed.context;
+    const target = createLaunchContextTarget(input.target);
+    if (
+      context.state !== "relaunchable"
+      || target == null
+      || context.target.namespace !== target.namespace
+      || context.target.namespaceBaseRoot !== target.namespaceBaseRoot
+    ) return null;
+    const now = runtime.now();
+    const rearmed = {
+      ...context,
+      owner: input.owner ?? { pid: process.pid, startedAt: now.toISOString() },
+      state: "pending" as const,
+      updatedAt: now.toISOString(),
+    };
+    await writeContext(input.path, rearmed);
+    return rearmed;
+  });
+}
+
 export async function claimPackagedLaunchContext(input: {
   owner?: LaunchContextOwner;
   path: string;

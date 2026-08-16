@@ -9,6 +9,7 @@ import {
   claimPackagedLaunchContext,
   markPackagedLaunchContextRelaunchable,
   parsePackagedLaunchContext,
+  rearmPackagedLaunchContext,
   recoverPackagedLaunchContext,
   restorePackagedLaunchContext,
 } from "../src/launch-context/index.js";
@@ -50,15 +51,47 @@ describe("packaged launch context", () => {
     });
     expect(claimed).toMatchObject({ owner: { pid: 22 }, state: "active" });
     expect(await markPackagedLaunchContextRelaunchable({ ownerPid: 22, path, runtime })).toBe(true);
-    active.delete(22);
     active.add(33);
     expect(await claimPackagedLaunchContext({
       owner: { pid: 33, startedAt: "2026-08-14T00:00:02.000Z" },
       path,
       runtime,
     })).toMatchObject({ owner: { pid: 33 }, state: "active" });
+    active.delete(22);
     expect(await restorePackagedLaunchContext({ path, runtime })).toBe(true);
     await expect(readFile(path, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("re-arms a parked transaction for an external cold launcher", async () => {
+    const { namespaceBaseRoot, path } = await fixture();
+    const runtime = { isProcessAlive: (pid: number) => pid === 11 };
+    const pending = await beginPackagedLaunchContext({
+      owner: { pid: 11, startedAt: "2026-08-14T00:00:00.000Z" },
+      path,
+      runtime,
+      sessionId: "session-one",
+      target: { namespace: "release-beta", namespaceBaseRoot },
+    });
+    await claimPackagedLaunchContext({ path, runtime, sessionId: pending.sessionId });
+    await markPackagedLaunchContextRelaunchable({ path, runtime, sessionId: pending.sessionId });
+
+    const rearmed = await rearmPackagedLaunchContext({
+      owner: { pid: 22, startedAt: "2026-08-14T00:00:02.000Z" },
+      path,
+      runtime,
+      target: { namespace: "release-beta", namespaceBaseRoot },
+    });
+    expect(rearmed).toMatchObject({
+      owner: { pid: 22 },
+      sessionId: pending.sessionId,
+      state: "pending",
+    });
+    expect(await claimPackagedLaunchContext({
+      owner: { pid: 33, startedAt: "2026-08-14T00:00:03.000Z" },
+      path,
+      runtime,
+      sessionId: pending.sessionId,
+    })).toMatchObject({ owner: { pid: 33 }, state: "active" });
   });
 
   it("recovers a killed owner and removes legacy unleased state", async () => {

@@ -16,12 +16,21 @@ async function listTypeScriptFiles(root: string): Promise<string[]> {
 }
 
 describe('mac local saturation driver', () => {
-  it('keeps local LaunchServices restarts isolated and distinct from portable release acceptance', async () => {
+  it('runs full headless saturation by default without borrowing a real release channel', async () => {
     const script = await readFile(join(e2eRoot, 'scripts', 'mac-local-saturation.sh'), 'utf8');
 
-    expect(script).toContain('--debug-channel local');
+    expect(script).toContain('OD_MAC_LOCAL_SMOKE_PROFILE:-full');
+    expect(script).toContain('RELEASE_CHANNEL=local');
+    expect(script).toContain('DEBUG_CHANNEL="exact:$RELEASE_CHANNEL"');
+    expect(script).toContain('OD_MAC_LOCAL_EXACT_NAME:-e2e$RUN_DIGEST');
     expect(script).toContain('OD_PACKAGED_E2E_HEADLESS=1');
-    expect(script).toContain('OD_PACKAGED_E2E_STANDALONE_SEED_EMBEDDED=1');
+    expect(script).toContain('STANDALONE_SEED_EMBEDDED=1');
+    expect(script).toContain('STANDALONE_SEED_EMBEDDED=0');
+    expect(script).toContain('OD_PACKAGED_E2E_MAC_SMOKE_LANES=shell,standalone');
+    expect(script).toContain('OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE=tools-serve');
+    expect(script).toContain('build-distribution-shared');
+    expect(script).toContain('build-distribution-target');
+    expect(script).toContain('merge-closure-distribution');
     expect(script).toContain('scripts/release-smoke.ts mac specs/mac.spec.ts');
     expect(script).toContain('OPEN_DESIGN_AMR_PROFILE=test');
     expect(script).toContain('--to dmg');

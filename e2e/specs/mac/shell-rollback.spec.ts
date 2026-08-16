@@ -20,7 +20,7 @@ import { shouldRunPackagedMacSmoke } from './lib/context.js';
 
 
 import type { MacInspectResult,MacInstallResult,MacStartResult,MacStopResult,MacUninstallResult } from './lib/index.js';
-import { assertHealthEvalValue,buildCorruptedMacPayloadFixture,buildVersionBumpedMacPayloadFixture,bumpCountedVersion,capturePackagedCheckpoint,captureUpdateEnv,closureBuildJsonPath,packagedMacUpdaterPlatform,packagedUpdaterClosureFixtureOptions,resetPackagedRuntimeState,resolveLocalPayloadUpdateFixture,restoreUpdateEnv,runToolsPackJson,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,smokeLanes,toolsPackDir,updateFixture,updateScenario,verifyCoreOnly,waitForDesktopGone,waitForHealthyDesktopShellVersion,waitForUpdaterStatus,workspaceRoot } from './lib/index.js';
+import { assertHealthEvalValue,buildCorruptedMacPayloadFixture,buildVersionBumpedMacPayloadFixture,bumpCountedVersion,capturePackagedCheckpoint,captureUpdateEnv,closureBuildJsonPath,packagedMacUpdaterPlatform,packagedUpdaterClosureFixtureOptions,resetPackagedRuntimeState,resolveLocalPayloadUpdateFixture,restoreUpdateEnv,runToolsPackJson,seedConfiguredPackagedClosure,seedPackagedOnboardingComplete,settledLauncherGeneration,smokeLanes,toolsPackDir,updateFixture,updateScenario,verifyCoreOnly,waitForDesktopGone,waitForHealthyDesktopShellVersion,waitForProcessExit,waitForUpdaterStatus,workspaceRoot } from './lib/index.js';
 
 const macShellDescribe = shouldRunPackagedMacSmoke && hasPackagedSmokeLane(smokeLanes, 'shell') ? describe : describe.skip;
 const shellAbsorbsStandaloneAcceptance = hasPackagedSmokeLane(smokeLanes, 'shell')
@@ -58,6 +58,7 @@ macShellDescribe('packaged mac Shell rollback recovery', () => {
       corruptFixture = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
         ...packagedUpdaterClosureFixtureOptions(),
+        closureShellVersionMin: targetVersion,
         payloadPath: corruptPayloadPath,
         platform: packagedMacUpdaterPlatform,
         version: targetVersion,
@@ -83,8 +84,11 @@ macShellDescribe('packaged mac Shell rollback recovery', () => {
       expect(installCorrupt.update?.state).toBe('downloaded');
 
       // The app quits for the relaunch; the corrupted payload stub then exits
-      // before any launcher bookkeeping. Wait for the desktop to disappear.
+      // before any launcher bookkeeping. IPC disappears before the original
+      // process has necessarily completed its after-quit handoff, so require
+      // both signals before attempting the rollback cold start.
       await waitForDesktopGone('crashing payload never became the desktop');
+      await waitForProcessExit(start.pid, 'pre-update desktop completed the crashing-payload handoff');
       cleanupStarted = false;
 
       // The pre-armed attempt is the rollback evidence the crash left behind.
@@ -135,6 +139,7 @@ macShellDescribe('packaged mac Shell rollback recovery', () => {
       goodFixture = await startToolsServeUpdaterFixture({
         channel: updateScenario.channel,
         ...packagedUpdaterClosureFixtureOptions(),
+        closureShellVersionMin: healedVersion,
         payloadPath: healedPayloadPath,
         platform: packagedMacUpdaterPlatform,
         version: healedVersion,

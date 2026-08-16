@@ -89,7 +89,7 @@ export async function waitForHealthyDesktopShellVersion(
           value?.status === 200 &&
           value.health.ok === true &&
           value.health.version === expectedStandaloneVersion &&
-          inspect.update?.currentVersion === expectedShellVersion &&
+          inspect.update?.currentVersion === expectedStandaloneVersion &&
           (previousPid == null || inspect.status.pid !== previousPid) &&
           (!requireSettledLauncher || settledLauncherGeneration(inspect.launcher, expectedShellVersion) != null)
         ) {
@@ -322,6 +322,19 @@ export async function waitForDesktopGone(label: string, timeoutMs = 120_000): Pr
     await delay(1000);
   }
   throw new Error(`${label}: desktop still running: ${formatUnknown(lastResult)}`);
+}
+
+export async function waitForProcessExit(pid: number, label: string, timeoutMs = 30_000): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    await delay(100);
+  }
+  throw new Error(`${label}: process ${pid} is still alive`);
 }
 
 export async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {

@@ -257,6 +257,7 @@ winDescribe('packaged windows runtime smoke', () => {
             artifactPath: initialUpdateFixture.installerPath,
             channel: updateScenario.channel,
             ...packagedUpdaterClosureFixtureOptions(),
+            closureShellVersionMin: initialUpdateFixture.targetVersion,
             ...(closureBuild == null ? {} : { closureManifestPath: closureBuild.manifestPath }),
             ...(updateFixtureMode === 'payload' ? { payloadPath: initialUpdateFixture.payloadPath } : {}),
             platform: 'win',
@@ -502,6 +503,7 @@ winDescribe('packaged windows runtime smoke', () => {
             artifactPath: localUpdateFixture.installerPath,
             channel: updateScenario.channel,
             ...packagedUpdaterClosureFixtureOptions(),
+            closureShellVersionMin: localUpdateFixture.targetVersion,
             payloadPath: localUpdateFixture.payloadPath,
             platform: 'win',
             ...(updateFixturePort == null ? {} : { port: updateFixturePort }),
@@ -551,7 +553,6 @@ winDescribe('packaged windows runtime smoke', () => {
           payloadFixture = await startToolsServeUpdaterFixture({
             artifactPath: localUpdateFixture.installerPath,
             channel: updateScenario.channel,
-            ...packagedUpdaterClosureFixtureOptions(),
             controlInstallationVersionMin: expectedPayloadUpdateVersion,
             controlInstallationVersionUrl: 'https://example.test/updater-recovery',
             payloadPath: localUpdateFixture.payloadPath,
