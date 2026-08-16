@@ -204,6 +204,7 @@ import {
 import {
   applyAppearanceToDocument,
   resolveAccentColor,
+  resolveAppTheme,
 } from '../state/appearance';
 import { isAutosaveDraftOnlyChange } from '../App';
 import {
@@ -1541,9 +1542,9 @@ export function SettingsDialog({
     ReadonlySet<string>
   >(() => new Set());
   const previousInitialRef = useRef(initial);
-  // Accent only — the theme is a constant now that the app ships light-only.
   const lastSavedAppearanceRef = useRef({
     accentColor: resolveAccentColor(initial.accentColor),
+    theme: resolveAppTheme(initial.theme),
   });
 
   useEffect(() => {
@@ -1559,8 +1560,9 @@ export function SettingsDialog({
   useEffect(() => {
     lastSavedAppearanceRef.current = {
       accentColor: resolveAccentColor(initial.accentColor),
+      theme: resolveAppTheme(initial.theme),
     };
-  }, [initial.accentColor]);
+  }, [initial.accentColor, initial.theme]);
 
   useEffect(() => {
     const previousInitial = previousInitialRef.current;
@@ -3308,6 +3310,7 @@ export function SettingsDialog({
           }
           lastSavedAppearanceRef.current = {
             accentColor: resolveAccentColor(persistedSnapshot.accentColor),
+            theme: resolveAppTheme(persistedSnapshot.theme),
           };
           // If a newer edit landed while the request was in flight,
           // leave the status as 'pending' so the next debounce tick
@@ -5896,9 +5899,6 @@ export function SettingsDialog({
                       aria-label={t('settings.language')}
                       onChange={(event) => {
                         const next = event.target.value as Locale;
-                        // P1 ui_click area=language — record the locale id
-                        // that was picked, regardless of whether it differs
-                        // from the current one (user clicked = signal).
                         trackSettingsLanguageClick(analytics.track, {
                           page_name: 'settings',
                           area: 'language',
@@ -5915,6 +5915,59 @@ export function SettingsDialog({
                     </select>
                     <Icon name="chevron-down" size={14} />
                   </label>
+                </div>
+              </div>
+
+              <div className="settings-general-block">
+                <div className="settings-general-block-head">
+                  <h3>{t('settings.theme')}</h3>
+                  <p className="hint">{t('settings.themeHint')}</p>
+                </div>
+                <div
+                  className="seg-control"
+                  role="group"
+                  aria-label={t('settings.theme')}
+                  style={{ '--seg-cols': 3, maxWidth: 360 } as React.CSSProperties}
+                >
+                  <button
+                    type="button"
+                    className={`seg-btn${resolveAppTheme(cfg.theme) === 'light' ? ' active' : ''}`}
+                    aria-pressed={resolveAppTheme(cfg.theme) === 'light'}
+                    onClick={() => {
+                      const next = 'light' as const;
+                      setCfg((prev) => ({ ...prev, theme: next }));
+                      applyAppearanceToDocument({ accentColor: cfg.accentColor, theme: next });
+                    }}
+                  >
+                    <Icon name="sun" size={14} />
+                    <span className="seg-title">{t('settings.themeLight')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`seg-btn${resolveAppTheme(cfg.theme) === 'dark' ? ' active' : ''}`}
+                    aria-pressed={resolveAppTheme(cfg.theme) === 'dark'}
+                    onClick={() => {
+                      const next = 'dark' as const;
+                      setCfg((prev) => ({ ...prev, theme: next }));
+                      applyAppearanceToDocument({ accentColor: cfg.accentColor, theme: next });
+                    }}
+                  >
+                    <Icon name="moon" size={14} />
+                    <span className="seg-title">{t('settings.themeDark')}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`seg-btn${resolveAppTheme(cfg.theme) === 'system' ? ' active' : ''}`}
+                    aria-pressed={resolveAppTheme(cfg.theme) === 'system'}
+                    onClick={() => {
+                      const next = 'system' as const;
+                      setCfg((prev) => ({ ...prev, theme: next }));
+                      applyAppearanceToDocument({ accentColor: cfg.accentColor, theme: next });
+                    }}
+                  >
+                    <Icon name="sun-moon" size={14} />
+                    <span className="seg-title">{t('settings.themeSystem')}</span>
+                  </button>
                 </div>
               </div>
 

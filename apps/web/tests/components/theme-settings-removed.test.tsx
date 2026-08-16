@@ -1,20 +1,12 @@
 // @vitest-environment jsdom
-//
-// Product removed the theme setting outright: the workspace surfaces have no
-// dark tokens, so offering dark mode only produced a broken-looking app. Two
-// surfaces used to write `config.theme` — the Settings → General appearance
-// segmented control and the onboarding welcome page's sun/moon toggle. These
-// specs pin both as gone, so a later refactor cannot quietly reintroduce a
-// path back into dark mode.
 
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { EntryShell } from '../../src/components/EntryShell';
 import { SettingsDialog } from '../../src/components/SettingsDialog';
 import { I18nProvider } from '../../src/i18n';
 import { DEFAULT_CONFIG } from '../../src/state/config';
-import type { AgentInfo, AppConfig } from '../../src/types';
+import type { AgentInfo } from '../../src/types';
 
 const analyticsMocks = vi.hoisted(() => ({
   track: vi.fn(),
@@ -39,7 +31,7 @@ const AGENTS: AgentInfo[] = [
   { id: 'codex', name: 'Codex', bin: 'codex', available: true },
 ];
 
-const THEME_CONTROL_LABELS = ['System', 'Light', 'Dark'];
+const THEME_CONTROL_LABELS = ['Light', 'Dark', 'System'];
 
 const originalResizeObserver = globalThis.ResizeObserver;
 
@@ -60,7 +52,7 @@ beforeEach(() => {
   analyticsMocks.track.mockReset();
 });
 
-describe('Settings → General (theme setting removed)', () => {
+describe('Settings → General Theme Selection', () => {
   function renderGeneralSettings() {
     return render(
       <I18nProvider initial="en">
@@ -80,97 +72,22 @@ describe('Settings → General (theme setting removed)', () => {
     );
   }
 
-  it('renders no appearance group', () => {
+  it('renders theme selection group', () => {
     renderGeneralSettings();
-
-    expect(screen.queryByRole('group', { name: 'Appearance' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Appearance' })).toBeTruthy();
   });
 
-  it('renders no System / Light / Dark theme buttons', () => {
+  it('renders Light, Dark, System theme buttons', () => {
     renderGeneralSettings();
 
     for (const label of THEME_CONTROL_LABELS) {
-      expect(screen.queryByRole('button', { name: label })).toBeNull();
+      expect(screen.getByRole('button', { name: label })).toBeTruthy();
     }
   });
 
-  it('keeps the neighbouring General settings intact', () => {
+  it('keeps neighbouring General settings intact', () => {
     renderGeneralSettings();
 
-    // The language select and the system-preferences block share the General
-    // page with the removed appearance control; deleting the theme picker must
-    // not take them along.
     expect(screen.getByRole('combobox', { name: 'Language' })).toBeTruthy();
-  });
-});
-
-describe('Onboarding welcome (theme toggle removed)', () => {
-  function baseConfig(overrides: Partial<AppConfig> = {}): AppConfig {
-    return {
-      mode: 'daemon',
-      agentId: null,
-      agentModels: {},
-      apiProtocol: 'anthropic',
-      apiProtocolConfigs: {},
-      apiKey: '',
-      baseUrl: '',
-      model: '',
-      ...overrides,
-    } as AppConfig;
-  }
-
-  function renderOnboarding() {
-    window.history.replaceState(null, '', '/onboarding');
-    return render(
-      <I18nProvider initial="en">
-        <EntryShell
-          skills={[]}
-          designTemplates={[]}
-          designSystems={[]}
-          projects={[]}
-          templates={[]}
-          promptTemplates={[]}
-          defaultDesignSystemId={null}
-          connectors={[]}
-          connectorsLoading={false}
-          config={baseConfig()}
-          agents={AGENTS}
-          daemonLive
-          onModeChange={vi.fn()}
-          onAgentChange={vi.fn()}
-          onAgentModelChange={vi.fn()}
-          onApiProtocolChange={vi.fn()}
-          onApiModelChange={vi.fn()}
-          onConfigPersist={vi.fn()}
-          onRefreshAgents={vi.fn(() => AGENTS)}
-          onCreateProject={vi.fn()}
-          onCreatePluginShareProject={vi.fn()}
-          onImportClaudeDesign={vi.fn()}
-          onOpenProject={vi.fn()}
-          onOpenLiveArtifact={vi.fn()}
-          onDeleteProject={vi.fn()}
-          onRenameProject={vi.fn()}
-          onChangeDefaultDesignSystem={vi.fn()}
-          onPersistComposioKey={vi.fn()}
-          onOpenSettings={vi.fn()}
-          onCompleteOnboarding={vi.fn()}
-        />
-      </I18nProvider>,
-    );
-  }
-
-  it('renders no sun/moon theme toggle on the welcome pane', () => {
-    const { container } = renderOnboarding();
-
-    expect(container.querySelector('.onboarding-cloud__pane')).not.toBeNull();
-    expect(container.querySelector('.onboarding-cloud__theme')).toBeNull();
-  });
-
-  it('exposes no theme control by accessible name', () => {
-    renderOnboarding();
-
-    for (const label of THEME_CONTROL_LABELS) {
-      expect(screen.queryByRole('button', { name: label })).toBeNull();
-    }
   });
 });

@@ -96,7 +96,8 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .social-share-button--x {
+  html:not([data-theme]) .social-share-button--x,
+  html[data-theme="system"] .social-share-button--x {
     --social-share-brand: #f5f5f5;
   }
 }

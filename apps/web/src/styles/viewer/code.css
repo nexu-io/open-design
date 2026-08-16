@@ -106,7 +106,8 @@
   --markdown-inline-code-text: color-mix(in oklab, var(--accent-strong) 72%, var(--text-strong));
 }
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .markdown-rendered {
+  html:not([data-theme]) .markdown-rendered,
+  html[data-theme="system"] .markdown-rendered {
     --markdown-code-bg: var(--code-body-bg);
     --markdown-code-bar: var(--code-header-bg);
     --markdown-code-border: var(--border-soft);

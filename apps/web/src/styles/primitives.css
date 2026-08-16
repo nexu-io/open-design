@@ -201,7 +201,8 @@ select::-ms-expand { display: none; }
   background-size: 12px 12px;
 }
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) select {
+  html:not([data-theme]) select,
+  html[data-theme='system'] select {
     background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%239a9690' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='3 5 6 8 9 5'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;

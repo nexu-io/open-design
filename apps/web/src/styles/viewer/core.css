@@ -44,7 +44,8 @@
   background: var(--bg-panel);
 }
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) .viewer-toolbar {
+  html:not([data-theme]) .viewer-toolbar,
+  html[data-theme='system'] .viewer-toolbar {
     background: var(--bg-panel);
   }
 }

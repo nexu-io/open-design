@@ -39,6 +39,7 @@ export interface ProjectLocationPrefs {
 
 export interface AppConfigPrefs {
   onboardingCompleted?: boolean;
+  theme?: 'light' | 'dark' | 'system';
   agentId?: string | null;
   agentModels?: Record<string, AgentModelPrefs>;
   agentCliEnv?: AgentCliEnvPrefs;

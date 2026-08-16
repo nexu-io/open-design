@@ -427,6 +427,11 @@ export interface Dict {
   'settings.agentInstallGroup': string;
   'settings.agentAuthRequired': string;
   'settings.agentAuthUnknown': string;
+  'settings.theme': string;
+  'settings.themeHint': string;
+  'settings.themeLight': string;
+  'settings.themeDark': string;
+  'settings.themeSystem': string;
   'settings.advanced': string;
   'settings.amrLogin': string;
   'settings.amrLogout': string;
