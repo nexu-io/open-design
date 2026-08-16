@@ -48,6 +48,7 @@ import {
 } from "./protocol/index.js";
 
 import { createStandaloneLauncherBootstrapEnv } from "./launcher-bootstrap.js";
+import type { StandalonePreparedResource } from "./resource-runtime.js";
 
 export const STANDALONE_BODY_BRIDGE_SERVICE = "standalone-body" as const;
 
@@ -64,9 +65,12 @@ type StandaloneBodyAttachInput = Readonly<{
   shellService: string;
 }>;
 
-type StandaloneBodyBridgeMethods = {
+export type StandaloneResourceEnsureRequest = Readonly<{ id: string }>;
+
+export type StandaloneBodyBridgeMethods = {
   attach: SidecarMethod<StandaloneBodyAttachInput, StandaloneRuntimeStatus>;
   close: SidecarMethod<StandaloneBodyAttachmentInput, StandaloneRuntimeTerminalStatus>;
+  ensureResource: SidecarMethod<StandaloneResourceEnsureRequest, StandalonePreparedResource>;
   invoke: SidecarMethod<StandaloneRuntimeCommandRequest, StandaloneRuntimeCommandResult>;
   readStatus: SidecarMethod<StandaloneBodyAttachmentInput, StandaloneRuntimeStatus>;
   waitForTerminal: SidecarMethod<StandaloneBodyAttachmentInput, StandaloneRuntimeTerminalStatus>;
@@ -375,8 +379,9 @@ function validateTerminalStatus(
   return status;
 }
 
-type StandaloneBodyBridgeHostOptions = Readonly<{
+export type StandaloneBodyBridgeHostOptions = Readonly<{
   descriptor: StandaloneHandoffDescriptor;
+  ensureResource?: (id: string) => Promise<StandalonePreparedResource>;
   handoff: StandaloneHandoff;
   onExitRequested?: () => void;
 }>;
@@ -507,6 +512,12 @@ function createStandaloneBodyBridgeHost(options: StandaloneBodyBridgeHostOptions
           const terminal = validateTerminalStatus(await handle.close(), baseline);
           await removeAttachment(attachmentId, entry);
           return terminal;
+        },
+        async ensureResource({ id }) {
+          if (options.ensureResource == null) {
+            throw new Error("Standalone body does not expose Closure resource materialization");
+          }
+          return await options.ensureResource(id);
         },
         async invoke(value) {
           const command = validateStandaloneRuntimeCommandRequest(value, {

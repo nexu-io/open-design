@@ -7,6 +7,7 @@ import { evaluateRollout } from '../critique/ratchet.js';
 import { parseRolloutPhase } from '../critique/rollout.js';
 import {
   AgentCompanionSetupError,
+  DSH_RUNTIME_RESOURCE_ID,
   installDeepSeekHarnessCompanion,
 } from '../agent-companion-setup.js';
 
@@ -29,6 +30,7 @@ export interface RegisterDaemonRoutesDeps {
     roots?: unknown;
   };
   env: NodeJS.ProcessEnv;
+  ensureClosureResource?: ((id: string) => Promise<Readonly<{ path: string }>>) | null;
 }
 
 export function registerDaemonRoutes(app: Express, deps: RegisterDaemonRoutesDeps): void {
@@ -103,9 +105,10 @@ export function registerDaemonRoutes(app: Express, deps: RegisterDaemonRoutesDep
       return sendApiError(res, 400, 'BAD_REQUEST', 'This agent has no Open Design connection component.');
     }
     try {
+      const resource = await deps.ensureClosureResource?.(DSH_RUNTIME_RESOURCE_ID);
       const result = await installDeepSeekHarnessCompanion({
         projectRoot: paths.PROJECT_ROOT,
-        resourceRoot: paths.RESOURCE_ROOT,
+        resourceRoot: resource?.path ?? paths.RESOURCE_ROOT,
         runtimeDataDir: paths.RUNTIME_DATA_DIR,
       });
       return res.json(result);

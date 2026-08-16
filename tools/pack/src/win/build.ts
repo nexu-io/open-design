@@ -110,8 +110,7 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
       config,
       paths,
       cache,
-      { bundleAgentRuntimes: true, materialize: config.to !== "dir" },
-      workspaceBuildKey,
+      { materialize: config.to !== "dir" },
     )
   );
   await runPhase("win-icon", async () => {

@@ -2549,6 +2549,7 @@ export interface StartServerOptions {
   desktopArtifactExporter?: DesktopArtifactExporter | null;
   desktopPdfExporter?: DesktopPdfExporter | null;
   desktopSlideRenderer?: DesktopSlideRenderer | null;
+  ensureClosureResource?: ((id: string) => Promise<Readonly<{ path: string }>>) | null;
   host?: string;
   port?: number;
   returnServer?: boolean;
@@ -2570,6 +2571,7 @@ export async function startServer({
   desktopPdfExporter = null,
   desktopSlideRenderer = null,
   desktopArtifactExporter = null,
+  ensureClosureResource = null,
   runtime = null,
   staticDir = STATIC_DIR,
 }: StartServerOptions = {}) {
@@ -7267,6 +7269,7 @@ export async function startServer({
     getDaemonShuttingDown: () => daemonShuttingDown,
     sandboxRuntime: SANDBOX_RUNTIME,
     env: process.env,
+    ensureClosureResource,
   });
 
   const openDesignPublicMetadata = createOpenDesignPublicMetadataService();

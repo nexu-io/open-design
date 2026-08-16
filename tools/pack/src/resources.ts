@@ -146,6 +146,7 @@ export async function copyBundledResourceTrees({
 }
 
 export const DSH_RUNTIME_RESOURCE_DIRECTORY = join("agent-runtimes", "deepseek-harness");
+export const DSH_RUNTIME_RESOURCE_ID = "dsh-runtime";
 
 export type BundledDshRuntimeManifest = {
   file: string;

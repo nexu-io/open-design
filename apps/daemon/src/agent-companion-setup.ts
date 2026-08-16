@@ -23,6 +23,7 @@ import {
 
 const execFileAsync = promisify(execFile);
 const DSH_AGENT_ID = 'deepseek-harness';
+export const DSH_RUNTIME_RESOURCE_ID = 'dsh-runtime';
 const DSH_RUNTIME_RESOURCE_DIRECTORY = path.join('agent-runtimes', 'deepseek-harness');
 const DSH_RUNTIME_PACKAGE_NAME = '@open-design/dsh-runtime';
 

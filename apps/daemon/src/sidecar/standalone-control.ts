@@ -15,6 +15,10 @@ import {
   validateStandaloneShellCapabilityInput,
   validateStandaloneShellCapabilityOutput,
 } from "@open-design/standalone/protocol";
+import {
+  STANDALONE_BODY_BRIDGE_SERVICE,
+  type StandaloneBodyBridgeMethods,
+} from "@open-design/standalone/process-bridge";
 
 import { startDaemonRuntime } from "../daemon-startup.js";
 import { setDesktopAuthSecret } from "../desktop-auth.js";
@@ -60,7 +64,7 @@ async function startDefaultRuntime(
 ): Promise<DaemonStandaloneRuntime> {
   process.env.OD_DATA_DIR = context.roots.dataRoot;
   process.env.OD_RESOURCE_ROOT = context.roots.resourceRoot;
-  const shellCapabilities = await bootstrapControlPlane({
+  const controlPlane = bootstrapControlPlane({
     projection: context.projection,
     roots: context.roots,
     scope: {
@@ -68,7 +72,11 @@ async function startDefaultRuntime(
       generation: context.identity.generation,
       namespace: context.identity.namespace,
     },
-  }).connect<ShellCapabilityBridgeMethods>(STANDALONE_SHELL_CAPABILITY_SERVICE);
+  });
+  const [shellCapabilities, bodyBridge] = await Promise.all([
+    controlPlane.connect<ShellCapabilityBridgeMethods>(STANDALONE_SHELL_CAPABILITY_SERVICE),
+    controlPlane.connect<StandaloneBodyBridgeMethods>(STANDALONE_BODY_BRIDGE_SERVICE),
+  ]);
   const invokeShell = async <TCapability extends StandaloneShellCapability>(
     capability: TCapability,
     input: StandaloneShellCapabilityInput<TCapability>,
@@ -96,6 +104,11 @@ async function startDefaultRuntime(
     throw new Error(`Electron Shell capability failed: ${capability} (${result.error.code})`);
   };
   const started = await startDaemonRuntime({
+    ensureClosureResource: async (id) => await bodyBridge.call(
+      "ensureResource",
+      { id },
+      { timeoutMs: null },
+    ),
     desktopArtifactExporter: async (input) =>
       await invokeShell(
         STANDALONE_SHELL_CAPABILITIES.EXPORT_ARTIFACT,

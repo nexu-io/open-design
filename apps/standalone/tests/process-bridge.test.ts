@@ -13,6 +13,7 @@ import {
   type StandaloneShellCapabilityRequest,
 } from "@open-design/standalone/protocol";
 import { bootstrapSidecarLifecycle } from "@open-design/sidecar/lifecycle";
+import { bootstrapControlPlane } from "@open-design/sidecar/control";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -22,10 +23,12 @@ import {
   validateStandaloneLauncherBootstrap,
 } from "../src/launcher-bootstrap.js";
 import {
+  STANDALONE_BODY_BRIDGE_SERVICE,
   connectStandaloneBodyBridge,
   exposeStandaloneBodyBridge,
   launchStandaloneBodyBridge,
   resolveStandaloneShellBridgeService,
+  type StandaloneBodyBridgeMethods,
 } from "../src/process-bridge.js";
 
 const roots: string[] = [];
@@ -117,6 +120,49 @@ function fakeHandle(descriptor: StandaloneHandoffDescriptor): StandaloneHandle {
 }
 
 describe("Standalone process bridge", () => {
+  it("materializes lazy resources only when the body bridge is explicitly called", async () => {
+    const binding = await descriptor();
+    const requested: string[] = [];
+    const body = await exposeStandaloneBodyBridge({
+      descriptor: binding,
+      async ensureResource(id) {
+        requested.push(id);
+        return { id, path: join(binding.paths.resourceRoot, id), reused: false, title: "DSH" };
+      },
+      async handoff() {
+        return fakeHandle(binding);
+      },
+    });
+    try {
+      expect(requested).toEqual([]);
+      const client = await bootstrapControlPlane({
+        projection: {
+          digest: binding.handoff.descriptorDigest,
+          value: binding.handoff.descriptor,
+        },
+        roots: {
+          dataRoot: binding.paths.dataRoot,
+          resourceRoot: binding.paths.resourceRoot,
+          runtimeRoot: binding.paths.runtimeRoot,
+        },
+        scope: binding.handoff.scope,
+      }).connect<StandaloneBodyBridgeMethods>(STANDALONE_BODY_BRIDGE_SERVICE);
+      await expect(client.call(
+        "ensureResource",
+        { id: "dsh-runtime" },
+        { timeoutMs: null },
+      )).resolves.toEqual({
+        id: "dsh-runtime",
+        path: join(binding.paths.resourceRoot, "dsh-runtime"),
+        reused: false,
+        title: "DSH",
+      });
+      expect(requested).toEqual(["dsh-runtime"]);
+    } finally {
+      await body.close();
+    }
+  });
+
   it("round-trips a strict launcher bootstrap without Shell capabilities", async () => {
     const binding = await descriptor();
     const env = createStandaloneLauncherBootstrapEnv({
