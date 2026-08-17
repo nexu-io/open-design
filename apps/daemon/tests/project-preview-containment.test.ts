@@ -276,6 +276,7 @@ describe('project preview containment routes', () => {
         '</head><body>',
         '<script src="scripts/app.js"></script>',
         '<script>var u = URL.createObjectURL(new Blob(["x"])); URL.revokeObjectURL(u);</script>',
+        '<script>URL.revokeObjectURL(u2)</script >',
         '</body></html>',
       ].join(''),
     );
@@ -295,8 +296,10 @@ describe('project preview containment routes', () => {
     // Relative external script sources are still workspace-scoped.
     expect(html).toContain(`/api/projects/${projectId}/raw/scripts/app.js`);
 
-    // Executable JS that happens to contain url(...) is left untouched.
+    // Executable JS that happens to contain url(...) is left untouched,
+    // including a script whose end tag carries whitespace before `>`.
     expect(html).toContain('URL.revokeObjectURL(u)');
+    expect(html).toContain('URL.revokeObjectURL(u2)');
     expect(html).not.toContain('revokeObjecturl(');
   });
 
@@ -312,7 +315,9 @@ describe('project preview containment routes', () => {
         '<style>.hero { background-image: url("assets/hero.png") }</style>',
         '</head><body>',
         '<button onclick="URL.revokeObjectURL(u)">revoke</button>',
+        '<button onclick=URL.revokeObjectURL(u2)>revoke-unquoted</button>',
         '<a href="javascript:URL.revokeObjectURL(u)">jump</a>',
+        '<a href=javascript:URL.revokeObjectURL(u3)>jump-unquoted</a>',
         '<script src="scripts/app.js"></script>',
         '</body></html>',
       ].join(''),
@@ -332,9 +337,12 @@ describe('project preview containment routes', () => {
     expect(html).toContain(`/api/projects/${projectId}/raw/assets/hero.png`);
     expect(html).toContain(`/api/projects/${projectId}/raw/scripts/app.js`);
 
-    // Event handlers and javascript: URIs stay byte-for-byte unchanged.
+    // Event handlers and javascript: URIs stay byte-for-byte unchanged,
+    // whether quoted or unquoted.
     expect(html).toContain('onclick="URL.revokeObjectURL(u)"');
+    expect(html).toContain('onclick=URL.revokeObjectURL(u2)');
     expect(html).toContain('href="javascript:URL.revokeObjectURL(u)"');
+    expect(html).toContain('href=javascript:URL.revokeObjectURL(u3)');
     expect(html).not.toContain('revokeObjecturl(');
   });
 

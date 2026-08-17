@@ -5508,12 +5508,14 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
     // rewriting them produces a syntax error that kills the script. Executable
     // JS lives in three places: <script> bodies, `on*` event-handler attribute
     // values, and `javascript:` URI attribute values. Preserve all three
-    // verbatim; CSS `url(...)` references only appear in <style>, style=, and
-    // stylesheet markup, so skipping executable regions loses nothing.
+    // verbatim, covering the browser's valid syntax for each — including
+    // unquoted handler values and whitespace inside the script end tag; CSS
+    // `url(...)` references only appear in <style>, style=, and stylesheet
+    // markup, so skipping executable regions loses nothing.
     const executableRegion = new RegExp(
       [
-        '<script\\b[^>]*>[\\s\\S]*?</script>',
-        '\\son[a-z0-9_-]*\\s*=\\s*(?:"[^"]*"|\'[^\']*\')',
+        '<script\\b[^>]*>[\\s\\S]*?</script\\s*>',
+        '\\son[a-z0-9_-]*\\s*=\\s*(?:"[^"]*"|\'[^\']*\'|[^\\s"\'`=<>]+)',
         '(?:"javascript:[^"]*"|\'javascript:[^\']*\')',
         'javascript:[^\\s"\'<>]*',
       ].join('|'),
