@@ -114,17 +114,15 @@ describe("release workflow topology", () => {
     expect(distribution).toContain("uses: ./.github/actions/release/platform/mac/exact");
     expect(distribution).toContain("uses: ./.github/actions/release/platform/win/exact");
     expect(distribution).toContain("channel: ${{ inputs.exact_name }}");
-    expect(mac).toContain('prefix: tools-pack-mac-v2-${{ runner.os }}-${{ inputs.arch }}-');
-    expect(mac).not.toContain('prefix: tools-pack-mac-v2-${{ inputs.channel }}-');
+    expect(mac).toContain('prefix: tools-pack-mac-v3-${{ inputs.channel }}-${{ runner.os }}-${{ inputs.arch }}-');
     expect(mac).toContain("uses: ./.github/actions/release/closure/target/mac");
     expect(mac).toContain("channel: ${{ inputs.channel }}");
-    expect(win).toContain('prefix: tools-pack-win-v2-${{ runner.os }}-${{ runner.arch }}-');
-    expect(win).not.toContain('prefix: tools-pack-win-v2-${{ inputs.channel }}-');
+    expect(win).toContain('prefix: tools-pack-win-v3-${{ inputs.channel }}-${{ runner.os }}-${{ runner.arch }}-');
     expect(win).toContain('"release-${{ inputs.channel }}-win"');
     expect(mac).toContain("uses: ./.github/actions/release/platform/cache/save");
     expect(win).toContain("uses: ./.github/actions/release/platform/cache/save");
-    expect(standardMac).toContain('prefix: tools-pack-mac-v2-${{ runner.os }}-${{ steps.platform.outputs.arch }}-');
-    expect(standardWin).toContain('prefix: tools-pack-win-v2-${{ runner.os }}-${{ runner.arch }}-');
+    expect(standardMac).toContain('prefix: tools-pack-mac-v3-${{ inputs.channel }}-${{ runner.os }}-${{ steps.platform.outputs.arch }}-');
+    expect(standardWin).toContain('prefix: tools-pack-win-v3-${{ inputs.channel }}-${{ runner.os }}-${{ runner.arch }}-');
     for (const action of [mac, win, standardMac, standardWin]) {
       expect(action).not.toContain("hashFiles(");
     }
