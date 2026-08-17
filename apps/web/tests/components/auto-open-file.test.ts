@@ -599,7 +599,7 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
       request({
         requestedFileName: null,
         activeFileNameAtTurnEnd: null,
-        turnOwnedFileNames: ['recovered.md'],
+        turnOwnedFileNames: new Set(['recovered.md']),
       }),
       [PLAN, INDEX, { name: 'recovered.md', path: 'recovered.md', kind: 'text', mtime: 1 }],
       { now: TURN_END + 500, activeFileName: 'recovered.md' },
@@ -616,7 +616,7 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
       request({
         requestedFileName: null,
         activeFileNameAtTurnEnd: null,
-        turnOwnedFileNames: ['recovered.md'],
+        turnOwnedFileNames: new Set(['recovered.md']),
       }),
       [PLAN, INDEX, { name: 'notes.md', path: 'notes.md', kind: 'text', mtime: 1 }],
       { now: TURN_END + 500, activeFileName: 'notes.md' },

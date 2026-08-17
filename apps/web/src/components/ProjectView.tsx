@@ -2434,6 +2434,13 @@ export function ProjectView({
   // long after the render that captured it.
   const openTabsActiveRef = useRef<string | null>(openTabsState.active);
   openTabsActiveRef.current = openTabsState.active;
+  // Mirror for the same reason: the completion continuation calls the settle
+  // evaluator it captured at send time, and a `useCallback` dependency cannot
+  // refresh a closure that is already in flight. Read through this ref so the
+  // watch's conversation is compared against the conversation the user is in
+  // NOW rather than the one that was active when the run started.
+  const activeConversationIdRef = useRef<string | null>(activeConversationId);
+  activeConversationIdRef.current = activeConversationId;
   // The turn whose auto-open decision is still being re-evaluated as post-turn
   // file lists settle (issue #5352); null when no turn is in that window.
   //
@@ -3570,8 +3577,19 @@ export function ProjectView({
       art: Artifact,
       projectFilesSnapshot?: ProjectFile[],
       sourceText?: string,
-      options: { pointerMinMtime?: number } = {},
+      options: {
+        pointerMinMtime?: number;
+        // Auto-opener for the two focus requests below. A run that persists its
+        // artifact is parked on `writeProjectTextFile` (or on the pointer
+        // lookup) while a newer send can start, so a caller that owns an
+        // auto-open fence passes its fenced opener here; without it these two
+        // requests are the one way a superseded run can still move focus after
+        // every other opener has been fenced. Defaults to the unfenced request
+        // for callers with no run to fence against.
+        openFile?: (fileName: string) => void;
+      } = {},
     ) => {
+      const openPersistedFile = options.openFile ?? requestOpenFile;
       const persistedHtml = resolvePersistedArtifactHtml({
         artifactHtml: art.html,
         identifier: art.identifier,
@@ -3614,7 +3632,7 @@ export function ProjectView({
             return { ok: true as const, fileName: pointerTarget };
           }
           savedArtifactRef.current = pointerTarget;
-          requestOpenFile(pointerTarget);
+          openPersistedFile(pointerTarget);
           return { ok: true as const, fileName: pointerTarget };
         }
       }
@@ -3679,7 +3697,7 @@ export function ProjectView({
         // Auto-open the freshly-persisted artifact as a tab so the user
         // sees it without an extra click. The Write-tool path already does
         // this for tool-emitted files; this handles the artifact-tag path.
-        requestOpenFile(file.name);
+        openPersistedFile(file.name);
         return { ok: true as const, fileName: file.name };
       } else {
         // writeProjectTextFile collapses all failure paths (non-OK HTTP
@@ -3778,7 +3796,13 @@ export function ProjectView({
     // token cannot cover this: switching chats starts no new turn, so nothing
     // bumps it, yet the file workspace is project-scoped and would happily
     // focus the previous chat's artifact underneath the new one.
-    if (pending.conversationId !== activeConversationId) {
+    //
+    // Through the ref, not the render's `activeConversationId`: the completion
+    // continuation calls the evaluator captured by the render that started the
+    // run, so a closure comparison would check the watch's conversation against
+    // itself and pass — the guard would hold for the effect-driven evaluations
+    // and be blind exactly where the finalizer arms and evaluates in one go.
+    if (pending.conversationId !== activeConversationIdRef.current) {
       pendingAutoOpenSettleRef.current = null;
       return;
     }
@@ -3788,13 +3812,21 @@ export function ProjectView({
     });
     if (!decision.keepWatching) pendingAutoOpenSettleRef.current = null;
     if (decision.openFileName) requestOpenFile(decision.openFileName);
-  }, [activeConversationId, requestOpenFile]);
+  }, [requestOpenFile]);
 
   // Later lists: every accepted file-list generation (and every focus change,
-  // which can retire the watch) re-runs the decision.
+  // which can retire the watch) re-runs the decision. `activeConversationId` is
+  // a trigger rather than an input now that the check reads the ref: leaving
+  // the conversation must retire the watch at once, not whenever the next file
+  // list happens to land.
   useEffect(() => {
     evaluateAutoOpenSettle();
-  }, [committedFilesGeneration, evaluateAutoOpenSettle, openTabsState.active]);
+  }, [
+    activeConversationId,
+    committedFilesGeneration,
+    evaluateAutoOpenSettle,
+    openTabsState.active,
+  ]);
 
   // Live-reload: when the daemon's chokidar watcher reports a file change,
   // bump filesRefresh so the file list refetches with new mtimes — which
@@ -7012,9 +7044,20 @@ export function ProjectView({
       // send has taken over and move focus to this run's output during that one.
       // Requesting focus for a run that no longer owns auto-open is the same
       // stale-focus bug whether it arrives through the watcher or directly.
+      //
+      // Every request that actually goes out is recorded here, because the
+      // settle watcher's focus-move guard has to be able to tell "focus is on a
+      // file THIS run opened" from "the user moved on". A request that was
+      // fenced out moved nothing, so it is not recorded. The set is run-scoped
+      // rather than scoped to the completion continuation: a per-write refresh
+      // can land its open after the continuation sampled its focus witness, and
+      // that file is just as much this run's own activation as the completion
+      // path's own opens.
+      const runAutoOpenedFileNames = new Set<string>();
       const requestRunOpenFile = (fileName: string) => {
         if (autoOpenSettleGenerationRef.current !== autoOpenSettleGeneration) return false;
         requestOpenFile(fileName);
+        runAutoOpenedFileNames.add(fileName);
         return true;
       };
       // Pending Write/Edit tool invocations for this run: tool_use_id -> path.
@@ -7395,19 +7438,16 @@ export function ProjectView({
             // them back out of it.
             const activeFileNameAtTerminalHandoff = openTabsActiveRef.current;
             // Files this turn's OWN auto-open moves focus to during the
-            // continuation below. Those are auto activations, so they must stay
-            // turn-owned rather than reading as the user moving on — and they
-            // are not knowable at the moment the witness above is sampled.
-            const turnAutoOpenedFileNames = new Set<string>();
+            // continuation below are recorded by `requestRunOpenFile` into the
+            // run-scoped set above. Those are auto activations, so they must
+            // stay turn-owned rather than reading as the user moving on — and
+            // they are not knowable at the moment the witness above is sampled.
             const requestTurnOpenFile = (fileName: string) => {
               // Fenced like every other auto-open this run can ask for: the
               // awaits below (post-run refresh, artifact recovery/persistence)
               // can park this continuation past a newer send, and opening from
               // here afterwards focuses THIS turn's artifact during that one.
-              // Only a request that actually went out counts as turn-owned
-              // focus — a suppressed one moved nothing.
-              if (!requestRunOpenFile(fileName)) return;
-              turnAutoOpenedFileNames.add(fileName);
+              requestRunOpenFile(fileName);
             };
             try {
               // A settled shared file-list read from before the daemon exit can
@@ -7447,7 +7487,17 @@ export function ProjectView({
                   completionSelectedAutoOpen = true;
                   requestTurnOpenFile(sameTurnWrite.name);
                 } else {
-                  const persistence = await persistArtifact(artifactToPersist, nextFiles, finalText);
+                  // Persistence auto-opens what it wrote. That request belongs
+                  // to this run like every other one here, and it is issued
+                  // from behind an await that a newer send can overtake, so it
+                  // goes through the same fence instead of straight to
+                  // `requestOpenFile`.
+                  const persistence = await persistArtifact(
+                    artifactToPersist,
+                    nextFiles,
+                    finalText,
+                    { openFile: requestRunOpenFile },
+                  );
                   if (persistence.ok) artifactPersistenceSucceeded = true;
                   else artifactPersistenceError = persistence.error;
                   nextFiles = await refreshProjectFiles({ fresh: true });
@@ -7553,7 +7603,7 @@ export function ProjectView({
                     resolveTurnOptions: turnAutoOpenOptionsFor,
                     requestedFileName: producedArtifactToOpen ?? null,
                     activeFileNameAtTurnEnd: activeFileNameAtTerminalHandoff,
-                    turnOwnedFileNames: [...turnAutoOpenedFileNames],
+                    turnOwnedFileNames: runAutoOpenedFileNames,
                     deadline: Date.now() + AUTO_OPEN_SETTLE_WINDOW_MS,
                   },
                 };

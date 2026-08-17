@@ -251,11 +251,16 @@ export interface AutoOpenSettleRequest<F extends CandidateFile = CandidateFile> 
   // the focus-move guard below into its own opposite: the user's choice reads
   // as "where the turn put focus", and the watcher yanks them out of it.
   readonly activeFileNameAtTurnEnd: string | null;
-  // Every file the turn's own auto-open moved focus to while the completion
-  // continuation ran. Those activations are the turn's, not the user's, so they
-  // must not read as "the user moved on" — but they cannot be known at the
-  // moment `activeFileNameAtTurnEnd` is sampled, because they happen after it.
-  readonly turnOwnedFileNames?: ReadonlyArray<string>;
+  // Every file the RUN's own auto-open moved focus to. Those activations are
+  // the run's, not the user's, so they must not read as "the user moved on" —
+  // but they cannot be known at the moment `activeFileNameAtTurnEnd` is
+  // sampled, because they happen after it.
+  //
+  // A live set rather than a snapshot: the run's per-write refreshes are
+  // fire-and-forget and can open their file after this watch is armed. A copy
+  // taken at arming time would miss exactly those, and the guard would then
+  // read the run's own late activation as the user moving on.
+  readonly turnOwnedFileNames?: ReadonlySet<string>;
   // Epoch ms after which the turn stops being re-evaluated.
   readonly deadline: number;
 }
@@ -319,7 +324,7 @@ export function reevaluateAutoOpenOnFilesSettled<F extends CandidateFile>(
     || context.activeFileName === request.requestedFileName
     || (
       context.activeFileName !== null
-      && (request.turnOwnedFileNames?.includes(context.activeFileName) ?? false)
+      && (request.turnOwnedFileNames?.has(context.activeFileName) ?? false)
     );
   if (!turnOwnsFocus) return { openFileName: null, keepWatching: false };
   return { openFileName: resolved, keepWatching: false };

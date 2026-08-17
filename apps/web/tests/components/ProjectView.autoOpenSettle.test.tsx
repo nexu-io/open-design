@@ -270,6 +270,12 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     preTurn: ProjectFile[];
     postRun: ProjectFile[];
     settled: ProjectFile[];
+    // What an INDEPENDENT list read returns while the completion read is still
+    // parked — a chokidar-driven refresh landing underneath the finalizer.
+    // Only the newest request commits to the shared snapshot, so a list landed
+    // here survives the older held read resolving afterwards, and the finalizer
+    // then arms against a list its own read never saw.
+    duringHold?: ProjectFile[];
   }) {
     const heldRead = deferred<ProjectFile[]>();
     let holdNextRead = false;
@@ -283,7 +289,8 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
         heldReadRequested = true;
         return heldRead.promise;
       }
-      return turnDone ? options.settled : options.preTurn;
+      if (turnDone) return options.settled;
+      return heldReadRequested && options.duringHold ? options.duringHold : options.preTurn;
     });
 
     const handlers: StreamHandlers[] = [];
@@ -476,11 +483,22 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     preTurn: ProjectFile[];
     postRun: ProjectFile[];
     perWriteSettled: ProjectFile[];
+    // Which file the mid-run Write touches. Its refresh is the one held open,
+    // so the per-write auto-open decision is taken on this file.
+    writePath?: string;
+    // Further Writes the agent makes after it, whose refreshes are NOT held.
+    // They still register as touched paths, which is what lets a file that has
+    // not landed in any list yet be attributed to the turn once it does.
+    alsoWritePaths?: string[];
+    // Lists that land after the per-write refresh has been released, i.e. what
+    // the settle watcher gets to re-evaluate against.
+    settled?: ProjectFile[];
   }) {
     const heldRead = deferred<ProjectFile[]>();
     let holdNextRead = false;
     let heldReadRequested = false;
     let turnDone = false;
+    let perWriteReleased = false;
 
     loadTabs.mockResolvedValue(options.tabs);
     fetchProjectFiles.mockImplementation(async () => {
@@ -489,7 +507,8 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
         heldReadRequested = true;
         return heldRead.promise;
       }
-      return turnDone ? options.postRun : options.preTurn;
+      if (!turnDone) return options.preTurn;
+      return perWriteReleased && options.settled ? options.settled : options.postRun;
     });
 
     const handlers: StreamHandlers[] = [];
@@ -515,7 +534,7 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
         kind: 'tool_use',
         id: 'tool-write-1',
         name: 'Write',
-        input: { path: 'turn-a.html' },
+        input: { path: options.writePath ?? 'turn-a.html' },
       });
       handlers[0]!.onAgentEvent({
         kind: 'tool_result',
@@ -527,6 +546,23 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     // The per-write refresh must actually be parked, or "delayed per-write"
     // is fiction and the assertions below hold for the wrong reason.
     await waitFor(() => expect(heldReadRequested).toBe(true));
+
+    for (const [index, path] of (options.alsoWritePaths ?? []).entries()) {
+      await act(async () => {
+        handlers[0]!.onAgentEvent({
+          kind: 'tool_use',
+          id: `tool-write-extra-${index}`,
+          name: 'Write',
+          input: { path },
+        });
+        handlers[0]!.onAgentEvent({
+          kind: 'tool_result',
+          toolUseId: `tool-write-extra-${index}`,
+          content: '',
+          isError: false,
+        });
+      });
+    }
 
     turnDone = true;
     await act(async () => {
@@ -540,6 +576,7 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
           await Promise.resolve();
           await Promise.resolve();
         });
+        perWriteReleased = true;
       },
     };
   }
@@ -622,6 +659,210 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     await turn.releaseCompletionRead();
     await landSettledFileList();
     await landSettledFileList();
+
+    expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
+  });
+
+  // The conversation guard above is evaluated in two places, and only one of
+  // them re-renders first. Every LATER list runs the guard through an effect,
+  // so it reads a fresh evaluator; the finalizer arms and evaluates in one go,
+  // through the evaluator the send captured. The two tests below pin the
+  // second path, where the target is already in the accepted list when the
+  // finalizer arms — reached by landing an independent list underneath the
+  // parked completion read.
+  it('opens from the arming-site evaluation when the wanted list already landed', async () => {
+    // Positive control for the conversation test below: it is the arming-site
+    // evaluation, not a later effect-driven one, that opens index.html here —
+    // nothing lands a further list between the release and the assertion.
+    const turn = await runTurnHoldingCompletionRead({
+      projectId: 'project-arming-control',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, RUN_LOG],
+      duringHold: [NOTES, OTHER, RUN_LOG, INDEX],
+      settled: [NOTES, OTHER, RUN_LOG, INDEX],
+    });
+
+    await landSettledFileList();
+    await turn.releaseCompletionRead();
+
+    expect(openRequestKeys().map((key) => key.name)).toContain('index.html');
+  });
+
+  it('retires at the arming site too when the user has left the conversation', async () => {
+    // Reviewer #6842 (nettee, 2026-08-17): the conversation guard compared the
+    // watch against the render's `activeConversationId`, and the finalizer
+    // calls the evaluator captured by the render that STARTED the run — a
+    // dependency list cannot refresh a closure already in flight. So the guard
+    // compared conversation A against conversation A and passed, and the
+    // arming-site evaluation opened A's artifact underneath B. The later
+    // effect-driven evaluation retires the watch, but only after focus moved.
+    listConversations.mockResolvedValue([
+      { id: 'conv-1', title: 'Conversation' },
+      { id: 'conv-2', title: 'Second conversation' },
+    ]);
+
+    const turn = await runTurnHoldingCompletionRead({
+      projectId: 'project-arming-conversation',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, RUN_LOG],
+      duringHold: [NOTES, OTHER, RUN_LOG, INDEX],
+      settled: [NOTES, OTHER, RUN_LOG, INDEX],
+    });
+
+    await landSettledFileList();
+    const chatProps = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+      onSelectConversation?: (id: string) => void;
+    };
+    await act(async () => {
+      chatProps.onSelectConversation?.('conv-2');
+    });
+    await waitFor(() => {
+      expect(
+        (chatPaneSpy.mock.calls.at(-1)?.[0] as { activeConversationId?: string | null })
+          .activeConversationId,
+      ).toBe('conv-2');
+    });
+    const openedBeforeRelease = openRequestKeys().length;
+
+    await turn.releaseCompletionRead();
+
+    expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
+  });
+
+  it('upgrades to the settled artifact after a delayed per-write open of the same run', async () => {
+    // Reviewer #6842 (nettee, 2026-08-17): the watcher's focus-move guard was
+    // handed only the files the COMPLETION continuation opened. A per-write
+    // refresh that settles after terminal handoff opens its file through the
+    // same run fence, so `plan.md` is this run's own activation — but it was
+    // absent from the snapshot, so when `index.html` settled the guard read
+    // focus as "the user moved on" and retired instead of upgrading. The bug
+    // this PR exists to fix, re-entering through the fix's own bookkeeping.
+    const PLAN = projectFile('plan.md', 'text', turnStart + 10);
+
+    const turn = await runTurnHoldingPerWriteRead({
+      projectId: 'project-per-write-then-settle',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, RUN_LOG],
+      writePath: 'plan.md',
+      // The agent writes the deliverable too, but no list has caught up with
+      // it by turn end — the situation the settle watcher exists for.
+      alsoWritePaths: ['index.html'],
+      // The released per-write read carries only the support file, so it is
+      // what moves focus; `index.html` lands afterwards.
+      perWriteSettled: [NOTES, OTHER, RUN_LOG, PLAN],
+      settled: [NOTES, OTHER, RUN_LOG, PLAN, INDEX],
+    });
+
+    await turn.releasePerWriteRead();
+    expect(openRequestKeys().map((key) => key.name)).toContain('plan.md');
+
+    // The workspace follows the open request, exactly as it would in the app.
+    await act(async () => {
+      latestWorkspaceProps().onTabsStateChange?.({
+        tabs: ['notes.md', 'plan.md'],
+        active: 'plan.md',
+      });
+    });
+
+    await landSettledFileList();
+    await landSettledFileList();
+
+    expect(openRequestKeys().map((key) => key.name)).toContain('index.html');
+  });
+
+  // Drives one turn to terminal status with no produced files but a standalone
+  // HTML answer, so the completion path falls through to `persistArtifact`, and
+  // parks that persistence's write — the window in which a newer send can take
+  // auto-open over while the older run is still inside the persist helper.
+  async function runTurnHoldingArtifactPersistence(options: {
+    projectId: string;
+    tabs: OpenTabsState;
+    files: ProjectFile[];
+    persistedFileName: string;
+  }) {
+    const heldWrite = deferred<{ name: string }>();
+    let heldWriteRequested = false;
+
+    loadTabs.mockResolvedValue(options.tabs);
+    fetchProjectFiles.mockResolvedValue(options.files);
+    writeProjectTextFile.mockImplementation(async () => {
+      heldWriteRequested = true;
+      return heldWrite.promise;
+    });
+
+    const handlers: StreamHandlers[] = [];
+    streamViaDaemon.mockImplementation(async (opts: { handlers: StreamHandlers }) => {
+      handlers.push(opts.handlers);
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView(options.projectId);
+
+    const sendProps = await waitForSend();
+    await act(async () => {
+      await sendProps.onSend!('build me a page', [], []);
+    });
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      handlers[0]!.onDone(
+        '<!doctype html><html><head><title>Persisted</title></head>'
+          + '<body><h1>Persisted</h1><p>A complete document.</p></body></html>',
+      );
+    });
+    // The continuation must actually be parked inside the persistence, or
+    // "while the write is in flight" is fiction.
+    await waitFor(() => expect(heldWriteRequested).toBe(true));
+
+    return {
+      releasePersistence: async () => {
+        await act(async () => {
+          heldWrite.resolve({ name: options.persistedFileName });
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+      },
+    };
+  }
+
+  // Positive control for the persistence guard below.
+  it('opens the persisted artifact when the run still owns auto-open', async () => {
+    const turn = await runTurnHoldingArtifactPersistence({
+      projectId: 'project-persist-control',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      files: [NOTES, OTHER],
+      persistedFileName: 'persisted.html',
+    });
+
+    await turn.releasePersistence();
+
+    expect(openRequestKeys().map((key) => key.name)).toContain('persisted.html');
+  });
+
+  it('does not open a superseded run’s persisted artifact', async () => {
+    // Reviewer #6842 (nettee, 2026-08-17): `persistArtifact` auto-opens what it
+    // writes, and that request went straight to the unfenced opener. The
+    // completion path's own opens were fenced, so this was the one way a run
+    // parked past a newer send could still move focus — through the helper it
+    // delegates to rather than through any opener this run holds.
+    const turn = await runTurnHoldingArtifactPersistence({
+      projectId: 'project-persist-overlap',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      files: [NOTES, OTHER],
+      persistedFileName: 'persisted.html',
+    });
+
+    const sendPropsB = await waitForSend();
+    await act(async () => {
+      await sendPropsB.onSend!('turn B', [], []);
+    });
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    const openedBeforeRelease = openRequestKeys().length;
+
+    await turn.releasePersistence();
 
     expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
   });
