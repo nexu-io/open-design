@@ -263,6 +263,55 @@ describe('project preview containment routes', () => {
     expect(borrowedTokenResponse.status).toBe(404);
   });
 
+
+  it('still workspace-scopes <script src> after script-block shielding fix (#6949)', async () => {
+    const workspaceId = `workspace-${randomUUID()}`;
+    const workspaceMemberId = `member-${randomUUID()}`;
+    const projectId = await createProject({ entryFile: 'index.html' });
+    // Project root entry; relative src should resolve against the dir of index.html
+    await writeProjectFile(
+      projectId,
+      'main.js',
+      'console.log("hrp");',
+    );
+    await writeProjectFile(
+      projectId,
+      'index.html',
+      [
+        '<!doctype html><html><head><title>Test</title></head><body>',
+        '<script src="./main.js"></script>',
+        '<script>',
+        '  var u = URL.revokeObjectURL;',
+        '</script>',
+        '</body></html>',
+      ].join(''),
+    );
+    bindPersonalProject(projectId, workspaceId, workspaceMemberId);
+
+    const scopeQuery = new URLSearchParams({
+      workspaceId,
+      workspaceMemberId,
+      odPreviewBridge: 'scroll',
+    });
+    const response = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/index.html?${scopeQuery}`,
+    );
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    // Inline script content must be preserved verbatim across cssUrl shielding.
+    expect(html).toContain('var u = URL.revokeObjectURL;');
+    // script src attribute MUST still be workspace-scoped by the assetAttr pass,
+    // proving the script-block shielding only wraps the cssUrl pass and not the
+    // earlier asset-attribute workspace-scoping pass.
+    expect(html).toContain('/api/projects/');
+    expect(html).toContain('workspaceId=');
+    expect(html).toContain('workspaceMemberId=');
+    // The scoped src should reference the resolved main.js path, not the
+    // bare "./main.js" relative URL.
+    expect(html).not.toContain('./main.js');
+    expect(html).toContain('main.js');
+  });
+
   it('skips rewriting url() inside <script> blocks to prevent JS corruption', async () => {
     const workspaceId = `workspace-${randomUUID()}`;
     const workspaceMemberId = `member-${randomUUID()}`;

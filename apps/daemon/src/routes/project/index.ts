@@ -5462,16 +5462,7 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
       return `${scoped}&${suffix.slice(1)}`;
     };
 
-    // Extract and preserve script blocks to avoid corrupting JavaScript source
-    // when replacing cssUrl patterns (which might match e.g. URL.revokeObjectURL(url)).
-    const scriptBlocks: string[] = [];
-    const placeholder = (index: number) => `<!--OD-SCRIPT-PLACEHOLDER-${index}-->`;
-    let htmlWithoutScripts = html.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (match) => {
-      scriptBlocks.push(match);
-      return placeholder(scriptBlocks.length - 1);
-    });
-
-    let next = htmlWithoutScripts.replace(
+    let next = html.replace(
       assetAttr,
       (match, space: string, name: string, eq: string, quote: string, value: string) => {
         const rewritten = rewrite(value);
@@ -5503,12 +5494,19 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         .join(',');
       return rewritten === value ? match : `${prefix}${quote}${rewritten}${quote}`;
     });
-    next = next.replace(cssUrl, (match, quote: string, value: string) => {
+    // Shield script blocks only around the cssUrl pass to avoid corrupting
+    // JavaScript source (e.g. URL.revokeObjectURL(url)). Script src attributes
+    // are still workspace-scoped by the assetAttr pass above.
+    const scriptBlocks: string[] = [];
+    const placeholder = (index: number) => `<!--OD-SCRIPT-PLACEHOLDER-${index}-->`;
+    let cssShielded = next.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (match) => {
+      scriptBlocks.push(match);
+      return placeholder(scriptBlocks.length - 1);
+    });
+    next = cssShielded.replace(cssUrl, (match, quote: string, value: string) => {
       const rewritten = rewrite(value);
       return rewritten === value ? match : `url(${quote}${rewritten}${quote})`;
     });
-
-    // Restore preserved script blocks
     for (let i = 0; i < scriptBlocks.length; i++) {
       const block = scriptBlocks[i];
       if (block !== undefined) {
