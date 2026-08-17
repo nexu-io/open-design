@@ -282,8 +282,13 @@ function promptTooLargeDetail(text: string): TrackingRunFailureDetail | null {
   }
   // `prefill context too large` is the local-runtime (MLX) shape of the same
   // "the prompt does not fit" failure that currently leaks into execution_failed.
+  // `prompt is too long` is the verbatim surface string Claude Code emits when
+  // the assembled turn exceeds the upstream context window — distinct wording
+  // from the `prompt too large` analytics-ish phrase but the same failure, so
+  // route it to `prompt_too_large` instead of letting it fall through to the
+  // auth/execution_failed buckets. See issue #6979.
   if (
-    /\b(context window|context size (?:has been )?exceeded|prompt too large|request_too_large|maximum context|too many tokens|input.*too large|request (?:body )?exceeds configured limit|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i.test(text)
+    /\b(context window|context size (?:has been )?exceeded|prompt too large|prompt is too long|request_too_large|maximum context|too many tokens|input.*too large|request (?:body )?exceeds configured limit|output token maximum|maximum output tokens|CLAUDE_CODE_MAX_OUTPUT_TOKENS|exceeds the safe size|composed prompt exceeds|prompt token count .* exceeds|maximum context length|context too large|prefill context too large|reduce the length of (?:the )?(?:messages|input prompt)|request \(\d+ tokens\) exceeds the available context size|n_keep:\s*\d+\s*>=\s*n_ctx)\b/i.test(text)
   ) {
     return 'prompt_too_large';
   }

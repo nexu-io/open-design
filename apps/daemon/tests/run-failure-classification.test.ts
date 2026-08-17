@@ -1749,6 +1749,30 @@ describe('classifyRunFailure — batch A reclassification out of execution_faile
     expect(result?.user_action).toBe('reduce_context');
   });
 
+  // Issue #6979: Claude Code surfaces `Prompt is too long` verbatim when the
+  // assembled turn exceeds the upstream context window. The classifier must
+  // route it to prompt_too_large (not auth or unknown), matching the
+  // AGENT_PROMPT_TOO_LARGE ecode path the daemon now emits.
+  it('classifies "Prompt is too long" stdout as prompt_too_large (#6979)', () => {
+    const result = classify(
+      'AGENT_PROMPT_TOO_LARGE',
+      'API Error: Prompt is too long.',
+    );
+    expect(result?.failure_category).toBe('prompt_too_large');
+    expect(result?.failure_detail).toBe('prompt_too_large');
+    expect(result?.user_action).toBe('reduce_context');
+  });
+
+  it('classifies plain "Prompt is too long" text without an explicit ecode as prompt_too_large (#6979)', () => {
+    const result = classify(
+      'AGENT_EXECUTION_FAILED',
+      'Error: Prompt is too long. Reduce the size of the request and retry.',
+    );
+    expect(result?.failure_category).toBe('prompt_too_large');
+    expect(result?.failure_detail).toBe('prompt_too_large');
+    expect(result?.user_action).toBe('reduce_context');
+  });
+
   it('classifies an ACP "thread/start failed" as agent_protocol_error', () => {
     const result = classify(
       'AGENT_EXECUTION_FAILED',
