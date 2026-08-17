@@ -5503,18 +5503,28 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
 
     // The attribute passes above run over the whole document, so a relative
     // <script src> is still workspace-scoped. The cssUrl pass must not touch
-    // executable JS, though: inline code legitimately contains `url(...)`
-    // substrings (for example `URL.revokeObjectURL(url)`), and rewriting them
-    // produces a syntax error that kills the entire script. CSS `url(...)`
-    // references only appear outside <script> (in <style>, style=, and
-    // stylesheet markup), so skipping script bodies loses nothing.
-    const scriptBlock = /<script\b[^>]*>[\s\S]*?<\/script>/gi;
+    // executable JavaScript, though: inline code legitimately contains
+    // `url(...)` substrings (for example `URL.revokeObjectURL(url)`), and
+    // rewriting them produces a syntax error that kills the script. Executable
+    // JS lives in three places: <script> bodies, `on*` event-handler attribute
+    // values, and `javascript:` URI attribute values. Preserve all three
+    // verbatim; CSS `url(...)` references only appear in <style>, style=, and
+    // stylesheet markup, so skipping executable regions loses nothing.
+    const executableRegion = new RegExp(
+      [
+        '<script\\b[^>]*>[\\s\\S]*?</script>',
+        '\\son[a-z0-9_-]*\\s*=\\s*(?:"[^"]*"|\'[^\']*\')',
+        '(?:"javascript:[^"]*"|\'javascript:[^\']*\')',
+        'javascript:[^\\s"\'<>]*',
+      ].join('|'),
+      'gi',
+    );
     let cssRewritten = '';
     let cursor = 0;
-    let scriptMatch: RegExpExecArray | null;
-    while ((scriptMatch = scriptBlock.exec(next)) !== null) {
-      cssRewritten += rewriteCssUrls(next.slice(cursor, scriptMatch.index)) + scriptMatch[0];
-      cursor = scriptMatch.index + scriptMatch[0].length;
+    let regionMatch: RegExpExecArray | null;
+    while ((regionMatch = executableRegion.exec(next)) !== null) {
+      cssRewritten += rewriteCssUrls(next.slice(cursor, regionMatch.index)) + regionMatch[0];
+      cursor = regionMatch.index + regionMatch[0].length;
     }
     return cssRewritten + rewriteCssUrls(next.slice(cursor));
   }
