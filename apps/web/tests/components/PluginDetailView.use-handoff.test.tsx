@@ -154,8 +154,21 @@ describe('PluginDetailView Use hands the plugin to Home', () => {
     );
   });
 
+  it('distinguishes a safe daemon failure from the unreachable fallback', async () => {
+    vi.mocked(applyPlugin).mockResolvedValue({
+      ok: false,
+      message: 'Plugin application failed. Try again.',
+    } as never);
+    await renderDetailAndUse();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Apply failed: Plugin application failed. Try again.',
+    );
+    expect(screen.getByRole('alert')).not.toHaveTextContent('daemon is reachable');
+  });
+
   it('keeps the localized fallback when applying fails without a diagnosis', async () => {
-    vi.mocked(applyPlugin).mockResolvedValue({ ok: false, message: '' } as never);
+    vi.mocked(applyPlugin).mockResolvedValue(null as never);
     await renderDetailAndUse();
 
     expect(await screen.findByRole('alert')).toHaveTextContent(

@@ -474,7 +474,13 @@ describe('applyPlugin', () => {
   it('does not fall back when the new local resolver rejects a source', async () => {
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(
       JSON.stringify({ error: 'plugin not found' }),
-      { status: 404, headers: { 'x-od-plugin-apply-local': '1' } },
+      {
+        status: 404,
+        headers: {
+          'content-type': 'application/json',
+          'x-od-plugin-apply-local': '1',
+        },
+      },
     ));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -482,6 +488,66 @@ describe('applyPlugin', () => {
       pluginSource: 'team:plugin:workspace-a:shared-plugin-id',
     })).resolves.toEqual({ ok: false, message: 'plugin not found' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not expose an HTML server error from plugin apply', async () => {
+    const fetchMock = vi.fn<typeof fetch>(async () => new Response(
+      '<!doctype html><html><body><pre>MissingInputError: workspace_name\n    at /Users/alice/open-design/plugins/apply.ts:42:1</pre></body></html>',
+      { status: 500, headers: { 'content-type': 'text/html; charset=utf-8' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(applyPlugin('sample-plugin')).resolves.toBeNull();
+  });
+
+  it('keeps the localized fallback when plugin apply cannot reach the daemon', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => {
+      throw new TypeError('fetch failed: connect ECONNREFUSED 127.0.0.1:18544');
+    }));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toBeNull();
+  });
+
+  it('preserves the bounded missing-input diagnosis', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json(
+      { error: 'missing_inputs', fields: ['workspace_name'] },
+      { status: 422 },
+    )));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toEqual({
+      ok: false,
+      message: 'Missing required plugin inputs: workspace_name',
+    });
+  });
+
+  it('distinguishes a safe daemon apply failure from a transport failure', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json(
+      { error: 'plugin_apply_failed' },
+      { status: 500 },
+    )));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toEqual({
+      ok: false,
+      message: 'Plugin application failed. Try again.',
+    });
+  });
+
+  it.each([
+    ['application/json', JSON.stringify({ error: 'connect ECONNREFUSED 127.0.0.1:18544' })],
+    ['application/json', JSON.stringify({ error: 'Plugin failed at /Users/alice/open-design/plugin.ts' })],
+    ['application/json', JSON.stringify({ error: 'ENOENT: /Volumes/PortableSSD/plugin.json' })],
+    ['application/json', JSON.stringify({ error: 'Error: boom at applyPlugin (apps/daemon/src/routes/plugins/index.ts:432:20)' })],
+    ['application/json', JSON.stringify({ error: 'Plugin failed\n    at apply (/private/tmp/plugin.ts:4:2)' })],
+    ['application/json', JSON.stringify({ error: 'x'.repeat(301) })],
+    ['text/plain', 'connect ECONNREFUSED 127.0.0.1:18544'],
+    ['text/plain', 'connect ETIMEDOUT 127.0.0.1:18544'],
+  ])('rejects an unsafe %s plugin apply diagnosis', async (contentType, body) => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(body, {
+      status: 500,
+      headers: { 'content-type': contentType },
+    })));
+
+    await expect(applyPlugin('sample-plugin')).resolves.toBeNull();
   });
 
   it('scopes same-id plugin apply requests to the exact A/B workspace', async () => {

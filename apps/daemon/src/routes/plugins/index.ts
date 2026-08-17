@@ -661,13 +661,13 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
         source,
       );
       if (!currentPlugin) return res.status(404).json({ error: 'plugin not found' });
-      return applyResolvedPlugin(req, res, currentPlugin, registry);
+      return await applyResolvedPlugin(req, res, currentPlugin, registry);
     } catch (err: unknown) {
       if (err instanceof plugins.MissingInputError) {
         return res.status(422).json({ error: 'missing_inputs', fields: err.fields });
       }
       logPluginApplyFailure('apply-local', req.params.id, err);
-      return res.status(500).json({ error: String(err) });
+      return res.status(500).json({ error: 'plugin_apply_failed' });
     }
   });
   app.post('/api/plugins/:id/apply', async (req, res) => {
@@ -696,13 +696,13 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       ) {
         return res.status(404).json({ error: 'plugin not found' });
       }
-      return applyResolvedPlugin(req, res, plugin, registry);
+      return await applyResolvedPlugin(req, res, plugin, registry);
     } catch (err: unknown) {
       if (err instanceof plugins.MissingInputError) {
         return res.status(422).json({ error: 'missing_inputs', fields: err.fields });
       }
       logPluginApplyFailure('apply', req.params.id, err);
-      res.status(500).json({ error: String(err) });
+      res.status(500).json({ error: 'plugin_apply_failed' });
     }
   });
   app.post('/api/plugins/:id/duplicate-project', helpers.requireLocalDaemonRequest, async (req, res) => {

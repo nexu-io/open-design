@@ -2735,15 +2735,52 @@ export async function applyPlugin(
     // new-Web/old-daemon upgrade window, omitting the plugin is safer than
     // silently substituting different local bytes.
     if (!resp.ok) {
-      return { ok: false, message: await readErrorMessage(resp) };
+      if (await isLocalDaemonProxyFailure(resp)) return null;
+      const message = await readPluginApplyErrorMessage(resp);
+      return message ? { ok: false, message } : null;
     }
     const json = (await resp.json()) as ApplyPluginOutcome;
     return json;
-  } catch (err) {
-    return {
-      ok: false,
-      message: err instanceof Error ? err.message : String(err),
-    };
+  } catch {
+    return null;
+  }
+}
+
+async function readPluginApplyErrorMessage(resp: Response): Promise<string> {
+  const contentType = (resp.headers.get('content-type') ?? '').toLowerCase();
+  if (contentType.includes('text/html')) return '';
+
+  if (!contentType || contentType.includes('application/json')) {
+    try {
+      const json = (await resp.clone().json()) as {
+        error?: string;
+        fields?: unknown;
+      };
+      if (json.error === 'plugin not found') return json.error;
+      if (json.error === 'plugin_apply_failed') {
+        return 'Plugin application failed. Try again.';
+      }
+      if (json.error === 'missing_inputs' && Array.isArray(json.fields)) {
+        const fields = json.fields.filter(
+          (field): field is string =>
+            typeof field === 'string' && /^[A-Za-z0-9._-]{1,64}$/u.test(field),
+        );
+        if (fields.length > 0 && fields.length <= 10 && fields.length === json.fields.length) {
+          return `Missing required plugin inputs: ${fields.join(', ')}`;
+        }
+      }
+      return '';
+    } catch {
+      if (contentType.includes('application/json')) return '';
+    }
+  }
+
+  if (contentType && !contentType.includes('text/plain')) return '';
+  try {
+    const message = (await resp.text()).trim();
+    return message === 'not found' || message === 'plugin not found' ? message : '';
+  } catch {
+    return '';
   }
 }
 
