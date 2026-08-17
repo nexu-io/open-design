@@ -23,7 +23,7 @@ const COPY: Partial<Record<LandingLocaleCode, DownloadPromptCopy>> = {
     ],
     primary: 'Download free',
     secondary: 'Keep browsing',
-    platformNote: 'Available for macOS, Windows, and Linux',
+    platformNote: 'Available for macOS and Windows',
     closeLabel: 'Close download prompt',
   },
   zh: {
@@ -37,7 +37,7 @@ const COPY: Partial<Record<LandingLocaleCode, DownloadPromptCopy>> = {
     ],
     primary: '免费下载',
     secondary: '继续浏览',
-    platformNote: '支持 macOS、Windows 与 Linux',
+    platformNote: '支持 macOS 与 Windows',
     closeLabel: '关闭下载提示',
   },
   ja: {
@@ -51,7 +51,7 @@ const COPY: Partial<Record<LandingLocaleCode, DownloadPromptCopy>> = {
     ],
     primary: '無料ダウンロード',
     secondary: '閲覧を続ける',
-    platformNote: 'macOS、Windows、Linux に対応',
+    platformNote: 'macOS と Windows に対応',
     closeLabel: 'ダウンロード案内を閉じる',
   },
   ko: {
@@ -65,7 +65,7 @@ const COPY: Partial<Record<LandingLocaleCode, DownloadPromptCopy>> = {
     ],
     primary: '무료 다운로드',
     secondary: '계속 둘러보기',
-    platformNote: 'macOS, Windows, Linux 지원',
+    platformNote: 'macOS, Windows 지원',
     closeLabel: '다운로드 안내 닫기',
   },
   de: {
@@ -79,7 +79,7 @@ const COPY: Partial<Record<LandingLocaleCode, DownloadPromptCopy>> = {
     ],
     primary: 'Kostenlos herunterladen',
     secondary: 'Weiter ansehen',
-    platformNote: 'Für macOS, Windows und Linux',
+    platformNote: 'Für macOS und Windows',
     closeLabel: 'Download-Hinweis schließen',
   },
   fr: {
@@ -93,7 +93,7 @@ const COPY: Partial<Record<LandingLocaleCode, DownloadPromptCopy>> = {
     ],
     primary: 'Télécharger gratuitement',
     secondary: 'Continuer à explorer',
-    platformNote: 'Disponible sur macOS, Windows et Linux',
+    platformNote: 'Disponible sur macOS et Windows',
     closeLabel: 'Fermer l’invitation au téléchargement',
   },
   ru: {
@@ -107,7 +107,7 @@ const COPY: Partial<Record<LandingLocaleCode, DownloadPromptCopy>> = {
     ],
     primary: 'Скачать бесплатно',
     secondary: 'Продолжить просмотр',
-    platformNote: 'Для macOS, Windows и Linux',
+    platformNote: 'Для macOS и Windows',
     closeLabel: 'Закрыть предложение скачать приложение',
   },
   es: {
@@ -121,7 +121,7 @@ const COPY: Partial<Record<LandingLocaleCode, DownloadPromptCopy>> = {
     ],
     primary: 'Descargar gratis',
     secondary: 'Seguir explorando',
-    platformNote: 'Disponible para macOS, Windows y Linux',
+    platformNote: 'Disponible para macOS y Windows',
     closeLabel: 'Cerrar la invitación de descarga',
   },
   'pt-br': {
@@ -135,7 +135,7 @@ const COPY: Partial<Record<LandingLocaleCode, DownloadPromptCopy>> = {
     ],
     primary: 'Baixar grátis',
     secondary: 'Continuar explorando',
-    platformNote: 'Disponível para macOS, Windows e Linux',
+    platformNote: 'Disponível para macOS e Windows',
     closeLabel: 'Fechar convite de download',
   },
   it: {
@@ -149,7 +149,7 @@ const COPY: Partial<Record<LandingLocaleCode, DownloadPromptCopy>> = {
     ],
     primary: 'Scarica gratis',
     secondary: 'Continua a esplorare',
-    platformNote: 'Disponibile per macOS, Windows e Linux',
+    platformNote: 'Disponibile per macOS e Windows',
     closeLabel: 'Chiudi l’invito al download',
   },
   tr: {
@@ -163,7 +163,7 @@ const COPY: Partial<Record<LandingLocaleCode, DownloadPromptCopy>> = {
     ],
     primary: 'Ücretsiz indir',
     secondary: 'Gezinmeye devam et',
-    platformNote: 'macOS, Windows ve Linux için',
+    platformNote: 'macOS ve Windows için',
     closeLabel: 'İndirme önerisini kapat',
   },
 };

@@ -206,7 +206,7 @@ export interface InfoPageCopy {
     localFirst: string;
     byok: string;
     apache: string;
-    macWinLinux: string;
+    macWin: string;
   };
   official: {
     title: string;
@@ -358,8 +358,6 @@ export interface InfoPageCopy {
     windows: string;
     windowsInstaller: string;
     windowsPortable: string;
-    linux: string;
-    linuxBody: string;
     installer: string;
     portable: string;
     dmg: string;
@@ -394,7 +392,7 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
       localFirst: 'Local-first',
       byok: 'BYOK',
       apache: 'Apache-2.0',
-      macWinLinux: 'macOS · Windows · Linux',
+      macWin: 'macOS · Windows',
     },
     official: {
       title: 'Official OpenDesign — Source page, GitHub, releases, and aliases',
@@ -438,7 +436,7 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
       runtimeTitle: 'What runs on your machine',
       runtimeBody: 'OpenDesign ships three runnable surfaces — all open source, all local-first:',
       runtimeItems: [
-        { label: 'Desktop app', body: 'packaged Electron build for macOS, Windows, Linux.' },
+        { label: 'Desktop app', body: 'packaged Electron build for macOS and Windows.' },
         { label: 'Daemon (od)', body: 'local HTTP daemon and CLI for agents, shell, or CI.' },
         { label: 'Skills + Systems', body: 'Markdown bundles you can fork, edit, and ship.' },
       ],
@@ -3327,9 +3325,9 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
     },
     agentGuides: EN_AGENT_GUIDES,
     download: {
-      title: 'Download OpenDesign — Free Desktop App (macOS, Windows, Linux)',
+      title: 'Download OpenDesign — Free Desktop App (macOS & Windows)',
       description:
-        'Download the latest OpenDesign desktop app — free and open-source (Apache-2.0). Install, sign in once, and start designing without configuring a model key. macOS (Apple Silicon & Intel), Windows, and Linux.',
+        'Download the latest OpenDesign desktop app — free and open-source (Apache-2.0). Install, sign in once, and start designing without configuring a model key. macOS (Apple Silicon & Intel) and Windows.',
       breadcrumb: 'Download',
       label: 'Download',
       heading: 'Download OpenDesign for free. Design with your agent.',
@@ -3350,8 +3348,6 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
       windows: 'Windows',
       windowsInstaller: 'Installer',
       windowsPortable: 'Portable',
-      linux: 'Linux',
-      linuxBody: 'AppImage and Docker / Podman Compose are available on the release page.',
       installer: 'Installer',
       portable: 'Portable',
       dmg: 'DMG',
@@ -3361,7 +3357,6 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
       requirements: [
         { label: 'macOS', body: '11 Big Sur or newer — Apple Silicon and Intel builds.' },
         { label: 'Windows', body: '10 or 11 (x64) — installer or portable zip.' },
-        { label: 'Linux', body: 'AppImage, or Docker / Podman Compose one-click setup.' },
       ],
       allReleasesTitle: 'All releases',
       allReleasesBody:
@@ -3375,7 +3370,7 @@ const INFO_PAGE_COPY: Partial<Record<LandingLocaleCode, InfoPageCopy>> = {
 
 /*
  * Localized /download copy for the compact locales (everything outside the
- * full en/zh/zh-tw blocks above). Brand/technical tokens — mac/windows/linux,
+ * full en/zh/zh-tw blocks above). Brand/technical tokens — mac/windows,
  * DMG/ZIP, Apple Silicon, Intel — intentionally stay as the English
  * defaults via the spread, matching how the zh block keeps them. zh-CN is
  * hand-checked; the rest are machine-translated and welcome native review.
@@ -3384,9 +3379,9 @@ type DownloadCopy = InfoPageCopy['download'];
 const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = {
   ja: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'OpenDesign をダウンロード — 無料のオープンソース デスクトップアプリ（macOS / Windows / Linux）',
+    title: 'OpenDesign をダウンロード — 無料のオープンソース デスクトップアプリ（macOS / Windows）',
     description:
-      '最新の OpenDesign デスクトップアプリをダウンロード——無料でオープンソース（Apache-2.0）。インストールして一度サインインすれば、モデルキーの設定なしで始められます。macOS（Apple Silicon と Intel）、Windows、Linux に対応。',
+      '最新の OpenDesign デスクトップアプリをダウンロード——無料でオープンソース（Apache-2.0）。インストールして一度サインインすれば、モデルキーの設定なしで始められます。macOS（Apple Silicon と Intel）と Windows に対応。',
     breadcrumb: 'ダウンロード',
     label: 'ダウンロード',
     heading: 'OpenDesign を無料でダウンロード。エージェントと一緒にデザインしよう。',
@@ -3402,7 +3397,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'すべてのプラットフォーム',
     windowsInstaller: 'インストーラー',
     windowsPortable: 'ポータブル',
-    linuxBody: 'AppImage と Docker / Podman Compose はリリースページから利用できます。',
     installer: 'インストーラー',
     portable: 'ポータブル',
     downloadVerb: 'ダウンロード',
@@ -3410,7 +3404,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur 以降 — Apple Silicon と Intel に対応。' },
       { label: 'Windows', body: '10 または 11（x64）— インストーラーまたはポータブル zip。' },
-      { label: 'Linux', body: 'AppImage、または Docker / Podman Compose のワンクリック構築。' },
     ],
     allReleasesTitle: 'すべてのリリース',
     allReleasesBody:
@@ -3421,9 +3414,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   ko: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'OpenDesign 다운로드 — 무료 오픈소스 데스크톱 앱 (macOS, Windows, Linux)',
+    title: 'OpenDesign 다운로드 — 무료 오픈소스 데스크톱 앱 (macOS & Windows)',
     description:
-      '최신 OpenDesign 데스크톱 앱을 다운로드하세요 — 무료 오픈소스(Apache-2.0). 설치 후 한 번 로그인하면 모델 키 설정 없이 바로 시작할 수 있습니다. macOS(Apple Silicon 및 Intel), Windows, Linux 지원.',
+      '최신 OpenDesign 데스크톱 앱을 다운로드하세요 — 무료 오픈소스(Apache-2.0). 설치 후 한 번 로그인하면 모델 키 설정 없이 바로 시작할 수 있습니다. macOS(Apple Silicon 및 Intel), Windows 지원.',
     breadcrumb: '다운로드',
     label: '다운로드',
     heading: 'OpenDesign을 무료로 다운로드하고 에이전트와 함께 디자인하세요.',
@@ -3439,7 +3432,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: '모든 플랫폼',
     windowsInstaller: '설치 버전',
     windowsPortable: '포터블',
-    linuxBody: 'AppImage 및 Docker / Podman Compose는 릴리스 페이지에서 받을 수 있습니다.',
     installer: '설치 버전',
     portable: '포터블',
     downloadVerb: '다운로드',
@@ -3447,7 +3439,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur 이상 — Apple Silicon 및 Intel 빌드.' },
       { label: 'Windows', body: '10 또는 11(x64) — 설치 버전 또는 포터블 zip.' },
-      { label: 'Linux', body: 'AppImage, 또는 Docker / Podman Compose 원클릭 설치.' },
     ],
     allReleasesTitle: '모든 릴리스',
     allReleasesBody:
@@ -3458,9 +3449,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   de: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'OpenDesign herunterladen — kostenlose Open-Source-Desktop-App (macOS, Windows, Linux)',
+    title: 'OpenDesign herunterladen — kostenlose Open-Source-Desktop-App (macOS & Windows)',
     description:
-      'Lade die neueste Open-Design-Desktop-App herunter — kostenlos und Open Source (Apache-2.0). Installieren, einmal anmelden und ohne Modellschlüssel loslegen. Für macOS (Apple Silicon & Intel), Windows und Linux.',
+      'Lade die neueste Open-Design-Desktop-App herunter — kostenlos und Open Source (Apache-2.0). Installieren, einmal anmelden und ohne Modellschlüssel loslegen. Für macOS (Apple Silicon & Intel), Windows.',
     breadcrumb: 'Download',
     label: 'Download',
     heading: 'OpenDesign kostenlos herunterladen. Mit deinem Agenten designen.',
@@ -3476,7 +3467,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Alle Plattformen',
     windowsInstaller: 'Installer',
     windowsPortable: 'Portable',
-    linuxBody: 'AppImage sowie Docker / Podman Compose stehen auf der Release-Seite bereit.',
     installer: 'Installer',
     portable: 'Portable',
     downloadVerb: 'Herunterladen',
@@ -3484,7 +3474,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur oder neuer — Builds für Apple Silicon und Intel.' },
       { label: 'Windows', body: '10 oder 11 (x64) — Installer oder portables ZIP.' },
-      { label: 'Linux', body: 'AppImage oder Docker / Podman Compose mit Ein-Klick-Setup.' },
     ],
     allReleasesTitle: 'Alle Releases',
     allReleasesBody:
@@ -3495,9 +3484,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   fr: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Télécharger OpenDesign — application de bureau gratuite et open source (macOS, Windows, Linux)',
+    title: 'Télécharger OpenDesign — application de bureau gratuite et open source (macOS & Windows)',
     description:
-      'Téléchargez la dernière application de bureau OpenDesign — gratuite et open source (Apache-2.0). Installez-la, connectez-vous une fois et commencez sans configurer de clé de modèle. Pour macOS (Apple Silicon et Intel), Windows et Linux.',
+      'Téléchargez la dernière application de bureau OpenDesign — gratuite et open source (Apache-2.0). Installez-la, connectez-vous une fois et commencez sans configurer de clé de modèle. Pour macOS (Apple Silicon et Intel), Windows.',
     breadcrumb: 'Télécharger',
     label: 'Télécharger',
     heading: 'Téléchargez OpenDesign gratuitement. Concevez avec votre agent.',
@@ -3513,7 +3502,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Toutes les plateformes',
     windowsInstaller: 'Installateur',
     windowsPortable: 'Portable',
-    linuxBody: 'AppImage ainsi que Docker / Podman Compose sont disponibles sur la page de release.',
     installer: 'Installateur',
     portable: 'Portable',
     downloadVerb: 'Télécharger',
@@ -3521,7 +3509,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur ou plus récent — builds Apple Silicon et Intel.' },
       { label: 'Windows', body: '10 ou 11 (x64) — installateur ou zip portable.' },
-      { label: 'Linux', body: 'AppImage, ou installation en un clic via Docker / Podman Compose.' },
     ],
     allReleasesTitle: 'Toutes les versions',
     allReleasesBody:
@@ -3532,9 +3519,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   ru: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Скачать OpenDesign — бесплатное десктопное приложение с открытым исходным кодом (macOS, Windows, Linux)',
+    title: 'Скачать OpenDesign — бесплатное десктопное приложение с открытым исходным кодом (macOS & Windows)',
     description:
-      'Скачайте последнее десктопное приложение OpenDesign — бесплатное и с открытым исходным кодом (Apache-2.0). Установите, войдите один раз и начните работу без настройки ключа модели. Для macOS (Apple Silicon и Intel), Windows и Linux.',
+      'Скачайте последнее десктопное приложение OpenDesign — бесплатное и с открытым исходным кодом (Apache-2.0). Установите, войдите один раз и начните работу без настройки ключа модели. Для macOS (Apple Silicon и Intel), Windows.',
     breadcrumb: 'Скачать',
     label: 'Скачать',
     heading: 'Скачайте OpenDesign бесплатно. Создавайте дизайн вместе со своим агентом.',
@@ -3550,7 +3537,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Все платформы',
     windowsInstaller: 'Установщик',
     windowsPortable: 'Портативная версия',
-    linuxBody: 'AppImage, а также Docker / Podman Compose доступны на странице релиза.',
     installer: 'Установщик',
     portable: 'Портативная версия',
     downloadVerb: 'Скачать',
@@ -3558,7 +3544,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur или новее — сборки для Apple Silicon и Intel.' },
       { label: 'Windows', body: '10 или 11 (x64) — установщик или портативный zip.' },
-      { label: 'Linux', body: 'AppImage или установка в один клик через Docker / Podman Compose.' },
     ],
     allReleasesTitle: 'Все релизы',
     allReleasesBody:
@@ -3569,9 +3554,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   es: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Descargar OpenDesign — app de escritorio gratuita y de código abierto (macOS, Windows, Linux)',
+    title: 'Descargar OpenDesign — app de escritorio gratuita y de código abierto (macOS & Windows)',
     description:
-      'Descarga la última app de escritorio de OpenDesign: gratis y de código abierto (Apache-2.0). Instálala, inicia sesión una vez y empieza sin configurar claves de modelo. Para macOS (Apple Silicon e Intel), Windows y Linux.',
+      'Descarga la última app de escritorio de OpenDesign: gratis y de código abierto (Apache-2.0). Instálala, inicia sesión una vez y empieza sin configurar claves de modelo. Para macOS (Apple Silicon e Intel), Windows.',
     breadcrumb: 'Descargar',
     label: 'Descargar',
     heading: 'Descarga OpenDesign gratis. Diseña con tu agente.',
@@ -3587,7 +3572,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Todas las plataformas',
     windowsInstaller: 'Instalador',
     windowsPortable: 'Portable',
-    linuxBody: 'AppImage y Docker / Podman Compose están disponibles en la página de la versión.',
     installer: 'Instalador',
     portable: 'Portable',
     downloadVerb: 'Descargar',
@@ -3595,7 +3579,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur o posterior — versiones para Apple Silicon e Intel.' },
       { label: 'Windows', body: '10 u 11 (x64) — instalador o zip portable.' },
-      { label: 'Linux', body: 'AppImage, o instalación con un clic vía Docker / Podman Compose.' },
     ],
     allReleasesTitle: 'Todas las versiones',
     allReleasesBody:
@@ -3606,9 +3589,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   'pt-br': {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Baixar OpenDesign — app de desktop gratuito e open source (macOS, Windows, Linux)',
+    title: 'Baixar OpenDesign — app de desktop gratuito e open source (macOS & Windows)',
     description:
-      'Baixe o app de desktop mais recente do OpenDesign — gratuito e open source (Apache-2.0). Instale, entre uma vez e comece sem configurar chaves de modelo. Para macOS (Apple Silicon e Intel), Windows e Linux.',
+      'Baixe o app de desktop mais recente do OpenDesign — gratuito e open source (Apache-2.0). Instale, entre uma vez e comece sem configurar chaves de modelo. Para macOS (Apple Silicon e Intel), Windows.',
     breadcrumb: 'Baixar',
     label: 'Baixar',
     heading: 'Baixe o OpenDesign grátis. Crie designs com seu agente.',
@@ -3624,7 +3607,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Todas as plataformas',
     windowsInstaller: 'Instalador',
     windowsPortable: 'Portátil',
-    linuxBody: 'AppImage e Docker / Podman Compose estão disponíveis na página da versão.',
     installer: 'Instalador',
     portable: 'Portátil',
     downloadVerb: 'Baixar',
@@ -3632,7 +3614,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur ou mais recente — versões para Apple Silicon e Intel.' },
       { label: 'Windows', body: '10 ou 11 (x64) — instalador ou zip portátil.' },
-      { label: 'Linux', body: 'AppImage, ou instalação com um clique via Docker / Podman Compose.' },
     ],
     allReleasesTitle: 'Todas as versões',
     allReleasesBody:
@@ -3643,9 +3624,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   it: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Scarica OpenDesign — app desktop gratuita e open source (macOS, Windows, Linux)',
+    title: 'Scarica OpenDesign — app desktop gratuita e open source (macOS & Windows)',
     description:
-      'Scarica l’ultima app desktop di OpenDesign — gratuita e open source (Apache-2.0). Installa, accedi una volta e inizia senza configurare chiavi del modello. Per macOS (Apple Silicon e Intel), Windows e Linux.',
+      'Scarica l’ultima app desktop di OpenDesign — gratuita e open source (Apache-2.0). Installa, accedi una volta e inizia senza configurare chiavi del modello. Per macOS (Apple Silicon e Intel), Windows.',
     breadcrumb: 'Scarica',
     label: 'Scarica',
     heading: 'Scarica OpenDesign gratis. Progetta con il tuo agente.',
@@ -3661,7 +3642,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Tutte le piattaforme',
     windowsInstaller: 'Programma di installazione',
     windowsPortable: 'Portatile',
-    linuxBody: 'AppImage e Docker / Podman Compose sono disponibili nella pagina della release.',
     installer: 'Programma di installazione',
     portable: 'Portatile',
     downloadVerb: 'Scarica',
@@ -3669,7 +3649,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur o successivo — build per Apple Silicon e Intel.' },
       { label: 'Windows', body: '10 o 11 (x64) — installer o zip portatile.' },
-      { label: 'Linux', body: 'AppImage, o installazione con un clic tramite Docker / Podman Compose.' },
     ],
     allReleasesTitle: 'Tutte le release',
     allReleasesBody:
@@ -3680,9 +3659,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   vi: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Tải OpenDesign — ứng dụng máy tính cho macOS, Windows và Linux',
+    title: 'Tải OpenDesign — ứng dụng máy tính cho macOS và Windows',
     description:
-      'Tải bản dựng máy tính OpenDesign mới nhất. Cài đặt là tạo được ngay — đăng nhập một lần, chọn mô hình và bắt đầu thiết kế. macOS (Apple Silicon và Intel), Windows và Linux.',
+      'Tải bản dựng máy tính OpenDesign mới nhất. Cài đặt là tạo được ngay — đăng nhập một lần, chọn mô hình và bắt đầu thiết kế. macOS (Apple Silicon và Intel), Windows.',
     breadcrumb: 'Tải xuống',
     label: 'Tải xuống',
     heading: 'Tải OpenDesign.',
@@ -3696,7 +3675,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Tất cả nền tảng',
     windowsInstaller: 'Bản cài đặt',
     windowsPortable: 'Bản di động',
-    linuxBody: 'AppImage cùng Docker / Podman Compose có sẵn trên trang phát hành.',
     installer: 'Bản cài đặt',
     portable: 'Bản di động',
     downloadVerb: 'Tải xuống',
@@ -3704,7 +3682,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur trở lên — bản dựng Apple Silicon và Intel.' },
       { label: 'Windows', body: '10 hoặc 11 (x64) — bản cài đặt hoặc zip di động.' },
-      { label: 'Linux', body: 'AppImage, hoặc cài đặt một chạm qua Docker / Podman Compose.' },
     ],
     allReleasesTitle: 'Tất cả bản phát hành',
     allReleasesBody:
@@ -3715,9 +3692,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   pl: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Pobierz OpenDesign — aplikacja desktopowa na macOS, Windows i Linux',
+    title: 'Pobierz OpenDesign — aplikacja desktopowa na macOS i Windows',
     description:
-      'Pobierz najnowszą wersję desktopową OpenDesign. Zainstaluj i twórz — zaloguj się raz, wybierz model i zacznij projektować. macOS (Apple Silicon i Intel), Windows oraz Linux.',
+      'Pobierz najnowszą wersję desktopową OpenDesign. Zainstaluj i twórz — zaloguj się raz, wybierz model i zacznij projektować. macOS (Apple Silicon i Intel), Windows.',
     breadcrumb: 'Pobierz',
     label: 'Pobierz',
     heading: 'Pobierz OpenDesign.',
@@ -3731,7 +3708,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Wszystkie platformy',
     windowsInstaller: 'Instalator',
     windowsPortable: 'Wersja przenośna',
-    linuxBody: 'AppImage oraz Docker / Podman Compose są dostępne na stronie wydania.',
     installer: 'Instalator',
     portable: 'Wersja przenośna',
     downloadVerb: 'Pobierz',
@@ -3739,7 +3715,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur lub nowszy — wersje dla Apple Silicon i Intel.' },
       { label: 'Windows', body: '10 lub 11 (x64) — instalator albo przenośny zip.' },
-      { label: 'Linux', body: 'AppImage lub instalacja jednym kliknięciem przez Docker / Podman Compose.' },
     ],
     allReleasesTitle: 'Wszystkie wydania',
     allReleasesBody:
@@ -3750,9 +3725,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   id: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Unduh OpenDesign — aplikasi desktop untuk macOS, Windows & Linux',
+    title: 'Unduh OpenDesign — aplikasi desktop untuk macOS & Windows',
     description:
-      'Unduh build desktop OpenDesign terbaru. Pasang lalu berkarya — masuk sekali, pilih model, mulai mendesain. macOS (Apple Silicon & Intel), Windows, dan Linux.',
+      'Unduh build desktop OpenDesign terbaru. Pasang lalu berkarya — masuk sekali, pilih model, mulai mendesain. macOS (Apple Silicon & Intel), dan Windows.',
     breadcrumb: 'Unduh',
     label: 'Unduh',
     heading: 'Unduh OpenDesign.',
@@ -3766,7 +3741,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Semua platform',
     windowsInstaller: 'Penginstal',
     windowsPortable: 'Portabel',
-    linuxBody: 'AppImage serta Docker / Podman Compose tersedia di halaman rilis.',
     installer: 'Penginstal',
     portable: 'Portabel',
     downloadVerb: 'Unduh',
@@ -3774,7 +3748,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur atau lebih baru — build Apple Silicon dan Intel.' },
       { label: 'Windows', body: '10 atau 11 (x64) — penginstal atau zip portabel.' },
-      { label: 'Linux', body: 'AppImage, atau penyiapan satu klik via Docker / Podman Compose.' },
     ],
     allReleasesTitle: 'Semua rilis',
     allReleasesBody:
@@ -3785,9 +3758,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   nl: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'OpenDesign downloaden — desktop-app voor macOS, Windows en Linux',
+    title: 'OpenDesign downloaden — desktop-app voor macOS en Windows',
     description:
-      'Download de nieuwste OpenDesign desktop-build. Installeren en maken — één keer inloggen, een model kiezen en beginnen met ontwerpen. macOS (Apple Silicon en Intel), Windows en Linux.',
+      'Download de nieuwste OpenDesign desktop-build. Installeren en maken — één keer inloggen, een model kiezen en beginnen met ontwerpen. macOS (Apple Silicon en Intel), en Windows.',
     breadcrumb: 'Downloaden',
     label: 'Downloaden',
     heading: 'OpenDesign downloaden.',
@@ -3801,7 +3774,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Alle platforms',
     windowsInstaller: 'Installatieprogramma',
     windowsPortable: 'Portable',
-    linuxBody: 'AppImage en Docker / Podman Compose zijn beschikbaar op de release-pagina.',
     installer: 'Installatieprogramma',
     portable: 'Portable',
     downloadVerb: 'Downloaden',
@@ -3809,7 +3781,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur of nieuwer — builds voor Apple Silicon en Intel.' },
       { label: 'Windows', body: '10 of 11 (x64) — installatieprogramma of portable zip.' },
-      { label: 'Linux', body: 'AppImage, of installatie met één klik via Docker / Podman Compose.' },
     ],
     allReleasesTitle: 'Alle releases',
     allReleasesBody:
@@ -3820,9 +3791,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   ar: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'تنزيل OpenDesign — تطبيق سطح المكتب لنظام macOS وWindows وLinux',
+    title: 'تنزيل OpenDesign — تطبيق سطح المكتب لنظام macOS وWindows',
     description:
-      'نزّل أحدث إصدار سطح مكتب من OpenDesign. ثبّت وابدأ الإنشاء — سجّل الدخول مرة واحدة، اختر نموذجًا، وابدأ التصميم. يدعم macOS (Apple Silicon وIntel) وWindows وLinux.',
+      'نزّل أحدث إصدار سطح مكتب من OpenDesign. ثبّت وابدأ الإنشاء — سجّل الدخول مرة واحدة، اختر نموذجًا، وابدأ التصميم. يدعم macOS (Apple Silicon وIntel) وWindows.',
     breadcrumb: 'تنزيل',
     label: 'تنزيل',
     heading: 'تنزيل OpenDesign.',
@@ -3836,7 +3807,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'جميع المنصات',
     windowsInstaller: 'برنامج التثبيت',
     windowsPortable: 'النسخة المحمولة',
-    linuxBody: 'يتوفر AppImage وكذلك Docker / Podman Compose في صفحة الإصدار.',
     installer: 'برنامج التثبيت',
     portable: 'النسخة المحمولة',
     downloadVerb: 'تنزيل',
@@ -3844,7 +3814,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur أو أحدث — إصدارات Apple Silicon وIntel.' },
       { label: 'Windows', body: '10 أو 11 (x64) — برنامج تثبيت أو ملف zip محمول.' },
-      { label: 'Linux', body: 'AppImage، أو إعداد بنقرة واحدة عبر Docker / Podman Compose.' },
     ],
     allReleasesTitle: 'جميع الإصدارات',
     allReleasesBody:
@@ -3855,9 +3824,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   tr: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'OpenDesign’i indir — ücretsiz ve açık kaynak masaüstü uygulaması (macOS, Windows, Linux)',
+    title: 'OpenDesign’i indir — ücretsiz ve açık kaynak masaüstü uygulaması (macOS & Windows)',
     description:
-      'En son OpenDesign masaüstü uygulamasını indirin — ücretsiz ve açık kaynak (Apache-2.0). Kurun, bir kez giriş yapın ve model anahtarı yapılandırmadan başlayın. macOS (Apple Silicon ve Intel), Windows ve Linux için.',
+      'En son OpenDesign masaüstü uygulamasını indirin — ücretsiz ve açık kaynak (Apache-2.0). Kurun, bir kez giriş yapın ve model anahtarı yapılandırmadan başlayın. macOS (Apple Silicon ve Intel), Windows için.',
     breadcrumb: 'İndir',
     label: 'İndir',
     heading: 'OpenDesign uygulamasını ücretsiz indirin. Ajanınızla tasarlayın.',
@@ -3873,7 +3842,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Tüm platformlar',
     windowsInstaller: 'Yükleyici',
     windowsPortable: 'Taşınabilir',
-    linuxBody: 'AppImage ile Docker / Podman Compose sürüm sayfasında mevcuttur.',
     installer: 'Yükleyici',
     portable: 'Taşınabilir',
     downloadVerb: 'İndir',
@@ -3881,7 +3849,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur veya üzeri — Apple Silicon ve Intel sürümleri.' },
       { label: 'Windows', body: '10 veya 11 (x64) — yükleyici veya taşınabilir zip.' },
-      { label: 'Linux', body: 'AppImage veya Docker / Podman Compose ile tek tıkla kurulum.' },
     ],
     allReleasesTitle: 'Tüm sürümler',
     allReleasesBody:
@@ -3892,9 +3859,9 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
   },
   uk: {
     ...INFO_PAGE_COPY.en!.download,
-    title: 'Завантажити OpenDesign — десктопний застосунок для macOS, Windows і Linux',
+    title: 'Завантажити OpenDesign — десктопний застосунок для macOS і Windows',
     description:
-      'Завантажте найновішу десктопну збірку OpenDesign. Встановіть і творіть — увійдіть один раз, виберіть модель, почніть проєктувати. macOS (Apple Silicon та Intel), Windows і Linux.',
+      'Завантажте найновішу десктопну збірку OpenDesign. Встановіть і творіть — увійдіть один раз, виберіть модель, почніть проєктувати. macOS (Apple Silicon та Intel), Windows.',
     breadcrumb: 'Завантажити',
     label: 'Завантажити',
     heading: 'Завантажити OpenDesign.',
@@ -3908,7 +3875,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     platformsTitle: 'Усі платформи',
     windowsInstaller: 'Інсталятор',
     windowsPortable: 'Портативна версія',
-    linuxBody: 'AppImage, а також Docker / Podman Compose доступні на сторінці випуску.',
     installer: 'Інсталятор',
     portable: 'Портативна версія',
     downloadVerb: 'Завантажити',
@@ -3916,7 +3882,6 @@ const COMPACT_DOWNLOAD_COPY: Partial<Record<LandingLocaleCode, DownloadCopy>> = 
     requirements: [
       { label: 'macOS', body: '11 Big Sur або новіша — збірки для Apple Silicon та Intel.' },
       { label: 'Windows', body: '10 або 11 (x64) — інсталятор або портативний zip.' },
-      { label: 'Linux', body: 'AppImage або встановлення в один клік через Docker / Podman Compose.' },
     ],
     allReleasesTitle: 'Усі випуски',
     allReleasesBody:
@@ -3982,7 +3947,7 @@ INFO_PAGE_COPY.zh = {
     runtimeTitle: '你的机器上运行什么',
     runtimeBody: 'OpenDesign 提供三个可运行表面，全部开源、全部本地优先：',
     runtimeItems: [
-      { label: '桌面应用', body: '面向 macOS、Windows、Linux 的 Electron 打包版本。' },
+      { label: '桌面应用', body: '面向 macOS 与 Windows 的 Electron 打包版本。' },
       { label: 'Daemon（od）', body: '给 agent、shell 或 CI 使用的本地 HTTP daemon 与 CLI。' },
       { label: 'Skills + Systems', body: '可以 fork、编辑和交付的 Markdown bundle。' },
     ],
@@ -4181,9 +4146,9 @@ INFO_PAGE_COPY.zh = {
   agentGuides: ZH_AGENT_GUIDES,
   download: {
     ...INFO_PAGE_COPY.en!.download,
-    title: '下载 OpenDesign —— 免费开源桌面客户端（macOS / Windows / Linux）',
+    title: '下载 OpenDesign —— 免费开源桌面客户端（macOS / Windows）',
     description:
-      '下载最新版 OpenDesign 桌面客户端——免费、开源（Apache-2.0）。安装后登录一次即可开始设计，无需配置模型密钥。支持 macOS（Apple Silicon 与 Intel）、Windows、Linux。',
+      '下载最新版 OpenDesign 桌面客户端——免费、开源（Apache-2.0）。安装后登录一次即可开始设计，无需配置模型密钥。支持 macOS（Apple Silicon 与 Intel）、Windows。',
     breadcrumb: '下载',
     label: '下载',
     heading: '免费下载 OpenDesign，用你的 Agent 开始设计。',
@@ -4200,7 +4165,6 @@ INFO_PAGE_COPY.zh = {
     macIntel: 'Intel',
     windowsInstaller: '安装版',
     windowsPortable: '便携版',
-    linuxBody: 'AppImage 以及 Docker / Podman Compose 一键搭建，见 release 页面。',
     installer: '安装版',
     portable: '便携版',
     downloadVerb: '下载',
@@ -4208,7 +4172,6 @@ INFO_PAGE_COPY.zh = {
     requirements: [
       { label: 'macOS', body: '11 Big Sur 及以上——提供 Apple Silicon 与 Intel 版本。' },
       { label: 'Windows', body: '10 或 11（x64）——安装版或便携版 zip。' },
-      { label: 'Linux', body: 'AppImage，或 Docker / Podman Compose 一键搭建。' },
     ],
     allReleasesTitle: '全部版本',
     allReleasesBody: '每个构建与历史版本都在 GitHub Releases 与 releases.open-design.ai 上。',
@@ -4467,7 +4430,7 @@ INFO_PAGE_COPY['zh-tw'] = {
     runtimeTitle: '你的機器上執行什麼',
     runtimeBody: 'OpenDesign 提供三個可執行表面，全部開源、全部本地優先：',
     runtimeItems: [
-      { label: '桌面應用', body: '面向 macOS、Windows、Linux 的 Electron 打包版本。' },
+      { label: '桌面應用', body: '面向 macOS 與 Windows 的 Electron 打包版本。' },
       { label: 'Daemon（od）', body: '給 agent、shell 或 CI 使用的本地 HTTP daemon 與 CLI。' },
       { label: 'Skills + Systems', body: '可以 fork、編輯和交付的 Markdown bundle。' },
     ],
@@ -4745,7 +4708,7 @@ function compactCommon(locale: LandingLocaleCode, text: CompactInfoPageText): In
     localFirst: text.common.localFirst,
     byok: 'BYOK',
     apache: 'Apache-2.0',
-    macWinLinux: 'macOS · Windows · Linux',
+    macWin: 'macOS · Windows',
   };
 }
 

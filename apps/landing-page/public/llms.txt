@@ -23,8 +23,8 @@ OpenDesign is free and open-source (Apache-2.0). The desktop app is BYOK —
 you pay only your own model API. Optional paid tiers add bundled model credits
 and hosted cloud deploys. See /pricing.md and https://open-design.ai/pricing/.
 
-Brand names "OpenDesign", "OpenDesign", "open-design", "opendesign",
-"OpenDesign AI", and "OD" all refer to this same project, hosted at
+Brand names "OpenDesign", "Open Design", "open-design", "opendesign",
+"Open Design AI", and "OD" all refer to this same project, hosted at
 https://open-design.ai/ and developed at github.com/nexu-io/open-design.
 
 ## Official Entry Points
@@ -32,7 +32,7 @@ https://open-design.ai/ and developed at github.com/nexu-io/open-design.
 - Home: https://open-design.ai/
 - Official source page: https://open-design.ai/official/
 - Quickstart: https://open-design.ai/quickstart/
-- Download (macOS, Windows, Linux): https://open-design.ai/download/
+- Download (macOS & Windows): https://open-design.ai/download/
 - Pricing: https://open-design.ai/pricing/
 - Machine-readable pricing: https://open-design.ai/pricing.md
 - FAQ: https://open-design.ai/faq/

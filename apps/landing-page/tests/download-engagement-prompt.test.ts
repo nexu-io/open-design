@@ -145,7 +145,6 @@ function runPromptEnhancer(options: {
     macArm64: 'https://example.com/open-design-mac-arm64.dmg',
     macX64: 'https://example.com/open-design-mac-x64.dmg',
     windows: 'https://example.com/open-design-win-x64-setup.exe',
-    linux: 'https://example.com/open-design-x86_64.AppImage',
   };
   const fetch = async () => ({ ok: true, json: async () => ({ assets: [] }) });
 
@@ -423,7 +422,8 @@ test('download prompt: header and prompt keep mobile fallbacks aligned in docume
         platform: 'Linux x86_64',
         maxTouchPoints: 0,
       },
-      expectedHref: 'https://example.com/open-design-x86_64.AppImage',
+      // No Linux desktop build — Linux stays on the neutral /download/ page.
+      expectedHref: '/download/',
     },
   ];
 

@@ -1,6 +1,6 @@
 # Pricing — OpenDesign
 
-OpenDesign is **free and open-source**. The desktop app (macOS, Windows, Linux)
+OpenDesign is **free and open-source**. The desktop app (macOS & Windows)
 is Apache-2.0 licensed and BYOK — you install it for free and pay only for your
 own agent/model API usage, which bills directly to your own provider account.
 Nothing is proxied through OpenDesign.
@@ -14,7 +14,7 @@ not required to use OpenDesign.
 - License: Apache-2.0 (full source at https://github.com/nexu-io/open-design)
 - Model access: **BYOK** — bring your own provider key; API usage bills to your
   own account, never proxied through OpenDesign
-- Runs: local-first on your own machine (macOS, Windows, Linux)
+- Runs: local-first on your own machine (macOS & Windows)
 - Includes: the full skill + design-system library, every supported coding agent
   (Claude Code, Codex, Cursor, Gemini, OpenCode, Qwen, and more), and artifacts
   saved as files in your own repository
