@@ -6,7 +6,7 @@
  * shape for client-side reconciliation and smoke checks.
  *
  * Keep `PRICING_SNAPSHOT` and `public/pricing/plans.json` in lockstep until
- * Open Design Cloud exposes an external JSON contract that can replace this
+ * OpenDesign Cloud exposes an external JSON contract that can replace this
  * static landing-page contract.
  */
 

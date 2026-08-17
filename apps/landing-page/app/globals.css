@@ -452,7 +452,7 @@ body::before {
   .locale-menu { animation: none; }
   .locale-trigger-caret { transition: none; }
 }
-/* ---------- Open Design Cloud header account ---------- */
+/* ---------- OpenDesign Cloud header account ---------- */
 /* The avatar menu stays out of layout until a live cloud session is found. */
 .nav-account {
   display: inline-flex;
@@ -482,7 +482,7 @@ body::before {
   outline-offset: 2px;
 }
 /* Circular avatar — a disc reads unmistakably as a user avatar. Dark tile +
-   single initial mirrors Open Design Cloud's identity styling. */
+   single initial mirrors OpenDesign Cloud's identity styling. */
 .nav-avatar,
 .nav-avatar-fallback {
   width: 32px;
@@ -735,7 +735,7 @@ body::before {
   font-size: 18px;
 }
 /*
- * Combined brand lockup — the glyph + "Open Design" wordmark as a single
+ * Combined brand lockup — the glyph + "OpenDesign" wordmark as a single
  * SVG (`/logo-lockup.svg`, viewBox 225×83). Sized by height so the glyph
  * keeps roughly its previous 44px optical weight while the wordmark sets
  * its own width. Replaces the old `.brand-mark` glyph + `.brand-name`
@@ -3186,7 +3186,7 @@ section.tight { padding: 90px 0; }
  * bone/paper palette; no dark panels.
  */
 /* ---------- Labs product-window showcase ----------
- * The Open Design deck editor rendered as a static window, sitting on a
+ * The OpenDesign deck editor rendered as a static window, sitting on a
  * full-bleed canvas (`heroImage`). The mode Dock floats over the window's
  * lower edge and swaps the deck preview (`.la-slide img`). All chrome below
  * is purely presentational (SSR/no-JS). */
@@ -4323,7 +4323,7 @@ section.tight { padding: 90px 0; }
   font-family: var(--sans);
   /* Fluid within the 238px safe area: caps at 42px on wide desktop, scales down
      as the two-column copy track narrows so the headline fits without the
-     "Open Design" line wrapping awkwardly on small/medium screens. */
+     "OpenDesign" line wrapping awkwardly on small/medium screens. */
   font-size: clamp(26px, 3vw, 42px);
   font-weight: 700;
   letter-spacing: -0.022em;
@@ -4339,7 +4339,7 @@ section.tight { padding: 90px 0; }
   font-style: italic;
   font-weight: 500;
 }
-/* "正在一起构建 Open Design" stays on its own single line at every breakpoint
+/* "正在一起构建 OpenDesign" stays on its own single line at every breakpoint
    (the content-sized copy track guarantees room, so it no longer overflows). */
 .testimonial-copy h2 .testi-post { white-space: nowrap; }
 .author {
@@ -4723,7 +4723,7 @@ section.tight { padding: 90px 0; }
 .cta-dance.precise-bg-in::before {
   background-image: url('/cta-bg.webp?v=3');
 }
-/* Open Design Home window floating over the mural, centered in the lower half;
+/* OpenDesign Home window floating over the mural, centered in the lower half;
    its bottom is clipped by the block's overflow:hidden (matching the comp). */
 .cta-window {
   position: relative;
@@ -4897,7 +4897,7 @@ section.tight { padding: 90px 0; }
   letter-spacing: -0.022em;
   color: var(--ink);
   margin: 0 0 16px;
-  /* CJK titles ("Open Design 订阅") must wrap at the space, never inside the
+  /* CJK titles ("OpenDesign 订阅") must wrap at the space, never inside the
      CJK word; balance keeps the two lines visually even. */
   word-break: keep-all;
   text-wrap: balance;
@@ -5384,7 +5384,7 @@ footer .container {
 /* ---------- footer masthead ----------
  *
  * Masthead sign-off under the footer link columns: a container-filling
- * two-tone "Open Design." wordmark. One class contract shared by
+ * two-tone "OpenDesign." wordmark. One class contract shared by
  * `site-footer.astro` and the homepage footer in `page.tsx`.
  */
 .foot-masthead {
@@ -5395,7 +5395,7 @@ footer .container {
   font-weight: 800;
   /* Fills the 964px column at the 1440px design width and degrades fluidly.
      The lower bound follows the viewport (10.4vw) rather than a fixed 52px
-     floor: "Open Design." is ~5.75em wide here, so the old 52px floor rendered
+     floor: "OpenDesign." is ~5.75em wide here, so the old 52px floor rendered
      ~299px and overflowed the padded mobile footer box (100vw - 48px ≈ 272px on
      a 320px phone), where the page's global overflow-x:hidden clipped it.
      10.4vw always satisfies 10.4vw·5.75 ≤ 100vw-48, so the sign-off fits at

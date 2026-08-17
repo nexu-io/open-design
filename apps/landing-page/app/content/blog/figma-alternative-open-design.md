@@ -35,8 +35,8 @@ i18n:
         <figcaption>事实来源活在一个专有文件里,在别人的云上。</figcaption>
       </figure>
 
-      <h2>Open Design 押的那个转变</h2>
-      <p>Open Design 不是 Figma 的克隆。这里没有无限画布,也没有多人光标。它是一个薄薄的 skill 层,把你本来就在用的编程 agent 变成一台设计引擎。四个原语是 <a href="/blog/31-skills-72-systems-how-the-library-works/">skills、systems、adapters 和 daemon</a>——而关键在于,它们全都只是文件:</p>
+      <h2>OpenDesign 押的那个转变</h2>
+      <p>OpenDesign 不是 Figma 的克隆。这里没有无限画布,也没有多人光标。它是一个薄薄的 skill 层,把你本来就在用的编程 agent 变成一台设计引擎。四个原语是 <a href="/blog/31-skills-72-systems-how-the-library-works/">skills、systems、adapters 和 daemon</a>——而关键在于,它们全都只是文件:</p>
       <ul>
         <li>每个 skill 是一个 <code>SKILL.md</code> 文件,你可以读、可以 fork、可以提 PR 回来。</li>
         <li>每个设计系统是一个可移植的 <code>DESIGN.md</code> 文件——包括我们为 Figma 本身 ship 的那一份。你可以在任何编辑器里打开它、在 git 里 diff 它,它能活得比下一个读它的工具更久。</li>
@@ -49,7 +49,7 @@ i18n:
         <li><strong>工作流可移植。</strong>一个 skill 就是一个文件夹。它能组合进你 <code>$PATH</code> 上的任何 agent,而不是某个厂商的插件运行时。</li>
         <li><strong>默认 BYOK。</strong>粘贴任何 OpenAI 兼容的 <code>base_url</code> 和 key;<a href="/blog/byok-design-workflow-claude-codex-qwen/">你的 token 直接发给提供商</a>。Apache-2.0,无需注册,没有按席位的账单。</li>
       </ul>
-      <p>心智模型是这样的:Figma 是一块你租来的画布。Open Design 是一套你拥有的工作流。</p>
+      <p>心智模型是这样的:Figma 是一块你租来的画布。OpenDesign 是一套你拥有的工作流。</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="一叠黑色素纸和索引卡从一个打开的容器里铺展开来,有几张正飘离,呈现在暖色编辑风研究图版上" />
@@ -58,7 +58,7 @@ i18n:
 
       <h2>逐项对照</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>许可</td><td>专有</td><td>Apache-2.0</td></tr>
           <tr><td>运行时</td><td>托管(浏览器,Figma 云)</td><td>本地 daemon(<code>pnpm tools-dev</code>)+ 可选自托管</td></tr>
@@ -73,7 +73,7 @@ i18n:
           <tr><td>数据路径</td><td>文件 → Figma 云</td><td>提示词 → 你选的提供商;什么都不经过我们</td></tr>
         </tbody>
       </table>
-      <p>诚实地总结:Figma 拥有市面上最打磨的协作画布体验,而对一个一起 review 精确屏幕的设计师团队来说,这份打磨就是产品本身。Open Design 则完全用画布换来了一个库——skills、systems 和 agents,设计成与你笔记本上已有的工具组合起来用。不同的形状,不同的押注。</p>
+      <p>诚实地总结:Figma 拥有市面上最打磨的协作画布体验,而对一个一起 review 精确屏幕的设计师团队来说,这份打磨就是产品本身。OpenDesign 则完全用画布换来了一个库——skills、systems 和 agents,设计成与你笔记本上已有的工具组合起来用。不同的形状,不同的押注。</p>
 
       <h2>谁该选哪个</h2>
       <table>
@@ -82,10 +82,10 @@ i18n:
           <tr><td>做实时、多设计师画布工作、需要在线 review 的设计团队</td><td><strong>Figma。</strong>开源里没有东西能匹配那块多人画布。</td></tr>
           <tr><td>整天做像素级矢量和组件工作的设计师</td><td><strong>Figma。</strong>画布原语成熟,你的肌肉记忆值真金白银。</td></tr>
           <tr><td>已经标准化在 Figma 上、Dev Mode 进了工程环节的组织</td><td><strong>Figma。</strong>整合成本你已经付过了;把它花掉。</td></tr>
-          <tr><td>已经在终端里驱动 Claude Code、Codex 或 Cursor 的设计工程师</td><td><strong>Open Design。</strong>你的 agent 就是设计引擎;skill 层加上品味和结构,不用再装一个新应用。</td></tr>
-          <tr><td>任何需要 BYOK、项目中途换模型、或敏感简报要本地化处理的人</td><td><strong>Open Design。</strong><a href="/blog/byok-reality-check-5-things-that-break/">现实比宣传更粗糙</a>,但这是唯一真正成立的契约。</td></tr>
-          <tr><td>想要一套能熬过工具更替的设计系统的团队</td><td><strong>Open Design。</strong><code>DESIGN.md</code> 文件比读它的工具活得更久。</td></tr>
-          <tr><td>想 ship 一套项目能采纳的设计工作流的开源贡献者</td><td><strong>Open Design。</strong>放一个文件夹,重启 daemon,提 PR。</td></tr>
+          <tr><td>已经在终端里驱动 Claude Code、Codex 或 Cursor 的设计工程师</td><td><strong>OpenDesign。</strong>你的 agent 就是设计引擎;skill 层加上品味和结构,不用再装一个新应用。</td></tr>
+          <tr><td>任何需要 BYOK、项目中途换模型、或敏感简报要本地化处理的人</td><td><strong>OpenDesign。</strong><a href="/blog/byok-reality-check-5-things-that-break/">现实比宣传更粗糙</a>,但这是唯一真正成立的契约。</td></tr>
+          <tr><td>想要一套能熬过工具更替的设计系统的团队</td><td><strong>OpenDesign。</strong><code>DESIGN.md</code> 文件比读它的工具活得更久。</td></tr>
+          <tr><td>想 ship 一套项目能采纳的设计工作流的开源贡献者</td><td><strong>OpenDesign。</strong>放一个文件夹,重启 daemon,提 PR。</td></tr>
         </tbody>
       </table>
       <p>对大多数团队来说,定胜负的那个维度不是质量——Figma 的手艺是真的。而是:你的工作是一块用来画的画布,还是一套用来自动化的工作流。如果是后者,你会更想拥有它,而不是租它。</p>
@@ -97,9 +97,9 @@ i18n:
 
       <h2>延伸阅读</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">如何把 Figma 工作流迁移成 Open Design 插件</a>——一次导出、token 同步或品牌套件的具体路径</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">如何把 Figma 工作流迁移成 OpenDesign 插件</a>——一次导出、token 同步或品牌套件的具体路径</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">Claude Design 的开源替代方案</a>——同样诚实的判断,换一个工具</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">为什么我们把 Open Design 做成 skill 层,而不是一个产品</a>——「是层,不是产品」这个押注背后更长的宣言</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">为什么我们把 OpenDesign 做成 skill 层,而不是一个产品</a>——「是层,不是产品」这个押注背后更长的宣言</li>
       </ul>
   zh-tw:
     title: "Figma 的開源替代方案"
@@ -131,8 +131,8 @@ i18n:
         <figcaption>事實來源活在一個專有檔案裡,在別人的雲上。</figcaption>
       </figure>
 
-      <h2>Open Design 押的那個轉變</h2>
-      <p>Open Design 不是 Figma 的複製品。這裡沒有無限畫布,也沒有多人游標。它是一個薄薄的 skill 層,把你本來就在用的編程 agent 變成一台設計引擎。四個原語是 <a href="/blog/31-skills-72-systems-how-the-library-works/">skills、systems、adapters 和 daemon</a>——而關鍵在於,它們全都只是檔案:</p>
+      <h2>OpenDesign 押的那個轉變</h2>
+      <p>OpenDesign 不是 Figma 的複製品。這裡沒有無限畫布,也沒有多人游標。它是一個薄薄的 skill 層,把你本來就在用的編程 agent 變成一台設計引擎。四個原語是 <a href="/blog/31-skills-72-systems-how-the-library-works/">skills、systems、adapters 和 daemon</a>——而關鍵在於,它們全都只是檔案:</p>
       <ul>
         <li>每個 skill 是一個 <code>SKILL.md</code> 檔案,你可以讀、可以 fork、可以提 PR 回來。</li>
         <li>每個設計系統是一個可移植的 <code>DESIGN.md</code> 檔案——包括我們為 Figma 本身 ship 的那一份。你可以在任何編輯器裡打開它、在 git 裡 diff 它,它能活得比下一個讀它的工具更久。</li>
@@ -145,7 +145,7 @@ i18n:
         <li><strong>工作流可移植。</strong>一個 skill 就是一個資料夾。它能組合進你 <code>$PATH</code> 上的任何 agent,而不是某個廠商的外掛執行時。</li>
         <li><strong>預設 BYOK。</strong>貼上任何 OpenAI 相容的 <code>base_url</code> 和 key;<a href="/blog/byok-design-workflow-claude-codex-qwen/">你的 token 直接發給提供商</a>。Apache-2.0,無需註冊,沒有按席位的帳單。</li>
       </ul>
-      <p>心智模型是這樣的:Figma 是一塊你租來的畫布。Open Design 是一套你擁有的工作流。</p>
+      <p>心智模型是這樣的:Figma 是一塊你租來的畫布。OpenDesign 是一套你擁有的工作流。</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="一疊黑色素紙和索引卡從一個打開的容器裡鋪展開來,有幾張正飄離,呈現在暖色編輯風研究圖版上" />
@@ -154,7 +154,7 @@ i18n:
 
       <h2>逐項對照</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>授權</td><td>專有</td><td>Apache-2.0</td></tr>
           <tr><td>執行時</td><td>託管(瀏覽器,Figma 雲)</td><td>本地 daemon(<code>pnpm tools-dev</code>)+ 可選自託管</td></tr>
@@ -169,7 +169,7 @@ i18n:
           <tr><td>資料路徑</td><td>檔案 → Figma 雲</td><td>提示詞 → 你選的提供商;什麼都不經過我們</td></tr>
         </tbody>
       </table>
-      <p>誠實地總結:Figma 擁有市面上最打磨的協作畫布體驗,而對一個一起 review 精確螢幕的設計師團隊來說,這份打磨就是產品本身。Open Design 則完全用畫布換來了一個程式庫——skills、systems 和 agents,設計成與你筆電上已有的工具組合起來用。不同的形狀,不同的押注。</p>
+      <p>誠實地總結:Figma 擁有市面上最打磨的協作畫布體驗,而對一個一起 review 精確螢幕的設計師團隊來說,這份打磨就是產品本身。OpenDesign 則完全用畫布換來了一個程式庫——skills、systems 和 agents,設計成與你筆電上已有的工具組合起來用。不同的形狀,不同的押注。</p>
 
       <h2>誰該選哪個</h2>
       <table>
@@ -178,10 +178,10 @@ i18n:
           <tr><td>做即時、多設計師畫布工作、需要線上 review 的設計團隊</td><td><strong>Figma。</strong>開源裡沒有東西能匹配那塊多人畫布。</td></tr>
           <tr><td>整天做像素級向量和元件工作的設計師</td><td><strong>Figma。</strong>畫布原語成熟,你的肌肉記憶值真金白銀。</td></tr>
           <tr><td>已經標準化在 Figma 上、Dev Mode 進了工程環節的組織</td><td><strong>Figma。</strong>整合成本你已經付過了;把它花掉。</td></tr>
-          <tr><td>已經在終端機裡驅動 Claude Code、Codex 或 Cursor 的設計工程師</td><td><strong>Open Design。</strong>你的 agent 就是設計引擎;skill 層加上品味和結構,不用再裝一個新應用。</td></tr>
-          <tr><td>任何需要 BYOK、專案中途換模型、或敏感簡報要本地化處理的人</td><td><strong>Open Design。</strong><a href="/blog/byok-reality-check-5-things-that-break/">現實比宣傳更粗糙</a>,但這是唯一真正成立的契約。</td></tr>
-          <tr><td>想要一套能熬過工具更替的設計系統的團隊</td><td><strong>Open Design。</strong><code>DESIGN.md</code> 檔案比讀它的工具活得更久。</td></tr>
-          <tr><td>想 ship 一套專案能採納的設計工作流的開源貢獻者</td><td><strong>Open Design。</strong>放一個資料夾,重啟 daemon,提 PR。</td></tr>
+          <tr><td>已經在終端機裡驅動 Claude Code、Codex 或 Cursor 的設計工程師</td><td><strong>OpenDesign。</strong>你的 agent 就是設計引擎;skill 層加上品味和結構,不用再裝一個新應用。</td></tr>
+          <tr><td>任何需要 BYOK、專案中途換模型、或敏感簡報要本地化處理的人</td><td><strong>OpenDesign。</strong><a href="/blog/byok-reality-check-5-things-that-break/">現實比宣傳更粗糙</a>,但這是唯一真正成立的契約。</td></tr>
+          <tr><td>想要一套能熬過工具更替的設計系統的團隊</td><td><strong>OpenDesign。</strong><code>DESIGN.md</code> 檔案比讀它的工具活得更久。</td></tr>
+          <tr><td>想 ship 一套專案能採納的設計工作流的開源貢獻者</td><td><strong>OpenDesign。</strong>放一個資料夾,重啟 daemon,提 PR。</td></tr>
         </tbody>
       </table>
       <p>對大多數團隊來說,定勝負的那個維度不是品質——Figma 的手藝是真的。而是:你的工作是一塊用來畫的畫布,還是一套用來自動化的工作流。如果是後者,你會更想擁有它,而不是租它。</p>
@@ -193,9 +193,9 @@ i18n:
 
       <h2>延伸閱讀</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">如何把 Figma 工作流遷移成 Open Design 外掛</a>——一次匯出、token 同步或品牌套件的具體路徑</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">如何把 Figma 工作流遷移成 OpenDesign 外掛</a>——一次匯出、token 同步或品牌套件的具體路徑</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">Claude Design 的開源替代方案</a>——同樣誠實的判斷,換一個工具</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">為什麼我們把 Open Design 做成 skill 層,而不是一個產品</a>——「是層,不是產品」這個押注背後更長的宣言</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">為什麼我們把 OpenDesign 做成 skill 層,而不是一個產品</a>——「是層,不是產品」這個押注背後更長的宣言</li>
       </ul>
   ja:
     title: "Figma のオープンソース代替"
@@ -227,8 +227,8 @@ i18n:
         <figcaption>事実の源は、独自仕様のファイルの中、他人のクラウド上に生きている。</figcaption>
       </figure>
 
-      <h2>Open Design が賭けている転換</h2>
-      <p>Open Design は Figma のクローンではありません。ここには無限キャンバスもなければ、多人数のカーソルもありません。これは薄い skill レイヤーで、あなたがすでに使っているコーディング agent を設計エンジンに変えます。四つのプリミティブは <a href="/blog/31-skills-72-systems-how-the-library-works/">skills、systems、adapters、daemon</a> です——そして肝心なのは、それらがすべて単なるファイルだという点です。</p>
+      <h2>OpenDesign が賭けている転換</h2>
+      <p>OpenDesign は Figma のクローンではありません。ここには無限キャンバスもなければ、多人数のカーソルもありません。これは薄い skill レイヤーで、あなたがすでに使っているコーディング agent を設計エンジンに変えます。四つのプリミティブは <a href="/blog/31-skills-72-systems-how-the-library-works/">skills、systems、adapters、daemon</a> です——そして肝心なのは、それらがすべて単なるファイルだという点です。</p>
       <ul>
         <li>どの skill も <code>SKILL.md</code> ファイルで、読むことも、fork することも、PR として送り返すこともできます。</li>
         <li>どの設計システムも移植可能な <code>DESIGN.md</code> ファイルです——私たちが Figma 自身のために出荷したものも含めて。任意のエディタで開け、git で diff でき、それを次に読むツールよりも長く生き残ります。</li>
@@ -241,7 +241,7 @@ i18n:
         <li><strong>ワークフローは移植可能です。</strong>skill とは一つのフォルダです。あなたの <code>$PATH</code> 上のどんな agent にも組み込めます。特定ベンダーのプラグインランタイムではありません。</li>
         <li><strong>デフォルトで BYOK。</strong>OpenAI 互換の <code>base_url</code> と key を貼り付けるだけ。<a href="/blog/byok-design-workflow-claude-codex-qwen/">あなたの token はまっすぐプロバイダーへ届きます</a>。Apache-2.0、登録不要、シート単位の請求なし。</li>
       </ul>
-      <p>心の中のモデルはこうです。Figma はあなたが借りるキャンバス。Open Design はあなたが所有するワークフロー。</p>
+      <p>心の中のモデルはこうです。Figma はあなたが借りるキャンバス。OpenDesign はあなたが所有するワークフロー。</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="開いた容器から扇状に広がる黒いプレーンな紙とインデックスカードの束、数枚が自由に漂う、暖色系のエディトリアル風スタディプレート" />
@@ -250,7 +250,7 @@ i18n:
 
       <h2>項目ごとの対照</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>ライセンス</td><td>独自仕様</td><td>Apache-2.0</td></tr>
           <tr><td>ランタイム</td><td>ホスト型(ブラウザ、Figma クラウド)</td><td>ローカル daemon(<code>pnpm tools-dev</code>)+ 任意でセルフホスト</td></tr>
@@ -265,7 +265,7 @@ i18n:
           <tr><td>データ経路</td><td>ファイル → Figma クラウド</td><td>プロンプト → あなたが選んだプロバイダー;何も私たちを経由しない</td></tr>
         </tbody>
       </table>
-      <p>正直にまとめると、Figma は市場で最も洗練されたコラボレーション・キャンバス体験を持っており、精密な画面を一緒にレビューするデザイナーのチームにとって、その洗練こそが製品そのものです。Open Design のほうは、キャンバスをまるごとライブラリと引き換えにします——skills、systems、agents は、あなたのノートパソコンにすでにあるツールと組み合わせて使うように設計されています。異なる形、異なる賭け。</p>
+      <p>正直にまとめると、Figma は市場で最も洗練されたコラボレーション・キャンバス体験を持っており、精密な画面を一緒にレビューするデザイナーのチームにとって、その洗練こそが製品そのものです。OpenDesign のほうは、キャンバスをまるごとライブラリと引き換えにします——skills、systems、agents は、あなたのノートパソコンにすでにあるツールと組み合わせて使うように設計されています。異なる形、異なる賭け。</p>
 
       <h2>誰がどちらを選ぶべきか</h2>
       <table>
@@ -274,10 +274,10 @@ i18n:
           <tr><td>リアルタイムで複数デザイナーのキャンバス作業をし、ライブレビューが必要な設計チーム</td><td><strong>Figma。</strong>あの多人数キャンバスに匹敵するものはオープンソースにはない。</td></tr>
           <tr><td>一日中ピクセル精度のベクターやコンポーネント作業をするデザイナー</td><td><strong>Figma。</strong>キャンバスのプリミティブは成熟し、あなたの手の記憶は本物のお金に値する。</td></tr>
           <tr><td>すでに Figma に標準化し、Dev Mode がエンジニアリングの流れに組み込まれている組織</td><td><strong>Figma。</strong>統合コストはもう払い終えている;それを使い切ろう。</td></tr>
-          <tr><td>すでにターミナルから Claude Code、Codex、Cursor を駆動している設計エンジニア</td><td><strong>Open Design。</strong>あなたの agent こそが設計エンジン;skill レイヤーがセンスと構造を足してくれて、新しいアプリを入れる必要はない。</td></tr>
-          <tr><td>BYOK、プロジェクト途中でのモデル切り替え、または機微なブリーフのローカル限定処理を必要とする人</td><td><strong>Open Design。</strong><a href="/blog/byok-reality-check-5-things-that-break/">現実は宣伝よりも荒削り</a>だが、これが本当に成り立つ唯一の契約だ。</td></tr>
-          <tr><td>ツールの移り変わりを生き延びる設計システムを望むチーム</td><td><strong>Open Design。</strong><code>DESIGN.md</code> ファイルは、それを読むツールよりも長生きする。</td></tr>
-          <tr><td>プロジェクトが採用できる設計ワークフローを出荷したいオープンソースの貢献者</td><td><strong>Open Design。</strong>フォルダを一つ置き、daemon を再起動し、PR を送る。</td></tr>
+          <tr><td>すでにターミナルから Claude Code、Codex、Cursor を駆動している設計エンジニア</td><td><strong>OpenDesign。</strong>あなたの agent こそが設計エンジン;skill レイヤーがセンスと構造を足してくれて、新しいアプリを入れる必要はない。</td></tr>
+          <tr><td>BYOK、プロジェクト途中でのモデル切り替え、または機微なブリーフのローカル限定処理を必要とする人</td><td><strong>OpenDesign。</strong><a href="/blog/byok-reality-check-5-things-that-break/">現実は宣伝よりも荒削り</a>だが、これが本当に成り立つ唯一の契約だ。</td></tr>
+          <tr><td>ツールの移り変わりを生き延びる設計システムを望むチーム</td><td><strong>OpenDesign。</strong><code>DESIGN.md</code> ファイルは、それを読むツールよりも長生きする。</td></tr>
+          <tr><td>プロジェクトが採用できる設計ワークフローを出荷したいオープンソースの貢献者</td><td><strong>OpenDesign。</strong>フォルダを一つ置き、daemon を再起動し、PR を送る。</td></tr>
         </tbody>
       </table>
       <p>ほとんどのチームにとって勝敗を決める軸は、品質ではありません——Figma の手仕事は本物です。それは、あなたの仕事が描くためのキャンバスなのか、それとも自動化するためのワークフローなのか、という点です。もし後者なら、あなたはそれを借りるよりも所有したいと思うはずです。</p>
@@ -289,9 +289,9 @@ i18n:
 
       <h2>さらに読む</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Figma のワークフローを Open Design プラグインに移植する方法</a>——エクスポート、token 同期、ブランドキットの具体的な道筋</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Figma のワークフローを OpenDesign プラグインに移植する方法</a>——エクスポート、token 同期、ブランドキットの具体的な道筋</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">Claude Design のオープンソース代替</a>——同じく正直な見立てを、別のツールで</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ私たちは Open Design を製品ではなく skill レイヤーとして作ったのか</a>——「レイヤーであって製品ではない」という賭けの背後にある、より長い宣言</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">なぜ私たちは OpenDesign を製品ではなく skill レイヤーとして作ったのか</a>——「レイヤーであって製品ではない」という賭けの背後にある、より長い宣言</li>
       </ul>
   ko:
     title: "Figma의 오픈소스 대안"
@@ -323,8 +323,8 @@ i18n:
         <figcaption>사실의 원천이 독점 파일 안에, 남의 클라우드 위에 산다.</figcaption>
       </figure>
 
-      <h2>Open Design가 거는 그 전환</h2>
-      <p>Open Design는 Figma의 클론이 아닙니다. 여기에는 무한 캔버스도, 멀티플레이어 커서도 없습니다. 그것은 당신이 이미 쓰는 코딩 agent를 디자인 엔진으로 바꿔 주는 얇은 skill 층입니다. 네 가지 원시 요소는 <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters, 그리고 daemon</a>입니다 — 그리고 핵심은, 그것들이 전부 그냥 파일이라는 점입니다.</p>
+      <h2>OpenDesign가 거는 그 전환</h2>
+      <p>OpenDesign는 Figma의 클론이 아닙니다. 여기에는 무한 캔버스도, 멀티플레이어 커서도 없습니다. 그것은 당신이 이미 쓰는 코딩 agent를 디자인 엔진으로 바꿔 주는 얇은 skill 층입니다. 네 가지 원시 요소는 <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters, 그리고 daemon</a>입니다 — 그리고 핵심은, 그것들이 전부 그냥 파일이라는 점입니다.</p>
       <ul>
         <li>모든 skill은 읽고, fork 하고, PR로 되돌려 보낼 수 있는 <code>SKILL.md</code> 파일입니다.</li>
         <li>모든 디자인 시스템은 이식 가능한 <code>DESIGN.md</code> 파일입니다 — 우리가 Figma 자체를 위해 ship 한 것을 포함해서요. 어떤 에디터에서든 열 수 있고, git에서 diff 할 수 있으며, 다음에 그것을 읽는 도구보다 더 오래 살아남습니다.</li>
@@ -337,7 +337,7 @@ i18n:
         <li><strong>워크플로는 이식 가능합니다.</strong> skill은 하나의 폴더입니다. 그것은 어떤 벤더의 플러그인 런타임이 아니라, 당신의 <code>$PATH</code> 위에 있는 어떤 agent에든 조합됩니다.</li>
         <li><strong>기본값이 BYOK입니다.</strong> OpenAI 호환 <code>base_url</code>과 key를 아무거나 붙여 넣으세요. <a href="/blog/byok-design-workflow-claude-codex-qwen/">당신의 토큰은 곧장 제공자에게 갑니다</a>. Apache-2.0, 가입 불필요, 좌석당 청구 없음.</li>
       </ul>
-      <p>심성 모형은 이렇습니다. Figma는 당신이 빌린 캔버스입니다. Open Design는 당신이 소유한 워크플로입니다.</p>
+      <p>심성 모형은 이렇습니다. Figma는 당신이 빌린 캔버스입니다. OpenDesign는 당신이 소유한 워크플로입니다.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="열린 용기에서 검은색 평문 종이와 색인 카드 한 무더기가 부채꼴로 펼쳐지고 몇 장이 자유롭게 떠가는, 따뜻한 색조의 에디토리얼 연구 도판" />
@@ -346,7 +346,7 @@ i18n:
 
       <h2>나란히 비교</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>라이선스</td><td>독점</td><td>Apache-2.0</td></tr>
           <tr><td>런타임</td><td>호스팅됨(브라우저, Figma 클라우드)</td><td>로컬 daemon(<code>pnpm tools-dev</code>) + 선택적 셀프호스트</td></tr>
@@ -361,7 +361,7 @@ i18n:
           <tr><td>데이터 경로</td><td>파일 → Figma 클라우드</td><td>프롬프트 → 당신이 고른 제공자; 그 무엇도 우리를 거치지 않음</td></tr>
         </tbody>
       </table>
-      <p>솔직하게 요약하면, Figma는 시장에서 가장 잘 다듬어진 협업 캔버스 경험을 가지고 있고, 정밀한 화면을 함께 review 하는 디자이너 팀에게는 그 완성도가 곧 제품 자체입니다. Open Design는 캔버스를 통째로 라이브러리와 맞바꿉니다 — 당신의 노트북에 이미 있는 도구와 조합되도록 설계된 skills, systems, agents. 다른 형태, 다른 베팅.</p>
+      <p>솔직하게 요약하면, Figma는 시장에서 가장 잘 다듬어진 협업 캔버스 경험을 가지고 있고, 정밀한 화면을 함께 review 하는 디자이너 팀에게는 그 완성도가 곧 제품 자체입니다. OpenDesign는 캔버스를 통째로 라이브러리와 맞바꿉니다 — 당신의 노트북에 이미 있는 도구와 조합되도록 설계된 skills, systems, agents. 다른 형태, 다른 베팅.</p>
 
       <h2>누가 무엇을 골라야 하나</h2>
       <table>
@@ -370,10 +370,10 @@ i18n:
           <tr><td>실시간으로 여러 디자이너가 캔버스 작업을 하고 라이브 review가 필요한 디자인 팀이라면</td><td><strong>Figma.</strong> 오픈소스에는 그 멀티플레이어 캔버스에 견줄 만한 것이 없습니다.</td></tr>
           <tr><td>온종일 픽셀 단위 벡터와 컴포넌트 작업을 하는 디자이너라면</td><td><strong>Figma.</strong> 캔버스 원시 요소가 성숙해 있고 당신의 근육 기억은 진짜 돈값을 합니다.</td></tr>
           <tr><td>이미 Figma로 표준화되어 있고 Dev Mode가 엔지니어링 루프에 들어가 있는 조직이라면</td><td><strong>Figma.</strong> 통합 비용은 이미 치렀으니, 그것을 써먹으세요.</td></tr>
-          <tr><td>이미 터미널에서 Claude Code, Codex, 또는 Cursor를 구동하는 디자인 엔지니어라면</td><td><strong>Open Design.</strong> 당신의 agent가 곧 디자인 엔진입니다. skill 층은 새 앱 없이 취향과 구조를 더해 줍니다.</td></tr>
-          <tr><td>BYOK, 프로젝트 도중의 모델 교체, 또는 민감한 브리프의 로컬 전용 처리가 필요한 누구든</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">현실은 마케팅보다 거칩니다</a>, 하지만 진짜로 성립하는 유일한 계약입니다.</td></tr>
-          <tr><td>도구 교체를 견뎌 내는 디자인 시스템을 원하는 팀이라면</td><td><strong>Open Design.</strong> <code>DESIGN.md</code> 파일은 그것을 읽는 도구보다 오래 삽니다.</td></tr>
-          <tr><td>프로젝트가 채택할 수 있는 디자인 워크플로를 ship 하고 싶은 오픈소스 기여자라면</td><td><strong>Open Design.</strong> 폴더 하나 떨어뜨리고, daemon을 재시작하고, PR을 보내세요.</td></tr>
+          <tr><td>이미 터미널에서 Claude Code, Codex, 또는 Cursor를 구동하는 디자인 엔지니어라면</td><td><strong>OpenDesign.</strong> 당신의 agent가 곧 디자인 엔진입니다. skill 층은 새 앱 없이 취향과 구조를 더해 줍니다.</td></tr>
+          <tr><td>BYOK, 프로젝트 도중의 모델 교체, 또는 민감한 브리프의 로컬 전용 처리가 필요한 누구든</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">현실은 마케팅보다 거칩니다</a>, 하지만 진짜로 성립하는 유일한 계약입니다.</td></tr>
+          <tr><td>도구 교체를 견뎌 내는 디자인 시스템을 원하는 팀이라면</td><td><strong>OpenDesign.</strong> <code>DESIGN.md</code> 파일은 그것을 읽는 도구보다 오래 삽니다.</td></tr>
+          <tr><td>프로젝트가 채택할 수 있는 디자인 워크플로를 ship 하고 싶은 오픈소스 기여자라면</td><td><strong>OpenDesign.</strong> 폴더 하나 떨어뜨리고, daemon을 재시작하고, PR을 보내세요.</td></tr>
         </tbody>
       </table>
       <p>대부분의 팀에게 승부를 가르는 차원은 품질이 아닙니다 — Figma의 솜씨는 진짜입니다. 그것은, 당신의 일이 그릴 캔버스냐, 아니면 자동화할 워크플로냐입니다. 후자라면, 당신은 그것을 빌리기보다 소유하고 싶을 것입니다.</p>
@@ -385,9 +385,9 @@ i18n:
 
       <h2>더 읽을거리</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Figma 워크플로를 Open Design 플러그인으로 옮기는 법</a> — 내보내기, token 동기화, 또는 브랜드 키트의 구체적 경로</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Figma 워크플로를 OpenDesign 플러그인으로 옮기는 법</a> — 내보내기, token 동기화, 또는 브랜드 키트의 구체적 경로</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">Claude Design의 오픈소스 대안</a> — 같은 솔직한 판단을, 도구 하나 옆에서</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">왜 우리는 Open Design를 제품이 아니라 skill 층으로 만들었나</a> — 「제품이 아니라 층」이라는 베팅 뒤에 있는 더 긴 선언문</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">왜 우리는 OpenDesign를 제품이 아니라 skill 층으로 만들었나</a> — 「제품이 아니라 층」이라는 베팅 뒤에 있는 더 긴 선언문</li>
       </ul>
   de:
     title: "Die Open-Source-Alternative zu Figma"
@@ -419,8 +419,8 @@ i18n:
         <figcaption>Die Quelle der Wahrheit lebt in einer proprietären Datei, in jemand anderes Cloud.</figcaption>
       </figure>
 
-      <h2>Der Wandel, auf den Open Design setzt</h2>
-      <p>Open Design ist kein Figma-Klon. Es gibt keine unendliche Leinwand und keine Multiplayer-Cursor. Es ist eine dünne Skill-Schicht, die den Coding-Agenten, den du bereits nutzt, in eine Design-Engine verwandelt. Die vier Primitive sind <a href="/blog/31-skills-72-systems-how-the-library-works/">Skills, Systems, Adapter und der Daemon</a> – und das Wichtige daran ist, dass sie alle nur Dateien sind:</p>
+      <h2>Der Wandel, auf den OpenDesign setzt</h2>
+      <p>OpenDesign ist kein Figma-Klon. Es gibt keine unendliche Leinwand und keine Multiplayer-Cursor. Es ist eine dünne Skill-Schicht, die den Coding-Agenten, den du bereits nutzt, in eine Design-Engine verwandelt. Die vier Primitive sind <a href="/blog/31-skills-72-systems-how-the-library-works/">Skills, Systems, Adapter und der Daemon</a> – und das Wichtige daran ist, dass sie alle nur Dateien sind:</p>
       <ul>
         <li>Jeder Skill ist eine <code>SKILL.md</code>-Datei, die du lesen, forken und als PR zurückschicken kannst.</li>
         <li>Jedes Designsystem ist eine portable <code>DESIGN.md</code>-Datei – einschließlich der, die wir für Figma selbst ausliefern. Du kannst sie in jedem Editor öffnen, sie in git diffen, und sie überlebt jedes Werkzeug, das sie als Nächstes liest.</li>
@@ -433,7 +433,7 @@ i18n:
         <li><strong>Der Workflow ist portabel.</strong> Ein Skill ist ein Ordner. Er fügt sich in jeden Agenten auf deinem <code>$PATH</code> ein, nicht in die Plugin-Laufzeit eines einzelnen Anbieters.</li>
         <li><strong>BYOK standardmäßig.</strong> Füge eine beliebige OpenAI-kompatible <code>base_url</code> und einen Key ein; <a href="/blog/byok-design-workflow-claude-codex-qwen/">deine Tokens gehen direkt an den Anbieter</a>. Apache-2.0, keine Registrierung, keine Rechnung pro Platz.</li>
       </ul>
-      <p>Das mentale Modell: Figma ist eine Leinwand, die du mietest. Open Design ist ein Workflow, den du besitzt.</p>
+      <p>Das mentale Modell: Figma ist eine Leinwand, die du mietest. OpenDesign ist ein Workflow, den du besitzt.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="Ein Fächer aus schlichten schwarzen Papierbögen und Karteikarten, der sich aus einem offenen Behälter ausbreitet, ein paar davon lösen sich frei, auf einer warmen redaktionellen Studientafel" />
@@ -442,7 +442,7 @@ i18n:
 
       <h2>Direkter Vergleich</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>Lizenz</td><td>Proprietär</td><td>Apache-2.0</td></tr>
           <tr><td>Laufzeit</td><td>Gehostet (Browser, Figma-Cloud)</td><td>Lokaler Daemon (<code>pnpm tools-dev</code>) + optionales Self-Hosting</td></tr>
@@ -457,7 +457,7 @@ i18n:
           <tr><td>Datenpfad</td><td>Dateien → Figma-Cloud</td><td>Prompts → dein gewählter Anbieter; nichts über uns</td></tr>
         </tbody>
       </table>
-      <p>Die ehrliche Zusammenfassung: Figma hat die ausgereifteste kollaborative Leinwand-Erfahrung auf dem Markt, und für ein Team von Designern, die gemeinsam präzise Screens reviewen, ist diese Politur das Produkt. Open Design tauscht die Leinwand vollständig gegen eine Bibliothek – Skills, Systems und Agenten, die darauf ausgelegt sind, sich mit dem Werkzeug zu verbinden, das bereits auf deinem Laptop liegt. Andere Form, andere Wette.</p>
+      <p>Die ehrliche Zusammenfassung: Figma hat die ausgereifteste kollaborative Leinwand-Erfahrung auf dem Markt, und für ein Team von Designern, die gemeinsam präzise Screens reviewen, ist diese Politur das Produkt. OpenDesign tauscht die Leinwand vollständig gegen eine Bibliothek – Skills, Systems und Agenten, die darauf ausgelegt sind, sich mit dem Werkzeug zu verbinden, das bereits auf deinem Laptop liegt. Andere Form, andere Wette.</p>
 
       <h2>Wer was wählen sollte</h2>
       <table>
@@ -466,10 +466,10 @@ i18n:
           <tr><td>Ein Designteam, das Echtzeit-Leinwandarbeit mit mehreren Designern und Live-Review macht</td><td><strong>Figma.</strong> Nichts im Open-Source-Bereich erreicht die Multiplayer-Leinwand.</td></tr>
           <tr><td>Eine Designerin, die den ganzen Tag pixelgenaue Vektor- und Komponentenarbeit macht</td><td><strong>Figma.</strong> Die Leinwand-Primitive sind ausgereift und dein Muskelgedächtnis ist bares Geld wert.</td></tr>
           <tr><td>Eine Organisation, die bereits auf Figma standardisiert ist und Dev Mode im Engineering-Loop hat</td><td><strong>Figma.</strong> Du hast die Integrationskosten bereits bezahlt; nutze sie aus.</td></tr>
-          <tr><td>Ein Design-Engineer, der Claude Code, Codex oder Cursor bereits vom Terminal aus steuert</td><td><strong>Open Design.</strong> Dein Agent ist die Design-Engine; die Skill-Schicht fügt Geschmack und Struktur hinzu, ohne eine neue App.</td></tr>
-          <tr><td>Jeder, der BYOK, einen Modellwechsel mitten im Projekt oder Nur-lokal für sensible Briefings braucht</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Die Realität ist rauer als das Marketing</a>, aber es ist der einzige Vertrag, der wirklich hält.</td></tr>
-          <tr><td>Ein Team, das ein Designsystem will, das den Werkzeugwechsel überlebt</td><td><strong>Open Design.</strong> <code>DESIGN.md</code>-Dateien überleben das Werkzeug, das sie liest.</td></tr>
-          <tr><td>Ein Open-Source-Mitwirkender, der einen Design-Workflow ausliefern will, den das Projekt übernehmen kann</td><td><strong>Open Design.</strong> Leg einen Ordner ab, starte den Daemon neu, schick den PR.</td></tr>
+          <tr><td>Ein Design-Engineer, der Claude Code, Codex oder Cursor bereits vom Terminal aus steuert</td><td><strong>OpenDesign.</strong> Dein Agent ist die Design-Engine; die Skill-Schicht fügt Geschmack und Struktur hinzu, ohne eine neue App.</td></tr>
+          <tr><td>Jeder, der BYOK, einen Modellwechsel mitten im Projekt oder Nur-lokal für sensible Briefings braucht</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Die Realität ist rauer als das Marketing</a>, aber es ist der einzige Vertrag, der wirklich hält.</td></tr>
+          <tr><td>Ein Team, das ein Designsystem will, das den Werkzeugwechsel überlebt</td><td><strong>OpenDesign.</strong> <code>DESIGN.md</code>-Dateien überleben das Werkzeug, das sie liest.</td></tr>
+          <tr><td>Ein Open-Source-Mitwirkender, der einen Design-Workflow ausliefern will, den das Projekt übernehmen kann</td><td><strong>OpenDesign.</strong> Leg einen Ordner ab, starte den Daemon neu, schick den PR.</td></tr>
         </tbody>
       </table>
       <p>Die Dimension, die es für die meisten Teams entscheidet, ist nicht die Qualität – Figmas Handwerk ist echt. Es ist die Frage, ob deine Arbeit eine Leinwand zum Malen ist oder ein Workflow zum Automatisieren. Wenn es Letzteres ist, willst du es lieber besitzen als mieten.</p>
@@ -483,7 +483,7 @@ i18n:
       <ul>
         <li><a href="/blog/port-figma-workflow-open-design-plugin/">Wie man einen Figma-Workflow in ein Open-Design-Plugin überführt</a> – der konkrete Weg für einen Export, eine Token-Synchronisierung oder ein Brand Kit</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">Die Open-Source-Alternative zu Claude Design</a> – dieselbe ehrliche Einschätzung, ein Werkzeug weiter</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Warum wir Open Design als Skill-Schicht gebaut haben, nicht als Produkt</a> – das längere Manifest hinter der Wette „Schicht, kein Produkt"</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Warum wir OpenDesign als Skill-Schicht gebaut haben, nicht als Produkt</a> – das längere Manifest hinter der Wette „Schicht, kein Produkt"</li>
       </ul>
   fr:
     title: "L'alternative open source à Figma"
@@ -515,8 +515,8 @@ i18n:
         <figcaption>La source de vérité vit dans un fichier propriétaire, à l'intérieur du cloud de quelqu'un d'autre.</figcaption>
       </figure>
 
-      <h2>Le basculement sur lequel parie Open Design</h2>
-      <p>Open Design n'est pas un clone de Figma. Il n'y a pas de canevas infini ni de curseurs multi-utilisateurs. C'est une fine couche de skills qui transforme l'agent de code que vous utilisez déjà en moteur de design. Les quatre primitives sont les <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters et le daemon</a> — et le point important, c'est qu'elles ne sont toutes que des fichiers :</p>
+      <h2>Le basculement sur lequel parie OpenDesign</h2>
+      <p>OpenDesign n'est pas un clone de Figma. Il n'y a pas de canevas infini ni de curseurs multi-utilisateurs. C'est une fine couche de skills qui transforme l'agent de code que vous utilisez déjà en moteur de design. Les quatre primitives sont les <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters et le daemon</a> — et le point important, c'est qu'elles ne sont toutes que des fichiers :</p>
       <ul>
         <li>Chaque skill est un fichier <code>SKILL.md</code> que vous pouvez lire, forker et renvoyer sous forme de PR.</li>
         <li>Chaque système de design est un fichier <code>DESIGN.md</code> portable — y compris celui que nous livrons pour Figma lui-même. Vous pouvez l'ouvrir dans n'importe quel éditeur, le diffuser dans git, et il survit à n'importe quel outil qui le lit ensuite.</li>
@@ -529,7 +529,7 @@ i18n:
         <li><strong>Le workflow est portable.</strong> Un skill est un dossier. Il se compose dans n'importe quel agent sur votre <code>$PATH</code>, pas dans le runtime de plugins d'un seul fournisseur.</li>
         <li><strong>BYOK par défaut.</strong> Collez n'importe quels <code>base_url</code> et clé compatibles OpenAI ; <a href="/blog/byok-design-workflow-claude-codex-qwen/">vos tokens vont directement au fournisseur</a>. Apache-2.0, sans inscription, sans facture par siège.</li>
       </ul>
-      <p>Le modèle mental : Figma est un canevas que vous louez. Open Design est un workflow que vous possédez.</p>
+      <p>Le modèle mental : Figma est un canevas que vous louez. OpenDesign est un workflow que vous possédez.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="Un éventail de feuilles de papier noir uni et de fiches s'étalant hors d'un récipient ouvert, quelques-unes s'échappant librement, sur une planche d'étude éditoriale aux teintes chaudes" />
@@ -538,7 +538,7 @@ i18n:
 
       <h2>Comparaison côte à côte</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>Licence</td><td>Propriétaire</td><td>Apache-2.0</td></tr>
           <tr><td>Runtime</td><td>Hébergé (navigateur, cloud Figma)</td><td>Daemon local (<code>pnpm tools-dev</code>) + auto-hébergement optionnel</td></tr>
@@ -553,7 +553,7 @@ i18n:
           <tr><td>Chemin des données</td><td>Fichiers → cloud Figma</td><td>Prompts → le fournisseur que vous choisissez ; rien ne transite par nous</td></tr>
         </tbody>
       </table>
-      <p>Le résumé honnête : Figma offre l'expérience de canevas collaboratif la plus raffinée du marché, et pour une équipe de designers qui passent ensemble en revue des écrans précis, ce raffinement est le produit. Open Design échange entièrement le canevas contre une bibliothèque — skills, systems et agents conçus pour se composer avec l'outil déjà présent sur votre ordinateur portable. Une forme différente, un pari différent.</p>
+      <p>Le résumé honnête : Figma offre l'expérience de canevas collaboratif la plus raffinée du marché, et pour une équipe de designers qui passent ensemble en revue des écrans précis, ce raffinement est le produit. OpenDesign échange entièrement le canevas contre une bibliothèque — skills, systems et agents conçus pour se composer avec l'outil déjà présent sur votre ordinateur portable. Une forme différente, un pari différent.</p>
 
       <h2>Qui devrait choisir quoi</h2>
       <table>
@@ -562,10 +562,10 @@ i18n:
           <tr><td>Une équipe de design faisant du travail sur canevas multi-designers en temps réel avec revue en direct</td><td><strong>Figma.</strong> Rien dans l'open source n'égale le canevas multi-utilisateurs.</td></tr>
           <tr><td>Un designer faisant du travail vectoriel et de composants au pixel près toute la journée</td><td><strong>Figma.</strong> Les primitives du canevas sont matures et votre mémoire musculaire vaut de l'argent bien réel.</td></tr>
           <tr><td>Une organisation déjà standardisée sur Figma avec le Dev Mode dans la boucle d'ingénierie</td><td><strong>Figma.</strong> Vous avez payé le coût d'intégration ; rentabilisez-le.</td></tr>
-          <tr><td>Un design engineer qui pilote déjà Claude Code, Codex ou Cursor depuis le terminal</td><td><strong>Open Design.</strong> Votre agent est le moteur de design ; la couche de skills ajoute goût et structure sans nouvelle application.</td></tr>
-          <tr><td>Quiconque a besoin de BYOK, de changer de modèle en cours de projet, ou de traitement local-only pour des briefs sensibles</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">La réalité est plus rugueuse que le marketing</a>, mais c'est le seul contrat qui tient vraiment.</td></tr>
-          <tr><td>Une équipe qui veut un système de design qui survit au renouvellement des outils</td><td><strong>Open Design.</strong> Les fichiers <code>DESIGN.md</code> survivent à l'outil qui les lit.</td></tr>
-          <tr><td>Un contributeur open source qui veut livrer un workflow de design que le projet peut adopter</td><td><strong>Open Design.</strong> Déposez un dossier, redémarrez le daemon, envoyez la PR.</td></tr>
+          <tr><td>Un design engineer qui pilote déjà Claude Code, Codex ou Cursor depuis le terminal</td><td><strong>OpenDesign.</strong> Votre agent est le moteur de design ; la couche de skills ajoute goût et structure sans nouvelle application.</td></tr>
+          <tr><td>Quiconque a besoin de BYOK, de changer de modèle en cours de projet, ou de traitement local-only pour des briefs sensibles</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">La réalité est plus rugueuse que le marketing</a>, mais c'est le seul contrat qui tient vraiment.</td></tr>
+          <tr><td>Une équipe qui veut un système de design qui survit au renouvellement des outils</td><td><strong>OpenDesign.</strong> Les fichiers <code>DESIGN.md</code> survivent à l'outil qui les lit.</td></tr>
+          <tr><td>Un contributeur open source qui veut livrer un workflow de design que le projet peut adopter</td><td><strong>OpenDesign.</strong> Déposez un dossier, redémarrez le daemon, envoyez la PR.</td></tr>
         </tbody>
       </table>
       <p>La dimension qui tranche pour la plupart des équipes n'est pas la qualité — le savoir-faire de Figma est réel. C'est de savoir si votre travail est un canevas sur lequel peindre, ou un workflow à automatiser. Si c'est le second, vous préférerez le posséder plutôt que le louer.</p>
@@ -577,9 +577,9 @@ i18n:
 
       <h2>Pour aller plus loin</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Comment porter un workflow Figma vers un plugin Open Design</a> — le chemin concret pour un export, une synchro de tokens ou un kit de marque</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Comment porter un workflow Figma vers un plugin OpenDesign</a> — le chemin concret pour un export, une synchro de tokens ou un kit de marque</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">L'alternative open source à Claude Design</a> — la même analyse honnête, pour un autre outil</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Pourquoi nous avons fait d'Open Design une couche de skills, et non un produit</a> — le manifeste plus long derrière le pari « une couche, pas un produit »</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Pourquoi nous avons fait d'OpenDesign une couche de skills, et non un produit</a> — le manifeste plus long derrière le pari « une couche, pas un produit »</li>
       </ul>
   ru:
     title: "Открытая альтернатива Figma с открытым исходным кодом"
@@ -611,8 +611,8 @@ i18n:
         <figcaption>Источник истины живёт в проприетарном файле, внутри чужого облака.</figcaption>
       </figure>
 
-      <h2>Сдвиг, на который ставит Open Design</h2>
-      <p>Open Design — это не клон Figma. Здесь нет бесконечного холста и нет многопользовательских курсоров. Это тонкий skill-слой, который превращает кодинг-agent, которым вы уже пользуетесь, в дизайн-движок. Четыре примитива — это <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters и daemon</a> — и важная часть в том, что все они — просто файлы:</p>
+      <h2>Сдвиг, на который ставит OpenDesign</h2>
+      <p>OpenDesign — это не клон Figma. Здесь нет бесконечного холста и нет многопользовательских курсоров. Это тонкий skill-слой, который превращает кодинг-agent, которым вы уже пользуетесь, в дизайн-движок. Четыре примитива — это <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters и daemon</a> — и важная часть в том, что все они — просто файлы:</p>
       <ul>
         <li>Каждый skill — это файл <code>SKILL.md</code>, который вы можете прочитать, форкнуть и отправить обратно как PR.</li>
         <li>Каждая дизайн-система — это переносимый файл <code>DESIGN.md</code>, включая тот, который мы поставляем для самой Figma. Вы можете открыть его в любом редакторе, сделать diff в git, и он переживёт любой инструмент, который прочитает его следующим.</li>
@@ -625,7 +625,7 @@ i18n:
         <li><strong>Рабочий процесс переносим.</strong> Skill — это папка. Она встраивается в любой agent в вашем <code>$PATH</code>, а не в среду плагинов одного вендора.</li>
         <li><strong>BYOK по умолчанию.</strong> Вставьте любой OpenAI-совместимый <code>base_url</code> и ключ; <a href="/blog/byok-design-workflow-claude-codex-qwen/">ваши токены идут напрямую к провайдеру</a>. Apache-2.0, без регистрации, без счёта за место.</li>
       </ul>
-      <p>Ментальная модель такая: Figma — это холст, который вы арендуете. Open Design — это рабочий процесс, которым вы владеете.</p>
+      <p>Ментальная модель такая: Figma — это холст, который вы арендуете. OpenDesign — это рабочий процесс, которым вы владеете.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="Веер из простых чёрных листов бумаги и карточек, разворачивающийся из открытого контейнера, пара листов улетает свободно, на тёплой редакторской исследовательской плашке" />
@@ -634,7 +634,7 @@ i18n:
 
       <h2>Бок о бок</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>Лицензия</td><td>Проприетарная</td><td>Apache-2.0</td></tr>
           <tr><td>Среда выполнения</td><td>Размещённая (браузер, облако Figma)</td><td>Локальный daemon (<code>pnpm tools-dev</code>) + опциональный self-host</td></tr>
@@ -649,7 +649,7 @@ i18n:
           <tr><td>Путь данных</td><td>Файлы → облако Figma</td><td>Промпты → выбранный вами провайдер; ничто не проходит через нас</td></tr>
         </tbody>
       </table>
-      <p>Честный итог: у Figma самый отполированный опыт совместной работы на холсте на рынке, и для команды дизайнеров, вместе ревьюящих точные экраны, эта отполированность и есть продукт. Open Design же полностью меняет холст на библиотеку — skills, systems и agents, спроектированные для компоновки с инструментом, уже стоящим на вашем ноутбуке. Другая форма, другая ставка.</p>
+      <p>Честный итог: у Figma самый отполированный опыт совместной работы на холсте на рынке, и для команды дизайнеров, вместе ревьюящих точные экраны, эта отполированность и есть продукт. OpenDesign же полностью меняет холст на библиотеку — skills, systems и agents, спроектированные для компоновки с инструментом, уже стоящим на вашем ноутбуке. Другая форма, другая ставка.</p>
 
       <h2>Кому что выбрать</h2>
       <table>
@@ -658,10 +658,10 @@ i18n:
           <tr><td>Дизайн-команда, делающая работу на холсте в реальном времени с несколькими дизайнерами и живым ревью</td><td><strong>Figma.</strong> Ничто в open source не сравнится с многопользовательским холстом.</td></tr>
           <tr><td>Дизайнер, целыми днями делающий пиксель-точную векторную и компонентную работу</td><td><strong>Figma.</strong> Примитивы холста зрелые, а ваша мышечная память стоит реальных денег.</td></tr>
           <tr><td>Организация, уже стандартизированная на Figma, с Dev Mode в инженерном цикле</td><td><strong>Figma.</strong> Вы уже заплатили цену интеграции; используйте её.</td></tr>
-          <tr><td>Дизайн-инженер, уже управляющий Claude Code, Codex или Cursor из терминала</td><td><strong>Open Design.</strong> Ваш agent и есть дизайн-движок; skill-слой добавляет вкус и структуру без нового приложения.</td></tr>
-          <tr><td>Любой, кому нужен BYOK, выбор модели посреди проекта или локальная обработка чувствительных брифов</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Реальность грубее, чем маркетинг</a>, но это единственный контракт, который действительно держится.</td></tr>
-          <tr><td>Команда, которой нужна дизайн-система, переживающая смену инструментов</td><td><strong>Open Design.</strong> Файлы <code>DESIGN.md</code> переживают инструмент, который их читает.</td></tr>
-          <tr><td>Контрибьютор open source, желающий выпустить дизайн-процесс, который проект сможет принять</td><td><strong>Open Design.</strong> Положите папку, перезапустите daemon, отправьте PR.</td></tr>
+          <tr><td>Дизайн-инженер, уже управляющий Claude Code, Codex или Cursor из терминала</td><td><strong>OpenDesign.</strong> Ваш agent и есть дизайн-движок; skill-слой добавляет вкус и структуру без нового приложения.</td></tr>
+          <tr><td>Любой, кому нужен BYOK, выбор модели посреди проекта или локальная обработка чувствительных брифов</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Реальность грубее, чем маркетинг</a>, но это единственный контракт, который действительно держится.</td></tr>
+          <tr><td>Команда, которой нужна дизайн-система, переживающая смену инструментов</td><td><strong>OpenDesign.</strong> Файлы <code>DESIGN.md</code> переживают инструмент, который их читает.</td></tr>
+          <tr><td>Контрибьютор open source, желающий выпустить дизайн-процесс, который проект сможет принять</td><td><strong>OpenDesign.</strong> Положите папку, перезапустите daemon, отправьте PR.</td></tr>
         </tbody>
       </table>
       <p>Измерение, которое решает дело для большинства команд, — это не качество; мастерство Figma реально. Это то, является ли ваша работа холстом, на котором рисуют, или рабочим процессом, который автоматизируют. Если последнее — вы предпочтёте владеть им, а не арендовать его.</p>
@@ -673,9 +673,9 @@ i18n:
 
       <h2>Дополнительное чтение</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Как перенести рабочий процесс Figma в плагин Open Design</a> — конкретный путь для экспорта, синхронизации токенов или бренд-кита</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Как перенести рабочий процесс Figma в плагин OpenDesign</a> — конкретный путь для экспорта, синхронизации токенов или бренд-кита</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">Открытая альтернатива Claude Design</a> — тот же честный разбор, на инструмент в сторону</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Почему мы сделали Open Design skill-слоем, а не продуктом</a> — более длинный манифест за ставкой «слой, а не продукт»</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Почему мы сделали OpenDesign skill-слоем, а не продуктом</a> — более длинный манифест за ставкой «слой, а не продукт»</li>
       </ul>
   es:
     title: "La alternativa de código abierto a Figma"
@@ -707,8 +707,8 @@ i18n:
         <figcaption>La fuente de verdad vive en un archivo propietario, dentro de la nube de otra persona.</figcaption>
       </figure>
 
-      <h2>El cambio por el que apuesta Open Design</h2>
-      <p>Open Design no es un clon de Figma. No hay lienzo infinito ni cursores multijugador. Es una fina capa de skills que convierte el agente de programación que ya usas en un motor de diseño. Las cuatro primitivas son <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters y el daemon</a> — y lo importante es que todas son simplemente archivos:</p>
+      <h2>El cambio por el que apuesta OpenDesign</h2>
+      <p>OpenDesign no es un clon de Figma. No hay lienzo infinito ni cursores multijugador. Es una fina capa de skills que convierte el agente de programación que ya usas en un motor de diseño. Las cuatro primitivas son <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters y el daemon</a> — y lo importante es que todas son simplemente archivos:</p>
       <ul>
         <li>Cada skill es un archivo <code>SKILL.md</code> que puedes leer, hacer fork y devolver como un PR.</li>
         <li>Cada sistema de diseño es un archivo portable <code>DESIGN.md</code> — incluyendo el que enviamos para el propio Figma. Puedes abrirlo en cualquier editor, hacerle diff en git, y sobrevive a cualquier herramienta que lo lea después.</li>
@@ -721,7 +721,7 @@ i18n:
         <li><strong>El flujo de trabajo es portable.</strong> Un skill es una carpeta. Se compone en cualquier agente de tu <code>$PATH</code>, no en el runtime de plugins de un único proveedor.</li>
         <li><strong>BYOK por defecto.</strong> Pega cualquier <code>base_url</code> y key compatible con OpenAI; <a href="/blog/byok-design-workflow-claude-codex-qwen/">tus tokens van directos al proveedor</a>. Apache-2.0, sin registro, sin factura por asiento.</li>
       </ul>
-      <p>El modelo mental es este: Figma es un lienzo que alquilas. Open Design es un flujo de trabajo que posees.</p>
+      <p>El modelo mental es este: Figma es un lienzo que alquilas. OpenDesign es un flujo de trabajo que posees.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="Un abanico de hojas de papel negro liso y fichas de índice desplegándose desde un contenedor abierto, con un par flotando libres, sobre una lámina de estudio editorial de tono cálido" />
@@ -730,7 +730,7 @@ i18n:
 
       <h2>Cara a cara</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>Licencia</td><td>Propietaria</td><td>Apache-2.0</td></tr>
           <tr><td>Runtime</td><td>Alojado (navegador, nube de Figma)</td><td>Daemon local (<code>pnpm tools-dev</code>) + autohospedaje opcional</td></tr>
@@ -745,7 +745,7 @@ i18n:
           <tr><td>Ruta de datos</td><td>Archivos → nube de Figma</td><td>Prompts → el proveedor que elijas; nada a través de nosotros</td></tr>
         </tbody>
       </table>
-      <p>El resumen honesto: Figma tiene la experiencia de lienzo colaborativo más pulida del mercado, y para un equipo de diseñadores que revisan juntos pantallas precisas, ese pulido es el producto. Open Design cambia el lienzo por completo por una biblioteca — skills, systems y agents diseñados para componerse con la herramienta que ya tienes en tu portátil. Forma distinta, apuesta distinta.</p>
+      <p>El resumen honesto: Figma tiene la experiencia de lienzo colaborativo más pulida del mercado, y para un equipo de diseñadores que revisan juntos pantallas precisas, ese pulido es el producto. OpenDesign cambia el lienzo por completo por una biblioteca — skills, systems y agents diseñados para componerse con la herramienta que ya tienes en tu portátil. Forma distinta, apuesta distinta.</p>
 
       <h2>Quién debería elegir qué</h2>
       <table>
@@ -754,10 +754,10 @@ i18n:
           <tr><td>Un equipo de diseño haciendo trabajo de lienzo en tiempo real, con varios diseñadores y revisión en vivo</td><td><strong>Figma.</strong> Nada en el código abierto iguala ese lienzo multijugador.</td></tr>
           <tr><td>Un diseñador haciendo trabajo vectorial y de componentes con precisión de píxel todo el día</td><td><strong>Figma.</strong> Las primitivas del lienzo son maduras y tu memoria muscular vale dinero de verdad.</td></tr>
           <tr><td>Una organización ya estandarizada en Figma con Dev Mode dentro del bucle de ingeniería</td><td><strong>Figma.</strong> Ya pagaste el coste de integración; gástalo.</td></tr>
-          <tr><td>Un ingeniero de diseño que ya impulsa Claude Code, Codex o Cursor desde la terminal</td><td><strong>Open Design.</strong> Tu agente es el motor de diseño; la capa de skills aporta gusto y estructura sin una app nueva.</td></tr>
-          <tr><td>Cualquiera que necesite BYOK, cambio de modelo a mitad de proyecto o procesamiento local-only para briefs sensibles</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">La realidad es más áspera que el marketing</a>, pero es el único contrato que realmente se sostiene.</td></tr>
-          <tr><td>Un equipo que quiere un sistema de diseño que sobreviva al recambio de herramientas</td><td><strong>Open Design.</strong> Los archivos <code>DESIGN.md</code> sobreviven a la herramienta que los lee.</td></tr>
-          <tr><td>Un colaborador de código abierto que quiere enviar un flujo de trabajo de diseño que el proyecto pueda adoptar</td><td><strong>Open Design.</strong> Suelta una carpeta, reinicia el daemon, envía el PR.</td></tr>
+          <tr><td>Un ingeniero de diseño que ya impulsa Claude Code, Codex o Cursor desde la terminal</td><td><strong>OpenDesign.</strong> Tu agente es el motor de diseño; la capa de skills aporta gusto y estructura sin una app nueva.</td></tr>
+          <tr><td>Cualquiera que necesite BYOK, cambio de modelo a mitad de proyecto o procesamiento local-only para briefs sensibles</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">La realidad es más áspera que el marketing</a>, pero es el único contrato que realmente se sostiene.</td></tr>
+          <tr><td>Un equipo que quiere un sistema de diseño que sobreviva al recambio de herramientas</td><td><strong>OpenDesign.</strong> Los archivos <code>DESIGN.md</code> sobreviven a la herramienta que los lee.</td></tr>
+          <tr><td>Un colaborador de código abierto que quiere enviar un flujo de trabajo de diseño que el proyecto pueda adoptar</td><td><strong>OpenDesign.</strong> Suelta una carpeta, reinicia el daemon, envía el PR.</td></tr>
         </tbody>
       </table>
       <p>La dimensión que lo decide para la mayoría de los equipos no es la calidad — el oficio de Figma es real. Es si tu trabajo es un lienzo sobre el que pintar, o un flujo de trabajo que automatizar. Si es lo segundo, preferirás poseerlo a alquilarlo.</p>
@@ -769,9 +769,9 @@ i18n:
 
       <h2>Lecturas relacionadas</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cómo migrar un flujo de trabajo de Figma a un plugin de Open Design</a> — el camino concreto para una exportación, sincronización de tokens o kit de marca</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cómo migrar un flujo de trabajo de Figma a un plugin de OpenDesign</a> — el camino concreto para una exportación, sincronización de tokens o kit de marca</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">La alternativa de código abierto a Claude Design</a> — la misma lectura honesta, con otra herramienta</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por qué construimos Open Design como una capa de skills, y no como un producto</a> — el manifiesto más extenso detrás de la apuesta de «capa, no producto»</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por qué construimos OpenDesign como una capa de skills, y no como un producto</a> — el manifiesto más extenso detrás de la apuesta de «capa, no producto»</li>
       </ul>
   pt-br:
     title: "A alternativa de código aberto ao Figma"
@@ -803,8 +803,8 @@ i18n:
         <figcaption>A fonte da verdade vive em um arquivo proprietário, dentro da nuvem de outra pessoa.</figcaption>
       </figure>
 
-      <h2>A mudança em que o Open Design aposta</h2>
-      <p>O Open Design não é um clone do Figma. Não há canvas infinito nem cursores multiplayer. É uma camada fina de skills que transforma o agent de programação que você já usa em um motor de design. Os quatro primitivos são <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters e o daemon</a> — e a parte importante é que todos eles são apenas arquivos:</p>
+      <h2>A mudança em que o OpenDesign aposta</h2>
+      <p>O OpenDesign não é um clone do Figma. Não há canvas infinito nem cursores multiplayer. É uma camada fina de skills que transforma o agent de programação que você já usa em um motor de design. Os quatro primitivos são <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters e o daemon</a> — e a parte importante é que todos eles são apenas arquivos:</p>
       <ul>
         <li>Cada skill é um arquivo <code>SKILL.md</code> que você pode ler, fazer fork e enviar de volta como um PR.</li>
         <li>Cada design system é um arquivo <code>DESIGN.md</code> portável — incluindo o que entregamos para o próprio Figma. Você pode abri-lo em qualquer editor, fazer diff dele no git, e ele sobrevive a qualquer ferramenta que o leia em seguida.</li>
@@ -817,7 +817,7 @@ i18n:
         <li><strong>O fluxo de trabalho é portável.</strong> Um skill é uma pasta. Ele se compõe com qualquer agent no seu <code>$PATH</code>, não com o runtime de plugins de um único fornecedor.</li>
         <li><strong>BYOK por padrão.</strong> Cole qualquer <code>base_url</code> e key compatíveis com OpenAI; <a href="/blog/byok-design-workflow-claude-codex-qwen/">seus tokens vão direto para o provedor</a>. Apache-2.0, sem cadastro, sem conta por assento.</li>
       </ul>
-      <p>O modelo mental: o Figma é um canvas que você aluga. O Open Design é um fluxo de trabalho que você possui.</p>
+      <p>O modelo mental: o Figma é um canvas que você aluga. O OpenDesign é um fluxo de trabalho que você possui.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="Um leque de folhas de papel preto liso e fichas de índice se espalhando para fora de um recipiente aberto, algumas deslizando soltas, sobre uma prancha de estudo editorial em tons quentes" />
@@ -826,7 +826,7 @@ i18n:
 
       <h2>Lado a lado</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>Licença</td><td>Proprietária</td><td>Apache-2.0</td></tr>
           <tr><td>Runtime</td><td>Hospedado (navegador, nuvem do Figma)</td><td>Daemon local (<code>pnpm tools-dev</code>) + self-host opcional</td></tr>
@@ -841,7 +841,7 @@ i18n:
           <tr><td>Caminho dos dados</td><td>Arquivos → nuvem do Figma</td><td>Prompts → o provedor que você escolheu; nada passa por nós</td></tr>
         </tbody>
       </table>
-      <p>O resumo honesto: o Figma tem a experiência de canvas colaborativo mais polida do mercado, e para uma equipe de designers revisando telas precisas juntos, esse polimento é o produto. O Open Design troca o canvas por completo por uma biblioteca — skills, systems e agents projetados para se compor com a ferramenta que você já tem no seu laptop. Formato diferente, aposta diferente.</p>
+      <p>O resumo honesto: o Figma tem a experiência de canvas colaborativo mais polida do mercado, e para uma equipe de designers revisando telas precisas juntos, esse polimento é o produto. O OpenDesign troca o canvas por completo por uma biblioteca — skills, systems e agents projetados para se compor com a ferramenta que você já tem no seu laptop. Formato diferente, aposta diferente.</p>
 
       <h2>Quem deve escolher o quê</h2>
       <table>
@@ -850,10 +850,10 @@ i18n:
           <tr><td>Uma equipe de design fazendo trabalho de canvas em tempo real, com múltiplos designers e revisão ao vivo</td><td><strong>Figma.</strong> Nada no código aberto se compara ao canvas multiplayer.</td></tr>
           <tr><td>Um designer fazendo trabalho vetorial e de componentes com precisão de pixel o dia inteiro</td><td><strong>Figma.</strong> Os primitivos de canvas são maduros e sua memória muscular vale dinheiro de verdade.</td></tr>
           <tr><td>Uma organização já padronizada no Figma com o Dev Mode dentro do loop de engenharia</td><td><strong>Figma.</strong> Você já pagou o custo de integração; aproveite-o.</td></tr>
-          <tr><td>Um design engineer que já conduz Claude Code, Codex ou Cursor a partir do terminal</td><td><strong>Open Design.</strong> Seu agent é o motor de design; a camada de skills adiciona gosto e estrutura sem um novo aplicativo.</td></tr>
-          <tr><td>Qualquer um que precise de BYOK, troca de modelo no meio do projeto, ou processamento local-only para briefings sensíveis</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">A realidade é mais áspera do que o marketing</a>, mas é o único contrato que realmente se sustenta.</td></tr>
-          <tr><td>Uma equipe que quer um design system que sobreviva à rotatividade de ferramentas</td><td><strong>Open Design.</strong> Arquivos <code>DESIGN.md</code> sobrevivem à ferramenta que os lê.</td></tr>
-          <tr><td>Um contribuidor de código aberto que quer entregar um fluxo de trabalho de design que o projeto possa adotar</td><td><strong>Open Design.</strong> Solte uma pasta, reinicie o daemon, envie o PR.</td></tr>
+          <tr><td>Um design engineer que já conduz Claude Code, Codex ou Cursor a partir do terminal</td><td><strong>OpenDesign.</strong> Seu agent é o motor de design; a camada de skills adiciona gosto e estrutura sem um novo aplicativo.</td></tr>
+          <tr><td>Qualquer um que precise de BYOK, troca de modelo no meio do projeto, ou processamento local-only para briefings sensíveis</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">A realidade é mais áspera do que o marketing</a>, mas é o único contrato que realmente se sustenta.</td></tr>
+          <tr><td>Uma equipe que quer um design system que sobreviva à rotatividade de ferramentas</td><td><strong>OpenDesign.</strong> Arquivos <code>DESIGN.md</code> sobrevivem à ferramenta que os lê.</td></tr>
+          <tr><td>Um contribuidor de código aberto que quer entregar um fluxo de trabalho de design que o projeto possa adotar</td><td><strong>OpenDesign.</strong> Solte uma pasta, reinicie o daemon, envie o PR.</td></tr>
         </tbody>
       </table>
       <p>A dimensão que decide isso para a maioria das equipes não é qualidade — o ofício do Figma é real. É se o seu trabalho é um canvas para pintar, ou um fluxo de trabalho para automatizar. Se for o segundo, você vai preferir possuí-lo a alugá-lo.</p>
@@ -865,9 +865,9 @@ i18n:
 
       <h2>Leitura complementar</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Como migrar um fluxo de trabalho do Figma para um plugin do Open Design</a> — o caminho concreto para um export, sincronização de tokens ou kit de marca</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Como migrar um fluxo de trabalho do Figma para um plugin do OpenDesign</a> — o caminho concreto para um export, sincronização de tokens ou kit de marca</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">A alternativa de código aberto ao Claude Design</a> — a mesma leitura honesta, uma ferramenta ao lado</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por que construímos o Open Design como uma camada de skills, e não como um produto</a> — o manifesto mais longo por trás da aposta "camada, não produto"</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Por que construímos o OpenDesign como uma camada de skills, e não como um produto</a> — o manifesto mais longo por trás da aposta "camada, não produto"</li>
       </ul>
   it:
     title: "L'alternativa open source a Figma"
@@ -899,8 +899,8 @@ i18n:
         <figcaption>La fonte di verità vive in un file proprietario, dentro il cloud di qualcun altro.</figcaption>
       </figure>
 
-      <h2>Il cambiamento su cui scommette Open Design</h2>
-      <p>Open Design non è un clone di Figma. Non c'è canvas infinita e non ci sono cursori multiplayer. È un sottile skill layer che trasforma l'agent di coding che già usi in un motore di design. Le quattro primitive sono <a href="/blog/31-skills-72-systems-how-the-library-works/">skill, system, adapter e daemon</a> — e la parte importante è che sono tutti solo file:</p>
+      <h2>Il cambiamento su cui scommette OpenDesign</h2>
+      <p>OpenDesign non è un clone di Figma. Non c'è canvas infinita e non ci sono cursori multiplayer. È un sottile skill layer che trasforma l'agent di coding che già usi in un motore di design. Le quattro primitive sono <a href="/blog/31-skills-72-systems-how-the-library-works/">skill, system, adapter e daemon</a> — e la parte importante è che sono tutti solo file:</p>
       <ul>
         <li>Ogni skill è un file <code>SKILL.md</code> che puoi leggere, fare fork e rimandare indietro come PR.</li>
         <li>Ogni design system è un file <code>DESIGN.md</code> portabile — incluso quello che pubblichiamo per Figma stesso. Puoi aprirlo in qualsiasi editor, fare il diff in git, e sopravvive a qualunque strumento lo legga dopo.</li>
@@ -913,7 +913,7 @@ i18n:
         <li><strong>Il flusso di lavoro è portabile.</strong> Una skill è una cartella. Si compone in qualsiasi agent sul tuo <code>$PATH</code>, non nel runtime di plugin di un singolo vendor.</li>
         <li><strong>BYOK di default.</strong> Incolla qualsiasi <code>base_url</code> e key compatibili con OpenAI; <a href="/blog/byok-design-workflow-claude-codex-qwen/">i tuoi token vanno dritti al provider</a>. Apache-2.0, nessuna registrazione, nessun conto per postazione.</li>
       </ul>
-      <p>Il modello mentale: Figma è una canvas che affitti. Open Design è un flusso di lavoro che possiedi.</p>
+      <p>Il modello mentale: Figma è una canvas che affitti. OpenDesign è un flusso di lavoro che possiedi.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="Un ventaglio di fogli di carta nera semplice e schede indice che si dispiega da un contenitore aperto, con un paio che fluttuano via, su una tavola di studio editoriale dai toni caldi" />
@@ -922,7 +922,7 @@ i18n:
 
       <h2>Confronto diretto</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>Licenza</td><td>Proprietaria</td><td>Apache-2.0</td></tr>
           <tr><td>Runtime</td><td>Ospitato (browser, cloud di Figma)</td><td>Daemon locale (<code>pnpm tools-dev</code>) + self-host opzionale</td></tr>
@@ -937,7 +937,7 @@ i18n:
           <tr><td>Percorso dei dati</td><td>File → cloud di Figma</td><td>Prompt → il provider che hai scelto; niente passa attraverso di noi</td></tr>
         </tbody>
       </table>
-      <p>Il riassunto onesto: Figma ha l'esperienza di canvas collaborativa più rifinita sul mercato, e per un team di designer che revisionano insieme schermate precise, quella rifinitura è il prodotto. Open Design baratta completamente la canvas per una libreria — skill, system e agent progettati per comporsi con lo strumento che hai già sul laptop. Forma diversa, scommessa diversa.</p>
+      <p>Il riassunto onesto: Figma ha l'esperienza di canvas collaborativa più rifinita sul mercato, e per un team di designer che revisionano insieme schermate precise, quella rifinitura è il prodotto. OpenDesign baratta completamente la canvas per una libreria — skill, system e agent progettati per comporsi con lo strumento che hai già sul laptop. Forma diversa, scommessa diversa.</p>
 
       <h2>Chi dovrebbe scegliere cosa</h2>
       <table>
@@ -946,10 +946,10 @@ i18n:
           <tr><td>Un team di design che fa lavoro su canvas in tempo reale, con più designer e revisione dal vivo</td><td><strong>Figma.</strong> Niente nell'open source eguaglia la canvas multiplayer.</td></tr>
           <tr><td>Un designer che fa lavoro vettoriale e su componenti al pixel tutto il giorno</td><td><strong>Figma.</strong> Le primitive della canvas sono mature e la tua memoria muscolare vale soldi veri.</td></tr>
           <tr><td>Un'organizzazione già standardizzata su Figma con Dev Mode nel ciclo di engineering</td><td><strong>Figma.</strong> Hai già pagato il costo dell'integrazione; sfruttalo.</td></tr>
-          <tr><td>Un design engineer che già guida Claude Code, Codex o Cursor dal terminale</td><td><strong>Open Design.</strong> Il tuo agent è il motore di design; lo skill layer aggiunge gusto e struttura senza una nuova app.</td></tr>
-          <tr><td>Chiunque abbia bisogno di BYOK, di cambiare modello a metà progetto, o di local-only per brief sensibili</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">La realtà è più ruvida del marketing</a>, ma è l'unico contratto che regge davvero.</td></tr>
-          <tr><td>Un team che vuole un design system che sopravviva al ricambio degli strumenti</td><td><strong>Open Design.</strong> I file <code>DESIGN.md</code> sopravvivono allo strumento che li legge.</td></tr>
-          <tr><td>Un contributore open source che vuole pubblicare un flusso di lavoro di design che il progetto possa adottare</td><td><strong>Open Design.</strong> Metti una cartella, riavvia il daemon, manda la PR.</td></tr>
+          <tr><td>Un design engineer che già guida Claude Code, Codex o Cursor dal terminale</td><td><strong>OpenDesign.</strong> Il tuo agent è il motore di design; lo skill layer aggiunge gusto e struttura senza una nuova app.</td></tr>
+          <tr><td>Chiunque abbia bisogno di BYOK, di cambiare modello a metà progetto, o di local-only per brief sensibili</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">La realtà è più ruvida del marketing</a>, ma è l'unico contratto che regge davvero.</td></tr>
+          <tr><td>Un team che vuole un design system che sopravviva al ricambio degli strumenti</td><td><strong>OpenDesign.</strong> I file <code>DESIGN.md</code> sopravvivono allo strumento che li legge.</td></tr>
+          <tr><td>Un contributore open source che vuole pubblicare un flusso di lavoro di design che il progetto possa adottare</td><td><strong>OpenDesign.</strong> Metti una cartella, riavvia il daemon, manda la PR.</td></tr>
         </tbody>
       </table>
       <p>La dimensione che decide per la maggior parte dei team non è la qualità — l'artigianato di Figma è reale. È se il tuo lavoro è una canvas da dipingere, o un flusso di lavoro da automatizzare. Se è il secondo, preferiresti possederlo piuttosto che affittarlo.</p>
@@ -961,9 +961,9 @@ i18n:
 
       <h2>Letture correlate</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Come portare un flusso di lavoro Figma in un plugin di Open Design</a> — il percorso concreto per un export, una sincronizzazione di token o un brand kit</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Come portare un flusso di lavoro Figma in un plugin di OpenDesign</a> — il percorso concreto per un export, una sincronizzazione di token o un brand kit</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">L'alternativa open source a Claude Design</a> — la stessa valutazione onesta, con uno strumento diverso</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Perché abbiamo costruito Open Design come skill layer, non come prodotto</a> — il manifesto più lungo dietro la scommessa «layer, non prodotto»</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Perché abbiamo costruito OpenDesign come skill layer, non come prodotto</a> — il manifesto più lungo dietro la scommessa «layer, non prodotto»</li>
       </ul>
   vi:
     title: "Giải pháp thay thế mã nguồn mở cho Figma"
@@ -995,8 +995,8 @@ i18n:
       <figcaption>Nguồn sự thật sống trong một tệp độc quyền, bên trong đám mây của người khác.</figcaption>
       </figure>
 
-      <h2>Sự chuyển dịch mà Open Design đặt cược</h2>
-      <p>Open Design không phải là một bản sao của Figma. Ở đây không có canvas vô hạn và không có con trỏ đa người dùng. Nó là một lớp skill mỏng biến chính cái agent lập trình mà bạn đã dùng thành một cỗ máy thiết kế. Bốn nguyên thủy là <a href="/blog/31-skills-72-systems-how-the-library-works/">skill, system, adapter và daemon</a> — và phần quan trọng là tất cả chúng chỉ là các tệp:</p>
+      <h2>Sự chuyển dịch mà OpenDesign đặt cược</h2>
+      <p>OpenDesign không phải là một bản sao của Figma. Ở đây không có canvas vô hạn và không có con trỏ đa người dùng. Nó là một lớp skill mỏng biến chính cái agent lập trình mà bạn đã dùng thành một cỗ máy thiết kế. Bốn nguyên thủy là <a href="/blog/31-skills-72-systems-how-the-library-works/">skill, system, adapter và daemon</a> — và phần quan trọng là tất cả chúng chỉ là các tệp:</p>
       <ul>
       <li>Mỗi skill là một tệp <code>SKILL.md</code> mà bạn có thể đọc, fork, và gửi lại dưới dạng PR.</li>
       <li>Mỗi hệ thống thiết kế là một tệp <code>DESIGN.md</code> di động — bao gồm cả cái mà chúng tôi ship cho chính Figma. Bạn có thể mở nó trong bất kỳ trình soạn thảo nào, diff nó trong git, và nó sống lâu hơn bất kỳ công cụ nào đọc nó kế tiếp.</li>
@@ -1009,7 +1009,7 @@ i18n:
       <li><strong>Quy trình làm việc di động được.</strong> Một skill là một thư mục. Nó ghép được vào bất kỳ agent nào trên <code>$PATH</code> của bạn, chứ không phải runtime plugin của một nhà cung cấp duy nhất.</li>
       <li><strong>BYOK theo mặc định.</strong> Dán vào bất kỳ <code>base_url</code> và key tương thích OpenAI nào; <a href="/blog/byok-design-workflow-claude-codex-qwen/">token của bạn đi thẳng tới nhà cung cấp</a>. Apache-2.0, không cần đăng ký, không có hóa đơn tính theo chỗ ngồi.</li>
       </ul>
-      <p>Mô hình tư duy là thế này: Figma là một canvas bạn thuê. Open Design là một quy trình làm việc bạn sở hữu.</p>
+      <p>Mô hình tư duy là thế này: Figma là một canvas bạn thuê. OpenDesign là một quy trình làm việc bạn sở hữu.</p>
 
       <figure>
       <img src="/blog/plate-18-portable-files.webp" alt="Một xấp giấy đen trơn và thẻ mục lục xòe ra từ một hộp đựng đang mở, vài tờ đang trôi tự do, trên một tấm bản nghiên cứu phong cách biên tập tông ấm" />
@@ -1018,7 +1018,7 @@ i18n:
 
       <h2>Đối chiếu song song</h2>
       <table>
-      <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+      <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
       <tbody>
       <tr><td>Giấy phép</td><td>Độc quyền</td><td>Apache-2.0</td></tr>
       <tr><td>Runtime</td><td>Lưu trữ trên máy chủ (trình duyệt, đám mây Figma)</td><td>Daemon cục bộ (<code>pnpm tools-dev</code>) + tự lưu trữ tùy chọn</td></tr>
@@ -1033,7 +1033,7 @@ i18n:
       <tr><td>Đường đi dữ liệu</td><td>Tệp → đám mây Figma</td><td>Prompt → nhà cung cấp bạn chọn; không có gì đi qua chúng tôi</td></tr>
       </tbody>
       </table>
-      <p>Tóm tắt một cách trung thực: Figma có trải nghiệm canvas cộng tác hoàn thiện nhất trên thị trường, và với một đội ngũ các nhà thiết kế cùng review những màn hình chính xác, độ hoàn thiện đó chính là sản phẩm. Open Design thì đánh đổi toàn bộ canvas để lấy một thư viện — skill, system và agent, được thiết kế để ghép với công cụ vốn đã có trên laptop của bạn. Hình hài khác, ván cược khác.</p>
+      <p>Tóm tắt một cách trung thực: Figma có trải nghiệm canvas cộng tác hoàn thiện nhất trên thị trường, và với một đội ngũ các nhà thiết kế cùng review những màn hình chính xác, độ hoàn thiện đó chính là sản phẩm. OpenDesign thì đánh đổi toàn bộ canvas để lấy một thư viện — skill, system và agent, được thiết kế để ghép với công cụ vốn đã có trên laptop của bạn. Hình hài khác, ván cược khác.</p>
 
       <h2>Ai nên chọn cái gì</h2>
       <table>
@@ -1042,10 +1042,10 @@ i18n:
       <tr><td>Một đội thiết kế làm công việc canvas đa nhà thiết kế thời gian thực với review trực tiếp</td><td><strong>Figma.</strong> Không có gì trong thế giới mã nguồn mở sánh được với canvas đa người dùng.</td></tr>
       <tr><td>Một nhà thiết kế làm công việc vector và component chính xác đến từng pixel cả ngày</td><td><strong>Figma.</strong> Các nguyên thủy của canvas đã trưởng thành và trí nhớ cơ bắp của bạn đáng giá tiền thật.</td></tr>
       <tr><td>Một tổ chức đã chuẩn hóa trên Figma với Dev Mode trong vòng lặp kỹ thuật</td><td><strong>Figma.</strong> Bạn đã trả chi phí tích hợp rồi; hãy tiêu nó đi.</td></tr>
-      <tr><td>Một kỹ sư thiết kế vốn đã vận hành Claude Code, Codex hay Cursor từ terminal</td><td><strong>Open Design.</strong> Agent của bạn chính là cỗ máy thiết kế; lớp skill thêm gu thẩm mỹ và cấu trúc mà không cần một ứng dụng mới.</td></tr>
-      <tr><td>Bất kỳ ai cần BYOK, đổi mô hình giữa chừng dự án, hoặc xử lý chỉ-cục-bộ cho những bản brief nhạy cảm</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Thực tế thô ráp hơn lời quảng cáo</a>, nhưng đây là khế ước duy nhất thực sự đứng vững.</td></tr>
-      <tr><td>Một đội muốn có một hệ thống thiết kế sống sót qua các đợt thay đổi công cụ</td><td><strong>Open Design.</strong> Các tệp <code>DESIGN.md</code> sống lâu hơn công cụ đọc chúng.</td></tr>
-      <tr><td>Một người đóng góp mã nguồn mở muốn ship một quy trình làm việc thiết kế mà dự án có thể tiếp nhận</td><td><strong>Open Design.</strong> Thả một thư mục vào, khởi động lại daemon, gửi PR.</td></tr>
+      <tr><td>Một kỹ sư thiết kế vốn đã vận hành Claude Code, Codex hay Cursor từ terminal</td><td><strong>OpenDesign.</strong> Agent của bạn chính là cỗ máy thiết kế; lớp skill thêm gu thẩm mỹ và cấu trúc mà không cần một ứng dụng mới.</td></tr>
+      <tr><td>Bất kỳ ai cần BYOK, đổi mô hình giữa chừng dự án, hoặc xử lý chỉ-cục-bộ cho những bản brief nhạy cảm</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Thực tế thô ráp hơn lời quảng cáo</a>, nhưng đây là khế ước duy nhất thực sự đứng vững.</td></tr>
+      <tr><td>Một đội muốn có một hệ thống thiết kế sống sót qua các đợt thay đổi công cụ</td><td><strong>OpenDesign.</strong> Các tệp <code>DESIGN.md</code> sống lâu hơn công cụ đọc chúng.</td></tr>
+      <tr><td>Một người đóng góp mã nguồn mở muốn ship một quy trình làm việc thiết kế mà dự án có thể tiếp nhận</td><td><strong>OpenDesign.</strong> Thả một thư mục vào, khởi động lại daemon, gửi PR.</td></tr>
       </tbody>
       </table>
       <p>Chiều quyết định với phần lớn các đội không phải là chất lượng — tay nghề của Figma là thật. Mà là: công việc của bạn là một canvas để vẽ lên, hay một quy trình làm việc để tự động hóa. Nếu là vế sau, bạn sẽ thích sở hữu nó hơn là thuê nó.</p>
@@ -1057,9 +1057,9 @@ i18n:
 
       <h2>Đọc thêm</h2>
       <ul>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cách chuyển một quy trình làm việc Figma thành một plugin Open Design</a> — con đường cụ thể cho một lần xuất, đồng bộ token, hoặc bộ kit thương hiệu</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cách chuyển một quy trình làm việc Figma thành một plugin OpenDesign</a> — con đường cụ thể cho một lần xuất, đồng bộ token, hoặc bộ kit thương hiệu</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Giải pháp thay thế mã nguồn mở cho Claude Design</a> — cùng một nhận định trung thực, đổi sang một công cụ khác</li>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Vì sao chúng tôi xây Open Design như một lớp skill, chứ không phải một sản phẩm</a> — bản tuyên ngôn dài hơi hơn đằng sau ván cược «là lớp, không phải sản phẩm»</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Vì sao chúng tôi xây OpenDesign như một lớp skill, chứ không phải một sản phẩm</a> — bản tuyên ngôn dài hơi hơn đằng sau ván cược «là lớp, không phải sản phẩm»</li>
       </ul>
   pl:
     title: "Otwartoźródłowa alternatywa dla Figmy"
@@ -1091,8 +1091,8 @@ i18n:
         <figcaption>Źródło prawdy żyje w zastrzeżonym pliku, wewnątrz cudzej chmury.</figcaption>
       </figure>
 
-      <h2>Zmiana, na którą stawia Open Design</h2>
-      <p>Open Design nie jest klonem Figmy. Nie ma tu nieskończonego płótna ani wielodostępnych kursorów. To cienka warstwa skilli, która zamienia agenta kodującego, którego już używasz, w silnik projektowy. Cztery prymitywy to <a href="/blog/31-skills-72-systems-how-the-library-works/">skille, systemy, adaptery i daemon</a> — a istotne jest to, że wszystkie one są po prostu plikami:</p>
+      <h2>Zmiana, na którą stawia OpenDesign</h2>
+      <p>OpenDesign nie jest klonem Figmy. Nie ma tu nieskończonego płótna ani wielodostępnych kursorów. To cienka warstwa skilli, która zamienia agenta kodującego, którego już używasz, w silnik projektowy. Cztery prymitywy to <a href="/blog/31-skills-72-systems-how-the-library-works/">skille, systemy, adaptery i daemon</a> — a istotne jest to, że wszystkie one są po prostu plikami:</p>
       <ul>
         <li>Każdy skill to plik <code>SKILL.md</code>, który możesz przeczytać, sforkować i odesłać jako PR.</li>
         <li>Każdy system projektowy to przenośny plik <code>DESIGN.md</code> — w tym ten, który dostarczamy dla samej Figmy. Możesz go otworzyć w dowolnym edytorze, zrobić diff w git i przetrwa on niezależnie od tego, jakie narzędzie odczyta go następne.</li>
@@ -1105,7 +1105,7 @@ i18n:
         <li><strong>Workflow jest przenośny.</strong> Skill to folder. Komponuje się z dowolnym agentem na twoim <code>$PATH</code>, a nie ze środowiskiem wtyczek jednego dostawcy.</li>
         <li><strong>BYOK domyślnie.</strong> Wklej dowolny zgodny z OpenAI <code>base_url</code> i klucz; <a href="/blog/byok-design-workflow-claude-codex-qwen/">twoje tokeny trafiają prosto do dostawcy</a>. Apache-2.0, bez rejestracji, bez rachunku za miejsce.</li>
       </ul>
-      <p>Model mentalny: Figma to płótno, które wynajmujesz. Open Design to workflow, który posiadasz.</p>
+      <p>Model mentalny: Figma to płótno, które wynajmujesz. OpenDesign to workflow, który posiadasz.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="Wachlarz zwykłych czarnych kartek papieru i kart indeksowych rozpościerający się z otwartego pojemnika, kilka z nich unosi się swobodnie, na ciepłej redakcyjnej planszy studyjnej" />
@@ -1114,7 +1114,7 @@ i18n:
 
       <h2>Zestawienie obok siebie</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>Licencja</td><td>Zastrzeżona</td><td>Apache-2.0</td></tr>
           <tr><td>Środowisko uruchomieniowe</td><td>Hostowane (przeglądarka, chmura Figmy)</td><td>Lokalny daemon (<code>pnpm tools-dev</code>) + opcjonalny self-host</td></tr>
@@ -1129,7 +1129,7 @@ i18n:
           <tr><td>Ścieżka danych</td><td>Pliki → chmura Figmy</td><td>Prompty → wybrany przez ciebie dostawca; nic przez nas</td></tr>
         </tbody>
       </table>
-      <p>Uczciwe podsumowanie: Figma ma najbardziej dopracowane doświadczenie płótna do współpracy na rynku, a dla zespołu projektantów wspólnie recenzujących precyzyjne ekrany to dopracowanie jest produktem. Open Design całkowicie wymienia płótno na bibliotekę — skille, systemy i agentów zaprojektowanych tak, by komponować się z narzędziem, które już masz na laptopie. Inny kształt, inny zakład.</p>
+      <p>Uczciwe podsumowanie: Figma ma najbardziej dopracowane doświadczenie płótna do współpracy na rynku, a dla zespołu projektantów wspólnie recenzujących precyzyjne ekrany to dopracowanie jest produktem. OpenDesign całkowicie wymienia płótno na bibliotekę — skille, systemy i agentów zaprojektowanych tak, by komponować się z narzędziem, które już masz na laptopie. Inny kształt, inny zakład.</p>
 
       <h2>Kto powinien wybrać co</h2>
       <table>
@@ -1138,10 +1138,10 @@ i18n:
           <tr><td>Zespołem projektowym wykonującym pracę na płótnie w czasie rzeczywistym, z wieloma projektantami i recenzją na żywo</td><td><strong>Figma.</strong> Nic w open source nie dorównuje wielodostępnemu płótnu.</td></tr>
           <tr><td>Projektantem wykonującym przez cały dzień pracę wektorową i komponentową z dokładnością do piksela</td><td><strong>Figma.</strong> Prymitywy płótna są dojrzałe, a twoja pamięć mięśniowa jest warta prawdziwych pieniędzy.</td></tr>
           <tr><td>Organizacją już ustandaryzowaną na Figmie, z Dev Mode w pętli inżynieryjnej</td><td><strong>Figma.</strong> Koszt integracji już zapłaciłeś; wykorzystaj go.</td></tr>
-          <tr><td>Inżynierem projektowym, który już napędza Claude Code, Codex lub Cursor z terminala</td><td><strong>Open Design.</strong> Twój agent jest silnikiem projektowym; warstwa skilli dodaje gust i strukturę bez nowej aplikacji.</td></tr>
-          <tr><td>Kimś, kto potrzebuje BYOK, zmiany modelu w trakcie projektu lub trybu wyłącznie lokalnego dla wrażliwych briefów</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Rzeczywistość jest bardziej szorstka niż marketing</a>, ale to jedyny kontrakt, który naprawdę się trzyma.</td></tr>
-          <tr><td>Zespołem, który chce systemu projektowego przetrwającego rotację narzędzi</td><td><strong>Open Design.</strong> Pliki <code>DESIGN.md</code> przeżywają narzędzie, które je odczytuje.</td></tr>
-          <tr><td>Współpracownikiem open source, który chce dostarczyć workflow projektowy możliwy do przyjęcia przez projekt</td><td><strong>Open Design.</strong> Wrzuć folder, zrestartuj daemon, wyślij PR.</td></tr>
+          <tr><td>Inżynierem projektowym, który już napędza Claude Code, Codex lub Cursor z terminala</td><td><strong>OpenDesign.</strong> Twój agent jest silnikiem projektowym; warstwa skilli dodaje gust i strukturę bez nowej aplikacji.</td></tr>
+          <tr><td>Kimś, kto potrzebuje BYOK, zmiany modelu w trakcie projektu lub trybu wyłącznie lokalnego dla wrażliwych briefów</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Rzeczywistość jest bardziej szorstka niż marketing</a>, ale to jedyny kontrakt, który naprawdę się trzyma.</td></tr>
+          <tr><td>Zespołem, który chce systemu projektowego przetrwającego rotację narzędzi</td><td><strong>OpenDesign.</strong> Pliki <code>DESIGN.md</code> przeżywają narzędzie, które je odczytuje.</td></tr>
+          <tr><td>Współpracownikiem open source, który chce dostarczyć workflow projektowy możliwy do przyjęcia przez projekt</td><td><strong>OpenDesign.</strong> Wrzuć folder, zrestartuj daemon, wyślij PR.</td></tr>
         </tbody>
       </table>
       <p>Wymiar, który rozstrzyga to dla większości zespołów, nie jest jakością — rzemiosło Figmy jest prawdziwe. Chodzi o to, czy twoja praca to płótno do malowania, czy workflow do zautomatyzowania. Jeśli to drugie, wolisz to posiadać niż wynajmować.</p>
@@ -1153,9 +1153,9 @@ i18n:
 
       <h2>Dalsze lektury</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Jak przenieść workflow z Figmy do wtyczki Open Design</a> — konkretna ścieżka dla eksportu, synchronizacji tokenów lub zestawu brandingowego</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Jak przenieść workflow z Figmy do wtyczki OpenDesign</a> — konkretna ścieżka dla eksportu, synchronizacji tokenów lub zestawu brandingowego</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">Otwartoźródłowa alternatywa dla Claude Design</a> — ta sama uczciwa ocena, tylko dla innego narzędzia</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Dlaczego zbudowaliśmy Open Design jako warstwę skilli, a nie produkt</a> — dłuższy manifest stojący za zakładem „warstwa, nie produkt"</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Dlaczego zbudowaliśmy OpenDesign jako warstwę skilli, a nie produkt</a> — dłuższy manifest stojący za zakładem „warstwa, nie produkt"</li>
       </ul>
   id:
     title: "Alternatif open-source untuk Figma"
@@ -1187,8 +1187,8 @@ i18n:
         <figcaption>Sumber kebenaran hidup di sebuah file proprietary, di dalam cloud milik orang lain.</figcaption>
       </figure>
 
-      <h2>Pergeseran yang dipertaruhkan Open Design</h2>
-      <p>Open Design bukan klon Figma. Tidak ada kanvas tak terbatas dan tidak ada kursor multiplayer. Ia adalah sebuah lapisan skill tipis yang mengubah coding agent yang sudah Anda gunakan menjadi sebuah mesin desain. Empat primitifnya adalah <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters, dan daemon</a> — dan bagian pentingnya adalah bahwa semuanya hanyalah file:</p>
+      <h2>Pergeseran yang dipertaruhkan OpenDesign</h2>
+      <p>OpenDesign bukan klon Figma. Tidak ada kanvas tak terbatas dan tidak ada kursor multiplayer. Ia adalah sebuah lapisan skill tipis yang mengubah coding agent yang sudah Anda gunakan menjadi sebuah mesin desain. Empat primitifnya adalah <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters, dan daemon</a> — dan bagian pentingnya adalah bahwa semuanya hanyalah file:</p>
       <ul>
         <li>Setiap skill adalah sebuah file <code>SKILL.md</code> yang bisa Anda baca, fork, dan kirim kembali sebagai PR.</li>
         <li>Setiap design system adalah sebuah file <code>DESIGN.md</code> yang portabel — termasuk yang kami ship untuk Figma itu sendiri. Anda bisa membukanya di editor mana pun, mem-diff-nya di git, dan ia bertahan lebih lama daripada alat apa pun yang membacanya berikutnya.</li>
@@ -1201,7 +1201,7 @@ i18n:
         <li><strong>Alur kerjanya portabel.</strong> Sebuah skill adalah sebuah folder. Ia merangkai ke dalam agent mana pun di <code>$PATH</code> Anda, bukan runtime plugin milik satu vendor.</li>
         <li><strong>BYOK secara default.</strong> Tempel <code>base_url</code> dan key apa pun yang kompatibel dengan OpenAI; <a href="/blog/byok-design-workflow-claude-codex-qwen/">token Anda dikirim langsung ke penyedia</a>. Apache-2.0, tanpa pendaftaran, tanpa tagihan per-seat.</li>
       </ul>
-      <p>Model mentalnya: Figma adalah sebuah kanvas yang Anda sewa. Open Design adalah sebuah alur kerja yang Anda miliki.</p>
+      <p>Model mentalnya: Figma adalah sebuah kanvas yang Anda sewa. OpenDesign adalah sebuah alur kerja yang Anda miliki.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="Sebuah kipasan lembaran kertas hitam polos dan kartu indeks yang menyebar keluar dari wadah terbuka, beberapa di antaranya melayang bebas, di atas plat studi editorial bernuansa hangat" />
@@ -1210,7 +1210,7 @@ i18n:
 
       <h2>Berdampingan</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>Lisensi</td><td>Proprietary</td><td>Apache-2.0</td></tr>
           <tr><td>Runtime</td><td>Hosted (browser, cloud Figma)</td><td>Daemon lokal (<code>pnpm tools-dev</code>) + self-host opsional</td></tr>
@@ -1225,7 +1225,7 @@ i18n:
           <tr><td>Jalur data</td><td>File → cloud Figma</td><td>Prompt → penyedia pilihan Anda; tidak ada yang melewati kami</td></tr>
         </tbody>
       </table>
-      <p>Ringkasan jujurnya: Figma memiliki pengalaman kanvas kolaboratif yang paling terpoles di pasar, dan untuk sebuah tim desainer yang me-review layar-layar presisi bersama, poles itu adalah produknya. Open Design menukar kanvas sepenuhnya dengan sebuah library — skills, systems, dan agents yang dirancang untuk merangkai dengan alat yang sudah ada di laptop Anda. Bentuk yang berbeda, taruhan yang berbeda.</p>
+      <p>Ringkasan jujurnya: Figma memiliki pengalaman kanvas kolaboratif yang paling terpoles di pasar, dan untuk sebuah tim desainer yang me-review layar-layar presisi bersama, poles itu adalah produknya. OpenDesign menukar kanvas sepenuhnya dengan sebuah library — skills, systems, dan agents yang dirancang untuk merangkai dengan alat yang sudah ada di laptop Anda. Bentuk yang berbeda, taruhan yang berbeda.</p>
 
       <h2>Siapa yang harus memilih apa</h2>
       <table>
@@ -1234,10 +1234,10 @@ i18n:
           <tr><td>Sebuah tim desain yang mengerjakan pekerjaan kanvas real-time, multi-desainer dengan review langsung</td><td><strong>Figma.</strong> Tidak ada apa pun di open source yang menandingi kanvas multiplayer.</td></tr>
           <tr><td>Seorang desainer yang mengerjakan pekerjaan vektor dan komponen presisi piksel sepanjang hari</td><td><strong>Figma.</strong> Primitif kanvasnya matang dan muscle memory Anda bernilai uang sungguhan.</td></tr>
           <tr><td>Sebuah organisasi yang sudah terstandardisasi di Figma dengan Dev Mode di dalam loop engineering</td><td><strong>Figma.</strong> Anda sudah membayar biaya integrasinya; manfaatkanlah.</td></tr>
-          <tr><td>Seorang design engineer yang sudah menggerakkan Claude Code, Codex, atau Cursor dari terminal</td><td><strong>Open Design.</strong> Agent Anda adalah mesin desainnya; lapisan skill menambahkan selera dan struktur tanpa aplikasi baru.</td></tr>
-          <tr><td>Siapa pun yang membutuhkan BYOK, pilihan model di tengah proyek, atau local-only untuk brief sensitif</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Kenyataannya lebih kasar daripada pemasarannya</a>, tetapi itu satu-satunya kontrak yang benar-benar berlaku.</td></tr>
-          <tr><td>Sebuah tim yang menginginkan design system yang bertahan melampaui pergantian alat</td><td><strong>Open Design.</strong> File <code>DESIGN.md</code> bertahan lebih lama daripada alat yang membacanya.</td></tr>
-          <tr><td>Seorang kontributor open-source yang ingin men-ship sebuah alur kerja desain yang bisa diadopsi proyek</td><td><strong>Open Design.</strong> Letakkan sebuah folder, restart daemon, kirim PR.</td></tr>
+          <tr><td>Seorang design engineer yang sudah menggerakkan Claude Code, Codex, atau Cursor dari terminal</td><td><strong>OpenDesign.</strong> Agent Anda adalah mesin desainnya; lapisan skill menambahkan selera dan struktur tanpa aplikasi baru.</td></tr>
+          <tr><td>Siapa pun yang membutuhkan BYOK, pilihan model di tengah proyek, atau local-only untuk brief sensitif</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Kenyataannya lebih kasar daripada pemasarannya</a>, tetapi itu satu-satunya kontrak yang benar-benar berlaku.</td></tr>
+          <tr><td>Sebuah tim yang menginginkan design system yang bertahan melampaui pergantian alat</td><td><strong>OpenDesign.</strong> File <code>DESIGN.md</code> bertahan lebih lama daripada alat yang membacanya.</td></tr>
+          <tr><td>Seorang kontributor open-source yang ingin men-ship sebuah alur kerja desain yang bisa diadopsi proyek</td><td><strong>OpenDesign.</strong> Letakkan sebuah folder, restart daemon, kirim PR.</td></tr>
         </tbody>
       </table>
       <p>Dimensi yang menentukannya bagi sebagian besar tim bukanlah kualitas — kerajinan Figma itu nyata. Melainkan apakah pekerjaan Anda adalah sebuah kanvas untuk dilukis, atau sebuah alur kerja untuk diotomatisasi. Jika yang terakhir, Anda akan lebih memilih memilikinya daripada menyewanya.</p>
@@ -1249,9 +1249,9 @@ i18n:
 
       <h2>Bacaan terkait</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cara memindahkan alur kerja Figma menjadi plugin Open Design</a> — jalur konkret untuk sebuah ekspor, sinkronisasi token, atau brand kit</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Cara memindahkan alur kerja Figma menjadi plugin OpenDesign</a> — jalur konkret untuk sebuah ekspor, sinkronisasi token, atau brand kit</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">Alternatif open-source untuk Claude Design</a> — penilaian jujur yang sama, untuk satu alat berbeda</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Mengapa kami membangun Open Design sebagai lapisan skill, bukan sebuah produk</a> — manifesto lebih panjang di balik taruhan "lapisan, bukan produk"</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Mengapa kami membangun OpenDesign sebagai lapisan skill, bukan sebuah produk</a> — manifesto lebih panjang di balik taruhan "lapisan, bukan produk"</li>
       </ul>
   nl:
     title: "Het open-source alternatief voor Figma"
@@ -1283,8 +1283,8 @@ i18n:
       <figcaption>De bron van waarheid leeft in een propriëtair bestand, in andermans cloud.</figcaption>
       </figure>
 
-      <h2>De verschuiving waar Open Design op inzet</h2>
-      <p>Open Design is geen Figma-kloon. Er is geen oneindig canvas en geen multiplayer-cursors. Het is een dunne skill-laag die de coding-agent die je al gebruikt verandert in een ontwerpengine. De vier primitieven zijn <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters en de daemon</a> — en het belangrijke is dat ze allemaal gewoon bestanden zijn:</p>
+      <h2>De verschuiving waar OpenDesign op inzet</h2>
+      <p>OpenDesign is geen Figma-kloon. Er is geen oneindig canvas en geen multiplayer-cursors. Het is een dunne skill-laag die de coding-agent die je al gebruikt verandert in een ontwerpengine. De vier primitieven zijn <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters en de daemon</a> — en het belangrijke is dat ze allemaal gewoon bestanden zijn:</p>
       <ul>
       <li>Elke skill is een <code>SKILL.md</code>-bestand dat je kunt lezen, forken en als PR terugsturen.</li>
       <li>Elk ontwerpsysteem is een overdraagbaar <code>DESIGN.md</code>-bestand — inclusief degene die we voor Figma zelf leveren. Je kunt het openen in elke editor, het diffen in git, en het overleeft welke tool het hierna ook leest.</li>
@@ -1297,7 +1297,7 @@ i18n:
       <li><strong>De workflow is overdraagbaar.</strong> Een skill is een map. Het stelt zich samen met elke agent op je <code>$PATH</code>, niet met de plugin-runtime van één leverancier.</li>
       <li><strong>BYOK standaard.</strong> Plak elke OpenAI-compatibele <code>base_url</code> en key; <a href="/blog/byok-design-workflow-claude-codex-qwen/">jouw tokens gaan rechtstreeks naar de provider</a>. Apache-2.0, geen registratie, geen rekening per seat.</li>
       </ul>
-      <p>Het mentale model: Figma is een canvas dat je huurt. Open Design is een workflow die je bezit.</p>
+      <p>Het mentale model: Figma is een canvas dat je huurt. OpenDesign is een workflow die je bezit.</p>
 
       <figure>
       <img src="/blog/plate-18-portable-files.webp" alt="Een waaier van blanco zwarte vellen papier en indexkaarten die uit een open houder spreiden, een paar zwevend los, op een warm redactioneel studievel" />
@@ -1306,7 +1306,7 @@ i18n:
 
       <h2>Naast elkaar</h2>
       <table>
-      <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+      <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
       <tbody>
       <tr><td>Licentie</td><td>Propriëtair</td><td>Apache-2.0</td></tr>
       <tr><td>Runtime</td><td>Gehost (browser, Figma-cloud)</td><td>Lokale daemon (<code>pnpm tools-dev</code>) + optionele self-host</td></tr>
@@ -1321,7 +1321,7 @@ i18n:
       <tr><td>Datapad</td><td>Bestanden → Figma-cloud</td><td>Prompts → jouw gekozen provider; niets via ons</td></tr>
       </tbody>
       </table>
-      <p>De eerlijke samenvatting: Figma heeft de meest gepolijste collaboratief-canvaservaring op de markt, en voor een team ontwerpers dat samen precieze schermen reviewt, ís die afwerking het product. Open Design ruilt het canvas volledig in voor een bibliotheek — skills, systems en agents ontworpen om samen te stellen met de tool die al op je laptop staat. Andere vorm, andere weddenschap.</p>
+      <p>De eerlijke samenvatting: Figma heeft de meest gepolijste collaboratief-canvaservaring op de markt, en voor een team ontwerpers dat samen precieze schermen reviewt, ís die afwerking het product. OpenDesign ruilt het canvas volledig in voor een bibliotheek — skills, systems en agents ontworpen om samen te stellen met de tool die al op je laptop staat. Andere vorm, andere weddenschap.</p>
 
       <h2>Wie moet wat kiezen</h2>
       <table>
@@ -1330,10 +1330,10 @@ i18n:
       <tr><td>Een ontwerpteam dat realtime, multi-designer canvaswerk doet met live review</td><td><strong>Figma.</strong> Niets in open source evenaart het multiplayer-canvas.</td></tr>
       <tr><td>Een ontwerper die de hele dag pixelnauwkeurig vector- en componentwerk doet</td><td><strong>Figma.</strong> De canvas-primitieven zijn volwassen en je spiergeheugen is echt geld waard.</td></tr>
       <tr><td>Een organisatie die al op Figma is gestandaardiseerd met Dev Mode in de engineering-loop</td><td><strong>Figma.</strong> Je hebt de integratiekosten al betaald; benut ze.</td></tr>
-      <tr><td>Een design engineer die Claude Code, Codex of Cursor al vanuit de terminal aandrijft</td><td><strong>Open Design.</strong> Je agent ís de ontwerpengine; de skill-laag voegt smaak en structuur toe zonder een nieuwe app.</td></tr>
-      <tr><td>Iedereen die BYOK, modelkeuze midden in een project, of local-only voor gevoelige briefings nodig heeft</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">De realiteit is ruwer dan de marketing</a>, maar het is het enige contract dat echt standhoudt.</td></tr>
-      <tr><td>Een team dat een ontwerpsysteem wil dat tool-verloop overleeft</td><td><strong>Open Design.</strong> <code>DESIGN.md</code>-bestanden overleven de tool die ze leest.</td></tr>
-      <tr><td>Een open-source bijdrager die een ontwerpworkflow wil leveren die het project kan overnemen</td><td><strong>Open Design.</strong> Plaats een map, herstart de daemon, stuur de PR.</td></tr>
+      <tr><td>Een design engineer die Claude Code, Codex of Cursor al vanuit de terminal aandrijft</td><td><strong>OpenDesign.</strong> Je agent ís de ontwerpengine; de skill-laag voegt smaak en structuur toe zonder een nieuwe app.</td></tr>
+      <tr><td>Iedereen die BYOK, modelkeuze midden in een project, of local-only voor gevoelige briefings nodig heeft</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">De realiteit is ruwer dan de marketing</a>, maar het is het enige contract dat echt standhoudt.</td></tr>
+      <tr><td>Een team dat een ontwerpsysteem wil dat tool-verloop overleeft</td><td><strong>OpenDesign.</strong> <code>DESIGN.md</code>-bestanden overleven de tool die ze leest.</td></tr>
+      <tr><td>Een open-source bijdrager die een ontwerpworkflow wil leveren die het project kan overnemen</td><td><strong>OpenDesign.</strong> Plaats een map, herstart de daemon, stuur de PR.</td></tr>
       </tbody>
       </table>
       <p>De dimensie die het voor de meeste teams beslist is niet kwaliteit — Figma's vakmanschap is echt. Het is of jouw werk een canvas is om op te schilderen, of een workflow om te automatiseren. Als het het laatste is, bezit je het liever dan dat je het huurt.</p>
@@ -1345,9 +1345,9 @@ i18n:
 
       <h2>Verder lezen</h2>
       <ul>
-      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Hoe je een Figma-workflow overzet naar een Open Design-plugin</a> — het concrete pad voor een export, token-sync of brand kit</li>
+      <li><a href="/blog/port-figma-workflow-open-design-plugin/">Hoe je een Figma-workflow overzet naar een OpenDesign-plugin</a> — het concrete pad voor een export, token-sync of brand kit</li>
       <li><a href="/blog/open-source-alternative-to-claude-design/">Het open-source alternatief voor Claude Design</a> — dezelfde eerlijke kijk, één tool verderop</li>
-      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Waarom we Open Design als skill-laag bouwden, niet als product</a> — het langere manifest achter de weddenschap "laag, geen product"</li>
+      <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Waarom we OpenDesign als skill-laag bouwden, niet als product</a> — het langere manifest achter de weddenschap "laag, geen product"</li>
       </ul>
   ar:
     title: "البديل مفتوح المصدر لـ Figma"
@@ -1379,8 +1379,8 @@ i18n:
         <figcaption>مصدر الحقيقة يعيش في ملف مملوك احتكاريًا، داخل سحابة شخص آخر.</figcaption>
       </figure>
 
-      <h2>التحوّل الذي تراهن عليه Open Design</h2>
-      <p>Open Design ليست نسخة مستنسخة من Figma. لا توجد لوحة لا نهائية ولا مؤشرات متعددة المستخدمين. إنها طبقة مهارات رقيقة تحوّل وكيل البرمجة الذي تستخدمه بالفعل إلى محرك تصميم. الأوّليات الأربع هي <a href="/blog/31-skills-72-systems-how-the-library-works/">skills وsystems وadapters وthe daemon</a> — والجزء المهم أنها جميعًا مجرد ملفات:</p>
+      <h2>التحوّل الذي تراهن عليه OpenDesign</h2>
+      <p>OpenDesign ليست نسخة مستنسخة من Figma. لا توجد لوحة لا نهائية ولا مؤشرات متعددة المستخدمين. إنها طبقة مهارات رقيقة تحوّل وكيل البرمجة الذي تستخدمه بالفعل إلى محرك تصميم. الأوّليات الأربع هي <a href="/blog/31-skills-72-systems-how-the-library-works/">skills وsystems وadapters وthe daemon</a> — والجزء المهم أنها جميعًا مجرد ملفات:</p>
       <ul>
         <li>كل skill هو ملف <code>SKILL.md</code> يمكنك قراءته وعمل fork له وإعادته كـ PR.</li>
         <li>كل نظام تصميم هو ملف <code>DESIGN.md</code> قابل للنقل — بما في ذلك الذي نشحنه لأجل Figma نفسها. يمكنك فتحه في أي محرر وعمل diff له في git، وهو يعمّر أطول من أي أداة تقرؤه لاحقًا.</li>
@@ -1393,7 +1393,7 @@ i18n:
         <li><strong>سير العمل قابل للنقل.</strong> الـ skill هو مجلد. يتركّب في أي وكيل على <code>$PATH</code> لديك، لا في زمن تشغيل إضافات مورّد واحد.</li>
         <li><strong>BYOK افتراضيًا.</strong> الصق أي <code>base_url</code> ومفتاح متوافقين مع OpenAI؛ <a href="/blog/byok-design-workflow-claude-codex-qwen/">تذهب رموزك مباشرة إلى المزوّد</a>. Apache-2.0، دون تسجيل، دون فاتورة لكل مقعد.</li>
       </ul>
-      <p>النموذج الذهني: Figma لوحة تستأجرها. Open Design سير عمل تملكه.</p>
+      <p>النموذج الذهني: Figma لوحة تستأجرها. OpenDesign سير عمل تملكه.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="مروحة من أوراق سوداء صرفة وبطاقات فهرسة تنتشر خارج حاوية مفتوحة، وبعضها ينجرف حرًا، على لوح دراسة تحريري بألوان دافئة" />
@@ -1402,7 +1402,7 @@ i18n:
 
       <h2>جنبًا إلى جنب</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>الترخيص</td><td>مملوك احتكاريًا</td><td>Apache-2.0</td></tr>
           <tr><td>زمن التشغيل</td><td>مُستضاف (المتصفح، سحابة Figma)</td><td>daemon محلي (<code>pnpm tools-dev</code>) + استضافة ذاتية اختيارية</td></tr>
@@ -1417,7 +1417,7 @@ i18n:
           <tr><td>مسار البيانات</td><td>الملفات ← سحابة Figma</td><td>المطالبات ← المزوّد الذي اخترته؛ لا شيء يمرّ عبرنا</td></tr>
         </tbody>
       </table>
-      <p>الخلاصة الصادقة: تمتلك Figma أكثر تجارب اللوحة التعاونية صقلاً في السوق، وبالنسبة لفريق من المصممين يراجعون شاشات دقيقة معًا، فإن هذا الصقل هو المنتج بعينه. أما Open Design فتقايض اللوحة بالكامل بمكتبة — skills وsystems وagents مصممة لتتركّب مع الأداة الموجودة أصلاً على حاسوبك المحمول. شكل مختلف، رهان مختلف.</p>
+      <p>الخلاصة الصادقة: تمتلك Figma أكثر تجارب اللوحة التعاونية صقلاً في السوق، وبالنسبة لفريق من المصممين يراجعون شاشات دقيقة معًا، فإن هذا الصقل هو المنتج بعينه. أما OpenDesign فتقايض اللوحة بالكامل بمكتبة — skills وsystems وagents مصممة لتتركّب مع الأداة الموجودة أصلاً على حاسوبك المحمول. شكل مختلف، رهان مختلف.</p>
 
       <h2>من ينبغي أن يختار ماذا</h2>
       <table>
@@ -1426,10 +1426,10 @@ i18n:
           <tr><td>فريق تصميم يقوم بعمل لوحة متعدد المصممين في الوقت الفعلي مع مراجعة حيّة</td><td><strong>Figma.</strong> لا شيء في عالم المصادر المفتوحة يضاهي اللوحة متعددة المستخدمين.</td></tr>
           <tr><td>مصمم يقوم بعمل متجهي دقيق على مستوى البكسل وعمل مكوّنات طوال اليوم</td><td><strong>Figma.</strong> أوّليات اللوحة ناضجة وذاكرتك العضلية تساوي مالاً حقيقيًا.</td></tr>
           <tr><td>مؤسسة موحّدة بالفعل على Figma مع Dev Mode داخل حلقة الهندسة</td><td><strong>Figma.</strong> لقد دفعت كلفة التكامل؛ فأنفقها.</td></tr>
-          <tr><td>مهندس تصميم يقود بالفعل Claude Code أو Codex أو Cursor من الطرفية</td><td><strong>Open Design.</strong> وكيلك هو محرك التصميم؛ طبقة المهارات تضيف الذوق والبنية دون تطبيق جديد.</td></tr>
-          <tr><td>أي شخص يحتاج إلى BYOK، أو تبديل النموذج في منتصف المشروع، أو المعالجة المحلية فقط للموجزات الحساسة</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">الواقع أخشن من التسويق</a>، لكنه العقد الوحيد الذي يصمد فعلاً.</td></tr>
-          <tr><td>فريق يريد نظام تصميم يصمد عبر تبدّل الأدوات</td><td><strong>Open Design.</strong> ملفات <code>DESIGN.md</code> تعمّر أطول من الأداة التي تقرؤها.</td></tr>
-          <tr><td>مساهم في المصادر المفتوحة يريد شحن سير عمل تصميم يمكن للمشروع تبنّيه</td><td><strong>Open Design.</strong> أسقط مجلدًا، أعد تشغيل الـ daemon، وأرسل الـ PR.</td></tr>
+          <tr><td>مهندس تصميم يقود بالفعل Claude Code أو Codex أو Cursor من الطرفية</td><td><strong>OpenDesign.</strong> وكيلك هو محرك التصميم؛ طبقة المهارات تضيف الذوق والبنية دون تطبيق جديد.</td></tr>
+          <tr><td>أي شخص يحتاج إلى BYOK، أو تبديل النموذج في منتصف المشروع، أو المعالجة المحلية فقط للموجزات الحساسة</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">الواقع أخشن من التسويق</a>، لكنه العقد الوحيد الذي يصمد فعلاً.</td></tr>
+          <tr><td>فريق يريد نظام تصميم يصمد عبر تبدّل الأدوات</td><td><strong>OpenDesign.</strong> ملفات <code>DESIGN.md</code> تعمّر أطول من الأداة التي تقرؤها.</td></tr>
+          <tr><td>مساهم في المصادر المفتوحة يريد شحن سير عمل تصميم يمكن للمشروع تبنّيه</td><td><strong>OpenDesign.</strong> أسقط مجلدًا، أعد تشغيل الـ daemon، وأرسل الـ PR.</td></tr>
         </tbody>
       </table>
       <p>البُعد الذي يحسم الأمر لمعظم الفرق ليس الجودة — إتقان Figma حقيقي. بل هو: هل عملك لوحة لترسم عليها، أم سير عمل لتُؤتمته. إن كان الأخير، فستفضّل أن تملكه على أن تستأجره.</p>
@@ -1441,9 +1441,9 @@ i18n:
 
       <h2>قراءات إضافية</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">كيفية نقل سير عمل Figma إلى إضافة Open Design</a> — المسار الملموس لتصدير، أو مزامنة رموز، أو طقم علامة تجارية</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">كيفية نقل سير عمل Figma إلى إضافة OpenDesign</a> — المسار الملموس لتصدير، أو مزامنة رموز، أو طقم علامة تجارية</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">البديل مفتوح المصدر لـ Claude Design</a> — القراءة الصادقة نفسها، بأداة مختلفة</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا Open Design كطبقة مهارات، لا كمنتج</a> — البيان الأطول وراء رهان «طبقة، لا منتج»</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">لماذا بنينا OpenDesign كطبقة مهارات، لا كمنتج</a> — البيان الأطول وراء رهان «طبقة، لا منتج»</li>
       </ul>
   tr:
     title: "Figma'nın açık kaynaklı alternatifi"
@@ -1475,8 +1475,8 @@ i18n:
         <figcaption>Gerçeğin kaynağı tescilli bir dosyada, başkasının bulutunda yaşıyor.</figcaption>
       </figure>
 
-      <h2>Open Design'ın bahis koyduğu kayma</h2>
-      <p>Open Design bir Figma klonu değil. Sonsuz tuval yok, çok kişilik imleçler yok. Halihazırda kullandığınız kodlama agent'ını bir tasarım motoruna dönüştüren ince bir skill katmanı. Dört ilkel <a href="/blog/31-skills-72-systems-how-the-library-works/">skill'ler, system'ler, adapter'lar ve daemon</a> — ve önemli olan, hepsinin yalnızca dosya olması:</p>
+      <h2>OpenDesign'ın bahis koyduğu kayma</h2>
+      <p>OpenDesign bir Figma klonu değil. Sonsuz tuval yok, çok kişilik imleçler yok. Halihazırda kullandığınız kodlama agent'ını bir tasarım motoruna dönüştüren ince bir skill katmanı. Dört ilkel <a href="/blog/31-skills-72-systems-how-the-library-works/">skill'ler, system'ler, adapter'lar ve daemon</a> — ve önemli olan, hepsinin yalnızca dosya olması:</p>
       <ul>
         <li>Her skill, okuyabileceğiniz, fork'layabileceğiniz ve PR olarak geri gönderebileceğiniz bir <code>SKILL.md</code> dosyasıdır.</li>
         <li>Her tasarım sistemi taşınabilir bir <code>DESIGN.md</code> dosyasıdır — Figma'nın kendisi için gönderdiğimiz dahil. Onu herhangi bir düzenleyicide açabilir, git'te diff'leyebilirsiniz ve onu bir sonraki okuyan araçtan daha uzun yaşar.</li>
@@ -1489,7 +1489,7 @@ i18n:
         <li><strong>İş akışı taşınabilir.</strong> Bir skill bir klasördür. Tek bir satıcının eklenti çalışma zamanına değil, <code>$PATH</code>'inizdeki herhangi bir agent'a bestelenir.</li>
         <li><strong>Varsayılan olarak BYOK.</strong> OpenAI uyumlu herhangi bir <code>base_url</code> ve anahtarı yapıştırın; <a href="/blog/byok-design-workflow-claude-codex-qwen/">token'larınız doğrudan sağlayıcıya gider</a>. Apache-2.0, kayıt yok, koltuk başına fatura yok.</li>
       </ul>
-      <p>Zihinsel model şöyle: Figma kiraladığınız bir tuvaldir. Open Design sahip olduğunuz bir iş akışıdır.</p>
+      <p>Zihinsel model şöyle: Figma kiraladığınız bir tuvaldir. OpenDesign sahip olduğunuz bir iş akışıdır.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="Açık bir kaptan yelpaze gibi açılan düz siyah kâğıt sayfaları ve dizin kartları, birkaçı serbestçe süzülüyor, sıcak editöryel bir çalışma plakası üzerinde" />
@@ -1498,7 +1498,7 @@ i18n:
 
       <h2>Yan yana</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>Lisans</td><td>Tescilli</td><td>Apache-2.0</td></tr>
           <tr><td>Çalışma zamanı</td><td>Barındırılan (tarayıcı, Figma bulutu)</td><td>Yerel daemon (<code>pnpm tools-dev</code>) + isteğe bağlı kendi kendine barındırma</td></tr>
@@ -1513,7 +1513,7 @@ i18n:
           <tr><td>Veri yolu</td><td>Dosyalar → Figma bulutu</td><td>İstemler → seçtiğiniz sağlayıcı; hiçbir şey bizim üzerimizden geçmez</td></tr>
         </tbody>
       </table>
-      <p>Dürüst özet: Figma piyasadaki en cilalı işbirlikçi tuval deneyimine sahip ve hassas ekranları birlikte inceleyen bir tasarımcı ekibi için bu cila ürünün ta kendisidir. Open Design ise tuvali tamamen bir kütüphaneyle değiştirir — dizüstü bilgisayarınızdaki mevcut araçla bestelenmek üzere tasarlanmış skill'ler, system'ler ve agent'lar. Farklı biçim, farklı bahis.</p>
+      <p>Dürüst özet: Figma piyasadaki en cilalı işbirlikçi tuval deneyimine sahip ve hassas ekranları birlikte inceleyen bir tasarımcı ekibi için bu cila ürünün ta kendisidir. OpenDesign ise tuvali tamamen bir kütüphaneyle değiştirir — dizüstü bilgisayarınızdaki mevcut araçla bestelenmek üzere tasarlanmış skill'ler, system'ler ve agent'lar. Farklı biçim, farklı bahis.</p>
 
       <h2>Kim hangisini seçmeli</h2>
       <table>
@@ -1522,10 +1522,10 @@ i18n:
           <tr><td>Canlı incelemeyle gerçek zamanlı, çok tasarımcılı tuval işi yapan bir tasarım ekibi</td><td><strong>Figma.</strong> Açık kaynakta hiçbir şey çok kişilik tuvale yaklaşmıyor.</td></tr>
           <tr><td>Bütün gün piksel hassasiyetinde vektör ve bileşen işi yapan bir tasarımcı</td><td><strong>Figma.</strong> Tuval ilkelleri olgun ve kas hafızanız gerçek para eder.</td></tr>
           <tr><td>Dev Mode'u mühendislik döngüsüne dahil etmiş, halihazırda Figma'da standartlaşmış bir organizasyon</td><td><strong>Figma.</strong> Entegrasyon maliyetini zaten ödediniz; harcayın.</td></tr>
-          <tr><td>Terminalden halihazırda Claude Code, Codex veya Cursor'u süren bir tasarım mühendisi</td><td><strong>Open Design.</strong> Agent'ınız tasarım motorudur; skill katmanı yeni bir uygulama olmadan zevk ve yapı ekler.</td></tr>
-          <tr><td>BYOK, proje ortasında model seçimi veya hassas brifingler için yalnızca yerel işlem isteyen herkes</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Gerçeklik pazarlamadan daha kaba</a>, ama gerçekten tutan tek sözleşme bu.</td></tr>
-          <tr><td>Araç değişimine dayanan bir tasarım sistemi isteyen bir ekip</td><td><strong>Open Design.</strong> <code>DESIGN.md</code> dosyaları onu okuyan araçtan daha uzun yaşar.</td></tr>
-          <tr><td>Projenin benimseyebileceği bir tasarım iş akışı göndermek isteyen bir açık kaynak katkıda bulunanı</td><td><strong>Open Design.</strong> Bir klasör bırakın, daemon'ı yeniden başlatın, PR'ı gönderin.</td></tr>
+          <tr><td>Terminalden halihazırda Claude Code, Codex veya Cursor'u süren bir tasarım mühendisi</td><td><strong>OpenDesign.</strong> Agent'ınız tasarım motorudur; skill katmanı yeni bir uygulama olmadan zevk ve yapı ekler.</td></tr>
+          <tr><td>BYOK, proje ortasında model seçimi veya hassas brifingler için yalnızca yerel işlem isteyen herkes</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Gerçeklik pazarlamadan daha kaba</a>, ama gerçekten tutan tek sözleşme bu.</td></tr>
+          <tr><td>Araç değişimine dayanan bir tasarım sistemi isteyen bir ekip</td><td><strong>OpenDesign.</strong> <code>DESIGN.md</code> dosyaları onu okuyan araçtan daha uzun yaşar.</td></tr>
+          <tr><td>Projenin benimseyebileceği bir tasarım iş akışı göndermek isteyen bir açık kaynak katkıda bulunanı</td><td><strong>OpenDesign.</strong> Bir klasör bırakın, daemon'ı yeniden başlatın, PR'ı gönderin.</td></tr>
         </tbody>
       </table>
       <p>Çoğu ekip için kararı veren boyut kalite değil — Figma'nın işçiliği gerçek. Mesele, işinizin üzerinde çizilecek bir tuval mı yoksa otomatikleştirilecek bir iş akışı mı olduğu. İkincisiyse, kiralamaktansa sahip olmayı tercih edersiniz.</p>
@@ -1537,9 +1537,9 @@ i18n:
 
       <h2>İlgili okumalar</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Bir Figma iş akışı Open Design eklentisine nasıl taşınır</a> — bir dışa aktarma, token senkronizasyonu veya marka kiti için somut yol</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Bir Figma iş akışı OpenDesign eklentisine nasıl taşınır</a> — bir dışa aktarma, token senkronizasyonu veya marka kiti için somut yol</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">Claude Design'ın açık kaynaklı alternatifi</a> — aynı dürüst değerlendirme, bir araç öteden</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Open Design'ı neden bir ürün değil, bir skill katmanı olarak inşa ettik</a> — "ürün değil, katman" bahsinin arkasındaki daha uzun manifesto</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">OpenDesign'ı neden bir ürün değil, bir skill katmanı olarak inşa ettik</a> — "ürün değil, katman" bahsinin arkasındaki daha uzun manifesto</li>
       </ul>
   uk:
     title: "Альтернатива Figma з відкритим кодом"
@@ -1571,8 +1571,8 @@ i18n:
         <figcaption>Джерело істини живе у пропрієтарному файлі, всередині чиєїсь чужої хмари.</figcaption>
       </figure>
 
-      <h2>Зсув, на який ставить Open Design</h2>
-      <p>Open Design — не клон Figma. Тут немає нескінченного полотна і немає багатокористувацьких курсорів. Це тонкий шар skill'ів, який перетворює coding agent, яким ви вже користуєтесь, на дизайнерський рушій. Чотири примітиви — це <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters і daemon</a> — а важливо те, що всі вони — просто файли:</p>
+      <h2>Зсув, на який ставить OpenDesign</h2>
+      <p>OpenDesign — не клон Figma. Тут немає нескінченного полотна і немає багатокористувацьких курсорів. Це тонкий шар skill'ів, який перетворює coding agent, яким ви вже користуєтесь, на дизайнерський рушій. Чотири примітиви — це <a href="/blog/31-skills-72-systems-how-the-library-works/">skills, systems, adapters і daemon</a> — а важливо те, що всі вони — просто файли:</p>
       <ul>
         <li>Кожен skill — це файл <code>SKILL.md</code>, який ви можете читати, форкати й надсилати назад як PR.</li>
         <li>Кожна дизайн-система — це переносний файл <code>DESIGN.md</code> — включно з тим, який ми постачаємо для самої Figma. Ви можете відкрити його в будь-якому редакторі, порівняти diff'ом у git, і він переживе будь-який інструмент, що прочитає його наступним.</li>
@@ -1585,7 +1585,7 @@ i18n:
         <li><strong>Робочий процес переносний.</strong> Skill — це папка. Вона компонується з будь-яким agent'ом у вашому <code>$PATH</code>, а не з середовищем виконання плагінів одного вендора.</li>
         <li><strong>BYOK за замовчуванням.</strong> Вставте будь-який сумісний з OpenAI <code>base_url</code> і ключ; <a href="/blog/byok-design-workflow-claude-codex-qwen/">ваші токени йдуть прямо до провайдера</a>. Apache-2.0, без реєстрації, без рахунку за місце.</li>
       </ul>
-      <p>Ментальна модель така: Figma — це полотно, яке ви орендуєте. Open Design — це робочий процес, яким ви володієте.</p>
+      <p>Ментальна модель така: Figma — це полотно, яке ви орендуєте. OpenDesign — це робочий процес, яким ви володієте.</p>
 
       <figure>
         <img src="/blog/plate-18-portable-files.webp" alt="Віяло простих чорних аркушів паперу та індексних карток, що розгортаються з відкритого контейнера, кілька з яких відлітають убік, на теплій редакторській дослідницькій плашці" />
@@ -1594,7 +1594,7 @@ i18n:
 
       <h2>Порівняння пліч-о-пліч</h2>
       <table>
-        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>Open Design</strong></th></tr></thead>
+        <thead><tr><th></th><th><strong>Figma</strong></th><th><strong>OpenDesign</strong></th></tr></thead>
         <tbody>
           <tr><td>Ліцензія</td><td>Пропрієтарна</td><td>Apache-2.0</td></tr>
           <tr><td>Середовище виконання</td><td>Хостоване (браузер, хмара Figma)</td><td>Локальний daemon (<code>pnpm tools-dev</code>) + опційний self-host</td></tr>
@@ -1609,7 +1609,7 @@ i18n:
           <tr><td>Шлях даних</td><td>Файли → хмара Figma</td><td>Промпти → обраний вами провайдер; нічого через нас</td></tr>
         </tbody>
       </table>
-      <p>Чесний підсумок: Figma має найвідшліфованіший досвід колаборативного полотна на ринку, і для команди дизайнерів, що разом переглядають точні екрани, ця відшліфованість і є продуктом. Open Design ж цілковито міняє полотно на бібліотеку — skills, systems і agents, спроєктовані так, щоб компонуватися з інструментом, який уже є на вашому ноутбуці. Інша форма, інша ставка.</p>
+      <p>Чесний підсумок: Figma має найвідшліфованіший досвід колаборативного полотна на ринку, і для команди дизайнерів, що разом переглядають точні екрани, ця відшліфованість і є продуктом. OpenDesign ж цілковито міняє полотно на бібліотеку — skills, systems і agents, спроєктовані так, щоб компонуватися з інструментом, який уже є на вашому ноутбуці. Інша форма, інша ставка.</p>
 
       <h2>Кому що обрати</h2>
       <table>
@@ -1618,10 +1618,10 @@ i18n:
           <tr><td>Дизайнерська команда, що працює на полотні в реальному часі з кількома дизайнерами та живим переглядом</td><td><strong>Figma.</strong> Ніщо у відкритому коді не зрівняється з багатокористувацьким полотном.</td></tr>
           <tr><td>Дизайнер, що цілими днями робить піксельно точну векторну та компонентну роботу</td><td><strong>Figma.</strong> Примітиви полотна зрілі, а ваша м'язова пам'ять варта справжніх грошей.</td></tr>
           <tr><td>Організація, що вже стандартизувалася на Figma з Dev Mode в інженерному циклі</td><td><strong>Figma.</strong> Ви вже заплатили за інтеграцію; витратьте це.</td></tr>
-          <tr><td>Дизайн-інженер, що вже керує Claude Code, Codex чи Cursor з терміналу</td><td><strong>Open Design.</strong> Ваш agent і є дизайнерським рушієм; шар skill'ів додає смак і структуру без нового застосунку.</td></tr>
-          <tr><td>Будь-хто, кому потрібен BYOK, зміна моделі посеред проєкту чи робота лише локально для чутливих брифів</td><td><strong>Open Design.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Реальність грубіша за маркетинг</a>, але це єдиний контракт, який насправді тримається.</td></tr>
-          <tr><td>Команда, що хоче дизайн-систему, яка переживе зміну інструментів</td><td><strong>Open Design.</strong> Файли <code>DESIGN.md</code> переживають інструмент, що їх читає.</td></tr>
-          <tr><td>Контрибутор з відкритим кодом, що хоче випустити дизайнерський робочий процес, який проєкт може прийняти</td><td><strong>Open Design.</strong> Покладіть папку, перезапустіть daemon, надішліть PR.</td></tr>
+          <tr><td>Дизайн-інженер, що вже керує Claude Code, Codex чи Cursor з терміналу</td><td><strong>OpenDesign.</strong> Ваш agent і є дизайнерським рушієм; шар skill'ів додає смак і структуру без нового застосунку.</td></tr>
+          <tr><td>Будь-хто, кому потрібен BYOK, зміна моделі посеред проєкту чи робота лише локально для чутливих брифів</td><td><strong>OpenDesign.</strong> <a href="/blog/byok-reality-check-5-things-that-break/">Реальність грубіша за маркетинг</a>, але це єдиний контракт, який насправді тримається.</td></tr>
+          <tr><td>Команда, що хоче дизайн-систему, яка переживе зміну інструментів</td><td><strong>OpenDesign.</strong> Файли <code>DESIGN.md</code> переживають інструмент, що їх читає.</td></tr>
+          <tr><td>Контрибутор з відкритим кодом, що хоче випустити дизайнерський робочий процес, який проєкт може прийняти</td><td><strong>OpenDesign.</strong> Покладіть папку, перезапустіть daemon, надішліть PR.</td></tr>
         </tbody>
       </table>
       <p>Вимір, що вирішує справу для більшості команд, — це не якість; майстерність Figma реальна. Це те, чи ваша робота — це полотно для малювання, чи робочий процес для автоматизації. Якщо друге, ви радше володітимете ним, ніж орендуватимете.</p>
@@ -1633,9 +1633,9 @@ i18n:
 
       <h2>Додаткове читання</h2>
       <ul>
-        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Як перенести робочий процес Figma у плагін Open Design</a> — конкретний шлях для експорту, синхронізації токенів чи брендового набору</li>
+        <li><a href="/blog/port-figma-workflow-open-design-plugin/">Як перенести робочий процес Figma у плагін OpenDesign</a> — конкретний шлях для експорту, синхронізації токенів чи брендового набору</li>
         <li><a href="/blog/open-source-alternative-to-claude-design/">Альтернатива Claude Design з відкритим кодом</a> — та сама чесна оцінка, на один інструмент далі</li>
-        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Чому ми зробили Open Design шаром skill'ів, а не продуктом</a> — довший маніфест за ставкою «шар, а не продукт»</li>
+        <li><a href="/blog/why-we-built-open-design-as-a-skill-layer/">Чому ми зробили OpenDesign шаром skill'ів, а не продуктом</a> — довший маніфест за ставкою «шар, а не продукт»</li>
       </ul>
 ---
 
@@ -1673,9 +1673,9 @@ None of these are bugs. They're the shape of a hosted, collaborative-canvas prod
   <figcaption>The source of truth lives in a proprietary file, inside someone else's cloud.</figcaption>
 </figure>
 
-## The shift Open Design bets on
+## The shift OpenDesign bets on
 
-Open Design isn't a Figma clone. There's no infinite canvas and no multiplayer cursors. It's a thin skill layer that turns the coding agent you already use into a design engine. The four primitives are [skills, systems, adapters, and the daemon](/blog/31-skills-72-systems-how-the-library-works/) — and the important part is that they're all just files:
+OpenDesign isn't a Figma clone. There's no infinite canvas and no multiplayer cursors. It's a thin skill layer that turns the coding agent you already use into a design engine. The four primitives are [skills, systems, adapters, and the daemon](/blog/31-skills-72-systems-how-the-library-works/) — and the important part is that they're all just files:
 
 - Every skill is a `SKILL.md` file you can read, fork, and send back as a PR.
 - Every design system is a portable `DESIGN.md` file — including the one we ship for Figma itself. You can open it in any editor, diff it in git, and it outlives whatever tool reads it next.
@@ -1688,7 +1688,7 @@ What that buys you is the opposite of the four lock-ins above:
 - **The workflow is portable.** A skill is a folder. It composes into any agent on your `$PATH`, not a single vendor's plugin runtime.
 - **BYOK by default.** Paste any OpenAI-compatible `base_url` and key; [your tokens go straight to the provider](/blog/byok-design-workflow-claude-codex-qwen/). Apache-2.0, no signup, no per-seat bill.
 
-The mental model: Figma is a canvas you rent. Open Design is a workflow you own.
+The mental model: Figma is a canvas you rent. OpenDesign is a workflow you own.
 
 <figure>
   <img src="/blog/plate-18-portable-files.webp" alt="A fan of plain black paper sheets and index cards spreading out of an open container, a couple drifting free, on a warm editorial study plate" />
@@ -1697,7 +1697,7 @@ The mental model: Figma is a canvas you rent. Open Design is a workflow you own.
 
 ## Side-by-side
 
-| | **Figma** | **Open Design** |
+| | **Figma** | **OpenDesign** |
 |---|---|---|
 | License | Proprietary | Apache-2.0 |
 | Runtime | Hosted (browser, Figma cloud) | Local daemon (`pnpm tools-dev`) + optional self-host |
@@ -1711,7 +1711,7 @@ The mental model: Figma is a canvas you rent. Open Design is a workflow you own.
 | Self-hostable | No | Yes (laptop or your own deploy) |
 | Data path | Files → Figma cloud | Prompts → your chosen provider; nothing through us |
 
-The honest summary: Figma has the most polished collaborative-canvas experience on the market, and for a team of designers reviewing precise screens together, that polish is the product. Open Design trades the canvas entirely for a library — skills, systems, and agents designed to compose with the tool already on your laptop. Different shape, different bet.
+The honest summary: Figma has the most polished collaborative-canvas experience on the market, and for a team of designers reviewing precise screens together, that polish is the product. OpenDesign trades the canvas entirely for a library — skills, systems, and agents designed to compose with the tool already on your laptop. Different shape, different bet.
 
 ## Who should pick what
 
@@ -1720,10 +1720,10 @@ The honest summary: Figma has the most polished collaborative-canvas experience 
 | A design team doing real-time, multi-designer canvas work with live review | **Figma.** Nothing in open source matches the multiplayer canvas. |
 | A designer doing pixel-precise vector and component work all day | **Figma.** The canvas primitives are mature and your muscle memory is worth real money. |
 | An org already standardised on Figma with Dev Mode in the engineering loop | **Figma.** You've paid the integration cost; spend it. |
-| A design engineer who already drives Claude Code, Codex, or Cursor from the terminal | **Open Design.** Your agent is the design engine; the skill layer adds taste and structure without a new app. |
-| Anyone who needs BYOK, model choice mid-project, or local-only for sensitive briefs | **Open Design.** [The reality is rougher than the marketing](/blog/byok-reality-check-5-things-that-break/), but it's the only contract that actually holds. |
-| A team that wants a design system that survives tool churn | **Open Design.** `DESIGN.md` files outlive the tool that reads them. |
-| An open-source contributor who wants to ship a design workflow the project can adopt | **Open Design.** Drop a folder, restart the daemon, send the PR. |
+| A design engineer who already drives Claude Code, Codex, or Cursor from the terminal | **OpenDesign.** Your agent is the design engine; the skill layer adds taste and structure without a new app. |
+| Anyone who needs BYOK, model choice mid-project, or local-only for sensitive briefs | **OpenDesign.** [The reality is rougher than the marketing](/blog/byok-reality-check-5-things-that-break/), but it's the only contract that actually holds. |
+| A team that wants a design system that survives tool churn | **OpenDesign.** `DESIGN.md` files outlive the tool that reads them. |
+| An open-source contributor who wants to ship a design workflow the project can adopt | **OpenDesign.** Drop a folder, restart the daemon, send the PR. |
 
 The dimension that decides it for most teams isn't quality — Figma's craft is real. It's whether your work is a canvas to paint on, or a workflow to automate. If it's the latter, you'd rather own it than rent it.
 
@@ -1737,6 +1737,6 @@ Or just run the three-command quickstart and point it at the model you already p
 
 ## Related reading
 
-- [How to port a Figma workflow into an Open Design plugin](/blog/port-figma-workflow-open-design-plugin/) — the concrete path for an export, token sync, or brand kit
+- [How to port a Figma workflow into an OpenDesign plugin](/blog/port-figma-workflow-open-design-plugin/) — the concrete path for an export, token sync, or brand kit
 - [The open-source alternative to Claude Design](/blog/open-source-alternative-to-claude-design/) — the same honest read, one tool over
-- [Why we built Open Design as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/) — the longer manifesto behind the "layer, not product" bet
+- [Why we built OpenDesign as a skill layer, not a product](/blog/why-we-built-open-design-as-a-skill-layer/) — the longer manifesto behind the "layer, not product" bet

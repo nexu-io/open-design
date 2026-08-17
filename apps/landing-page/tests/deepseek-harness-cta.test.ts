@@ -32,7 +32,7 @@ test('DeepSeek Harness hero CTAs are complete for every active locale', () => {
     if (code !== 'en') {
       assert.notEqual(
         actions[1]?.label,
-        'Join Open Design Discord',
+        'Join OpenDesign Discord',
         `${code}: Discord label fell back to the English sentence`,
       );
       assert.notEqual(
@@ -100,7 +100,7 @@ test('DeepSeek Harness tutorial exposes the official resources and connection wa
     );
 
     const connectionSection = page.rich?.sections.find(({ id }) => id === 'open-design');
-    assert.ok(connectionSection, `${code}: missing the Open Design connection section`);
+    assert.ok(connectionSection, `${code}: missing the OpenDesign connection section`);
     const connectionSteps = connectionSection.blocks.find((block) => block.kind === 'steps');
     assert.ok(connectionSteps, `${code}: missing the numbered connection steps`);
     assert.deepEqual(
@@ -111,7 +111,7 @@ test('DeepSeek Harness tutorial exposes the official resources and connection wa
     assert.match(
       connectionSteps.items.map(({ label, body }) => `${label} ${body}`).join(' '),
       /0\.19\.1/,
-      `${code}: missing the minimum Open Design version`,
+      `${code}: missing the minimum OpenDesign version`,
     );
     const imageSources = connectionSection.blocks.flatMap((block) =>
       block.kind === 'image' ? [block.src] : [],

@@ -22,17 +22,17 @@ export const it: DeepseekCopyOverride = {
     'Chiude il ciclo: annota pagine reali, compila asset di motion, trasferisce la tua libreria di skill.',
     'Rendi l’harness stesso un design workspace: pannelli di anteprima, workbench e board accanto alla chat.',
   ],
-  collectionCloserHeading: 'Salta il setup. Progetta con DeepSeek Harness dentro Open Design',
+  collectionCloserHeading: 'Salta il setup. Progetta con DeepSeek Harness dentro OpenDesign',
   filterAll: 'Tutti',
   collectionCloserBody:
-    'Open Design è il design workspace open source e agent-native che lavora attorno a DeepSeek Harness. Tiene coerenti sistemi, skill e template, così l’agente consegna lavoro che ti appartiene.',
+    'OpenDesign è il design workspace open source e agent-native che lavora attorno a DeepSeek Harness. Tiene coerenti sistemi, skill e template, così l’agente consegna lavoro che ti appartiene.',
 
   categoryVision: 'Visione e input',
   categoryCanvas: 'Canvas e generative UI',
   categoryWorkflow: 'Workflow di design',
   categoryWorkspace: 'Workspace e anteprima',
 
-  ctaDownload: 'Scarica Open Design',
+  ctaDownload: 'Scarica OpenDesign',
   ctaStarList: 'Metti una star a DeepSeek Harness',
   ctaGuide: 'Come fare design con DeepSeek Harness',
   ctaBrowseAll: 'Sfoglia tutti i plugin',
@@ -71,9 +71,9 @@ export const it: DeepseekCopyOverride = {
   detailMoreOnList: 'Altro nel repo di DeepSeek Harness',
   detailRelated: 'Altri plugin di design per DeepSeek Harness',
   finalEyebrow: 'Prossimo passo',
-  detailCloserHeading: 'Progetta con Open Design, senza il setup',
+  detailCloserHeading: 'Progetta con OpenDesign, senza il setup',
   detailCloserBody:
-    'Installa questo plugin da solo, oppure porta attorno a DeepSeek Harness un intero strato di design curato con Open Design. Usa la tua chiave, resta padrone dell’output.',
+    'Installa questo plugin da solo, oppure porta attorno a DeepSeek Harness un intero strato di design curato con OpenDesign. Usa la tua chiave, resta padrone dell’output.',
 
   skills: {
     modlens: {

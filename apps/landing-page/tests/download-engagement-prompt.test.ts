@@ -342,7 +342,7 @@ test('download hero: every active locale explains the agent-led design workflow'
   }
   assert.equal(
     getInfoPageCopy('zh').download.heading,
-    '免费下载 Open Design，用你的 Agent 开始设计。',
+    '免费下载 OpenDesign，用你的 Agent 开始设计。',
   );
   assert.match(downloadPageSource, /hero-product-1280\.webp/);
   assert.match(downloadPageSource, /hero-download-attention/);

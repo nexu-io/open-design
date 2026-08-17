@@ -3,7 +3,7 @@
 // the in-app Plugins home displays. Authoritative source of truth for
 // the marketing site's `/plugins/...` routes; mirroring it keeps the
 // landing-page counts in lockstep with what visitors see when they
-// open Open Design.
+// open OpenDesign.
 //
 // Why a parallel loader instead of extending `catalog.ts`:
 //   - Catalog reads SKILL.md frontmatter through Astro Content

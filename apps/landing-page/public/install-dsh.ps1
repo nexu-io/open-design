@@ -79,7 +79,7 @@ exit /b %ERRORLEVEL%
 function Finish([string]$Label) {
   Write-Host "DeepSeek Harness $DshVersion is ready ($Label)."
   Write-Host "Command: $Launcher"
-  Write-Host 'Open Design can discover this command without editing your PATH.'
+  Write-Host 'OpenDesign can discover this command without editing your PATH.'
   if (-not $NoLaunch) {
     Write-Host 'Starting dsh web. Configure your API key in Settings -> Models; press Ctrl+C to stop.'
     & $Launcher web
@@ -150,7 +150,7 @@ try {
 
   $runtimeStaging = Join-Path $InstallRoot ".runtime-dsh-$DshVersion.$PID"
   New-Item -ItemType Directory -Force -Path $runtimeStaging | Out-Null
-  Write-Host "Installing dsh $DshVersion and pnpm $PnpmVersion in Open Design's user toolchain..."
+  Write-Host "Installing dsh $DshVersion and pnpm $PnpmVersion in OpenDesign's user toolchain..."
   & (Join-Path $NodeTarget 'npm.cmd') install --prefix $runtimeStaging --no-save --no-package-lock --omit=dev "@deepseek-ai/dsh@$DshVersion" "pnpm@$PnpmVersion"
   if ($LASTEXITCODE -ne 0) { Fail "npm install exited with code $LASTEXITCODE." }
 

@@ -22,17 +22,17 @@ export const es: DeepseekCopyOverride = {
     'Cierra el bucle: anota páginas reales, compila assets de movimiento, traslada tu biblioteca de skills.',
     'Convierte el propio harness en un espacio de trabajo de diseño: paneles de vista previa, bancos de trabajo y tableros junto al chat.',
   ],
-  collectionCloserHeading: 'Sáltate la configuración: diseña con DeepSeek Harness dentro de Open Design',
+  collectionCloserHeading: 'Sáltate la configuración: diseña con DeepSeek Harness dentro de OpenDesign',
   filterAll: 'Todos',
   collectionCloserBody:
-    'Open Design es el espacio de trabajo de diseño de código abierto y nativo para agentes que envuelve a DeepSeek Harness. Mantiene coherentes tus sistemas, skills y plantillas para que el agente entregue trabajo que es tuyo.',
+    'OpenDesign es el espacio de trabajo de diseño de código abierto y nativo para agentes que envuelve a DeepSeek Harness. Mantiene coherentes tus sistemas, skills y plantillas para que el agente entregue trabajo que es tuyo.',
 
   categoryVision: 'Visión y entrada',
   categoryCanvas: 'Lienzo y UI generativa',
   categoryWorkflow: 'Flujo de diseño',
   categoryWorkspace: 'Espacio de trabajo y vista previa',
 
-  ctaDownload: 'Descargar Open Design',
+  ctaDownload: 'Descargar OpenDesign',
   ctaStarList: 'Dar una estrella a DeepSeek Harness',
   ctaGuide: 'Cómo diseñar con DeepSeek Harness',
   ctaBrowseAll: 'Ver todos los plugins',
@@ -71,9 +71,9 @@ export const es: DeepseekCopyOverride = {
   detailMoreOnList: 'Más en el repo de DeepSeek Harness',
   detailRelated: 'Más plugins de diseño para DeepSeek Harness',
   finalEyebrow: 'Siguiente paso',
-  detailCloserHeading: 'Diseña con Open Design, sin montar nada',
+  detailCloserHeading: 'Diseña con OpenDesign, sin montar nada',
   detailCloserBody:
-    'Instala este plugin tú mismo, o ejecuta toda una capa de diseño curada alrededor de DeepSeek Harness con Open Design. Trae tu propia key: lo que produzcas es tuyo.',
+    'Instala este plugin tú mismo, o ejecuta toda una capa de diseño curada alrededor de DeepSeek Harness con OpenDesign. Trae tu propia key: lo que produzcas es tuyo.',
 
   skills: {
     modlens: {
