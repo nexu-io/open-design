@@ -144,14 +144,6 @@ const jsonLd = [
   <article class="info-page dl-page" data-download-root>
     <header class="dl-hero">
       <div class="dl-hero-copy">
-        <div class="dl-hero-brand">
-          <span class="dl-hero-mark" aria-hidden="true">
-            <img src="/favicon.svg" alt="" width="34" height="34" />
-          </span>
-          {/* Product name, not a translatable phrase — the brand pill
-              always reads the canonical one-word name. */}
-          <span>OpenDesign</span>
-        </div>
         <h1 class="dl-hero-heading">{page.heading}</h1>
         <p class="dl-hero-lead">{page.lead}</p>
         <p class="dl-mobile-notice" data-dl-mobile-notice hidden>
@@ -543,27 +535,6 @@ const jsonLd = [
   .dl-hero-copy {
     min-width: 0;
   }
-  .dl-hero-brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: var(--ink-soft, #555);
-    font-size: 0.82rem;
-    font-weight: 650;
-    letter-spacing: 0.02em;
-  }
-  .dl-hero-mark {
-    width: 52px;
-    height: 52px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-    border-radius: 15px;
-    background: var(--surface, rgba(255, 255, 255, 0.6));
-    border: 1px solid var(--border, rgba(0, 0, 0, 0.1));
-    box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.4);
-  }
   .dl-hero-heading {
     font-family: var(--serif, Georgia, serif);
     font-weight: 600;
@@ -718,7 +689,6 @@ const jsonLd = [
       padding: 28px 0 12px;
       text-align: center;
     }
-    .dl-hero-brand,
     .dl-hero-actions {
       justify-content: center;
     }
