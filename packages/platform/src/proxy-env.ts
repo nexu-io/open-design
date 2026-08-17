@@ -365,6 +365,33 @@ export function parseWindowsInternetSettingsProxyOutput(
  * @param options - Optional platform override and command runner (for testing).
  * @returns A normalized proxy environment, or `{}` when no proxy is configured.
  */
+
+/**
+ * Check whether a proxy environment is SOCKS-only — has a SOCKS ALL_PROXY
+ * value but no HTTP or HTTPS proxy. Agents like Claude Code that do not
+ * support SOCKS can use this to avoid passing an unusable ALL_PROXY.
+ */
+export function isSocksOnlyProxyEnv(
+  env: NodeJS.ProcessEnv,
+): boolean {
+  let hasAllProxy = false;
+  let hasHttpProxy = false;
+  let hasHttpsProxy = false;
+  for (const [key, value] of Object.entries(env)) {
+    const lowerKey = key.toLowerCase();
+    const trimmed = (value || '').trim();
+    if (!trimmed) continue;
+    if (lowerKey === 'all_proxy') {
+      hasAllProxy = trimmed.startsWith('socks');
+    } else if (lowerKey === 'http_proxy') {
+      hasHttpProxy = true;
+    } else if (lowerKey === 'https_proxy') {
+      hasHttpsProxy = true;
+    }
+  }
+  return hasAllProxy && !hasHttpProxy && !hasHttpsProxy;
+}
+
 export function resolveSystemProxyEnv(options: ResolveSystemProxyEnvOptions = {}): NodeJS.ProcessEnv {
   const platform = options.platform ?? process.platform;
   const runCommand = options.runCommand ?? defaultSystemProxyCommandRunner;
