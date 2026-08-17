@@ -765,6 +765,94 @@ describe('FileWorkspace upload input', () => {
     );
   });
 
+  // Reviewer #6842 (nettee, 2026-08-17): ProjectView's post-turn auto-open watch
+  // retires on `onUserActivateTab`, so what that callback does and does not fire
+  // for is the whole contract. Pinned here, at the component that owns the
+  // activations, because ProjectView's own regression mocks this one out.
+  it('reports an activation the persisted tab state never sees', async () => {
+    const onTabsStateChange = vi.fn();
+    const onUserActivateTab = vi.fn();
+    // Never resolves: the sketch stays unpersisted, which is the state
+    // `activatePending` exists for — activated locally, deliberately not routed
+    // through `onTabsStateChange`.
+    mockedWriteProjectTextFile.mockImplementation(() => new Promise(() => {}));
+
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={onTabsStateChange}
+        onUserActivateTab={onUserActivateTab}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('design-files-empty-new-sketch'));
+
+    await waitFor(() => expect(onUserActivateTab).toHaveBeenCalled());
+    // The point of the report: the parent learns that the user activated
+    // something WITHOUT the persisted tab state ever changing — so nothing in
+    // ProjectView's tab mirror could have told it.
+    expect(onTabsStateChange).not.toHaveBeenCalled();
+  });
+
+  it('does not report an activation the parent itself requested', async () => {
+    const onTabsStateChange = vi.fn();
+    const onUserActivateTab = vi.fn();
+    const notes = {
+      name: 'notes.md',
+      path: 'notes.md',
+      type: 'file',
+      size: 10,
+      mtime: 1,
+      kind: 'text',
+      mime: 'text/plain',
+    } as ProjectFile;
+
+    const { rerender } = render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[notes]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={onTabsStateChange}
+        onUserActivateTab={onUserActivateTab}
+      />,
+    );
+
+    rerender(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[notes]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: [], active: null }}
+        onTabsStateChange={onTabsStateChange}
+        onUserActivateTab={onUserActivateTab}
+        openRequest={{ name: 'notes.md', nonce: 1 }}
+      />,
+    );
+
+    // The activation landed…
+    await waitFor(() =>
+      expect(onTabsStateChange).toHaveBeenCalledWith(
+        expect.objectContaining({ active: 'notes.md' }),
+      ),
+    );
+    // …and was not reported as the user's. Reporting it would retire the very
+    // auto-open watch that asked for it, putting issue #5352 straight back.
+    expect(onUserActivateTab).not.toHaveBeenCalled();
+  });
+
   // PageCreator flows are unreachable while the 新建空白页面 launcher entry
   // is paused (see ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT); these suites
   // revive automatically when the switch flips back.

@@ -249,6 +249,13 @@ interface Props {
   // daemon's SQLite store can hold the source of truth and survive reloads.
   tabsState: OpenTabsState;
   onTabsStateChange: (next: OpenTabsState) => void;
+  // Fired once for every activation the USER makes in here that the parent did
+  // not ask for. `onTabsStateChange` cannot serve as that signal: transient tabs
+  // (an unsaved sketch) are activated locally and never round-trip through the
+  // persisted state, and a persisted change carries no clue about who caused it.
+  // ProjectView's post-turn auto-open watch needs both — see
+  // `AutoOpenSettleRequest.userActivationsAtTurnEnd`.
+  onUserActivateTab?: () => void;
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean, images?: File[], commentId?: string) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<boolean>;
@@ -1295,6 +1302,7 @@ export function FileWorkspace({
   designSystemActivityEvents = [],
   tabsState,
   onTabsStateChange,
+  onUserActivateTab,
   previewComments = NO_PREVIEW_COMMENTS,
   onSavePreviewComment,
   onRemovePreviewComment,
@@ -1725,12 +1733,39 @@ export function FileWorkspace({
     && liveArtifactEntries.length === 0
     && projectFolders.length === 0;
 
+  // The activation the parent asked for and we have not reported yet. Set by the
+  // two places an activation originates OUTSIDE this component — the persisted
+  // `tabsState.active` hydration below and the `openRequest` effect — so the
+  // reporter can tell those apart from a gesture made in here. Anything not
+  // marked counts as the user's, which is the safe default: over-reporting only
+  // retires an auto-open watch early, while under-reporting would let it move
+  // focus away from a tab the user picked.
+  const parentRequestedActivationRef = useRef<string | null>(null);
+  const reportedActiveTabRef = useRef(activeTab);
+
+  // Report user activations upward. One effect on `activeTab` rather than a call
+  // at each activation site: there are twenty-odd of those, and a new one added
+  // later would silently go unreported.
+  useEffect(() => {
+    if (reportedActiveTabRef.current === activeTab) return;
+    reportedActiveTabRef.current = activeTab;
+    const parentRequested = parentRequestedActivationRef.current;
+    // Cleared either way: a request that never changed the active tab (openFile
+    // short-circuits when it is already active) must not be left behind to
+    // swallow a later activation of the same name.
+    parentRequestedActivationRef.current = null;
+    if (parentRequested === activeTab) return;
+    onUserActivateTab?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   // Pull the persisted active tab in when the parent's hydration completes
   // (or on project switch). Fall back to the Design Files browser so a
   // fresh project lands in a useful place.
   useEffect(() => {
     const nextActive = tabsState.active ?? defaultRootTab;
     if (nextActive === activeTabRef.current) return;
+    parentRequestedActivationRef.current = nextActive;
     afterActiveManualEditSettles(() => setActiveTab(nextActive));
     // afterActiveManualEditSettles reads post-commit refs and intentionally
     // remains stable across this externally-driven hydration transition.
@@ -2012,13 +2047,18 @@ export function FileWorkspace({
         name === DESIGN_SYSTEM_TAB && !designSystemProject
           ? DESIGN_FILES_TAB
           : name;
+      parentRequestedActivationRef.current = nextActive;
       setPersistedActive(nextActive);
       return;
     }
     if (isBrowserTabId(name) && browserTabs.some((tab) => tab.id === name)) {
+      parentRequestedActivationRef.current = name;
       setPersistedActive(name);
       return;
     }
+    // Marked so the reporter above does not read the parent's own auto-open as
+    // the user taking over — that would retire the very watch that issued it.
+    parentRequestedActivationRef.current = name;
     openFile(name, { forcePersist: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);

@@ -2441,6 +2441,21 @@ export function ProjectView({
   // NOW rather than the one that was active when the run started.
   const activeConversationIdRef = useRef<string | null>(activeConversationId);
   activeConversationIdRef.current = activeConversationId;
+  // Monotonic count of activations the USER performed inside the workspace,
+  // including the ones `openTabsState` never hears about: the workspace flips to
+  // an unsaved sketch locally and deliberately does not round-trip that through
+  // the persisted tab state, so the active tab above keeps naming whatever the
+  // last persisted activation was. The settle watch's focus-move guard has to
+  // know the user has taken over even when the tab they took over WITH is
+  // invisible here (see `AutoOpenSettleRequest.userActivationsAtTurnEnd`).
+  //
+  // A ref rather than state: it is only ever read at evaluation time, and
+  // re-rendering ProjectView on every transient tab flip is precisely the round
+  // trip the workspace avoids by keeping those activations local.
+  const workspaceUserActivationsRef = useRef(0);
+  const handleWorkspaceUserActivation = useCallback(() => {
+    workspaceUserActivationsRef.current += 1;
+  }, []);
   // The turn whose auto-open decision is still being re-evaluated as post-turn
   // file lists settle (issue #5352); null when no turn is in that window.
   //
@@ -3809,6 +3824,7 @@ export function ProjectView({
     const decision = reevaluateAutoOpenOnFilesSettled(pending.request, projectFilesRef.current, {
       now: Date.now(),
       activeFileName: openTabsActiveRef.current,
+      userActivations: workspaceUserActivationsRef.current,
     });
     if (!decision.keepWatching) pendingAutoOpenSettleRef.current = null;
     if (decision.openFileName) requestOpenFile(decision.openFileName);
@@ -7437,6 +7453,12 @@ export function ProjectView({
             // read the user's own choice as "where the turn put focus" and pull
             // them back out of it.
             const activeFileNameAtTerminalHandoff = openTabsActiveRef.current;
+            // Sampled at the same instant, and for the same window, as the
+            // witness above — but it catches what the witness structurally
+            // cannot: activations the workspace keeps to itself (an unsaved
+            // sketch), and the difference between the user re-picking a file
+            // this run opened and the run having opened it.
+            const userActivationsAtTerminalHandoff = workspaceUserActivationsRef.current;
             // Files this turn's OWN auto-open moves focus to during the
             // continuation below are recorded by `requestRunOpenFile` into the
             // run-scoped set above. Those are auto activations, so they must
@@ -7603,6 +7625,7 @@ export function ProjectView({
                     resolveTurnOptions: turnAutoOpenOptionsFor,
                     requestedFileName: producedArtifactToOpen ?? null,
                     activeFileNameAtTurnEnd: activeFileNameAtTerminalHandoff,
+                    userActivationsAtTurnEnd: userActivationsAtTerminalHandoff,
                     turnOwnedFileNames: runAutoOpenedFileNames,
                     deadline: Date.now() + AUTO_OPEN_SETTLE_WINDOW_MS,
                   },
@@ -11355,6 +11378,7 @@ export function ProjectView({
           designSystemActivityEvents={designSystemActivityEvents}
           tabsState={openTabsState}
           onTabsStateChange={persistTabsState}
+          onUserActivateTab={handleWorkspaceUserActivation}
           previewComments={previewComments}
           onSavePreviewComment={savePreviewComment}
           onRemovePreviewComment={removePreviewComment}

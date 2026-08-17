@@ -510,6 +510,7 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     resolveTurnOptions: () => ({ turnStartedAt: TURN_START, turnEndedAt: TURN_END }),
     requestedFileName: null,
     activeFileNameAtTurnEnd: null,
+    userActivationsAtTurnEnd: 0,
     deadline: DEADLINE,
     ...overrides,
   });
@@ -520,12 +521,14 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     const beforeSettle = reevaluateAutoOpenOnFilesSettled(request(), [], {
       now: TURN_END,
       activeFileName: null,
+      userActivations: 0,
     });
     expect(beforeSettle).toEqual({ openFileName: null, keepWatching: true });
 
     const afterSettle = reevaluateAutoOpenOnFilesSettled(request(), [PLAN, INDEX], {
       now: TURN_END + 500,
       activeFileName: null,
+      userActivations: 0,
     });
     expect(afterSettle).toEqual({ openFileName: 'index.html', keepWatching: false });
   });
@@ -535,7 +538,7 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     const decision = reevaluateAutoOpenOnFilesSettled(
       request({ requestedFileName: 'plan.md' }),
       [PLAN, INDEX],
-      { now: TURN_END + 500, activeFileName: 'plan.md' },
+      { now: TURN_END + 500, activeFileName: 'plan.md', userActivations: 0 },
     );
 
     expect(decision).toEqual({ openFileName: 'index.html', keepWatching: false });
@@ -545,7 +548,7 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     const decision = reevaluateAutoOpenOnFilesSettled(
       request({ requestedFileName: 'index.html', activeFileNameAtTurnEnd: 'notes.md' }),
       [PLAN, INDEX, { name: 'notes.md', path: 'notes.md', kind: 'text', mtime: 1 }],
-      { now: TURN_END + 500, activeFileName: 'notes.md' },
+      { now: TURN_END + 500, activeFileName: 'notes.md', userActivations: 0 },
     );
 
     expect(decision).toEqual({ openFileName: 'index.html', keepWatching: false });
@@ -555,7 +558,7 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     const decision = reevaluateAutoOpenOnFilesSettled(
       request({ requestedFileName: 'index.html' }),
       [PLAN, INDEX],
-      { now: TURN_END + 500, activeFileName: 'index.html' },
+      { now: TURN_END + 500, activeFileName: 'index.html', userActivations: 0 },
     );
 
     expect(decision).toEqual({ openFileName: null, keepWatching: true });
@@ -568,14 +571,14 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     const onlyPlan = reevaluateAutoOpenOnFilesSettled(
       request({ requestedFileName: 'plan.md' }),
       [PLAN],
-      { now: TURN_END + 200, activeFileName: 'plan.md' },
+      { now: TURN_END + 200, activeFileName: 'plan.md', userActivations: 0 },
     );
     expect(onlyPlan).toEqual({ openFileName: null, keepWatching: true });
 
     const withHtml = reevaluateAutoOpenOnFilesSettled(
       request({ requestedFileName: 'plan.md' }),
       [PLAN, INDEX],
-      { now: TURN_END + 700, activeFileName: 'plan.md' },
+      { now: TURN_END + 700, activeFileName: 'plan.md', userActivations: 0 },
     );
     expect(withHtml).toEqual({ openFileName: 'index.html', keepWatching: false });
   });
@@ -584,7 +587,7 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     const decision = reevaluateAutoOpenOnFilesSettled(
       request({ requestedFileName: 'plan.md', activeFileNameAtTurnEnd: null }),
       [PLAN, INDEX, { name: 'notes.md', path: 'notes.md', kind: 'text', mtime: 1 }],
-      { now: TURN_END + 500, activeFileName: 'notes.md' },
+      { now: TURN_END + 500, activeFileName: 'notes.md', userActivations: 0 },
     );
 
     expect(decision).toEqual({ openFileName: null, keepWatching: false });
@@ -602,7 +605,7 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
         turnOwnedFileNames: new Set(['recovered.md']),
       }),
       [PLAN, INDEX, { name: 'recovered.md', path: 'recovered.md', kind: 'text', mtime: 1 }],
-      { now: TURN_END + 500, activeFileName: 'recovered.md' },
+      { now: TURN_END + 500, activeFileName: 'recovered.md', userActivations: 0 },
     );
 
     expect(decision).toEqual({ openFileName: 'index.html', keepWatching: false });
@@ -619,10 +622,65 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
         turnOwnedFileNames: new Set(['recovered.md']),
       }),
       [PLAN, INDEX, { name: 'notes.md', path: 'notes.md', kind: 'text', mtime: 1 }],
-      { now: TURN_END + 500, activeFileName: 'notes.md' },
+      { now: TURN_END + 500, activeFileName: 'notes.md', userActivations: 0 },
     );
 
     expect(decision).toEqual({ openFileName: null, keepWatching: false });
+  });
+
+  it('retires the watch when the user activated a tab the witness cannot see', () => {
+    // Reviewer #6842 (nettee, 2026-08-17): the workspace activates an unsaved
+    // sketch locally and never round-trips it through the persisted tab state,
+    // so `activeFileName` still reports the tab the turn left behind while the
+    // user is looking at the sketch they picked during the finalizer's awaits.
+    // Focus therefore looks exactly like "where the turn put it", and the guard
+    // above happily yanks them out of it. Only the activation count sees this.
+    const decision = reevaluateAutoOpenOnFilesSettled(
+      request({
+        requestedFileName: null,
+        activeFileNameAtTurnEnd: 'notes.md',
+      }),
+      [PLAN, INDEX, { name: 'notes.md', path: 'notes.md', kind: 'text', mtime: 1 }],
+      { now: TURN_END + 500, activeFileName: 'notes.md', userActivations: 1 },
+    );
+
+    expect(decision).toEqual({ openFileName: null, keepWatching: false });
+  });
+
+  it('retires the watch when the user re-picks a file the run auto-opened', () => {
+    // The other half of the same reviewer point: a name cannot say WHO activated
+    // it, so the turn-owned union reads a deliberate user choice of plan.md the
+    // same as the run having opened plan.md itself. Upgrading to index.html on
+    // top of the user's own pick is the behaviour this PR exists to prevent.
+    const decision = reevaluateAutoOpenOnFilesSettled(
+      request({
+        requestedFileName: null,
+        activeFileNameAtTurnEnd: null,
+        turnOwnedFileNames: new Set(['plan.md']),
+      }),
+      [PLAN, INDEX],
+      { now: TURN_END + 500, activeFileName: 'plan.md', userActivations: 2 },
+    );
+
+    expect(decision).toEqual({ openFileName: null, keepWatching: false });
+  });
+
+  it('keeps upgrading while every activation since turn end was the run’s own', () => {
+    // Positive control for the two above: the count matching what was sampled at
+    // terminal handoff must leave the watch working. If this stops opening
+    // index.html the count has become a blanket off-switch.
+    const decision = reevaluateAutoOpenOnFilesSettled(
+      request({
+        requestedFileName: null,
+        activeFileNameAtTurnEnd: null,
+        turnOwnedFileNames: new Set(['plan.md']),
+        userActivationsAtTurnEnd: 7,
+      }),
+      [PLAN, INDEX],
+      { now: TURN_END + 500, activeFileName: 'plan.md', userActivations: 7 },
+    );
+
+    expect(decision).toEqual({ openFileName: 'index.html', keepWatching: false });
   });
 
   it('keeps waiting while the selected name is not yet an openable entry', () => {
@@ -631,7 +689,7 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     const decision = reevaluateAutoOpenOnFilesSettled(
       request({ producedFiles: [INDEX] }),
       [PLAN],
-      { now: TURN_END + 500, activeFileName: null },
+      { now: TURN_END + 500, activeFileName: null, userActivations: 0 },
     );
 
     expect(decision).toEqual({ openFileName: null, keepWatching: true });
@@ -641,7 +699,7 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     const decision = reevaluateAutoOpenOnFilesSettled(
       request({ producedFiles: [INDEX] }),
       [PLAN, { ...INDEX, type: 'dir' }],
-      { now: TURN_END + 500, activeFileName: null },
+      { now: TURN_END + 500, activeFileName: null, userActivations: 0 },
     );
 
     expect(decision).toEqual({ openFileName: null, keepWatching: true });
@@ -651,6 +709,7 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     const decision = reevaluateAutoOpenOnFilesSettled(request(), [PLAN, INDEX], {
       now: DEADLINE + 1,
       activeFileName: null,
+      userActivations: 0,
     });
 
     expect(decision).toEqual({ openFileName: null, keepWatching: false });
@@ -673,14 +732,14 @@ describe('reevaluateAutoOpenOnFilesSettled', () => {
     const beforeSettle = reevaluateAutoOpenOnFilesSettled(
       request({ resolveTurnOptions, requestedFileName: 'plan.md' }),
       [PLAN],
-      { now: TURN_END, activeFileName: 'plan.md' },
+      { now: TURN_END, activeFileName: 'plan.md', userActivations: 0 },
     );
     expect(beforeSettle.openFileName).toBeNull();
 
     const afterSettle = reevaluateAutoOpenOnFilesSettled(
       request({ resolveTurnOptions, requestedFileName: 'plan.md' }),
       [PLAN, INDEX],
-      { now: TURN_END + 500, activeFileName: 'plan.md' },
+      { now: TURN_END + 500, activeFileName: 'plan.md', userActivations: 0 },
     );
     expect(afterSettle.openFileName).toBe('index.html');
   });

@@ -200,6 +200,7 @@ function latestWorkspaceProps() {
   return fileWorkspaceSpy.mock.calls.at(-1)?.[0] as {
     openRequest?: { name: string; nonce: number } | null;
     onTabsStateChange?: (next: OpenTabsState) => void;
+    onUserActivateTab?: () => void;
     onRefreshFiles?: (options?: unknown) => Promise<unknown>;
   };
 }
@@ -388,6 +389,37 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
 
     // Nothing at all may move focus after the user has chosen: not index.html
     // when it lands, and not the turn's own leftovers on the way there.
+    expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
+  });
+
+  it('does not steal focus when the user activates a pending sketch while the finalizer waits', async () => {
+    // Reviewer #6842 (nettee, 2026-08-17): the test above only covers tab changes
+    // the parent hears about. `FileWorkspace.activatePending` deliberately flips
+    // to an unsaved sketch WITHOUT calling `onTabsStateChange`, so this
+    // interleaving leaves the focus witness reporting notes.md — the very tab the
+    // turn recorded at handoff — while the user is looking at their sketch. The
+    // guard then finds focus exactly where the turn left it and opens
+    // index.html over the sketch. Same setup as the positive control at the top
+    // of this file, so that control is what proves the watcher fires here at all.
+    const turn = await runTurnHoldingCompletionRead({
+      projectId: 'project-settle-pending-sketch',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, RUN_LOG],
+      settled: [NOTES, OTHER, RUN_LOG, INDEX],
+    });
+
+    // Exactly what the workspace does for a pending sketch: report the
+    // activation, leave the persisted tab state (and so the witness) untouched.
+    await act(async () => {
+      latestWorkspaceProps().onUserActivateTab?.();
+    });
+    const openedBeforeRelease = openRequestKeys().length;
+
+    await turn.releaseCompletionRead();
+    await landSettledFileList();
+    await landSettledFileList();
+
     expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
   });
 

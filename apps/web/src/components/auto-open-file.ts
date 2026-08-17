@@ -261,6 +261,24 @@ export interface AutoOpenSettleRequest<F extends CandidateFile = CandidateFile> 
   // taken at arming time would miss exactly those, and the guard would then
   // read the run's own late activation as the user moving on.
   readonly turnOwnedFileNames?: ReadonlySet<string>;
+  // Count of workspace activations the USER performed, as of terminal handoff —
+  // the same instant `activeFileNameAtTurnEnd` is sampled.
+  //
+  // The focus witness above cannot stand in for this, in either direction:
+  //
+  //   * It does not see every activation. The workspace flips to an unsaved
+  //     sketch locally, without telling the owner of the persisted tab state
+  //     (`FileWorkspace.activatePending`), so the witness keeps reporting the
+  //     tab this turn left behind while the user is looking at the sketch they
+  //     just picked. The guard below then finds focus exactly where the turn
+  //     put it and pulls the user out of that sketch.
+  //   * A name cannot say WHO activated it. A file this run auto-opened reads
+  //     the same whether the run opened it or the user chose it afterwards, so
+  //     the turn-owned union accepts a deliberate user choice as the run's own.
+  //
+  // A count of user activations answers both: any change means the user has
+  // taken the workspace over since the turn ended, whatever they moved to.
+  readonly userActivationsAtTurnEnd: number;
   // Epoch ms after which the turn stops being re-evaluated.
   readonly deadline: number;
 }
@@ -291,9 +309,18 @@ export interface AutoOpenSettleDecision {
 export function reevaluateAutoOpenOnFilesSettled<F extends CandidateFile>(
   request: AutoOpenSettleRequest<F>,
   allFiles: ReadonlyArray<F>,
-  context: { now: number; activeFileName: string | null },
+  context: { now: number; activeFileName: string | null; userActivations: number },
 ): AutoOpenSettleDecision {
   if (context.now > request.deadline) return { openFileName: null, keepWatching: false };
+  // The user has activated something themselves since this turn ended, so the
+  // workspace is theirs now. Checked before anything else about focus, because
+  // `activeFileName` can neither see every activation nor say who made it — see
+  // `userActivationsAtTurnEnd`. Retiring here covers the tab the user picked
+  // during the finalizer's own awaits (invisible to the witness when it is an
+  // unsaved sketch) as well as a deliberate re-pick of a file this run opened.
+  if (context.userActivations !== request.userActivationsAtTurnEnd) {
+    return { openFileName: null, keepWatching: false };
+  }
 
   const resolved = selectAutoOpenTurnArtifact(
     request.producedFiles,
