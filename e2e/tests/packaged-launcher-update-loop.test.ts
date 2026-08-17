@@ -29,7 +29,11 @@ type PackagedConfigLike = {
 
 type DesktopUpdaterModule = {
   createDesktopUpdater: (config: Record<string, unknown>, deps?: Record<string, unknown>) => {
-    checkForUpdates: () => Promise<{
+    checkForUpdates: (options: {
+      activationPolicy: "authorize-silent" | "revoke-silent";
+      autoDownload?: boolean;
+      trigger: "download" | "manual" | "scheduler" | "sidecar" | "test";
+    }) => Promise<{
       artifact?: { type?: string };
       availableVersion?: string;
       reinstall?: {
@@ -404,7 +408,10 @@ describe("packaged launcher payload update loop", () => {
         now: () => new Date("2026-06-06T00:00:00.000Z"),
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates({
+        activationPolicy: "revoke-silent",
+        trigger: "test",
+      });
       expect(checked.state).toBe(UPDATE_DOWNLOADED);
       expect(checked.artifact?.type).toBe("payload");
       expect(checked.availableVersion).toBe(testCase.promotedVersion);
@@ -929,7 +936,10 @@ async function checkPackagedUpdate(scenario: FloorScenario): Promise<{
       now: () => new Date("2026-07-28T00:00:00.000Z"),
     });
 
-    const snapshot = await updater.checkForUpdates();
+    const snapshot = await updater.checkForUpdates({
+      activationPolicy: "revoke-silent",
+      trigger: "test",
+    });
     const runtimeJson = JSON.parse(
       await readFile(runtime.launcherPaths.runtimePath, "utf8"),
     ) as { active?: { generation: number; version: string } };
