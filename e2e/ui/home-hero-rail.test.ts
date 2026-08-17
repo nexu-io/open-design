@@ -308,6 +308,40 @@ const HOME_PLUGINS = [
 ];
 
 const APPLY_RESPONSES: Record<string, unknown> = {
+  'example-web-prototype': {
+    query: 'Build a high-fidelity web prototype for product evaluators.',
+    contextItems: [],
+    inputs: [],
+    assets: [],
+    mcpServers: [],
+    trust: 'bundled',
+    capabilitiesGranted: ['prompt:inject'],
+    capabilitiesRequired: ['prompt:inject'],
+    appliedPlugin: {
+      snapshotId: 'snap-web-prototype',
+      pluginId: 'example-web-prototype',
+      pluginVersion: '0.1.0',
+      manifestSourceDigest: 'c'.repeat(64),
+      inputs: {
+        artifactKind: 'web prototype',
+        fidelity: 'high-fidelity',
+        audience: 'product evaluators',
+        designSystem: 'the active project design system',
+        template: 'the bundled web prototype seed',
+      },
+      resolvedContext: { items: [] },
+      capabilitiesGranted: ['prompt:inject'],
+      capabilitiesRequired: ['prompt:inject'],
+      assetsStaged: [],
+      taskKind: 'new-generation',
+      appliedAt: 0,
+      connectorsRequired: [],
+      connectorsResolved: [],
+      mcpServers: [],
+      status: 'fresh',
+    },
+    projectMetadata: {},
+  },
   'example-live-dashboard': {
     query: 'Build a Notion-style team dashboard with live KPIs.',
     contextItems: [],
@@ -553,6 +587,58 @@ test.beforeEach(async ({ page }) => {
       body: JSON.stringify(body ?? { error: 'Unknown plugin apply route' }),
     });
   });
+});
+
+test('[P1] last project list row keeps its overflow menu inside the viewport', async ({ page }) => {
+  const recentProjects = Array.from({ length: 3 }, (_, index) => ({
+    id: `recent-list-menu-${index + 1}`,
+    name: `List Project ${index + 1}`,
+    skillId: null,
+    designSystemId: null,
+    createdAt: Date.now() - (index + 1) * 10_000,
+    updatedAt: Date.now() - (index + 1) * 5_000,
+    metadata: { kind: 'prototype', nameSource: 'user' },
+  }));
+  const lastProject = recentProjects.at(-1)!;
+
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await page.route('**/api/projects', async (route) => {
+    if (route.request().method() === 'GET') {
+      await route.fulfill({ json: { projects: recentProjects } });
+      return;
+    }
+    await route.continue();
+  });
+  await gotoEntryHome(page);
+
+  await page.getByRole('button', { name: 'List view' }).click();
+  const lastRow = page.locator(`[data-project-id="${lastProject.id}"]`);
+  await expect(lastRow).toBeVisible();
+  await page.evaluate((projectId) => {
+    const scroller = document.querySelector<HTMLElement>('.entry-main--scroll');
+    const row = document.querySelector<HTMLElement>(`[data-project-id="${projectId}"]`);
+    const trigger = row?.querySelector<HTMLElement>('.recent-projects__card-more');
+    if (!scroller || !row || !trigger) {
+      throw new Error('Recent project list-menu fixture is missing');
+    }
+
+    const desiredTop = scroller.getBoundingClientRect().bottom - 60;
+    scroller.scrollTop += trigger.getBoundingClientRect().top - desiredTop;
+  }, lastProject.id);
+
+  await lastRow.hover();
+  const trigger = lastRow.getByRole('button', { name: /more actions/i });
+  await trigger.click();
+
+  const menu = lastRow.getByRole('menu');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Delete' })).toBeInViewport();
+
+  const triggerBox = await trigger.boundingBox();
+  const menuBox = await menu.boundingBox();
+  expect(triggerBox).not.toBeNull();
+  expect(menuBox).not.toBeNull();
+  expect((menuBox?.y ?? 0) + (menuBox?.height ?? 0)).toBeLessThan(triggerBox?.y ?? 0);
 });
 
 test('[P1] home left rail expands and collapses from the shell controls', async ({ page }) => {
@@ -1174,8 +1260,8 @@ test('[P0] empty home composer submits the active placeholder suggestion with te
   };
 
   expect(body.pendingPrompt?.trim()).toBeTruthy();
-  expect(typeof body.pluginId).toBe('string');
-  expect(typeof body.metadata?.kind).toBe('string');
+  expect(body.pluginId).toBe('example-web-prototype');
+  expect(body.metadata?.kind).toBe('prototype');
   await expect(page).toHaveURL(/\/projects\//);
 });
 
@@ -1383,29 +1469,30 @@ test('[P2] zh-CN home smoke exposes the localized creation type, design system, 
   await expect(page.getByTestId('home-hero-submit')).toHaveAccessibleName('运行');
 });
 
-test('[P1] home template picker switches the seeded deck to another type without a clear action', async ({ page }) => {
+test('[P1] home template picker switches the seeded prototype to another type without a clear action', async ({ page }) => {
   await gotoEntryHome(page);
   // Wait for the fresh-home default binding before opening its menu. Otherwise
   // the binding's reconciliation legitimately replaces the open menu tree
   // while Playwright is trying to act on one of its rows.
   await expect(page.getByTestId('home-hero-template-trigger')).toContainText(
-    /Slide deck|幻灯片|投影片/i,
+    /UI Mockup|原型/i,
   );
 
   const menu = await openHomeTemplateMenu(page);
   await expect(menu.getByTestId('home-hero-template-wedge-prototype')).toBeVisible();
   await expect(menu.getByTestId('home-hero-template-wedge-deck')).toBeVisible();
 
-  // Deck is already the fresh-Home default. Switch to a different item so the
-  // test exercises a real selection instead of racing the async deck binding
+  // Prototype is already the fresh-Home default. Switch to a different item so the
+  // test exercises a real selection instead of racing the async default binding
   // by clicking the active menu row while it is being reconciled.
-  await menu.getByTestId('home-hero-template-wedge-prototype').click();
-  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Prototype|原型|UI Mockup/i);
+  await menu.getByTestId('home-hero-template-wedge-deck').click();
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Slide deck|幻灯片|投影片/i);
 
   // Clearing was removed, so switching is the only exit from a chosen type:
-  // the pill follows the new one and deck-only footer chrome drops away.
+  // the pill follows the new one while deferred artifact settings stay out of
+  // the footer for both prototype and deck.
   await expect(page.getByTestId('home-hero-footer-option-speakerNotes')).toHaveCount(0);
-  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Prototype|原型|UI Mockup/i);
+  await expect(page.getByTestId('home-hero-template-trigger')).toContainText(/Slide deck|幻灯片|投影片/i);
 });
 
 // "Blank project" no longer has a Home entry: the "…or create a blank project"

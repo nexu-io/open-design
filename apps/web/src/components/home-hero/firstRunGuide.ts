@@ -1,10 +1,11 @@
 // First-run Home guidance cascade.
 //
 // A brand-new user (no projects yet) gets a three-beat trail of sheen
-// pulses pointing at the happy path: the Prototype type chip → the first
-// example-prompt card → the Send button (the send pulse ships separately
-// and fires on every pick). Each beat advances a persisted stage so the
-// trail plays at most once per install:
+// pulses pointing at the happy path: the Prototype type chip when Home has no
+// default selection → the first example-prompt card → the Send button (the
+// send pulse ships separately and fires on every pick). A successfully bound
+// default type skips the redundant chip pulse. Each beat advances a persisted
+// stage so the trail plays at most once per install:
 //
 //   'chip' (fresh) → user picks a type chip → 'card' → first preset card
 //   pulses once → 'done'

@@ -120,6 +120,55 @@ describe('parseDeckThumbnails', () => {
     expect(parsed.ancestors.map((a) => a.tag)).toEqual(['deck-stage']);
   });
 
+  it('prefers deck-stage children over unrelated screen labels elsewhere in the document', () => {
+    const html = `<!doctype html><html><head><style>
+      deck-stage > section { width: 1280px; height: 720px; }
+    </style></head><body>
+      <aside data-screen-label="Prototype navigation">Not a slide</aside>
+      <deck-stage width="1280" height="720">
+        <section data-screen-label="01 Cover">A</section>
+        <section data-screen-label="02 Agenda">B</section>
+      </deck-stage>
+    </body></html>`;
+
+    const parsed = parseDeckThumbnails(html);
+
+    expect(parsed.renderable).toBe(true);
+    expect(parsed.slides).toHaveLength(2);
+    expect(parsed.slides[0]).toContain('01 Cover');
+    expect(parsed.slides[1]).toContain('02 Agenda');
+  });
+
+  it('does not treat ordinary prototype annotations as deck slides', () => {
+    const html = `<!doctype html><html><head><style>
+      h1 { color: tomato; }
+    </style></head><body><main>
+      <h1 data-screen-label="Hero title">Prototype headline</h1>
+      <button data-screen-label="CTA">Buy now</button>
+    </main></body></html>`;
+
+    const parsed = parseDeckThumbnails(html);
+
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('no-slides');
+  });
+
+  it('requires containerless legacy slides to be numbered direct siblings', () => {
+    const separated = `<!doctype html><html><head><style>
+      section { width: 1920px; height: 1080px; }
+    </style></head><body><main>
+      <section data-screen-label="01 Cover">A</section>
+      <div><section data-screen-label="02 Agenda">B</section></div>
+    </main></body></html>`;
+    expect(parseDeckThumbnails(separated).reason).toBe('no-slides');
+
+    const siblings = separated.replace(
+      '<div><section data-screen-label="02 Agenda">B</section></div>',
+      '<section data-screen-label="02 Agenda">B</section>',
+    );
+    expect(parseDeckThumbnails(siblings).slides).toHaveLength(2);
+  });
+
   it('rewrites viewport units in CSS to canvas px (renderable, faithful)', () => {
     // No explicit px canvas → defaults to 1920×1080; 100vw→1920px, 100vh→1080px.
     const html = `<!doctype html><html><head><style>

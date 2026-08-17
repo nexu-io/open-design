@@ -14,7 +14,14 @@
  *   { type: 'od:slide-state', active: number, count: number }
  * after every navigation so the host can render its own counter / dots.
  */
-import { injectDeckStageFallback } from '@open-design/contracts/runtime/deck-stage-fallback';
+import {
+  DECK_EXPLICIT_SLIDE_SELECTOR,
+  DECK_LEGACY_SCREEN_LABEL_RE_SOURCE,
+  DECK_LEGACY_SCREEN_SLIDE_SELECTOR,
+  DECK_SLIDE_SELECTOR,
+  DECK_STRUCTURED_SLIDE_SELECTOR,
+  injectDeckStageFallback,
+} from '@open-design/contracts/runtime/deck-stage-fallback';
 import { buildPreviewObservabilityBridge } from '@open-design/contracts/runtime/preview-observability';
 
 import {
@@ -2882,15 +2889,97 @@ function injectDeckBridge(
     }, true);
   }
   window.__odDeckBridgeOwnListenerInstall = false;
+  function deckStageSlides(stage){
+    if (!stage) return [];
+    var nested = stage.querySelectorAll(${JSON.stringify(DECK_SLIDE_SELECTOR)});
+    var direct = [];
+    for (var i = 0; i < nested.length; i++) {
+      if (nested[i].parentElement === stage) direct.push(nested[i]);
+    }
+    return direct.length ? direct : nested;
+  }
+  function legacyScreenSlides(){
+    var candidates = document.querySelectorAll(${JSON.stringify(DECK_LEGACY_SCREEN_SLIDE_SELECTOR)});
+    var labelRe = new RegExp(${JSON.stringify(DECK_LEGACY_SCREEN_LABEL_RE_SOURCE)}, 'i');
+    var groups = [];
+    for (var i = 0; i < candidates.length; i++) {
+      var match = labelRe.exec(candidates[i].getAttribute('data-screen-label') || '');
+      if (!match || !candidates[i].parentNode) continue;
+      var group = null;
+      for (var j = 0; j < groups.length; j++) {
+        if (groups[j].parent === candidates[i].parentNode) { group = groups[j]; break; }
+      }
+      if (!group) {
+        group = { parent: candidates[i].parentNode, slides: [], numbers: {} };
+        groups.push(group);
+      }
+      group.slides.push(candidates[i]);
+      group.numbers[String(Number(match[1]))] = true;
+    }
+    var best = [];
+    for (var k = 0; k < groups.length; k++) {
+      if (Object.keys(groups[k].numbers).length > 1 && groups[k].slides.length > best.length) {
+        best = groups[k].slides;
+      }
+    }
+    return best;
+  }
   function slides(){
-    // Structured selectors first so decorative .slide markup in non-deck
-    // pages (icons, badges, code samples) is not counted as deck slides;
-    // fall back to all .slide only when nothing structured matched, so
-    // freeform decks that nest slides under an extra wrapper still report
-    // the real count instead of leaving the host counter at 1 / 0.
-    var structured = document.querySelectorAll('deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide');
+    // An explicit deck-stage owns its descendants, so unrelated annotated
+    // screens elsewhere in the document cannot leak into its count. Otherwise
+    // prefer direct children of recognized legacy containers before falling
+    // back to every supported persisted slide marker.
+    var stageSlides = deckStageSlides(document.querySelector('deck-stage'));
+    if (stageSlides.length) return stageSlides;
+    var structured = document.querySelectorAll(${JSON.stringify(DECK_STRUCTURED_SLIDE_SELECTOR)});
     if (structured.length) return structured;
-    return document.querySelectorAll('.slide');
+    var explicit = document.querySelectorAll(${JSON.stringify(DECK_EXPLICIT_SLIDE_SELECTOR)});
+    if (explicit.length) return explicit;
+    return legacyScreenSlides();
+  }
+  function deckStageForSlides(list){
+    var stage = document.querySelector('deck-stage');
+    if (!stage) return null;
+    if (list && list.length && !stage.contains(list[0])) return null;
+    return stage;
+  }
+  function activeIndexFromDeckStage(list){
+    var stage = deckStageForSlides(list);
+    if (!stage) return -1;
+    var index = Number(stage.index);
+    if (!Number.isFinite(index)) return -1;
+    index = Math.floor(index);
+    return index >= 0 && index < list.length ? index : -1;
+  }
+  function navigateViaDeckStage(list, action, index){
+    if (!list.length) return false;
+    var stage = deckStageForSlides(list);
+    if (!stage) return false;
+    try {
+      if (action === 'go' && typeof index === 'number' && typeof stage.goTo === 'function') {
+        stage.goTo(index);
+      } else if (action === 'next' && typeof stage.next === 'function') {
+        stage.next();
+      } else if (action === 'prev' && typeof stage.prev === 'function') {
+        stage.prev();
+      } else if (action === 'first' && typeof stage.reset === 'function') {
+        stage.reset();
+      } else if (action === 'first' && typeof stage.goTo === 'function') {
+        stage.goTo(0);
+      } else if (action === 'last' && typeof stage.goTo === 'function') {
+        stage.goTo(list.length - 1);
+      } else {
+        return false;
+      }
+      // Public deck-stage methods are synchronous in the authored runtime.
+      // Report here for older implementations that do not emit slidechange;
+      // modern implementations also emit the event and are harmlessly
+      // coalesced by React state equality in the host.
+      report();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
   function scrollOverflow(el){
     if (!el) return 0;
@@ -2989,6 +3078,8 @@ function injectDeckBridge(
       var w = Math.max(1, window.innerWidth);
       return Math.max(0, Math.min(list.length - 1, Math.round(maxScrollLeft() / w)));
     }
+    var byDeckStage = activeIndexFromDeckStage(list);
+    if (byDeckStage >= 0) return byDeckStage;
     var byTransform = activeIndexFromTransform(list);
     if (byTransform >= 0) return byTransform;
     var byClass = findActiveByClass(list);
@@ -3287,6 +3378,7 @@ function injectDeckBridge(
   function go(action){
     var list = slides();
     if (!list.length) return;
+    if (navigateViaDeckStage(list, action)) return;
     if (isScrollDeck()) {
       scrollGo(Math.max(0, Math.min(list.length - 1, targetFor(action, list))));
       return;
@@ -3307,6 +3399,7 @@ function injectDeckBridge(
     var list = slides();
     if (!list.length) return;
     var target = Math.max(0, Math.min(list.length - 1, i));
+    if (navigateViaDeckStage(list, 'go', target)) return;
     if (isScrollDeck()) { scrollGo(target); return; }
     if (activeIndex(list) === target) { report(); return; }
     stepToIndexViaKeys(target, function(stepped){
@@ -3390,6 +3483,17 @@ function injectDeckBridge(
       }
     } catch (e) {}
   }
+  // Runtime-managed decks can also move themselves through their own tap
+  // zones, keyboard handler, or public API. Normalize both generations of
+  // deck-stage state notification back into the host-owned slide protocol.
+  document.addEventListener('slidechange', function(ev){
+    var stage = document.querySelector('deck-stage');
+    if (stage && ev.target === stage) report();
+  });
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (data && typeof data.slideIndexChanged === 'number') report();
+  });
   window.__odDeckSlideState = function(){
     var list = slides();
     return { active: activeIndex(list), count: list.length };

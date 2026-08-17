@@ -1486,9 +1486,12 @@ function normalizeDesignSystemCraftApplies(value: unknown): string[] | undefined
 }
 
 export function assembleExample(templateHtml: string, slidesHtml: string, title: string) {
+  // Function replacements: string replacements would expand `$$`, `$&`, `$``,
+  // and `$'` inside the skill-derived inputs via String.prototype.replace's
+  // GetSubstitution (#6795).
   return templateHtml
-    .replace('<!-- SLIDES_HERE -->', slidesHtml)
-    .replace(/<title>.*?<\/title>/, `<title>${title} | Open Design Example</title>`);
+    .replace('<!-- SLIDES_HERE -->', () => slidesHtml)
+    .replace(/<title>.*?<\/title>/, () => `<title>${title} | Open Design Example</title>`);
 }
 
 export function rewriteSkillAssetUrls(

@@ -221,13 +221,13 @@ describe('OpenAI-compatible media providers', () => {
       if (String(input) === 'https://images.example.test/v1/images/generations') {
         expect(init?.dispatcher).toBe(dispatcher);
         return new Response(JSON.stringify({
-          data: [{ url: 'https://cdn.example.test/generated.png' }],
+          data: [{ url: 'https://93.184.216.34/generated.png' }],
         }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
-      expect(String(input)).toBe('https://cdn.example.test/generated.png');
+      expect(String(input)).toBe('https://93.184.216.34/generated.png');
       expect(init?.dispatcher).toBe(dispatcher);
       return new Response(Buffer.from(PNG_BASE64, 'base64'));
     });
@@ -262,13 +262,13 @@ describe('OpenAI-compatible media providers', () => {
       if (String(input) === 'https://images.example.test/v1/images/generations') {
         submitCalls += 1;
         return new Response(JSON.stringify({
-          data: [{ url: 'https://cdn.example.test/generated.png' }],
+          data: [{ url: 'https://93.184.216.34/generated.png' }],
         }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       }
-      expect(String(input)).toBe('https://cdn.example.test/generated.png');
+      expect(String(input)).toBe('https://93.184.216.34/generated.png');
       return new Response('temporarily unavailable', { status: 503 });
     });
     vi.stubGlobal('fetch', fetchMock);

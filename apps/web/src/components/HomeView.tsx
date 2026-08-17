@@ -1806,7 +1806,7 @@ export function HomeView({
   }, [pendingChipRestore, pluginsLoading, plugins, active, pendingPluginUseHandoff]);
 
   // Default creation type (per product): a fresh Home composer starts on
-  // 幻灯片 (the `deck` chip) instead of typeless. One-shot per mount, decided
+  // 原型 (the `prototype` chip) instead of typeless. One-shot per mount, decided
   // from the MOUNT-time draft state — if a persisted chip draft exists, the
   // restore effect above owns the composer and this seed must never race its
   // async resolution, so it is skipped outright. Explicitly clearing the chip
@@ -1817,10 +1817,10 @@ export function HomeView({
   // `pickChip` itself so no synthetic chat_composer click lands in analytics.
   const defaultChipSeededRef = useRef(pendingChipRestore !== null);
   // Keep Send locked during the one effect turn between a cold plugin-catalog
-  // load and the default deck binding. The heavier Home chrome can otherwise
+  // load and the default prototype binding. The heavier Home chrome can otherwise
   // make that turn user-visible: the composer accepts a click while `active`
   // is still null and routes the prompt through the generic fallback even
-  // though Slide deck becomes selected immediately afterwards.
+  // though Prototype becomes selected immediately afterwards.
   const [defaultChipSeedPending, setDefaultChipSeedPending] = useState(
     pendingChipRestore === null,
   );
@@ -1828,7 +1828,7 @@ export function HomeView({
     if (defaultChipSeededRef.current) return;
     if (pluginsLoading || pendingPluginUseHandoff || pendingChipRestore) return;
     // A live hand-off or another explicit intent may have bound a plugin in
-    // the same catalog-resolution turn. It supersedes the default deck and is
+    // the same catalog-resolution turn. It supersedes the default prototype and is
     // just as ready to submit.
     if (active) {
       defaultChipSeededRef.current = true;
@@ -1836,22 +1836,22 @@ export function HomeView({
       return;
     }
     defaultChipSeededRef.current = true;
-    const deckChip = findChip('deck');
-    const deckAction = deckChip?.action;
-    if (!deckChip || !deckAction || deckAction.kind !== 'apply-scenario') {
+    const prototypeChip = findChip('prototype');
+    const prototypeAction = prototypeChip?.action;
+    if (!prototypeChip || !prototypeAction || prototypeAction.kind !== 'apply-scenario') {
       setDefaultChipSeedPending(false);
       return;
     }
-    const record = plugins.find((plugin) => plugin.id === deckAction.pluginId);
+    const record = plugins.find((plugin) => plugin.id === prototypeAction.pluginId);
     if (!record) {
       setDefaultChipSeedPending(false);
       return;
     }
     void usePlugin(record, undefined, {
-      projectKind: deckAction.projectKind,
-      chipId: deckChip.id,
-      inputs: deckAction.inputs,
-      projectMetadata: deckAction.projectMetadata ?? null,
+      projectKind: prototypeAction.projectKind,
+      chipId: prototypeChip.id,
+      inputs: prototypeAction.inputs,
+      projectMetadata: prototypeAction.projectMetadata ?? null,
       suppressPromptUpdate: true,
       deferApply: true,
     });
@@ -2811,10 +2811,10 @@ export function HomeView({
   // centers vertically instead of hugging the top, and the strip is skipped.
   const recentProjectsEmpty = !projectsLoading && projects.length === 0;
   // A deliberate resource/plugin selection already gives submit an exact
-  // route, so it must not remain behind the fresh-home default-deck barrier.
+  // route, so it must not remain behind the fresh-home default-prototype barrier.
   // Keep the barrier for a plain prompt: that is the only lane where sending
   // before the catalog settles could incorrectly fall back to the generic
-  // scenario immediately before Slide deck binds.
+  // scenario immediately before Prototype binds.
   const hasExplicitSubmitRoute = Boolean(
     active
     || activeSkill

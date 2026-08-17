@@ -19,7 +19,12 @@
 
 import DOMPurify from 'dompurify';
 
-import { DECK_SLIDE_SELECTOR } from '@open-design/contracts/runtime/deck-stage-fallback';
+import {
+  DECK_EXPLICIT_SLIDE_SELECTOR,
+  DECK_SLIDE_SELECTOR,
+  DECK_STRUCTURED_SLIDE_SELECTOR,
+} from '@open-design/contracts/runtime/deck-stage-fallback';
+import { collectLegacyDeckScreenSlides } from './deck-slide-structure';
 
 export type DeckThumbnailFallbackReason =
   | 'no-dom-parser'
@@ -58,16 +63,6 @@ export interface ParsedDeckThumbnails {
 const DEFAULT_DESIGN_WIDTH = 1920;
 const DEFAULT_DESIGN_HEIGHT = 1080;
 const MAX_SLIDES = 200;
-
-// Structured-first slide detection, mirroring the deck bridge's `slides()` in
-// srcdoc.ts: prefer slides that are direct children of a recognized stage so
-// decorative `.slide` markup elsewhere isn't miscounted, then fall back to the
-// shared selector.
-const STRUCTURED_SLIDE_SELECTOR =
-  'deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, ' +
-  '#deck > .slide, body > .slide, ' +
-  'deck-stage > [data-screen-label], .deck-stage > [data-screen-label], ' +
-  '#deck > [data-screen-label], body > [data-screen-label]';
 
 const FONT_HOSTS = new Set([
   'fonts.googleapis.com',
@@ -205,9 +200,18 @@ function rewriteViewportUnits(css: string, width: number, height: number): strin
 }
 
 function collectSlideElements(doc: Document): Element[] {
-  const structured = Array.from(doc.querySelectorAll(STRUCTURED_SLIDE_SELECTOR));
+  const deckStage = doc.querySelector('deck-stage');
+  if (deckStage) {
+    const nested = Array.from(deckStage.querySelectorAll(DECK_SLIDE_SELECTOR));
+    const direct = nested.filter((slide) => slide.parentElement === deckStage);
+    if (direct.length > 0) return direct;
+    if (nested.length > 0) return nested;
+  }
+  const structured = Array.from(doc.querySelectorAll(DECK_STRUCTURED_SLIDE_SELECTOR));
   if (structured.length > 0) return structured;
-  return Array.from(doc.querySelectorAll(DECK_SLIDE_SELECTOR));
+  const explicit = Array.from(doc.querySelectorAll(DECK_EXPLICIT_SLIDE_SELECTOR));
+  if (explicit.length > 0) return explicit;
+  return collectLegacyDeckScreenSlides(doc);
 }
 
 // Walk from the slide's parent up to (but excluding) <body>/<html>, so

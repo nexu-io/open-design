@@ -6003,6 +6003,12 @@ describe('FileViewer SVG artifacts', () => {
       'slides.html',
       '<section class="slide">A</section><section class="slide">B</section>',
     ).deck).toBe(true);
+
+    expect(fileVersionPreviewOptions(
+      'project-1',
+      'prototype.html',
+      '<main><h1 data-screen-label="Hero title">Prototype</h1></main>',
+    ).deck).toBe(false);
   });
 
   it('routes history deck arrow keys to the preview unless a text input is focused', async () => {

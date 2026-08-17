@@ -7,6 +7,7 @@ type ParserState = {
   cursorTextSoFar: string;
   cursorTurnStart: number;
   openCodeToolUses: Set<string>;
+  openCodeToolResults: Set<string>;
   codexToolUses: Set<string>;
   codexErrorEmitted: boolean;
   codexPreviousEventWasAgentMessage: boolean;
@@ -153,6 +154,48 @@ function formatOpenCodeUsage(tokens: unknown): Usage | null {
   return Object.keys(usage).length > 0 ? usage : null;
 }
 
+function isPowerShellErrorRecord(toolName: string, output: unknown): boolean {
+  const normalizedTool = toolName.toLowerCase();
+  if (normalizedTool !== 'bash' && normalizedTool !== 'shell') return false;
+  if (typeof output !== 'string') return false;
+
+  // A PowerShell non-terminating error can leave the shell process at exit 0.
+  // Require both canonical ErrorRecord fields so ordinary output containing a
+  // word such as "failed" does not become an error result.
+  return (
+    /(?:^|\r?\n)\s*\+\s*CategoryInfo\s*:/u.test(output) &&
+    /(?:^|\r?\n)\s*\+\s*FullyQualifiedErrorId\s*:/u.test(output)
+  );
+}
+
+function openCodeToolResult(
+  toolName: string,
+  statePart: JsonObject,
+): { content: string; isError: boolean } | null {
+  const status = typeof statePart.status === 'string' ? statePart.status.toLowerCase() : '';
+  if (status !== 'completed' && status !== 'error' && status !== 'failed') return null;
+
+  const metadata = isRecord(statePart.metadata) ? statePart.metadata : {};
+  const exitCodes = [statePart.exit, statePart.exitCode, metadata.exit];
+  const hasNonZeroExit = exitCodes.some(
+    (exitCode) => typeof exitCode === 'number' && Number.isFinite(exitCode) && exitCode !== 0,
+  );
+  const explicitError =
+    (typeof statePart.error === 'string' && statePart.error.trim().length > 0) ||
+    (isRecord(statePart.error) && Object.keys(statePart.error).length > 0)
+      ? statePart.error
+      : null;
+  const isError =
+    status === 'error' ||
+    status === 'failed' ||
+    explicitError !== null ||
+    hasNonZeroExit ||
+    isPowerShellErrorRecord(toolName, statePart.output);
+  const contentSource = explicitError ?? statePart.output;
+
+  return { content: stringifyContent(contentSource), isError };
+}
+
 function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: ParserState): boolean {
   if (!isRecord(obj)) return false;
   const part = isRecord(obj.part) ? obj.part : {};
@@ -188,12 +231,14 @@ function handleOpenCodeEvent(obj: unknown, onEvent: StreamEventHandler, state: P
         input: safeParseJson(statePart?.input) ?? statePart?.input ?? null,
       });
     }
-    if (statePart?.status === 'completed') {
+    const result = statePart ? openCodeToolResult(part.tool, statePart) : null;
+    if (result && !state.openCodeToolResults.has(key)) {
+      state.openCodeToolResults.add(key);
       onEvent({
         type: 'tool_result',
         toolUseId: part.callID,
-        content: stringifyContent(statePart.output),
-        isError: false,
+        content: result.content,
+        isError: result.isError,
       });
     }
     return true;
@@ -876,6 +921,7 @@ export function createJsonEventStreamHandler(kind: ParserKind, onEvent: StreamEv
     cursorTextSoFar: '',
     cursorTurnStart: 0,
     openCodeToolUses: new Set<string>(),
+    openCodeToolResults: new Set<string>(),
     codexToolUses: new Set<string>(),
     codexErrorEmitted: false,
     codexPreviousEventWasAgentMessage: false,
