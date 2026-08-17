@@ -2442,8 +2442,14 @@ export function ProjectView({
   // already started; without an owner token that older finalizer reinstalls its
   // own producedFiles/resolver, and the NEW turn's file-list generations then
   // drive the OLD turn's artifact into focus.
+  //
+  // It carries the conversation it ran in for the same reason. ProjectView
+  // outlives conversation switches — only ChatPane is keyed by the active
+  // conversation — so a watch armed in one chat stays live, and able to pull
+  // focus to that chat's artifact, after the user has moved to another.
   const pendingAutoOpenSettleRef = useRef<{
     readonly generation: number;
+    readonly conversationId: string | null;
     readonly request: AutoOpenSettleRequest<ProjectFile>;
   } | null>(null);
   // Monotonic auto-open owner token; bumped once per send.
@@ -3768,13 +3774,21 @@ export function ProjectView({
       pendingAutoOpenSettleRef.current = null;
       return;
     }
+    // Same for a watch whose conversation the user has left. The generation
+    // token cannot cover this: switching chats starts no new turn, so nothing
+    // bumps it, yet the file workspace is project-scoped and would happily
+    // focus the previous chat's artifact underneath the new one.
+    if (pending.conversationId !== activeConversationId) {
+      pendingAutoOpenSettleRef.current = null;
+      return;
+    }
     const decision = reevaluateAutoOpenOnFilesSettled(pending.request, projectFilesRef.current, {
       now: Date.now(),
       activeFileName: openTabsActiveRef.current,
     });
     if (!decision.keepWatching) pendingAutoOpenSettleRef.current = null;
     if (decision.openFileName) requestOpenFile(decision.openFileName);
-  }, [requestOpenFile]);
+  }, [activeConversationId, requestOpenFile]);
 
   // Later lists: every accepted file-list generation (and every focus change,
   // which can retire the watch) re-runs the decision.
@@ -6992,6 +7006,17 @@ export function ProjectView({
       // itself over this turn.
       const autoOpenSettleGeneration = ++autoOpenSettleGenerationRef.current;
       pendingAutoOpenSettleRef.current = null;
+      // The same token fences every auto-open THIS run can ask for, not just the
+      // settle watch: the per-write refreshes below and the whole completion
+      // continuation are unawaited too, so any of them can resolve after a newer
+      // send has taken over and move focus to this run's output during that one.
+      // Requesting focus for a run that no longer owns auto-open is the same
+      // stale-focus bug whether it arrives through the watcher or directly.
+      const requestRunOpenFile = (fileName: string) => {
+        if (autoOpenSettleGenerationRef.current !== autoOpenSettleGeneration) return false;
+        requestOpenFile(fileName);
+        return true;
+      };
       // Pending Write/Edit tool invocations for this run: tool_use_id -> path.
       // Keeping this local prevents a superseded stream's late tool_result from
       // consuming a replacement run's colliding tool id.
@@ -7115,7 +7140,7 @@ export function ProjectView({
                 && immediateFileName
                 && immediateArtifact === immediateFileName
               ) {
-                requestOpenFile(immediateFileName);
+                requestRunOpenFile(immediateFileName);
               }
               // Refresh first so FileWorkspace's file list (and the tab
               // body) sees the new content before we ask it to focus.
@@ -7157,7 +7182,7 @@ export function ProjectView({
                   && decision.shouldOpen
                   && decision.fileName
                 ) {
-                  requestOpenFile(decision.fileName);
+                  requestRunOpenFile(decision.fileName);
                 }
               }).catch(() => {
                 // A failed background read is non-authoritative. Keep the
@@ -7375,8 +7400,14 @@ export function ProjectView({
             // are not knowable at the moment the witness above is sampled.
             const turnAutoOpenedFileNames = new Set<string>();
             const requestTurnOpenFile = (fileName: string) => {
+              // Fenced like every other auto-open this run can ask for: the
+              // awaits below (post-run refresh, artifact recovery/persistence)
+              // can park this continuation past a newer send, and opening from
+              // here afterwards focuses THIS turn's artifact during that one.
+              // Only a request that actually went out counts as turn-owned
+              // focus — a suppressed one moved nothing.
+              if (!requestRunOpenFile(fileName)) return;
               turnAutoOpenedFileNames.add(fileName);
-              requestOpenFile(fileName);
             };
             try {
               // A settled shared file-list read from before the daemon exit can
@@ -7516,6 +7547,7 @@ export function ProjectView({
               if (autoOpenSettleGenerationRef.current === autoOpenSettleGeneration) {
                 pendingAutoOpenSettleRef.current = {
                   generation: autoOpenSettleGeneration,
+                  conversationId: runConversationId,
                   request: {
                     producedFiles: produced,
                     resolveTurnOptions: turnAutoOpenOptionsFor,

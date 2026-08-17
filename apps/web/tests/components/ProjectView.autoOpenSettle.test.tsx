@@ -131,6 +131,14 @@ vi.mock('../../src/components/Loading', () => ({
   CenteredLoader: () => null,
 }));
 
+// The slice of the daemon stream handlers these tests drive: terminal handoff,
+// plus the agent events that carry a mid-run Write through to its own
+// fire-and-forget file-list refresh.
+interface StreamHandlers {
+  onDone: (fullText?: string) => void;
+  onAgentEvent: (event: Record<string, unknown>) => void;
+}
+
 function projectFile(name: string, kind: ProjectFile['kind'], mtime: number): ProjectFile {
   return {
     kind,
@@ -278,13 +286,11 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
       return turnDone ? options.settled : options.preTurn;
     });
 
-    const handlers: Array<{ onDone: (fullText?: string) => void }> = [];
-    streamViaDaemon.mockImplementation(
-      async (opts: { handlers: { onDone: (fullText?: string) => void } }) => {
-        handlers.push(opts.handlers);
-        return new Promise<void>(() => {});
-      },
-    );
+    const handlers: StreamHandlers[] = [];
+    streamViaDaemon.mockImplementation(async (opts: { handlers: StreamHandlers }) => {
+      handlers.push(opts.handlers);
+      return new Promise<void>(() => {});
+    });
 
     renderProjectView(options.projectId);
 
@@ -404,6 +410,215 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
 
     // Only now does turn A's read resolve, carrying its finalizer to the arming
     // site — after turn B already owns auto-open.
+    await turn.releaseCompletionRead();
+    await landSettledFileList();
+    await landSettledFileList();
+
+    expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
+  });
+
+  // The turn's own post-run read already carries a previewable artifact, so the
+  // completion pass opens it directly and never arms the watcher. That path is
+  // parked behind the same awaits, so it needs the same owner token.
+  const TURN_A_HTML = projectFile('turn-a.html', 'html', turnStart + 20);
+
+  // Positive control for the two completion-path assertions below: with nobody
+  // superseding the turn, releasing the read must actually open turn-a.html.
+  // If this stops firing, "did not open" proves nothing.
+  it('opens the turn artifact from the completion path when the turn still owns auto-open', async () => {
+    const turn = await runTurnHoldingCompletionRead({
+      projectId: 'project-completion-control',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, TURN_A_HTML],
+      settled: [NOTES, OTHER, TURN_A_HTML],
+    });
+
+    await turn.releaseCompletionRead();
+
+    expect(openRequestKeys().map((key) => key.name)).toContain('turn-a.html');
+  });
+
+  it('does not open a superseded turn artifact from the completion path', async () => {
+    // Reviewer #6842 (nettee, 2026-08-14): the generation check at the arming
+    // site is too late for this. The completion pass reaches
+    // `requestTurnOpenFile(producedArtifactToOpen)` BEFORE it, so a turn parked
+    // in its post-run awaits could still send that request after a newer turn
+    // had taken over — the watcher was fenced, the direct open was not.
+    const turn = await runTurnHoldingCompletionRead({
+      projectId: 'project-completion-overlap',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, TURN_A_HTML],
+      settled: [NOTES, OTHER, TURN_A_HTML],
+    });
+
+    const sendPropsB = await waitForSend();
+    await act(async () => {
+      await sendPropsB.onSend!('turn B', [], []);
+    });
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    const openedBeforeRelease = openRequestKeys().length;
+
+    await turn.releaseCompletionRead();
+    await landSettledFileList();
+
+    expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
+  });
+
+  // Drives one turn whose mid-run Write refresh is held open, then carries the
+  // turn to terminal status with a post-run list that has nothing previewable
+  // in it — so the completion pass selects nothing and the released per-write
+  // refresh is the only thing that can move focus.
+  async function runTurnHoldingPerWriteRead(options: {
+    projectId: string;
+    tabs: OpenTabsState;
+    preTurn: ProjectFile[];
+    postRun: ProjectFile[];
+    perWriteSettled: ProjectFile[];
+  }) {
+    const heldRead = deferred<ProjectFile[]>();
+    let holdNextRead = false;
+    let heldReadRequested = false;
+    let turnDone = false;
+
+    loadTabs.mockResolvedValue(options.tabs);
+    fetchProjectFiles.mockImplementation(async () => {
+      if (holdNextRead) {
+        holdNextRead = false;
+        heldReadRequested = true;
+        return heldRead.promise;
+      }
+      return turnDone ? options.postRun : options.preTurn;
+    });
+
+    const handlers: StreamHandlers[] = [];
+    streamViaDaemon.mockImplementation(async (opts: { handlers: StreamHandlers }) => {
+      handlers.push(opts.handlers);
+      return new Promise<void>(() => {});
+    });
+
+    renderProjectView(options.projectId);
+
+    const sendProps = await waitForSend();
+    await act(async () => {
+      await sendProps.onSend!('build me a page', [], []);
+    });
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(1));
+
+    // The agent writes the artifact mid-run. Its file-list refresh is
+    // fire-and-forget by design (a file can open while the run streams), so
+    // park it and let the run finish underneath it.
+    holdNextRead = true;
+    await act(async () => {
+      handlers[0]!.onAgentEvent({
+        kind: 'tool_use',
+        id: 'tool-write-1',
+        name: 'Write',
+        input: { path: 'turn-a.html' },
+      });
+      handlers[0]!.onAgentEvent({
+        kind: 'tool_result',
+        toolUseId: 'tool-write-1',
+        content: '',
+        isError: false,
+      });
+    });
+    // The per-write refresh must actually be parked, or "delayed per-write"
+    // is fiction and the assertions below hold for the wrong reason.
+    await waitFor(() => expect(heldReadRequested).toBe(true));
+
+    turnDone = true;
+    await act(async () => {
+      handlers[0]!.onDone('done');
+    });
+
+    return {
+      releasePerWriteRead: async () => {
+        await act(async () => {
+          heldRead.resolve(options.perWriteSettled);
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+      },
+    };
+  }
+
+  // Positive control for the per-write guard below.
+  it('opens from a delayed per-write refresh while the run still owns auto-open', async () => {
+    const turn = await runTurnHoldingPerWriteRead({
+      projectId: 'project-per-write-control',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, RUN_LOG],
+      perWriteSettled: [NOTES, OTHER, RUN_LOG, TURN_A_HTML],
+    });
+
+    await turn.releasePerWriteRead();
+
+    expect(openRequestKeys().map((key) => key.name)).toContain('turn-a.html');
+  });
+
+  it('does not let a delayed per-write refresh focus a superseded run', async () => {
+    // Reviewer #6842 (nettee, 2026-08-14): this callback is guarded only by the
+    // run-local `completionSelectedAutoOpen`, which a newer turn cannot flip.
+    // A Write refresh from run A that settles during run B therefore focused
+    // A's file even though every other auto-open path had been fenced.
+    const turn = await runTurnHoldingPerWriteRead({
+      projectId: 'project-per-write-overlap',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, RUN_LOG],
+      perWriteSettled: [NOTES, OTHER, RUN_LOG, TURN_A_HTML],
+    });
+
+    const sendPropsB = await waitForSend();
+    await act(async () => {
+      await sendPropsB.onSend!('turn B', [], []);
+    });
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+    const openedBeforeRelease = openRequestKeys().length;
+
+    await turn.releasePerWriteRead();
+
+    expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
+  });
+
+  it('retires the watch when the user leaves the conversation the turn ran in', async () => {
+    // Reviewer #6842 (nettee, 2026-08-14): the owner token cannot cover this.
+    // Switching chats starts no new turn, so nothing bumps the generation —
+    // but ProjectView outlives conversation switches (only ChatPane is keyed by
+    // the active conversation) and the file workspace is project-scoped, so the
+    // watch stayed live and focused the previous chat's artifact underneath the
+    // new one. Same setup as the positive control at the top of this file,
+    // which is what proves the watcher would otherwise have opened index.html.
+    listConversations.mockResolvedValue([
+      { id: 'conv-1', title: 'Conversation' },
+      { id: 'conv-2', title: 'Second conversation' },
+    ]);
+
+    const turn = await runTurnHoldingCompletionRead({
+      projectId: 'project-settle-conversation',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, RUN_LOG],
+      settled: [NOTES, OTHER, RUN_LOG, INDEX],
+    });
+
+    const chatProps = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+      onSelectConversation?: (id: string) => void;
+    };
+    await act(async () => {
+      chatProps.onSelectConversation?.('conv-2');
+    });
+    await waitFor(() => {
+      expect(
+        (chatPaneSpy.mock.calls.at(-1)?.[0] as { activeConversationId?: string | null })
+          .activeConversationId,
+      ).toBe('conv-2');
+    });
+    const openedBeforeRelease = openRequestKeys().length;
+
     await turn.releaseCompletionRead();
     await landSettledFileList();
     await landSettledFileList();
