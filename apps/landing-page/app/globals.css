@@ -1017,17 +1017,25 @@ body::before {
   gap: 0;
   min-width: 0;
   /* Five columns since the 2026-08 nav consolidation (Plugin + the three
-     former Solution groups + Agent). Centered on the trigger — anchored at
-     `left: -16px` the wide panel runs off the right viewport edge. The
-     mobile drawer resets left/transform via its `position: static` rule. */
+     former Solution groups + Agent). Anchored at `left: -16px` the wide
+     panel runs off the right viewport edge, so the li goes static and the
+     panel centers against `.container` (the nearest positioned ancestor —
+     NOT `.site-chrome`/the viewport). The mobile drawer resets
+     left/transform via its `position: static` rule. */
   max-width: min(94vw, 1000px);
 }
 /* Desktop only: the mobile drawer flattens dropdowns to `position: static`,
    where a centering transform would shift them sideways. The Product li goes
-   static so the wide panel positions against the fixed .site-chrome and
-   centers on the VIEWPORT — anchored to the li it overflows narrow desktops. */
+   static so the wide panel positions against `.container` and centers on it —
+   anchored to the li it overflows narrow desktops. */
 @media (min-width: 1081px) {
   .nav-links li.nav-item-mega { position: static; }
+  /* With the li static, absolutely-positioned descendants resolve against
+     `.container` (the nearest positioned ancestor), so the shared
+     `left: 100%` hover-bridge ::after would land at the container's right
+     edge — a stray hit target nowhere near the trigger. Drop it here; the
+     full-width mega panel itself bridges the hover. */
+  .nav-links li.nav-item-mega::after { content: none; }
   .nav-dropdown-mega {
     left: 50%;
     transform: translateX(-50%) translateY(-4px);

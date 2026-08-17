@@ -229,10 +229,6 @@ export function Header({
                 className={
                   'nav-trigger' +
                   (active === 'product' ||
-                  active === 'home' ||
-                  active === 'html-anything' ||
-                  active === 'html-video' ||
-                  active === 'codex-slides' ||
                   active === 'open-design-plugin' ||
                   active === 'solution' ||
                   active === 'agent'
@@ -252,19 +248,20 @@ export function Header({
                     to the footer only (2026-08 nav consolidation); the mega
                     panel now carries Plugin + the former Solution groups. */}
                 <li className='nav-mega-col nav-mega-col-merged'>
-                  <span className='nav-mega-col-head'>{productMenuCopy.plugins}</span>
-                  <ul className='nav-mega-list'>
-                    {/* Product name, not a translatable phrase — same
-                        convention as "Codex Slides" before it. */}
-                    <li>
-                      <a
-                        href={href('/codex-plugin/')}
-                        className={active === 'open-design-plugin' ? 'is-active' : undefined}
-                      >
-                        <span className='dropdown-name'>Codex Plugin</span>
-                      </a>
-                    </li>
-                  </ul>
+                  {/* Product name as the column head-link, not a translatable
+                      phrase — same convention as "Codex Slides" before it.
+                      The localized "Plugins" label is reserved for the
+                      Resources → /plugins/ catalog hub to avoid one chrome
+                      word pointing at two destinations. */}
+                  <a
+                    href={href('/codex-plugin/')}
+                    className={
+                      'nav-mega-col-head' +
+                      (active === 'open-design-plugin' ? ' is-active' : '')
+                    }
+                  >
+                    Codex Plugin
+                  </a>
                 </li>
                 {/* Former Solution dropdown, folded into the mega panel as
                     three side-by-side columns (Use cases / Roles / Tools). */}
