@@ -608,6 +608,8 @@ export const en: Dict = {
   'settings.cliEnvClaudeConfigDir': 'Claude Code config directory',
   'settings.cliEnvClaudeBaseUrl': 'Claude proxy base URL',
   'settings.cliEnvClaudeApiKey': 'Claude CLI API key',
+  'settings.cliEnvClaudeHttpProxy': 'HTTP_PROXY (for Claude Code)',
+  'settings.cliEnvClaudeHttpsProxy': 'HTTPS_PROXY (for Claude Code)',
   'settings.cliEnvCodexHome': 'Codex home',
   'settings.cliEnvCodexBin': 'Codex executable path',
   'settings.cliEnvCodexBaseUrl': 'Codex/OpenAI proxy base URL',
