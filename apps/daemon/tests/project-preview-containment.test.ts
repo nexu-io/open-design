@@ -472,8 +472,11 @@ describe('project preview containment routes', () => {
     // Inline JS source survives verbatim — neither the body nor a placeholder
     // got dropped or relocated by a string-replace collision.
     expect(html).toContain('<script>URL.revokeObjectURL(url);</script>');
-    // No marker of our own is leaked back to the client.
-    expect(html).not.toMatch(/<!--OD-(BLOCK|ATTR)[A-Z]*-SHIELD-/--/);
+    // No marker of our own is leaked back to the client. The marker pattern
+    // is `<!--OD-{BLOCKOPEN|BLOCKCLOSE|ATTROPEN|ATTRCLOSE}-SHIELD-{nonce}--`
+    // (with optional `[0-9]+-{nonce}` re-roll suffix). The trailing `--` is a
+    // regex literal that needs no escaping inside `[]`-free context.
+    expect(html).not.toMatch(/<!--OD-(?:BLOCKOPEN|BLOCKCLOSE|ATTROPEN|ATTRCLOSE)-SHIELD-/);
   });
 
   it('serves minted preview HTML and assets without bearer headers when API token auth is enabled', async () => {
