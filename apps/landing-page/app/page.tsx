@@ -580,24 +580,18 @@ export default function Page({
                     rate-limited) it falls back to the /download/ page (the
                     per-platform picker) rather than the GitHub releases list. */}
                 <a
-                  className='btn btn-primary hero-download-attention'
+                  className='hm-dl hm-dl-hero'
                   href={href('/download/')}
                   data-download-cta
                   data-direct-download
                   data-download-chip-target
                   data-download-placement='hero'
                 >
-                  <span className='arrow'>{iconDownload}</span>
+                  <em className='hm-di' aria-hidden='true'>
+                    ↓
+                  </em>
                   {home.hero.download}
-                </a>
-                <a className='btn btn-ghost' href={REPO} {...ext}>
-                  <span className='arrow'>{<RemixIcon glyph={RI.github} />}</span>
-                  <span>
-                    Star{' '}
-                    <span className='star-count' data-github-stars>
-                      {github.starsLabel}
-                    </span>
-                  </span>
+                  <u className='hm-sheen' aria-hidden='true' />
                 </a>
               </div>
               {/* `{systems}` in heroSub is substituted with the live

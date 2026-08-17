@@ -316,7 +316,7 @@ test('homepage hero: every active locale carries the brand-system scenario promi
     homeStylesSource,
     /\.hero-task-emphasis\s*\{[^}]*display:\s*inline-block;[^}]*background:\s*linear-gradient\(/s,
   );
-  assert.match(homePageSource, /hero-download-attention/);
+  assert.match(homePageSource, /hm-dl hm-dl-hero/);
   assert.match(homePageSource, /data-direct-download/);
 });
 
