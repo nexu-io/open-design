@@ -265,8 +265,10 @@ const headerHtml = renderToStaticMarkup(
       .meetup-v4 .meetup-wide-photo img { aspect-ratio: 16 / 9; object-fit: cover; }
       .meetup-v4 .meetup-flow { display: flex; flex-wrap: wrap; gap: 9px; margin: 22px 0 4px; }
       .meetup-v4 .meetup-flow span { display: inline-flex; align-items: center; min-height: 34px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.58); color: var(--ink-soft); font-family: var(--mono); font-size: 12px; letter-spacing: .02em; }
-      .meetup-v4 .meetup-case-intro { padding: 0; margin: 0 0 28px; }
-      .meetup-v4 .meetup-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+      .meetup-v4 .meetup-case-intro { max-width: 800px; padding: 0; margin: 0 auto 38px; }
+      .meetup-v4 .meetup-case-intro .v4h2 { max-width: 760px; font-size: clamp(30px, 3.1vw, 38px); }
+      .meetup-v4 .meetup-case-intro .v4lede { max-width: 740px; }
+      .meetup-v4 .meetup-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; align-items: start; max-width: 960px; margin: 0 auto; }
       .meetup-v4 .meetup-pair figure { margin: 0; }
       .meetup-v4 .meetup-pair img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border: 1px solid var(--line); border-radius: var(--spacing-8); background: #fff; box-shadow: 0 34px 70px -34px rgba(20,20,30,.55); }
       .meetup-v4 .meetup-pair figcaption { margin-top: 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.45; color: var(--ink-faint); }
