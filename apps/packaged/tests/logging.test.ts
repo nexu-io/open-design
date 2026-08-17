@@ -14,7 +14,7 @@
  * @see https://github.com/nexu-io/open-design/issues/895
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -26,6 +26,7 @@ import {
   createFatalUncaughtExceptionHandler,
   createFatalUnhandledRejectionHandler,
   isHarmlessSocketOptionError,
+  isHarmlessStdoutError,
   type PackagedDesktopLogger,
 } from '../src/logging.js';
 import type { PackagedNamespacePaths } from '../src/paths.js';
@@ -143,6 +144,125 @@ describe('isHarmlessSocketOptionError (issue #895)', () => {
     const error = new Error('') as NodeJS.ErrnoException;
     error.code = 'EINVAL';
     expect(isHarmlessSocketOptionError(error)).toBe(false);
+  });
+});
+
+/**
+ * Regression coverage for the packaged main-process EPIPE crash that
+ * surfaces the first time a renderer lifecycle handler calls
+ * `console.info(...)` in an Electron build with no controlling
+ * terminal. The wrapper installed by `createPackagedDesktopLogger`
+ * must swallow only the two known-safe stream-closure codes
+ * (`EPIPE`, `ERR_STREAM_DESTROYED`) and re-throw anything else, so
+ * real I/O failures are not silently dropped.
+ */
+describe('isHarmlessStdoutError (packaged console echo EPIPE guard)', () => {
+  it('matches an Error with code: EPIPE', () => {
+    const error = new Error('write EPIPE') as NodeJS.ErrnoException;
+    error.code = 'EPIPE';
+    expect(isHarmlessStdoutError(error)).toBe(true);
+  });
+
+  it('matches an Error with code: ERR_STREAM_DESTROYED', () => {
+    const error = new Error('stream destroyed') as NodeJS.ErrnoException;
+    error.code = 'ERR_STREAM_DESTROYED';
+    expect(isHarmlessStdoutError(error)).toBe(true);
+  });
+
+  it('does NOT match a bare Error that mentions "broken pipe" in its message but has no code', () => {
+    const error = new Error('broken pipe, write');
+    expect(isHarmlessStdoutError(error)).toBe(false);
+  });
+
+  it('does NOT match an unrelated errno like EACCES even if the message mentions pipes', () => {
+    const error = new Error('broken pipe while writing to log file') as NodeJS.ErrnoException;
+    error.code = 'EACCES';
+    expect(isHarmlessStdoutError(error)).toBe(false);
+  });
+
+  it('does NOT match non-objects (null, undefined, strings)', () => {
+    expect(isHarmlessStdoutError(null)).toBe(false);
+    expect(isHarmlessStdoutError(undefined)).toBe(false);
+    expect(isHarmlessStdoutError('EPIPE')).toBe(false);
+  });
+});
+
+describe('createPackagedDesktopLogger console echo EPIPE guard', () => {
+  it('swallows an EPIPE thrown by the original console.info echo and still records the call to the desktop log file', () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-echo-epipe-'));
+    const previousEcho = process.env.OD_DESKTOP_LOG_ECHO;
+    // echo must be on (the default) for safeEcho to be in the path.
+    delete process.env.OD_DESKTOP_LOG_ECHO;
+    // Stub the host's console.info BEFORE constructing the logger so
+    // the factory captures the throwing original as `originalConsole.info`
+    // (the wrapper then calls safeEcho(originalConsole.info), which is
+    // the only place the EPIPE filter is applied — see issue #6964).
+    const epipe = new Error('write EPIPE') as NodeJS.ErrnoException;
+    epipe.code = 'EPIPE';
+    console.info = () => {
+      throw epipe;
+    };
+    const desktopLogPath = join(root, 'desktop.log');
+    try {
+      createPackagedDesktopLogger(makePaths(root, desktopLogPath));
+
+      // The wrapped call must NOT throw — the unwrapped version
+      // crashed the main process via an uncaught exception that
+      // propagated out of `Writable.write`.
+      expect(() =>
+        console.info('main window did-start-loading', { url: 'about:blank' }),
+      ).not.toThrow();
+
+      // The wrapper must have actually run (and called the file
+      // logger) — not the bare stub. If the wrapper had been
+      // bypassed, no record would land in the desktop log file.
+      const line = readFileSync(desktopLogPath, 'utf8');
+      expect(line).toContain('console.info');
+      expect(line).toContain('main window did-start-loading');
+    } finally {
+      if (previousEcho == null) {
+        delete process.env.OD_DESKTOP_LOG_ECHO;
+      } else {
+        process.env.OD_DESKTOP_LOG_ECHO = previousEcho;
+      }
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('still re-throws non-harmless errors thrown by the original console.error echo and records the call to the desktop log file', () => {
+    const root = mkdtempSync(join(tmpdir(), 'od-packaged-echo-other-'));
+    const previousEcho = process.env.OD_DESKTOP_LOG_ECHO;
+    delete process.env.OD_DESKTOP_LOG_ECHO;
+    // Same before/after ordering as the EPIPE case: stub the host's
+    // console.error BEFORE the factory so originalConsole.error
+    // captures the throwing stub.
+    const eacces = new Error('permission denied writing to log file') as NodeJS.ErrnoException;
+    eacces.code = 'EACCES';
+    console.error = () => {
+      throw eacces;
+    };
+    const desktopLogPath = join(root, 'desktop.log');
+    try {
+      createPackagedDesktopLogger(makePaths(root, desktopLogPath));
+
+      // The wrapper must surface non-harmless errors so real I/O
+      // failures are not silently dropped.
+      expect(() => console.error('fatal write failure')).toThrow(eacces);
+
+      // The wrapper must have actually run (and called the file
+      // logger BEFORE the echo) — proving the throw escaped via
+      // safeEcho, not via the bare stub.
+      const line = readFileSync(desktopLogPath, 'utf8');
+      expect(line).toContain('console.error');
+      expect(line).toContain('fatal write failure');
+    } finally {
+      if (previousEcho == null) {
+        delete process.env.OD_DESKTOP_LOG_ECHO;
+      } else {
+        process.env.OD_DESKTOP_LOG_ECHO = previousEcho;
+      }
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
 
