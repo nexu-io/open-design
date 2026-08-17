@@ -27,6 +27,11 @@ export type StandaloneUpdatePreparation = Readonly<
     }
 >;
 
+export type StandaloneUpdateActivationPolicy =
+  | "authorize-silent"
+  | "authorize-user"
+  | "revoke-silent";
+
 /**
  * The sole legacy discriminator is absence of the modern Closure envelope.
  * Standalone never reads legacy control fields; Shell remains their owner.
@@ -39,7 +44,7 @@ export function hasModernClosureUpdateMetadata(metadata: unknown): metadata is R
 }
 
 export async function prepareStandaloneUpdate(input: Readonly<{
-  activationSource?: "silent-policy" | "user-restart";
+  activationPolicy: StandaloneUpdateActivationPolicy;
   channel: string;
   fetch?: typeof globalThis.fetch;
   metadata: unknown;
@@ -86,11 +91,15 @@ export async function prepareStandaloneUpdate(input: Readonly<{
     }
     let descriptor = await readClosureBindingDescriptor(paths);
     if (
-      input.activationSource != null
+      input.activationPolicy !== "revoke-silent"
       && result.reason === "already-prepared"
       && descriptor.prepared != null
     ) {
-      await authorizePreparedClosureActivation(paths, descriptor.prepared, input.activationSource);
+      await authorizePreparedClosureActivation(
+        paths,
+        descriptor.prepared,
+        input.activationPolicy === "authorize-user" ? "user-restart" : "silent-policy",
+      );
       descriptor = await readClosureBindingDescriptor(paths);
     } else if (result.reason === "already-prepared") {
       descriptor = await revokePreparedClosureActivation(paths, "silent-policy");
@@ -117,8 +126,12 @@ export async function prepareStandaloneUpdate(input: Readonly<{
   if (descriptor.prepared?.standalone.generation !== result.pointer.generation) {
     throw new Error("Standalone prepared binding changed before resource completion");
   }
-  if (input.activationSource != null) {
-    await authorizePreparedClosureActivation(paths, descriptor.prepared, input.activationSource);
+  if (input.activationPolicy !== "revoke-silent") {
+    await authorizePreparedClosureActivation(
+      paths,
+      descriptor.prepared,
+      input.activationPolicy === "authorize-user" ? "user-restart" : "silent-policy",
+    );
   }
   const preparedDescriptor = await readClosureBindingDescriptor(paths);
   await discardUnreferencedClosureResources(paths).catch(() => undefined);

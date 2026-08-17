@@ -318,10 +318,11 @@ export async function startSidecarStandalone(
         }
         try {
           const output = await prepareStandaloneUpdate({
-            ...(command.input.activationSource === "silent-policy"
-              || command.input.activationSource === "user-restart"
-              ? { activationSource: command.input.activationSource }
-              : {}),
+            activationPolicy: command.input.activationSource === "silent-policy"
+              ? "authorize-silent"
+              : command.input.activationSource === "user-restart"
+                ? "authorize-user"
+                : "revoke-silent",
             channel: request.handoff.scope.channel,
             metadata: command.input.metadata,
             namespace: request.handoff.scope.namespace,

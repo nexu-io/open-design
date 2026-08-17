@@ -124,6 +124,19 @@ macShellDescribe('packaged mac Shell silent update', () => {
       );
       expect(terminal.update?.currentVersion).toBe(updateScenario.expectedCurrentVersion);
 
+      // Exercise the operator/inspect entry while the target Shell is still
+      // paired with the previous Closure. Manual and scheduled checks must use
+      // the same preference-backed atom, so this cannot disarm the prepared
+      // compatible Closure before the convergence restart.
+      const manualCheck = await runToolsPackJson<MacInspectResult>(
+        'inspect',
+        ['--update-action', 'check'],
+      );
+      expect(manualCheck.update?.standalone).toMatchObject({
+        activationSource: 'silent-policy',
+        state: 'prepared',
+      });
+
       // The target Closure requires the target Shell. The first cold start
       // therefore advances only the Shell while retaining the last successful
       // Closure; the next cold start commits the now-compatible Closure graph.

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import type { StandaloneUpdateActivationPolicy } from "@open-design/standalone";
 import {
   STANDALONE_HANDOFF_SCHEMA_VERSION,
   type StandaloneHandle,
@@ -56,16 +57,20 @@ export function createStandaloneUpdatePreparation(input: Readonly<{
   requestId?: () => string;
 }>): (
   metadata: Record<string, unknown>,
-  options?: { activationSource?: "silent-policy" | "user-restart" },
+  options: { activationPolicy: StandaloneUpdateActivationPolicy },
 ) => Promise<StandaloneUpdatePreparation> {
   const requestId = input.requestId ?? randomUUID;
-  return async (metadata, options = {}) => {
+  return async (metadata, options) => {
     const result = await input.handle.invoke({
       attachmentId: input.attachmentId,
       command: OPEN_DESIGN_PREPARE_UPDATE_COMMAND,
       handoff: input.handoff,
       input: {
-        ...(options.activationSource == null ? {} : { activationSource: options.activationSource }),
+        ...(options.activationPolicy === "authorize-silent"
+          ? { activationSource: "silent-policy" }
+          : options.activationPolicy === "authorize-user"
+            ? { activationSource: "user-restart" }
+            : {}),
         metadata,
       } as StandaloneProtocolJsonValue,
       requestId: requestId(),

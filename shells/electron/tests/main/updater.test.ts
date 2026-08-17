@@ -48,6 +48,11 @@ type FixtureServer = {
 type FixturePlatform = "mac" | "win";
 type FixtureChannel = ReleaseChannel;
 
+const TEST_REVOKE_CHECK = Object.freeze({
+  activationPolicy: "revoke-silent",
+  trigger: "test",
+} as const);
+
 function prereleaseCounterParts(version: string): { baseVersion: string; number: number } | null {
   const prerelease = /^(\d+\.\d+\.\d+)-.+\.(\d+)$/.exec(version);
   if (prerelease?.[1] != null && prerelease[2] != null) {
@@ -346,10 +351,12 @@ describe("desktop updater", () => {
       controlInstallationVersionMin: "9.9.9",
       standaloneMetadata: { schemaVersion: 4 },
     });
-    const prepareStandaloneUpdate = vi.fn(async (_metadata: unknown, options?: {
-      activationSource?: "silent-policy" | "user-restart";
+    const prepareStandaloneUpdate = vi.fn(async (_metadata: unknown, options: {
+      activationPolicy: "authorize-silent" | "authorize-user" | "revoke-silent";
     }) => ({
-      activationSource: options?.activationSource ?? null,
+      activationSource: options.activationPolicy === "authorize-silent"
+        ? "silent-policy" as const
+        : options.activationPolicy === "authorize-user" ? "user-restart" as const : null,
       architecture: "standalone" as const,
       releaseVersion: "1.0.1",
       route: "closure" as const,
@@ -365,8 +372,9 @@ describe("desktop updater", () => {
       }, { prepareStandaloneUpdate });
 
       const status = await updater.checkForUpdates({
-        activationSource: "silent-policy",
+        activationPolicy: "authorize-silent",
         autoDownload: false,
+        trigger: "test",
       });
 
       expect(status.state).toBe(DESKTOP_UPDATE_STATES.NOT_AVAILABLE);
@@ -379,7 +387,7 @@ describe("desktop updater", () => {
       expect(status.reinstall).toBeUndefined();
       expect(prepareStandaloneUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ closure: { schemaVersion: 4 } }),
-        { activationSource: "silent-policy" },
+        { activationPolicy: "authorize-silent" },
       );
 
       const authorized = await updater.installUpdate();
@@ -390,7 +398,7 @@ describe("desktop updater", () => {
       });
       expect(prepareStandaloneUpdate).toHaveBeenLastCalledWith(
         expect.objectContaining({ closure: { schemaVersion: 4 } }),
-        { activationSource: "user-restart" },
+        { activationPolicy: "authorize-user" },
       );
     } finally {
       await fixture.close();
@@ -407,10 +415,12 @@ describe("desktop updater", () => {
       if (fetchCount > 1) throw new Error("offline");
       return await globalThis.fetch(input, init);
     };
-    const prepareStandaloneUpdate = vi.fn(async (_metadata: unknown, options?: {
-      activationSource?: "silent-policy" | "user-restart";
+    const prepareStandaloneUpdate = vi.fn(async (_metadata: unknown, options: {
+      activationPolicy: "authorize-silent" | "authorize-user" | "revoke-silent";
     }) => ({
-      activationSource: options?.activationSource ?? null,
+      activationSource: options.activationPolicy === "authorize-silent"
+        ? "silent-policy" as const
+        : options.activationPolicy === "authorize-user" ? "user-restart" as const : null,
       architecture: "standalone" as const,
       releaseVersion: "1.0.1",
       route: "closure" as const,
@@ -424,15 +434,15 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.PACKAGED,
       }, { fetch: fetchImpl, prepareStandaloneUpdate });
 
-      await updater.checkForUpdates({ activationSource: "silent-policy", autoDownload: false });
-      const offline = await updater.checkForUpdates({ autoDownload: false });
+      await updater.checkForUpdates({ activationPolicy: "authorize-silent", trigger: "test", autoDownload: false });
+      const offline = await updater.checkForUpdates({ ...TEST_REVOKE_CHECK, autoDownload: false });
 
       expect(offline.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
       expect(offline.standalone?.activationSource).toBeNull();
       expect(prepareStandaloneUpdate).toHaveBeenNthCalledWith(
         2,
         expect.objectContaining({ closure: { schemaVersion: 4 } }),
-        {},
+        { activationPolicy: "revoke-silent" },
       );
     } finally {
       await fixture.close();
@@ -471,7 +481,7 @@ describe("desktop updater", () => {
         },
       );
 
-      await updater.checkForUpdates({ autoDownload: false });
+      await updater.checkForUpdates({ ...TEST_REVOKE_CHECK, autoDownload: false });
 
       expect(logger.info).toHaveBeenCalledWith("[open-design updater] lifecycle", expect.objectContaining({
         enabled: true,
@@ -505,7 +515,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.STABLE);
       expect(checked.availableVersion).toBe("1.0.1");
@@ -541,7 +551,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.platform).toBe("win32");
       expect(checked.supported).toBe(true);
@@ -576,7 +586,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.PACKAGED,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.artifact?.type).toBe("installer");
@@ -629,7 +639,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.PACKAGED,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.artifact?.type).toBe("installer");
@@ -720,7 +730,7 @@ describe("desktop updater", () => {
         processPid: 4242,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.artifact?.type).toBe("payload");
@@ -859,7 +869,7 @@ describe("desktop updater", () => {
       })}\n`);
 
       const lockedUpdater = createUpdater(failLauncherPayloadRemovalForVersion("1.0.0-beta.0"));
-      const checked = await lockedUpdater.checkForUpdates();
+      const checked = await lockedUpdater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.error).toBeUndefined();
@@ -887,7 +897,7 @@ describe("desktop updater", () => {
         state: "cleanup-removed",
       });
 
-      const rechecked = await lockedUpdater.checkForUpdates();
+      const rechecked = await lockedUpdater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(rechecked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(rechecked.error).toBeUndefined();
       expect(extractCount).toBe(1);
@@ -969,7 +979,7 @@ describe("desktop updater", () => {
         removeLauncherPayloadRoot: failLauncherPayloadRemovalForVersion("1.0.0-beta.0"),
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       await mkdir(join(launcherPaths.versionsRoot, "1.0.0-beta.0", "payload"), { recursive: true });
       await writeFile(join(launcherPaths.versionsRoot, "1.0.0-beta.0", "payload", "opencode.exe"), "locked");
@@ -1095,7 +1105,7 @@ describe("desktop updater", () => {
       processPid: 4242,
     };
     const updater = createDesktopUpdater(updaterInput, updaterDeps);
-    const snapshot = await updater.checkForUpdates();
+    const snapshot = await updater.checkForUpdates(TEST_REVOKE_CHECK);
     const restartedSnapshot = harnessOptions.restart === true
       ? await createDesktopUpdater(updaterInput, updaterDeps).status()
       : undefined;
@@ -1294,7 +1304,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       const installed = await updater.installUpdate();
       expect(installed.installResult?.dryRun).toBe(true);
@@ -1313,7 +1323,7 @@ describe("desktop updater", () => {
       expect(await readdir(join(root, "releases"))).toEqual([]);
 
       // Install freeze is gone: a fresh check re-offers and re-downloads.
-      const rechecked = await updater.checkForUpdates();
+      const rechecked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(rechecked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(rechecked.downloadPath).toEqual(expect.any(String));
     } finally {
@@ -1332,7 +1342,7 @@ describe("desktop updater", () => {
         env: updaterEnv(fixture.metadataUrl),
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       await mkdir(join(root, "state", "lock"), { recursive: true });
       await writeFile(join(root, "state", "lock", "owner.json"), JSON.stringify({
@@ -1664,7 +1674,7 @@ describe("desktop updater", () => {
         processPid: 4242,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.artifact?.type).toBe("payload");
@@ -1748,7 +1758,7 @@ describe("desktop updater", () => {
         },
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
       expect(checked.error?.code).toBe("launcher-payload-prepare-failed");
@@ -1806,7 +1816,7 @@ describe("desktop updater", () => {
         processExecPath: "C:\\Users\\runneradmin\\AppData\\Roaming\\Open Design Beta\\launcher\\channels\\beta\\namespaces\\release-beta-win\\versions\\1.0.0-beta.1\\payload\\Open Design.exe",
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.artifact?.type).toBe("installer");
@@ -1895,7 +1905,7 @@ describe("desktop updater", () => {
         processPid: 4243,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.artifact?.type).toBe("payload");
       expect(checked.capabilities.canApplyInPlace).toBe(true);
       expect(checked.capabilities.canOpenInstaller).toBe(false);
@@ -2022,7 +2032,7 @@ describe("desktop updater", () => {
         processPid: 4244,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.PRERELEASE);
       expect(checked.artifact?.type).toBe("payload");
@@ -2142,7 +2152,7 @@ describe("desktop updater", () => {
         processPid: 4244,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.artifact?.type).toBe("payload");
       expect(checked.capabilities.canApplyInPlace).toBe(true);
       expect(checked.capabilities.canOpenInstaller).toBe(false);
@@ -2252,7 +2262,7 @@ describe("desktop updater", () => {
         processPid: 4246,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.artifact?.type).toBe("payload");
       await rm(launcherLaunchPath, { force: true });
 
@@ -2364,7 +2374,7 @@ describe("desktop updater", () => {
         },
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       const installed = await updater.installUpdate();
 
       expect(installed.error).toBeUndefined();
@@ -2496,7 +2506,7 @@ describe("desktop updater", () => {
         spawnDetached: () => child as never,
       });
 
-      await updater.checkForUpdates();
+      await updater.checkForUpdates(TEST_REVOKE_CHECK);
       const installed = await updater.installUpdate();
 
       expect(installed.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
@@ -2573,7 +2583,7 @@ describe("desktop updater", () => {
         },
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
       expect(checked.error?.code).toBe("launcher-payload-prepare-failed");
@@ -2609,7 +2619,7 @@ describe("desktop updater", () => {
         { logger },
       );
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.error).toBeUndefined();
@@ -2639,7 +2649,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
       expect(checked.error?.code).toBe("download-failed");
@@ -2678,7 +2688,7 @@ describe("desktop updater", () => {
         } },
       );
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       const installed = await updater.installUpdate();
       const flowIds = await readdir(observationRoot);
       const summary = JSON.parse(await readFile(join(observationRoot, flowIds[0] ?? "", "summary.json"), "utf8")) as Record<string, unknown>;
@@ -2733,7 +2743,7 @@ describe("desktop updater", () => {
         } },
       );
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       const first = await updater.installUpdate();
       const second = await updater.installUpdate();
 
@@ -2772,7 +2782,7 @@ describe("desktop updater", () => {
         },
       );
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       const installed = await updater.installUpdate();
 
       expect(installed.installResult?.path).toBe(checked.downloadPath);
@@ -2823,7 +2833,7 @@ describe("desktop updater", () => {
         },
       );
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       const installed = await updater.installUpdate();
 
       expect(installed.installResult?.path).toBe(checked.downloadPath);
@@ -2894,12 +2904,12 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const first = await updater.checkForUpdates();
+      const first = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(first.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(first.downloadPath).toEqual(expect.any(String));
       expect(fixture.artifactRequests()).toBe(1);
 
-      const second = await updater.checkForUpdates();
+      const second = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(second.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(second.downloadPath).toBe(first.downloadPath);
       expect(second.availableVersion).toBe(first.availableVersion);
@@ -2921,7 +2931,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const first = await updater.checkForUpdates();
+      const first = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(first.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(first.downloadPath).toEqual(expect.any(String));
       expect(fixture.artifactRequests()).toBe(1);
@@ -2937,7 +2947,7 @@ describe("desktop updater", () => {
         env: updaterEnv(fixture.metadataUrl),
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
-      const restored = await restarted.checkForUpdates();
+      const restored = await restarted.checkForUpdates(TEST_REVOKE_CHECK);
       const metadata = JSON.parse(await readFile(join(root, "metadata.json"), "utf8")) as Record<string, unknown>;
 
       expect(restored.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
@@ -2963,12 +2973,12 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const downloaded = await updater.checkForUpdates();
+      const downloaded = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(downloaded.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       await fixture.close();
       fixtureClosed = true;
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.downloadPath).toBe(downloaded.downloadPath);
@@ -3032,12 +3042,12 @@ describe("desktop updater", () => {
         { fetch: fetchImpl },
       );
 
-      const downloaded = await updater.checkForUpdates();
+      const downloaded = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(downloaded.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
 
       version = "1.0.2";
       failArtifact = true;
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.downloadPath).toBe(downloaded.downloadPath);
@@ -3084,7 +3094,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.NOT_AVAILABLE);
       expect(checked.downloadPath).toBeUndefined();
     } finally {
@@ -3107,7 +3117,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.BETA);
       expect(checked.availableVersion).toBe("1.0.1-beta.2");
@@ -3128,7 +3138,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
       expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.STABLE);
       expect(checked.error?.code).toBe("metadata-channel-mismatch");
@@ -3153,7 +3163,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
       expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.BETA);
       expect(checked.error?.code).toBe("metadata-channel-mismatch");
@@ -3178,7 +3188,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.BETA);
       expect(checked.availableVersion).toBe("1.0.1-beta-internal.2");
@@ -3202,7 +3212,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.PRERELEASE);
       expect(checked.availableVersion).toBe("1.0.1-prerelease.2");
@@ -3226,7 +3236,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.channel).toBe("preview");
       expect(checked.availableVersion).toBe("1.0.1-preview.2");
@@ -3247,7 +3257,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       await writeFile(checked.downloadPath ?? "", "tampered", "utf8");
 
@@ -3283,9 +3293,9 @@ describe("desktop updater", () => {
         { fetch: fetchImpl },
       );
 
-      const first = updater.checkForUpdates({ autoDownload: false });
-      const second = updater.checkForUpdates({ autoDownload: false });
-      const third = updater.checkForUpdates({ autoDownload: false });
+      const first = updater.checkForUpdates({ ...TEST_REVOKE_CHECK, autoDownload: false });
+      const second = updater.checkForUpdates({ ...TEST_REVOKE_CHECK, autoDownload: false });
+      const third = updater.checkForUpdates({ ...TEST_REVOKE_CHECK, autoDownload: false });
 
       await waitForRequestCount(requests, 1);
       expect(requests).toHaveLength(1);
@@ -3367,7 +3377,7 @@ describe("desktop updater", () => {
         },
         { fetch: fetchImpl },
       );
-      await updater.checkForUpdates({ autoDownload: false });
+      await updater.checkForUpdates({ ...TEST_REVOKE_CHECK, autoDownload: false });
       fetchImpl.mockClear();
       vi.useFakeTimers();
       const scheduler = createDesktopUpdaterScheduler(updater, {
@@ -3416,7 +3426,7 @@ describe("desktop updater", () => {
         },
         { fetch: fetchImpl },
       );
-      await updater.checkForUpdates({ autoDownload: false });
+      await updater.checkForUpdates({ ...TEST_REVOKE_CHECK, autoDownload: false });
       blockScheduledFetch = true;
       vi.useFakeTimers();
       const scheduler = createDesktopUpdaterScheduler(updater, {
@@ -3458,13 +3468,13 @@ describe("desktop updater", () => {
         intervalMs: 100,
       });
 
-      await updater.checkForUpdates();
+      await updater.checkForUpdates(TEST_REVOKE_CHECK);
       scheduler.start();
       expect(scheduler.isRunning()).toBe(true);
       await updater.installUpdate();
       expect(scheduler.isRunning()).toBe(false);
       const requestsBeforeFrozenCheck = fixture.artifactRequests();
-      await updater.checkForUpdates();
+      await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(fixture.artifactRequests()).toBe(requestsBeforeFrozenCheck);
     } finally {
       await fixture.close();
@@ -3483,7 +3493,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const downloaded = await updater.checkForUpdates();
+      const downloaded = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       const installed = await updater.installUpdate();
       expect(installed.installResult?.path).toBe(downloaded.downloadPath);
       const metadataRequestsBeforeRestart = fixture.metadataRequests();
@@ -3494,7 +3504,7 @@ describe("desktop updater", () => {
         env: updaterEnv(fixture.metadataUrl),
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
-      const checked = await restarted.checkForUpdates();
+      const checked = await restarted.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.installResult?.path).toBe(downloaded.downloadPath);
@@ -3516,7 +3526,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const downloaded = await updater.checkForUpdates();
+      const downloaded = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       const installed = await updater.installUpdate();
       expect(installed.installResult?.path).toBe(downloaded.downloadPath);
 
@@ -3540,7 +3550,7 @@ describe("desktop updater", () => {
       expect(store.installFrozen).toBeUndefined();
       expect(store.installResult).toBeUndefined();
 
-      const checked = await restarted.checkForUpdates();
+      const checked = await restarted.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.NOT_AVAILABLE);
       expect(checked.installResult).toBeUndefined();
     } finally {
@@ -3603,7 +3613,7 @@ describe("desktop updater", () => {
         launchAppAfterQuit: async () => ({ helperLogPath: join(root, "updates", "helpers", "relaunch.log") }),
       };
       const updater = createDesktopUpdater(updaterInput, updaterDeps);
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       const installed = await updater.installUpdate();
       expect(installed.installResult?.activeVersion).toBe("1.0.0-beta.2");
@@ -3622,7 +3632,7 @@ describe("desktop updater", () => {
 
       // Checks are alive again: the updater re-derives the offer instead of
       // returning the frozen snapshot.
-      const rechecked = await restarted.checkForUpdates();
+      const rechecked = await restarted.checkForUpdates(TEST_REVOKE_CHECK);
       expect(rechecked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(rechecked.installResult).toBeUndefined();
     } finally {
@@ -3708,7 +3718,7 @@ describe("desktop updater", () => {
       await writeReleaseFixture(root, "1.0.0-beta.1-win-x64-old1", "beta", "1.0.0-beta.1");
       await writeReleaseFixture(root, "1.0.0-beta.2-win-x64-current", "beta", "1.0.0-beta.2");
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       const cleanup = JSON.parse(await readFile(join(root, "state", "cleanup.json"), "utf8")) as {
         releases: Array<{ deprecatedAt?: string; key: string; state: string; version?: string }>;
       };
@@ -3750,7 +3760,7 @@ describe("desktop updater", () => {
       await updater.status();
       await mkdir(join(root, "releases", "missing-metadata-release"), { recursive: true });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.cache?.lifecycle?.releases.unknown).toBe(1);
@@ -3991,7 +4001,7 @@ describe("desktop updater", () => {
       await updater.status();
       await writeReleaseFixture(root, "1.0.0-beta.1-mac-arm64-old1", "beta", "1.0.0-beta.1");
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
 
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
       expect(checked.cache?.lifecycle).toMatchObject({
@@ -4019,7 +4029,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
       expect(checked.error?.code).toBe("no-compatible-artifact");
       expect(checked.error?.message).toContain("macIntel");
@@ -4042,7 +4052,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
       expect(checked.error?.code).toBe("update-root-not-owned");
       expect(existsSync(alienFile)).toBe(true);
@@ -4067,7 +4077,7 @@ describe("desktop updater", () => {
         source: SIDECAR_SOURCES.TOOLS_PACK,
       });
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
       expect(checked.error?.code).toBe("update-root-not-owned");
       expect(existsSync(join(realRoot, ".open-design-updater-root.json"))).toBe(false);
@@ -4094,7 +4104,7 @@ describe("desktop updater", () => {
       await updater.status();
       symlinkSync(outside, join(root, "staging"), "dir");
 
-      const checked = await updater.checkForUpdates();
+      const checked = await updater.checkForUpdates(TEST_REVOKE_CHECK);
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.ERROR);
       expect(checked.error?.code).toBe("update-store-invalid-shape");
       expect(existsSync(outsideMarker)).toBe(true);

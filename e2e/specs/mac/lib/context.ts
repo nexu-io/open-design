@@ -244,6 +244,11 @@ export type MacInspectResult = {
       reason: string;
       url?: string;
     };
+    standalone?: {
+      activationSource: 'silent-policy' | 'user-restart' | null;
+      releaseVersion: string;
+      state: 'current' | 'prepared';
+    };
     state: string;
     supported?: boolean;
   };

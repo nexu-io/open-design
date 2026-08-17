@@ -5,6 +5,7 @@ import {
 
 import type { DesktopUpdater, DesktopUpdaterLogger } from "../updater.js";
 import type { DesktopUpdateTransitionOwner } from "../update-preflight.js";
+import { checkDesktopUpdatesWithPolicy } from "./check-policy.js";
 
 /**
  * @module updater-scheduler
@@ -36,7 +37,7 @@ export function createDesktopUpdaterScheduler(
     initialDelayMs: number;
     intervalMs: number;
     logger?: DesktopUpdaterLogger;
-  silentStandaloneActivation?: () => Promise<boolean>;
+    silentStandaloneActivation?: () => Promise<boolean>;
     startupSilentPayloadUpdate?: StartupSilentPayloadUpdateOptions;
   },
 ): DesktopUpdaterScheduler {
@@ -105,9 +106,13 @@ export function createDesktopUpdaterScheduler(
       const startupReady = startupTick && options.startupSilentPayloadUpdate != null
         ? await updater.status()
         : null;
-      const silentActivationEnabled = await options.silentStandaloneActivation?.().catch(() => false) ?? false;
-      status = await updater.checkForUpdates({
-        ...(silentActivationEnabled ? { activationSource: "silent-policy" as const } : {}),
+      status = await checkDesktopUpdatesWithPolicy({
+        onPreferenceError: (error) => {
+          logger.warn("[open-design updater] scheduled check could not resolve silent update preference; revoking activation", error);
+        },
+        resolveSilentActivation: options.silentStandaloneActivation ?? (async () => false),
+        trigger: "scheduler",
+        updater,
       });
       if (
         startupTick

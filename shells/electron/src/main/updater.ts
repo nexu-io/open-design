@@ -27,13 +27,11 @@ import { createProcessStampArgs } from "@open-design/platform";
 import { resolveAppIpcPath } from "@open-design/sidecar";
 import {
   APP_KEYS,
-  DESKTOP_UPDATE_ACTIONS,
   DESKTOP_UPDATE_MODES,
   DESKTOP_UPDATE_STATES,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_MODES,
   SIDECAR_SOURCES,
-  type DesktopUpdateAction,
   type DesktopUpdateCacheLifecycleSummary,
   type DesktopUpdateChecksumSnapshot,
   type DesktopUpdateErrorSnapshot,
@@ -94,6 +92,10 @@ import {
   type DesktopStandaloneUpdatePreparation,
   type StandaloneUpdatePreparationPort,
 } from "./updater/standalone.js";
+import type {
+  DesktopUpdateCheckActivationPolicy,
+  DesktopUpdateCheckTrigger,
+} from "./updater/check-policy.js";
 
 export type { DesktopStandaloneUpdatePreparation } from "./updater/standalone.js";
 
@@ -172,16 +174,16 @@ export type LoadedRelease = {
 };
 
 type ActionOptions = {
-  activationSource?: "silent-policy" | "user-restart";
+  activationPolicy: DesktopUpdateCheckActivationPolicy;
   autoDownload?: boolean;
+  trigger: DesktopUpdateCheckTrigger;
 };
 
 export type DesktopUpdater = {
-  checkForUpdates(options?: ActionOptions): Promise<DesktopUpdateStatusSnapshot>;
+  checkForUpdates(options: ActionOptions): Promise<DesktopUpdateStatusSnapshot>;
   clearCache(): Promise<DesktopUpdateStatusSnapshot>;
   config: DesktopUpdaterConfig;
   downloadUpdate(): Promise<DesktopUpdateStatusSnapshot>;
-  handle(action: DesktopUpdateAction): Promise<DesktopUpdateStatusSnapshot>;
   installUpdate(): Promise<DesktopUpdateStatusSnapshot>;
   shouldAutoCheck(): boolean;
   snapshot(): DesktopUpdateStatusSnapshot;
@@ -761,7 +763,7 @@ export function createDesktopUpdater(
     return opened.root;
   }
 
-  async function checkForCandidate(options: ActionOptions = {}): Promise<DesktopUpdateStatusSnapshot> {
+  async function checkForCandidate(options: ActionOptions): Promise<DesktopUpdateStatusSnapshot> {
     const unsupported = unsupportedStatus();
     if (unsupported != null) return unsupported;
     if (installFrozen || installResult != null) return snapshot();
@@ -771,7 +773,7 @@ export function createDesktopUpdater(
       if (installFrozen || installResult != null) return snapshot();
     }
     if (
-      options.activationSource == null
+      options.activationPolicy === "revoke-silent"
       && standaloneStatus?.architecture === "standalone"
       && standaloneStatus.route === "closure"
       && standaloneStatus.state === "prepared"
@@ -779,6 +781,7 @@ export function createDesktopUpdater(
       && metadata != null
     ) {
       const reconciled = await resolveStandaloneMetadataPreparation({
+        activationPolicy: "revoke-silent",
         metadata,
         ...(deps.prepareStandaloneUpdate == null ? {} : { prepare: deps.prepareStandaloneUpdate }),
       });
@@ -787,7 +790,11 @@ export function createDesktopUpdater(
     const keepDownloadedVisible = activeRelease != null;
     if (!keepDownloadedVisible) setState(DESKTOP_UPDATE_STATES.CHECKING);
     try {
-      logUpdateEvent("check-start", { metadataUrl: config.metadataUrl });
+      logUpdateEvent("check-start", {
+        activationPolicy: options.activationPolicy,
+        metadataUrl: config.metadataUrl,
+        trigger: options.trigger,
+      });
       const body = await fetchJson(fetchImpl, config.metadataUrl);
       lastCheckedAt = now().toISOString();
       metadata = body;
@@ -797,7 +804,7 @@ export function createDesktopUpdater(
       }));
       if (root != null) scheduleBackCleanup(root.realRoot, logger);
       const standaloneRoute = await resolveStandaloneMetadataPreparation({
-        ...(options.activationSource == null ? {} : { activationSource: options.activationSource }),
+        activationPolicy: options.activationPolicy,
         metadata: body,
         ...(deps.prepareStandaloneUpdate == null ? {} : { prepare: deps.prepareStandaloneUpdate }),
       });
@@ -930,7 +937,11 @@ export function createDesktopUpdater(
     if (unsupported != null) return unsupported;
     if (installFrozen || installResult != null) return snapshot();
     if (candidate == null) {
-      const checked = await checkForCandidate({ autoDownload: false });
+      const checked = await checkForCandidate({
+        activationPolicy: "revoke-silent",
+        autoDownload: false,
+        trigger: "download",
+      });
       if (checked.state !== DESKTOP_UPDATE_STATES.AVAILABLE || candidate == null) return checked;
     }
     if (activeRelease != null && releaseMatchesCandidate(activeRelease.ref, candidate)) {
@@ -1212,7 +1223,7 @@ export function createDesktopUpdater(
       && metadata != null
     ) {
       const authorized = await resolveStandaloneMetadataPreparation({
-        activationSource: "user-restart",
+        activationPolicy: "authorize-user",
         metadata,
         ...(deps.prepareStandaloneUpdate == null ? {} : { prepare: deps.prepareStandaloneUpdate }),
       });
@@ -1440,20 +1451,6 @@ export function createDesktopUpdater(
     clearCache: () => serialized(clearCacheAndResetState),
     config,
     downloadUpdate: () => serialized(downloadUpdate),
-    handle(action) {
-      switch (action) {
-        case DESKTOP_UPDATE_ACTIONS.STATUS:
-          return this.status();
-        case DESKTOP_UPDATE_ACTIONS.CHECK:
-          return this.checkForUpdates();
-        case DESKTOP_UPDATE_ACTIONS.CLEAR_CACHE:
-          return this.clearCache();
-        case DESKTOP_UPDATE_ACTIONS.DOWNLOAD:
-          return this.downloadUpdate();
-        case DESKTOP_UPDATE_ACTIONS.INSTALL:
-          return this.installUpdate();
-      }
-    },
     installUpdate: () => serialized(installUpdate),
     shouldAutoCheck: () => config.enabled && config.autoCheck,
     snapshot,

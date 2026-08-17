@@ -31,6 +31,7 @@ spec (`e2e/specs/mac.spec.ts` / `win.spec.ts` via `release-smoke.ts`),
 | Metadata fetch/parse/channel match, per-channel version fields | U, P, F | desktop unit; specs; real beta feed loop |
 | not-available / available / downloaded-stays-visible | U, P | desktop unit; specs |
 | Silent startup payload update (allowSilentUpdates) | U, P | desktop unit silent group; mac/win spec `applies a downloaded payload silently on the next cold start` |
+| Shared check activation policy (renderer, scheduler, inspect/sidecar) | U, P | desktop check-policy + host-boundary unit; mac silent-update convergence issues an inspect check between Shell and Closure cold starts |
 | Modern route: Shell min decides Shell vs Closure; legacy floor is isolated | U | Closure update tests; desktop modern-metadata routing test |
 | Artifact selection (payload vs installer, context validity) | U, P | desktop unit routing group; specs |
 | Installer-reinstall floor (`control.shell.installation.version.min`): three reasons, same-version offer, clamp | U, P | desktop unit reseed group; spec recovery segment |

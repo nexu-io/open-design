@@ -49,6 +49,7 @@ export {
 } from "./splash-progress.js";
 import type { PrintReadyPdfOptions } from "./pdf-export.js";
 import type { DesktopUpdater } from "./updater.js";
+import { checkDesktopUpdatesWithPolicy } from "./updater/check-policy.js";
 import { parseDesktopUpdateMenuLabels } from "./update-menu.js";
 import {
   DesktopUpdateTransitionOwner,
@@ -2365,11 +2366,18 @@ export async function createDesktopRuntime(options: DesktopRuntimeOptions): Prom
   });
   ipcMain.handle("od:update:check", async (event, updaterOptions: unknown) => {
     requireMainWindowSender(event);
-    const silent = await options.ensureSilentUpdatePreference?.().catch(() => false) ?? false;
-    const status = await (options.updater?.checkForUpdates({
-      ...checkOptionsFromHost(updaterOptions),
-      ...(silent ? { activationSource: "silent-policy" as const } : {}),
-    }) ?? unavailableUpdaterStatus());
+    const checkOptions = checkOptionsFromHost(updaterOptions);
+    const status = options.updater == null
+      ? unavailableUpdaterStatus()
+      : await checkDesktopUpdatesWithPolicy({
+          ...checkOptions,
+          onPreferenceError: (error) => {
+            console.warn("[open-design updater] manual check could not resolve silent update preference; revoking activation", error);
+          },
+          resolveSilentActivation: options.ensureSilentUpdatePreference ?? (async () => false),
+          trigger: "manual",
+          updater: options.updater,
+        });
     sendUpdaterStatus(status);
     return status;
   });

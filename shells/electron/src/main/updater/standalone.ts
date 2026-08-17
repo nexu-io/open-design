@@ -1,3 +1,5 @@
+import type { StandaloneUpdateActivationPolicy } from "@open-design/standalone";
+
 import { hasStandaloneDistributionMetadata } from "./feed.js";
 
 export type DesktopStandaloneUpdatePreparation =
@@ -13,11 +15,11 @@ export type DesktopStandaloneUpdatePreparation =
 
 export type StandaloneUpdatePreparationPort = (
   metadata: Record<string, unknown>,
-  options: { activationSource?: "silent-policy" | "user-restart" },
+  options: { activationPolicy: StandaloneUpdateActivationPolicy },
 ) => Promise<DesktopStandaloneUpdatePreparation>;
 
 export async function resolveStandaloneMetadataPreparation(input: Readonly<{
-  activationSource?: "silent-policy" | "user-restart";
+  activationPolicy: StandaloneUpdateActivationPolicy;
   metadata: Record<string, unknown>;
   prepare?: StandaloneUpdatePreparationPort;
 }>): Promise<Readonly<{
@@ -27,8 +29,6 @@ export async function resolveStandaloneMetadataPreparation(input: Readonly<{
   const modern = hasStandaloneDistributionMetadata(input.metadata);
   const preparation = input.prepare == null
     ? (modern ? null : { architecture: "legacy" as const })
-    : await input.prepare(input.metadata, {
-        ...(input.activationSource == null ? {} : { activationSource: input.activationSource }),
-      });
+    : await input.prepare(input.metadata, { activationPolicy: input.activationPolicy });
   return Object.freeze({ modern, preparation });
 }

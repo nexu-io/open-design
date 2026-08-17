@@ -23,8 +23,18 @@ describe("desktop updater host boundary", () => {
     expect(runtime).toContain("UPDATER_STATUS_EVENT");
     expect(runtime).toContain("event.sender !== window.webContents");
     expect(runtime).toContain("ensureSilentUpdatePreference");
-    expect(runtime).toContain('activationSource: "silent-policy"');
+    expect(runtime).toContain("checkDesktopUpdatesWithPolicy");
     expect(runtime).not.toContain("activateOnRestart");
+  });
+
+  it("routes renderer, scheduler, and sidecar checks through one policy atom", () => {
+    const main = source("src/main/index.ts");
+    const runtime = source("src/main/runtime.ts");
+    const scheduler = source("src/main/updater/scheduler.ts");
+    expect(runtime).toContain('trigger: "manual"');
+    expect(scheduler).toContain('trigger: "scheduler"');
+    expect(main).toContain('trigger: "sidecar"');
+    expect(main).not.toContain("updater.handle(");
   });
 
   it("lists every registered od:update:* handler in the teardown channel table", () => {
@@ -85,7 +95,9 @@ describe("desktop updater host boundary", () => {
     expect(main).toContain("desktop updater status timed out after ${timeoutMs}ms");
     expect(main).toContain("update: updater.snapshot()");
     expect(main).toContain("return await desktopStatusSnapshot(activeDesktop)");
-    expect(main).not.toContain("return await updater.status()");
+    const snapshotStart = main.indexOf("async function snapshotUpdateForStatus()");
+    const snapshotEnd = main.indexOf("async function snapshotStandaloneForStatus()", snapshotStart);
+    expect(main.slice(snapshotStart, snapshotEnd)).not.toContain("return await updater.status()");
   });
 
   it("adds updater access to the macOS app menu without changing the Windows File menu", () => {

@@ -6,6 +6,7 @@ import { BrowserWindow, Menu, app, dialog, globalShortcut, shell, type MenuItemC
 
 import {
   APP_KEYS,
+  DESKTOP_UPDATE_ACTIONS,
   OPEN_DESIGN_SIDECAR_CONTRACT,
   SIDECAR_ENV,
   SIDECAR_MESSAGES,
@@ -24,6 +25,7 @@ import {
   type SidecarStamp,
   type WebStatusSnapshot,
 } from "@open-design/sidecar/protocol";
+import type { StandaloneUpdateActivationPolicy } from "@open-design/standalone";
 import type { StandaloneLifecyclePort, StandaloneRuntimeStatus } from "@open-design/standalone/protocol";
 import type { DesktopStandaloneUpdatePreparation } from "./updater.js";
 import { dirname, join } from "node:path";
@@ -64,6 +66,7 @@ import {
   type DesktopUpdaterScheduler,
 } from "./updater.js";
 import { ensureSilentUpdatePreference } from "./updater/silent-policy.js";
+import { checkDesktopUpdatesWithPolicy } from "./updater/check-policy.js";
 import { DesktopUpdateTransitionOwner } from "./update-preflight.js";
 import {
   exportDiagnosticsToFile,
@@ -218,7 +221,7 @@ export type DesktopMainOptions = {
     launcherRuntimePath?: string | null;
     prepareStandaloneUpdate?: (
       metadata: Record<string, unknown>,
-      options?: { activationSource?: "silent-policy" | "user-restart" },
+      options: { activationPolicy: StandaloneUpdateActivationPolicy },
     ) => Promise<DesktopStandaloneUpdatePreparation>;
   };
 };
@@ -996,7 +999,25 @@ export async function runDesktopMain(
           case SIDECAR_MESSAGES.EXPORT_ARTIFACT:
             return await activeDesktop.exportArtifact(request.input as DesktopExportArtifactInput);
           case SIDECAR_MESSAGES.UPDATE:
-            return await updater.handle((request.input as DesktopUpdateInput).action);
+            switch ((request.input as DesktopUpdateInput).action) {
+              case DESKTOP_UPDATE_ACTIONS.STATUS:
+                return await updater.status();
+              case DESKTOP_UPDATE_ACTIONS.CHECK:
+                return await checkDesktopUpdatesWithPolicy({
+                  onPreferenceError: (error) => {
+                    console.warn("[open-design updater] sidecar check could not resolve silent update preference; revoking activation", error);
+                  },
+                  resolveSilentActivation: ensureUpdaterSilentPreference,
+                  trigger: "sidecar",
+                  updater,
+                });
+              case DESKTOP_UPDATE_ACTIONS.CLEAR_CACHE:
+                return await updater.clearCache();
+              case DESKTOP_UPDATE_ACTIONS.DOWNLOAD:
+                return await updater.downloadUpdate();
+              case DESKTOP_UPDATE_ACTIONS.INSTALL:
+                return await updater.installUpdate();
+            }
         }
       } catch (error) {
         console.error("[open-design desktop] desktop IPC request failed", {

@@ -245,6 +245,7 @@ describe("Standalone unresolved bootstrap", () => {
       },
     });
     const input = {
+      activationPolicy: "revoke-silent",
       channel: "beta",
       metadata: legacyMetadata,
       namespace: "release-beta",
@@ -505,6 +506,7 @@ describe("Standalone unresolved bootstrap", () => {
       releaseVersion: "0.19.0-beta.2",
     };
     const updateInput = {
+      activationPolicy: "revoke-silent",
       channel: "beta",
       fetch: value.fetch,
       metadata,
@@ -523,7 +525,7 @@ describe("Standalone unresolved bootstrap", () => {
     );
     expect(current.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.1");
 
-    await prepareStandaloneUpdate({ ...updateInput, activationSource: "silent-policy" });
+    await prepareStandaloneUpdate({ ...updateInput, activationPolicy: "authorize-silent" });
     const revoked = await prepareStandaloneUpdate(updateInput);
     expect(revoked).toMatchObject({ activationSource: null, state: "prepared" });
     const stillCurrent = await resolveStandaloneBootstrap(
@@ -532,7 +534,7 @@ describe("Standalone unresolved bootstrap", () => {
     );
     expect(stillCurrent.handoff.handoff.descriptor.standalone.version).toBe("0.19.0-beta.1");
 
-    await prepareStandaloneUpdate({ ...updateInput, activationSource: "silent-policy" });
+    await prepareStandaloneUpdate({ ...updateInput, activationPolicy: "authorize-silent" });
     const activated = await resolveStandaloneBootstrap(
       request(value, "0.19.0-beta.1", null),
       { fetch: value.fetch },
