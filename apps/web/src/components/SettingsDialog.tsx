@@ -937,6 +937,18 @@ const AGENT_CLI_ENV_FIELDS = [
     placeholder: 'Paste OPENAI_API_KEY',
     secret: true,
   },
+  {
+    agentId: 'claude',
+    envKey: 'HTTP_PROXY',
+    labelKey: 'settings.cliEnvClaudeHttpProxy',
+    placeholder: 'http://proxy.example.com:8080',
+  },
+  {
+    agentId: 'claude',
+    envKey: 'HTTPS_PROXY',
+    labelKey: 'settings.cliEnvClaudeHttpsProxy',
+    placeholder: 'http://proxy.example.com:8080',
+  },
 ] as const;
 
 function defaultApiProtocolConfig(protocol: ApiProtocol): ApiProtocolConfig {
