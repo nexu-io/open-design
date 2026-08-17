@@ -345,6 +345,137 @@ describe('project preview containment routes', () => {
     expect(html).not.toContain('URL.revokeObjecturl(');
   });
 
+  it('shields executable attributes (on*, srcdoc, javascript:) from the cssUrl pass', async () => {
+    const workspaceId = `workspace-${randomUUID()}`;
+    const workspaceMemberId = `member-${randomUUID()}`;
+    const projectId = await createProject({ entryFile: 'index.html' });
+    // Fixture covers the three executable-attribute shapes the cssUrl regex
+    // previously corrupted:
+    //   1. on*="...URL.revokeObjectURL(url)..." — inline event handler that
+    //      contains a `url(` token which the cssUrl regex would rewrite as
+    //      if it were CSS, corrupting the JS source.
+    //   2. <iframe srcdoc="<style>...url(./nested.png)...</style>"> — a
+    //      full subdocument whose nested CSS url() must NOT be rewritten
+    //      because scoped workspace URLs leak the project path out of the
+    //      iframe's own document boundary.
+    //   3. href="javascript:..." — a JS scheme URL whose body must be
+    //      preserved verbatim (no project scoping rewrite).
+    //   4. (control) A real <style> url(./bg.png) and a real <img src=./a.png>
+    //      MUST still be workspace-scoped, proving the shield only narrows
+    //      the cssUrl pass and does not regress asset/img rewriting.
+    await writeProjectFile(
+      projectId,
+      'index.html',
+      [
+        '<!doctype html><html><head><title>Test</title>',
+        '<style>body{background:url(./bg.png)}</style>',
+        '</head><body>',
+        '<button onclick="URL.revokeObjectURL(url)">run</button>',
+        '<a href="javascript:void(0)">x</a>',
+        '<iframe srcdoc="<style>.x{background:url(./nested.png)}</style>"></iframe>',
+        '<img src="./a.png">',
+        '</body></html>',
+      ].join(''),
+    );
+    bindPersonalProject(projectId, workspaceId, workspaceMemberId);
+
+    const scopeQuery = new URLSearchParams({
+      workspaceId,
+      workspaceMemberId,
+      odPreviewBridge: 'scroll',
+    });
+    const response = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/index.html?${scopeQuery}`,
+    );
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    // 1. Inline event-handler executables are preserved verbatim.
+    expect(html).toContain('onclick="URL.revokeObjectURL(url)"');
+    expect(html).not.toContain('URL.revokeObjecturl(');
+    // The cssUrl pass must not have inserted scoped project paths into the
+    // onclick value.
+    expect(html).not.toMatch(
+      /onclick="[^"]*\/api\/projects\/[^"]*\/raw\//,
+    );
+
+    // 2. javascript: URLs are preserved verbatim.
+    expect(html).toContain('href="javascript:void(0)"');
+    expect(html).not.toMatch(
+      /href="javascript:[^"]*\/api\/projects\//,
+    );
+
+    // 3. srcdoc subdocuments are preserved verbatim; nested url() is NOT
+    //    rewritten because the iframe's own origin owns that CSS, not the
+    //    daemon's workspace scope.
+    expect(html).toContain(
+      'srcdoc="<style>.x{background:url(./nested.png)}</style>"',
+    );
+    // The srcdoc value specifically must not contain a scoped project path
+    // (the iframe document owns its own CSS url() — see assertion 4 for the
+    // contrast: the parent <style> IS scoped, but srcdoc is not).
+    const srcdocMatch = html.match(/srcdoc="([^"]*)"/);
+    expect(srcdocMatch).toBeTruthy();
+    expect(srcdocMatch?.[1]).not.toContain('/api/projects/');
+
+    // 4. Control: real CSS url() in <style> IS workspace-scoped (proves the
+    //    shield does not over-narrow and break the original #6932 fix).
+    expect(html).toMatch(
+      /url\([^)]*\/api\/projects\/[^/]+\/raw\/bg\.png[^)]*\)/,
+    );
+    // 4b. Control: <img src="./a.png"> IS workspace-scoped (proves assetAttr
+    //     still runs; only cssUrl is shielded with executable content).
+    expect(html).toMatch(
+      /<img src="[^"]*\/api\/projects\/[^/]+\/raw\/a\.png[^"]*">/,
+    );
+  });
+
+  it('does not let user-authored marker-like comments collide with script shielding', async () => {
+    const workspaceId = `workspace-${randomUUID()}`;
+    const workspaceMemberId = `member-${randomUUID()}`;
+    const projectId = await createProject({ entryFile: 'index.html' });
+    // Fixture: the input contains a comment that LOOKS like the
+    // OD-SCRIPT-PLACEHOLDER-N marker the daemon used to use for script-block
+    // shielding. With the new collision-safe markers (per-rewrite nonce +
+    // input probe), the user's marker-like comment must survive unchanged,
+    // and the inline script's URL.revokeObjectURL(url) call must ALSO survive
+    // verbatim (i.e. it must not get restored into the user's marker slot).
+    await writeProjectFile(
+      projectId,
+      'index.html',
+      [
+        '<!doctype html><html><head><title>Test</title></head><body>',
+        '<!--OD-SCRIPT-PLACEHOLDER-0-->',
+        '<script>URL.revokeObjectURL(url);</script>',
+        '<!--OD-SCRIPT-PLACEHOLDER-1-->',
+        '</body></html>',
+      ].join(''),
+    );
+    bindPersonalProject(projectId, workspaceId, workspaceMemberId);
+
+    const scopeQuery = new URLSearchParams({
+      workspaceId,
+      workspaceMemberId,
+      odPreviewBridge: 'scroll',
+    });
+    const response = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/index.html?${scopeQuery}`,
+    );
+    expect(response.status).toBe(200);
+    const html = await response.text();
+
+    // User's marker-like comments survive verbatim (collision-safe markers
+    // generated by the daemon are different per-rewrite and probe-confirmed
+    // absent from the input before use).
+    expect(html).toContain('<!--OD-SCRIPT-PLACEHOLDER-0-->');
+    expect(html).toContain('<!--OD-SCRIPT-PLACEHOLDER-1-->');
+    // Inline JS source survives verbatim — neither the body nor a placeholder
+    // got dropped or relocated by a string-replace collision.
+    expect(html).toContain('<script>URL.revokeObjectURL(url);</script>');
+    // No marker of our own is leaked back to the client.
+    expect(html).not.toMatch(/<!--OD-(BLOCK|ATTR)[A-Z]*-SHIELD-/--/);
+  });
+
   it('serves minted preview HTML and assets without bearer headers when API token auth is enabled', async () => {
     const previousToken = process.env.OD_API_TOKEN;
     const token = `preview-token-${randomUUID()}`;

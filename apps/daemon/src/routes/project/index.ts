@@ -5494,26 +5494,160 @@ export function registerProjectFileRoutes(app: Express, ctx: RegisterProjectFile
         .join(',');
       return rewritten === value ? match : `${prefix}${quote}${rewritten}${quote}`;
     });
-    // Shield script blocks only around the cssUrl pass to avoid corrupting
-    // JavaScript source (e.g. URL.revokeObjectURL(url)). Script src attributes
-    // are still workspace-scoped by the assetAttr pass above.
-    const scriptBlocks: string[] = [];
-    const placeholder = (index: number) => `<!--OD-SCRIPT-PLACEHOLDER-${index}-->`;
-    let cssShielded = next.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gi, (match) => {
-      scriptBlocks.push(match);
-      return placeholder(scriptBlocks.length - 1);
-    });
+    // Shield executable/JavaScript regions from the cssUrl pass. The cssUrl
+    // regex `url(...)'` is intentionally case-insensitive and matches across
+    // HTML boundaries, so any JavaScript that contains a string like
+    // `URL.revokeObjectURL(url)` (very common in the same files this rewrite
+    // serves — webcam pipelines, generated canvas blobs, etc.) would otherwise
+    // get rewritten as if it were CSS. Url() inside JavaScript has no semantic
+    // meaning to the daemon's workspace scoping, so we drop these regions out
+    // of the cssUrl pass entirely and restore them verbatim afterwards.
+    //
+    // Two regions are shielded:
+    //   1. <script>...</script> bodies (preserved with the surrounding tag so
+    //      the assetAttr pass above still sees <script src> for scoping).
+    //   2. Executable attribute values: on* event handlers, srcdoc iframe
+    //      payloads, and javascript: URLs in href/action/etc. These are split
+    //      out so the cssUrl pass can only see the empty placeholder slots,
+    //      never the executable attribute value text.
+    //
+    // Markers are collision-safe: generated only after a probe confirms no
+    // occurrence in the current input, and tagged with a per-rewrite nonce so
+    // two rewrites in the same process cannot be cross-restored by user data.
+    function buildScriptShieldMarkers(input: string): {
+      blockOpen: string;
+      blockClose: string;
+      attrOpen: string;
+      attrClose: string;
+    } {
+      // Eight base64url octets carry ~64 bits of entropy, far beyond accidental
+      // collision probability for any practical input size. Plus a probe.
+      const nonce =
+        Math.random().toString(36).slice(2, 10) +
+        Math.random().toString(36).slice(2, 10);
+      const base = (kind: string) => `<!--OD-${kind}-SHIELD-${nonce}--`;
+      let blockOpen = base('BLOCKOPEN');
+      let blockClose = base('BLOCKCLOSE');
+      let attrOpen = base('ATTROPEN');
+      let attrClose = base('ATTRCLOSE');
+      // Probe-correct: if (somehow — by extremely low chance, or because a
+      // future fuzzer feeds us our own marker) any token is already in the
+      // input, keep re-rolling until none is. Bounded iterations fall back to
+      // appending a counter to the suffix.
+      let guard = 0;
+      while (
+        (input.includes(blockOpen) ||
+          input.includes(blockClose) ||
+          input.includes(attrOpen) ||
+          input.includes(attrClose)) &&
+        guard < 16
+      ) {
+        const suffix = `${guard}-${nonce}`;
+        blockOpen = `<!--OD-BLOCKOPEN-${suffix}--`;
+        blockClose = `<!--OD-BLOCKCLOSE-${suffix}--`;
+        attrOpen = `<!--OD-ATTROPEN-${suffix}--`;
+        attrClose = `<!--OD-ATTRCLOSE-${suffix}--`;
+        guard += 1;
+      }
+      return { blockOpen, blockClose, attrOpen, attrClose };
+    }
+
+    const { blockOpen, blockClose, attrOpen, attrClose } =
+      buildScriptShieldMarkers(next);
+    const blocks: string[] = [];
+    const attrs: string[] = [];
+    let cssShielded = next.replace(
+      /<script\b[^>]*>[\s\S]*?<\/script>/gi,
+      (match) => {
+        const idx = blocks.push(match) - 1;
+        return `${blockOpen}${idx}${blockClose}`;
+      },
+    );
+    cssShielded = cssShielded.replace(
+      // Event-handler attributes: on*=\"...\" / on*='...' (including
+      // inline JS that calls URL.revokeObjectURL etc.). Replace the
+      // attribute value with a placeholder that the cssUrl pass sees as
+      // opaque text (it contains no `url(...)` so the regex never matches),
+      // and restore the original value verbatim after the cssUrl pass.
+      /\s(on[a-zA-Z]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi,
+      (
+        match,
+        name: string,
+        dq: string | undefined,
+        sq: string | undefined,
+      ) => {
+        const quote = dq !== undefined ? '"' : "'";
+        const value = dq ?? sq ?? "";
+        if (value === "") return match;
+        const idx = attrs.push(value) - 1;
+        // Preserve attribute structure (name="...") so the cssUrl pass
+        // sees a quotable slot, never the executable value.
+        return ` ${name}=${quote}${attrOpen}${idx}${attrClose}${quote}`;
+      },
+    );
+    cssShielded = cssShielded.replace(
+      // <iframe srcdoc="..."> — the value is a complete HTML document that
+      // can contain anything (including <script>, onclick, JS strings). We
+      // shield the whole value so the cssUrl pass never sees inside it.
+      // Full iframe scope is later reconstructed by restore.
+      /\s(srcdoc)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi,
+      (
+        match,
+        name: string,
+        dq: string | undefined,
+        sq: string | undefined,
+      ) => {
+        const quote = dq !== undefined ? '"' : "'";
+        const value = dq ?? sq ?? "";
+        if (value === "") return match;
+        const idx = attrs.push(value) - 1;
+        return ` ${name}=${quote}${attrOpen}${idx}${attrClose}${quote}`;
+      },
+    );
+    cssShielded = cssShielded.replace(
+      // Bare javascript: URLs in href/action/etc. The value is a JS scheme
+      // URL, all executable, all shielded.
+      /\s(href|action|formaction|data|cite|longdesc|poster|background)\s*=\s*(?:"(javascript:[^"]*)"|'(javascript:[^']*)')/gi,
+      (
+        match,
+        name: string,
+        dq: string | undefined,
+        sq: string | undefined,
+      ) => {
+        const quote = dq !== undefined ? '"' : "'";
+        const value = dq ?? sq ?? "";
+        if (!value) return match;
+        const idx = attrs.push(value) - 1;
+        return ` ${name}=${quote}${attrOpen}${idx}${attrClose}${quote}`;
+      },
+    );
+    // Run the cssUrl pass against the shielded HTML. With every executable
+    // region replaced by an opaque placeholder, cssUrl can only match real
+    // CSS url(...) references — JavaScript strings are no longer visible.
     next = cssShielded.replace(cssUrl, (match, quote: string, value: string) => {
       const rewritten = rewrite(value);
       return rewritten === value ? match : `url(${quote}${rewritten}${quote})`;
     });
-    for (let i = 0; i < scriptBlocks.length; i++) {
-      const block = scriptBlocks[i];
+    // Restore shielded script blocks verbatim. Using a function replacer so
+    // any `$` in the block body is taken literally (replace() with a string
+    // pattern would otherwise treat `$1`, `$&`, etc. as substitution tokens).
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
       if (block !== undefined) {
-        next = next.replace(placeholder(i), () => block);
+        next = next.replace(
+          `${blockOpen}${i}${blockClose}`,
+          () => block,
+        );
       }
     }
-
+    // Restore shielded attribute values verbatim — same function-replacer
+    // reasoning as above.
+    for (let i = 0; i < attrs.length; i++) {
+      const value = attrs[i];
+      if (value !== undefined) {
+        next = next.replace(`${attrOpen}${i}${attrClose}`, () => value);
+      }
+    }
     return next;
   }
 
