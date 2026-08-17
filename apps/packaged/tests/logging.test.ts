@@ -14,6 +14,7 @@
  * @see https://github.com/nexu-io/open-design/issues/895
  */
 
+import { EventEmitter } from 'node:events';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -25,6 +26,7 @@ import {
   createPackagedDesktopLogger,
   createFatalUncaughtExceptionHandler,
   createFatalUnhandledRejectionHandler,
+  installStdioErrorGuard,
   isHarmlessSocketOptionError,
   isHarmlessStdoutError,
   type PackagedDesktopLogger,
@@ -263,6 +265,66 @@ describe('createPackagedDesktopLogger console echo EPIPE guard', () => {
       }
       rmSync(root, { recursive: true, force: true });
     }
+  });
+});
+
+// Regression coverage for the gap `safeEcho`'s try/catch cannot close:
+// a detached stdout/stderr pipe fails *asynchronously* (the stream
+// emits its own 'error' event, e.g. from `process.nextTick` during
+// internal `destroy()`), not as a synchronous throw from `.write()`.
+// Reproduced live on a packaged Windows build: the crash's stack trace
+// still showed `safeEcho`'s frames (because V8 fixes `.stack` at Error
+// *construction* time, not throw time), which made it look like the
+// try/catch had been bypassed when in fact it was never reached at all.
+describe('installStdioErrorGuard (async stdio pipe-closure guard)', () => {
+  function fakeStream(): NodeJS.WritableStream {
+    return new EventEmitter() as unknown as NodeJS.WritableStream;
+  }
+
+  it('swallows an EPIPE emitted asynchronously on the stream, not thrown synchronously', () => {
+    const stream = fakeStream();
+    installStdioErrorGuard([stream]);
+
+    const epipe = new Error('write EPIPE') as NodeJS.ErrnoException;
+    epipe.code = 'EPIPE';
+
+    // This is exactly what safeEcho's try/catch cannot see: nothing on
+    // the call stack, just an 'error' event firing on its own.
+    expect(() => (stream as unknown as EventEmitter).emit('error', epipe)).not.toThrow();
+  });
+
+  it('swallows an ERR_STREAM_DESTROYED emitted asynchronously on the stream', () => {
+    const stream = fakeStream();
+    installStdioErrorGuard([stream]);
+
+    const destroyed = new Error('stream destroyed') as NodeJS.ErrnoException;
+    destroyed.code = 'ERR_STREAM_DESTROYED';
+
+    expect(() => (stream as unknown as EventEmitter).emit('error', destroyed)).not.toThrow();
+  });
+
+  it('re-throws a non-harmless error emitted on the stream instead of silently dropping it', () => {
+    const stream = fakeStream();
+    installStdioErrorGuard([stream]);
+
+    const eacces = new Error('permission denied') as NodeJS.ErrnoException;
+    eacces.code = 'EACCES';
+
+    // EventEmitter re-throws synchronously out of emit() when an
+    // 'error' listener itself throws.
+    expect(() => (stream as unknown as EventEmitter).emit('error', eacces)).toThrow(eacces);
+  });
+
+  it('installs an independent guard per stream (stdout failure does not depend on stderr)', () => {
+    const stdout = fakeStream();
+    const stderr = fakeStream();
+    installStdioErrorGuard([stdout, stderr]);
+
+    const epipe = new Error('write EPIPE') as NodeJS.ErrnoException;
+    epipe.code = 'EPIPE';
+
+    expect(() => (stdout as unknown as EventEmitter).emit('error', epipe)).not.toThrow();
+    expect(() => (stderr as unknown as EventEmitter).emit('error', epipe)).not.toThrow();
   });
 });
 

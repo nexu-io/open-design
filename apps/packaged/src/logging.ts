@@ -236,6 +236,11 @@ export function createPackagedDesktopLogger(paths: PackagedNamespacePaths): Pack
   // intentionally narrow (a future `code: 'EACCES'`-style regression
   // that broadens the filter trips the regression test in
   // `tests/logging.test.ts`).
+  //
+  // This try/catch alone is NOT sufficient to stop the crash: it only
+  // catches a *synchronous* throw, and a detached stdout/stderr pipe
+  // fails asynchronously instead. See `installStdioErrorGuard` below
+  // for the layer that actually covers that path.
   const safeEcho = (fn: (...a: unknown[]) => void) => (...args: unknown[]) => {
     if (!echo) return;
     try {
@@ -263,7 +268,41 @@ export function createPackagedDesktopLogger(paths: PackagedNamespacePaths): Pack
     safeEcho(originalConsole.error)(...args);
   };
 
+  // safeEcho's try/catch only covers a *synchronous* throw. It does not
+  // cover this failure mode: verified live on a packaged Windows build
+  // where safeEcho alone did not stop the crash. See installStdioErrorGuard.
+  installStdioErrorGuard([process.stdout, process.stderr]);
+
   return logger;
+}
+
+/**
+ * Second, independent layer on top of `safeEcho` above. `safeEcho`'s
+ * try/catch only catches a *synchronous* throw from the echo call, but
+ * `Writable#write` on a detached stdout/stderr pipe (no controlling
+ * terminal — the packaged Electron case) fails *asynchronously*
+ * instead: Node's internal `onwriteError` path schedules the stream's
+ * own `'error'` event via `process.nextTick` during `destroy()`, so by
+ * the time it fires, the `try { fn(...args) }` call has already
+ * returned normally and there is nothing left on the stack to catch.
+ *
+ * This is easy to miss because the resulting uncaught exception's
+ * `.stack` is misleading: V8 fixes `.stack` at `Error` *construction*
+ * time — deep inside the synchronous write attempt, which includes
+ * this file's `safeEcho` frames — not at throw time. It looks like the
+ * error went through `safeEcho` and escaped it, when it actually never
+ * reached that catch block at all.
+ *
+ * Streams are passed in (rather than reading `process.stdout` /
+ * `process.stderr` directly) so this can be unit tested against fakes.
+ */
+export function installStdioErrorGuard(streams: Iterable<NodeJS.WritableStream>): void {
+  for (const stream of streams) {
+    stream.on("error", (error) => {
+      if (isHarmlessStdoutError(error)) return;
+      throw error;
+    });
+  }
 }
 
 /**
