@@ -571,6 +571,29 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   agent_cli_version?: string;
   runtime_companion_name?: string;
   runtime_companion_version?: string;
+  /** Current assistant-message event persistence path for rollout comparison. */
+  message_event_storage_mode?: 'events_json_snapshot' | 'append_only';
+  /** Persistable agent events observed before batching or compaction. */
+  message_event_input_count?: number;
+  message_event_delta_count?: number;
+  /** Approximate UTF-16 character volume accepted by the persistence path. */
+  message_event_input_char_count?: number;
+  /** Synchronous message persistence batches attempted during this run. */
+  message_event_flush_count?: number;
+  /** Events handed to storage after in-memory adjacent-delta compaction. */
+  message_event_batch_event_count?: number;
+  /** Final compacted event count observed after the last successful flush. */
+  message_event_persisted_count?: number;
+  message_event_flush_total_ms?: number;
+  message_event_flush_max_ms?: number;
+  message_event_pending_char_peak?: number;
+  /** Number and cost of terminal append-only batch folds. */
+  message_event_finalize_count?: number;
+  message_event_finalize_total_ms?: number;
+  message_event_finalize_max_ms?: number;
+  /** Compacted event count in the terminal message snapshot. */
+  message_event_final_event_count?: number;
+  message_event_persistence_error_count?: number;
   retry_original_failure_category?: TrackingRunFailureCategory;
   retry_original_failure_detail?: TrackingRunFailureDetail;
   retry_original_failure_stage?: TrackingRunFailureStage;

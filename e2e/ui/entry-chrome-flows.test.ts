@@ -1083,7 +1083,7 @@ test('[P1] rail destinations navigate and Home keeps its composer execution pill
   await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
 });
 
-test('[P0] @critical home composer routes free-form prompts through the default deck scenario', async ({ page }) => {
+test('[P0] @critical home composer routes free-form prompts through the default prototype scenario', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
@@ -1105,12 +1105,12 @@ test('[P0] @critical home composer routes free-form prompts through the default 
     pluginInputs?: Record<string, unknown>;
     metadata?: { kind?: string };
   };
-  expect(body.name).toBe('Write an Operating Review like a Disciplined COO');
+  expect(body.name).toBe('Web Prototype');
   expect(body.pendingPrompt).toBe(prompt);
   expect(body.conversationMode).toBe('design');
-  expect(body.pluginId).toBe('example-simple-deck');
-  expect(body.pluginInputs).toMatchObject({ deckType: 'pitch deck' });
-  expect(body.metadata?.kind).toBe('deck');
+  expect(body.pluginId).toBe('example-web-prototype');
+  expect(body.pluginInputs).toMatchObject({ artifactKind: 'web prototype' });
+  expect(body.metadata?.kind).toBe('prototype');
 });
 
 test('[P0] @critical home working directory creates the project with linked dirs instead of importing files', async ({ page }) => {
@@ -1316,12 +1316,12 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
 
   const input = page.getByTestId('home-hero-file-input');
   const submit = page.getByTestId('home-hero-submit');
-  // Fresh Home now locks submit until its default deck route has resolved.
+  // Fresh Home locks submit until its default prototype route has resolved.
   // Under the grouped CI pool that catalogue binding can outlive Playwright's
   // default assertion timeout, so wait on the user-visible routed state before
   // checking the attachment lifecycle rather than racing the seed effect.
   await expect(page.getByTestId('home-hero-template-trigger')).toContainText(
-    /Slide deck|幻灯片|投影片/i,
+    /UI Mockup|原型/i,
     { timeout: T.long },
   );
   await expect(submit).toBeEnabled({ timeout: T.long });

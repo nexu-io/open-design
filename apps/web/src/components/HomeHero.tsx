@@ -744,18 +744,26 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     );
   }, [activeExamplePlugins, activeChipId, selectedSubcategory, pluginOptions]);
 
-  // First-run guide, beat 1: pulse the Prototype chip for brand-new users.
+  // First-run guide, beat 1: pulse the Prototype chip for brand-new users only
+  // when Home could not bind a default type. A successfully seeded default has
+  // already completed that choice, so skip the redundant pulse and let beat 2
+  // guide the user to its first example card.
   // The settle delay lets the hero finish its entrance before the sheen.
   useEffect(() => {
     if (firstRunGuide !== true) return;
     if (readHomeGuideStage() !== 'chip') return;
+    if (activeChipId) {
+      writeHomeGuideStage('card');
+      setGuidePulseChipId(null);
+      return;
+    }
     const arm = window.setTimeout(() => setGuidePulseChipId('prototype'), 900);
     const disarm = window.setTimeout(() => setGuidePulseChipId(null), 3600);
     return () => {
       window.clearTimeout(arm);
       window.clearTimeout(disarm);
     };
-  }, [firstRunGuide]);
+  }, [firstRunGuide, activeChipId]);
 
   // Users with existing projects never see the trail — complete ANY
   // unfinished stage silently. A chip pick during the loading window can

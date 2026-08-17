@@ -8,6 +8,9 @@ const savedPosthogKey = process.env.POSTHOG_KEY;
 const savedPosthogHost = process.env.POSTHOG_HOST;
 const savedAmrProfile = process.env.OPEN_DESIGN_AMR_PROFILE;
 const savedVelaWebUrl = process.env.OD_VELA_WEB_URL;
+const savedVelaWebUrlProd = process.env.OD_VELA_WEB_URL_PROD;
+const savedVelaWebUrlTest = process.env.OD_VELA_WEB_URL_TEST;
+const savedVelaWebUrlFeatureTest = process.env.OD_VELA_WEB_URL_FEATURE_TEST;
 
 afterEach(() => {
   if (savedVelaWebUrl == null) {
@@ -15,6 +18,12 @@ afterEach(() => {
   } else {
     process.env.OD_VELA_WEB_URL = savedVelaWebUrl;
   }
+  if (savedVelaWebUrlProd == null) delete process.env.OD_VELA_WEB_URL_PROD;
+  else process.env.OD_VELA_WEB_URL_PROD = savedVelaWebUrlProd;
+  if (savedVelaWebUrlTest == null) delete process.env.OD_VELA_WEB_URL_TEST;
+  else process.env.OD_VELA_WEB_URL_TEST = savedVelaWebUrlTest;
+  if (savedVelaWebUrlFeatureTest == null) delete process.env.OD_VELA_WEB_URL_FEATURE_TEST;
+  else process.env.OD_VELA_WEB_URL_FEATURE_TEST = savedVelaWebUrlFeatureTest;
   if (savedTelemetryRelayUrl == null) {
     delete process.env.OPEN_DESIGN_TELEMETRY_RELAY_URL;
   } else {
@@ -189,6 +198,18 @@ describe("resolveToolPackConfig PostHog analytics", () => {
 // secret keyed by AMR profile, exactly like POSTHOG_KEY, and flows on into
 // open-design-config.json -> the packaged daemon spawn env (OD_VELA_WEB_URL).
 describe("resolveToolPackConfig vela web origin", () => {
+  it("bakes every supplied profile origin for runtime environment switching", () => {
+    process.env.OD_VELA_WEB_URL_PROD = "https://prod.example.invalid";
+    process.env.OD_VELA_WEB_URL_TEST = "https://test.example.invalid/";
+    process.env.OD_VELA_WEB_URL_FEATURE_TEST = "https://feature.example.invalid";
+    const config = resolveToolPackConfig("mac", { namespace: "vela-web-test" });
+    expect(config.velaWebUrls).toEqual({
+      prod: "https://prod.example.invalid",
+      test: "https://test.example.invalid",
+      "feature-test": "https://feature.example.invalid",
+    });
+  });
+
   it("bakes OD_VELA_WEB_URL into packaged config when set at build time", () => {
     process.env.OD_VELA_WEB_URL = "https://vela.example.invalid";
     const config = resolveToolPackConfig("mac", { namespace: "vela-web-test" });

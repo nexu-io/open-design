@@ -69,6 +69,39 @@ function postSlide(win: ReturnType<typeof setupDeckBridge>['win'], action: 'next
 }
 
 describe('deck bridge — nested slide markup (#1530)', () => {
+  it('does not claim ordinary prototype annotations as deck navigation state', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(
+      '<main><h1 data-screen-label="Hero title">Prototype headline</h1>' +
+      '<button data-screen-label="CTA">Buy now</button></main>',
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 0, count: 0 });
+  });
+
+  it('does not combine numbered screen sections from different parents', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(
+      '<main><section data-screen-label="01 Cover">One</section>' +
+      '<div><section data-screen-label="02 Agenda">Two</section></div></main>',
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 0, count: 0 });
+  });
+
+  it('keeps containerless multi-screen legacy decks navigable', async () => {
+    const { win, parentPostMessage } = setupDeckBridge(
+      '<main><section data-screen-label="01 Cover">One</section>' +
+      '<section data-screen-label="02 Agenda">Two</section></main>',
+    );
+
+    await new Promise<void>((resolve) => win.setTimeout(resolve, 350));
+
+    expect(lastSlideState(parentPostMessage)).toMatchObject({ active: 0, count: 2 });
+  });
+
   it('counts nested .slide elements through a fallback when no structured container matches', async () => {
     // 8 slides nested two levels deep — none of `.deck > .slide`,
     // `.deck-stage > .slide`, `.deck-shell > .slide`, or `body > .slide`

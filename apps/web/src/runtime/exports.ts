@@ -24,6 +24,7 @@ import {
   workspaceProjectHeaders,
   workspaceResourceUrl,
 } from '../collab/workspace-identity';
+import { sourceHasLegacyDeckScreenSlides } from './deck-slide-structure';
 
 // Re-exported so app components can gate desktop-only export paths without
 // importing the host package directly.
@@ -1010,10 +1011,9 @@ export async function exportProjectAsPptx(opts: {
 // structure such as `data-title` or a `.deck` wrapper. Deliberately DO NOT treat
 // a plain `.slide` class as proof of a deck: ordinary pages often use that token
 // for carousels/testimonials and still need full-page/scroll-stitch capture.
-export function sourceLooksLikeExportableDeck(source: string | null | undefined): boolean {
-  if (!source) return false;
+function sourceLooksLikeStructuredDeck(source: string): boolean {
   return (
-    /<deck-stage[\s/>]|\bdata-screen-label\s*=|class\s*=\s*['"](?:[^'"]*\s)?(?:deck-slide|ppt-slide)(?:\s|['"])/i.test(
+    /<deck-stage[\s/>]|class\s*=\s*['"](?:[^'"]*\s)?(?:deck-slide|ppt-slide)(?:\s|['"])/i.test(
       source,
     ) ||
     /<[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])[^>]*\bdata-title\s*=|<[^>]*\bdata-title\s*=[^>]*\bclass\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(
@@ -1023,6 +1023,23 @@ export function sourceLooksLikeExportableDeck(source: string | null | undefined)
       source,
     )
   );
+}
+
+export function sourceLooksLikeExportableDeck(source: string | null | undefined): boolean {
+  if (!source) return false;
+  return sourceLooksLikeStructuredDeck(source) || /\bdata-screen-label\s*=/i.test(source);
+}
+
+/**
+ * Viewer navigation needs stronger evidence than export. `data-screen-label`
+ * is shared with ordinary prototype annotations, so only explicit deck
+ * structure or a numbered sibling collection of legacy slide sections may
+ * turn the live preview into deck mode.
+ */
+export function sourceLooksLikeNavigableDeck(source: string | null | undefined): boolean {
+  if (!source) return false;
+  if (sourceLooksLikeStructuredDeck(source)) return true;
+  return sourceHasLegacyDeckScreenSlides(source);
 }
 
 // Decides how a current-slide / whole-deck / page image capture should run.

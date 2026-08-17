@@ -541,7 +541,7 @@ describe('HomeView prompt handoff', () => {
     expect(screen.getByTestId('home-hero-submit').getAttribute('aria-busy')).toBe('false');
   });
 
-  it('keeps Send locked until the fresh-home default deck binding is ready', async () => {
+  it('keeps Send locked until the fresh-home default prototype binding is ready', async () => {
     let resolvePlugins: (response: Response) => void = () => undefined;
     const pluginsResponse = new Promise<Response>((resolve) => {
       resolvePlugins = resolve;
@@ -567,7 +567,7 @@ describe('HomeView prompt handoff', () => {
     expect(submit.disabled).toBe(true);
 
     await act(async () => {
-      resolvePlugins(new Response(JSON.stringify({ plugins: [SIMPLE_DECK_PLUGIN] }), {
+      resolvePlugins(new Response(JSON.stringify({ plugins: [WEB_PROTOTYPE_PLUGIN] }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }));
@@ -575,7 +575,7 @@ describe('HomeView prompt handoff', () => {
     });
 
     await waitFor(() => expect(submit.disabled).toBe(false));
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Slide deck');
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('UI Mockup');
   });
 
   it('keeps creation types actionable while an expired plugin cache refreshes after a project round trip', async () => {

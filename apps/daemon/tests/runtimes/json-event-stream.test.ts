@@ -1,6 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { createJsonEventStreamHandler } from '../../src/runtimes/json-event-stream.js';
+import { createToolLoopGuard, type ToolLoopVerdict } from '../../src/tool-loop-guard.js';
 
 type JsonStreamEvent = Record<string, unknown>;
 
@@ -74,6 +75,221 @@ test('opencode json stream emits tool events', () => {
     { type: 'tool_use', id: 'call-1', name: 'read', input: { file: 'foo.txt' } },
     { type: 'tool_result', toolUseId: 'call-1', content: 'done', isError: false },
   ]);
+});
+
+test('opencode json stream marks structured tool failures as errors', () => {
+  const cases = [
+    {
+      name: 'completed tool with a non-zero metadata exit',
+      state: { status: 'completed', output: 'command failed', metadata: { exit: 1 } },
+      content: 'command failed',
+    },
+    {
+      name: 'completed tool with a direct non-zero exitCode',
+      state: { status: 'completed', output: 'command failed', exitCode: 2 },
+      content: 'command failed',
+    },
+    {
+      name: 'completed tool with a direct non-zero exit',
+      state: { status: 'completed', output: 'command failed', exit: 3 },
+      content: 'command failed',
+    },
+    {
+      name: 'completed tool with an explicit error',
+      state: { status: 'completed', output: 'partial output', error: 'tool failed' },
+      content: 'tool failed',
+    },
+    {
+      name: 'official error state',
+      state: { status: 'error', output: 'partial output', error: 'permission denied' },
+      content: 'permission denied',
+    },
+    {
+      name: 'legacy failed state',
+      state: { status: 'failed', output: 'process failed' },
+      content: 'process failed',
+    },
+    {
+      name: 'PowerShell non-terminating ErrorRecord with exit zero',
+      state: {
+        status: 'completed',
+        output:
+          "Get-Content : Cannot find path 'missing.txt' because it does not exist.\r\n" +
+          '    + CategoryInfo          : ObjectNotFound: (missing.txt:String) [Get-Content], ItemNotFoundException\r\n' +
+          '    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand',
+        metadata: { exit: 0 },
+      },
+      content:
+        "Get-Content : Cannot find path 'missing.txt' because it does not exist.\r\n" +
+        '    + CategoryInfo          : ObjectNotFound: (missing.txt:String) [Get-Content], ItemNotFoundException\r\n' +
+        '    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand',
+    },
+  ];
+
+  for (const [index, testCase] of cases.entries()) {
+    const { events, handler } = collectEvents('opencode');
+    handler.feed(
+      JSON.stringify({
+        type: 'tool_use',
+        part: {
+          tool: 'bash',
+          callID: `call-${index}`,
+          state: {
+            input: { command: 'exit 1' },
+            ...testCase.state,
+          },
+        },
+      }) + '\n',
+    );
+
+    assert.deepEqual(
+      events.at(-1),
+      {
+        type: 'tool_result',
+        toolUseId: `call-${index}`,
+        content: testCase.content,
+        isError: true,
+      },
+      testCase.name,
+    );
+  }
+});
+
+test('opencode json stream preserves successful and non-terminal tool states', () => {
+  const { events, handler } = collectEvents('opencode');
+
+  for (const [callID, state] of [
+    ['success', { status: 'completed', output: 'done', metadata: { exit: 0 } }],
+    ['false-error', { status: 'completed', output: 'done', error: false }],
+    ['zero-error', { status: 'completed', output: 'done', error: 0 }],
+    ['pending', { status: 'pending', input: { command: 'pwd' } }],
+    ['running', { status: 'running', input: { command: 'pwd' } }],
+  ] as const) {
+    handler.feed(
+      JSON.stringify({ type: 'tool_use', part: { tool: 'bash', callID, state } }) + '\n',
+    );
+  }
+
+  assert.deepEqual(events, [
+    { type: 'tool_use', id: 'success', name: 'bash', input: null },
+    { type: 'tool_result', toolUseId: 'success', content: 'done', isError: false },
+    { type: 'tool_use', id: 'false-error', name: 'bash', input: null },
+    { type: 'tool_result', toolUseId: 'false-error', content: 'done', isError: false },
+    { type: 'tool_use', id: 'zero-error', name: 'bash', input: null },
+    { type: 'tool_result', toolUseId: 'zero-error', content: 'done', isError: false },
+    { type: 'tool_use', id: 'pending', name: 'bash', input: { command: 'pwd' } },
+    { type: 'tool_use', id: 'running', name: 'bash', input: { command: 'pwd' } },
+  ]);
+});
+
+test('opencode json stream emits a terminal tool result only once per call', () => {
+  const { events, handler } = collectEvents('opencode');
+  const terminal = JSON.stringify({
+    type: 'tool_use',
+    sessionID: 'session-1',
+    part: {
+      tool: 'bash',
+      callID: 'call-1',
+      state: { status: 'completed', output: 'failed', metadata: { exit: 1 } },
+    },
+  });
+
+  handler.feed(`${terminal}\n${terminal}\n`);
+
+  assert.deepEqual(events, [
+    { type: 'tool_use', id: 'call-1', name: 'bash', input: null },
+    { type: 'tool_result', toolUseId: 'call-1', content: 'failed', isError: true },
+  ]);
+});
+
+test('opencode PowerShell signatures stay narrow to canonical shell ErrorRecords', () => {
+  const { events, handler } = collectEvents('opencode');
+  const errorRecord =
+    '+ CategoryInfo : ObjectNotFound: (missing.txt:String) [Get-Content], ItemNotFoundException\n' +
+    '+ FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand';
+  const documentation =
+    'CategoryInfo : copied from a troubleshooting document\n' +
+    'FullyQualifiedErrorId : copied-example';
+
+  for (const [tool, callID, output] of [
+    ['read', 'read-error-record', errorRecord],
+    ['bash', 'bash-documentation', documentation],
+  ] as const) {
+    handler.feed(
+      JSON.stringify({
+        type: 'tool_use',
+        part: {
+          tool,
+          callID,
+          state: { status: 'completed', output, metadata: { exit: 0 } },
+        },
+      }) + '\n',
+    );
+  }
+
+  assert.deepEqual(events, [
+    { type: 'tool_use', id: 'read-error-record', name: 'read', input: null },
+    {
+      type: 'tool_result',
+      toolUseId: 'read-error-record',
+      content: errorRecord,
+      isError: false,
+    },
+    { type: 'tool_use', id: 'bash-documentation', name: 'bash', input: null },
+    {
+      type: 'tool_result',
+      toolUseId: 'bash-documentation',
+      content: documentation,
+      isError: false,
+    },
+  ]);
+});
+
+test('opencode structured failures reach the repeated-failure tool-loop halt', () => {
+  const guard = createToolLoopGuard({ mode: 'halt' });
+  const verdicts: ToolLoopVerdict[] = [];
+  const handler = createJsonEventStreamHandler('opencode', (event) => {
+    if (event.type === 'tool_use') {
+      guard.observeToolUse(String(event.id), String(event.name), event.input);
+    }
+    if (event.type === 'tool_result') {
+      const verdict = guard.observeToolResult(
+        String(event.toolUseId),
+        event.isError === true,
+        typeof event.content === 'string' ? event.content : undefined,
+      );
+      if (verdict) verdicts.push(verdict);
+    }
+  });
+
+  for (let index = 0; index < 8; index += 1) {
+    handler.feed(
+      JSON.stringify({
+        type: 'tool_use',
+        part: {
+          tool: 'bash',
+          callID: `call-${index}`,
+          state: {
+            status: 'completed',
+            input: { command: 'Get-Content -LiteralPath missing.txt' },
+            output:
+              "Get-Content : Cannot find path 'missing.txt' because it does not exist.\r\n" +
+              '    + CategoryInfo          : ObjectNotFound: (missing.txt:String) [Get-Content], ItemNotFoundException\r\n' +
+              '    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand',
+            metadata: { exit: 0 },
+          },
+        },
+      }) + '\n',
+    );
+  }
+
+  assert.deepEqual(
+    verdicts.map(({ reason, action, count }) => ({ reason, action, count })),
+    [
+      { reason: 'repeated-failure', action: 'warn', count: 4 },
+      { reason: 'repeated-failure', action: 'halt', count: 8 },
+    ],
+  );
 });
 
 test('opencode json stream emits structured errors as error events', () => {

@@ -171,8 +171,8 @@ describe('ExtensionsMarketplace installed plugin detail entry', () => {
     expect(screen.queryByTestId('plugin-detail')).toBeNull();
   });
 
-  it('keeps an uninstalled Community card in the existing install modal', async () => {
-    renderHarness();
+  it('keeps an uninstalled Community card in a root-level install modal', async () => {
+    const { container } = renderHarness();
 
     fireEvent.click(
       await screen.findByTestId(
@@ -183,6 +183,13 @@ describe('ExtensionsMarketplace installed plugin detail entry', () => {
     const modal = await screen.findByTestId('plugins-available-details-modal');
     expect(window.location.pathname).toBe('/plugins');
     expect(screen.queryByTestId('plugin-detail')).toBeNull();
+    // The top-right account cluster is also portalled to <body>. Keeping the
+    // scrim inside the marketplace stacking context lets that cluster paint
+    // above the backdrop and escape its blur.
+    expect(modal.parentElement).toBe(document.body);
+    expect(
+      container.querySelector('[data-testid="plugins-available-details-modal"]'),
+    ).toBeNull();
     expect(within(modal).getByText('Community Plugin Kit')).toBeTruthy();
     expect(
       within(modal).getByTestId(

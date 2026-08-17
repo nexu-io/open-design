@@ -82,7 +82,7 @@ interface VelaWorkspaceContextOptions {
   /** Injectable for tests; defaults to reading ~/.amr/config.json + env. */
   readSession?: typeof readVelaControlApiContext;
   /** Settings-backed AMR environment used by the daemon's agent launcher. */
-  configuredEnv?: Record<string, string>;
+  configuredEnv?: Record<string, string> | (() => Record<string, string>);
   /**
    * Legacy default for no-argument `current()` and fresh-account bootstrap.
    * Exact request resolution never reads it.
@@ -115,7 +115,10 @@ interface VelaWorkspaceContextOptions {
  * Returns null when a required field is missing or an enum is out of range —
  * collab then stays dormant rather than acting on a malformed context.
  */
-export function mapVelaWorkspaceContext(input: unknown): WorkspaceCollabContext | null {
+export function mapVelaWorkspaceContext(
+  input: unknown,
+  configuredEnv: Record<string, string> = {},
+): WorkspaceCollabContext | null {
   if (!input || typeof input !== 'object') return null;
   const raw = input as Record<string, unknown>;
 
@@ -160,6 +163,8 @@ export function mapVelaWorkspaceContext(input: unknown): WorkspaceCollabContext 
   const settingsUrl = resolveWorkspaceSettingsUrl(
     workspaceId,
     (raw as { workspaceSettingsUrl?: unknown }).workspaceSettingsUrl,
+    process.env,
+    configuredEnv,
   );
   if (settingsUrl) context.workspaceSettingsUrl = settingsUrl;
 
@@ -227,6 +232,9 @@ export function createVelaWorkspaceContextProvider(
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   type VelaSession = NonNullable<ReturnType<typeof readVelaControlApiContext>>;
   let lastBootstrapFailureAt = 0;
+  const configuredEnv = () => typeof options.configuredEnv === 'function'
+    ? options.configuredEnv()
+    : (options.configuredEnv ?? {});
 
   /**
    * Read the context for the workspace THIS daemon is pinned to.
@@ -339,10 +347,12 @@ export function createVelaWorkspaceContextProvider(
   async function resolvePinnedWorkspace(
     session: VelaSession,
     workspaceId: string,
+    selectedEnv: Record<string, string>,
   ): Promise<WorkspaceCollabContext | null> {
     const result = await fetchVelaWorkspaceDirectory({
       fetch: fetchImpl,
       readSession: () => session,
+      configuredEnv: selectedEnv,
       timeoutMs,
     });
     if (!result.ok) return null; // B unreachable — preserve the pin, confirm nothing.
@@ -352,7 +362,7 @@ export function createVelaWorkspaceContextProvider(
         entry.memberStatus === 'active' &&
         entry.lifecycleState !== 'deleted',
     );
-    if (item) return workspaceContextFromDirectoryItem(item);
+    if (item) return workspaceContextFromDirectoryItem(item, selectedEnv);
     // Confirmed stale: the directory answered and this workspace no longer
     // has the caller as an active member. Purge the pin before anything else
     // reads it, then recover exactly like the fresh-account bootstrap.
@@ -360,13 +370,14 @@ export function createVelaWorkspaceContextProvider(
     const fallback = await pickDefaultWorkspace(session, result);
     if (!fallback) return null;
     await options.setLocalSelection?.(fallback.workspaceId);
-    return workspaceContextFromDirectoryItem(fallback);
+    return workspaceContextFromDirectoryItem(fallback, selectedEnv);
   }
 
   async function resolveCurrent(
     req: WorkspaceContextRequest,
   ): Promise<WorkspaceCollabContext | null> {
-      const session = readSession();
+      const selectedEnv = configuredEnv();
+      const session = readSession(process.env, selectedEnv);
       if (!session || !session.controlKey || !session.apiUrl) return null;
       try {
         const explicitSelection = req.workspaceId?.trim() || undefined;
@@ -381,14 +392,17 @@ export function createVelaWorkspaceContextProvider(
         const response = await fetchCurrent(session, localSelection);
         if (response.ok) {
           const body: unknown = await response.json();
-          const mapped = mapVelaWorkspaceContext(body);
+          const mapped = mapVelaWorkspaceContext(body, selectedEnv);
           if (mapped && (!localSelection || mapped.workspaceId === localSelection)) {
             return withUserIdentity(mapped, session);
           }
           if (localSelection) {
             // Server disagrees with the pinned scope → synthesize from the
             // membership directory instead of silently following the server.
-            return withUserIdentity(await resolvePinnedWorkspace(session, localSelection), session);
+            return withUserIdentity(
+              await resolvePinnedWorkspace(session, localSelection, selectedEnv),
+              session,
+            );
           }
           return null;
         }
@@ -399,7 +413,10 @@ export function createVelaWorkspaceContextProvider(
         if (localSelection) {
           // The pinned workspace could not be read from current — resolve it
           // from the directory (clears the pin only on a CONFIRMED removal).
-          return withUserIdentity(await resolvePinnedWorkspace(session, localSelection), session);
+          return withUserIdentity(
+            await resolvePinnedWorkspace(session, localSelection, selectedEnv),
+            session,
+          );
         }
         if (missingPrincipal) {
           // Fresh account: B has no current workspace and the client has no
@@ -407,7 +424,7 @@ export function createVelaWorkspaceContextProvider(
           const picked = await pickDefaultWorkspace(session);
           if (!picked) return null;
           await options.setLocalSelection?.(picked.workspaceId);
-          return withUserIdentity(workspaceContextFromDirectoryItem(picked), session);
+          return withUserIdentity(workspaceContextFromDirectoryItem(picked, selectedEnv), session);
         }
         return null;
       } catch {
@@ -420,13 +437,14 @@ export function createVelaWorkspaceContextProvider(
   async function resolveExact(
     req: WorkspaceContextRequest & { workspaceId: string },
   ): Promise<WorkspaceCollabContext | null> {
-    const session = readSession();
+    const selectedEnv = configuredEnv();
+    const session = readSession(process.env, selectedEnv);
     const workspaceId = req.workspaceId.trim();
     if (!session || !session.controlKey || !session.apiUrl || !workspaceId) return null;
     try {
       const response = await fetchCurrent(session, workspaceId);
       if (response.ok) {
-        const mapped = mapVelaWorkspaceContext(await response.json());
+        const mapped = mapVelaWorkspaceContext(await response.json(), selectedEnv);
         if (mapped?.workspaceId === workspaceId) {
           return withUserIdentity(mapped, session);
         }
@@ -436,6 +454,7 @@ export function createVelaWorkspaceContextProvider(
       const directory = await fetchVelaWorkspaceDirectory({
         fetch: fetchImpl,
         readSession: () => session,
+        configuredEnv: selectedEnv,
         timeoutMs,
       });
       if (!directory.ok) return null;
@@ -446,7 +465,7 @@ export function createVelaWorkspaceContextProvider(
           && entry.lifecycleState !== 'deleted',
       );
       return item
-        ? withUserIdentity(workspaceContextFromDirectoryItem(item), session)
+        ? withUserIdentity(workspaceContextFromDirectoryItem(item, selectedEnv), session)
         : null;
     } catch {
       return null;
@@ -477,6 +496,7 @@ async function responseIsMissingPrincipal(response: Response): Promise<boolean> 
  */
 export function workspaceContextFromDirectoryItem(
   item: WorkspaceDirectoryItem,
+  configuredEnv: Record<string, string> = {},
 ): WorkspaceCollabContext {
   const context: WorkspaceCollabContext = {
     workspaceId: item.workspaceId,
@@ -495,7 +515,12 @@ export function workspaceContextFromDirectoryItem(
       memberStatus: item.memberStatus,
     }),
   };
-  const settingsUrl = resolveWorkspaceSettingsUrl(item.workspaceId, undefined);
+  const settingsUrl = resolveWorkspaceSettingsUrl(
+    item.workspaceId,
+    undefined,
+    process.env,
+    configuredEnv,
+  );
   if (settingsUrl) context.workspaceSettingsUrl = settingsUrl;
   if (item.workspaceName) context.workspaceName = item.workspaceName;
   if (item.workspaceType === 'team') {
@@ -960,7 +985,10 @@ export async function fetchVelaWorkspaceDirectory(
   const fetchImpl = options.fetch ?? fetch;
   const readSession = options.readSession ?? readVelaControlApiContext;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const session = readSession(process.env, options.configuredEnv ?? {});
+  const configuredEnv = typeof options.configuredEnv === 'function'
+    ? options.configuredEnv()
+    : (options.configuredEnv ?? {});
+  const session = readSession(process.env, configuredEnv);
   // No local Vela session is an authoritative signed-out identity, not an
   // authority outage. Returning a successful empty directory lets clients
   // clear a previously cached Team selection instead of preserving it forever.
@@ -976,7 +1004,7 @@ export async function fetchVelaWorkspaceDirectory(
     if (!response.ok) {
       if (response.status === 401 || response.status === 403) {
         if (!options.readSession) {
-          markVelaAuthorizationExpired(process.env, options.configuredEnv ?? {});
+          markVelaAuthorizationExpired(process.env, configuredEnv);
         }
         return {
           ok: false,
@@ -1016,7 +1044,7 @@ export function createWorkspaceContextProviderFromEnv(
   env: NodeJS.ProcessEnv = process.env,
   options: Pick<
     VelaWorkspaceContextOptions,
-    'getActiveWorkspaceId' | 'setLocalSelection' | 'clearLocalSelection'
+    'configuredEnv' | 'getActiveWorkspaceId' | 'setLocalSelection' | 'clearLocalSelection'
   > = {},
 ): WorkspaceContextProvider {
   if (env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela') {

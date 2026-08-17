@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import type { Express, Request, Response } from 'express';
+import type { LintArtifactRequest, LintArtifactResponse } from '@open-design/contracts';
 import {
   PREVIEW_OBSERVABILITY_BRIDGE_MARKER,
   buildPreviewObservabilityBridge,
@@ -179,6 +180,8 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
    * daemon-global active/current state.
    */
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  /** Current settings-backed AMR environment for synthesized project contexts. */
+  configuredEnv?: () => Record<string, string>;
   /**
    * Production-only authority for project creation. Kept distinct from the
    * read-side directory fetcher so local/dev and explicitly anonymous callers
@@ -1803,6 +1806,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     ...(ctx.fetchProjectCreationWorkspaceDirectory
       ? { fetchWorkspaceDirectory: ctx.fetchProjectCreationWorkspaceDirectory }
       : {}),
+    ...(ctx.configuredEnv ? { configuredEnv: ctx.configuredEnv } : {}),
   });
   function sendMissingWorkspaceContext(res: Response) {
     return sendApiError(res, 401, 'WORKSPACE_CONTEXT_REQUIRED', 'workspace context is required');
@@ -4215,6 +4219,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         projectId: project.id,
         binding,
         directory,
+        ...(ctx.configuredEnv ? { configuredEnv: ctx.configuredEnv() } : {}),
       });
       if (!bootstrap.ok) {
         return sendApiError(
@@ -4243,6 +4248,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       projectId: project.id,
       binding,
       directory,
+      ...(ctx.configuredEnv ? { configuredEnv: ctx.configuredEnv() } : {}),
     });
     /** @type {import('@open-design/contracts').ProjectWorkspaceScopeResponse} */
     const body = { scope };
@@ -4864,17 +4870,20 @@ export function registerProjectArtifactRoutes(app: Express, ctx: RegisterProject
   // Standalone lint endpoint — POST raw HTML, get findings back.
   // The chat layer uses this to lint streamed-in artifacts without writing
   // them to disk first, so a P0 issue can be surfaced before save.
+  // Request/response are typed against the shared contract so a producer
+  // change that breaks the wire shape fails compilation here.
   app.post('/api/artifacts/lint', (req, res) => {
     try {
-      const { html } = req.body || {};
+      const { html } = (req.body ?? {}) as Partial<LintArtifactRequest>;
       if (typeof html !== 'string' || html.length === 0) {
         return res.status(400).json({ error: 'html required' });
       }
       const findings = lintArtifact(html);
-      res.json({
+      const payload: LintArtifactResponse = {
         findings,
         agentMessage: renderFindingsForAgent(findings),
-      });
+      };
+      res.json(payload);
     } catch (err: any) {
       res.status(500).json({ error: String(err) });
     }

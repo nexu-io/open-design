@@ -21,6 +21,7 @@ export const PACKAGED_WEB_OUTPUT_MODE_ENV = "OD_WEB_OUTPUT_MODE";
 
 export type PackagedWebOutputMode = "server" | "standalone";
 export type PackagedAmrProfile = "prod" | "test" | "feature-test" | "local";
+export type PackagedVelaWebUrls = Partial<Record<PackagedAmrProfile, string>>;
 
 export type RawPackagedConfig = {
   amrProfile?: string;
@@ -50,6 +51,7 @@ export type RawPackagedConfig = {
   // checked in because the non-prod AMR environments are internal deployments
   // and this repository is public; absent for prod and fork builds.
   velaWebUrl?: string;
+  velaWebUrls?: Partial<Record<PackagedAmrProfile, string>>;
   webSidecarEntryRelative?: string;
   webStandaloneRoot?: string;
   webOutputMode?: string;
@@ -69,6 +71,7 @@ export type PackagedConfig = {
   posthogKey: string | null;
   posthogHost: string | null;
   velaWebUrl: string | null;
+  velaWebUrls?: PackagedVelaWebUrls;
   webSidecarEntry: string | null;
   webStandaloneRoot: string | null;
   webOutputMode: PackagedWebOutputMode;
@@ -128,6 +131,17 @@ function cleanOptionalString(value: string | undefined): string | null {
   if (value == null) return null;
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+function cleanVelaWebUrls(
+  value: Partial<Record<PackagedAmrProfile, string>> | undefined,
+): PackagedVelaWebUrls {
+  const result: PackagedVelaWebUrls = {};
+  for (const profile of ['prod', 'test', 'feature-test', 'local'] as const) {
+    const origin = cleanOptionalString(value?.[profile]);
+    if (origin) result[profile] = origin.replace(/\/+$/, '');
+  }
+  return result;
 }
 
 function resolvePackagedWebOutputMode(value: string | undefined): PackagedWebOutputMode {
@@ -216,6 +230,7 @@ export async function readPackagedConfig(): Promise<PackagedConfig> {
     posthogKey: cleanOptionalString(raw.posthogKey),
     posthogHost: cleanOptionalString(raw.posthogHost),
     velaWebUrl: cleanOptionalString(raw.velaWebUrl),
+    velaWebUrls: cleanVelaWebUrls(raw.velaWebUrls),
     webSidecarEntry,
     webStandaloneRoot,
     webOutputMode,

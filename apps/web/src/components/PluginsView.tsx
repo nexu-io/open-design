@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
   type SetStateAction,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Dialog } from '@open-design/components';
 import {
   PLUGIN_SHARE_ACTION_PLUGIN_IDS,
@@ -3215,7 +3216,7 @@ function AvailablePluginDetailsModal({
     });
   }
 
-  return (
+  const modal = (
     <div
       className="plugin-details-modal-backdrop"
       role="dialog"
@@ -3519,6 +3520,9 @@ function AvailablePluginDetailsModal({
       </div>
     </div>
   );
+
+  if (typeof document === 'undefined') return modal;
+  return createPortal(modal, document.body);
 }
 
 function SourcesPanel({

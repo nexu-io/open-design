@@ -3426,16 +3426,16 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
-    // Let both identity sources resolve before checking the action. The $10
-    // value is account-scoped and must NOT be shown as this team workspace's
-    // balance while its explicit wallet response is unavailable.
+    // Let both identity sources resolve before checking the action. The card
+    // describes the selected CLI login, so its account balance remains visible
+    // even though this team member cannot manage workspace billing.
     await waitFor(() => {
       expect(fetchMock.mock.calls.some(([i]) =>
         i.toString() === '/api/workspace/context')).toBe(true);
       expect(fetchMock.mock.calls.some(([i]) =>
         i.toString() === '/api/integrations/vela/status')).toBe(true);
     });
-    expect(screen.queryByText('$10.00')).toBeNull();
+    expect(screen.getByText('$10.00')).toBeTruthy();
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
@@ -3922,13 +3922,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
     });
   });
 
-  // recvpZPzGJL7o7: "cli 页面的余额数据取的还是 personal 空间的余额". The local-CLI
-  // card read ONLY vela's account-scoped balance (`account.balanceUsd`, then
-  // the `/api/integrations/vela/wallet` snapshot) — the same account-scoped
-  // projection `resolvePlanTier` already exists to override for the plan badge
-  // on this exact card. The explicit workspace balance from
-  // `useWorkspaceBillingResponse` must win once it has loaded.
-  it('prefers the workspace billing balance over the account-scoped wallet snapshot', async () => {
+  it('keeps the feature-test CLI account balance independent from the selected workspace wallet', async () => {
     const context = teamMemberWorkspaceContext({
       workspaceId: 'ws-team',
       workspaceMemberId: 'member-team',
@@ -3986,6 +3980,7 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
             loggedIn: true,
             profile: 'feature-test',
             user: { id: 'user-1', email: 'signed-in@example.com', name: 'Signed In User' },
+            account: { plan: 'plus', balanceUsd: '18.7931' },
             configPath: '/Users/test/.amr/config.json',
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
@@ -4020,14 +4015,20 @@ describe('SettingsDialog execution settings Local CLI interactions', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: /Local CLI.*1 installed/i }));
 
-    // recvqakgSc1Pwd: the card must format `balanceUsd` (a real dollar
-    // figure vela reports), never `totalAvailableCredits` (a raw credits
-    // count) — feeding the credits count through the USD formatter is how a
-    // FEATURE TEST workspace with 388307 credits rendered "Balance
-    // $388307.00" in Settings > Models & providers > Local CLI.
-    expect(await screen.findByText('$9.99')).toBeTruthy();
-    expect(screen.queryByText('$99933.00')).toBeNull();
-    expect(screen.queryByText('$138.63')).toBeNull();
+    // This card describes the selected CLI login (email + profile + account
+    // plan), so its balance must come from that same feature-test account.
+    // The current workspace balance remains visible in the global workspace
+    // chrome and must not replace the account value here.
+    const amrCard = screen.getByTestId('settings-agent-card-amr');
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) =>
+        input.toString().startsWith('/api/workspace/billing?'))).toBe(true);
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(amrCard.querySelector('.agent-card-amr-balance-value')?.textContent).toBe('$18.79');
   });
 
   it('renders env-backed AMR login inside Settings without fabricating account details', async () => {

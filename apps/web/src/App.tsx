@@ -119,6 +119,7 @@ import { workspaceProjectHeaders } from './collab/workspace-identity';
 import {
   beginWorkspaceScopedRead,
   currentWorkspaceAccountGeneration,
+  notifyWorkspaceContextRefresh,
   resolveBoundProjectWorkspaceContext,
   resolveCurrentWorkspaceContextReadWitness,
   useWorkspaceBilling,
@@ -2859,13 +2860,21 @@ function AppInner() {
   useEffect(() => {
     const handleAppConfigChanged = () => {
       void fetchDaemonConfig().then((daemonConfig) => {
+        const previous = latestPersistedConfigRef.current;
         const next = clearStaleAmrModelChoiceOnProfileChange(
-          latestPersistedConfigRef.current,
-          mergeDaemonConfig(latestPersistedConfigRef.current, daemonConfig),
+          previous,
+          mergeDaemonConfig(previous, daemonConfig),
         );
+        const amrProfileChanged = amrProfileForConfig(previous) !== amrProfileForConfig(next);
         latestPersistedConfigRef.current = next;
         saveConfig(next);
         setConfig(next);
+        // The native Develop menu changes the complete AMR account boundary,
+        // not only the agent model catalog. Retire the old workspace selection,
+        // context, directory and every account-scoped cache before refreshing
+        // the new profile; otherwise prod workspace links remain mounted while
+        // status/models/billing already point at feature-test.
+        if (amrProfileChanged) notifyWorkspaceContextRefresh();
         amrModelsRef.current = null;
         restartAmrPolling();
         void refreshAgents();

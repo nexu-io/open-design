@@ -166,7 +166,6 @@ import { SettingsWorkspaceSection } from './SettingsWorkspaceSection';
 import {
   useWorkspaceBillingResponse,
   useWorkspaceContext,
-  workspaceBillingBalanceUsd,
   workspaceBillingSummaryForContext,
 } from '../collab/useWorkspaceContext';
 import { canUpgradeFromPlanTier, resolvePlanTier } from '../collab/team-plan';
@@ -1641,15 +1640,9 @@ export function SettingsDialog({
     context: workspaceContext,
     loading: workspaceContextLoading,
   } = useWorkspaceContext();
-  // recvpZPzGJL7o7: the local-CLI card's balance came ONLY from vela's
-  // account-scoped sources (`amrCardStatus.account.balanceUsd`, then the
-  // `/api/integrations/vela/wallet` snapshot) — the same account-scoped
-  // projection `resolvePlanTier` exists to correct for the plan-tier badge
-  // right next to it, via the SAME card's `amrCardResolvedPlan` below. A team
-  // member reads their PERSONAL wallet there even while the card's own badge
-  // correctly names the team's paid plan, because nothing fed the workspace's
-  // real balance into the number. `useWorkspaceBillingResponse` carries the
-  // explicit v2 workspace-wallet source independently from account metadata.
+  // Workspace billing remains available for workspace plan/upgrade decisions.
+  // The local-CLI card itself describes the selected CLI login and profile, so
+  // its email, account plan and balance must stay on one account-scoped source.
   const workspaceBillingResponse = useWorkspaceBillingResponse();
   // Same partition for the plan half: `response.summary` is an ACCOUNT read, so
   // the AMR card's plan badge and both upgrade routes must consume it projected
@@ -4675,14 +4668,6 @@ export function SettingsDialog({
                             amrWalletVisible && amrWalletSnapshot?.status === 'available'
                               ? formatVelaBalanceUsd(amrWalletSnapshot.balanceUsd)
                               : null;
-                          // recvpZPzGJL7o7: `amrStatusBalance` and `amrWalletBalance`
-                          // are both vela ACCOUNT-scoped reads. A team balance
-                          // may only come from the nested v2 workspace wallet
-                          // response whose workspace identity Vela returned;
-                          // never display the account summary's balance as a
-                          // team fallback. Personal/local use keeps the account
-                          // summary and login-status fallbacks.
-                          //
                           // recvqakgSc1Pwd: this must read `balanceUsd` — the
                           // dollar figure vela already computed — not
                           // `totalAvailableCredits`, a raw credits COUNT on a
@@ -4691,19 +4676,9 @@ export function SettingsDialog({
                           // credits count as a dollar amount is what put
                           // "Balance $388307.00" on a workspace whose real
                           // balance was under $39.
-                          const workspaceBalanceUsd = workspaceBillingBalanceUsd(
-                            workspaceBillingResponse,
-                            workspaceContext,
-                          );
-                          const amrWorkspaceBalance =
-                            amrWalletVisible && workspaceBalanceUsd
-                              ? formatVelaBalanceUsd(workspaceBalanceUsd)
-                              : null;
                           const amrCardBalanceLabel =
                             isAmrAgent && active && amrCardSignedIn
-                              ? workspaceContext?.workspaceType === 'team'
-                                ? amrWorkspaceBalance
-                                : amrWorkspaceBalance ?? amrStatusBalance ?? amrWalletBalance
+                              ? amrStatusBalance ?? amrWalletBalance
                               : null;
                           // vela's `account.plan` is ACCOUNT-scoped, so a member
                           // whose plan is held by the team workspace reads

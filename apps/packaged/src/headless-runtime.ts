@@ -233,6 +233,7 @@ export async function runPackagedHeadless(
         posthogKey: activeConfig.posthogKey,
         posthogHost: activeConfig.posthogHost,
         velaWebUrl: activeConfig.velaWebUrl,
+        velaWebUrls: activeConfig.velaWebUrls,
         // PR #974 round-5 (lefarcen P2): headless packaged mode uses the signed
         // Electron entry as a lifecycle owner, but creates no BrowserWindow and
         // exposes no privileged shell.openPath surface.

@@ -154,6 +154,7 @@ import {
   planDeckImageCapture,
   requestPreviewSnapshot,
   sourceLooksLikeExportableDeck,
+  sourceLooksLikeNavigableDeck,
   type ExportProgress,
   type ImageExportFormat,
 } from '../runtime/exports';
@@ -3242,7 +3243,7 @@ function sourceLooksLikeDeckPreview(source: string | null | undefined): boolean 
   if (!source) return false;
   return (
     /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(source) ||
-    sourceLooksLikeExportableDeck(source)
+    sourceLooksLikeNavigableDeck(source)
   );
 }
 

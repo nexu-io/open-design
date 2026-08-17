@@ -77,7 +77,10 @@ export function setRuntimeAmrConsoleOrigin(origin: string | null | undefined): v
   runtimeAmrConsoleOrigin = normalized.length > 0 ? normalized : null;
 }
 
-export function amrConsoleUrlForProfile(profile: string | null | undefined): string {
+export function amrConsoleUrlForProfile(
+  profile: string | null | undefined,
+  consoleOrigin?: string | null,
+): string {
   const normalized = profile?.trim() || 'prod';
   // prod's console is the public product URL and stays pinned to it: a runtime
   // origin must never be able to redirect a production user's account, plan, or
@@ -86,6 +89,8 @@ export function amrConsoleUrlForProfile(profile: string | null | undefined): str
   if (normalized === 'prod' || !KNOWN_AMR_PROFILES.has(normalized)) {
     return DEFAULT_AMR_RECHARGE_URL;
   }
+  const statusOrigin = consoleOrigin?.trim().replace(/\/$/, '') ?? '';
+  if (statusOrigin) return `${statusOrigin}${AMR_CONSOLE_PATH}`;
   if (runtimeAmrConsoleOrigin) return `${runtimeAmrConsoleOrigin}${AMR_CONSOLE_PATH}`;
   return AMR_CONSOLE_URL_BY_PROFILE[normalized] ?? DEFAULT_AMR_RECHARGE_URL;
 }

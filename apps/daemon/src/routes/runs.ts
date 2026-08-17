@@ -119,6 +119,7 @@ import {
   BYOK_OPENCODE_PROVIDER_REQUIRED_MESSAGE,
 } from '../runtimes/byok-opencode.js';
 import { resolveChatRunInactivityTimeoutMs } from '../runtimes/chat-run-lifecycle.js';
+import { runMessageEventPersistenceAnalytics } from '../runtimes/chat-run-messages.js';
 import { TERMINAL_RUN_STATUSES } from '../runtimes/runs.js';
 import {
   deriveActivationMilestones,
@@ -2704,6 +2705,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
             tool_error_count: toolAnalytics.tool_error_count,
             tool_name_count: toolAnalytics.tool_name_count,
             tool_names: toolAnalytics.tool_names_csv,
+            ...runMessageEventPersistenceAnalytics(run),
           };
         Object.assign(
           finishedProperties,
