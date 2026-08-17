@@ -2,7 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform';
+import { isSocksOnlyProxyEnv, mergeProxyAwareEnv, resolveSystemProxyEnv } from '@open-design/platform';
 import { readAppConfigSync } from '../app-config.js';
 import { resolveProjectRelativePath } from '../home-expansion.js';
 import { expandConfiguredEnv } from './paths.js';
@@ -132,6 +132,25 @@ export function spawnEnvForAgent(
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'claude') {
+    // Claude Code does not support SOCKS proxies. If the system proxy is
+    // SOCKS-only (ALL_PROXY=socks://... with no HTTP_PROXY/HTTPS_PROXY),
+    // strip ALL_PROXY so Claude can reach the API directly. Users can
+    // configure an HTTP(S) forward proxy via agentCliEnv.
+    if (isSocksOnlyProxyEnv(env)) {
+      for (const key of Object.keys(env)) {
+        if (key.toLowerCase() === 'all_proxy') delete env[key];
+      }
+      // Also drop NODE_USE_ENV_PROXY if no HTTP/HTTPS proxy remains.
+      const hasHttpOrHttps = Object.keys(env).some((k) => {
+        const lk = k.toLowerCase();
+        return (lk === 'http_proxy' || lk === 'https_proxy') && (env[k] || '').trim().length > 0;
+      });
+      if (!hasHttpOrHttps) {
+        for (const key of Object.keys(env)) {
+          if (key.toLowerCase() === 'node_use_env_proxy') delete env[key];
+        }
+      }
+    }
     return finalizeRuntimeEnv(env, sandboxRuntime);
   }
   if (agentId === 'codex') {
