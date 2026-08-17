@@ -148,7 +148,9 @@ const jsonLd = [
           <span class="dl-hero-mark" aria-hidden="true">
             <img src="/favicon.svg" alt="" width="34" height="34" />
           </span>
-          <span>Vibe Design Workspace</span>
+          {/* Product name, not a translatable phrase — the brand pill
+              always reads the canonical one-word name. */}
+          <span>OpenDesign</span>
         </div>
         <h1 class="dl-hero-heading">{page.heading}</h1>
         <p class="dl-hero-lead">{page.lead}</p>
@@ -751,13 +753,21 @@ const jsonLd = [
   .dl-platforms { margin-top: 64px; }
   .dl-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    /* Three cards since the Linux card was removed — 3 equal columns
+       keep the row centered under the hero. */
+    grid-template-columns: repeat(3, 1fr);
     gap: 16px;
-    max-width: 920px;
+    max-width: 690px;
     margin: 0 auto;
   }
   @media (max-width: 860px) {
     .dl-grid { grid-template-columns: repeat(2, 1fr); max-width: 480px; }
+    /* Odd card out (Windows) centers under the two macOS cards. */
+    .dl-grid .dl-card:last-child {
+      grid-column: 1 / -1;
+      justify-self: center;
+      width: calc(50% - 8px);
+    }
   }
   @media (max-width: 420px) {
     .dl-grid { grid-template-columns: 1fr; max-width: 320px; }
