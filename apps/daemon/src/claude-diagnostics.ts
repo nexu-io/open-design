@@ -150,6 +150,31 @@ export function diagnoseClaudeCliFailure(
     );
   }
 
+  // Prompt / context window overflow. Claude Code surfaces this verbatim as
+  // `Prompt is too long` (or `API Error: Prompt is too long.`) when the
+  // assembled turn exceeds the upstream context window. It must be detected
+  // before the authFailure branch below: a `Prompt is too long` text from a
+  // mid-stream API error frame occasionally co-occurs with fragments the auth
+  // regex picks up (e.g. an expired-token notice logged just before the size
+  // rejection), which previously made the daemon tell the user to re-login
+  // when the actual fix was to reduce the prompt. Returning the dedicated
+  // `AGENT_PROMPT_TOO_LARGE` code lets server.ts pick the prompt_too_large
+  // branch in classifyRunFailure and lets the UI suggest reducing context.
+  // See issue #6979.
+  const promptTooLarge =
+    /\bprompt is too long\b/i.test(text) ||
+    /\bprompt too large\b/i.test(text) ||
+    /\bcontext (?:window|size) (?:has been )?exceeded\b/i.test(text) ||
+    /\bmaximum context length\b/i.test(text);
+  if (promptTooLarge) {
+    return withContext(
+      `${runtimeLabel} rejected the run because the prompt exceeds the supported context size.`,
+      'Reduce the prompt length, attachments, or accumulated conversation context, then retry.',
+      input,
+      'AGENT_PROMPT_TOO_LARGE',
+    );
+  }
+
   const authFailure =
     /\b401\b/.test(text) ||
     /apikeysource["'\s:]+none/i.test(text) ||

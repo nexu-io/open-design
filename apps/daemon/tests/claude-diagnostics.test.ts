@@ -289,4 +289,39 @@ describe('diagnoseClaudeCliFailure', () => {
     expect(diagnostic?.detail).toContain('OpenClaude endpoint configuration');
     expect(diagnostic?.detail).not.toContain('Claude Code');
   });
+
+  // Regression: Claude Code surfaces the exact string `Prompt is too long` when
+  // the assembled turn exceeds the upstream context window. Before this fix the
+  // daemon misclassified it as an auth failure (#6979), sending users to a
+  // credential fix when the real remedy was to reduce prompt size.
+  it('classifies `Prompt is too long` as a prompt-too-large failure, not auth (#6979)', () => {
+    const diagnostic = diagnoseClaudeCliFailure({
+      agentId: 'claude',
+      exitCode: 1,
+      stdoutTail: 'API Error: Prompt is too long.',
+    });
+
+    expect(diagnostic?.code).toBe('AGENT_PROMPT_TOO_LARGE');
+    expect(diagnostic?.message).toMatch(/prompt exceeds the supported context size/i);
+    expect(diagnostic?.detail).toMatch(/reduce the prompt length/i);
+    expect(diagnostic?.retryable).toBe(true);
+  });
+
+  it('still detects variant phrasings of prompt-too-large (#6979)', () => {
+    const inputs = [
+      { stdoutTail: 'Prompt is too long.' },
+      { stdoutTail: 'Error: Prompt is too long — the assembled request exceeds the context limit.' },
+      { stderrTail: 'prompt too large' },
+      { stdoutTail: 'Context window has been exceeded; reduce your input.' },
+      { stdoutTail: 'maximum context length of 200000 tokens exceeded' },
+    ];
+    for (const input of inputs) {
+      const diagnostic = diagnoseClaudeCliFailure({
+        agentId: 'claude',
+        exitCode: 1,
+        ...input,
+      });
+      expect(diagnostic?.code, `expected ${input.stdoutTail || input.stderrTail} to be classified`).toBe('AGENT_PROMPT_TOO_LARGE');
+    }
+  });
 });
