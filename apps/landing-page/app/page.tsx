@@ -1289,6 +1289,7 @@ export default function Page({
                   <li><a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a></li>
                   <li><a href={href('/html-video/')}>{ui.footer.htmlVideo}</a></li>
                   <li><a href={href('/codex-slides/')}>Codex Slides</a></li>
+                  <li><a href={href('/codex-plugin/')}>Codex Plugin</a></li>
                 </ul>
               </div>
 
@@ -1388,7 +1389,7 @@ export default function Page({
                 in globals.css cover both footers. */}
             <div className='foot-masthead' data-od-id='footer-masthead'>
               <p className='foot-masthead-wordmark'>
-                Open <span className='foot-masthead-accent'>Design</span><span className='foot-masthead-period'>.</span>
+                Open<span className='foot-masthead-accent'>Design</span><span className='foot-masthead-period'>.</span>
               </p>
             </div>
           </div>
