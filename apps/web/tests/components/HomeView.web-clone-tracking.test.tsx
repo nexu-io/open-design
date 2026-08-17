@@ -132,10 +132,10 @@ describe('web-clone example-card tracking', () => {
   });
 
   // Contract lock: the shipped Website-clone example set is intentionally
-  // narrowed to the first-party Open Design site to avoid shipping third-party
+  // narrowed to the first-party OpenDesign site to avoid shipping third-party
   // brand copies. Assert the exact count + domain so the rail can't silently
   // drift back to the old multi-site set without updating this contract.
-  it('resolves exactly the contracted Open Design Website-clone site card', async () => {
+  it('resolves exactly the contracted OpenDesign Website-clone site card', async () => {
     writeHomeGuideStage('done');
     stubPlugins();
     renderHome();
@@ -150,7 +150,7 @@ describe('web-clone example-card tracking', () => {
     ).toBe(true);
   });
 
-  it('renders the contracted Open Design site card with a local eager logo', async () => {
+  it('renders the contracted OpenDesign site card with a local eager logo', async () => {
     writeHomeGuideStage('done');
     stubPlugins();
     renderHome();
@@ -163,7 +163,7 @@ describe('web-clone example-card tracking', () => {
     expect(logo?.getAttribute('fetchpriority')).toBe('high');
   });
 
-  it('falls back when the local Open Design site card logo cannot load', async () => {
+  it('falls back when the local OpenDesign site card logo cannot load', async () => {
     writeHomeGuideStage('done');
     stubPlugins();
     renderHome();

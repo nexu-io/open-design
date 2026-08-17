@@ -46,7 +46,7 @@ export type AgentFixIntent =
   /** Re-run agent detection (the Settings "Rescan" affordance). */
   | { kind: 'rescan' }
   /**
-   * Prompt the user to point Open Design at an explicit binary by writing
+   * Prompt the user to point OpenDesign at an explicit binary by writing
    * `envKey` (e.g. `CURSOR_AGENT_BIN`) into `agentCliEnv`. Used when the CLI
    * is installed somewhere PATH detection can't reach.
    */
@@ -77,7 +77,7 @@ export type AgentDiagnosticReason =
   | 'configured-bin-invalid'
   /** The binary ran, but its version could not be read under a strict policy. */
   | 'version-probe-failed'
-  /** The installed CLI version is outside this Open Design build's tested set. */
+  /** The installed CLI version is outside this OpenDesign build's tested set. */
   | 'untested-version'
   /** A required external runtime profile or companion failed its handshake. */
   | 'runtime-profile-incompatible'
@@ -122,7 +122,7 @@ export interface AgentInfo {
    */
   diagnostics?: AgentDiagnostic[];
   models?: AgentModelOption[];
-  /** Whether models came from the installed CLI or Open Design's static fallback. */
+  /** Whether models came from the installed CLI or OpenDesign's static fallback. */
   modelsSource?: 'live' | 'fallback';
   reasoningOptions?: AgentModelOption[];
   /** HTTPS URL to install or download the CLI (vendor docs, GitHub README, npm). */

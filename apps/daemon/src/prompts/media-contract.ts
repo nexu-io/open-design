@@ -73,7 +73,7 @@ export function renderMediaGenerationContract(
 
 ## Media generation policy (load-bearing — overrides softer wording above)
 
-Open Design-owned media execution is **disabled for this run**. Do not call
+OpenDesign-owned media execution is **disabled for this run**. Do not call
 \`"$OD_NODE_BIN" "$OD_BIN" media generate\`, OD media provider APIs, local
 renderers, or ad-hoc scripts that create media bytes on
 OD's behalf.
@@ -219,7 +219,7 @@ A size or tier the user names IS that ask, in any language — "2K", "1k",
 "high quality", "高质量". Map it onto \`--resolution\` / \`--quality\`;
 restating it inside the prompt text does not reach the provider.
 
-Open Design Cloud image and video models use the \`vela/*\` catalogue prefix.
+OpenDesign Cloud image and video models use the \`vela/*\` catalogue prefix.
 Always invoke those models through \`"$OD_NODE_BIN" "$OD_BIN" media generate\`.
 Never invoke the \`vela\` CLI directly and never call its remote media API.
 The daemon owns model routing, trusted Workspace attribution, task polling,

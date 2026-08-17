@@ -331,7 +331,7 @@ function deriveCandidateDescription(ref: SkillPluginCandidateSourceRef): string 
 
 function synthesizeSkill(candidate: SkillPluginCandidate): string {
   const source = candidate.sourceRefs.find((ref) => ref.content)?.content?.trim();
-  if (source) return `${source}\n\n## Provenance\n\nFormalized by Open Design from candidate ${candidate.id}.\n`;
+  if (source) return `${source}\n\n## Provenance\n\nFormalized by OpenDesign from candidate ${candidate.id}.\n`;
   return [
     `# ${candidate.title}`,
     '',
@@ -339,7 +339,7 @@ function synthesizeSkill(candidate: SkillPluginCandidate): string {
     '',
     '## When to use',
     '',
-    'Use this skill when the workflow described by the source material should be repeated inside Open Design.',
+    'Use this skill when the workflow described by the source material should be repeated inside OpenDesign.',
     '',
     '## Workflow',
     '',
@@ -349,7 +349,7 @@ function synthesizeSkill(candidate: SkillPluginCandidate): string {
     '',
     '## Provenance',
     '',
-    `Formalized by Open Design from candidate ${candidate.id}.`,
+    `Formalized by OpenDesign from candidate ${candidate.id}.`,
     '',
   ].join('\n');
 }

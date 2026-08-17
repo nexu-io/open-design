@@ -820,7 +820,7 @@ export async function enforceVerifiedWorkspaceResourceRead(
  * Headerless is the `od` CLI's normal shape, not an anomaly: nothing in
  * `apps/daemon/src/cli.ts` attaches `x-od-workspace-*` outside `od workspace …`,
  * and `AGENTS.md` makes the CLI the embeddability contract that external agents
- * drive Open Design through. This branch used to answer 401 for ANY bound
+ * drive OpenDesign through. This branch used to answer 401 for ANY bound
  * resource, which was survivable only while headerless creates left projects
  * unbound. Once every created project got a workspace home (#6201), the two
  * rules combined into a project its own creator could not touch:

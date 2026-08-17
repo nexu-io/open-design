@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 // Resolve Playwright from wherever it can actually be found:
 //   1. relative to this script (covers a checkout that has its own dep);
 //   2. relative to the process cwd (covers `npm i -D playwright` in the
-//      project — the normal fix inside Open Design, where these scripts are
+//      project — the normal fix inside OpenDesign, where these scripts are
 //      staged under `.od-skills/<plugin>/scripts/` but run from the project
 //      root);
 //   3. OD_PLAYWRIGHT_PATH — an explicit package-dir escape hatch.

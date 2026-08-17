@@ -9,7 +9,7 @@
 - **Node.js：** `~24`（Node 24.x）。仓库在 `package.json#engines` 中强制要求该版本。
 - **pnpm：** `10.33.x`。仓库通过 `packageManager` 固定为 `pnpm@10.33.2`；若使用 Corepack，该固定版本将被自动选中。
 - **操作系统：** 主要支持 macOS、Linux、WSL2。Windows 原生环境大部分流程也可运行，但 WSL2 是更稳定的基线。
-- **可选的本地 agent CLI：** Open Design 通过 registry 支持 Claude Code、Codex、Devin for Terminal、OpenCode、Cursor Agent、Qwen、Qoder CLI、GitHub Copilot CLI 等本地 runtime；当前清单以 [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) 为准。即使未安装任何本地 runtime，也可使用在 Settings 中配置的 BYOK runtime。
+- **可选的本地 agent CLI：** OpenDesign 通过 registry 支持 Claude Code、Codex、Devin for Terminal、OpenCode、Cursor Agent、Qwen、Qoder CLI、GitHub Copilot CLI 等本地 runtime；当前清单以 [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) 为准。即使未安装任何本地 runtime，也可使用在 Settings 中配置的 BYOK runtime。
 
 `nvm` / `fnm` 为可选的便捷工具，并非项目必要依赖。如需使用，请在执行 pnpm 之前安装并切换到 Node 24：
 
@@ -74,7 +74,7 @@ pnpm typecheck                 # 对整个 workspace 执行 typecheck
 
 ## Docker 部署
 
-在一个完全容器化的环境中运行 Open Design，无需安装 Node.js 或 pnpm。
+在一个完全容器化的环境中运行 OpenDesign，无需安装 Node.js 或 pnpm。
 
 ### 环境要求
 
@@ -89,7 +89,7 @@ docker compose version
 
 ---
 
-## 启动 Open Design
+## 启动 OpenDesign
 
 从仓库根目录开始：
 
@@ -223,7 +223,7 @@ ls -la apps/daemon/dist/cli.js
 curl -s http://127.0.0.1:7457/api/health
 ```
 
-随后，在 Open Design 应用中**重新打开**该 project，不要复用之前 terminal 中的 agent 会话。由 daemon 启动的 agent 应当能够看到类似如下的值：
+随后，在 OpenDesign 应用中**重新打开**该 project，不要复用之前 terminal 中的 agent 会话。由 daemon 启动的 agent 应当能够看到类似如下的值：
 
 ```bash
 echo "OD_BIN=$OD_BIN"
@@ -310,7 +310,7 @@ open-design/
 │   └── desktop/               # Electron runtime，由 tools-dev 启动 / 检查
 ├── packages/
 │   ├── contracts/             # 共享的 web/daemon 应用契约
-│   ├── sidecar-proto/         # Open Design sidecar 协议契约
+│   ├── sidecar-proto/         # OpenDesign sidecar 协议契约
 │   ├── sidecar/               # 通用 sidecar runtime 原语
 │   └── platform/              # 通用 process/platform 原语
 ├── tools/dev/                 # `pnpm tools-dev` 生命周期与 inspect CLI
@@ -328,8 +328,8 @@ open-design/
 
 - **"no agents found on PATH"** —— 安装 [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) 中注册的任一本地 runtime，确认 daemon 能找到其可执行文件，然后在 **Settings → Execution mode** 中执行 **Rescan**；也可以在 Settings 中配置 BYOK runtime。
 - **daemon 在 /api/chat 上返回 500** —— 查看 daemon 终端的 stderr 尾部；通常是 CLI 拒绝了传入的参数。不同 CLI 的 argv 结构各异；如需调整，请查看 `apps/daemon/src/runtimes/defs/` 中对应的定义。
-- **媒体生成报错 `OD_BIN` 缺失、或 daemon URL 为 `:0`** —— 运行上述媒体 dispatcher 排查步骤。请勿复用已有的 CLI 会话；从 Open Design 应用中重新打开 project，daemon 才会注入新的 `OD_*` 变量。
-- **Codex 加载的插件上下文过多** —— 使用 `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` 启动 Open Design，daemon 启动 Codex 时会传入 `--disable plugins`。
+- **媒体生成报错 `OD_BIN` 缺失、或 daemon URL 为 `:0`** —— 运行上述媒体 dispatcher 排查步骤。请勿复用已有的 CLI 会话；从 OpenDesign 应用中重新打开 project，daemon 才会注入新的 `OD_*` 变量。
+- **Codex 加载的插件上下文过多** —— 使用 `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` 启动 OpenDesign，daemon 启动 Codex 时会传入 `--disable plugins`。
 - **artifact 始终不渲染** —— 先确认本次运行的交付 profile。对于具备文件系统能力的本地 runtime，检查 agent 是否创建了可预览的项目文件、文件事件是否到达 daemon；该路径不应把源码放进 `<artifact>`。对于 plain/纯文本或 BYOK 运行，检查是否存在一个完整的 `<artifact>` 块，并在 daemon 日志中定位第一处失败边界。
 
 ## 回到产品愿景

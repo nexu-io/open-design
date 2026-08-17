@@ -1367,7 +1367,7 @@ export function EntryShell({
       navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
       return 'blocked' as const;
     }
-    // Open Design Cloud pre-run balance gate: hard blocks (empty wallet or
+    // OpenDesign Cloud pre-run balance gate: hard blocks (empty wallet or
     // signed out) and the soft low-balance reminder both fire BEFORE the
     // project is created, so the dialog appears right here on the home page
     // and the composer keeps its draft. In-project sends are gated separately
@@ -1538,7 +1538,7 @@ export function EntryShell({
    * Onboarding is where a signed-out user signs IN, so the workspace context
    * the shell resolved before it is stale by definition. Without this the rail
    * came back in its signed-out shape — no workspace switcher, no 草稿 / 全部项目
-   * / Workspace 设置, and the "sign in to Open Design Cloud" callout still in
+   * / Workspace 设置, and the "sign in to OpenDesign Cloud" callout still in
    * the bottom-left corner (#140) — until a focus or the 30s poll happened to
    * re-read it. `CloudSignInTip` fires the same three after its own sign-in.
    *
@@ -2963,7 +2963,7 @@ function OnboardingView({
         // Onboarding may sit on this step for a while before finishOnboarding
         // fires refreshWorkspaceSurfacesAfterOnboarding() — without firing
         // these here too, Home's rail can render in its stale signed-out
-        // shape (still showing the "sign in to Open Design Cloud" callout)
+        // shape (still showing the "sign in to OpenDesign Cloud" callout)
         // for however long that gap lasts. Mirrors CloudSignInTip's own
         // finishSignedIn().
         notifyWorkspaceContextRefresh();
@@ -3254,7 +3254,7 @@ function OnboardingView({
 
   const primaryActionLabel = t('settings.onboardingContinue');
 
-  // Step 1 is identity only: every user signs into Open Design Cloud before
+  // Step 1 is identity only: every user signs into OpenDesign Cloud before
   // choosing Hosted, Local, or BYOK on the next screen.
   if (step === 0) {
     const cloudBusy = amrLoginPending;
@@ -3355,7 +3355,7 @@ function OnboardingView({
           <footer className="onboarding-cloud__footer">
             <LanguageMenu placement="up" align="start" />
             <span>
-              © {new Date().getFullYear()} Open Design · {t('settings.onboardingCloudRights')}
+              © {new Date().getFullYear()} OpenDesign · {t('settings.onboardingCloudRights')}
             </span>
           </footer>
         </div>
@@ -3483,7 +3483,7 @@ function OnboardingView({
           <footer className="onboarding-cloud__footer">
             <LanguageMenu placement="up" align="start" />
             <span>
-              © {new Date().getFullYear()} Open Design ·{' '}
+              © {new Date().getFullYear()} OpenDesign ·{' '}
               {t('settings.onboardingCloudRights')}
             </span>
           </footer>

@@ -1,7 +1,7 @@
 {
   "name": "@open-design/dsh-runtime",
   "version": "0.1.0",
-  "description": "DeepSeek Harness profile runtime for Open Design",
+  "description": "DeepSeek Harness profile runtime for OpenDesign",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",

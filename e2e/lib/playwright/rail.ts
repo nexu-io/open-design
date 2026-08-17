@@ -103,7 +103,7 @@ async function openProjectsEntryView(page: Page): Promise<void> {
     await page.goto('/projects', { waitUntil: 'domcontentloaded' });
   }
   await page
-    .getByText('Loading Open Design…')
+    .getByText('Loading OpenDesign…')
     .waitFor({ state: 'hidden', timeout: T.long })
     .catch(() => {});
   await expect(page).toHaveURL(/\/projects\/?$/, { timeout: T.long });

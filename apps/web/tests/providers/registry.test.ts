@@ -1680,7 +1680,7 @@ describe('connectConnector', () => {
       await expect(connectConnector('github')).resolves.toEqual({
         connector: { id: 'github', name: 'GitHub', status: 'available', tools: [] },
         auth: { kind: 'redirect_required', redirectUrl: 'https://example.com/oauth' },
-        error: 'Popup blocked. Allow popups for Open Design and try again.',
+        error: 'Popup blocked. Allow popups for OpenDesign and try again.',
       });
     } finally {
       restoreHost();

@@ -122,7 +122,7 @@ export interface KnownProvider {
   baseUrl: string;
   /** Ranked provider-owned preferences, matched against the live account catalogue. */
   preferredModels: string[];
-  /** Model ids that Open Design previously preselected but the provider retired. */
+  /** Model ids that OpenDesign previously preselected but the provider retired. */
   retiredModels?: string[];
   /** Optional provider-specific key console link shown in Settings. */
   apiKeyConsoleLink?: { host: string; url: string };

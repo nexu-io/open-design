@@ -61,7 +61,7 @@ function connectorCard(scope: Page | Locator, id: string) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await expect(page.getByText('Loading Open Design…')).toHaveCount(0, { timeout: T.long });
+  await expect(page.getByText('Loading OpenDesign…')).toHaveCount(0, { timeout: T.long });
 }
 
 async function openConnectorsSettings(

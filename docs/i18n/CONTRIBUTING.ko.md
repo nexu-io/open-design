@@ -1,4 +1,4 @@
-# Open Design 기여 가이드
+# OpenDesign 기여 가이드
 
 기여를 고민하고 있다니 고맙습니다. OD는 일부러 작게 유지합니다. 대부분의 가치는 프레임워크 코드가 아니라 **파일**(skill, design system, 프롬프트 조각)에 담겨 있습니다. 그래서 가장 효과가 큰 기여는 대개 폴더 하나, Markdown 파일 하나, 또는 PR 한 건 크기의 adapter입니다.
 
@@ -41,7 +41,7 @@ Node `~24`와 pnpm `10.33.x`가 필요합니다. `nvm`이나 `fnm`은 선택 사
 
 ## Docker 설정
 
-Node.js나 pnpm을 설치하지 않고도 Open Design을 실행할 수 있습니다.
+Node.js나 pnpm을 설치하지 않고도 OpenDesign을 실행할 수 있습니다.
 
 ### 사전 준비
 
@@ -51,7 +51,7 @@ Compose v2가 포함된 Docker Desktop이 설치되어 있는지 확인하세요
 docker compose version
 ```
 
-### Open Design 실행
+### OpenDesign 실행
 
 ```bash
 cd deploy

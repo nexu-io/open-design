@@ -3,10 +3,10 @@
   "id": "totality-festival",
   "name": "Totality Festival",
   "category": "Themed & Unique",
-  "description": "Bundled Open Design package for Totality Festival, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
+  "description": "Bundled OpenDesign package for Totality Festival, derived from curated DESIGN.md, tokens.css, and components.html fixtures.",
   "source": {
     "type": "bundled",
-    "origin": "Open Design curated bundled fixture"
+    "origin": "OpenDesign curated bundled fixture"
   },
   "files": {
     "design": "DESIGN.md",

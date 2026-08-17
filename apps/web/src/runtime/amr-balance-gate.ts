@@ -1,4 +1,4 @@
-// Pre-run balance gate for the Open Design Cloud agent. Two tiers:
+// Pre-run balance gate for the OpenDesign Cloud agent. Two tiers:
 //
 //   HARD  — the run cannot possibly succeed: the account is signed out, or the
 //           wallet balance is definitively <= $0. The send is blocked and the
@@ -163,7 +163,7 @@ export function setAmrLowBalanceWarnOptedOut(): void {
 }
 
 /**
- * Decide whether an Open Design Cloud run may start. Fast path first: the
+ * Decide whether an OpenDesign Cloud run may start. Fast path first: the
  * daemon-cached snapshot answers without an upstream roundtrip, so healthy
  * balances start with no added latency. Only a hard-block answer is confirmed
  * against the live wallet (refresh=1) — the cache may predate a recharge or

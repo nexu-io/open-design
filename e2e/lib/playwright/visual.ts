@@ -99,7 +99,7 @@ export const VISUAL_CLI_AGENTS = [
 
 export const VISUAL_AMR_AGENT = {
   id: 'amr',
-  name: 'Open Design',
+  name: 'OpenDesign',
   bin: 'vela',
   available: true,
   version: '0.1.0',
@@ -224,7 +224,7 @@ const VISUAL_PLUGINS = [
   makeVisualPlugin({
     id: 'visual-figma-importer',
     title: 'Figma Importer',
-    description: 'Migrate a Figma frame into an editable Open Design project.',
+    description: 'Migrate a Figma frame into an editable OpenDesign project.',
     mode: 'prototype',
     taskKind: 'figma-migration',
     tags: ['migration'],
@@ -691,7 +691,7 @@ export async function mockSignedInVelaAccount(
 }
 
 export async function waitForVisualReady(page: Page): Promise<void> {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.xlong });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.xlong });
   await expect(page.getByTestId('home-hero')).toBeVisible({ timeout: T.medium });
   await expect(page.getByTestId('home-hero-input')).toBeVisible({ timeout: T.medium });
   await page.evaluate(async () => {
@@ -721,7 +721,7 @@ export async function gotoVisualWorkspace(page: Page): Promise<void> {
   // leave the route guard and deep-link bootstrap racing the mocked list.
   await waitForVisualProjects(page, VISUAL_PROJECTS);
   await page.goto('/projects/visual-project-launchpad', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page).toHaveURL(/\/projects\/visual-project-launchpad/, { timeout: T.medium });
   await expect(page.getByTestId('chat-composer')).toBeVisible({ timeout: T.medium });
   await expect(page.getByTestId('chat-composer-input')).toBeVisible({ timeout: T.medium });
@@ -786,8 +786,8 @@ export async function prepareVisualWorkspacePreview(page: Page): Promise<void> {
 export async function prepareVisualAvatarMenu(page: Page): Promise<Locator> {
   await prepareVisualWorkspaceFileList(page);
   const menu = await openAvatarMenu(page);
-  // The composer popover is a model picker: the Open Design account card is
-  // conditional (Open Design has to be installed), so gate on the model list.
+  // The composer popover is a model picker: the OpenDesign account card is
+  // conditional (OpenDesign has to be installed), so gate on the model list.
   await expect(menu.locator('.avatar-model-section').first()).toBeVisible();
   await expect(page.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
   await expect(menu.locator('.avatar-item').first()).toBeVisible();

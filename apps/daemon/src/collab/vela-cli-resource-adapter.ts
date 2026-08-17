@@ -100,7 +100,7 @@ const MEMBER_MIRROR_EXCLUDED_PREFIXES = ['.env', 'deriveddata-/'] as const;
  * one flat list:
  *
  * - {@link MEMBER_MIRROR_EXCLUDED_ENTRIES} — secret-bearing entries
- *   (credentials, tool state, Open Design private bookkeeping). These must
+ *   (credentials, tool state, OpenDesign private bookkeeping). These must
  *   never leave the author's machine whether they are a file, a directory, or
  *   a symlink, so they are sent bare and match any entry of that name.
  * - {@link IGNORED_PROJECT_DIR_NAMES} — generated/installed/cache trees the
@@ -116,7 +116,7 @@ const MEMBER_MIRROR_EXCLUDED_PREFIXES = ['.env', 'deriveddata-/'] as const;
  * contain a slash, so the rule matches nothing and the tree is published in
  * full — the pre-optimization payload, never a missing file. Once the CLI
  * understands the form, the same push starts skipping those directories with
- * no further Open Design change. A new `--exclude-dir` flag could NOT degrade
+ * no further OpenDesign change. A new `--exclude-dir` flag could NOT degrade
  * this way: older CLIs reject unknown flags, which would fail every publish.
  */
 export const MEMBER_MIRROR_PUSH_EXCLUDED_ENTRIES: readonly string[] = (() => {

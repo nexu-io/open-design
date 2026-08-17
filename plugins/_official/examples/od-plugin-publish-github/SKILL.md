@@ -1,6 +1,6 @@
 ---
 name: od-plugin-publish-github
-description: Publish a local Open Design plugin to a new public GitHub repository using gh CLI.
+description: Publish a local OpenDesign plugin to a new public GitHub repository using gh CLI.
 triggers:
   - publish plugin
   - github repo

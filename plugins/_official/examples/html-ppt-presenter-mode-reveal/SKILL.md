@@ -3,9 +3,9 @@ name: html-ppt-presenter-mode
 en_name: "Run a Live AI Product Demo like a Founding DevRel Lead"
 zh_name: "像创始 DevRel 一样做现场 AI 演示"
 description: |
-  Open Design live demo: from a one-line prompt to runnable design in a single session — the flow, live. Built as a decision-grade AI literacy deck for developers, prospects, community.
+  OpenDesign live demo: from a one-line prompt to runnable design in a single session — the flow, live. Built as a decision-grade AI literacy deck for developers, prospects, community.
 en_description: |
-  Open Design live demo: from a one-line prompt to runnable design in a single session — the flow, live. Built as a decision-grade AI literacy deck for developers, prospects, community.
+  OpenDesign live demo: from a one-line prompt to runnable design in a single session — the flow, live. Built as a decision-grade AI literacy deck for developers, prospects, community.
 zh_description: |
   像创始 DevRel 一样做现场 AI 演示——一份可商业交付的AI 素养 Deck，围绕真实主题、证据链与决策目标组织。
 tags:
@@ -40,7 +40,7 @@ od:
   animations: true
   category: "ai-literacy"
   scenario: "ai"
-  example_prompt: "Create \"Run a Live AI Product Demo like a Founding DevRel Lead\" as a decision-grade AI literacy deck in this template's own visual system. Subject: Open Design live demo: from a one-line prompt to runnable design in a single session — the flow, live. Audience: developers, prospects, community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
+  example_prompt: "Create \"Run a Live AI Product Demo like a Founding DevRel Lead\" as a decision-grade AI literacy deck in this template's own visual system. Subject: OpenDesign live demo: from a one-line prompt to runnable design in a single session — the flow, live. Audience: developers, prospects, community. First ask only for missing essentials: audience, decision target, source-of-truth materials, deadline, and must-keep numbers. Then produce the slide plan, written slides, visual direction, speaker-ready structure, and a critic pass against this rubric: does the deck make AI implementation concrete enough to fund."
 ---
 # HTML PPT · Presenter Mode (演讲者模式)
 

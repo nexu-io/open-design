@@ -337,7 +337,7 @@ describe('resolveRunFailureUi', () => {
     });
   });
 
-  // PRD "需要登录" — non-AMR agents. Open Design can't sign in for them (their
+  // PRD "需要登录" — non-AMR agents. OpenDesign can't sign in for them (their
   // login lives in the user's own terminal), so the card shows the {agent}
   // sign-in copy, a plain Retry primary, and promotes AMR via the switch card.
   it('shows sign-in copy + retry + AMR promotion for non-AMR AGENT_AUTH_REQUIRED / UNAUTHORIZED', () => {

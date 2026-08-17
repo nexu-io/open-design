@@ -1036,7 +1036,7 @@ describe('ProjectView conversation run isolation', () => {
     },
   );
 
-  // An Open Design Cloud run is billed to the CALLER's own wallet. The gate must
+  // An OpenDesign Cloud run is billed to the CALLER's own wallet. The gate must
   // therefore ask about the caller's identity, not about this project's
   // workspace scope — a project whose scope is unresolved says nothing about
   // whether the signed-in user can pay, and holding the send closed there just

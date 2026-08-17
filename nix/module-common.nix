@@ -1,4 +1,4 @@
-# Shared option definitions for the Open Design Home Manager and NixOS
+# Shared option definitions for the OpenDesign Home Manager and NixOS
 # modules. Returns a plain attrset of options (NOT a NixOS module). The
 # consuming module imports this and merges the result into its own
 # `options.<scope>.open-design`.
@@ -25,7 +25,7 @@
     then flake.packages.${pkgs.stdenv.hostPlatform.system}
     else {};
 in {
-  enable = lib.mkEnableOption "Open Design — local-first design product daemon";
+  enable = lib.mkEnableOption "OpenDesign — local-first design product daemon";
 
   package = lib.mkOption {
     type = lib.types.package;
@@ -33,7 +33,7 @@ in {
       flakePackages.daemon or (throw
         "open-design: no daemon package available for ${pkgs.stdenv.hostPlatform.system}; set services.open-design.package explicitly");
     defaultText = lib.literalExpression "open-design.packages.\${pkgs.stdenv.hostPlatform.system}.daemon";
-    description = "The Open Design daemon package providing the `od` binary.";
+    description = "The OpenDesign daemon package providing the `od` binary.";
   };
 
   port = lib.mkOption {
@@ -130,7 +130,7 @@ in {
   };
 
   webFrontend = {
-    # The Open Design web frontend is a static SPA built by
+    # The OpenDesign web frontend is a static SPA built by
     # `apps/web` → `apps/web/out/`. The daemon is a separate Express
     # process that serves the JSON API at `/api/*`. The SPA is built
     # with `OD_DAEMON_URL=""`, so the bundled JS issues relative

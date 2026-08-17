@@ -1,6 +1,6 @@
 # Docker deployment
 
-This deployment ships Open Design as a single Alpine-based runtime image. The
+This deployment ships OpenDesign as a single Alpine-based runtime image. The
 daemon serves both the API and the built Next.js static export, so there is no
 separate nginx container.
 

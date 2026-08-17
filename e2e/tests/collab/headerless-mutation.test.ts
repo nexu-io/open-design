@@ -351,7 +351,7 @@ describe('a headerless caller can mutate only unbound local projects', () => {
 
   // The dual-track contract, pinned through the real binary rather than by
   // intent. `AGENTS.md` makes `od` the embeddability surface external agents
-  // drive Open Design through, and there was no test anywhere exercising a CLI
+  // drive OpenDesign through, and there was no test anywhere exercising a CLI
   // project mutation — which is why a 401 on every CLI-created project shipped
   // to this branch unnoticed.
   test(

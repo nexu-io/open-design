@@ -242,7 +242,7 @@ export function createCreatedProjectWorkspaceResolver(deps: {
  * always gets a binding row. A project with no row is not a harmless default —
  * `GET /api/projects/:id/workspace-scope` answers `unbound` for it, which strips
  * the workspace off the run request (`ProjectView`'s `projectRunWorkspaceContext`
- * → an Open Design Cloud run nothing can bill) and blanks the balance/plan area
+ * → an OpenDesign Cloud run nothing can bill) and blanks the balance/plan area
  * while that project is open (`AvatarMenu`). Headerless local AMR runs may use
  * the signed-in account wallet, but any later request that asserts a Workspace
  * still needs an exact persisted binding before workspace mutation gates allow it.

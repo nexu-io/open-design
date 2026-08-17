@@ -1,8 +1,8 @@
-# RFC: Agent-ready Open Design — cross-project tasks & spanning-project permissions
+# RFC: Agent-ready OpenDesign — cross-project tasks & spanning-project permissions
 
 **Status:** Draft (companion to agent-ready.md; the maintainer's separate reviewable permissions writeup)
 **Author:** @leonaburime-ucla
-**Related:** #5398 (make Open Design agent-ready); companion: [agent-ready.md](./agent-ready.md) (slice 5)
+**Related:** #5398 (make OpenDesign agent-ready); companion: [agent-ready.md](./agent-ready.md) (slice 5)
 
 ## Summary
 

@@ -948,7 +948,7 @@ async function gotoEntryHome(page: Page) {
     await waitForLoadingToClear(page).catch(() => {});
     if (await page.getByTestId('home-hero').isVisible({ timeout: 3_000 }).catch(() => false)) break;
   }
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);
@@ -1206,7 +1206,7 @@ async function openDesignFile(page: Page, fileName: string) {
 }
 
 async function waitForLoadingToClear(page: Page) {
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 }
 
 async function expectFileSource(page: Page, projectId: string, fileName: string, snippets: string[]) {

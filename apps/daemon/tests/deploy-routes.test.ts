@@ -187,7 +187,7 @@ describe('deploy provider routes', () => {
     });
   });
 
-  it('derives Cloudflare Pages project names from the Open Design project', async () => {
+  it('derives Cloudflare Pages project names from the OpenDesign project', async () => {
     const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-auto-project-'));
     const priorStateRoot = process.env.OD_USER_STATE_DIR;
     process.env.OD_USER_STATE_DIR = stateRoot;

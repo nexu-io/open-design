@@ -1,6 +1,6 @@
 # Plugin Directory Guide
 
-This directory owns Open Design plugin content and plugin authoring material.
+This directory owns OpenDesign plugin content and plugin authoring material.
 
 ## Boundaries
 

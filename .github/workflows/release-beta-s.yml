@@ -649,7 +649,7 @@ jobs:
           RELEASE_ASSETS_DIR: ${{ runner.temp }}/release-assets/mac_arm64
           RELEASE_CHANNEL: betas
           RELEASE_NAMESPACE: release-betas
-          RELEASE_NOTES: Open Design betas ${{ needs.metadata.outputs.release_version }}${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && '.signed' || '.unsigned' }} ${{ inputs.mac_arm64_delivery_mode }}
+          RELEASE_NOTES: OpenDesign betas ${{ needs.metadata.outputs.release_version }}${{ (inputs.mac_arm64_delivery_mode == 'internal-updater' || inputs.mac_arm64_sign_mode != 'no') && '.signed' || '.unsigned' }} ${{ inputs.mac_arm64_delivery_mode }}
           RELEASE_PUBLIC_ORIGIN: ${{ inputs.release_public_origin }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}

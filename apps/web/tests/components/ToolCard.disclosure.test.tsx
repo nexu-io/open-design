@@ -80,7 +80,7 @@ describe('ToolCard secondary result disclosures', () => {
     for (const [index, item] of [
       { name: 'Glob', input: { pattern: '**/*.tsx', path: 'src' } },
       { name: 'Grep', input: { pattern: 'TaskActivityCard', path: 'src' } },
-      { name: 'WebSearch', input: { query: 'Open Design chat activity' } },
+      { name: 'WebSearch', input: { query: 'OpenDesign chat activity' } },
     ].entries()) {
       const { container, unmount } = renderTool(
         { kind: 'tool_use', id: `search-${index}`, name: item.name, input: item.input },

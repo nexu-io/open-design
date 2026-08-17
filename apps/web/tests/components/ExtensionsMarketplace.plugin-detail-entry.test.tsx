@@ -60,7 +60,7 @@ const MARKETPLACES = [
     url: 'https://open-design.ai/marketplace/open-design-marketplace.json',
     trust: 'official',
     manifest: {
-      name: 'Open Design Official',
+      name: 'OpenDesign Official',
       version: '1.0.0',
       plugins: [
         {

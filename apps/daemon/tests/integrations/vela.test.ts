@@ -5,7 +5,7 @@
  * we focus on the status reader that drives the Settings UI.
  *
  * `~/.amr/config.json` is the source of truth — vela CLI writes it on
- * successful `vela login` and Open Design just surfaces a small projection.
+ * successful `vela login` and OpenDesign just surfaces a small projection.
  * Tests redirect HOME via env so we never touch the real user file.
  */
 

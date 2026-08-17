@@ -56,7 +56,7 @@ const AUTHORING_PLUGIN = {
     od: {
       kind: 'scenario',
       taskKind: 'new-generation',
-      useCase: { query: 'Create an Open Design plugin for {{pluginGoal}}.' },
+      useCase: { query: 'Create an OpenDesign plugin for {{pluginGoal}}.' },
       inputs: [
         {
           name: 'pluginGoal',
@@ -277,14 +277,14 @@ const LIVE_ARTIFACT_PLUGIN = {
     ...DEFAULT_PLUGIN.manifest,
     name: 'example-live-artifact',
     title: 'Live Artifact',
-    description: 'Create refreshable, auditable Open Design artifacts.',
+    description: 'Create refreshable, auditable OpenDesign artifacts.',
     od: {
       kind: 'scenario',
       taskKind: 'new-generation',
       mode: 'prototype',
       scenario: 'live',
       useCase: {
-        query: 'Create refreshable, auditable Open Design artifacts backed by connector or local data.',
+        query: 'Create refreshable, auditable OpenDesign artifacts backed by connector or local data.',
       },
       context: {
         skills: [{ path: './SKILL.md' }],
@@ -319,9 +319,9 @@ const LIVE_ARTIFACT_IMAGE_TEMPLATE_PLUGIN = {
 };
 
 const AUTHORING_DEFAULT_SCENARIO_INPUTS = {
-  artifactKind: 'Open Design plugin',
-  audience: 'Open Design plugin authors',
-  topic: 'packaging a reusable workflow as an Open Design plugin',
+  artifactKind: 'OpenDesign plugin',
+  audience: 'OpenDesign plugin authors',
+  topic: 'packaging a reusable workflow as an OpenDesign plugin',
 };
 
 const REFLY_DESIGN_SYSTEM = {
@@ -972,9 +972,9 @@ describe('HomeView prompt handoff', () => {
     ));
     expect(JSON.parse(String((applyCall?.[1] as RequestInit).body))).toMatchObject({
       inputs: {
-        artifactKind: 'Open Design plugin',
-        audience: 'Open Design plugin authors',
-        topic: 'packaging a reusable workflow as an Open Design plugin',
+        artifactKind: 'OpenDesign plugin',
+        audience: 'OpenDesign plugin authors',
+        topic: 'packaging a reusable workflow as an OpenDesign plugin',
       },
     });
     await waitFor(() => {
@@ -989,9 +989,9 @@ describe('HomeView prompt handoff', () => {
       pluginId: 'od-new-generation',
       appliedPluginSnapshotId: 'snap-default',
       pluginInputs: {
-        artifactKind: 'Open Design plugin',
-        audience: 'Open Design plugin authors',
-        topic: 'packaging a reusable workflow as an Open Design plugin',
+        artifactKind: 'OpenDesign plugin',
+        audience: 'OpenDesign plugin authors',
+        topic: 'packaging a reusable workflow as an OpenDesign plugin',
       },
       projectKind: 'other',
     }));

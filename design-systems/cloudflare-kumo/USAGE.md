@@ -1,6 +1,6 @@
 # Cloudflare Kumo UI Usage
 
-Agent-facing guidance for the Open Design curated integration of Cloudflare Kumo UI.
+Agent-facing guidance for the OpenDesign curated integration of Cloudflare Kumo UI.
 
 ## Read Order
 
@@ -17,8 +17,8 @@ Agent-facing guidance for the Open Design curated integration of Cloudflare Kumo
 - Keep product text compact: `14px` is the default content size, with sentence-case headings and restrained semibold emphasis.
 - Use the blue semantic brand background for primary actions; do not replace it with Cloudflare orange.
 - Prefer line rings and small shadows to decorative gradients or heavy elevation.
-- Use Kumo's native `data-mode="dark"` hook; `data-theme="dark"` is included only for Open Design artifact compatibility.
-- Treat the section, container, and extended heading tokens as Open Design compatibility bindings, not upstream Kumo tokens.
+- Use Kumo's native `data-mode="dark"` hook; `data-theme="dark"` is included only for OpenDesign artifact compatibility.
+- Treat the section, container, and extended heading tokens as OpenDesign compatibility bindings, not upstream Kumo tokens.
 
 ## Do
 

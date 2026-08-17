@@ -1,5 +1,5 @@
 {
-  description = "Open Design — local-first design product. Daemon (`od` CLI) + Next.js static web frontend.";
+  description = "OpenDesign — local-first design product. Daemon (`od` CLI) + Next.js static web frontend.";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -153,7 +153,7 @@
           export OD_DATA_DIR="''${OD_DATA_DIR:-$HOME/.od}"
           exec ${daemon}/bin/od --no-open "$@"
         ''}";
-        meta.description = "Open Design local daemon (`od`)";
+        meta.description = "OpenDesign local daemon (`od`)";
       };
 
       devShells.default = pkgs.mkShell {
@@ -162,7 +162,7 @@
           pnpm_10
         ];
         shellHook = ''
-          echo "🎨 Open Design dev shell loaded!"
+          echo "🎨 OpenDesign dev shell loaded!"
           echo ""
           echo "Language runtimes:"
           echo "  - 🐢 Node.js: $(node --version 2>/dev/null || echo 'not found')"

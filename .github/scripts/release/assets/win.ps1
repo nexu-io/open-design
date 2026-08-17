@@ -13,8 +13,8 @@ $releaseDir = Join-Path $env:RUNNER_TEMP "release-assets"
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
 $builderDir = Join-Path $env:RUNNER_TEMP "tools-pack/out/win/namespaces/${env:TOOLS_PACK_NAMESPACE}/builder"
-$sourceInstaller = Join-Path $builderDir "Open Design-${env:TOOLS_PACK_NAMESPACE}-setup.exe"
-$sourceZip = Join-Path $builderDir "Open Design-${env:TOOLS_PACK_NAMESPACE}-portable.zip"
+$sourceInstaller = Join-Path $builderDir "OpenDesign-${env:TOOLS_PACK_NAMESPACE}-setup.exe"
+$sourceZip = Join-Path $builderDir "OpenDesign-${env:TOOLS_PACK_NAMESPACE}-portable.zip"
 if (!(Test-Path $sourceInstaller)) {
   throw "expected installer not found at $sourceInstaller"
 }
@@ -51,7 +51,7 @@ $versionPrefix = if ([string]::IsNullOrWhiteSpace($env:RELEASE_VERSION_PREFIX)) 
 $installerUrl = "$publicOrigin/$versionPrefix/$versionedInstaller"
 $releaseDate = [DateTime]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
 $releaseNotes = if ([string]::IsNullOrWhiteSpace($env:RELEASE_NOTES)) {
-  "Open Design ${env:RELEASE_VERSION}$assetSuffix"
+  "OpenDesign ${env:RELEASE_VERSION}$assetSuffix"
 } else {
   $env:RELEASE_NOTES
 }

@@ -791,7 +791,7 @@ export function NewProjectPanel({
         }
         if ('canceled' in result && result.canceled) return;
         setWorkingDirError({
-          message: `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update Open Design and try again.`,
+          message: `Couldn't open the folder picker (${'reason' in result ? result.reason : 'host unavailable'}). Please update OpenDesign and try again.`,
         });
         return;
       }
