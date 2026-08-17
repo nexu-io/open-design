@@ -40,13 +40,13 @@ const jsonLd = {
           />
         </span>
         <span class="event-launch-copy">
-          <span class="event-pill">Happening now · Aug 10–14</span>
+          <span class="event-pill">Recently wrapped · Aug 10–14</span>
           <strong class="event-launch-title">Launch Week <span>Vol.01</span></strong>
           <span class="event-launch-body">
             Five days, five design jobs, one launch a day — each one aimed at a tool
             your team already pays for.
           </span>
-          <span class="event-launch-link">See the lineup -></span>
+          <span class="event-launch-link">See the five releases -></span>
         </span>
       </a>
     </section>
@@ -55,22 +55,22 @@ const jsonLd = {
       <div class="events-wrap">
         <div class="events-section-head">
           <p class="events-kicker">Latest recap</p>
-          <h2>Open Design Shanghai Workshop</h2>
+          <h2>Open Design Hong Kong Workshop</h2>
         </div>
-        <a class="event-feature" href="/community/open-design-shanghai-workshop/">
+        <a class="event-feature" href="/community/open-design-hong-kong-workshop/">
           <span class="event-feature-media">
             <img
-              src="/stories/open-design-shanghai-workshop-cover.webp"
-              alt="Participants at the Open Design Shanghai workshop"
+              src="/stories/open-design-hong-kong-workshop-cover.webp"
+              alt="Participants at the Open Design Hong Kong workshop"
               loading="eager"
             />
           </span>
           <span class="event-feature-copy">
-            <span class="event-pill">Recap · Shanghai · July 25</span>
-            <strong>Open Design Shanghai Workshop Recap</strong>
+            <span class="event-pill">Recap · Hong Kong · Aug 16</span>
+            <strong>Open Design Hong Kong Workshop Recap</strong>
             <span>
-              Developers, designers, product managers, students, and creators came together
-              near Fudan University to turn their own ideas into editable artifacts.
+              A room of builders connected design systems, live data, models, and skills
+              to create interactive, shareable artifacts—and stress-test the full workflow.
             </span>
             <span class="event-link">Read the recap -></span>
           </span>
@@ -85,6 +85,24 @@ const jsonLd = {
           <h2>More from the community.</h2>
         </div>
         <div class="event-grid">
+          <a class="event-card" href="/community/open-design-shanghai-workshop/">
+            <span class="event-card-media">
+              <img
+                src="/stories/open-design-shanghai-workshop-cover.webp"
+                alt="Participants at the Open Design Shanghai workshop"
+                loading="lazy"
+              />
+            </span>
+            <span class="event-card-body">
+              <span class="event-pill">Recap · Shanghai · July 25</span>
+              <strong>Open Design Shanghai Workshop Recap</strong>
+              <span>
+                Developers, designers, product managers, students, and creators came together
+                near Fudan University to turn their own ideas into editable artifacts.
+              </span>
+              <span class="event-link">Read the recap -></span>
+            </span>
+          </a>
           <a class="event-card" href="/community/open-design-osaka-meetup/">
             <span class="event-card-media">
               <img
@@ -372,7 +390,7 @@ const jsonLd = {
 
     .event-grid {
       display: grid;
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 18px;
     }
 
