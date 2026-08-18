@@ -1468,20 +1468,34 @@
   min-height: clamp(150px, 20vh, 210px);
 }
 /* Lexical placeholder — absolutely positioned over the empty editor. The
-   editor adds/removes its sibling automatically; we style by class. */
+   editor adds/removes its sibling automatically; we style by class.
+
+   Wraps rather than truncating (#5370): several placeholders are full
+   sentences (the design-system flow's, for one), and on a single nowrap line
+   an ellipsis hid most of the text with no way to read the rest.
+
+   The inset matches the editable's own 8px/9px padding, so the placeholder
+   occupies exactly the text box it stands in for. Taking the height from
+   `bottom` rather than a max-height literal is what keeps it inside the
+   composer instead of merely trading ellipsis for overflow: the containing
+   block is `.composer-input-editor`, so the bound tracks whichever height that
+   element currently has — the default `min(184px, 34vh)`, active-file mode's
+   taller box, or a manually dragged `--composer-manual-h` — with no value
+   repeated here to fall out of sync. `overflow: hidden` clips a placeholder
+   longer than that box; it cannot push the composer taller. */
 .composer-input-placeholder {
   position: absolute;
-  top: 8px;
-  left: 9px;
+  inset: 8px 9px;
   pointer-events: none;
   user-select: none;
   color: var(--text-faint);
   font-size: 13px;
   line-height: 1.6;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: calc(100% - 8px);
+  text-overflow: clip;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .composer-input-wrap .home-hero__carousel {
   position: absolute;
