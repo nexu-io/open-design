@@ -32,6 +32,7 @@ function activeFor(
     lastRenderedPrompt: null,
     projectKind: null,
     chipId,
+    prototypeSubtypeId: null,
     mediaSurface: null,
     projectMetadata: null,
     editableInputNames: [],

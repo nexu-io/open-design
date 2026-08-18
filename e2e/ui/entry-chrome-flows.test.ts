@@ -1321,7 +1321,7 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
   // default assertion timeout, so wait on the user-visible routed state before
   // checking the attachment lifecycle rather than racing the seed effect.
   await expect(page.getByTestId('home-hero-template-trigger')).toContainText(
-    /UI Mockup|原型/i,
+    /Prototype|原型/i,
     { timeout: T.long },
   );
   await expect(submit).toBeEnabled({ timeout: T.long });

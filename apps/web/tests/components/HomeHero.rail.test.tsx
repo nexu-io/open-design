@@ -20,6 +20,7 @@ import { HomeHero, homeHeroExamplePluginsForChip } from '../../src/components/Ho
 import {
   HOME_HERO_CHIPS,
   findChip,
+  orderedCreateChips,
 } from '../../src/components/home-hero/chips';
 
 afterEach(() => {
@@ -119,9 +120,10 @@ describe('HomeHero intent rail', () => {
   it('offers every scenario template through the composer template picker', () => {
     renderHero();
     openTemplatePicker();
+    const topLevelIds = new Set(orderedCreateChips().map((chip) => chip.id));
     for (const chip of HOME_HERO_CHIPS) {
       const wedge = screen.queryByTestId(`home-hero-template-wedge-${chip.id}`);
-      if (chip.group === 'create' && chip.action.kind === 'apply-scenario') {
+      if (topLevelIds.has(chip.id) && chip.action.kind === 'apply-scenario') {
         expect(wedge).toBeTruthy();
       } else {
         // Brand Kit (its own action) and the migrate shortcuts are reached from
@@ -175,14 +177,16 @@ describe('HomeHero intent rail', () => {
 
   it('does not reserve an empty active-context row for a hidden chip-bound plugin', () => {
     renderHero({
-      activeChipId: 'wireframe',
+      activeChipId: 'prototype',
+      activePrototypeSubtypeId: 'wireframe',
       activePluginTitle: 'Wireframe',
       showActivePluginChip: false,
       contextItemCount: 3,
     });
 
     expect(document.querySelector('.home-hero__active')).toBeNull();
-    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Wireframe');
+    expect(screen.getByTestId('home-hero-template-trigger').textContent).toContain('Prototype');
+    expect(screen.getByTestId('home-hero-subtype-wireframe').getAttribute('aria-selected')).toBe('true');
   });
 
   it('offers no clear affordance for the active creation chip', () => {
@@ -468,8 +472,8 @@ describe('HomeHero intent rail', () => {
       pendingChipId: 'figma',
     });
     openTemplatePicker();
-    const scenarioChips = HOME_HERO_CHIPS.filter(
-      (item) => item.group === 'create' && item.action.kind === 'apply-scenario',
+    const scenarioChips = orderedCreateChips().filter(
+      (item) => item.action.kind === 'apply-scenario',
     );
     for (const chip of scenarioChips) {
       const wedge = screen.getByTestId(`home-hero-template-wedge-${chip.id}`);
