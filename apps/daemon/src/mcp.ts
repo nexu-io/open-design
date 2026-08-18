@@ -660,7 +660,12 @@ export const TOOL_DEFS = [
     inputSchema: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: 'Human-readable project name.' },
+        name: {
+          type: 'string',
+          description: 'Human-readable project name. Must not contain path separators, traversal segments, or control characters (#7042).',
+          pattern: '^[^/\\\\\\u0000-\\u001f\\u007f]+$',
+          not: { enum: ['.', '..'] },
+        },
         id: {
           type: 'string',
           description: 'Optional project id slug ([A-Za-z0-9._-], <=128 chars). Derived from name when omitted.',
