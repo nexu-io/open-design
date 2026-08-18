@@ -97,7 +97,7 @@ describe('codex buildArgs session resume', () => {
     expect(args).not.toContain('resume');
   });
 
-  it('carries only the Open Design wrapper contract across Codex shell environment filtering', () => {
+  it('carries only the OpenDesign wrapper contract across Codex shell environment filtering', () => {
     const args = codexAgentDef.buildArgs('prompt', [], [], {}, {});
     const shellArgs = codexOpenDesignShellEnvironmentArgs();
 

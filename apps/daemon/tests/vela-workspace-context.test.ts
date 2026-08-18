@@ -945,6 +945,28 @@ describe('createVelaWorkspaceContextProvider', () => {
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBe(0);
   });
 
+  it('reads the current configured AMR environment on every workspace request', async () => {
+    let profile = 'prod';
+    const readSession = vi.fn((
+      _env?: NodeJS.ProcessEnv,
+      _configuredEnv?: Record<string, string>,
+    ) => SESSION as ReturnType<typeof readVelaControlApiContext>);
+    const provider = createVelaWorkspaceContextProvider({
+      fetch: (async () => jsonResponse(200, B_TEAM_CONTEXT)) as unknown as typeof fetch,
+      configuredEnv: () => ({ OPEN_DESIGN_AMR_PROFILE: profile }),
+      readSession,
+    });
+
+    await provider.current({});
+    profile = 'test';
+    await provider.current({});
+
+    expect(readSession.mock.calls.map((call) => call[1])).toEqual([
+      { OPEN_DESIGN_AMR_PROFILE: 'prod' },
+      { OPEN_DESIGN_AMR_PROFILE: 'test' },
+    ]);
+  });
+
   it('degrades to null on a 401 (signed out) or a network error', async () => {
     const unauthorized = createVelaWorkspaceContextProvider({
       fetch: (async () => jsonResponse(401, { error: 'unauthenticated' })) as unknown as typeof fetch,

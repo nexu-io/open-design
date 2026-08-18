@@ -22,7 +22,6 @@ const directAssets = {
   macArm64: latestRelease?.matrix.macArm64Dmg?.url ?? '',
   macX64: latestRelease?.matrix.macX64Dmg?.url ?? '',
   windows: latestRelease?.matrix.winSetup?.url ?? '',
-  linux: latestRelease?.matrix.linux?.url ?? '',
 };
 
 const ACTIVE_SECONDS_THRESHOLD = 35;
@@ -175,9 +174,8 @@ const DOWNLOAD_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
             ? { key: 'macX64', label: 'macOS (Intel)', match: (name) => /mac-x64\.dmg$/i.test(name) }
             : { key: 'macArm64', label: 'macOS (Apple Silicon)', match: (name) => /mac-arm64\.dmg$/i.test(name) };
         }
-        if ((/linux/.test(p) || /linux/.test(ua)) && !/android/.test(ua)) {
-          return { key: 'linux', label: 'Linux', match: (name) => /\.appimage$/i.test(name) };
-        }
+        // No Linux desktop build — Linux visitors keep the /download/
+        // page fallback.
         return null;
       };
       const applyDirectAsset = (url, platformLabel) => {
@@ -365,7 +363,6 @@ const DOWNLOAD_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
     font-size: 12px;
     font-weight: 750;
     letter-spacing: .12em;
-    text-transform: uppercase;
   }
   .download-prompt-card h2 {
     max-width: 17ch;

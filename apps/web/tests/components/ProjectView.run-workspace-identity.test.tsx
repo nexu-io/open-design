@@ -54,6 +54,7 @@ import {
   listMessages,
   loadTabs,
   persistTabsToDaemonNow,
+  ProjectConversationsHttpError,
 } from '../../src/state/projects';
 import {
   deletePreviewComment,
@@ -271,11 +272,13 @@ vi.mock('../../src/components/Loading', () => ({
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: (props: {
     activeConversationId?: string | null;
+    conversations?: Conversation[];
     loading?: boolean;
     messages?: ChatMessage[];
     messagesConversationId?: string | null;
     previewComments?: unknown[];
     onDeleteComment?: (commentId: string) => void;
+    onSelectConversation?: (conversationId: string) => void;
     sendDisabled?: boolean;
     queuedItems?: Array<{ prompt: string }>;
     onSend?: (
@@ -353,10 +356,12 @@ const previewComment = (id: string, note: string, updatedAt: number): PreviewCom
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((next) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((next, fail) => {
     resolve = next;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, reject, resolve };
 }
 
 /**
@@ -506,7 +511,7 @@ describe('a Home auto-send identifies its caller before the project scope resolv
     ).toEqual(CALLER_CONTEXT);
   });
 
-  it('sends query and headers together for the scoped HTML fetch used by auto-open analysis', async () => {
+  it('keeps fetch headers while using the project-authoritative raw URL for auto-open analysis', async () => {
     workspaceScopeMocks.projectScope = {
       loading: false,
       scope: {
@@ -545,10 +550,7 @@ describe('a Home auto-send identifies its caller before the project scope resolv
         String(input).includes(`/api/projects/${PROJECT_ID}/raw/index.html`),
       );
       expect(rawCall).toBeDefined();
-      expect(String(rawCall?.[0])).toBe(
-        `/api/projects/${PROJECT_ID}/raw/index.html?workspaceId=${TEAM_WORKSPACE}`
-          + `&workspaceMemberId=${TEAM_MEMBER}`,
-      );
+      expect(String(rawCall?.[0])).toBe(`/api/projects/${PROJECT_ID}/raw/index.html`);
       expect(rawCall?.[1]).toEqual(expect.objectContaining({
         headers: expect.objectContaining({
           'x-od-workspace-id': TEAM_WORKSPACE,
@@ -589,6 +591,105 @@ describe('a Home auto-send identifies its caller before the project scope resolv
     expect(mockedFetchPreviewComments).toHaveBeenCalledTimes(1);
 
     comments.resolve([]);
+  });
+
+  it('clears the established transcript when request authority changes and reload fails', async () => {
+    window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
+    const persistedMessage: ChatMessage = {
+      id: 'persisted-assistant',
+      role: 'assistant',
+      content: 'Persisted answer',
+      createdAt: 1,
+    };
+    mockedListMessages.mockResolvedValueOnce([persistedMessage]);
+    const view = renderProjectView({
+      project: { ...project(), pendingPrompt: '' },
+    });
+
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0].messages).toEqual([persistedMessage]);
+    });
+
+    const reload = deferred<ChatMessage[]>();
+    mockedListMessages.mockReturnValueOnce(reload.promise);
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: PROJECT_ID,
+        workspaceId: TEAM_WORKSPACE,
+        visibility: 'team',
+        context: {
+          ...CALLER_CONTEXT,
+          role: 'admin',
+          permissions: buildWorkspacePermissions({
+            role: 'admin',
+            lifecycleState: 'active',
+          }),
+        } as WorkspaceCollabContext & { workspaceType: 'team' },
+      },
+    };
+    view.rerender(projectViewElement({
+      project: { ...project(), pendingPrompt: '' },
+    }));
+
+    await waitFor(() => expect(mockedListMessages).toHaveBeenCalledTimes(2));
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0].messages).toEqual([]);
+
+    await act(async () => {
+      reload.reject(new Error('workspace directory unavailable'));
+      await reload.promise.catch(() => undefined);
+    });
+
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0].messages).toEqual([]);
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0].messagesConversationId).toBeNull();
+    expect(mockedStreamViaDaemon).not.toHaveBeenCalled();
+  });
+
+  it('reuses one Home handoff identity across ProjectView remounts', async () => {
+    const firstView = renderProjectView();
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
+    const firstRun = mockedStreamViaDaemon.mock.calls[0]?.[0];
+    firstView.unmount();
+
+    window.sessionStorage.setItem(`od:auto-send-first:${PROJECT_ID}`, '1');
+    renderProjectView();
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(2));
+    const replayedRun = mockedStreamViaDaemon.mock.calls[1]?.[0];
+
+    expect({
+      clientRequestId: replayedRun?.clientRequestId,
+      userMessageId: replayedRun?.userMessageId,
+      assistantMessageId: replayedRun?.assistantMessageId,
+    }).toEqual({
+      clientRequestId: firstRun?.clientRequestId,
+      userMessageId: firstRun?.userMessageId,
+      assistantMessageId: firstRun?.assistantMessageId,
+    });
+    expect(firstRun?.clientRequestId).toMatch(/^[A-Za-z0-9._-]+$/);
+    expect(firstRun?.userMessageId).toMatch(/^[A-Za-z0-9._-]+$/);
+    expect(firstRun?.assistantMessageId).toMatch(/^[A-Za-z0-9._-]+$/);
+  });
+
+  it('keeps Home handoff identities within the daemon limit for a maximum-length project id', async () => {
+    const maximumLengthProjectId = 'p'.repeat(128);
+    window.sessionStorage.setItem(`od:auto-send-first:${maximumLengthProjectId}`, '1');
+
+    renderProjectView({
+      project: {
+        ...project(),
+        id: maximumLengthProjectId,
+      },
+    });
+
+    await waitFor(() => expect(mockedStreamViaDaemon).toHaveBeenCalledTimes(1));
+    const run = mockedStreamViaDaemon.mock.calls[0]?.[0];
+    const ids = [run?.clientRequestId, run?.userMessageId, run?.assistantMessageId];
+
+    for (const id of ids) {
+      expect(id).toMatch(/^[A-Za-z0-9._-]+$/);
+      expect(id?.length).toBeLessThanOrEqual(128);
+    }
   });
 
   it('does not let the initial comments read replace a newer SSE refresh', async () => {
@@ -1091,6 +1192,167 @@ describe('a Home auto-send observes a project billing scope that settles after m
       resourceContextObservations.at(-1),
       'FileWorkspace/FileViewer consumers must keep one canonical context object',
     ).toBe(establishedResourceContext);
+  });
+
+  it('keeps the selected conversation when the same project authority identity refreshes', async () => {
+    window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
+    mockedListConversations.mockReset();
+    mockedListMessages.mockReset();
+    mockedListMessages.mockResolvedValue([]);
+    workspaceScopeMocks.ambientContext = CALLER_CONTEXT;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: PROJECT_ID,
+        workspaceId: TEAM_WORKSPACE,
+        visibility: 'team',
+        context: CALLER_CONTEXT as WorkspaceCollabContext & { workspaceType: 'team' },
+      },
+    };
+    const availableConversations = [
+      { ...conversation(PROJECT_ID), id: 'conv-first' },
+      { ...conversation(PROJECT_ID), id: 'conv-second', createdAt: 2, updatedAt: 2 },
+    ];
+    mockedListConversations.mockResolvedValue(availableConversations);
+
+    const stableProject = { ...project(), pendingPrompt: '' };
+    const view = renderProjectView({ project: stableProject });
+    await waitFor(() => expect(mockedListConversations).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0].activeConversationId).toBe('conv-first');
+    });
+
+    await act(async () => {
+      chatPaneSpy.mock.calls.at(-1)?.[0].onSelectConversation?.('conv-second');
+    });
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0].activeConversationId).toBe('conv-second');
+    });
+
+    const refreshedContext = {
+      ...CALLER_CONTEXT,
+      workspaceMemberId: 'member-revalidated',
+    } as WorkspaceCollabContext & { workspaceType: 'team' };
+    workspaceScopeMocks.ambientContext = refreshedContext;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: PROJECT_ID,
+        workspaceId: TEAM_WORKSPACE,
+        visibility: 'team',
+        context: refreshedContext,
+      },
+    };
+    await act(async () => {
+      view.rerender(projectViewElement({ project: stableProject }));
+    });
+
+    await waitFor(() => expect(mockedListConversations).toHaveBeenCalledTimes(2));
+    expect(chatPaneSpy.mock.calls.at(-1)?.[0].activeConversationId).toBe('conv-second');
+  });
+
+  it('clears an established transcript when the project authority is revoked', async () => {
+    window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
+    mockedListConversations.mockReset();
+    mockedListMessages.mockReset();
+    mockedListConversations.mockImplementation(async (projectId: string) => [
+      conversation(projectId),
+    ]);
+    mockedListMessages
+      .mockResolvedValueOnce([{
+        id: 'workspace-a-message',
+        role: 'assistant',
+        content: 'Workspace A secret',
+        createdAt: 1,
+      } as never])
+      .mockRejectedValueOnce(new Error('workspace access forbidden'));
+    workspaceScopeMocks.ambientContext = CALLER_CONTEXT;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: PROJECT_ID,
+        workspaceId: TEAM_WORKSPACE,
+        visibility: 'team',
+        context: CALLER_CONTEXT as WorkspaceCollabContext & { workspaceType: 'team' },
+      },
+    };
+
+    const stableProject = { ...project(), pendingPrompt: '' };
+    const view = renderProjectView({ project: stableProject });
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0].messages).toEqual([
+        expect.objectContaining({ content: 'Workspace A secret' }),
+      ]);
+    });
+
+    workspaceScopeMocks.ambientContext = null;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: null,
+      failure: 'forbidden',
+    };
+    await act(async () => {
+      view.rerender(projectViewElement({ project: stableProject }));
+    });
+
+    await waitFor(() => expect(mockedListMessages).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0].messages).toEqual([]);
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0].sendDisabled).toBe(true);
+    });
+  });
+
+  it('clears established conversation metadata when revalidation is forbidden', async () => {
+    window.sessionStorage.removeItem(`od:auto-send-first:${PROJECT_ID}`);
+    mockedListConversations.mockReset();
+    mockedListMessages.mockReset();
+    mockedListConversations
+      .mockResolvedValueOnce([{
+        ...conversation(PROJECT_ID),
+        title: 'Workspace A secret title',
+      }])
+      .mockRejectedValueOnce(
+        new ProjectConversationsHttpError(403, 'workspace access forbidden'),
+      );
+    mockedListMessages.mockResolvedValue([]);
+    workspaceScopeMocks.ambientContext = CALLER_CONTEXT;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: {
+        kind: 'team',
+        projectId: PROJECT_ID,
+        workspaceId: TEAM_WORKSPACE,
+        visibility: 'team',
+        context: CALLER_CONTEXT as WorkspaceCollabContext & { workspaceType: 'team' },
+      },
+    };
+
+    const stableProject = { ...project(), pendingPrompt: '' };
+    const view = renderProjectView({ project: stableProject });
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0].conversations).toEqual([
+        expect.objectContaining({ title: 'Workspace A secret title' }),
+      ]);
+    });
+
+    workspaceScopeMocks.ambientContext = null;
+    workspaceScopeMocks.projectScope = {
+      loading: false,
+      scope: null,
+      failure: 'forbidden',
+    };
+    await act(async () => {
+      view.rerender(projectViewElement({ project: stableProject }));
+    });
+
+    await waitFor(() => expect(mockedListConversations).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0].conversations).toEqual([]);
+      expect(chatPaneSpy.mock.calls.at(-1)?.[0].activeConversationId).toBeNull();
+    });
   });
 
   it('flushes project A tabs with A authority after rendering project B', async () => {

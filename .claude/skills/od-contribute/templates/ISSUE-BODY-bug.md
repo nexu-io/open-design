@@ -10,7 +10,7 @@
 
 {{EXPECTED}}
 
-### Open Design version
+### OpenDesign version
 
 {{OD_VERSION}}
 

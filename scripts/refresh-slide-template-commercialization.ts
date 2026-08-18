@@ -1,5 +1,5 @@
 /**
- * Refresh the commercial metadata for Open Design's slide-deck templates.
+ * Refresh the commercial metadata for OpenDesign's slide-deck templates.
  *
  * Source of truth for WHICH template becomes WHICH commercial use-case is
  * `assignment.json` (default: `<repo>/.tmp/assignment.json`, override with

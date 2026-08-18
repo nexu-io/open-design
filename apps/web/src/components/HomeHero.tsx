@@ -18,6 +18,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { VisuallyHidden } from '@open-design/components';
 import type {
   CSSProperties,
   DragEvent as ReactDragEvent,
@@ -59,6 +60,7 @@ import { ScenarioArt } from './home-hero/ScenarioArt';
 import { useEdgeAutoScroll, EdgeScrollZones } from './home-hero/EdgeAutoScroll';
 import {
   isSubChipParent,
+  prototypeSubChipForSlug,
   subChipsForChip,
   type HomeHeroSubChip,
 } from './home-hero/sub-chips';
@@ -87,6 +89,7 @@ import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
 import { comparePluginGalleryOrder } from './plugins-home/pluginPopularity';
 import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
+import { notifyCompletionFeedbackGesture } from '../utils/notifications';
 import { inferPluginPreview } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 import { useDeckPreviewScale } from '../lib/use-deck-preview-scale';
@@ -165,6 +168,9 @@ interface Props {
   activePluginIsExplicit?: boolean;
   activePluginRecord?: InstalledPluginRecord | null;
   activeChipId: string | null;
+  // Prototype's selected second-level scene is owned by HomeView so action
+  // metadata and persistence stay aligned with the visible filter selection.
+  activePrototypeSubtypeId?: string | null;
   onClearActivePlugin: () => void;
   onClearActiveChip?: () => void;
   activeSkillId?: string | null;
@@ -229,6 +235,7 @@ interface Props {
   onPickMcp?: (server: McpServerConfig, nextPrompt: string) => void;
   onPickConnector?: (connector: ConnectorDetail, nextPrompt: string) => void;
   onPickChip: (chip: HomeHeroChip) => void;
+  onPickPrototypeSubtype?: (sub: HomeHeroSubChip | null) => void;
   contextItemCount: number;
   error: string | null;
   showActivePluginChip?: boolean;
@@ -357,6 +364,8 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     onPickMcp = () => undefined,
     onPickConnector = () => undefined,
     onPickChip,
+    activePrototypeSubtypeId,
+    onPickPrototypeSubtype,
     contextItemCount,
     error,
     showActivePluginChip = true,
@@ -392,9 +401,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   const [guidePulseChipId, setGuidePulseChipId] = useState<string | null>(null);
   const [guidePulseFirstPreset, setGuidePulseFirstPreset] = useState(false);
   // Selected second-level sub-category slug (Prototype / Slide deck rail).
-  // Local-only: it filters the example-prompt cards below the rail. It never
-  // binds a plugin or stamps an active badge.
-  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  // Deck remains a local example filter. Prototype is controlled by HomeView:
+  // every scene binds the Prototype action, while Mobile/Wireframe additionally
+  // retain the project metadata from their former top-level actions.
+  const [localSelectedSubcategory, setLocalSelectedSubcategory] = useState<string | null>(null);
+  const selectedSubcategory =
+    activeChipId === 'prototype' && activePrototypeSubtypeId !== undefined
+      ? activePrototypeSubtypeId
+      : localSelectedSubcategory;
   // Footer Template pill preview: the create-rail card the pointer is over,
   // so hovering a card below previews it in the pill (cleared on rail-leave).
   const [previewTemplateId, setPreviewTemplateId] = useState<string | null>(null);
@@ -439,13 +453,17 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // with nothing bound we cycle the full set. Memoised by chip + locale so the
   // reference only changes on a real switch, which restarts the carousel.
   const carouselScenarios = useMemo<PlaceholderScenario[]>(() => {
+    const nestedActionChipId =
+      activeChipId === 'prototype'
+        ? prototypeSubChipForSlug(activePrototypeSubtypeId ?? null)?.actionChipId ?? null
+        : null;
     return buildPlaceholderScenarios({
-      activeChipId,
+      activeChipId: nestedActionChipId ?? activeChipId,
       resolveTextKey: (key) => t(key),
       examplesForChip: (chipId) => homeHeroChipPromptExamples(chipId, locale),
       fallbackForChip: (chipId) => fallbackPlaceholderScenarioText(chipId, locale, t),
     });
-  }, [activeChipId, locale, t]);
+  }, [activeChipId, activePrototypeSubtypeId, locale, t]);
   // The placeholder carousel runs while the composer is empty and nothing
   // OTHER than a create-template chip is bound. A selected template keeps it
   // alive (showing that template's scenarios); only an explicit plugin/skill
@@ -501,10 +519,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   function handleSend() {
     if (submitting || submitDisabled) return;
     if (canSubmit) {
+      notifyCompletionFeedbackGesture();
       onSubmit();
       return;
     }
-    if (carouselSubmittable && carouselScenario) onSubmitScenario(carouselScenario);
+    if (carouselSubmittable && carouselScenario) {
+      notifyCompletionFeedbackGesture();
+      onSubmitScenario(carouselScenario);
+    }
   }
   const fileMatches = useMemo(
     () =>
@@ -738,24 +760,42 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   // deck/image plugin that merely carries a "brand" tag is not pulled in.
   const filteredExamplePlugins = useMemo(() => {
     if (!selectedSubcategory || !isSubChipParent(activeChipId)) return activeExamplePlugins;
+    // Mobile shares the existing Apps facet. Wireframe is a generation
+    // constraint rather than a plugin taxonomy, so keep the Prototype starter
+    // pool visible while the selected action carries its lo-fi metadata.
+    const facetSubcategory =
+      activeChipId === 'prototype' && selectedSubcategory === 'mobile'
+        ? 'app-prototypes'
+        : activeChipId === 'prototype' && selectedSubcategory === 'wireframe'
+          ? null
+          : selectedSubcategory;
+    if (!facetSubcategory) return activeExamplePlugins;
     const pool = pluginOptions.filter((plugin) => plugin.manifest?.od?.kind !== 'atom');
     return sortByVisualAppeal(
-      applyFacetSelection(pool, { category: activeChipId, subcategory: selectedSubcategory }),
+      applyFacetSelection(pool, { category: activeChipId, subcategory: facetSubcategory }),
     );
   }, [activeExamplePlugins, activeChipId, selectedSubcategory, pluginOptions]);
 
-  // First-run guide, beat 1: pulse the Prototype chip for brand-new users.
+  // First-run guide, beat 1: pulse the Prototype chip for brand-new users only
+  // when Home could not bind a default type. A successfully seeded default has
+  // already completed that choice, so skip the redundant pulse and let beat 2
+  // guide the user to its first example card.
   // The settle delay lets the hero finish its entrance before the sheen.
   useEffect(() => {
     if (firstRunGuide !== true) return;
     if (readHomeGuideStage() !== 'chip') return;
+    if (activeChipId) {
+      writeHomeGuideStage('card');
+      setGuidePulseChipId(null);
+      return;
+    }
     const arm = window.setTimeout(() => setGuidePulseChipId('prototype'), 900);
     const disarm = window.setTimeout(() => setGuidePulseChipId(null), 3600);
     return () => {
       window.clearTimeout(arm);
       window.clearTimeout(disarm);
     };
-  }, [firstRunGuide]);
+  }, [firstRunGuide, activeChipId]);
 
   // Users with existing projects never see the trail — complete ANY
   // unfinished stage silently. A chip pick during the loading window can
@@ -845,7 +885,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
 
   useEffect(() => {
     setSelectedPromptExample(null);
-    setSelectedSubcategory(null);
+    setLocalSelectedSubcategory(null);
   }, [activeChipId]);
 
   useEffect(() => {
@@ -1262,7 +1302,7 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         <PixelScanLogo className="home-hero__logo home-hero__logo--tiles" />
       </span>
 
-      {/* Capsule type row: the 12 create-scenario types as pill chips above
+      {/* Capsule type row: the 10 top-level create-scenario types as pill chips above
           the composer (per product — replaces the fanned card carousel); the
           selected pill carries the accent tint, click switches. */}
       <TypePillRow
@@ -2095,7 +2135,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               chip_id: activeChipId ?? undefined,
               subcategory: sub.slug,
             });
-            setSelectedSubcategory((current) => (current === sub.slug ? null : sub.slug));
+            const next = selectedSubcategory === sub.slug ? null : sub;
+            setLocalSelectedSubcategory(next?.slug ?? null);
+            if (activeChipId === 'prototype') onPickPrototypeSubtype?.(next);
           }}
           onSelectAll={() => {
             trackHomeChatComposerClick(analytics.track, {
@@ -2105,12 +2147,15 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
               chip_id: activeChipId ?? undefined,
               subcategory: 'all',
             });
-            setSelectedSubcategory(null);
+            setLocalSelectedSubcategory(null);
+            if (activeChipId === 'prototype') onPickPrototypeSubtype?.(null);
           }}
         />
       ) : null}
 
-      {filteredExamplePlugins.length > 0 && activeChipId ? (
+      {pluginsLoading ? (
+        <PluginPromptPresetsLoading />
+      ) : filteredExamplePlugins.length > 0 && activeChipId ? (
         <PluginPromptPresets
           chipId={activeChipId}
           plugins={filteredExamplePlugins}
@@ -2193,6 +2238,32 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     </section>
   );
 });
+
+function PluginPromptPresetsLoading() {
+  const { t } = useI18n();
+  return (
+    <div
+      className="home-hero__prompt-examples home-hero__plugin-presets-wrap"
+      data-testid="home-hero-examples-loading"
+      aria-busy="true"
+    >
+      <div className="home-hero__prompt-examples-title">
+        {t('homeHero.promptExamples')}
+      </div>
+      <div className="home-hero__rail-scroller">
+        <div className="home-hero__plugin-presets-loading" aria-hidden="true">
+          {Array.from({ length: 4 }, (_, index) => (
+            <span className="home-hero__plugin-preset-loading" key={index}>
+              <span className="home-hero__plugin-preset-loading-preview" />
+              <span className="home-hero__plugin-preset-loading-title" />
+            </span>
+          ))}
+        </div>
+      </div>
+      <VisuallyHidden>{t('common.loading')}</VisuallyHidden>
+    </div>
+  );
+}
 
 function PluginPromptPresets({
   activePluginId,
@@ -3401,7 +3472,7 @@ function SubTypeChip({
     >
       <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
       <span className="home-hero__subtype-chip-label">
-        {pluginSubfacetLabel(sub.slug, sub.label, t)}
+        {homeHeroSubChipLabel(sub, t)}
       </span>
     </button>
   );
@@ -3562,7 +3633,7 @@ function SubTypeRow({
                   >
                     <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
                     <span className="home-hero__subtype-chip-label">
-                      {pluginSubfacetLabel(sub.slug, sub.label, t)}
+                      {homeHeroSubChipLabel(sub, t)}
                     </span>
                     {isActive ? <Icon name="check" size={13} /> : null}
                   </button>
@@ -3582,7 +3653,7 @@ function SubTypeRow({
           <span key={sub.slug} className="home-hero__subtype-chip" data-measure="chip">
             <Icon name={sub.icon} size={13} className="home-hero__subtype-chip-icon" />
             <span className="home-hero__subtype-chip-label">
-              {pluginSubfacetLabel(sub.slug, sub.label, t)}
+              {homeHeroSubChipLabel(sub, t)}
             </span>
           </span>
         ))}
@@ -3593,6 +3664,15 @@ function SubTypeRow({
       </div>
     </div>
   );
+}
+
+function homeHeroSubChipLabel(
+  sub: HomeHeroSubChip,
+  t: ReturnType<typeof useT>,
+): string {
+  if (sub.slug === 'mobile') return t('homeHero.chip.mobile');
+  if (sub.slug === 'wireframe') return t('homeHero.chip.wireframe');
+  return pluginSubfacetLabel(sub.slug, sub.label, t);
 }
 
 interface ShortcutsMenuProps {

@@ -92,7 +92,7 @@ afterEach(() => {
 });
 
 describe('persisted project Workspace transport scope', () => {
-  it('mints a srcDoc preview base under the exact captured Workspace identity', async () => {
+  it('mints a srcDoc preview base without client-supplied Workspace authority', async () => {
     const workspaceA = teamContext('workspace-a', 'member-a');
     const fetchMock = vi.fn<typeof fetch>(async () => Response.json({
       url: '/api/projects/project-1/preview/scope-1/pages/brand.html',
@@ -110,14 +110,10 @@ describe('persisted project Workspace transport scope', () => {
     )).resolves.toBe('/api/projects/project-1/preview/scope-1/pages/');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/projects/project-1/preview-url?file=pages%2Fbrand.html&workspaceId=workspace-a&workspaceMemberId=member-a',
-      expect.objectContaining({
+      '/api/projects/project-1/preview-url?file=pages%2Fbrand.html',
+      {
         cache: 'no-store',
-        headers: expect.objectContaining({
-          'x-od-workspace-id': 'workspace-a',
-          'x-od-workspace-member-id': 'member-a',
-        }),
-      }),
+      },
     );
   });
 
@@ -138,7 +134,7 @@ describe('persisted project Workspace transport scope', () => {
     )).resolves.toBeNull();
   });
 
-  it('keeps browser-owned project and SSE URLs on captured A after shell B exists', () => {
+  it('keeps raw project URLs server-authoritative while scoped streams retain captured A', () => {
     const workspaceA = teamContext('workspace-a', 'member-a');
     const workspaceB = teamContext('workspace-b', 'member-b');
     const capturedRawUrl = projectRawUrl('project-1', 'index.html', workspaceA);
@@ -147,7 +143,11 @@ describe('persisted project Workspace transport scope', () => {
 
     projectRawUrl('project-1', 'index.html', workspaceB);
 
-    for (const url of [capturedRawUrl, capturedTerminalUrl, capturedEventsUrl]) {
+    const parsedRaw = new URL(capturedRawUrl, 'https://od.local');
+    expect(parsedRaw.searchParams.has('workspaceId')).toBe(false);
+    expect(parsedRaw.searchParams.has('workspaceMemberId')).toBe(false);
+
+    for (const url of [capturedTerminalUrl, capturedEventsUrl]) {
       const parsed = new URL(url, 'https://od.local');
       expect(parsed.searchParams.get('workspaceId')).toBe('workspace-a');
       expect(parsed.searchParams.get('workspaceMemberId')).toBe('member-a');
@@ -234,7 +234,7 @@ describe('persisted project Workspace transport scope', () => {
     );
   });
 
-  it('sends query and headers together when deleting a scoped raw file', async () => {
+  it('keeps write authority in headers without leaking it into the raw URL', async () => {
     const workspaceA = teamContext('workspace-a', 'member-a');
     const fetchMock = vi.fn<typeof fetch>(async () => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetchMock);
@@ -242,7 +242,7 @@ describe('persisted project Workspace transport scope', () => {
     await expect(deleteProjectFile('project-1', 'index.html', workspaceA)).resolves.toBe(true);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/projects/project-1/raw/index.html?workspaceId=workspace-a&workspaceMemberId=member-a',
+      '/api/projects/project-1/raw/index.html',
       expect.objectContaining({
         method: 'DELETE',
         headers: expect.objectContaining({

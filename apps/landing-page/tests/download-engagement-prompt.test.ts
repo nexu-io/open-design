@@ -145,7 +145,6 @@ function runPromptEnhancer(options: {
     macArm64: 'https://example.com/open-design-mac-arm64.dmg',
     macX64: 'https://example.com/open-design-mac-x64.dmg',
     windows: 'https://example.com/open-design-win-x64-setup.exe',
-    linux: 'https://example.com/open-design-x86_64.AppImage',
   };
   const fetch = async () => ({ ok: true, json: async () => ({ assets: [] }) });
 
@@ -316,7 +315,7 @@ test('homepage hero: every active locale carries the brand-system scenario promi
     homeStylesSource,
     /\.hero-task-emphasis\s*\{[^}]*display:\s*inline-block;[^}]*background:\s*linear-gradient\(/s,
   );
-  assert.match(homePageSource, /hero-download-attention/);
+  assert.match(homePageSource, /hm-dl hm-dl-hero/);
   assert.match(homePageSource, /data-direct-download/);
 });
 
@@ -342,7 +341,7 @@ test('download hero: every active locale explains the agent-led design workflow'
   }
   assert.equal(
     getInfoPageCopy('zh').download.heading,
-    '免费下载 Open Design，用你的 Agent 开始设计。',
+    '免费下载 OpenDesign，用你的 Agent 开始设计。',
   );
   assert.match(downloadPageSource, /hero-product-1280\.webp/);
   assert.match(downloadPageSource, /hero-download-attention/);
@@ -423,7 +422,8 @@ test('download prompt: header and prompt keep mobile fallbacks aligned in docume
         platform: 'Linux x86_64',
         maxTouchPoints: 0,
       },
-      expectedHref: 'https://example.com/open-design-x86_64.AppImage',
+      // No Linux desktop build — Linux stays on the neutral /download/ page.
+      expectedHref: '/download/',
     },
   ];
 

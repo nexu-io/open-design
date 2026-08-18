@@ -25,7 +25,11 @@ import type { OpenDesignHostUpdaterStatusSnapshot } from '@open-design/host';
 import { installMockOpenDesignHost } from '@open-design/host/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { EntryNavRail, resetWorkspaceDirectoryCache } from '../../src/components/EntryNavRail';
+import {
+  EntryNavRail,
+  resetWorkspaceDirectoryCache,
+  WorkspaceTopRightAccountCluster,
+} from '../../src/components/EntryNavRail';
 import { UpdaterPopup } from '../../src/components/UpdaterPopup';
 import { I18nProvider } from '../../src/i18n';
 
@@ -130,6 +134,22 @@ async function renderWithDownloadedUpdate(context: WorkspaceCollabContext | null
 }
 
 describe('updater rocket placement after the account avatar', () => {
+  it('keeps the project-detail updater slot in the shared account row', () => {
+    render(
+      <I18nProvider initial="zh-CN">
+        <WorkspaceTopRightAccountCluster
+          workspaceContextOverride={teamContext()}
+          updaterSlot={<span data-testid="project-updater-slot-content" />}
+        />
+      </I18nProvider>,
+    );
+
+    const trigger = screen.getByTestId('entry-nav-account');
+    const slot = screen.getByTestId('entry-nav-account-updater');
+    expect(screen.getByTestId('project-updater-slot-content')).toBeTruthy();
+    expect(trigger.nextElementSibling).toBe(slot);
+  });
+
   it('renders the rocket inline immediately after the avatar chip', async () => {
     await renderWithDownloadedUpdate();
 

@@ -3,7 +3,7 @@
   "version": "0.19.2",
   "private": true,
   "type": "module",
-  "description": "Open Design renderer host bridge protocol.",
+  "description": "OpenDesign renderer host bridge protocol.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [

@@ -973,6 +973,33 @@ afterEach(() => {
 });
 
 describe('loadConfig', () => {
+  it('enables completion sound and desktop notifications for a fresh config', () => {
+    expect(loadConfig().notifications).toEqual({
+      soundEnabled: true,
+      successSoundId: 'ding',
+      failureSoundId: 'buzz',
+      desktopEnabled: true,
+    });
+  });
+
+  it('preserves an explicit saved notification opt-out', () => {
+    store.set('open-design:config', JSON.stringify({
+      notifications: {
+        soundEnabled: false,
+        successSoundId: 'ding',
+        failureSoundId: 'buzz',
+        desktopEnabled: false,
+      },
+    }));
+
+    expect(loadConfig().notifications).toEqual({
+      soundEnabled: false,
+      successSoundId: 'ding',
+      failureSoundId: 'buzz',
+      desktopEnabled: false,
+    });
+  });
+
   it('migrates legacy OpenAI-compatible API configs to an explicit apiProtocol', () => {
     const legacyConfig: Partial<AppConfig> = {
       mode: 'api',

@@ -144,6 +144,9 @@ env:
   # VELA_WEB_URL_PROD.
   OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}
   OD_VELA_WEB_URL: ${{ inputs.amr_profile == 'feature-test' && secrets.VELA_WEB_URL_FEATURE_TEST || inputs.amr_profile == 'test' && secrets.VELA_WEB_URL_TEST || inputs.amr_profile == 'prod' && secrets.VELA_WEB_URL_PROD || '' }}
+  OD_VELA_WEB_URL_FEATURE_TEST: ${{ secrets.VELA_WEB_URL_FEATURE_TEST }}
+  OD_VELA_WEB_URL_TEST: ${{ secrets.VELA_WEB_URL_TEST }}
+  OD_VELA_WEB_URL_PROD: ${{ secrets.VELA_WEB_URL_PROD }}
 jobs:
   metadata:
     name: Prepare prerelease metadata

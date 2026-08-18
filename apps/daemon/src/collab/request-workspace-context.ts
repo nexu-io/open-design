@@ -31,6 +31,7 @@ export type VerifiedWorkspaceRequestContextResult =
 export async function verifyWorkspaceRequestContext(input: {
   req: unknown;
   fetchWorkspaceDirectory: () => Promise<WorkspaceDirectoryFetchResult>;
+  configuredEnv?: Record<string, string>;
   requireTeam?: boolean;
 }): Promise<VerifiedWorkspaceRequestContextResult> {
   const claimed = workspaceResourceContextFromRequest(input.req);
@@ -93,6 +94,6 @@ export async function verifyWorkspaceRequestContext(input: {
 
   return {
     ok: true,
-    context: workspaceContextFromDirectoryItem(membership),
+    context: workspaceContextFromDirectoryItem(membership, input.configuredEnv),
   };
 }

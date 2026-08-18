@@ -2,7 +2,7 @@
 /*
  * Customer story — Stuart Gardoll  (`/stories/stuart-gardoll/`)
  *
- * Second Open Design customer story. Same bespoke full-bleed band layout as the
+ * Second OpenDesign customer story. Same bespoke full-bleed band layout as the
  * first (`stories/ikigai-one.astro`): it hand-wires the shared shell — header,
  * footer, SeoHead — the way `blog/[slug].astro` does, then drops in its own
  * `<main class="v4">` band layout + styles.
@@ -53,13 +53,13 @@ const pageUrl = new URL(Astro.url.pathname, Astro.site ?? fallbackSite).toString
 // in-article figures — swapping this does not change any image in the story body.
 const ogImage = new URL('/stories/stuart-gardoll-og.jpg', Astro.site ?? fallbackSite).toString();
 
-// Breadcrumb trail (Open Design → Stuart Gardoll). SeoHead emits the Article
+// Breadcrumb trail (OpenDesign → Stuart Gardoll). SeoHead emits the Article
 // JSON-LD; this adds the SERP breadcrumb.
 const breadcrumbJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'BreadcrumbList',
   itemListElement: [
-    { '@type': 'ListItem', position: 1, name: 'Open Design', item: origin },
+    { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: origin },
     { '@type': 'ListItem', position: 2, name: 'Stuart Gardoll', item: pageUrl },
   ],
 };

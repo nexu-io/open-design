@@ -45,4 +45,24 @@ describe("footer parity", () => {
     // Concrete anchor for the Careers link that originally regressed.
     assert.ok(homeKeys.has("careers"), "homepage footer is missing the Careers label");
   });
+
+  it("keeps the product column destinations in parity", async () => {
+    const [homepage, subpage] = await Promise.all([
+      readFile(HOMEPAGE_FOOTER, "utf8"),
+      readFile(SUBPAGE_FOOTER, "utf8"),
+    ]);
+
+    // Product destinations both footers must link. /codex-plugin/ originally
+    // regressed on the homepage after the 2026-08 nav consolidation.
+    for (const path of ["/html-anything/", "/html-video/", "/codex-slides/", "/codex-plugin/"]) {
+      assert.ok(
+        homepage.includes(`href={href('${path}')}`),
+        `homepage footer is missing the ${path} product link`,
+      );
+      assert.ok(
+        subpage.includes(`href={href('${path}')}`),
+        `sub-page footer is missing the ${path} product link`,
+      );
+    }
+  });
 });

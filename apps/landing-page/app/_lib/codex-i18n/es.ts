@@ -8,7 +8,7 @@ export const es: CodexCopyOverride = {
   collectionEyebrow: 'Colección curada',
   collectionHeading: 'Los plugins de diseño que hacen que Codex entregue UI de verdad',
   collectionLede:
-    'OpenAI Codex escribe código que funciona. Por su cuenta recurre a tipografías seguras, espaciados del montón y Helvetica centrada. Estos plugins le dan criterio: skills de estética y reglas de sistema de diseño. Instala uno, o ejecútalos todos dentro de Open Design.',
+    'OpenAI Codex escribe código que funciona. Por su cuenta recurre a tipografías seguras, espaciados del montón y Helvetica centrada. Estos plugins le dan criterio: skills de estética y reglas de sistema de diseño. Instala uno, o ejecútalos todos dentro de OpenDesign.',
   collectionStats: [
     { value: '50', label: 'plugins seleccionados' },
     { value: '13', label: 'repos de origen' },
@@ -20,13 +20,13 @@ export const es: CodexCopyOverride = {
     'Anula las decisiones estéticas por defecto de Codex antes de escribir una sola línea.',
     'Convierte tus tokens y componentes en reglas que Codex sigue en lugar de improvisar.',
   ],
-  collectionCloserHeading: 'Sáltate la configuración: diseña con Codex dentro de Open Design',
+  collectionCloserHeading: 'Sáltate la configuración: diseña con Codex dentro de OpenDesign',
   filterAll: 'Todos',
   collectionCloserBody:
-    'Open Design es el espacio de trabajo de diseño de código abierto y nativo para agentes que envuelve a Codex. Mantiene coherentes tus sistemas, skills y plantillas para que el agente entregue trabajo que es tuyo.',
+    'OpenDesign es el espacio de trabajo de diseño de código abierto y nativo para agentes que envuelve a Codex. Mantiene coherentes tus sistemas, skills y plantillas para que el agente entregue trabajo que es tuyo.',
   categoryFrontend: 'Frontend y UI',
   categoryDesignSystems: 'Sistemas de diseño',
-  ctaDownload: 'Descargar Open Design',
+  ctaDownload: 'Descargar OpenDesign',
   ctaStarList: 'Dar una estrella a la lista',
   ctaBrowseAll: 'Ver todos los plugins',
   ctaViewSource: 'Ver el código fuente',
@@ -61,9 +61,9 @@ export const es: CodexCopyOverride = {
   detailMoreOnList: 'Más en la lista codex-design',
   detailRelated: 'Más plugins de diseño para Codex',
   finalEyebrow: 'Siguiente paso',
-  detailCloserHeading: 'Diseña con Open Design, sin montar nada',
+  detailCloserHeading: 'Diseña con OpenDesign, sin montar nada',
   detailCloserBody:
-    'Instálalo tú mismo, o ejecuta toda una capa de diseño curada alrededor de Codex con Open Design. Trae tu propia key: lo que produzcas es tuyo.',
+    'Instálalo tú mismo, o ejecuta toda una capa de diseño curada alrededor de Codex con OpenDesign. Trae tu propia key: lo que produzcas es tuyo.',
   skills: {
     'gpt-taste': {
       tagline:

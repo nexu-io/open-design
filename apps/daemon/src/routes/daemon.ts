@@ -100,7 +100,7 @@ export function registerDaemonRoutes(app: Express, deps: RegisterDaemonRoutesDep
 
   app.post('/api/agents/:agentId/companion/install', requireLocalDaemonRequest, async (req, res) => {
     if (req.params.agentId !== 'deepseek-harness') {
-      return sendApiError(res, 400, 'BAD_REQUEST', 'This agent has no Open Design connection component.');
+      return sendApiError(res, 400, 'BAD_REQUEST', 'This agent has no OpenDesign connection component.');
     }
     try {
       const result = await installDeepSeekHarnessCompanion({

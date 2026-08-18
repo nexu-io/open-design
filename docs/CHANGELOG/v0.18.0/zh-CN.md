@@ -1,19 +1,19 @@
 ---
-title: Open Design 0.18.0
-description: Open Design 0.18.0 带来 Team Workspace——设计团队共同的家：共享项目、查看更新、在上下文中评论，并复用同一套设计体系、插件与技能；协作工作区现已直接延伸进 Codex。
+title: OpenDesign 0.18.0
+description: OpenDesign 0.18.0 带来 Team Workspace——设计团队共同的家：共享项目、查看更新、在上下文中评论，并复用同一套设计体系、插件与技能；协作工作区现已直接延伸进 Codex。
 ---
 
 ### 🌟 Codename: *Design Team Workspace. Now in Codex.*
 
-🤝 **`115 个 PR` · `22 位贡献者` · `2 天`** — Open Design 0.18.0 带来 Team Workspace——设计团队共同的家：在这里共享项目、查看更新、在上下文中直接评论，并复用同一套设计体系、插件与技能。借助全新的 Open Design plugin for Codex，这个协作工作区现在直接延伸进 Codex。🚀
+🤝 **`115 个 PR` · `22 位贡献者` · `2 天`** — OpenDesign 0.18.0 带来 Team Workspace——设计团队共同的家：在这里共享项目、查看更新、在上下文中直接评论，并复用同一套设计体系、插件与技能。借助全新的 OpenDesign plugin for Codex，这个协作工作区现在直接延伸进 Codex。🚀
 
 ## 🔥 亮点
 
-- 🤝 **团队工作区——团队有了自己的家。** *过去协作意味着离开 Open Design：导出文件、贴截图、追最新版。* 现在，**团队工作区**就在个人工作区旁边。创建、切换、按角色邀请同事，席位感知的邀请流程让每个人落到同一个地方——用同一个 Open Design Cloud 账号登录。 (#6142, #6459)
+- 🤝 **团队工作区——团队有了自己的家。** *过去协作意味着离开 OpenDesign：导出文件、贴截图、追最新版。* 现在，**团队工作区**就在个人工作区旁边。创建、切换、按角色邀请同事，席位感知的邀请流程让每个人落到同一个地方——用同一个 OpenDesign Cloud 账号登录。 (#6142, #6459)
 
-- 🚀 **Codex 中的 Open Design——错过了 0.17.0？再看一次。** *上个版本只存在了整整两天，所以它的头条值得再讲一遍：* Codex Desktop 和 CLI 可以把 Open Design 当作一套完整的创作引擎：确认视觉 brief，选择 Open Design Cloud 或受支持的本地执行方式，并获得真实的 Preview 或 Studio 结果。需要时，已签名的 Open Design runtime 会在后台启动，无需一直开着第二个应用，也无需手工拼接整套工具。从 0.16.x 升级上来？这对你也是新功能。 (#6055, #6273, #6362 — 随 [0.17.0](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0) 发布)
+- 🚀 **Codex 中的 OpenDesign——错过了 0.17.0？再看一次。** *上个版本只存在了整整两天，所以它的头条值得再讲一遍：* Codex Desktop 和 CLI 可以把 OpenDesign 当作一套完整的创作引擎：确认视觉 brief，选择 OpenDesign Cloud 或受支持的本地执行方式，并获得真实的 Preview 或 Studio 结果。需要时，已签名的 OpenDesign runtime 会在后台启动，无需一直开着第二个应用，也无需手工拼接整套工具。从 0.16.x 升级上来？这对你也是新功能。 (#6055, #6273, #6362 — 随 [0.17.0](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.17.0) 发布)
 
-- 🔌 **而且 Codex 不会再弄丢 Open Design。** 外部 MCP 宿主（Codex 等）过去在 Open Design 本地服务重启换端口后会彻底失联。现在连接会自己找到回家的路，`@open-design` 跨重启持续可用，无需重新配置。 (#6391)
+- 🔌 **而且 Codex 不会再弄丢 OpenDesign。** 外部 MCP 宿主（Codex 等）过去在 OpenDesign 本地服务重启换端口后会彻底失联。现在连接会自己找到回家的路，`@open-design` 跨重启持续可用，无需重新配置。 (#6391)
 
 - 📁 **共享项目自己保持最新。** 把项目移入团队空间，每位成员都会得到一份实时只读镜像：所有者工作时内容自动拉取，在线头像显示谁正在看，传输进度清晰可见，评论双向流动——只读访客也能评论。没有人需要重发任何东西，"这是最新版吗？"从此不再是问题。 (#5281, #5283, #5395, #6294)
 
@@ -41,13 +41,13 @@ description: Open Design 0.18.0 带来 Team Workspace——设计团队共同的
 
 ### 🏠 首页、项目与官网
 
-- **插件目录有了自己的门面。** 专门的落地页向新用户介绍 Open Design 插件，无需先安装应用。 (#6241) 感谢 @joeylee12629-star。
+- **插件目录有了自己的门面。** 专门的落地页向新用户介绍 OpenDesign 插件，无需先安装应用。 (#6241) 感谢 @joeylee12629-star。
 
 - **Codex agent 页面现在回答人们真正在问的问题。** 为搜索 Codex UI 的用户带来更清晰的定位与内容。 (#6200) 感谢 @joeylee12629-star。
 
 ## 🔁 变更
 
-- **Open Design 以明亮主题交付。** 新工作区界面为明亮外观调校，主题设置暂时下线，所有安装恢复为明亮主题。 (#6168)
+- **OpenDesign 以明亮主题交付。** 新工作区界面为明亮外观调校，主题设置暂时下线，所有安装恢复为明亮主题。 (#6168)
 
 ## 🐛 修复
 

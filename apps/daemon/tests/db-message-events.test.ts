@@ -7,6 +7,7 @@ import {
   appendMessageAgentEvent,
   appendMessageStatusEvent,
   closeDatabase,
+  finalizeMessageAgentEvents,
   insertConversation,
   insertProject,
   listMessages,
@@ -181,6 +182,17 @@ describe('message event persistence', () => {
     });
     appendMessageAgentEvent(db, 'assistant-1', { kind: 'text', text: 'done.' });
 
+    const storedDuringRun = db.prepare(
+      `SELECT content, events_json AS eventsJson FROM messages WHERE id = ?`,
+    ).get('assistant-1') as { content: string; eventsJson: string };
+    const batchCount = db.prepare(
+      `SELECT COUNT(*) AS count FROM message_event_batches WHERE message_id = ?`,
+    ).get('assistant-1') as { count: number };
+
+    expect(storedDuringRun.eventsJson).toBe('[]');
+    expect(storedDuringRun.content).toBe('');
+    expect(batchCount.count).toBe(3);
+
     const message = listMessages(db, 'conv-1')[0];
     expect(message?.content).toBe('Rendering done.');
     expect(message?.events).toEqual([
@@ -192,6 +204,130 @@ describe('message event persistence', () => {
         input: { command: 'od media generate' },
       },
       { kind: 'text', text: 'done.' },
+    ]);
+
+    // The browser periodically PUTs its live snapshot while the daemon owns
+    // the run. That snapshot must not be copied into events_json alongside
+    // the append-only batches, or the next read/finalize would double every
+    // event in the transcript.
+    upsertMessage(db, 'conv-1', {
+      ...message,
+      id: 'assistant-1',
+      role: 'assistant',
+      runId: 'agent-run-1',
+      runStatus: 'running',
+    });
+    expect(listMessages(db, 'conv-1')[0]?.events).toEqual(message?.events);
+    expect((db.prepare(
+      `SELECT events_json AS eventsJson FROM messages WHERE id = ?`,
+    ).get('assistant-1') as { eventsJson: string }).eventsJson).toBe('[]');
+
+    expect(finalizeMessageAgentEvents(db, 'assistant-1')).toEqual(message?.events);
+    expect(db.prepare(
+      `SELECT COUNT(*) AS count FROM message_event_batches WHERE message_id = ?`,
+    ).get('assistant-1')).toEqual({ count: 0 });
+    expect(JSON.parse((db.prepare(
+      `SELECT events_json AS eventsJson FROM messages WHERE id = ?`,
+    ).get('assistant-1') as { eventsJson: string }).eventsJson)).toEqual(message?.events);
+  });
+
+  it('lazily compacts a legacy terminal event snapshot after it is read', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    insertProject(db, {
+      id: 'proj-legacy',
+      name: 'Legacy stream project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertConversation(db, {
+      id: 'conv-legacy',
+      projectId: 'proj-legacy',
+      title: 'Legacy stream run',
+      createdAt: now,
+      updatedAt: now,
+    });
+    upsertMessage(db, 'conv-legacy', {
+      id: 'assistant-legacy',
+      role: 'assistant',
+      content: 'x'.repeat(20_000),
+      runId: 'legacy-run',
+      runStatus: 'succeeded',
+      events: [],
+      startedAt: now,
+      endedAt: now,
+    });
+    const legacyEvents = Array.from({ length: 20_000 }, () => ({
+      kind: 'thinking',
+      text: 'legacy-delta;',
+    }));
+    db.prepare(`UPDATE messages SET events_json = ? WHERE id = ?`).run(
+      JSON.stringify(legacyEvents),
+      'assistant-legacy',
+    );
+    closeDatabase();
+    const reopenedDb = openDatabase(tempDir, { dataDir: tempDir });
+    const beforeRead = reopenedDb.prepare(
+      `SELECT events_json AS eventsJson FROM messages WHERE id = ?`,
+    ).get('assistant-legacy') as { eventsJson: string };
+    expect(JSON.parse(beforeRead.eventsJson)).toHaveLength(20_000);
+
+    expect(listMessages(reopenedDb, 'conv-legacy')[0]?.events).toEqual([
+      { kind: 'thinking', text: 'legacy-delta;'.repeat(20_000) },
+    ]);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const stored = reopenedDb.prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = ?`)
+      .get('assistant-legacy') as { eventsJson: string };
+    expect(JSON.parse(stored.eventsJson)).toEqual([
+      { kind: 'thinking', text: 'legacy-delta;'.repeat(20_000) },
+    ]);
+  });
+
+  it('lazily finalizes append-only batches left behind by a terminal crash', async () => {
+    const db = openDatabase(tempDir, { dataDir: tempDir });
+    const now = Date.now();
+    insertProject(db, {
+      id: 'proj-recovery',
+      name: 'Recovered stream project',
+      createdAt: now,
+      updatedAt: now,
+    });
+    insertConversation(db, {
+      id: 'conv-recovery',
+      projectId: 'proj-recovery',
+      title: 'Recovered stream run',
+      createdAt: now,
+      updatedAt: now,
+    });
+    upsertMessage(db, 'conv-recovery', {
+      id: 'assistant-recovery',
+      role: 'assistant',
+      content: '',
+      runId: 'recovery-run',
+      runStatus: 'running',
+      events: [],
+      startedAt: now,
+    });
+    appendMessageAgentEvent(db, 'assistant-recovery', {
+      kind: 'thinking',
+      text: 'Recovered reasoning',
+    });
+    db.prepare(`UPDATE messages SET run_status = 'failed', ended_at = ? WHERE id = ?`)
+      .run(now, 'assistant-recovery');
+
+    expect(listMessages(db, 'conv-recovery')[0]?.events).toEqual([
+      { kind: 'thinking', text: 'Recovered reasoning' },
+    ]);
+
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(db.prepare(
+      `SELECT COUNT(*) AS count FROM message_event_batches WHERE message_id = ?`,
+    ).get('assistant-recovery')).toEqual({ count: 0 });
+    const stored = db.prepare(`SELECT events_json AS eventsJson FROM messages WHERE id = ?`)
+      .get('assistant-recovery') as { eventsJson: string };
+    expect(JSON.parse(stored.eventsJson)).toEqual([
+      { kind: 'thinking', text: 'Recovered reasoning' },
     ]);
   });
 

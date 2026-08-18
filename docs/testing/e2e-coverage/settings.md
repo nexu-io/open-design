@@ -81,7 +81,7 @@
 | SET-046 | Language 页面不依赖全局保存按钮；语言切换即时生效，关闭 Settings 也不会回滚已应用 locale | `SettingsDialog.execution.test.tsx` |
 | SET-047 | 多语言内容资源可通过翻译字典或英文 fallback 渲染为非空 skill、design system、prompt template 展示内容 | `localized-content.test.ts` |
 | SET-048 | Design system category、prompt template category 和 tag 在缺少 locale 字典项时回退到源值，已有字典项仍可本地化 | `localized-content.test.ts` |
-| SET-049 | Notifications 默认以 `offline` 展示；开启 completion sound 后才会显示成功/失败音选择器，并立即试听默认成功音 | `SettingsDialog.execution.test.tsx` |
+| SET-049 | Notifications 默认启用 completion sound 和桌面通知，并直接展示成功/失败音选择器；用户仍可分别关闭两个开关 | `SettingsDialog.execution.test.tsx` |
 | SET-050 | Notifications 支持切换 success / failure sound，并把声音选择保存到通知配置 | `SettingsDialog.execution.test.tsx` |
 | SET-051 | Desktop notification 在授权成功后会切为 `active`，支持发送测试通知并展示发送结果文案 | `SettingsDialog.execution.test.tsx` |
 | SET-052 | Desktop notification 在权限被拒绝时，会保持禁用并展示浏览器阻止提示，不显示测试按钮 | `SettingsDialog.execution.test.tsx` |

@@ -24,7 +24,7 @@ const REPO_DISCUSSIONS = `${REPO}/discussions`;
 const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const X_PROFILE = 'https://x.com/OpenDesignHQ';
 
-// Open Design Cloud endpoints for the header account module.
+// OpenDesign Cloud endpoints for the header account module.
 // Production defaults; overridable at build time via PUBLIC_* env so a
 // preview/staging build can point at a non-prod cloud. These are surfaced to
 // the runtime via `data-*` on `.nav-account` because the auth logic lives in
@@ -185,7 +185,7 @@ export function Header({
           <img
             className='brand-logo'
             src='/logo-lockup.svg'
-            alt='Open Design'
+            alt='OpenDesign'
             width={225}
             height={83}
           />
@@ -210,26 +210,29 @@ export function Header({
         <nav id='primary-nav' data-nav-primary>
           <ul className='nav-links'>
             {/* Product — a mega menu whose columns are top-level categories:
-                the Open Design product family and the Agent catalog today,
+                the OpenDesign product family and the Agent catalog today,
                 with room to add more (e.g. Feature) as its own column later.
                 The trigger is a <button> (not a link) so it never navigates —
                 Product used to bounce to the homepage — but its panel is
                 revealed by the SAME pure-CSS :hover / :focus-within rule as
                 the hub menus, so it works with no JS (first paint / script
                 failure) and on touch (tapping focuses the button →
-                :focus-within). It lights up for the whole product family AND
-                for /agents/ pages now that Agent lives inside it. */}
-            <li className='has-dropdown'>
+                :focus-within). It lights ONLY for destinations inside the
+                mega panel (Codex Plugin, Solutions, /agents/) — footer-only
+                product siblings (HTML Anything / HTML Video / Codex Slides)
+                intentionally do not light this tab. */}
+            {/* `nav-item-mega`: on desktop this li goes position:static so
+                the five-column mega panel positions against `.container`
+                and centers on it (anchored to the li
+                it overflowed narrow desktop widths). */}
+            <li className='has-dropdown nav-item-mega'>
               <button
                 type='button'
                 className={
                   'nav-trigger' +
                   (active === 'product' ||
-                  active === 'home' ||
-                  active === 'html-anything' ||
-                  active === 'html-video' ||
-                  active === 'codex-slides' ||
                   active === 'open-design-plugin' ||
+                  active === 'solution' ||
                   active === 'agent'
                     ? ' is-active'
                     : '')
@@ -242,51 +245,71 @@ export function Header({
                 className='nav-dropdown nav-dropdown-mega'
                 aria-label={productMenuCopy.product}
               >
-                {/* Products column — the Open Design product family. Names
-                    only (no blurbs): keeps the column compact and aligned
-                    with the Agent column, and avoids per-locale width blowups
-                    from long descriptions. */}
-                <li className='nav-mega-col'>
-                  <span className='nav-mega-col-head'>{productMenuCopy.product}</span>
+                {/* Plugin column — the Codex plugin entry. The product
+                    family (HTML Anything / HTML Video / Codex Slides) moved
+                    to the footer only (2026-08 nav consolidation); the mega
+                    panel now carries Plugin + the former Solution groups. */}
+                <li className='nav-mega-col nav-mega-col-merged'>
+                  {/* Product name as the column head-link, not a translatable
+                      phrase — same convention as "Codex Slides" before it.
+                      The localized "Plugins" label is reserved for the
+                      Resources → /plugins/ catalog hub to avoid one chrome
+                      word pointing at two destinations. */}
+                  <a
+                    href={href('/codex-plugin/')}
+                    className={
+                      'nav-mega-col-head' +
+                      (active === 'open-design-plugin' ? ' is-active' : '')
+                    }
+                  >
+                    Codex Plugin
+                  </a>
+                </li>
+                {/* Former Solution dropdown, folded into the mega panel as
+                    three side-by-side columns (Use cases / Roles / Tools). */}
+                <li className='nav-mega-col nav-mega-col-merged'>
+                  <a
+                    href={href('/solutions/')}
+                    className={
+                      'nav-mega-col-head' + (active === 'solution' ? ' is-active' : '')
+                    }
+                  >
+                    {productMenuCopy.useCases}
+                  </a>
                   <ul className='nav-mega-list'>
-                    <li>
-                      <a href={href('/')}>
-                        <span className='dropdown-name'>{productMenuCopy.openDesignName}</span>
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href={href('/html-anything/')}
-                        className={active === 'html-anything' ? 'is-active' : undefined}
-                      >
-                        <span className='dropdown-name'>{productMenuCopy.htmlAnythingName}</span>
-                      </a>
-                    </li>
-                    <li>
-                      <a href={href('/html-video/')}>
-                        <span className='dropdown-name'>{productMenuCopy.htmlVideoName}</span>
-                      </a>
-                    </li>
-                    {/* Product name, not a translatable phrase — same treatment
-                        as the hardcoded "Open Design" in the footer's product
-                        column, so it does not add an identical string to every
-                        locale block. */}
-                    <li>
-                      <a
-                        href={href('/codex-slides/')}
-                        className={active === 'codex-slides' ? 'is-active' : undefined}
-                      >
-                        <span className='dropdown-name'>Codex Slides</span>
-                      </a>
-                    </li>
-                    <li>
-                      <a
-                        href={href('/codex-plugin/')}
-                        className={active === 'open-design-plugin' ? 'is-active' : undefined}
-                      >
-                        <span className='dropdown-name'>Open Design Plugin</span>
-                      </a>
-                    </li>
+                    {productMenuCopy.useCaseItems.map((name, index) => (
+                      <li key={name}>
+                        <a href={href(USE_CASE_HREFS[index]!)}>
+                          <span className='dropdown-name'>{name}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+                <li className='nav-mega-col nav-mega-col-merged'>
+                  <span className='nav-mega-col-head'>{productMenuCopy.roles}</span>
+                  <ul className='nav-mega-list'>
+                    {productMenuCopy.roleItems.map((name, index) => (
+                      <li key={name}>
+                        <a href={href(ROLE_HREFS[index]!)}>
+                          <span className='dropdown-name'>{name}</span>
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+                <li className='nav-mega-col nav-mega-col-merged'>
+                  <span className='nav-mega-col-head'>{productMenuCopy.tools}</span>
+                  <ul className='nav-mega-list nav-mega-list-scroll'>
+                    {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
+                      <li key={key}>
+                        <a href={href(toolHref)}>
+                          <span className='dropdown-name'>
+                            {getSolutionPageCopy(locale, key).breadcrumb}
+                          </span>
+                        </a>
+                      </li>
+                    ))}
                   </ul>
                 </li>
                 {/* Agent column — the coding agents each with a dedicated
@@ -319,103 +342,6 @@ export function Header({
               </ul>
             </li>
 
-            {/* Solution — Use cases + Roles. */}
-            <li className='has-dropdown'>
-              <a
-                href={href('/solutions/')}
-                className={active === 'solution' ? 'is-active' : undefined}
-              >
-                {productMenuCopy.solution}
-                <span className='dropdown-caret' aria-hidden='true'>▾</span>
-              </a>
-              <ul
-                className='nav-dropdown nav-dropdown-solution'
-                aria-label={productMenuCopy.solution}
-              >
-                <li className='nav-dropdown-group'>
-                  <span className='nav-dropdown-group-label'>
-                    {productMenuCopy.useCases}
-                  </span>
-                </li>
-                {productMenuCopy.useCaseItems.map((name, index) => (
-                  <li key={name}>
-                    <a href={href(USE_CASE_HREFS[index]!)}>
-                      <span className='dropdown-name'>{name}</span>
-                    </a>
-                  </li>
-                ))}
-                <li className='nav-dropdown-group'>
-                  <span className='nav-dropdown-group-label'>
-                    {productMenuCopy.roles}
-                  </span>
-                </li>
-                {productMenuCopy.roleItems.map((name, index) => (
-                  <li key={name}>
-                    <a href={href(ROLE_HREFS[index]!)}>
-                      <span className='dropdown-name'>{name}</span>
-                    </a>
-                  </li>
-                ))}
-                <li className='nav-dropdown-group'>
-                  <span className='nav-dropdown-group-label'>
-                    {productMenuCopy.tools}
-                  </span>
-                </li>
-                {TOOL_ENTRIES.map(({ href: toolHref, key }) => (
-                  <li key={key}>
-                    <a href={href(toolHref)}>
-                      <span className='dropdown-name'>
-                        {getSolutionPageCopy(locale, key).breadcrumb}
-                      </span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </li>
-
-            {/* Plugins — the three composable catalogs. */}
-            <li className='has-dropdown'>
-              <a
-                href={href('/plugins/')}
-                className={
-                  active === 'plugins' ||
-                  active === 'library' ||
-                  active === 'skills' ||
-                  active === 'systems' ||
-                  active === 'templates' ||
-                  active === 'craft'
-                    ? 'is-active'
-                    : undefined
-                }
-              >
-                {productMenuCopy.plugins}
-                <span className='dropdown-caret' aria-hidden='true'>▾</span>
-              </a>
-              <ul className='nav-dropdown' aria-label={productMenuCopy.plugins}>
-                <li>
-                  <a href={href('/plugins/templates/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.pluginItems.templates}
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a href={href('/plugins/skills/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.pluginItems.skills}
-                    </span>
-                  </a>
-                </li>
-                <li>
-                  <a href={href('/plugins/systems/')}>
-                    <span className='dropdown-name'>
-                      {productMenuCopy.pluginItems.systems}
-                    </span>
-                  </a>
-                </li>
-              </ul>
-            </li>
-
             {/* Pricing — localized page. The plan numbers it renders stay in
                 sync with the vela commerce app at runtime (see
                 app/_lib/pricing.ts); the card copy mirrors vela's subscription
@@ -442,7 +368,13 @@ export function Header({
                   active === 'blog' ||
                   active === 'stories' ||
                   active === 'tutorials' ||
-                  active === 'download'
+                  active === 'download' ||
+                  active === 'plugins' ||
+                  active === 'library' ||
+                  active === 'skills' ||
+                  active === 'systems' ||
+                  active === 'templates' ||
+                  active === 'craft'
                     ? ' is-active'
                     : '')
                 }
@@ -490,6 +422,27 @@ export function Header({
                     <span className='dropdown-name'>
                       {productMenuCopy.resourceItems.download}
                     </span>
+                  </a>
+                </li>
+                {/* Plugins hub — the former top-level Plugins dropdown folded
+                    into Resources as a single hub link (2026-08 nav
+                    consolidation); the catalog sub-pages stay one click away
+                    on the hub and in the footer. */}
+                <li>
+                  <a
+                    href={href('/plugins/')}
+                    className={
+                      active === 'plugins' ||
+                      active === 'library' ||
+                      active === 'skills' ||
+                      active === 'systems' ||
+                      active === 'templates' ||
+                      active === 'craft'
+                        ? 'is-active'
+                        : undefined
+                    }
+                  >
+                    <span className='dropdown-name'>{productMenuCopy.plugins}</span>
                   </a>
                 </li>
               </ul>
@@ -595,6 +548,18 @@ export function Header({
               </div>
             </details>
           ) : null}
+          {/* GitHub star chip — quiet pill so Download stays the only
+              strong CTA in the bar. [data-github-stars] is refreshed by the
+              header enhancers (homepage inline script / header-enhancer). */}
+          <a
+            className='nav-star'
+            href={REPO}
+            {...ext}
+            aria-label='Star OpenDesign on GitHub'
+          >
+            <svg viewBox='0 0 16 16' width='14' height='14' fill='currentColor' aria-hidden='true'><path d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z' /></svg>
+            <span data-github-stars>{github?.starsLabel ?? '83K+'}</span>
+          </a>
           <a
             className='nav-cta ghost'
             href={href('/download/')}
@@ -607,7 +572,7 @@ export function Header({
             {headerCopy.download}
           </a>
           {/*
-            Open Design Cloud account entry. Signed-out visitors only see the
+            OpenDesign Cloud account entry. Signed-out visitors only see the
             download CTA above; the avatar menu stays `hidden` until the
             enhancer confirms a live cloud session via
             `GET {api}/api/auth/get-session`. Config flows through `data-*`

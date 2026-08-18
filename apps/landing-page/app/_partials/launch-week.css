@@ -25,7 +25,7 @@
 }
 
 /* ============================================================
-   Open Design Launch Week — mockup v1
+   OpenDesign Launch Week — mockup v1
    Direction C: pinned campaign cabin (left) + scrolling drops rail (right)
    Desktop-first. Assets referenced from ../assets/.
    ============================================================ */
@@ -39,7 +39,7 @@
   --olive: #6b6b1f;
 
   /* Four locked colour layers — never cross these:
-     acid  = Open Design / LIVE / CTA / selection / decisive action
+     acid  = OpenDesign / LIVE / CTA / selection / decisive action
      red   = KILL, verdicts, danger
      ink   = CLASSIFIED, withheld
      day-* = chapter identity ONLY (paint strokes, day numeral, hairline rules).
@@ -304,7 +304,7 @@ html:has(main.lw) {
   clip-path: var(--torn-marker);
   transform: rotate(-.6deg);
 }
-/* selection marquee — Open Design's own canvas UI, borrowed as house furniture.
+/* selection marquee — OpenDesign's own canvas UI, borrowed as house furniture.
    Also the layer that makes this read as a product page, not a printed poster. */
 .lw .hero-brand { position: relative; width: fit-content; max-width: 100%; margin: 0 auto;
 }

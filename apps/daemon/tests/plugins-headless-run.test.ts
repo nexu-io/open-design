@@ -417,7 +417,7 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
     expect(shareBody.sourcePluginId).toBe('sample-plugin');
     expect(shareBody.appliedPluginSnapshotId).toBeTruthy();
     expect(shareBody.stagedPath).toBe('plugin-source/sample-plugin');
-    expect(shareBody.prompt).toContain('Publish the local Open Design plugin');
+    expect(shareBody.prompt).toContain('Publish the local OpenDesign plugin');
     expect(shareBody.prompt).toContain('/api/projects/$OD_PROJECT_ID/plugins/publish-github');
     expect(shareBody.prompt).toContain('plugin-source/sample-plugin');
     expect(shareBody.project.pendingPrompt).toBe(shareBody.prompt);
@@ -479,9 +479,9 @@ describe('Plan §8 e2e-3 (entry slice) — headless install → project → run'
     const previousGitCommitterName = process.env.GIT_COMMITTER_NAME;
     const previousGitCommitterEmail = process.env.GIT_COMMITTER_EMAIL;
     process.env.OD_REAL_GIT = realGit;
-    process.env.GIT_AUTHOR_NAME = 'Open Design Test';
+    process.env.GIT_AUTHOR_NAME = 'OpenDesign Test';
     process.env.GIT_AUTHOR_EMAIL = 'open-design-test@example.com';
-    process.env.GIT_COMMITTER_NAME = 'Open Design Test';
+    process.env.GIT_COMMITTER_NAME = 'OpenDesign Test';
     process.env.GIT_COMMITTER_EMAIL = 'open-design-test@example.com';
     try {
       await withFakeAgent(

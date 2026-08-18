@@ -1,7 +1,7 @@
 export type PlanBadgeSize = 'sm' | 'md';
 
 /**
- * The Open Design plan nameplate — one source of truth for the
+ * The OpenDesign plan nameplate — one source of truth for the
  * free / plus / pro / max tier pill so Settings, the model switcher, and the
  * avatar menu all render the same shape. `plan` is the raw tier string (e.g.
  * "plus" or "Plus"); the label capitalizes via CSS. Color follows the active

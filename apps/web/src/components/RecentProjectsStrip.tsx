@@ -7,7 +7,15 @@
 // surfaces (e.g. an in-project quick-switcher pane).
 
 import type { CSSProperties } from 'react';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 
 const MOVE_CONFIRM_SKIP_KEY = 'od.projects.moveConfirmSkip';
@@ -203,6 +211,8 @@ const deckCoverCache = new Map<string, string>();
 const deckCoverInflight = new Map<string, Promise<string>>();
 const DEFAULT_RECENT_PROJECT_LIMIT = 6;
 const WIDE_RECENT_PROJECT_LIMIT = 7;
+const PROJECT_MENU_GAP = 6;
+const PROJECT_MENU_VIEWPORT_MARGIN = 24;
 // Card covers are background decoration. Browsers commonly allow only six
 // concurrent connections per origin, so an unbounded All Projects scan can
 // occupy every slot and queue the project file list/preview the user just
@@ -473,6 +483,7 @@ export function RecentProjectsStrip({
     Record<string, ProjectCoverOverride | null>
   >({});
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [menuPlacement, setMenuPlacement] = useState<'down' | 'up'>('down');
   const [renameTarget, setRenameTarget] = useState<{ id: string; original: string } | null>(null);
   const [renameInput, setRenameInput] = useState('');
   const [confirmTarget, setConfirmTarget] = useState<Project | null>(null);
@@ -549,6 +560,7 @@ export function RecentProjectsStrip({
     ],
   );
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const renameTitleId = useId();
   const confirmTitleId = useId();
   const moveTitleId = useId();
@@ -626,6 +638,48 @@ export function RecentProjectsStrip({
     }
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [menuOpenId]);
+
+  useLayoutEffect(() => {
+    if (!menuOpenId) return;
+    const anchor = menuContainerRef.current;
+    const menu = menuRef.current;
+    const trigger = anchor?.querySelector<HTMLElement>('.recent-projects__card-more');
+    if (!anchor || !menu || !trigger) return;
+
+    const measureMenuPlacement = () => {
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+      const scrollBoundary = anchor.closest<HTMLElement>('.entry-main--scroll');
+      const scrollRect = scrollBoundary?.getBoundingClientRect();
+      const visibleTop = Math.max(0, scrollRect?.top ?? 0);
+      const visibleBottom = Math.min(viewportHeight, scrollRect?.bottom ?? viewportHeight);
+      const triggerRect = trigger.getBoundingClientRect();
+      const menuHeight = menu.getBoundingClientRect().height;
+      const spaceBelow =
+        visibleBottom - triggerRect.bottom - PROJECT_MENU_GAP - PROJECT_MENU_VIEWPORT_MARGIN;
+      const spaceAbove =
+        triggerRect.top - visibleTop - PROJECT_MENU_GAP - PROJECT_MENU_VIEWPORT_MARGIN;
+      const nextPlacement =
+        spaceBelow < menuHeight && spaceAbove > spaceBelow ? 'up' : 'down';
+
+      setMenuPlacement((current) => (current === nextPlacement ? current : nextPlacement));
+    };
+
+    measureMenuPlacement();
+    window.addEventListener('resize', measureMenuPlacement);
+    window.addEventListener('scroll', measureMenuPlacement, true);
+    const observer = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(measureMenuPlacement);
+    if (observer) {
+      observer.observe(anchor);
+      observer.observe(menu);
+    }
+    return () => {
+      window.removeEventListener('resize', measureMenuPlacement);
+      window.removeEventListener('scroll', measureMenuPlacement, true);
+      observer?.disconnect();
+    };
   }, [menuOpenId]);
 
   // Cover fetching must key off the *set of project ids and their readiness*, not the
@@ -1873,6 +1927,8 @@ export function RecentProjectsStrip({
                   {menuOpenId === project.id ? (
                     <div
                       className="recent-projects__card-menu"
+                      data-placement={menuPlacement}
+                      ref={menuRef}
                       role="menu"
                       onClick={(event) => event.stopPropagation()}
                     >

@@ -135,6 +135,9 @@ env:
   # transports dormant rather than half-enabled.
   OPEN_DESIGN_AMR_PROFILE: prod
   OD_VELA_WEB_URL: ${{ secrets.VELA_WEB_URL_PROD }}
+  OD_VELA_WEB_URL_FEATURE_TEST: ${{ secrets.VELA_WEB_URL_FEATURE_TEST }}
+  OD_VELA_WEB_URL_TEST: ${{ secrets.VELA_WEB_URL_TEST }}
+  OD_VELA_WEB_URL_PROD: ${{ secrets.VELA_WEB_URL_PROD }}
   OPEN_DESIGN_TELEMETRY_RELAY_URL: ${{ vars.OPEN_DESIGN_TELEMETRY_RELAY_URL }}
   # PostHog product-analytics ingest. Defined as repository secret + var
   # so official builds ship with analytics enabled; PR builds and forks
@@ -526,7 +529,7 @@ jobs:
           RELEASE_BRANCH: ${{ needs.metadata.outputs.branch }}
           RELEASE_CHANNEL: ${{ needs.metadata.outputs.channel }}
           RELEASE_NAMESPACE: ${{ needs.metadata.outputs.namespace }}
-          RELEASE_NOTES: Open Design ${{ needs.metadata.outputs.release_version }}
+          RELEASE_NOTES: OpenDesign ${{ needs.metadata.outputs.release_version }}
           RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}
           RELEASE_TARGET: mac_arm64
           RELEASE_VERSION: ${{ needs.metadata.outputs.release_version }}
@@ -898,7 +901,7 @@ jobs:
             -ReleaseAssetSuffix "" `
             -ReleaseChannel "${{ needs.metadata.outputs.channel }}" `
             -ReleasePublicOrigin "${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}" `
-            -ReleaseNotes "Open Design ${{ needs.metadata.outputs.release_version }}" `
+            -ReleaseNotes "OpenDesign ${{ needs.metadata.outputs.release_version }}" `
             -IncludeZip $true
 
       - name: Publish windows platform

@@ -205,6 +205,57 @@ describe('HomeView workspace-scoped plugin catalog', () => {
     workspaceInvalidationHarness.autoActivate = true;
   });
 
+  it('masks the provisional catalog until the first Workspace-scoped read settles', async () => {
+    const pluginRequests: Headers[] = [];
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input, init) => {
+      if (String(input) === '/api/plugins') {
+        const headers = new Headers(init?.headers);
+        pluginRequests.push(headers);
+        const pluginId = headers.has('x-od-workspace-id')
+          ? 'scoped-plugin'
+          : 'provisional-plugin';
+        return new Response(JSON.stringify({ plugins: [plugin(pluginId)] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } });
+    }));
+    workspaceMock.state = {
+      context: null,
+      loading: true,
+      identityChangePending: false,
+      failure: undefined,
+    };
+    const view = renderHome();
+
+    await waitFor(() => expect(pluginRequests).toHaveLength(1));
+    expect(pluginRequests[0]?.has('x-od-workspace-id')).toBe(false);
+    expect(screen.getByTestId('plugin-catalog').textContent).toBe('loading');
+
+    workspaceMock.state = {
+      context: teamContext('workspace-startup', 'member-startup'),
+      loading: false,
+      identityChangePending: false,
+      failure: undefined,
+    };
+    view.rerender(
+      <HomeView
+        projects={[]}
+        onSubmit={() => undefined}
+        onOpenProject={() => undefined}
+        onViewAllProjects={() => undefined}
+      />,
+    );
+
+    await waitFor(() => expect(pluginRequests).toHaveLength(2));
+    expect(pluginRequests[1]?.get('x-od-workspace-id')).toBe('workspace-startup');
+    expect(pluginRequests[1]?.get('x-od-workspace-member-id')).toBe('member-startup');
+    await waitFor(() => {
+      expect(screen.getByTestId('plugin-catalog').textContent).toBe('scoped-plugin');
+    });
+  });
+
   it('parks hidden plugin invalidations and performs one bounded catch-up when Home activates', async () => {
     let pluginReads = 0;
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input) => {

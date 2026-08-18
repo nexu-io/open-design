@@ -1558,7 +1558,7 @@ describe('API proxy routes', () => {
       if (url === 'https://api.senseaudio.cn/v1/image/sync') {
         return new Response(
           JSON.stringify({
-            url: 'https://cdn.example.test/cat.png',
+            url: 'https://93.184.216.34/cat.png',
             base_resp: { status_code: 0, status_msg: 'success' },
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
@@ -1566,7 +1566,7 @@ describe('API proxy routes', () => {
       }
 
       // Image bytes download (initiated by the tool, not via the proxy)
-      if (url === 'https://cdn.example.test/cat.png') {
+      if (url === 'https://93.184.216.34/cat.png') {
         return new Response(pngBytes, {
           status: 200,
           headers: { 'content-type': 'image/png' },
@@ -1782,11 +1782,11 @@ describe('API proxy routes', () => {
       if (url.startsWith(baseUrl)) return realFetch(input, init);
       if (url === 'https://api.senseaudio.cn/v1/image/sync') {
         return new Response(
-          JSON.stringify({ url: 'https://cdn.example.test/x.png' }),
+          JSON.stringify({ url: 'https://93.184.216.34/x.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      if (url === 'https://cdn.example.test/x.png') {
+      if (url === 'https://93.184.216.34/x.png') {
         return new Response(Buffer.from([0x89, 0x50]), { status: 200 });
       }
       if (url === 'https://api.senseaudio.cn/v1/chat/completions') {
@@ -1840,11 +1840,11 @@ describe('API proxy routes', () => {
       if (url.startsWith(baseUrl)) return realFetch(input, init);
       if (url === 'https://api.senseaudio.cn/v1/image/sync') {
         return new Response(
-          JSON.stringify({ url: 'https://cdn.example.test/served.png' }),
+          JSON.stringify({ url: 'https://93.184.216.34/served.png' }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         );
       }
-      if (url === 'https://cdn.example.test/served.png') {
+      if (url === 'https://93.184.216.34/served.png') {
         return new Response(pngBytes, { status: 200 });
       }
       if (url === 'https://api.senseaudio.cn/v1/chat/completions') {

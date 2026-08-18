@@ -73,7 +73,7 @@ function localHeaders(): Record<string, string> {
 }
 
 describe('Workspace resource read authority wiring', () => {
-  it('uses the settled verifier only for Skill and Design System catalog GETs', async () => {
+  it('keeps Skill and Design System local reads off the remote authority plane', async () => {
     const app = express();
     const verifyWorkspaceReadAuthority = verifier();
     const verifyWorkspaceRequestAuthority = verifier();
@@ -129,7 +129,7 @@ describe('Workspace resource read authority wiring', () => {
       skills: [{ id: 'skill-1', hasBody: true }],
     });
     await expect(designSystems.json()).resolves.toEqual({ designSystems: [] });
-    expect(verifyWorkspaceReadAuthority).toHaveBeenCalledTimes(2);
+    expect(verifyWorkspaceReadAuthority).not.toHaveBeenCalled();
     expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
 
     const detail = await fetch(`${baseUrl}/api/skills/skill-1`, { headers });
@@ -138,10 +138,10 @@ describe('Workspace resource read authority wiring', () => {
       id: 'skill-1',
       body: '# Skill',
     });
-    expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(1);
+    expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
   });
 
-  it('uses the settled verifier only for the Plugin catalog GET', async () => {
+  it('keeps Plugin local reads off the remote authority plane', async () => {
     const app = express();
     const verifyWorkspaceReadAuthority = verifier();
     const verifyWorkspaceRequestAuthority = verifier();
@@ -191,12 +191,12 @@ describe('Workspace resource read authority wiring', () => {
 
     expect(listing.status).toBe(200);
     await expect(listing.json()).resolves.toEqual({ plugins: [plugin] });
-    expect(verifyWorkspaceReadAuthority).toHaveBeenCalledTimes(1);
+    expect(verifyWorkspaceReadAuthority).not.toHaveBeenCalled();
     expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
 
     const detail = await fetch(`${baseUrl}/api/plugins/plugin-1`, { headers });
     expect(detail.status).toBe(200);
     await expect(detail.json()).resolves.toEqual(plugin);
-    expect(verifyWorkspaceRequestAuthority).toHaveBeenCalledTimes(1);
+    expect(verifyWorkspaceRequestAuthority).not.toHaveBeenCalled();
   });
 });

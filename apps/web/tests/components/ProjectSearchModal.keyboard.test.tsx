@@ -161,7 +161,7 @@ describe('ProjectSearchModal keyboard navigation', () => {
     expect(activeName()).toBeUndefined();
   });
 
-  it('scopes Team project cover URLs for browser-owned image loads', () => {
+  it('uses server-derived project authority for Team project cover URLs', () => {
     const teamProject = {
       ...project('team-project', 'Team project', 4_000),
       metadata: {
@@ -173,7 +173,7 @@ describe('ProjectSearchModal keyboard navigation', () => {
 
     const image = screen.getByTestId('project-search-item-team-project').querySelector('img');
     expect(image?.getAttribute('src')).toBe(
-      '/api/projects/team-project/raw/cover.png?workspaceId=workspace-team&workspaceMemberId=member-1&v=4000',
+      '/api/projects/team-project/raw/cover.png?v=4000',
     );
   });
 });

@@ -504,6 +504,10 @@
   background: var(--bg-panel);
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
 }
+.recent-projects__card-menu[data-placement='up'] {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
 .recent-projects__card-menu button {
   appearance: none;
   display: flex;

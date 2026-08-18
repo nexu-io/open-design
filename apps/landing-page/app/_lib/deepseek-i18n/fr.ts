@@ -10,8 +10,8 @@ export const fr: DeepseekCopyOverride = {
   collectionLede:
     'Une sélection de plugins dsh pour le design : des ponts de vision qui lisent les captures d’écran, des canevas et de l’UI générative où l’agent peut dessiner, des outils de revue de design et des workbenches qui prévisualisent le tout. DeepSeek Harness lit le même format SKILL.md que Claude Code et Codex : votre bibliothèque de skills design vous suit.',
   collectionStats: [
-    { value: '13', label: 'plugins dsh sélectionnés' },
-    { value: '13', label: 'dépôts sources' },
+    { value: '19', label: 'plugins dsh sélectionnés' },
+    { value: '19', label: 'dépôts sources' },
     { value: 'SKILL.md', label: 'partagé avec Claude Code & Codex' },
   ],
   collectionIntro:
@@ -22,17 +22,17 @@ export const fr: DeepseekCopyOverride = {
     'Bouclez la boucle : annotez de vraies pages, compilez des assets de motion, emportez votre bibliothèque de skills.',
     'Faites du harness lui-même un workspace de design : panneaux d’aperçu, workbenches et boards à côté du chat.',
   ],
-  collectionCloserHeading: 'Passez la config. Designez avec DeepSeek Harness dans Open Design',
+  collectionCloserHeading: 'Passez la config. Designez avec DeepSeek Harness dans OpenDesign',
   filterAll: 'Tout',
   collectionCloserBody:
-    'Open Design est le workspace de design open source et agent-native qui tourne autour de DeepSeek Harness. Il garde vos systèmes, vos skills et vos templates cohérents pour que l’agent livre un travail qui vous appartient.',
+    'OpenDesign est le workspace de design open source et agent-native qui tourne autour de DeepSeek Harness. Il garde vos systèmes, vos skills et vos templates cohérents pour que l’agent livre un travail qui vous appartient.',
 
   categoryVision: 'Vision & entrée',
   categoryCanvas: 'Canvas & UI générative',
   categoryWorkflow: 'Workflow de design',
   categoryWorkspace: 'Workspace & aperçu',
 
-  ctaDownload: 'Télécharger Open Design',
+  ctaDownload: 'Télécharger OpenDesign',
   ctaStarList: 'Star DeepSeek Harness',
   ctaGuide: 'Comment designer avec DeepSeek Harness',
   ctaBrowseAll: 'Parcourir tous les plugins',
@@ -71,9 +71,9 @@ export const fr: DeepseekCopyOverride = {
   detailMoreOnList: 'Plus dans le dépôt DeepSeek Harness',
   detailRelated: 'Autres plugins design pour DeepSeek Harness',
   finalEyebrow: 'Prochaine étape',
-  detailCloserHeading: 'Designez avec Open Design, sans la config',
+  detailCloserHeading: 'Designez avec OpenDesign, sans la config',
   detailCloserBody:
-    'Installez ce plugin vous-même, ou faites tourner toute une couche design sélectionnée autour de DeepSeek Harness avec Open Design. Apportez votre clé, gardez la main sur ce que vous produisez.',
+    'Installez ce plugin vous-même, ou faites tourner toute une couche design sélectionnée autour de DeepSeek Harness avec OpenDesign. Apportez votre clé, gardez la main sur ce que vous produisez.',
 
   skills: {
     modlens: {
@@ -269,6 +269,96 @@ export const fr: DeepseekCopyOverride = {
         'Installez avec le script en une ligne, ou ajoutez le package npm à votre profil web.',
         'Ouvrez le workbench et répartissez les onglets entre la sidebar droite et le panneau du bas.',
         'Passez en revue ce que l’agent a construit, sur place : aperçus, diffs, terminal et onglets de navigateur.',
+      ],
+    },
+    'dsh-vision-router': {
+      tagline: 'Des yeux gratuits et sans clé pour les agents purement textuels : une chaîne de vision intégrée plus onze outils au pixel près.',
+      whatIsIt:
+        'Un routeur de vision qui garde les pixels d’origine côté modèle de vision et DeepSeek côté raisonnement. Choisissez un groupe de modèles « + Auto Vision », collez une image, et l’agent pilote onze outils au pixel près — grounding, recadrage, pixel diff, palette, OCR, vectorisation SVG, détourage, captures HTML — sur une chaîne de repli de vision anonyme et gratuite, sans compte ni clé.',
+      whyForDesign: [
+        'Une boucle pixel vérifiable pour la restauration d’UI : référence → capture → pixel diff avec heatmap rouge → correction → répéter jusqu’à convergence de l’écart.',
+        'Grounding et détection renvoient des boîtes en pixels de l’image d’origine, et son README documente une reconstruction vérifiée jusqu’à un diff final de 2,54 %.',
+        'Extraction de palette, vectorisation SVG des icônes et détourage de fond couvrent les petites corvées de design autour d’une reconstruction.',
+      ],
+      howWithAgent: [
+        'Ajoutez le plugin à votre profil web ; son patch de composition câble tout sans la moindre édition manuelle de fichier.',
+        'Ouvrez le sélecteur de modèles et choisissez un groupe marqué « + Auto Vision » avant d’envoyer des images.',
+        'Collez une capture et laissez l’agent enchaîner vision_ground, vision_crop, vision_describe et vision_pixel_diff.',
+      ],
+    },
+    'dsh-diagram': {
+      tagline: 'Transformez n’importe quel article de la session en canvas Excalidraw éditable, pas en image jetable.',
+      whatIsIt:
+        'Un canvas Excalidraw dans le harness : l’agent appelle diagram_create pour construire un organigramme, un schéma d’architecture, une chronologie, une hiérarchie ou une comparaison à partir d’une spec sémantique compacte, et un onglet Canvas ouvre l’éditeur complet pour affiner texte, nœuds et connexions directement dans la session.',
+      whyForDesign: [
+        'Éditable, pas jetable : continuez à travailler dans un vrai canvas vectoriel au lieu d’accepter une image générée statique.',
+        'L’autosauvegarde compare-and-set basée sur les révisions empêche un éditeur périmé d’écraser silencieusement un travail plus récent.',
+        'Exporte en .excalidraw, SVG ou PNG, et vos éditions manuelles n’atteignent l’agent que lorsque vous lui demandez d’appeler diagram_read.',
+      ],
+      howWithAgent: [
+        'Ajoutez le plugin à votre profil web et redémarrez dsh web.',
+        'Demandez un diagramme clair de l’article présent dans la session ; l’agent appelle diagram_create.',
+        'Ouvrez l’onglet Canvas, éditez directement, puis exportez ou laissez l’agent relire vos modifications.',
+      ],
+    },
+    'deepseek-harness-genui': {
+      tagline: 'La tâche fait pousser une interface React ciblée — et ce que vous y choisissez revient à l’agent.',
+      whatIsIt:
+        'Une couche d’interface à l’exécution pour les tâches d’agent : quand le texte devient un obstacle, l’agent écrit une petite app React + TypeScript — affichée en ligne, dans Canvas, en plein écran ou sur localhost — pour expliquer une relation difficile, recueillir une décision complexe ou piloter un outil connecté après approbation limitée à la tâche.',
+      whyForDesign: [
+        'Les interfaces sont du React code-first : layouts, contrôles et diagrammes sont de vrais composants, pas des captures d’écran.',
+        'Sélections, saisies et brouillons sauvegardés reviennent dans la tâche pour que les tours suivants de l’agent puissent les lire.',
+        'Un système DESIGN.md avec quatre profils visuels garde les apps générées dans un seul langage de design.',
+      ],
+      howWithAgent: [
+        'Exécutez la commande d’installation — elle ajoute le plugin, puis installe le Chromium dont Playwright a besoin.',
+        'Demandez une interface quand l’interaction aide : un sélecteur, un modèle explorable, un explorateur de chemins de code.',
+        'Interagissez, puis enchaînez — l’agent lit ce que vous avez sélectionné au lieu de vous demander de le répéter.',
+      ],
+    },
+    'dsh-annotate': {
+      tagline: 'Pointez des éléments du navigateur et envoyez à l’agent des faits structurés, pas des descriptions vagues.',
+      whatIsIt:
+        'Du feedback visuel dans le navigateur via une extension Chrome compagnon : /annotate passe en mode sélection, et chaque élément cliqué apporte un sélecteur, des faits DOM, les styles calculés saillants, des données d’accessibilité, votre commentaire et une capture optionnelle du viewport au tour suivant de l’agent.',
+      whyForDesign: [
+        'Le feedback visuel reste attaché à l’élément de la page au lieu de devenir une description vague ou une capture collée.',
+        'Styles calculés et données d’accessibilité arrivent comme des faits structurés sur lesquels l’agent peut agir directement.',
+        'Un pont WebSocket en loopback restreint par hôte, origine et ID d’extension garde le canal local.',
+      ],
+      howWithAgent: [
+        'Clonez le dépôt et ajoutez le projet à un profil du harness, puis chargez son dossier browser-extension comme extension décompressée depuis chrome://extensions.',
+        'Lancez /annotate, cliquez des éléments sur la page et attachez un commentaire à chacun.',
+        'Envoyez — les faits capturés et la capture du viewport arrivent dans le tour suivant de l’agent.',
+      ],
+    },
+    'dsh-hyperframes': {
+      tagline: 'HyperFrames by HeyGen, porté : cinq skills officiels qui transforment le HTML en vidéo finie.',
+      whatIsIt:
+        'Une seule installation enregistre dans le harness les cinq skills officiels HyperFrames by HeyGen : composition vidéo HTML avec styles visuels, palettes, sous-titres et transitions audio-réactives, la CLI hyperframes, le registre de composants, un pipeline site-vers-vidéo et une référence d’animation GSAP.',
+      whyForDesign: [
+        'Le motion design dans le médium où vous travaillez déjà : HTML et CSS deviennent de la vidéo rendue.',
+        'Un pipeline site-vers-vidéo en sept étapes transforme une URL en clip produit.',
+        'Les skills utilisent le format ouvert SKILL.md : le même jeu se transporte vers Claude Code, Cursor et Codex.',
+      ],
+      howWithAgent: [
+        'Ajoutez le plugin à votre profil web et redémarrez.',
+        'Dites « transforme cette URL en vidéo HyperFrames » pour déclencher le pipeline.',
+        'Rendez via la CLI hyperframes ; Node 22+ et FFmpeg sont les seules dépendances.',
+      ],
+    },
+    'dsh-web-preview': {
+      tagline: 'Un panneau latéral effet verre qui prévisualise le workspace, exécute le projet et annote les éléments.',
+      whatIsIt:
+        'Un panneau latéral d’aperçu web pour l’UI web du harness : les fichiers du workspace sont servis pour l’aperçu — Markdown rendu, code avec numéros de ligne, images et HTML tels quels — les projets détectent leur type automatiquement (Cargo, package.json, go.mod, Python) et s’exécutent avec des logs en direct, et un mode marquage renvoie les annotations d’éléments dans la conversation.',
+      whyForDesign: [
+        'Le prototype que l’agent vient d’écrire s’ouvre à côté du chat, barre d’adresse synchronisée et largeur de panneau réglable à la souris.',
+        'Le mode marquage surligne les éléments au survol, capture un sélecteur et un instantané HTML, et envoie votre note dans la conversation.',
+        'Liens, chemins de fichiers et fichiers déposés s’ouvrent tous dans le panneau : la revue ne quitte jamais la session.',
+      ],
+      howWithAgent: [
+        'Installez le package dans le dossier de votre profil web, puis montez-le en ajoutant une entrée insert nommée dsh-web-preview-panel dans le cordis.patch.yml de ce profil.',
+        'Redémarrez dsh web et ouvrez le bouton d’aperçu ▶ en haut à droite de la conversation.',
+        'Exécutez le projet depuis le panneau, annotez des éléments et envoyez logs ou notes directement à l’agent.',
       ],
     },
   },

@@ -8,6 +8,7 @@ import type { AnalyticsContext } from '../analytics.js';
 import { defaultMediaExecutionPolicy, mediaPolicyDenial } from '../media/policy.js';
 import { formatMediaTaskDiagnostic } from '../media/diagnostics.js';
 import { findMediaModel } from '../media/models.js';
+import type { MediaTaskError } from '../media/tasks.js';
 import type { ImageGenerationRequestSummary } from '../media/image-generation-retry.js';
 import type { RouteDeps } from '../server-context.js';
 import type {
@@ -26,11 +27,7 @@ import {
   MEDIA_TASK_WAIT_TOOL_ENDPOINT,
   type ToolTokenGrant,
 } from '../tool-tokens.js';
-import {
-  authorizePersistedAutomationWorkspaceScope,
-  normalizePersistedAutomationWorkspaceScope,
-} from '../automations/workspace-scope.js';
-import type { WorkspaceDirectoryFetchResult } from '../collab/vela-workspace-context.js';
+import { normalizePersistedAutomationWorkspaceScope } from '../automations/workspace-scope.js';
 
 const LONG_MEDIA_PROXY_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -49,7 +46,6 @@ const AIHUBMIX_CATALOG_TTL_MS = 5 * 60 * 1000;
 const aihubmixCatalogCache = new Map<string, { at: number; models: Array<{ id: string; label: string }> }>();
 
 export interface RegisterMediaRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'paths' | 'ids' | 'auth' | 'media' | 'appConfig' | 'orbit' | 'nativeDialogs' | 'projectStore' | 'projectFiles' | 'conversations' | 'research'> {
-  fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
   authorizeProjectRequest: AuthorizeProjectRequest;
   authorizeProjectToolRequest: AuthorizeProjectToolRequest;
 }
@@ -94,6 +90,32 @@ export function resolveLegacyMediaRouteGrant(input: {
   }
 
   return { ok: true, grant: input.grant };
+}
+
+
+/**
+ * Build the persisted failure record for a media task.
+ *
+ * A media failure is the only thing the client has left to explain itself
+ * with, so anything the producer proved must survive into the snapshot: the
+ * stable `code` the web client keys its copy on, the optional `subject`
+ * naming what a safety policy objected to, and `retryable` so the UI can stop
+ * inviting a retry that cannot succeed. Absent fields stay absent rather than
+ * being defaulted — `retryable: false` invented here would tell a user a
+ * transient outage is permanent.
+ */
+function mediaTaskErrorFromFailure(err: any): MediaTaskError {
+  const subject = err?.subject;
+  const retryable = err?.retryable;
+  return {
+    message: String(err && err.message ? err.message : err),
+    status: typeof err?.status === 'number' ? err.status : 400,
+    code: err?.code,
+    ...(subject === 'prompt' || subject === 'input_image' || subject === 'output_image'
+      ? { subject }
+      : {}),
+    ...(typeof retryable === 'boolean' ? { retryable } : {}),
+  };
 }
 
 export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) {
@@ -295,11 +317,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
         })
         .catch((err: any) => {
           task.status = 'failed';
-          task.error = {
-            message: String(err && err.message ? err.message : err),
-            status: typeof err?.status === 'number' ? err.status : 400,
-            code: err?.code,
-          };
+          task.error = mediaTaskErrorFromFailure(err);
           task.endedAt = Date.now();
           persistMediaTask(task);
           if (analyticsContext && providerRequestSummary) {
@@ -335,11 +353,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
     } catch (err: any) {
       if (task) {
         task.status = 'failed';
-        task.error = {
-          message: String(err && err.message ? err.message : err),
-          status: typeof err?.status === 'number' ? err.status : 400,
-          code: err?.code,
-        };
+        task.error = mediaTaskErrorFromFailure(err);
         task.endedAt = Date.now();
         persistMediaTask(task);
         notifyTaskWaiters(task);
@@ -583,10 +597,6 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
               code: 'WORKSPACE_CONTEXT_INCOMPLETE',
             });
           }
-          await authorizePersistedAutomationWorkspaceScope(
-            scope,
-            ctx.fetchWorkspaceDirectory,
-          );
         }
       }
       const config = await writeAppConfig(RUNTIME_DATA_DIR, req.body);
@@ -594,9 +604,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       onAppConfigWritten?.(config);
       res.json({ config });
     } catch (err: any) {
-      const status = err?.code === 'WORKSPACE_AUTHORITY_UNAVAILABLE'
-        ? 503
-        : err?.code === 'WORKSPACE_ACCESS_DENIED'
+      const status = err?.code === 'WORKSPACE_ACCESS_DENIED'
           ? 403
           : 500;
       res
@@ -682,9 +690,7 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       const locale = typeof req.body?.locale === 'string' ? req.body.locale : null;
       res.json(await orbitService.start('manual', { locale }));
     } catch (err: any) {
-      const status = err?.code === 'WORKSPACE_AUTHORITY_UNAVAILABLE'
-        ? 503
-        : err?.code === 'WORKSPACE_ACCESS_DENIED'
+      const status = err?.code === 'WORKSPACE_ACCESS_DENIED'
           ? 403
           : 500;
       res
@@ -867,8 +873,8 @@ export function registerMediaRoutes(app: Express, ctx: RegisterMediaRoutesDeps) 
       )
     ) return;
 
-    // Token callers must prove fresh project authority before task lookup so
-    // a revoked member or an authority outage cannot probe task existence.
+    // Token callers must prove their grant targets the persisted local project
+    // before task lookup; cloud availability is irrelevant to this local wait.
     const taskId = req.params.id;
     const task = getLiveMediaTask(taskId);
     if (!task) return res.status(404).json({ error: 'task not found' });

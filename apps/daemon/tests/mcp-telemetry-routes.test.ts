@@ -8,7 +8,7 @@ import {
 } from '../src/routes/telemetry.js';
 
 describe('local MCP telemetry privacy boundary', () => {
-  it('reuses the Open Design installation id and creates it only for opted-in headless use', async () => {
+  it('reuses the OpenDesign installation id and creates it only for opted-in headless use', async () => {
     const writeAppConfig = vi.fn(async (_dataDir: string, patch: Record<string, unknown>) => ({
       telemetry: { metrics: true },
       installationId: patch.installationId,

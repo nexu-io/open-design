@@ -61,8 +61,8 @@ const OFFICIAL_URL = `${origin}official/`;
 const websiteSchema = {
   '@type': 'WebSite',
   '@id': `${origin}#website`,
-  name: 'Open Design',
-  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD'],
+  name: 'OpenDesign',
+  alternateName: ['Open Design', 'open-design', 'opendesign', 'Open Design AI', 'OpenDesign AI', 'OD'],
   url: origin,
   inLanguage: localeDef.htmlLang,
   availableLanguage: LANDING_LOCALES.map((entry) => entry.htmlLang),
@@ -72,8 +72,8 @@ const websiteSchema = {
 const organizationSchema = {
   '@type': 'Organization',
   '@id': `${origin}#organization`,
-  name: 'Open Design',
-  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD', 'nexu-io/open-design'],
+  name: 'OpenDesign',
+  alternateName: ['Open Design', 'open-design', 'opendesign', 'Open Design AI', 'OpenDesign AI', 'OD', 'nexu-io/open-design'],
   url: origin,
   logo: {
     '@type': 'ImageObject',
@@ -91,13 +91,13 @@ const organizationSchema = {
 const softwareSchema = {
   '@type': 'SoftwareApplication',
   '@id': `${origin}#software`,
-  name: 'Open Design',
-  alternateName: ['OpenDesign', 'open-design', 'opendesign', 'Open Design AI', 'OD'],
+  name: 'OpenDesign',
+  alternateName: ['Open Design', 'open-design', 'opendesign', 'Open Design AI', 'OpenDesign AI', 'OD'],
   description,
   url: origin,
   inLanguage: localeDef.htmlLang,
   applicationCategory: 'DesignApplication',
-  operatingSystem: 'macOS, Windows, Linux',
+  operatingSystem: 'macOS, Windows',
   license: 'https://www.apache.org/licenses/LICENSE-2.0',
   softwareVersion: github.versionLabel,
   downloadUrl: RELEASES_URL,
@@ -205,7 +205,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
     />
 
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Open Design" />
+    <meta property="og:site_name" content="OpenDesign" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={metaDescription} />
     <meta property="og:url" content={canonical} />
@@ -490,13 +490,13 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
         };
 
         // Pull a clean 'v0.3.0'-style label from a GitHub release record.
-        // We prefer release.name (e.g. 'Open Design 0.3.0') because that's
+        // We prefer release.name (e.g. 'OpenDesign 0.3.0') because that's
         // what we hand-author; fall back to tag_name (e.g.
         // 'open-design-v0.3.0') with the project prefix stripped.
         //
         // Expected input shapes (release.name / release.tag_name):
-        //   { name: 'Open Design 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
-        //   { name: 'Open Design v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
+        //   { name: 'OpenDesign 0.3.0',  tag_name: 'v0.3.0' }            → 'v0.3.0'
+        //   { name: 'OpenDesign v0.3.0', tag_name: 'open-design-v0.3.0' } → 'v0.3.0'
         //   { name: '0.3.0-beta.1',       tag_name: 'open-design_0.3.0' }  → 'v0.3.0-beta.1' (name wins)
         //   { name: null,                 tag_name: 'open-design-v0.3.0' } → 'v0.3.0' (tag fallback)
         //   { name: null,                 tag_name: null }                  → null (caller skips)
@@ -1707,7 +1707,7 @@ const cobeEnhancerUrl = `/enhancers/cobe.js?v=${
             if (ev.key === 'Escape') setNavOpen(false);
           });
         })();
-        // Open Design Cloud header account. Same as `enhanceMobileNav`
+        // OpenDesign Cloud header account. Same as `enhanceMobileNav`
         // above, this mirrors `header-enhancer.astro` because the homepage does
         // not include that enhancer. Detect a live cloud session and reveal the
         // avatar menu for signed-in visitors; signed-out visitors keep the

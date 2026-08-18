@@ -7,7 +7,7 @@
 | 测试对象 | `run_created`、`run_finished`、恢复动作曝光/点击、启动前拦截、Task 成功率查询 |
 | 目标 Provider | `amr`、`claude_code`、`codex_cli` |
 | Schema | `event_schema_version = 4`；旧扁平参数在兼容窗口继续双写 |
-| 主要角色 | Open Design QA、研发、数据分析 |
+| 主要角色 | OpenDesign QA、研发、数据分析 |
 | 核心目标 | 验证事件能发出、参数语义正确、跨 Run 能归并、PostHog 中能正确查询 |
 
 最新 `main` 已经使用 v3 表达 MCP/Plugin 来源归因，因此本次代码落地使用 v4；本文中的 v4 对应需求文档里原规划的聚合与任务成功率方案。

@@ -1,6 +1,6 @@
 /**
  * Cross-runtime protocol used by generated artifact previews to report
- * failures to the Open Design host. The bridge runs inside both srcDoc and
+ * failures to the OpenDesign host. The bridge runs inside both srcDoc and
  * URL-loaded preview iframes; the host validates this narrow payload before it
  * reaches analytics.
  *

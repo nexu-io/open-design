@@ -14,7 +14,14 @@
  *   { type: 'od:slide-state', active: number, count: number }
  * after every navigation so the host can render its own counter / dots.
  */
-import { injectDeckStageFallback } from '@open-design/contracts/runtime/deck-stage-fallback';
+import {
+  DECK_EXPLICIT_SLIDE_SELECTOR,
+  DECK_LEGACY_SCREEN_LABEL_RE_SOURCE,
+  DECK_LEGACY_SCREEN_SLIDE_SELECTOR,
+  DECK_SLIDE_SELECTOR,
+  DECK_STRUCTURED_SLIDE_SELECTOR,
+  injectDeckStageFallback,
+} from '@open-design/contracts/runtime/deck-stage-fallback';
 import { buildPreviewObservabilityBridge } from '@open-design/contracts/runtime/preview-observability';
 
 import {
@@ -1208,7 +1215,7 @@ function serializeHtmlDocument(doc: Document): string {
  * Auto-annotate structural HTML elements that lack `data-od-id` or
  * `data-screen-label` so that the selection bridge (Picker / Pods /
  * Tweaks) can target them. This fixes imported designs whose HTML was
- * generated outside of Open Design and therefore carries no OD-specific
+ * generated outside of OpenDesign and therefore carries no OD-specific
  * annotations.
  */
 function annotateMissingOdIds(doc: string): string {
@@ -2882,24 +2889,109 @@ function injectDeckBridge(
     }, true);
   }
   window.__odDeckBridgeOwnListenerInstall = false;
+  function deckStageSlides(stage){
+    if (!stage) return [];
+    var nested = stage.querySelectorAll(${JSON.stringify(DECK_SLIDE_SELECTOR)});
+    var direct = [];
+    for (var i = 0; i < nested.length; i++) {
+      if (nested[i].parentElement === stage) direct.push(nested[i]);
+    }
+    return direct.length ? direct : nested;
+  }
+  function legacyScreenSlides(){
+    var candidates = document.querySelectorAll(${JSON.stringify(DECK_LEGACY_SCREEN_SLIDE_SELECTOR)});
+    var labelRe = new RegExp(${JSON.stringify(DECK_LEGACY_SCREEN_LABEL_RE_SOURCE)}, 'i');
+    var groups = [];
+    for (var i = 0; i < candidates.length; i++) {
+      var match = labelRe.exec(candidates[i].getAttribute('data-screen-label') || '');
+      if (!match || !candidates[i].parentNode) continue;
+      var group = null;
+      for (var j = 0; j < groups.length; j++) {
+        if (groups[j].parent === candidates[i].parentNode) { group = groups[j]; break; }
+      }
+      if (!group) {
+        group = { parent: candidates[i].parentNode, slides: [], numbers: {} };
+        groups.push(group);
+      }
+      group.slides.push(candidates[i]);
+      group.numbers[String(Number(match[1]))] = true;
+    }
+    var best = [];
+    for (var k = 0; k < groups.length; k++) {
+      if (Object.keys(groups[k].numbers).length > 1 && groups[k].slides.length > best.length) {
+        best = groups[k].slides;
+      }
+    }
+    return best;
+  }
   function slides(){
-    // Structured selectors first so decorative .slide markup in non-deck
-    // pages (icons, badges, code samples) is not counted as deck slides;
-    // fall back to all .slide only when nothing structured matched, so
-    // freeform decks that nest slides under an extra wrapper still report
-    // the real count instead of leaving the host counter at 1 / 0.
-    var structured = document.querySelectorAll('deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide');
+    // An explicit deck-stage owns its descendants, so unrelated annotated
+    // screens elsewhere in the document cannot leak into its count. Otherwise
+    // prefer direct children of recognized legacy containers before falling
+    // back to every supported persisted slide marker.
+    var stageSlides = deckStageSlides(document.querySelector('deck-stage'));
+    if (stageSlides.length) return stageSlides;
+    var structured = document.querySelectorAll(${JSON.stringify(DECK_STRUCTURED_SLIDE_SELECTOR)});
     if (structured.length) return structured;
-    return document.querySelectorAll('.slide');
+    var explicit = document.querySelectorAll(${JSON.stringify(DECK_EXPLICIT_SLIDE_SELECTOR)});
+    if (explicit.length) return explicit;
+    return legacyScreenSlides();
   }
-  function scrollOverflow(el){
+  function deckStageForSlides(list){
+    var stage = document.querySelector('deck-stage');
+    if (!stage) return null;
+    if (list && list.length && !stage.contains(list[0])) return null;
+    return stage;
+  }
+  function activeIndexFromDeckStage(list){
+    var stage = deckStageForSlides(list);
+    if (!stage) return -1;
+    var index = Number(stage.index);
+    if (!Number.isFinite(index)) return -1;
+    index = Math.floor(index);
+    return index >= 0 && index < list.length ? index : -1;
+  }
+  function navigateViaDeckStage(list, action, index){
+    if (!list.length) return false;
+    var stage = deckStageForSlides(list);
+    if (!stage) return false;
+    try {
+      if (action === 'go' && typeof index === 'number' && typeof stage.goTo === 'function') {
+        stage.goTo(index);
+      } else if (action === 'next' && typeof stage.next === 'function') {
+        stage.next();
+      } else if (action === 'prev' && typeof stage.prev === 'function') {
+        stage.prev();
+      } else if (action === 'first' && typeof stage.reset === 'function') {
+        stage.reset();
+      } else if (action === 'first' && typeof stage.goTo === 'function') {
+        stage.goTo(0);
+      } else if (action === 'last' && typeof stage.goTo === 'function') {
+        stage.goTo(list.length - 1);
+      } else {
+        return false;
+      }
+      // Public deck-stage methods are synchronous in the authored runtime.
+      // Report here for older implementations that do not emit slidechange;
+      // modern implementations also emit the event and are harmlessly
+      // coalesced by React state equality in the host.
+      report();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+  function scrollOverflow(el, axis){
     if (!el) return 0;
-    return Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
+    return axis === 'y'
+      ? Math.max(0, (el.scrollHeight || 0) - (el.clientHeight || 0))
+      : Math.max(0, (el.scrollWidth || 0) - (el.clientWidth || 0));
   }
-  function overflowMode(el){
+  function overflowMode(el, axis){
     if (!el || !window.getComputedStyle) return '';
     try {
-      return String(window.getComputedStyle(el).overflowX || '').toLowerCase();
+      var style = window.getComputedStyle(el);
+      return String(axis === 'y' ? style.overflowY : style.overflowX || '').toLowerCase();
     } catch (_) {
       return '';
     }
@@ -2917,14 +3009,14 @@ function injectDeckBridge(
       el === document.body
     );
   }
-  function rootScrollerClipped(){
-    return isClippedOverflowMode(overflowMode(document.documentElement)) ||
-      isClippedOverflowMode(overflowMode(document.body));
+  function rootScrollerClipped(axis){
+    return isClippedOverflowMode(overflowMode(document.documentElement, axis)) ||
+      isClippedOverflowMode(overflowMode(document.body, axis));
   }
-  function scrollLeftOf(el){
+  function scrollOffsetOf(el, axis){
     if (!el) return 0;
     try {
-      return Number(el.scrollLeft) || 0;
+      return Number(axis === 'y' ? el.scrollTop : el.scrollLeft) || 0;
     } catch (_) {
       return 0;
     }
@@ -2941,31 +3033,78 @@ function injectDeckBridge(
     add(document.body);
     return targets;
   }
-  function maxScrollLeft(){
+  function nestedScrollTargets(list){
+    var targets = [];
+    if (!list || !list.length) return targets;
+    var node = list[0] && list[0].parentElement;
+    while (node && !isRootScrollContainer(node)) {
+      var containsAll = true;
+      for (var i=1; i<list.length; i++) {
+        if (!node.contains(list[i])) { containsAll = false; break; }
+      }
+      if (containsAll) targets.push(node);
+      node = node.parentElement;
+    }
+    return targets;
+  }
+  function maxRootScrollOffset(axis){
     var targets = scrollTargets();
-    var value = 0;
+    var value = axis === 'y'
+      ? Number(window.scrollY || window.pageYOffset || 0)
+      : Number(window.scrollX || window.pageXOffset || 0);
     for (var i=0; i<targets.length; i++) {
-      value = Math.max(value, Number(targets[i].scrollLeft || 0));
+      value = Math.max(value, scrollOffsetOf(targets[i], axis));
     }
     return value;
   }
-  function hasHorizontalScroll(){
-    var targets = scrollTargets();
-    for (var i=0; i<targets.length; i++) {
-      if (targets[i].scrollWidth > targets[i].clientWidth + 1) return true;
+  function deckAxisOrder(list){
+    var minX = Infinity;
+    var maxX = -Infinity;
+    var minY = Infinity;
+    var maxY = -Infinity;
+    for (var i=0; list && i<list.length; i++) {
+      try {
+        var rect = list[i].getBoundingClientRect();
+        var x = Number(rect.left);
+        var y = Number(rect.top);
+        if (Number.isFinite(x)) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+        if (Number.isFinite(y)) { minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+      } catch (_) {}
     }
-    return false;
+    var xSpan = Number.isFinite(minX) && Number.isFinite(maxX) ? maxX - minX : 0;
+    var ySpan = Number.isFinite(minY) && Number.isFinite(maxY) ? maxY - minY : 0;
+    if (ySpan > 1 && ySpan > xSpan) return ['y', 'x'];
+    return ['x', 'y'];
   }
-  function isScrollDeck(){
-    var targets = scrollTargets();
-    for (var i=0; i<targets.length; i++) {
-      var candidate = targets[i];
-      if (scrollOverflow(candidate) <= 1) continue;
-      var mode = overflowMode(candidate);
-      if (isScrollableOverflowMode(mode)) return true;
-      if (isRootScrollContainer(candidate) && !isClippedOverflowMode(mode) && !rootScrollerClipped()) return true;
+  function scrollDeckTarget(list){
+    var axes = deckAxisOrder(list);
+    var nested = nestedScrollTargets(list);
+    for (var n=0; n<nested.length; n++) {
+      for (var a=0; a<axes.length; a++) {
+        var nestedAxis = axes[a];
+        if (scrollOverflow(nested[n], nestedAxis) <= 1) continue;
+        if (isScrollableOverflowMode(overflowMode(nested[n], nestedAxis))) {
+          return { axis: nestedAxis, element: nested[n], root: false };
+        }
+      }
     }
-    return false;
+    var targets = scrollTargets();
+    for (var a=0; a<axes.length; a++) {
+      var axis = axes[a];
+      for (var i=0; i<targets.length; i++) {
+        var candidate = targets[i];
+        if (scrollOverflow(candidate, axis) <= 1) continue;
+        var mode = overflowMode(candidate, axis);
+        if (isScrollableOverflowMode(mode)) return { axis: axis, element: candidate, root: true };
+        if (!isClippedOverflowMode(mode) && !rootScrollerClipped(axis)) {
+          return { axis: axis, element: candidate, root: true };
+        }
+      }
+    }
+    return null;
+  }
+  function isScrollDeck(list){
+    return !!scrollDeckTarget(list || slides());
   }
   function findActiveByClass(list){
     for (var i=0; i<list.length; i++) {
@@ -2983,12 +3122,52 @@ function injectDeckBridge(
     }
     return -1;
   }
+  function activeIndexFromScrollRects(list, scrollTarget){
+    var axis = scrollTarget.axis;
+    var origin = 0;
+    if (!scrollTarget.root) {
+      try {
+        var containerRect = scrollTarget.element.getBoundingClientRect();
+        origin = Number(axis === 'y' ? containerRect.top : containerRect.left) || 0;
+      } catch (_) {}
+    }
+    var best = -1;
+    var distance = Infinity;
+    var firstPosition = null;
+    var hasDistinctPosition = false;
+    for (var i=0; i<list.length; i++) {
+      try {
+        var rect = list[i].getBoundingClientRect();
+        var position = (Number(axis === 'y' ? rect.top : rect.left) || 0) - origin;
+        if (firstPosition === null) firstPosition = position;
+        else if (Math.abs(position - firstPosition) > 1) hasDistinctPosition = true;
+        var value = Math.abs(position);
+        if (value < distance) { distance = value; best = i; }
+      } catch (_) {}
+    }
+    return hasDistinctPosition ? best : -1;
+  }
+  var forcedScrollPageIndex = -1;
   function activeIndex(list){
     if (!list || !list.length) return 0;
-    if (isScrollDeck()) {
-      var w = Math.max(1, window.innerWidth);
-      return Math.max(0, Math.min(list.length - 1, Math.round(maxScrollLeft() / w)));
+    if (forcedScrollPageIndex >= 0) {
+      return Math.max(0, Math.min(list.length - 1, forcedScrollPageIndex));
     }
+    var scrollTarget = scrollDeckTarget(list);
+    if (scrollTarget) {
+      var byRect = activeIndexFromScrollRects(list, scrollTarget);
+      if (byRect >= 0) return byRect;
+      var axis = scrollTarget.axis;
+      var span = Math.max(1, scrollTarget.root
+        ? (axis === 'y' ? window.innerHeight : window.innerWidth)
+        : (axis === 'y' ? scrollTarget.element.clientHeight : scrollTarget.element.clientWidth));
+      var offset = scrollTarget.root
+        ? maxRootScrollOffset(axis)
+        : scrollOffsetOf(scrollTarget.element, axis);
+      return Math.max(0, Math.min(list.length - 1, Math.round(offset / span)));
+    }
+    var byDeckStage = activeIndexFromDeckStage(list);
+    if (byDeckStage >= 0) return byDeckStage;
     var byTransform = activeIndexFromTransform(list);
     if (byTransform >= 0) return byTransform;
     var byClass = findActiveByClass(list);
@@ -3102,10 +3281,22 @@ function injectDeckBridge(
   function updateDeckChrome(i, count){
     var cur = document.getElementById('deck-cur');
     var total = document.getElementById('deck-total');
+    var simpleCounter = document.getElementById('counter');
+    var simpleCounterParts = simpleCounter ? String(simpleCounter.textContent || '').split('/') : [];
     var prev = document.getElementById('deck-prev');
     var next = document.getElementById('deck-next');
     if (cur) cur.textContent = pad2(i + 1);
     if (total) total.textContent = pad2(count);
+    if (
+      simpleCounter &&
+      simpleCounterParts.length === 2 &&
+      simpleCounterParts[0].trim() !== '' &&
+      simpleCounterParts[1].trim() !== '' &&
+      Number.isFinite(Number(simpleCounterParts[0])) &&
+      Number.isFinite(Number(simpleCounterParts[1]))
+    ) {
+      simpleCounter.textContent = (i + 1) + ' / ' + count;
+    }
     if (prev) prev.toggleAttribute('disabled', i <= 0);
     if (next) next.toggleAttribute('disabled', i >= count - 1);
   }
@@ -3113,6 +3304,7 @@ function injectDeckBridge(
     var list = slides();
     if (!list.length) return false;
     var target = Math.max(0, Math.min(list.length - 1, i));
+    if (forcedScrollPageIndex >= 0) forcedScrollPageIndex = target;
     var activeClass = activeClassName(list);
     var usesInlineDisplay = false;
     var usesInlineVisibility = false;
@@ -3152,19 +3344,106 @@ function injectDeckBridge(
     report();
     return true;
   }
+  function forceScrollDeckPage(list, target, scrollTarget){
+    forcedScrollPageIndex = target;
+    var activeClass = activeClassName(list);
+    for (var i=0; i<list.length; i++) {
+      if (!list[i].hasAttribute('data-od-scroll-original-display')) {
+        list[i].setAttribute('data-od-scroll-original-display', list[i].style.display || '');
+      }
+      list[i].style.display = i === target
+        ? (list[i].getAttribute('data-od-scroll-original-display') || '')
+        : 'none';
+      if (list[i].classList) {
+        list[i].classList.remove('active', 'is-active', 'current');
+        if (i === target) list[i].classList.add(activeClass);
+      }
+    }
+    if (!scrollTarget || scrollTarget.root) {
+      try { window.scrollTo(0, 0); } catch (_) {}
+      var roots = scrollTargets();
+      for (var r=0; r<roots.length; r++) {
+        try { roots[r].scrollLeft = 0; roots[r].scrollTop = 0; } catch (_) {}
+      }
+    } else {
+      try { scrollTarget.element.scrollLeft = 0; scrollTarget.element.scrollTop = 0; } catch (_) {}
+    }
+    updateDeckChrome(target, list.length);
+    report(target);
+  }
   function scrollGo(i){
     var list = slides();
     var next = Math.max(0, Math.min(list.length - 1, i));
-    var left = next * window.innerWidth;
-    var targets = scrollTargets();
-    for (var t=0; t<targets.length; t++) {
+    var scrollTarget = scrollDeckTarget(list);
+    if (!scrollTarget) return;
+    var axis = scrollTarget.axis;
+    var span = Math.max(1, scrollTarget.root
+      ? (axis === 'y' ? window.innerHeight : window.innerWidth)
+      : (axis === 'y' ? scrollTarget.element.clientHeight : scrollTarget.element.clientWidth));
+    var offset = next * span;
+    try {
+      var firstRect = list[0].getBoundingClientRect();
+      var targetRect = list[next].getBoundingClientRect();
+      var firstPosition = Number(axis === 'y' ? firstRect.top : firstRect.left) || 0;
+      var targetPosition = Number(axis === 'y' ? targetRect.top : targetRect.left) || 0;
+      if (Math.abs(targetPosition - firstPosition) > 1) {
+        var current = scrollTarget.root
+          ? maxRootScrollOffset(axis)
+          : scrollOffsetOf(scrollTarget.element, axis);
+        var containerOrigin = 0;
+        if (!scrollTarget.root) {
+          var containerRect = scrollTarget.element.getBoundingClientRect();
+          containerOrigin = Number(axis === 'y' ? containerRect.top : containerRect.left) || 0;
+        }
+        offset = current + targetPosition - containerOrigin;
+      }
+    } catch (_) {}
+    var position = axis === 'y'
+      ? { top: offset, behavior: 'smooth' }
+      : { left: offset, behavior: 'smooth' };
+    if (scrollTarget.root) {
+      // Root scrolling is browser-special: setting scrollLeft/scrollTop on
+      // body or documentElement is not reliable when body owns overflow.
       try {
-        targets[t].scrollTo({ left: left, behavior: 'smooth' });
+        window.scrollTo(position);
       } catch (_) {
-        try { targets[t].scrollLeft = left; } catch (__) {}
+        try { window.scrollTo(axis === 'y' ? 0 : offset, axis === 'y' ? offset : 0); } catch (__) {}
+      }
+      var targets = scrollTargets();
+      for (var t=0; t<targets.length; t++) {
+        try {
+          targets[t].scrollTo(position);
+        } catch (_) {
+          try {
+            if (axis === 'y') targets[t].scrollTop = offset;
+            else targets[t].scrollLeft = offset;
+          } catch (__) {}
+        }
+      }
+    } else {
+      try {
+        scrollTarget.element.scrollTo(position);
+      } catch (_) {
+        try {
+          if (axis === 'y') scrollTarget.element.scrollTop = offset;
+          else scrollTarget.element.scrollLeft = offset;
+        } catch (__) {}
       }
     }
-    setTimeout(report, 380);
+    // A body-owned scroller can visually move while its offset remains absent
+    // from document.scrollingElement (notably in sandboxed iframes). Preserve
+    // the requested index for the host state instead of immediately snapping
+    // the rail back to page one; ordinary scroll events still call report()
+    // without an override and track subsequent manual movement.
+    report(next);
+    setTimeout(function(){
+      if (activeIndex(list) === next) { report(); return; }
+      // Some sandboxed Chromium documents expose a wide/tall root scrollWidth
+      // but ignore every root scrolling API. Fall back to a single-visible-page
+      // presentation so Remix never leaves the main canvas on page one while
+      // the host rail claims another page is active.
+      forceScrollDeckPage(list, next, scrollTarget);
+    }, 420);
   }
   function targetFor(action, list){
     var i = activeIndex(list);
@@ -3287,7 +3566,8 @@ function injectDeckBridge(
   function go(action){
     var list = slides();
     if (!list.length) return;
-    if (isScrollDeck()) {
+    if (navigateViaDeckStage(list, action)) return;
+    if (isScrollDeck(list)) {
       scrollGo(Math.max(0, Math.min(list.length - 1, targetFor(action, list))));
       return;
     }
@@ -3307,7 +3587,8 @@ function injectDeckBridge(
     var list = slides();
     if (!list.length) return;
     var target = Math.max(0, Math.min(list.length - 1, i));
-    if (isScrollDeck()) { scrollGo(target); return; }
+    if (navigateViaDeckStage(list, 'go', target)) return;
+    if (isScrollDeck(list)) { scrollGo(target); return; }
     if (activeIndex(list) === target) { report(); return; }
     stepToIndexViaKeys(target, function(stepped){
       if (stepped) { report(); return; }
@@ -3360,10 +3641,13 @@ function injectDeckBridge(
     }, true);
   }
   var lastCommentTargetSlideIndex = -1;
-  function report(){
+  function report(forcedIndex){
     try {
       var list = slides();
-      var i = activeIndex(list);
+      var measured = activeIndex(list);
+      var i = Number.isFinite(forcedIndex)
+        ? Math.max(0, Math.min(list.length - 1, Math.floor(forcedIndex)))
+        : measured;
       var count = list.length;
       var progressWidth = count ? ((i + 1) / count * 100) + '%' : '0';
       updateDeckChrome(i, count);
@@ -3390,6 +3674,17 @@ function injectDeckBridge(
       }
     } catch (e) {}
   }
+  // Runtime-managed decks can also move themselves through their own tap
+  // zones, keyboard handler, or public API. Normalize both generations of
+  // deck-stage state notification back into the host-owned slide protocol.
+  document.addEventListener('slidechange', function(ev){
+    var stage = document.querySelector('deck-stage');
+    if (stage && ev.target === stage) report();
+  });
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (data && typeof data.slideIndexChanged === 'number') report();
+  });
   window.__odDeckSlideState = function(){
     var list = slides();
     return { active: activeIndex(list), count: list.length };

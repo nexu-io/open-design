@@ -19,24 +19,24 @@ const faq = getHomeFaq(locale, {
 const HEAD = {
   en: {
     eyebrow: 'FAQ',
-    h1: 'Open Design FAQ',
-    lead: 'Common questions about Open Design — what it is, how it works, and how to get started.',
-    title: 'FAQ — Open Design',
-    desc: 'Frequently asked questions about Open Design: what it is, how to use it, pricing, models, and getting started.',
+    h1: 'OpenDesign FAQ',
+    lead: 'Common questions about OpenDesign — what it is, how it works, and how to get started.',
+    title: 'FAQ — OpenDesign',
+    desc: 'Frequently asked questions about OpenDesign: what it is, how to use it, pricing, models, and getting started.',
   },
   zh: {
     eyebrow: '常见问题',
-    h1: 'Open Design 常见问题',
-    lead: '关于 Open Design 的常见问题——它是什么、怎么用、如何上手。',
-    title: '常见问题 — Open Design',
-    desc: 'Open Design 常见问题:它是什么、如何使用、模型与上手方式。',
+    h1: 'OpenDesign 常见问题',
+    lead: '关于 OpenDesign 的常见问题——它是什么、怎么用、如何上手。',
+    title: '常见问题 — OpenDesign',
+    desc: 'OpenDesign 常见问题:它是什么、如何使用、模型与上手方式。',
   },
   'zh-tw': {
     eyebrow: '常見問題',
-    h1: 'Open Design 常見問題',
-    lead: '關於 Open Design 的常見問題——它是什麼、怎麼用、如何上手。',
-    title: '常見問題 — Open Design',
-    desc: 'Open Design 常見問題:它是什麼、如何使用、模型與上手方式。',
+    h1: 'OpenDesign 常見問題',
+    lead: '關於 OpenDesign 的常見問題——它是什麼、怎麼用、如何上手。',
+    title: '常見問題 — OpenDesign',
+    desc: 'OpenDesign 常見問題:它是什麼、如何使用、模型與上手方式。',
   },
 } satisfies Record<string, { eyebrow: string; h1: string; lead: string; title: string; desc: string }>;
 const h = HEAD[locale as keyof typeof HEAD] ?? HEAD.en;

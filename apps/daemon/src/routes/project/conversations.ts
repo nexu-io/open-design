@@ -11,6 +11,7 @@ import { registerProjectCommentRoutes } from './comments.js';
 import { cancelRunsOwnedBy } from './cancel-owned-runs.js';
 import {
   compactAdjacentMessageAgentEvents,
+  countMessages,
   deleteConversationAndRepairTeamCommentAnchor,
   isProjectCommentAnchorConversationId,
 } from '../../db.js';
@@ -265,7 +266,11 @@ export function registerProjectConversationRoutes(app: Express, ctx: RegisterPro
       return res.status(404).json({ error: 'conversation not found' });
     }
     const project = getProject(db, req.params.id);
-    if (project && listMessages(db, req.params.cid).length === 0) {
+    // COUNT(*) rather than listMessages(...).length: the backfill only needs to
+    // know whether the conversation is empty, and loading every message to
+    // answer that parses each one's JSON columns — including event logs that
+    // grow with tool output — before throwing the result away.
+    if (project && countMessages(db, req.params.cid) === 0) {
       const config = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR).catch(() => ({}));
       const agentId = typeof config.agentId === 'string' && config.agentId ? config.agentId : null;
       await backfillBrandExtractionTranscriptForProject({

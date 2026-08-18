@@ -8,7 +8,7 @@ export const ko: CodexCopyOverride = {
   collectionEyebrow: '엄선한 컬렉션',
   collectionHeading: 'Codex가 진짜 쓸 만한 UI를 내놓게 만드는 디자인 플러그인',
   collectionLede:
-    'OpenAI Codex는 돌아가는 코드를 짭니다. 다만 그냥 두면 무난한 폰트, 평범한 여백, 가운데 정렬된 Helvetica로 흘러가죠. 여기 모은 것은 Codex에 안목을 심어 주는 플러그인 모음입니다. 미감을 잡아 주는 스킬과 디자인 시스템 규칙까지. 하나만 설치해도 되고, Open Design 안에서 전부 돌려도 됩니다.',
+    'OpenAI Codex는 돌아가는 코드를 짭니다. 다만 그냥 두면 무난한 폰트, 평범한 여백, 가운데 정렬된 Helvetica로 흘러가죠. 여기 모은 것은 Codex에 안목을 심어 주는 플러그인 모음입니다. 미감을 잡아 주는 스킬과 디자인 시스템 규칙까지. 하나만 설치해도 되고, OpenDesign 안에서 전부 돌려도 됩니다.',
   collectionStats: [
     { value: '50', label: '엄선한 플러그인' },
     { value: '13', label: '출처 저장소' },
@@ -20,13 +20,13 @@ export const ko: CodexCopyOverride = {
     '코드 한 줄이 나오기 전에 Codex의 기본 미감 판단을 덮어씁니다.',
     '토큰과 컴포넌트를 Codex가 지어내는 대신 따르는 규칙으로 바꿉니다.',
   ],
-  collectionCloserHeading: '세팅은 건너뛰세요. Open Design 안에서 Codex와 디자인하기',
+  collectionCloserHeading: '세팅은 건너뛰세요. OpenDesign 안에서 Codex와 디자인하기',
   filterAll: '전체',
   collectionCloserBody:
-    'Open Design은 Codex를 감싸고 도는 오픈소스 에이전트 네이티브 디자인 워크스페이스입니다. 시스템과 스킬, 템플릿을 일관되게 지켜 주므로 에이전트가 내놓는 결과물은 온전히 여러분의 것입니다.',
+    'OpenDesign은 Codex를 감싸고 도는 오픈소스 에이전트 네이티브 디자인 워크스페이스입니다. 시스템과 스킬, 템플릿을 일관되게 지켜 주므로 에이전트가 내놓는 결과물은 온전히 여러분의 것입니다.',
   categoryFrontend: '프런트엔드 & UI',
   categoryDesignSystems: '디자인 시스템',
-  ctaDownload: 'Open Design 다운로드',
+  ctaDownload: 'OpenDesign 다운로드',
   ctaStarList: '목록에 Star 남기기',
   ctaBrowseAll: '전체 플러그인 둘러보기',
   ctaViewSource: '소스 보기',
@@ -61,9 +61,9 @@ export const ko: CodexCopyOverride = {
   detailMoreOnList: 'codex-design 목록에서 더 보기',
   detailRelated: '다른 Codex 디자인 플러그인',
   finalEyebrow: '다음 단계',
-  detailCloserHeading: '세팅 없이, Open Design으로 디자인하기',
+  detailCloserHeading: '세팅 없이, OpenDesign으로 디자인하기',
   detailCloserBody:
-    '이 플러그인을 직접 설치해도 되고, Open Design으로 Codex 주위에 잘 정돈된 디자인 레이어를 통째로 두를 수도 있습니다. 키는 직접 가져오고, 산출물도 직접 소유하세요.',
+    '이 플러그인을 직접 설치해도 되고, OpenDesign으로 Codex 주위에 잘 정돈된 디자인 레이어를 통째로 두를 수도 있습니다. 키는 직접 가져오고, 산출물도 직접 소유하세요.',
   skills: {
     'gpt-taste': {
       tagline: 'GSAP 스크롤 모션과 빈틈없는 벤토 그리드로 수상작급 랜딩 페이지를 만듭니다.',

@@ -18,6 +18,7 @@ import { resolveDaemonUrl } from './daemon-url.js';
 import { requestJsonIpc } from '@open-design/sidecar';
 import { SIDECAR_ENV, SIDECAR_MESSAGES } from '@open-design/sidecar-proto';
 import { EXPORT_FORMATS, EXPORT_IMAGE_FORMATS } from '@open-design/contracts';
+import type { ArtifactLintFinding, LintArtifactCliResultEnvelope, LintArtifactResponse, LintFailOn } from '@open-design/contracts';
 import { buildExportCliRequestBody, buildExportCliResultEnvelope, resolveExportCliDeckMode } from './export-cli-request.js';
 import { exportRoutePath } from './export-cli-routing.js';
 import {
@@ -273,7 +274,7 @@ const DEPLOY_STRING_FLAGS = new Set([
 const DEPLOY_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 // `od automation …` mirrors the Automations tab. Same surface, same
 // /api/routines store. The CLI form is the embeddability contract:
-// external agents (hermes-agent, openclaw, etc.) can drive Open Design
+// external agents (hermes-agent, openclaw, etc.) can drive OpenDesign
 // automations headlessly without going through the web UI.
 const AUTOMATION_STRING_FLAGS = new Set([
   'daemon-url', 'name', 'prompt', 'prompt-file', 'schedule', 'target',
@@ -407,6 +408,7 @@ const SUBCOMMAND_MAP = {
   craft: runCraft,
   diagnostics: runDiagnostics,
   export: runExport,
+  lint: runLint,
   status: runStatus,
   version: runVersion,
   'whats-new': runWhatsNew,
@@ -419,9 +421,9 @@ const SUBCOMMAND_MAP = {
 function printAgentHelp() {
   console.log(`Usage: od agent setup deepseek-harness [options]
 
-Install or repair Open Design's bundled connection component in the user's
+Install or repair OpenDesign's bundled connection component in the user's
 official DeepSeek Harness installation. The dsh CLI itself is not installed
-or upgraded by Open Design.
+or upgraded by OpenDesign.
 
 Options:
   --json                  Print a machine-readable result.
@@ -607,6 +609,121 @@ async function runExport(args) {
   console.log(`wrote ${out} (${buffer.length} bytes)`);
 }
 
+const LINT_STRING_FLAGS = new Set(['daemon-url', 'file', 'html-file', 'fail-on']);
+const LINT_BOOLEAN_FLAGS = new Set(['help', 'h', 'json', 'agent-message']);
+const LINT_FAIL_ON_VALUES = ['p0', 'p1', 'p2', 'none'];
+
+function printLintHelp() {
+  console.log(`Usage:
+  od lint <file.html|-> [options]
+
+Run the daemon's anti-slop artifact linter (the same checks applied on
+artifact save) against an HTML file, or stdin when the file is \`-\`.
+Runs without model/agent calls; works against a headless daemon.
+
+Exit codes: 0 clean at threshold · 1 findings at/above --fail-on ·
+2 usage · 3 daemon unreachable.
+
+Options:
+  --file, --html-file <p>  Input path (alternative to the positional; \`-\` = stdin)
+  --fail-on <sev>          p0 | p1 | p2 | none — exit 1 threshold (default p0)
+  --agent-message          Also print the <artifact-lint> block for agent splicing
+  --json                   Print a machine-readable result envelope
+  --daemon-url <url>       Override daemon URL
+
+Examples:
+  od lint artifact.html
+  od lint - < artifact.html --json
+  od lint report.html --fail-on p1 --agent-message`);
+}
+
+// CLI half of POST /api/artifacts/lint. The endpoint has been live since the
+// linter landed, but without a subcommand it was unreachable from external
+// agents — the exact gap the dual-track rule in AGENTS.md exists to prevent.
+async function runLint(args) {
+  if (args.length === 0 || args[0] === 'help' || args.includes('--help') || args.includes('-h')) {
+    printLintHelp();
+    process.exit(args.length === 0 ? 2 : 0);
+  }
+  let flags;
+  try {
+    flags = parseFlags(args, { string: LINT_STRING_FLAGS, boolean: LINT_BOOLEAN_FLAGS });
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+  }
+  const pos = positionalArgs(args, LINT_STRING_FLAGS);
+  const file = flags.file || flags['html-file'] || pos[0];
+  if (!file) {
+    printLintHelp();
+    process.exit(2);
+  }
+  const failOn = (flags['fail-on'] || 'p0') as LintFailOn;
+  if (!LINT_FAIL_ON_VALUES.includes(failOn)) {
+    console.error(`invalid --fail-on: ${failOn} (expected ${LINT_FAIL_ON_VALUES.join(' | ')})`);
+    process.exit(2);
+  }
+  let html;
+  try {
+    if (file === '-') {
+      const chunks = [];
+      for await (const chunk of process.stdin) chunks.push(chunk);
+      html = Buffer.concat(chunks).toString('utf8');
+    } else {
+      const { readFile } = await import('node:fs/promises');
+      html = await readFile(file, 'utf8');
+    }
+  } catch (err) {
+    console.error(`cannot read ${file}: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(2);
+  }
+  if (html.length === 0) {
+    console.error(`empty input: ${file}`);
+    process.exit(2);
+  }
+  const base = await cliDaemonBaseUrl(flags);
+  let resp;
+  try {
+    resp = await fetch(`${base}/api/artifacts/lint`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ html }),
+    });
+  } catch (err) {
+    surfaceFetchError(err, base);
+    process.exit(3);
+  }
+  if (!resp.ok) return structuredHttpFailure(resp);
+  const { findings, agentMessage } = (await resp.json()) as LintArtifactResponse;
+  const counts = { p0: 0, p1: 0, p2: 0 };
+  for (const f of findings) {
+    if (f.severity === 'P0') counts.p0 += 1;
+    else if (f.severity === 'P1') counts.p1 += 1;
+    else counts.p2 += 1;
+  }
+  const failed =
+    failOn === 'p0' ? counts.p0 > 0
+    : failOn === 'p1' ? counts.p0 + counts.p1 > 0
+    : failOn === 'p2' ? findings.length > 0
+    : false;
+  if (flags.json) {
+    const envelope: LintArtifactCliResultEnvelope = {
+      ok: !failed, file, failOn, counts, findings, agentMessage,
+    };
+    process.stdout.write(JSON.stringify(envelope, null, 2) + '\n');
+  } else {
+    for (const f of findings as ArtifactLintFinding[]) {
+      console.log(`[${f.severity}] ${f.id} — ${f.message}`);
+      if (f.snippet) console.log(`      ${f.snippet}`);
+      console.log(`      fix: ${f.fix}`);
+    }
+    const summary = `${findings.length} finding${findings.length === 1 ? '' : 's'} (P0 ${counts.p0} · P1 ${counts.p1} · P2 ${counts.p2})`;
+    console.log(findings.length ? summary : `clean — ${summary}`);
+    if (flags['agent-message'] && agentMessage) console.log(`\n${agentMessage}`);
+  }
+  if (failed) process.exitCode = 1;
+}
+
 if (argv[0] === 'mcp' && argv[1] === 'live-artifacts') {
   try {
     const { exitCode } = await runLiveArtifactsMcpServer();
@@ -765,7 +882,7 @@ function printRootHelp() {
   od plugin publish-repo <folder>
       Create/update the author's GitHub repo for a local plugin folder.
   od plugin open-design-pr <folder>
-      Push a community-catalog branch and open the Open Design PR form.
+      Push a community-catalog branch and open the OpenDesign PR form.
 
   od automation <list|get|create|update|run|runs|pause|resume|delete> [args]
       Drive the Automations surface headlessly. Same store as the UI's
@@ -779,13 +896,13 @@ function printRootHelp() {
 
   od amr <login|status> [args]
       Start Vela browser sign-in or inspect the current Vela account through
-      the local Open Design daemon.
+      the local OpenDesign daemon.
 
   od memory tree <list|view|edit|move> [args]
       Inspect and edit the memory tree that is injected into agent prompts.
 
   od share <open-design|url> [options]
-      Build localized social-share targets for the Open Design repo or a
+      Build localized social-share targets for the OpenDesign repo or a
       deployed project URL. Use --json for scripted integrations.
 
   od ui <list|show|respond|revoke|prefill> [args]
@@ -806,6 +923,11 @@ function printRootHelp() {
       (no model/agent calls). Mirrors the web Download menu; rasterization uses
       the desktop runtime's bundled Chromium.
 
+  od lint <file.html|-> [--fail-on <p0|p1|p2|none>] [--json]
+      Run the daemon's anti-slop artifact linter against an HTML file or stdin
+      (no model/agent calls; headless-safe). Exits 1 when findings meet the
+      --fail-on threshold, so it can gate cron/CI render pipelines.
+
   "$OD_NODE_BIN" "$OD_BIN" tools ...
       Recommended agent-runtime form; avoids relying on user PATH for od or node.
 
@@ -816,9 +938,9 @@ function printRootHelp() {
 
   od mcp [--daemon-url <url>]
       Run a stdio MCP server that proxies project tool calls to a
-      running Open Design daemon. Wire it into a coding agent
+      running OpenDesign daemon. Wire it into a coding agent
       (Claude Code, Cursor, VS Code, Zed, Windsurf) in another repo
-      to pull files from a local Open Design project and create
+      to pull files from a local OpenDesign project and create
       project-scoped artifacts without exporting a zip.
 
 Options:
@@ -849,7 +971,7 @@ async function runAmr(args) {
   od amr status [--refresh] [--json]
 
 Options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   OpenDesign daemon HTTP base.
   --refresh            Bypass the daemon's short wallet display cache.
   --json               Emit raw JSON.`);
     process.exit(sub === 'help' || args.includes('--help') || args.includes('-h') ? 0 : 2);
@@ -1398,7 +1520,7 @@ Options:
   --limit <n>           Positive integer page size (default: 100).
   --cursor <token>      Forward a server pagination cursor for list.
   --json                Emit raw JSON for scripts and external agents.
-  --daemon-url <url>    Open Design daemon HTTP base.`);
+  --daemon-url <url>    OpenDesign daemon HTTP base.`);
 }
 
 function messageCenterApiLocale(locale) {
@@ -1484,7 +1606,7 @@ function printResearchHelp() {
   console.log(`Usage:
   od research search --query <text> [--max-sources 5] [--daemon-url <url>]
 
-Runs Tavily-backed shallow research through the local Open Design daemon.
+Runs Tavily-backed shallow research through the local OpenDesign daemon.
 Output is JSON only on stdout:
   { "query": "...", "summary": "...", "sources": [...], "provider": "tavily", "depth": "shallow", "fetchedAt": 0 }
 
@@ -1659,6 +1781,22 @@ async function runMediaWait(rawArgs) {
   });
 }
 
+// Flush stdout and stderr before exiting. process.exit() terminates the
+// process without waiting for pending async writes; when stdout is a pipe
+// (Windows named pipes, or large/backpressured output on any platform) the
+// final JSON line can be dropped, leaving the caller with exit 0 and empty
+// output. Writing an empty chunk with a callback resolves only after every
+// previously queued write has been flushed. The resolve callback
+// deliberately ignores the error argument (EPIPE and similar still exit
+// with the requested code).
+async function flushStreamsAndExit(code) {
+  await Promise.all([
+    new Promise((resolve) => process.stdout.write('', resolve)),
+    new Promise((resolve) => process.stderr.write('', resolve)),
+  ]);
+  process.exit(code);
+}
+
 async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
   const totalBudgetMs = typeof options.totalBudgetMs === 'number' ? options.totalBudgetMs : 25_000;
   const perCallTimeoutMs = 4_000;
@@ -1688,23 +1826,23 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       });
     } catch (err) {
       surfaceFetchError(err, daemonUrl);
-      process.exit(3);
+      await flushStreamsAndExit(3);
     }
     if (resp.status === 404) {
       console.error(`task ${taskId} not found (expired or never queued)`);
-      process.exit(4);
+      await flushStreamsAndExit(4);
     }
     if (!resp.ok) {
       const text = await resp.text();
       console.error(`daemon ${resp.status}: ${text}`);
-      process.exit(4);
+      await flushStreamsAndExit(4);
     }
     let snap;
     try {
       snap = await resp.json();
     } catch {
       console.error('daemon returned non-JSON for /wait');
-      process.exit(4);
+      await flushStreamsAndExit(4);
     }
     lastSnapshot = snap;
     if (Array.isArray(snap.progress)) {
@@ -1732,7 +1870,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
         );
       }
       process.stdout.write(JSON.stringify({ file }) + '\n');
-      process.exit(file.providerError ? 5 : 0);
+      await flushStreamsAndExit(file.providerError ? 5 : 0);
     }
     if (snap.status === 'failed') {
       const msg = snap.error?.message || 'task failed';
@@ -1740,7 +1878,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       process.stdout.write(
         JSON.stringify({ taskId, status: 'failed', error: snap.error || {} }) + '\n',
       );
-      process.exit(snap.error?.status || 5);
+      await flushStreamsAndExit(snap.error?.status || 5);
     }
     if (snap.status === 'interrupted') {
       const msg = snap.error?.message || 'task interrupted';
@@ -1748,7 +1886,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       process.stdout.write(
         JSON.stringify({ taskId, status: 'interrupted', error: snap.error || {} }) + '\n',
       );
-      process.exit(snap.error?.status || 5);
+      await flushStreamsAndExit(snap.error?.status || 5);
     }
   }
 
@@ -1768,7 +1906,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       `Run \`"$OD_NODE_BIN" "$OD_BIN" media wait ${taskId} --since ${since}\` to continue in an agent runtime ` +
       `(${stillRunningHint}).\n`,
   );
-  process.exit(stillRunningExitCode);
+  await flushStreamsAndExit(stillRunningExitCode);
 }
 
 function surfaceFetchError(err, daemonUrl) {
@@ -1789,7 +1927,7 @@ function surfaceFetchError(err, daemonUrl) {
     console.error(
       'hint: outbound connect was denied by a sandbox. If you launched ' +
         'this command from a code agent, check the agent\'s sandbox / ' +
-        'network policy. The Open Design daemon itself is unaffected - it can be ' +
+        'network policy. The OpenDesign daemon itself is unaffected - it can be ' +
         'reached from a regular shell.',
     );
   }
@@ -1906,11 +2044,11 @@ Common options:
   --prompt-file <path|->     Read the prompt from a file, or - for stdin (for long-form prompts).
   --output <filename>       File to write under the project. Auto-named if omitted.
   --aspect 1:1|16:9|9:16|4:3|3:4
-  --quality <tier>          Open Design Cloud images only: published quality tier
+  --quality <tier>          OpenDesign Cloud images only: published quality tier
                             (gpt-image-2 accepts low|medium|high). Omit to let the
                             model's own default tier decide — tiers are priced
                             differently, so this is a billing choice.
-  --resolution <res>        Open Design Cloud images only: published output resolution
+  --resolution <res>        OpenDesign Cloud images only: published output resolution
                             (e.g. 1K, 2K). Must name a resolution the model publishes
                             for --aspect. Omit to use the model's default profile.
   --length <seconds>        Video length.
@@ -2005,13 +2143,13 @@ function printMcpHelp() {
   console.log(`Usage: od mcp [--daemon-url <url>]
 
 Run a stdio MCP (Model Context Protocol) server that proxies project
-tool calls to a running Open Design daemon. Wire it into a coding agent
-in another repo so the agent can pull files from a local Open Design
+tool calls to a running OpenDesign daemon. Wire it into a coding agent
+in another repo so the agent can pull files from a local OpenDesign
 project and create project-scoped artifacts without exporting a zip
 every iteration.
 
 Options:
-  --daemon-url <url>   Open Design daemon HTTP base URL. Resolution
+  --daemon-url <url>   OpenDesign daemon HTTP base URL. Resolution
                        order: this flag, OD_DAEMON_URL, OD_SIDECAR_IPC_PATH,
                        then http://127.0.0.1:7456. Each new MCP spawn
                        discovers the live daemon URL at startup, so
@@ -2023,10 +2161,10 @@ Options:
                        MCP server re-discovers the registered runtime
                        before calls and safely retries reads when the
                        daemon changes ports, so an existing task can
-                       survive an Open Design restart.
+                       survive an OpenDesign restart.
 
 Tools exposed:
-  list_projects                  list every Open Design project
+  list_projects                  list every OpenDesign project
   get_active_context             what project/file the user has open right now
   get_artifact([project, entry]) bundle: entry file + every referenced sibling
   get_project([project])         single project metadata
@@ -2037,13 +2175,13 @@ Tools exposed:
 
 When project is omitted, get_artifact / get_project / get_file /
 search_files / list_files / create_artifact default to the project the
-user has open in Open Design; get_artifact and get_file additionally
+user has open in OpenDesign; get_artifact and get_file additionally
 default to the active file. The response stamps usedActiveContext so
 callers can see which project/file got resolved.
 
 For the copy-paste, per-client snippet (with absolute paths resolved
 for your machine, plus a one-click deeplink for Cursor), open Settings
-→ MCP server in the Open Design app. The daemon must be running locally
+→ MCP server in the OpenDesign app. The daemon must be running locally
 for tool calls to succeed.
 
 To register this server into a coding agent's own config automatically:
@@ -2283,13 +2421,13 @@ async function runMcpInstall(args) {
 function printMcpInstallHelp() {
   console.log(`Usage: od mcp install <agent> [options]
 
-Register Open Design's stdio MCP server into a coding agent's own config.
+Register OpenDesign's stdio MCP server into a coding agent's own config.
 
 Agents:
   ${AGENT_SLUGS.join(' ')}
 
 Options:
-  --uninstall, --remove   Remove the Open Design MCP server instead.
+  --uninstall, --remove   Remove the OpenDesign MCP server instead.
   --print, --dry-run      Show what would change; write nothing.
   --json                  Machine-readable result (dry runs include launchSpec).
   --name <name>           MCP server name in the agent config (default: open-design).
@@ -2663,7 +2801,7 @@ async function runPluginLogin(rest) {
     console.log(`Usage:
   od plugin login [--host github.com]
 
-Wraps GitHub CLI auth for Open Design registry publishing. The token stays in gh.`);
+Wraps GitHub CLI auth for OpenDesign registry publishing. The token stays in gh.`);
     return;
   }
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
@@ -2685,7 +2823,7 @@ async function runPluginWhoami(rest) {
     console.log(`Usage:
   od plugin whoami [--host github.com] [--json]
 
-Shows the GitHub account gh will use for Open Design registry publishing.`);
+Shows the GitHub account gh will use for OpenDesign registry publishing.`);
     return;
   }
   const host = typeof flags.host === 'string' ? flags.host : 'github.com';
@@ -2879,7 +3017,7 @@ async function runMarketplace(args) {
                                                               Update the marketplace trust tier.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts).`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -3026,7 +3164,7 @@ Common options:
         console.error('[marketplace login] GitHub CLI is required. Install gh from https://cli.github.com/ and retry.');
         process.exit(1);
       }
-      console.log(`[marketplace login] authenticating gh for ${host}. Tokens stay in gh, not Open Design.`);
+      console.log(`[marketplace login] authenticating gh for ${host}. Tokens stay in gh, not OpenDesign.`);
       const result = await spawnPassthrough('gh', ['auth', 'login', '--hostname', host, '--web']);
       process.exit(result.code ?? 0);
     }
@@ -5775,7 +5913,7 @@ function printUiHelp() {
                                                      Pre-answer a surface so the run never broadcasts it.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
   --workspace <id>     Explicit Workspace id for a bound project or run.
   --workspace-member <id>
                        Explicit Workspace member id for a bound project or run.
@@ -5833,7 +5971,7 @@ function printPluginHelp() {
   od plugin whoami [--host github.com]     Show the gh account used for publishing.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
+  --daemon-url <url>   OpenDesign daemon HTTP base (default OD_DAEMON_URL, OD_SIDECAR_IPC_PATH discovery, or http://127.0.0.1:7456).
   --json               Emit raw JSON (suitable for scripts) instead of human-readable output.
 
 Installs support local folders, github:owner/repo refs, HTTPS .tgz archives,
@@ -5846,7 +5984,7 @@ and bare marketplace names resolved through configured registry sources.`);
 // Plan §6 Phase 1 follow-up + Phase 2C: thin CLI wrappers over the
 // existing daemon HTTP endpoints (POST /api/projects, POST /api/runs,
 // GET /api/projects/:id/files, …). The §12.5 walkthrough relies on
-// these so a code agent can drive Open Design end-to-end without
+// these so a code agent can drive OpenDesign end-to-end without
 // hitting `/api/*` directly. Spec §11.7 invariant: every UI feature is
 // reachable via the CLI; we wrap rather than duplicate.
 // ---------------------------------------------------------------------------
@@ -5865,7 +6003,7 @@ Platforms:
   x, linkedin, facebook, reddit, telegram, whatsapp, weibo, line, instagram, xiaohongshu
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   OpenDesign daemon HTTP base.
   --json               Emit raw JSON.`);
 }
 
@@ -5962,7 +6100,7 @@ Flags:
   --notes "<text>"     Design brief folded into the reshape prompt.
   --build              After import, start a run that builds the webpage.
   --prompt / --prompt-file   Override the build prompt (file or - for stdin).
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   OpenDesign daemon HTTP base.
   --workspace <id>     Explicit Workspace id for the bound project.
   --workspace-member <id>
                        Explicit Workspace member id for the bound project.
@@ -6650,7 +6788,7 @@ async function runProject(args) {
                     Synthesize a resume-conversation handoff prompt.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   OpenDesign daemon HTTP base.
   --workspace <id>     Exact Workspace for bound project requests.
   --workspace-member <id>
                        Exact caller membership for bound project requests.
@@ -6960,7 +7098,7 @@ async function runWorkspace(args) {
   od workspace billing [--workspace-type personal|team --workspace <id>] [--json]
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   OpenDesign daemon HTTP base.
   --member <id>        Workspace member id for route-level authorization.
   --role <role>        Workspace role: owner, admin, or member.
   --workspace-type <t> personal or team. A team share is refused in a personal
@@ -7246,7 +7384,7 @@ async function runRun(args) {
                                             provenance without applying them.
 
 Common options:
-  --daemon-url <url>         Open Design daemon HTTP base.
+  --daemon-url <url>         OpenDesign daemon HTTP base.
   --workspace <id>           Explicit Workspace id for a bound project.
   --workspace-member <id>    Explicit Workspace member id for a bound project.
   --json                     Emit raw JSON.`);
@@ -7560,7 +7698,7 @@ async function runShell(args) {
                                   working directory and attach to it.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   OpenDesign daemon HTTP base.
   --json               Print the created terminal session as JSON and exit
                        (does not attach).`);
     process.exit(args.length === 0 ? 2 : 0);
@@ -7702,7 +7840,7 @@ async function runFiles(args) {
                                                Restore a saved HTML as a new current version.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   OpenDesign daemon HTTP base.
   --workspace <id>     Exact Workspace for bound project requests.
   --workspace-member <id>
                        Exact caller membership for bound project requests.
@@ -8109,7 +8247,7 @@ async function runTemplates(args) {
   od templates delete <id>                          Delete a saved template by id.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   OpenDesign daemon HTTP base.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -8267,7 +8405,7 @@ async function runConversation(args) {
   od conversation info <conversationId>      Print one conversation.
 
 Common options:
-  --daemon-url <url>         Open Design daemon HTTP base.
+  --daemon-url <url>         OpenDesign daemon HTTP base.
   --workspace <id>           Explicit Workspace id for a bound project.
   --workspace-member <id>    Explicit Workspace member id for a bound project.
   --json                     Emit raw JSON.`);
@@ -8375,7 +8513,7 @@ async function runChat(args) {
                                            message.
 
 Common options:
-  --daemon-url <url>         Open Design daemon HTTP base.
+  --daemon-url <url>         OpenDesign daemon HTTP base.
   --workspace <id>           Explicit Workspace id for the bound project.
   --workspace-member <id>    Explicit Workspace member id for the bound project.
   --json                     Emit raw JSON.`);
@@ -8467,7 +8605,7 @@ async function runDaemon(args) {
   od daemon db     vacuum                 Run SQLite VACUUM to reclaim space after deletes.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   OpenDesign daemon HTTP base.
   --headless           No browser auto-open; aliased --no-open.
   --serve-web          Serve the web UI over the existing port (no electron).
   --json               Emit raw JSON.`);
@@ -8678,7 +8816,7 @@ async function runAtoms(args) {
   od atoms info <id>        Print metadata + the bundled SKILL.md body.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   OpenDesign daemon HTTP base.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -9235,7 +9373,7 @@ async function runDesignSystemImportLocal(args) {
   od design-systems import-local <path> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
   od design-systems import-local --path <path> [--name <name>] [--json]
 
-Imports a local project directory as an editable Open Design design system.
+Imports a local project directory as an editable OpenDesign design system.
 
   <path>                 Local project directory to scan.
   --path <path>          Path alternative for scripts that prefer named flags.
@@ -9266,7 +9404,7 @@ async function runDesignSystemImportGithub(args) {
   od design-systems import-github <url> [--branch <branch>] [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
   od design-systems import-github --url <url> [--branch <branch>] [--json]
 
-Imports a public GitHub repository as an editable Open Design design system.
+Imports a public GitHub repository as an editable OpenDesign design system.
 
   <url>                  Repository root URL, e.g. https://github.com/acme/design-kit.
   --url <url>            URL alternative for scripts that prefer named flags.
@@ -9379,7 +9517,7 @@ async function runDesignSystemImportShadcn(args) {
     console.log(`Usage:
   od design-systems import-shadcn <reference> [--name <name>] [--import-mode <mode>] [--craft <slugs>] [--json] [--daemon-url <url>]
 
-Imports a shadcn registry item as an Open Design design system.
+Imports a shadcn registry item as an OpenDesign design system.
 
   <reference>            "<owner>/<repo>/<item>" (e.g. shadcn/ui/theme-zinc)
                          or an https URL to a registry-item JSON document.
@@ -9559,7 +9697,7 @@ async function runWhatsNew(args) {
   if (!resp.ok) return structuredHttpFailure(resp);
   const data = await resp.json();
   if (flags.json) return process.stdout.write(JSON.stringify(data, null, 2) + '\n');
-  console.log(`Open Design ${data?.version ?? 'unknown'}`);
+  console.log(`OpenDesign ${data?.version ?? 'unknown'}`);
   if (data?.content != null) {
     console.log(`\n${data.content.title}\n${data.content.body}`);
     if (data.content.linkUrl) console.log(`\nDetails: ${data.content.linkUrl}`);
@@ -9710,7 +9848,7 @@ async function runConfig(args) {
   od config unset <key>               Remove a top-level key.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.
+  --daemon-url <url>   OpenDesign daemon HTTP base.
   --json               Emit raw JSON.`);
     process.exit(args.length === 0 ? 2 : 0);
   }
@@ -9877,7 +10015,7 @@ function printMemoryHelp() {
       profile/rewrite/verify hooks; --extraction maps to chatExtractionEnabled.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.`);
+  --daemon-url <url>   OpenDesign daemon HTTP base.`);
 }
 
 function memoryPositionals(values) {
@@ -10805,7 +10943,7 @@ Output:
   can drive the full automation lifecycle headlessly.
 
 Common options:
-  --daemon-url <url>   Open Design daemon HTTP base.`);
+  --daemon-url <url>   OpenDesign daemon HTTP base.`);
 }
 
 async function runAutomation(args) {
@@ -11424,7 +11562,7 @@ Options:
   --workspace <id>                          Explicit Workspace id for a bound project.
   --workspace-member <id>                   Explicit Workspace member id for a bound project.
   --json                                    Emit raw JSON response.
-  --daemon-url <url>                        Open Design daemon HTTP base.`);
+  --daemon-url <url>                        OpenDesign daemon HTTP base.`);
     return;
   }
 

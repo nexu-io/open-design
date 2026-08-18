@@ -933,10 +933,9 @@ export function EntryShell({
     teamProjects.projects,
   ]);
   // Open handler for the "全部项目" grid. A project already in the member's local
-  // list opens directly; a team-shared project the member has not pulled yet is
-  // first pulled + registered on the daemon (materialize content + insert a local
-  // project record) so it can open read-only — the member is not the owner, so
-  // the useProjectCollab single-writer path keeps it read-only.
+  // list opens directly. A remote Team project first creates an authority-bound
+  // placeholder, then ProjectView opens while the daemon materializes content in
+  // the background. The placeholder stamp keeps every content writer fail-closed.
   const [pullingProjectId, setPullingProjectId] = useState<string | null>(null);
   async function handleOpenAllProjects(id: string): Promise<boolean> {
     // The grid already reconciled the local row with the authoritative team
@@ -1003,22 +1002,34 @@ export function EntryShell({
       await open();
       return true;
     }
-    // The pull materializes the whole project before it can open; surface it
-    // on the card (spinner overlay) and swallow re-clicks meanwhile —
-    // otherwise the first click reads as dead for the entire download.
+    // Keep the card busy only for the short authority/bootstrap round trip, not
+    // for the full content transfer. PUT is idempotent, so the sidecar may safely
+    // replay it after a reused keep-alive socket resets. A paired older daemon
+    // has no bootstrap route; retain the former blocking POST fallback for that
+    // compatibility case.
     if (pullingProjectId) return false;
     const pullRead = beginWorkspaceScopedRead(workspaceContextRef.current);
     if (!pullRead.context) return false;
     setPullingProjectId(id);
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(id)}/collab/pull`, {
-        method: 'POST',
+      const collabRoute = `/api/projects/${encodeURIComponent(id)}/collab`;
+      let response = await fetch(`${collabRoute}/bootstrap`, {
+        method: 'PUT',
         headers: workspaceProjectHeaders(pullRead.context),
       });
+      if (response.status === 404 || response.status === 405) {
+        response = await fetch(`${collabRoute}/pull`, {
+          method: 'POST',
+          headers: workspaceProjectHeaders(pullRead.context),
+        });
+      }
       if (!pullRead.isStillCurrent(workspaceContextRef.current)) return false;
       if (!response.ok) return false;
       invalidateProjectFilesCache(id, pullRead.context);
-      await Promise.resolve(onProjectsRefresh?.());
+      // The exact route bootstrap and ambient list refresh are independent.
+      // Navigation may read the newly committed placeholder immediately while
+      // the shell refreshes its catalog in parallel.
+      void Promise.resolve(onProjectsRefresh?.());
     } catch {
       return false;
     } finally {
@@ -1367,7 +1378,7 @@ export function EntryShell({
       navigate({ kind: 'home', view: 'onboarding' }, { replace: true });
       return 'blocked' as const;
     }
-    // Open Design Cloud pre-run balance gate: hard blocks (empty wallet or
+    // OpenDesign Cloud pre-run balance gate: hard blocks (empty wallet or
     // signed out) and the soft low-balance reminder both fire BEFORE the
     // project is created, so the dialog appears right here on the home page
     // and the composer keeps its draft. In-project sends are gated separately
@@ -1538,7 +1549,7 @@ export function EntryShell({
    * Onboarding is where a signed-out user signs IN, so the workspace context
    * the shell resolved before it is stale by definition. Without this the rail
    * came back in its signed-out shape — no workspace switcher, no 草稿 / 全部项目
-   * / Workspace 设置, and the "sign in to Open Design Cloud" callout still in
+   * / Workspace 设置, and the "sign in to OpenDesign Cloud" callout still in
    * the bottom-left corner (#140) — until a focus or the 30s poll happened to
    * re-read it. `CloudSignInTip` fires the same three after its own sign-in.
    *
@@ -2963,7 +2974,7 @@ function OnboardingView({
         // Onboarding may sit on this step for a while before finishOnboarding
         // fires refreshWorkspaceSurfacesAfterOnboarding() — without firing
         // these here too, Home's rail can render in its stale signed-out
-        // shape (still showing the "sign in to Open Design Cloud" callout)
+        // shape (still showing the "sign in to OpenDesign Cloud" callout)
         // for however long that gap lasts. Mirrors CloudSignInTip's own
         // finishSignedIn().
         notifyWorkspaceContextRefresh();
@@ -3254,7 +3265,7 @@ function OnboardingView({
 
   const primaryActionLabel = t('settings.onboardingContinue');
 
-  // Step 1 is identity only: every user signs into Open Design Cloud before
+  // Step 1 is identity only: every user signs into OpenDesign Cloud before
   // choosing Hosted, Local, or BYOK on the next screen.
   if (step === 0) {
     const cloudBusy = amrLoginPending;
@@ -3355,7 +3366,7 @@ function OnboardingView({
           <footer className="onboarding-cloud__footer">
             <LanguageMenu placement="up" align="start" />
             <span>
-              © {new Date().getFullYear()} Open Design · {t('settings.onboardingCloudRights')}
+              © {new Date().getFullYear()} OpenDesign · {t('settings.onboardingCloudRights')}
             </span>
           </footer>
         </div>
@@ -3483,7 +3494,7 @@ function OnboardingView({
           <footer className="onboarding-cloud__footer">
             <LanguageMenu placement="up" align="start" />
             <span>
-              © {new Date().getFullYear()} Open Design ·{' '}
+              © {new Date().getFullYear()} OpenDesign ·{' '}
               {t('settings.onboardingCloudRights')}
             </span>
           </footer>

@@ -10,8 +10,8 @@ export const zh: DeepseekCopyOverride = {
   collectionLede:
     '一个精选的 dsh 设计插件合集：能读截图的视觉桥、Agent 可以落笔的画布和生成式 UI、设计评审工具，以及把这一切预览出来的工作台。DeepSeek Harness 读取跟 Claude Code 和 Codex 相同的 SKILL.md 格式，你的设计 Skill 库可以直接带过来。',
   collectionStats: [
-    { value: '13', label: '个精选 dsh 插件' },
-    { value: '13', label: '个来源仓库' },
+    { value: '19', label: '个精选 dsh 插件' },
+    { value: '19', label: '个来源仓库' },
     { value: 'SKILL.md', label: '与 Claude Code、Codex 通用' },
   ],
   collectionIntro:
@@ -22,17 +22,17 @@ export const zh: DeepseekCopyOverride = {
     '把闭环补上：在真实页面上做标注、编译动效资产、把你的 Skill 库带过来。',
     '把 harness 本身变成设计工作空间：对话旁边的预览面板、工作台和看板。',
   ],
-  collectionCloserHeading: '省掉配置，在 Open Design 里用 DeepSeek Harness 做设计',
+  collectionCloserHeading: '省掉配置，在 OpenDesign 里用 DeepSeek Harness 做设计',
   filterAll: '全部',
   collectionCloserBody:
-    'Open Design 是围绕 DeepSeek Harness 运转的开源、Agent 原生设计工作空间。它让你的设计系统、Skill 和模板始终保持一致，Agent 交付的成果真正属于你。',
+    'OpenDesign 是围绕 DeepSeek Harness 运转的开源、Agent 原生设计工作空间。它让你的设计系统、Skill 和模板始终保持一致，Agent 交付的成果真正属于你。',
 
   categoryVision: '视觉与输入',
   categoryCanvas: '画布与生成式 UI',
   categoryWorkflow: '设计工作流',
   categoryWorkspace: '工作空间与预览',
 
-  ctaDownload: '下载 Open Design',
+  ctaDownload: '下载 OpenDesign',
   ctaStarList: '给 DeepSeek Harness 点 Star',
   ctaGuide: '了解如何用 DeepSeek Harness 做设计',
   ctaBrowseAll: '浏览全部插件',
@@ -70,9 +70,9 @@ export const zh: DeepseekCopyOverride = {
   detailMoreOnList: '在 DeepSeek Harness 仓库里了解更多',
   detailRelated: '更多 DeepSeek Harness 设计插件',
   finalEyebrow: '下一步',
-  detailCloserHeading: '用 Open Design 做设计，省掉那些配置',
+  detailCloserHeading: '用 OpenDesign 做设计，省掉那些配置',
   detailCloserBody:
-    '你可以自己装这个插件，也可以用 Open Design 在 DeepSeek Harness 外面套一整层精选设计层。自带 API Key，产出归你所有。',
+    '你可以自己装这个插件，也可以用 OpenDesign 在 DeepSeek Harness 外面套一整层精选设计层。自带 API Key，产出归你所有。',
 
   skills: {
     modlens: {
@@ -268,6 +268,96 @@ export const zh: DeepseekCopyOverride = {
         '用一行脚本安装，或把 npm 包加进你的 web profile。',
         '打开工作台，把标签页排布在右侧边栏和底部面板上。',
         '原地检阅 Agent 做出来的东西：预览、diff、终端和浏览器标签页。',
+      ],
+    },
+    'dsh-vision-router': {
+      tagline: '给纯文本 Agent 的免费视觉，不要 API Key：内置视觉链路加十一个像素级工具。',
+      whatIsIt:
+        '一个视觉路由器：原始像素留在视觉模型一侧，推理交给 DeepSeek。选一个标着「+ Auto Vision」的模型组，粘贴一张图，Agent 就能驱动十一个像素级工具——grounding、裁剪、像素 diff、取色、OCR、SVG 描摹、抠图、HTML 截图——底下是一条免费的匿名视觉回退链路，不用注册账号，也不用 API Key。',
+      whyForDesign: [
+        'UI 还原有了可验证的像素闭环：参考稿 → 截图 → 带红色热力图的像素 diff → 修改 → 反复迭代直到差异收敛。',
+        'grounding 和检测返回原图上的像素框，README 里还记录了一次验证到最终差异只剩 2.54% 的重建。',
+        '取色、图标 SVG 矢量化和背景抠图，把重建周边的设计杂活也一并包了。',
+      ],
+      howWithAgent: [
+        '把插件加进你的 web profile；它的组合补丁会把一切接好，一个文件都不用手动改。',
+        '发图之前，先在模型选择器里选一个标着「+ Auto Vision」的模型组。',
+        '粘贴一张截图，让 Agent 串起 vision_ground、vision_crop、vision_describe 和 vision_pixel_diff。',
+      ],
+    },
+    'dsh-diagram': {
+      tagline: '把会话里的任何文章变成可编辑的 Excalidraw 画布，而不是一张用完即弃的图。',
+      whatIsIt:
+        '把 Excalidraw 画布装进 harness：Agent 调用 diagram_create，从一份紧凑的语义规格生成流程图、架构图、时间线、层级图或对比图，Canvas 标签页会打开完整编辑器，让你在会话里直接改文字、节点和连线。',
+      whyForDesign: [
+        '可编辑，不是一次性的：在真实的矢量画布上继续工作，而不是勉强接受一张生成的静态图。',
+        '基于版本号的 compare-and-set 自动保存，防止过期的编辑器悄悄覆盖更新的成果。',
+        '可以导出 .excalidraw、SVG 或 PNG；你手动改过的内容，只有在让 Agent 调用 diagram_read 时才会回到它那边。',
+      ],
+      howWithAgent: [
+        '把插件加进你的 web profile，重启 dsh web。',
+        '让它把会话里的文章画成一张清晰的图，Agent 会调用 diagram_create。',
+        '打开 Canvas 标签页直接编辑，然后导出，或让 Agent 把你的修改读回去。',
+      ],
+    },
+    'deepseek-harness-genui': {
+      tagline: '任务自己长出一个专注的 React 界面——你在里面做的选择会回流给 Agent。',
+      whatIsIt:
+        '一层给 Agent 任务用的运行时界面：当文字开始碍事，Agent 会写一个小型 React + TypeScript 应用——内联展示、放进 Canvas、全屏或跑在 localhost——用来讲清一段复杂关系、收集一个复杂决策，或在任务级授权后操作接入的工具。',
+      whyForDesign: [
+        '界面是代码优先的 React：布局、控件和图表都是真实组件，不是截图。',
+        '保存下来的选择、输入和草稿会回到任务里，供 Agent 后续轮次读取。',
+        '一套带四种视觉 profile 的 DESIGN.md 体系，让生成的应用保持同一种设计语言。',
+      ],
+      howWithAgent: [
+        '运行安装命令——它会添加插件，然后装好 Playwright 所需的 Chromium。',
+        '在交互更高效的时候要一个界面：一个选择器、一个可探索的模型、一个代码路径浏览器。',
+        '操作完接着聊——Agent 会直接读到你的选择，不用你再复述一遍。',
+      ],
+    },
+    'dsh-annotate': {
+      tagline: '指着浏览器里的元素，发给 Agent 的是结构化事实，不是含糊的描述。',
+      whatIsIt:
+        '通过配套 Chrome 扩展做可视化浏览器反馈：/annotate 进入选择模式，你点选的每个元素都会带上选择器、DOM 事实、计算样式要点、无障碍数据、你的批注和可选的视口截图，一起进入 Agent 的下一轮。',
+      whyForDesign: [
+        '视觉反馈始终挂在页面元素上，而不是退化成一段含糊描述或一张贴进来的截图。',
+        '计算样式和无障碍数据以结构化事实的形式到达，Agent 可以直接照着行动。',
+        '按主机、来源和扩展 ID 限制的本地回环 WebSocket 桥，让整条通道不出本机。',
+      ],
+      howWithAgent: [
+        '克隆仓库并把项目加进一个 harness profile，然后在 chrome://extensions 里以解包扩展方式加载它的 browser-extension 文件夹。',
+        '运行 /annotate，在页面上点选元素，逐个附上批注。',
+        '提交——采集到的事实和视口截图会落进 Agent 的下一轮。',
+      ],
+    },
+    'dsh-hyperframes': {
+      tagline: 'HeyGen 出品的 HyperFrames 移植版：五个官方 Skill，把 HTML 变成成片视频。',
+      whatIsIt:
+        '一次安装，把 HyperFrames by HeyGen 的五个官方 Skill 注册进 harness：带视觉风格、配色、字幕和音频响应转场的 HTML 视频合成、hyperframes CLI、组件仓库、网站转视频流水线，还有一份 GSAP 动画参考。',
+      whyForDesign: [
+        '在你本来就熟的介质里做动效：HTML 和 CSS 直接变成渲染出的视频。',
+        '一条七步的网站转视频流水线，把一个 URL 变成一支成片。',
+        'Skill 用的是开放的 SKILL.md 格式，同一套还能带去 Claude Code、Cursor 和 Codex。',
+      ],
+      howWithAgent: [
+        '把插件加进你的 web profile，重启。',
+        '说一句「把这个 URL 做成 HyperFrames 视频」，就能触发流水线。',
+        '用 hyperframes CLI 渲染；依赖只有 Node 22+ 和 FFmpeg。',
+      ],
+    },
+    'dsh-web-preview': {
+      tagline: '一块玻璃质感的侧边面板：预览工作区、运行项目、标注元素。',
+      whatIsIt:
+        '一个给 harness web UI 用的侧边网页预览面板：工作区文件直接托管出来预览——Markdown 渲染、代码带行号、图片和 HTML 原样呈现——项目自动识别类型（Cargo、package.json、go.mod、Python）并带实时日志运行，标记模式还能把元素批注采集回对话。',
+      whyForDesign: [
+        'Agent 刚写好的原型就开在对话旁边，地址栏保持同步，面板宽度可以拖拽。',
+        '标记模式悬停高亮元素，采集选择器和 HTML 快照，把你的批注发进对话。',
+        '链接、文件路径和拖进来的文件都在面板里打开，评审全程不用离开会话。',
+      ],
+      howWithAgent: [
+        '把包装进你的 web profile 目录，然后在该 profile 的 cordis.patch.yml 里添加一条名为 dsh-web-preview-panel 的 insert 条目来挂载它。',
+        '重启 dsh web，点开对话右上角的 ▶ 预览按钮。',
+        '在面板里运行项目、标注元素，把日志或批注直接发给 Agent。',
       ],
     },
   },

@@ -43,6 +43,7 @@ import {
   subscribePreviewIframeMessages,
   trackIframeLoad,
 } from '../observability/iframe-error';
+import { notifyExportSucceeded } from './experience-survey-trigger';
 import {
   trackArtifactExportResult,
   trackArtifactDeployResult,
@@ -154,6 +155,7 @@ import {
   planDeckImageCapture,
   requestPreviewSnapshot,
   sourceLooksLikeExportableDeck,
+  sourceLooksLikeNavigableDeck,
   type ExportProgress,
   type ImageExportFormat,
 } from '../runtime/exports';
@@ -3242,7 +3244,7 @@ function sourceLooksLikeDeckPreview(source: string | null | undefined): boolean 
   if (!source) return false;
   return (
     /class\s*=\s*['"](?:[^'"]*\s)?slide(?:\s|['"])/i.test(source) ||
-    sourceLooksLikeExportableDeck(source)
+    sourceLooksLikeNavigableDeck(source)
   );
 }
 
@@ -7511,6 +7513,7 @@ function HtmlViewer({
     const originPromise = resolveArtifactExportOrigin(context)
       .catch(() => unknownExportOrigin());
     const finish = async (result: 'success' | 'failed' | 'cancelled', errorCode?: string) => {
+      if (result === 'success') notifyExportSucceeded();
       const originProps = await originPromise;
       trackArtifactExportResult(
         analytics.track,
@@ -9811,11 +9814,10 @@ function HtmlViewer({
       || effectiveScopedSrcDocPreviewBase
       || !workspaceActive
       || projectResourceReadBlocked
-      || !workspaceContext
     ) return;
     let cancelled = false;
     const identity = srcDocPreviewBaseIdentity;
-    void fetchProjectPreviewBaseHref(projectId, file.name, workspaceContext).then((href) => {
+    void fetchProjectPreviewBaseHref(projectId, file.name).then((href) => {
       if (cancelled || !href) return;
       setScopedSrcDocPreviewBase({ identity, href });
     });
@@ -12771,6 +12773,7 @@ function HtmlViewer({
     const started = templateExportStartedRef.current || performance.now();
     const originPromise = templateExportOriginPromiseRef.current
       ?? resolveArtifactExportOrigin().catch(() => unknownExportOrigin());
+    if (result === 'success') notifyExportSucceeded();
     void originPromise.then((originProps) => {
       trackArtifactExportResult(
         analytics.track,
@@ -13746,7 +13749,7 @@ function HtmlViewer({
     await waitForAnimationFrame();
     // Prefer the daemon's off-screen render (desktop only): isolated from the
     // preview pane and, rendering the artifact alone in a hidden window, it can
-    // never capture Open Design's own UI. Page exports use the selected preview
+    // never capture OpenDesign's own UI. Page exports use the selected preview
     // preset; desktop pages and decks retain the renderer defaults. `wholeDeck`
     // (Export as image) stitches every slide
     // top-to-bottom into one long image — matching the slide count the viewer
@@ -13952,6 +13955,7 @@ function HtmlViewer({
     const started = imageExportStartedRef.current || performance.now();
     const originPromise = imageExportOriginPromiseRef.current
       ?? resolveArtifactExportOrigin().catch(() => unknownExportOrigin());
+    if (result === 'success') notifyExportSucceeded();
     void originPromise.then((originProps) => {
       trackArtifactExportResult(
         analytics.track,

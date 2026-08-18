@@ -168,7 +168,7 @@ describe("domToPptxBundleResource", () => {
 });
 
 describe("copyBundledResourceTrees", () => {
-  it("includes daemon resource trees", async () => {
+  it("includes daemon resources and the packaged Website Clone main path", async () => {
     const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-"));
     const workspaceRoot = join(root, "workspace");
     const resourceRoot = join(root, "resources");
@@ -200,7 +200,26 @@ describe("copyBundledResourceTrees", () => {
         "community",
         "open-design-marketplace.json",
       );
+      const webCloneSkillPath = join(
+        workspaceRoot,
+        "skills",
+        "web-clone",
+        "SKILL.md",
+      );
+      const webCloneBrowserRuntimePath = join(
+        workspaceRoot,
+        "skills",
+        "web-clone",
+        "scripts",
+        "lib",
+        "system-browser.mjs",
+      );
       await mkdir(join(workspaceRoot, "skills", "sample"), { recursive: true });
+      // Packaged Website Clone runs this staged skill from both the UI and the
+      // bundled `od` CLI. Keep the skill and its zero-dependency CDP runtime in
+      // the fixture: losing either file would break a primary product path and
+      // tempt the agent to install Playwright into the user's project again.
+      await mkdir(dirname(webCloneBrowserRuntimePath), { recursive: true });
       // The skills/design-templates split (see specs/current/
       // skills-and-design-templates.md) added a separate top-level
       // `design-templates/` tree that copyBundledResourceTrees now also
@@ -230,6 +249,12 @@ describe("copyBundledResourceTrees", () => {
         recursive: true,
       });
       await writeFile(promptTemplatePath, "{\"id\":\"sample\"}\n", "utf8");
+      await writeFile(webCloneSkillPath, "# Website Clone\n", "utf8");
+      await writeFile(
+        webCloneBrowserRuntimePath,
+        "export const systemChromium = {};\n",
+        "utf8",
+      );
       await writeFile(
         join(workspaceRoot, "data", "plugin-previews", "manifest.json"),
         "{\"previews\":{}}\n",
@@ -245,6 +270,23 @@ describe("copyBundledResourceTrees", () => {
       await writeFile(communityRegistryPath, "{\"plugins\":[]}\n", "utf8");
 
       await copyBundledResourceTrees({ workspaceRoot, resourceRoot });
+
+      await expect(
+        readFile(join(resourceRoot, "skills", "web-clone", "SKILL.md"), "utf8"),
+      ).resolves.toBe("# Website Clone\n");
+      await expect(
+        readFile(
+          join(
+            resourceRoot,
+            "skills",
+            "web-clone",
+            "scripts",
+            "lib",
+            "system-browser.mjs",
+          ),
+          "utf8",
+        ),
+      ).resolves.toBe("export const systemChromium = {};\n");
 
       await expect(
         readFile(

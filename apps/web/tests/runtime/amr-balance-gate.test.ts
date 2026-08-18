@@ -340,6 +340,32 @@ describe('checkAmrBalanceGate', () => {
     expect(mockedFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('uses the personal workspace wallet instead of an empty account wallet', async () => {
+    mockedFetch.mockResolvedValue(snapshot({ balanceUsd: '0' }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        expect(input.toString()).toBe(
+          '/api/workspace/billing?scope=workspace&workspaceId=ws-personal-a&freshness=authoritative',
+        );
+        return new Response(
+          JSON.stringify(authoritativeWorkspaceBillingResponse(
+            'ws-personal-a',
+            'wm-personal-a',
+            '98.22',
+          )),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
+
+    await expect(checkAmrBalanceGate({
+      workspaceType: 'personal',
+      workspaceId: 'ws-personal-a',
+      workspaceMemberId: 'wm-personal-a',
+    })).resolves.toEqual({ kind: 'allow' });
+  });
+
   it('does not authorize a positive balance from a daemon that cannot prove an authoritative read', async () => {
     mockedFetch.mockResolvedValue(snapshot({ balanceUsd: '247.50' }));
     vi.stubGlobal(

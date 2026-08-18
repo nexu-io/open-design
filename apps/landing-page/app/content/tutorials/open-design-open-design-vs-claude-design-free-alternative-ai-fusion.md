@@ -1,7 +1,7 @@
 ---
-title: 'The Four Libraries Behind Open Design — Skills, Systems, Templates, and Craft'
+title: 'The Four Libraries Behind OpenDesign — Skills, Systems, Templates, and Craft'
 youtubeId: G3I1E12I8Y0
-summary: A tour of the four content libraries that make Open Design's output good — composable skills, portable design systems, ready-to-fork templates, and the under-discussed "craft" layer (brand-agnostic rendering principles auto-enforced by a linter). Based on AI Fusion's walkthrough.
+summary: A tour of the four content libraries that make OpenDesign's output good — composable skills, portable design systems, ready-to-fork templates, and the under-discussed "craft" layer (brand-agnostic rendering principles auto-enforced by a linter). Based on AI Fusion's walkthrough.
 date: 2026-05-29
 category: Demo
 durationSeconds: 530
@@ -9,14 +9,14 @@ official: false
 author: 'AI Fusion'
 ---
 
-Why does Open Design's output look better than a typical AI design tool's? Because of four content libraries working together — and one of them, **craft**, rarely gets discussed. This guide tours all four. It follows the walkthrough **AI Fusion** gives in [their video](https://www.youtube.com/watch?v=G3I1E12I8Y0), rewritten and brought up to date with the current release. Watch the video above, or read on for the written version.
+Why does OpenDesign's output look better than a typical AI design tool's? Because of four content libraries working together — and one of them, **craft**, rarely gets discussed. This guide tours all four. It follows the walkthrough **AI Fusion** gives in [their video](https://www.youtube.com/watch?v=G3I1E12I8Y0), rewritten and brought up to date with the current release. Watch the video above, or read on for the written version.
 
-![The Open Design plugin library, with installable skills.](/tutorials/open-design-open-design-vs-claude-design-free-alternative-ai-fusion/plugin-library.webp)
+![The OpenDesign plugin library, with installable skills.](/tutorials/open-design-open-design-vs-claude-design-free-alternative-ai-fusion/plugin-library.webp)
 *The plugin library: install skills straight from the registry — including anti-slop design skills.*
 
-## What is Open Design?
+## What is OpenDesign?
 
-Open Design is the open-source, local-first alternative to a closed cloud design tool. It doesn't ship its own AI agent — it **detects the coding agents you already have** (Claude Code, Codex, Cursor, OpenCode, Qwen, and more), or you bring your own API key (Anthropic, OpenAI, Azure, Google Gemini, even a local model via Ollama). The architecture is clean: a front-end talking to a local daemon, everything saved to a local SQLite database so your projects are always there when you come back.
+OpenDesign is the open-source, local-first alternative to a closed cloud design tool. It doesn't ship its own AI agent — it **detects the coding agents you already have** (Claude Code, Codex, Cursor, OpenCode, Qwen, and more), or you bring your own API key (Anthropic, OpenAI, Azure, Google Gemini, even a local model via Ollama). The architecture is clean: a front-end talking to a local daemon, everything saved to a local SQLite database so your projects are always there when you come back.
 
 ## The four libraries
 
@@ -28,7 +28,7 @@ Skills are organized by mode, scenario, and platform. Each is literally **just a
 
 Each design system is a **single markdown file** with the full token spec: colors, typography, spacing, components, motion. Apple's premium white space, Airbnb's warm coral photography-driven UI, Airtable's structured-data look, Ant Design for data-dense apps — a large, portable library that keeps every artifact visually consistent.
 
-![The Open Design plugins hub.](/tutorials/open-design-open-design-vs-claude-design-free-alternative-ai-fusion/plugins-hub.webp)
+![The OpenDesign plugins hub.](/tutorials/open-design-open-design-vs-claude-design-free-alternative-ai-fusion/plugins-hub.webp)
 *The plugins hub: browse the registry, import plugins, and prepare them for your team.*
 
 ### 3. Templates — the "start from something" layer
@@ -45,7 +45,7 @@ This is the part most reviews skip. **Craft** is a set of brand-agnostic renderi
 
 Crucially, **some are auto-enforced by a linter**, so failing them is treated as a regression, not a style preference. That's a big reason the output quality is higher than you'd expect from an AI design tool — the standards are enforced, not suggested.
 
-![Slide-deck mode in Open Design with example decks.](/tutorials/open-design-open-design-vs-claude-design-free-alternative-ai-fusion/slide-deck-creator.webp)
+![Slide-deck mode in OpenDesign with example decks.](/tutorials/open-design-open-design-vs-claude-design-free-alternative-ai-fusion/slide-deck-creator.webp)
 *Slide-deck mode: choose a deck category and fork an example as your starting point.*
 
 ## Install and try it

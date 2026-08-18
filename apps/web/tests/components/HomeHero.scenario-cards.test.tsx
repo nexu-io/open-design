@@ -82,29 +82,39 @@ describe('HomeHero scenario cards', () => {
     openTemplatePicker();
     expect(
       screen.getByTestId('home-hero-template-wedge-prototype').getAttribute('aria-label'),
-    ).toContain('UI Mockup');
+    ).toContain('Prototype');
     expect(
       screen.getByTestId('home-hero-template-wedge-deck').getAttribute('aria-label'),
     ).toContain('Slide deck');
   });
 
-  it('leads the create rail with UI Mockup, then Slide deck, and trails Website clone', () => {
+  it('uses the fixed ten-item Home creation hierarchy in product order', () => {
     const ordered = orderedCreateChips();
     const ids = ordered.map((chip) => chip.id);
-    expect(ids.slice(0, 2)).toEqual(['prototype', 'deck']);
-    // Website clone sits behind every other explicit rail type (only the
-    // unlisted catalog tail, e.g. Brand Kit, follows), so the visible pill
-    // row overflows it into the 全部 popover at typical widths.
-    expect(ids.indexOf('web-clone')).toBeGreaterThan(ids.indexOf('audio'));
+    expect(ids).toEqual([
+      'prototype',
+      'deck',
+      'image',
+      'document',
+      'hyperframes',
+      'web-clone',
+      'video',
+      'audio',
+      'live-artifact',
+      'webgl',
+    ]);
+    expect(ids).not.toContain('wireframe');
+    expect(ids).not.toContain('mobile');
   });
 
-  it('adds the finer-grained scenarios as templates routed to a scenario plugin', () => {
+  it('keeps nested prototype scenarios executable without exposing them as top-level templates', () => {
     renderHero();
     openTemplatePicker();
-    for (const id of ['wireframe', 'mobile', 'document']) {
-      expect(screen.getByTestId(`home-hero-template-wedge-${id}`)).toBeTruthy();
-      expect(findChip(id)?.action.kind).toBe('apply-scenario');
-    }
+    expect(screen.queryByTestId('home-hero-template-wedge-wireframe')).toBeNull();
+    expect(screen.queryByTestId('home-hero-template-wedge-mobile')).toBeNull();
+    expect(screen.getByTestId('home-hero-template-wedge-document')).toBeTruthy();
+    expect(findChip('wireframe')?.action.kind).toBe('apply-scenario');
+    expect(findChip('mobile')?.action.kind).toBe('apply-scenario');
     // Wireframe reuses the web-prototype seed at lo-fi fidelity.
     expect(findChip('wireframe')?.action).toMatchObject({
       pluginId: 'example-web-prototype',
@@ -133,5 +143,17 @@ describe('HomeHero scenario cards', () => {
     fireEvent.click(submit);
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onSubmitScenario).not.toHaveBeenCalled();
+  });
+
+  it('uses the nested Prototype scene to scope empty-composer carousel suggestions', async () => {
+    placeholderCarouselMock.reportScenario = true;
+    renderHero({
+      activeChipId: 'prototype',
+      activePrototypeSubtypeId: 'mobile',
+    });
+
+    await waitFor(() => {
+      expect(placeholderCarouselMock.reportedScenarioId).toBe('app-idea');
+    });
   });
 });

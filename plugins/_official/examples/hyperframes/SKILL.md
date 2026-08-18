@@ -33,9 +33,9 @@ od:
 
 HTML is the source of truth for video. A composition is an HTML file with `data-*` attributes for timing, a GSAP timeline for animation, and CSS for appearance. The framework handles clip visibility, media playback, and timeline sync.
 
-## Open Design integration (load-bearing for this surface)
+## OpenDesign integration (load-bearing for this surface)
 
-When this skill runs inside Open Design (i.e. `$OD_PROJECT_DIR` is set), the
+When this skill runs inside OpenDesign (i.e. `$OD_PROJECT_DIR` is set), the
 output flow is fixed: only the rendered `.mp4` should land in the project
 root. Composition source files (`hyperframes.json`, `meta.json`,
 `index.html`, assets) belong inside a hidden cache directory so they don't

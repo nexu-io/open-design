@@ -9,7 +9,7 @@ const tr: DeepPartial<CodexSlidesCopy> = {
   heading: "Kodlama ajanının içindeki yapay zekâ slayt stüdyosu",
   lead:
     "Çoğu yapay zekâ slayt üreticisi tüm işi tek bir istemin arkasına saklar ve sana yalnızca bir dosya verir. Codex Slides ise zincirin tamamını Codex içinde canlı tutar — araştırma, taslak, görsel yön, render, düzenleme, sunum, dışa aktarma — ve her sunum kendi diskinde kalıcı bir proje olarak kalır. Image-native yaklaşım sayesinde her slayt, metni değiştirilmiş bir şablon değil, eksiksiz bir görsel tuvaldir.",
-  downloadCta: "Open Design'ı indir",
+  downloadCta: "OpenDesign'ı indir",
   heroAlt:
     "Codex Slides — solda tarayıcıdaki slayt stüdyosunu yöneten Codex, sağda render edilmiş bir pazar raporu slaydı",
 
@@ -105,9 +105,9 @@ const tr: DeepPartial<CodexSlidesCopy> = {
     "Depoyu bir eklenti pazarı olarak ekle, eklentiyi kur, Codex'i yeniden başlat ve yeni bir görev aç. Eklenti desteği olan Codex, Node.js 20 veya üzeri ve tek bir `codex login` yeterli — varsayılan akış için ayrı bir OpenAI anahtarı ya da `.env` dosyası gerekmez.",
 
   finalEyebrow: "Sonraki adım",
-  tiebackTitle: "Open Design ailesinden",
+  tiebackTitle: "OpenDesign ailesinden",
   tiebackBody:
-    "Open Design, hâlihazırda kullandığın kodlama ajanının dışında duran açık ve local-first tasarım çalışma alanıdır. Codex Slides ise aynı fikrin sunumlara çevrilmiş hali: ajanın işi açıkta yapar, proje senin makinende kalır ve hiçbir şey bir aboneliğin arkasına kilitlenmez. Slaytların ötesindeki tam tasarım araç seti için Open Design uygulamasını edin.",
+    "OpenDesign, hâlihazırda kullandığın kodlama ajanının dışında duran açık ve local-first tasarım çalışma alanıdır. Codex Slides ise aynı fikrin sunumlara çevrilmiş hali: ajanın işi açıkta yapar, proje senin makinende kalır ve hiçbir şey bir aboneliğin arkasına kilitlenmez. Slaytların ötesindeki tam tasarım araç seti için OpenDesign uygulamasını edin.",
 
   schemaAlternateName: "Codex içindeki açık kaynak yapay zekâ slayt stüdyosu",
   schemaWhatQuestion: "Codex Slides nedir?",
@@ -119,9 +119,9 @@ const tr: DeepPartial<CodexSlidesCopy> = {
   schemaExportQuestion: "Codex Slides gerçek PowerPoint dosyaları dışa aktarabilir mi?",
   schemaExportAnswer:
     "Evet. Codex Slides, ikisi de projenin konuşmacı notlarını koruyan gerçek bir PPTX ve baskıya hazır bir PDF dışa aktarır; render kalitesi 1K/2K/4K ve beş en boy oranı desteklenir (16:9, 4:3, 1:1, 9:16, 3:4). Image-native olduğu için dışa aktarılan PPTX slaytları, tek tek düzenlenebilir PowerPoint şekilleri yerine tam sayfa görseller içerir; düzenlenebilir şekilli dışa aktarma yol haritasındadır.",
-  schemaRelationQuestion: "Codex Slides, Open Design ile ilişkili mi?",
+  schemaRelationQuestion: "Codex Slides, OpenDesign ile ilişkili mi?",
   schemaRelationAnswer:
-    "Evet. Codex Slides, Open Design'ın arkasındaki ekibin kardeş projesidir — aynı açık, local-first ve agent-native yaklaşımın tasarım dosyaları yerine sunumlara uygulanmış hali.",
+    "Evet. Codex Slides, OpenDesign'ın arkasındaki ekibin kardeş projesidir — aynı açık, local-first ve agent-native yaklaşımın tasarım dosyaları yerine sunumlara uygulanmış hali.",
 };
 
 export default tr;

@@ -68,7 +68,7 @@ export type RuntimeContext = {
   newSessionId?: string;
   // Per-run plugin isolation for agent subprocesses. External Plugin entry
   // points use this for Local Codex so the child cannot recursively load the
-  // same Codex Plugin and route itself into another Open Design workflow.
+  // same Codex Plugin and route itself into another OpenDesign workflow.
   // Operator-wide overrides remain owned by each runtime definition.
   disablePlugins?: boolean;
 };
@@ -97,7 +97,7 @@ export type RuntimeListModels = {
 };
 
 export type RuntimeVersionPolicy = {
-  /** Exact version strings exercised by this Open Design build. */
+  /** Exact version strings exercised by this OpenDesign build. */
   supportedVersions: string[];
   /** Fail closed when the version probe fails or returns no usable version. */
   requireVersion: true;

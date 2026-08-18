@@ -3,7 +3,7 @@
  * /agents/deepseek-harness-design/ — agent detail page (industrial long-form).
  *
  * Captures "deepseek harness", "deepseek harness design", "dsh agent",
- * and "deepseek harness setup" intent and drives to Open Design. When the
+ * and "deepseek harness setup" intent and drives to OpenDesign. When the
  * agent guide carries a `rich` payload this renders the deep how-to
  * layout (hero CTA + sectioned long-form + images); otherwise it falls
  * back to the compact layout. Linked from the `/agents/` hub.
@@ -29,7 +29,7 @@ const page = copy.agentGuides[SLUG] ?? getInfoPageCopy('en').agentGuides[SLUG]!;
 const rich = page.rich;
 const tutorial = deepseekHarnessTutorialCopy(page);
 
-// This is an Open Design acquisition page: the hero download is the primary
+// This is an OpenDesign acquisition page: the hero download is the primary
 // action in every locale, followed by the Discord and Feishu community rooms.
 // Match by stable href so translated labels are kept.
 const heroCtas = rich ? deepseekHarnessHeroCtas(rich.heroCtaActions) : [];
@@ -39,8 +39,12 @@ const finalCtas = rich ? downloadFirstCtas(rich.ctaActions) : [];
 // the existing section IDs stable for inbound links and SEO.
 const DESIGN_SECTION_ORDER = [
   'why-design',
+  'gui',
   'setup',
   'open-design',
+  'detect-harness',
+  'connect-profile',
+  'first-design-task',
   'design-workflow',
   'plugins',
   'pitfalls',
@@ -98,7 +102,7 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: homeUrl },
       { '@type': 'ListItem', position: 2, name: copy.agents.breadcrumb, item: agentsHubUrl },
       { '@type': 'ListItem', position: 3, name: page.breadcrumb, item: pageUrl },
     ],
@@ -137,7 +141,7 @@ const jsonLd = [
 
 <Layout title={tutorial.title} description={page.description} active="agent" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <a href={href('/agents/')}>{copy.agents.breadcrumb}</a>
     <span>/</span>

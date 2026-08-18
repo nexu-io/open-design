@@ -333,7 +333,7 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
     });
   });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
 
   // Cloud-first onboarding no longer contains the legacy runtime/About-you/
   // Product-design survey. A signed-in user accepts the recommended Hosted
@@ -342,7 +342,7 @@ test('[P1] onboarding lands on the home composer without a recommended-start str
   await expect(cloudPrimary).toBeEnabled();
   await cloudPrimary.click();
   await expect(page.getByRole('heading', { name: /Choose your model source|选择模型来源/i })).toBeVisible();
-  await page.getByRole('radio', { name: /Open Design Hosted/i }).click();
+  await page.getByRole('radio', { name: /OpenDesign Hosted/i }).click();
   await page.getByRole('button', { name: /^Continue$/i }).click();
 
   // Finishing model-source setup lands the user on Home with the composer
@@ -416,7 +416,7 @@ test('[P1] home view exposes the redesigned hero, recent projects, and starters'
   // `recent-projects-view-all` button — so `HomeView.onViewAllProjects` is
   // wired but unreachable. Drive the route directly until an entry returns.
   await page.goto('/projects', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page).toHaveURL(/\/projects$/);
   await expect(page.getByTestId('entry-view-projects')).toBeVisible();
 });
@@ -992,7 +992,7 @@ test('[P1] Use everywhere guide uses daemon MCP install info and copies an agent
   // With the topbar's "Use everywhere" button gone (#5517) the Integrations
   // route is the entry; its default tab is still the Use everywhere guide.
   await page.goto('/integrations', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
   await expect(page.getByRole('heading', { name: 'Integrations' })).toBeVisible();
   // Landing on the route directly opens the view's own default tab, so select
   // the Use everywhere guide explicitly.
@@ -1083,7 +1083,7 @@ test('[P1] rail destinations navigate and Home keeps its composer execution pill
   await expect(page.getByTestId('inline-model-switcher-popover')).toHaveCount(0);
 });
 
-test('[P0] @critical home composer routes free-form prompts through the default deck scenario', async ({ page }) => {
+test('[P0] @critical home composer routes free-form prompts through the default prototype scenario', async ({ page }) => {
   await gotoEntryHome(page);
 
   await expect(page.getByTestId('composer-mode-trigger')).toHaveAttribute('aria-label', 'Mode: Design');
@@ -1105,12 +1105,12 @@ test('[P0] @critical home composer routes free-form prompts through the default 
     pluginInputs?: Record<string, unknown>;
     metadata?: { kind?: string };
   };
-  expect(body.name).toBe('Write an Operating Review like a Disciplined COO');
+  expect(body.name).toBe('Web Prototype');
   expect(body.pendingPrompt).toBe(prompt);
   expect(body.conversationMode).toBe('design');
-  expect(body.pluginId).toBe('example-simple-deck');
-  expect(body.pluginInputs).toMatchObject({ deckType: 'pitch deck' });
-  expect(body.metadata?.kind).toBe('deck');
+  expect(body.pluginId).toBe('example-web-prototype');
+  expect(body.pluginInputs).toMatchObject({ artifactKind: 'web prototype' });
+  expect(body.metadata?.kind).toBe('prototype');
 });
 
 test('[P0] @critical home working directory creates the project with linked dirs instead of importing files', async ({ page }) => {
@@ -1316,12 +1316,12 @@ test('[P0] @critical home hero attachment input stages files, enables submit, an
 
   const input = page.getByTestId('home-hero-file-input');
   const submit = page.getByTestId('home-hero-submit');
-  // Fresh Home now locks submit until its default deck route has resolved.
+  // Fresh Home locks submit until its default prototype route has resolved.
   // Under the grouped CI pool that catalogue binding can outlive Playwright's
   // default assertion timeout, so wait on the user-visible routed state before
   // checking the attachment lifecycle rather than racing the seed effect.
   await expect(page.getByTestId('home-hero-template-trigger')).toContainText(
-    /Slide deck|幻灯片|投影片/i,
+    /Prototype|原型/i,
     { timeout: T.long },
   );
   await expect(submit).toBeEnabled({ timeout: T.long });
@@ -1594,8 +1594,8 @@ async function dispatchAmbientWorkspaceEvent(
 
 async function gotoEntryHome(page: Page) {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.getByText('Loading Open Design…').waitFor({ state: 'hidden', timeout: T.long });
-  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve Open Design' });
+  await page.getByText('Loading OpenDesign…').waitFor({ state: 'hidden', timeout: T.long });
+  const privacyDialog = page.getByRole('dialog').filter({ hasText: 'Help us improve OpenDesign' });
   if (await privacyDialog.isVisible()) {
     await privacyDialog.getByRole('button', { name: /I get it|not now|got it|don't share/i }).click();
     await expect(privacyDialog).toHaveCount(0);

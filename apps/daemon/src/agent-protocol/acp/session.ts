@@ -613,7 +613,7 @@ export function attachAcpSession({
     clearStageTimer();
     stdin.end();
     // Some ACP agents keep the child process alive after stdin closes,
-    // waiting for another prompt. Each Open Design run owns one process per
+    // waiting for another prompt. Each OpenDesign run owns one process per
     // turn, so close it once this prompt is cleanly complete.
     const cleanExitTimer = setTimeout(() => {
       if (!child.killed) child.kill('SIGTERM');

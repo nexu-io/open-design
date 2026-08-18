@@ -160,26 +160,26 @@ const jsonLd = [
     '@context': 'https://schema.org',
     '@type': 'BreadcrumbList',
     itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Open Design', item: absUrl('/') },
+      { '@type': 'ListItem', position: 1, name: 'OpenDesign', item: absUrl('/') },
       { '@type': 'ListItem', position: 2, name: teamContent.breadcrumbLabel, item: absUrl('/pricing/') },
     ],
   },
   {
     '@context': 'https://schema.org',
     '@type': 'Product',
-    name: 'Open Design Subscription',
+    name: 'OpenDesign Subscription',
     description,
     offers: [
       {
         '@type': 'Offer',
-        name: 'Open Design free',
+        name: 'OpenDesign free',
         price: '0',
         priceCurrency: 'USD',
         url: CLOUD_CONSOLE_URL,
       },
       ...tiers.map((t) => ({
         '@type': 'Offer',
-        name: `Open Design ${t.tier}`,
+        name: `OpenDesign ${t.tier}`,
         price: String(t.monthly.priceUsd),
         priceCurrency: 'USD',
         url: CLOUD_CONSOLE_URL,
@@ -187,7 +187,7 @@ const jsonLd = [
       ...teamTiers.flatMap((t) => [
         {
           '@type': 'Offer',
-          name: `Open Design ${teamTierLabel(t)} monthly`,
+          name: `OpenDesign ${teamTierLabel(t)} monthly`,
           price: String(t.monthly.priceUsd),
           priceCurrency: 'USD',
           url: CLOUD_CONSOLE_URL,
@@ -199,7 +199,7 @@ const jsonLd = [
         },
         {
           '@type': 'Offer',
-          name: `Open Design ${teamTierLabel(t)} yearly`,
+          name: `OpenDesign ${teamTierLabel(t)} yearly`,
           price: String(t.yearly.priceUsd),
           priceCurrency: 'USD',
           url: CLOUD_CONSOLE_URL,
@@ -217,7 +217,7 @@ const jsonLd = [
 
 <Layout title={title} description={description} active="pricing" jsonLd={jsonLd}>
   <nav class="breadcrumb" aria-label="Breadcrumb">
-    <a href={href('/')}>Open Design</a>
+    <a href={href('/')}>OpenDesign</a>
     <span>/</span>
     <span aria-current="page">{teamContent.breadcrumbLabel}</span>
   </nav>
@@ -469,7 +469,7 @@ const jsonLd = [
 
     <section class="pr-multimodal" aria-labelledby="pr-multimodal-title">
       <div class="pr-multimodal-copy">
-        <span class="pr-multimodal-kicker">Open Design Cloud</span>
+        <span class="pr-multimodal-kicker">OpenDesign Cloud</span>
         <h2 id="pr-multimodal-title">{L.multimodalTitle}</h2>
         <p>{L.multimodalDescription}</p>
       </div>

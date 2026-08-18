@@ -1188,7 +1188,7 @@ export interface ConnectorActionResult {
 }
 
 function popupBlockedMessage(): string {
-  return 'Popup blocked. Allow popups for Open Design and try again.';
+  return 'Popup blocked. Allow popups for OpenDesign and try again.';
 }
 
 export async function openExternalUrl(url: string): Promise<boolean> {
@@ -1695,11 +1695,13 @@ export async function deployProjectFile(
     const message = payload?.error?.message || payload?.message || `Deploy failed (${resp.status})`;
     // Preserve a queryable failure code for analytics (`deployErrorCode` reads
     // `.code` first). The daemon deploy route (apps/daemon/src/routes/deploy.ts)
-    // collapses every non-404 failure's code to a generic `BAD_REQUEST` (and 404
-    // to `FILE_NOT_FOUND`) while keeping the REAL provider HTTP status on the
-    // response and the real message in the body — so ignore those envelope codes
-    // and fall back to `HTTP_${resp.status}`, which then buckets as HTTP_403 /
-    // HTTP_429 / HTTP_500 instead of collapsing every failure into one code.
+    // names the causes it can classify (NOT_HTML, MISSING_REFERENCES, …) and
+    // falls back to a generic `BAD_REQUEST` (404 → `FILE_NOT_FOUND`) for a
+    // provider transport failure, where it keeps the REAL provider HTTP status
+    // on the response and the real message in the body — so ignore those generic
+    // envelope codes and fall back to `HTTP_${resp.status}`, which then buckets
+    // as HTTP_403 / HTTP_429 / HTTP_500 instead of collapsing every failure into
+    // one code.
     const rawCode = payload?.error?.code || payload?.code;
     const code = rawCode && !GENERIC_DEPLOY_ENVELOPE_CODES.has(rawCode) ? rawCode : `HTTP_${resp.status}`;
     throw Object.assign(new Error(message), { code });
@@ -2289,25 +2291,23 @@ export function projectFileUrl(
 }
 
 /**
- * Mint the existing daemon-owned, project-scoped preview capability and return
- * its directory URL for srcDoc relative-resource resolution. The daemon binds
- * the capability to the exact Workspace identity and re-authorizes every asset
- * read, so callers must not manufacture a base from raw-file query scope.
+ * Mint the daemon-owned, project-scoped preview capability and return its
+ * directory URL for srcDoc relative-resource resolution. Project ownership is
+ * persisted by the daemon, so the browser must not duplicate that authority in
+ * query parameters or headers. The opaque preview scope authorizes subsequent
+ * asset navigation without exposing Workspace identifiers in iframe URLs.
  */
 export async function fetchProjectPreviewBaseHref(
   projectId: string,
   name: string,
-  workspaceContext: WorkspaceCollabContext,
+  _workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<string | null> {
   const params = new URLSearchParams({ file: name });
-  const requestUrl = workspaceResourceUrl(
-    `/api/projects/${encodeURIComponent(projectId)}/preview-url?${params.toString()}`,
-    workspaceContext,
-  );
+  const requestUrl =
+    `/api/projects/${encodeURIComponent(projectId)}/preview-url?${params.toString()}`;
   try {
     const response = await fetch(requestUrl, {
       cache: 'no-store',
-      headers: workspaceProjectHeaders(workspaceContext),
     });
     if (!response.ok) return null;
     const body = (await response.json()) as ProjectPreviewUrlResponse;
@@ -2952,7 +2952,7 @@ export async function uploadProjectFiles(
 export function projectRawUrl(
   projectId: string,
   filePath: string,
-  workspaceContext?: WorkspaceCollabContext | null,
+  _workspaceContext?: WorkspaceCollabContext | null,
 ): string {
   // Encode each path segment individually so a slash inside the file
   // path stays a path separator, not %2F.
@@ -2960,10 +2960,7 @@ export function projectRawUrl(
     .split('/')
     .map((seg) => encodeURIComponent(seg))
     .join('/');
-  return workspaceResourceUrl(
-    `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`,
-    workspaceContext,
-  );
+  return `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`;
 }
 
 export function designSystemStaticUrl(

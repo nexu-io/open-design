@@ -3,7 +3,7 @@
   "version": "0.19.2",
   "private": true,
   "type": "module",
-  "description": "Shared pure TypeScript contracts for the Open Design web/daemon boundary.",
+  "description": "Shared pure TypeScript contracts for the OpenDesign web/daemon boundary.",
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [

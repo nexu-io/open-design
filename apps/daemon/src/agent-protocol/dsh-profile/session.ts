@@ -222,7 +222,7 @@ export function attachDshProfileSession({
           return;
         }
         if (frame.status === 'cancelled' && !aborted) {
-          fail('DeepSeek Harness profile cancelled a run that Open Design did not cancel.');
+          fail('DeepSeek Harness profile cancelled a run that OpenDesign did not cancel.');
           return;
         }
         finish(frame.status);

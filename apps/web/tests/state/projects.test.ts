@@ -20,6 +20,7 @@ import {
   installPluginSource,
   listPlugins,
   listPluginsFresh,
+  listMessages,
   invalidatePluginCatalogCache,
   listProjects,
   listWorkspaceProjectSummaries,
@@ -82,6 +83,30 @@ function teamWorkspaceContext(
     ...overrides,
   };
 }
+
+describe('listMessages', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('rejects a failed read instead of reporting an authoritative empty transcript', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => Response.json({
+      error: {
+        code: 'WORKSPACE_CONTEXT_REQUIRED',
+        message: 'workspace context is required',
+        retryable: true,
+      },
+    }, { status: 401 })));
+
+    await expect(listMessages('project-1', 'conversation-1')).rejects.toMatchObject({
+      name: 'ProjectMessageListError',
+      status: 401,
+      code: 'WORKSPACE_CONTEXT_REQUIRED',
+      retryable: true,
+      message: 'workspace context is required',
+    });
+  });
+});
 
 describe('createProject local plugin identity', () => {
   afterEach(() => {

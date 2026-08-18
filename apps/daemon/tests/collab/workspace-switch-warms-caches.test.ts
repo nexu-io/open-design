@@ -30,6 +30,7 @@ import {
 let server: http.Server | null = null;
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   if (server) {
     const toClose = server;
     server = null;
@@ -79,6 +80,7 @@ async function startSwitchServer(options: {
   initial?: string;
   /** What the membership directory lists. Default: both workspaces, live. */
   directory?: WorkspaceDirectoryItem[];
+  configuredEnv?: () => Record<string, string>;
 }) {
   let pinned: string | null = options.initial ?? PERSONAL;
   const onWorkspaceSwitched = vi.fn<(workspaceId: string) => void>();
@@ -110,6 +112,7 @@ async function startSwitchServer(options: {
     listWorkspaceDirectory: async () =>
       options.directory ?? [directoryItem(PERSONAL), directoryItem(TEAM)],
     onWorkspaceSwitched,
+    ...(options.configuredEnv ? { configuredEnv: options.configuredEnv } : {}),
   });
 
   server = http.createServer(app);
@@ -182,6 +185,25 @@ describe('PUT /api/workspace/active announces a confirmed switch for cache warmi
     // response still describes the workspace the user picked.
     expect((result.body.context as { workspaceId?: string }).workspaceId).toBe(TEAM);
     expect(api.onWorkspaceSwitched).toHaveBeenCalledWith(TEAM);
+  });
+
+  it('uses the selected AMR profile origin when the response is synthesized from the directory', async () => {
+    vi.stubEnv('OPEN_DESIGN_AMR_PROFILE', 'prod');
+    vi.stubEnv('OD_VELA_WEB_URL', 'https://prod.example');
+    vi.stubEnv('OD_VELA_WEB_URLS', JSON.stringify({
+      prod: 'https://prod.example',
+      'feature-test': 'https://feature.example',
+    }));
+    const api = await startSwitchServer({
+      currentContext: () => null,
+      configuredEnv: () => ({ OPEN_DESIGN_AMR_PROFILE: 'feature-test' }),
+    });
+
+    const result = await api.switchTo(TEAM);
+
+    expect((result.body.context as { workspaceSettingsUrl?: string }).workspaceSettingsUrl).toBe(
+      'https://feature.example/settings?workspaceId=ws-team&source=open_design',
+    );
   });
 
   it('keeps the switch when the context read still describes the old workspace', async () => {

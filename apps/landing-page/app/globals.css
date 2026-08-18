@@ -452,7 +452,7 @@ body::before {
   .locale-menu { animation: none; }
   .locale-trigger-caret { transition: none; }
 }
-/* ---------- Open Design Cloud header account ---------- */
+/* ---------- OpenDesign Cloud header account ---------- */
 /* The avatar menu stays out of layout until a live cloud session is found. */
 .nav-account {
   display: inline-flex;
@@ -482,7 +482,7 @@ body::before {
   outline-offset: 2px;
 }
 /* Circular avatar — a disc reads unmistakably as a user avatar. Dark tile +
-   single initial mirrors Open Design Cloud's identity styling. */
+   single initial mirrors OpenDesign Cloud's identity styling. */
 .nav-avatar,
 .nav-avatar-fallback {
   width: 32px;
@@ -735,7 +735,7 @@ body::before {
   font-size: 18px;
 }
 /*
- * Combined brand lockup — the glyph + "Open Design" wordmark as a single
+ * Combined brand lockup — the glyph + "OpenDesign" wordmark as a single
  * SVG (`/logo-lockup.svg`, viewBox 225×83). Sized by height so the glyph
  * keeps roughly its previous 44px optical weight while the wordmark sets
  * its own width. Replaces the old `.brand-mark` glyph + `.brand-name`
@@ -1016,7 +1016,34 @@ body::before {
   display: flex;
   gap: 0;
   min-width: 0;
-  max-width: min(94vw, 640px);
+  /* Five columns since the 2026-08 nav consolidation (Plugin + the three
+     former Solution groups + Agent). Anchored at `left: -16px` the wide
+     panel runs off the right viewport edge, so the li goes static and the
+     panel centers against `.container` (the nearest positioned ancestor —
+     NOT `.site-chrome`/the viewport). The mobile drawer resets
+     left/transform via its `position: static` rule. */
+  max-width: min(94vw, 1000px);
+}
+/* Desktop only: the mobile drawer flattens dropdowns to `position: static`,
+   where a centering transform would shift them sideways. The Product li goes
+   static so the wide panel positions against `.container` and centers on it —
+   anchored to the li it overflows narrow desktops. */
+@media (min-width: 1081px) {
+  .nav-links li.nav-item-mega { position: static; }
+  /* With the li static, absolutely-positioned descendants resolve against
+     `.container` (the nearest positioned ancestor), so the shared
+     `left: 100%` hover-bridge ::after would land at the container's right
+     edge — a stray hit target nowhere near the trigger. Drop it here; the
+     full-width mega panel itself bridges the hover. */
+  .nav-links li.nav-item-mega::after { content: none; }
+  .nav-dropdown-mega {
+    left: 50%;
+    transform: translateX(-50%) translateY(-4px);
+  }
+  .nav-links li.has-dropdown:hover .nav-dropdown-mega,
+  .nav-links li.has-dropdown:focus-within .nav-dropdown-mega {
+    transform: translateX(-50%) translateY(0);
+  }
 }
 .nav-dropdown-mega .nav-mega-col {
   display: flex;
@@ -1024,6 +1051,31 @@ body::before {
   flex: 0 0 auto;
   min-width: 216px;
 }
+.nav-dropdown-mega .nav-mega-col-merged { min-width: 164px; }
+
+/* GitHub star chip beside the Download CTA (2026-08 nav consolidation):
+   quiet outline pill so Download stays the bar's only strong CTA. Narrow
+   viewports drop the chip first — Download always survives. */
+.nav-star {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #595959;
+  border: 1px solid #15140f24;
+  border-radius: 999px;
+  padding: 7px 13px;
+  margin-right: 10px;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.nav-star:hover { color: var(--ink); border-color: #15140f4d; }
+@media (max-width: 1160px) {
+  .nav-star { display: none; }
+}
+
 .nav-dropdown-mega .nav-mega-col + .nav-mega-col {
   margin-left: 6px;
   padding-left: 6px;
@@ -3186,7 +3238,7 @@ section.tight { padding: 90px 0; }
  * bone/paper palette; no dark panels.
  */
 /* ---------- Labs product-window showcase ----------
- * The Open Design deck editor rendered as a static window, sitting on a
+ * The OpenDesign deck editor rendered as a static window, sitting on a
  * full-bleed canvas (`heroImage`). The mode Dock floats over the window's
  * lower edge and swaps the deck preview (`.la-slide img`). All chrome below
  * is purely presentational (SSR/no-JS). */
@@ -4323,7 +4375,7 @@ section.tight { padding: 90px 0; }
   font-family: var(--sans);
   /* Fluid within the 238px safe area: caps at 42px on wide desktop, scales down
      as the two-column copy track narrows so the headline fits without the
-     "Open Design" line wrapping awkwardly on small/medium screens. */
+     "OpenDesign" line wrapping awkwardly on small/medium screens. */
   font-size: clamp(26px, 3vw, 42px);
   font-weight: 700;
   letter-spacing: -0.022em;
@@ -4339,7 +4391,7 @@ section.tight { padding: 90px 0; }
   font-style: italic;
   font-weight: 500;
 }
-/* "正在一起构建 Open Design" stays on its own single line at every breakpoint
+/* "正在一起构建 OpenDesign" stays on its own single line at every breakpoint
    (the content-sized copy track guarantees room, so it no longer overflows). */
 .testimonial-copy h2 .testi-post { white-space: nowrap; }
 .author {
@@ -4723,7 +4775,7 @@ section.tight { padding: 90px 0; }
 .cta-dance.precise-bg-in::before {
   background-image: url('/cta-bg.webp?v=3');
 }
-/* Open Design Home window floating over the mural, centered in the lower half;
+/* OpenDesign Home window floating over the mural, centered in the lower half;
    its bottom is clipped by the block's overflow:hidden (matching the comp). */
 .cta-window {
   position: relative;
@@ -4897,7 +4949,7 @@ section.tight { padding: 90px 0; }
   letter-spacing: -0.022em;
   color: var(--ink);
   margin: 0 0 16px;
-  /* CJK titles ("Open Design 订阅") must wrap at the space, never inside the
+  /* CJK titles ("OpenDesign 订阅") must wrap at the space, never inside the
      CJK word; balance keeps the two lines visually even. */
   word-break: keep-all;
   text-wrap: balance;
@@ -5384,7 +5436,7 @@ footer .container {
 /* ---------- footer masthead ----------
  *
  * Masthead sign-off under the footer link columns: a container-filling
- * two-tone "Open Design." wordmark. One class contract shared by
+ * two-tone "OpenDesign." wordmark. One class contract shared by
  * `site-footer.astro` and the homepage footer in `page.tsx`.
  */
 .foot-masthead {
@@ -5395,7 +5447,7 @@ footer .container {
   font-weight: 800;
   /* Fills the 964px column at the 1440px design width and degrades fluidly.
      The lower bound follows the viewport (10.4vw) rather than a fixed 52px
-     floor: "Open Design." is ~5.75em wide here, so the old 52px floor rendered
+     floor: "OpenDesign." is ~5.75em wide here, so the old 52px floor rendered
      ~299px and overflowed the padded mobile footer box (100vw - 48px ≈ 272px on
      a 320px phone), where the page's global overflow-x:hidden clipped it.
      10.4vw always satisfies 10.4vw·5.75 ≤ 100vw-48, so the sign-off fits at
@@ -6682,3 +6734,81 @@ footer .container {
     min-height: 44px;
   }
 }
+
+/* Black-pill download CTA. The hero variant breathes + sheens; every other
+   placement stays static (constant box-shadow animations are scroll-jank
+   fuel on this image-heavy page). */
+.hm-dl {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 13px;
+  background: var(--ink);
+  color: #fff;
+  border-radius: 999px;
+  padding: 15px 30px 15px 15px;
+  font-family: var(--sans);
+  font-size: 17px;
+  font-weight: 750;
+  cursor: pointer;
+  overflow: hidden;
+  text-decoration: none;
+  box-shadow: 0 16px 30px -16px #26262680;
+  transition: transform 0.18s cubic-bezier(0.23, 1, 0.32, 1), box-shadow 0.25s;
+}
+.hm-dl .hm-di {
+  font-style: normal;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: var(--coral);
+  color: #0d2601;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 17px;
+  flex: none;
+  transition: transform 0.18s;
+}
+.hm-dl:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 22px 40px -18px #26262699, 0 0 0 5px #63fe1338;
+}
+.hm-dl:hover .hm-di { transform: translateY(2px); }
+.hm-dl:active { transform: translateY(-1px) scale(0.99); }
+.hm-dl::after {
+  content: '';
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ff3b30;
+}
+.hm-dl .hm-sheen { display: none; }
+.hm-dl-hero { animation: hm-dl-breathe 2.8s ease-in-out infinite; }
+.hm-dl-hero:hover { animation-play-state: paused; }
+.hm-dl-hero .hm-sheen {
+  display: block;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 35%, #ffffff2e 50%, transparent 65%);
+  transform: translateX(-120%);
+  animation: hm-dl-sheen 4.2s ease-in-out infinite;
+}
+@keyframes hm-dl-sheen {
+  0%, 62% { transform: translateX(-120%); }
+  82%, 100% { transform: translateX(120%); }
+}
+@keyframes hm-dl-breathe {
+  50% { box-shadow: 0 16px 30px -16px #26262680, 0 0 0 7px #63fe1322; }
+}
+.hm-dl-s { padding: 11px 22px 11px 11px; font-size: 14px; }
+.hm-dl-s .hm-di { width: 28px; height: 28px; font-size: 14px; }
+@media (prefers-reduced-motion: reduce) {
+  .hm-dl-hero, .hm-dl-hero .hm-sheen { animation: none; }
+}
+

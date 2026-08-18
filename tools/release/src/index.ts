@@ -9,14 +9,6 @@ cli
       await import("./metadata/prepare-beta.ts");
       return;
     }
-    if (channel === "betas") {
-      await import("./metadata/prepare-betas.ts");
-      return;
-    }
-    if (channel === "preview") {
-      await import("./metadata/prepare-preview.ts");
-      return;
-    }
     if (channel === "prerelease" || channel === "stable") {
       process.env.OPEN_DESIGN_RELEASE_CHANNEL = channel;
       await import("./metadata/prepare-stable.ts");

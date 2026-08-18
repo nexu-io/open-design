@@ -9,7 +9,7 @@ const de: DeepPartial<CodexSlidesCopy> = {
   heading: 'Das KI-Slide-Studio in deinem Coding-Agenten',
   lead:
     'Die meisten KI-Foliengeneratoren verstecken die Arbeit hinter einer einzigen Anfrage und reichen dir eine Datei. Codex Slides hält die ganze Kette in Codex sichtbar — Recherche, Gliederung, visuelle Richtung, Rendern, Bearbeiten, Präsentieren, Exportieren — und jedes Deck bleibt ein dauerhaftes Projekt auf deiner eigenen Festplatte. Bild-nativ: Jede Folie ist eine vollflächige visuelle Leinwand, keine Vorlage mit ausgetauschtem Text.',
-  downloadCta: 'Open Design herunterladen',
+  downloadCta: 'OpenDesign herunterladen',
   heroAlt:
     'Codex Slides — links Codex, das im Browser das Slide-Studio steuert, rechts eine fertig gerenderte Marktbericht-Folie',
 
@@ -107,7 +107,7 @@ const de: DeepPartial<CodexSlidesCopy> = {
   finalEyebrow: 'Nächster Schritt',
   tiebackTitle: 'Aus der Open-Design-Familie',
   tiebackBody:
-    'Open Design ist der offene, local-first Design-Workspace, der außerhalb des Coding-Agenten sitzt, den du ohnehin nutzt. Codex Slides ist dieselbe Idee, gerichtet auf Präsentationen: Dein Agent arbeitet sichtbar, das Projekt bleibt auf deiner Maschine, und nichts steckt hinter einem Abo. Für das volle Design-Toolkit jenseits der Folien hol dir die Open-Design-App.',
+    'OpenDesign ist der offene, local-first Design-Workspace, der außerhalb des Coding-Agenten sitzt, den du ohnehin nutzt. Codex Slides ist dieselbe Idee, gerichtet auf Präsentationen: Dein Agent arbeitet sichtbar, das Projekt bleibt auf deiner Maschine, und nichts steckt hinter einem Abo. Für das volle Design-Toolkit jenseits der Folien hol dir die Open-Design-App.',
 
   schemaAlternateName: 'Das quelloffene KI-Slide-Studio in Codex',
   schemaWhatQuestion: 'Was ist Codex Slides?',
@@ -119,9 +119,9 @@ const de: DeepPartial<CodexSlidesCopy> = {
   schemaExportQuestion: 'Kann Codex Slides echte PowerPoint-Dateien exportieren?',
   schemaExportAnswer:
     'Ja. Codex Slides exportiert eine echte PPTX und ein druckfertiges PDF, beide mit den Sprechernotizen des Projekts, in 1K/2K/4K-Renderqualität und in fünf Seitenverhältnissen (16:9, 4:3, 1:1, 9:16, 3:4). Da es bild-nativ arbeitet, enthalten exportierte PPTX-Folien vollflächige Bilder statt einzeln editierbarer PowerPoint-Formen; der Export mit editierbaren Formen steht auf der Roadmap.',
-  schemaRelationQuestion: 'Hat Codex Slides mit Open Design zu tun?',
+  schemaRelationQuestion: 'Hat Codex Slides mit OpenDesign zu tun?',
   schemaRelationAnswer:
-    'Ja. Codex Slides ist ein Schwesterprojekt des Teams hinter Open Design — derselbe offene, local-first, agent-native Ansatz, angewandt auf Präsentationen statt auf Designdateien.',
+    'Ja. Codex Slides ist ein Schwesterprojekt des Teams hinter OpenDesign — derselbe offene, local-first, agent-native Ansatz, angewandt auf Präsentationen statt auf Designdateien.',
 };
 
 export default de;

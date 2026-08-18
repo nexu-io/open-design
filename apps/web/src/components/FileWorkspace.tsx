@@ -357,6 +357,8 @@ interface Props {
    * true, edit affordances are withheld and a notice explains why.
    */
   viewerOnly?: boolean;
+  /** First-open placeholder: do not mount cached/write-capable workspace tabs. */
+  materializationPending?: boolean;
   /** Optional override for the read-only notice text. */
   readonlyNotice?: string;
   /**
@@ -367,6 +369,12 @@ interface Props {
    * have not yet been published. Null once caught up / not a shared project.
    */
   fileSyncBadge?: FileSyncBadgeState | null;
+}
+
+function noop(): void {}
+
+function rejectRenameWhileMaterializing(): null {
+  return null;
 }
 
 interface SketchState {
@@ -597,7 +605,7 @@ const COMMUNITY_PAGE_PRESETS: ProjectPagePreset[] = [
   {
     id: 'community-open-design-landing',
     category: 'prototype',
-    title: pageText('Open Design Landing', 'Open Design 落地页', 'Open Design 落地頁'),
+    title: pageText('OpenDesign Landing', 'OpenDesign 落地页', 'OpenDesign 落地頁'),
     description: pageText(
       'Editorial landing page with a strong hero, proof points, and product narrative.',
       '带强主视觉、信任证明和产品叙事的编辑风落地页。',
@@ -1352,6 +1360,7 @@ export function FileWorkspace({
   fileActionsBefore,
   headerActions,
   viewerOnly = false,
+  materializationPending = false,
   readonlyNotice,
   fileSyncBadge = null,
 }: Props) {
@@ -3923,7 +3932,7 @@ export function FileWorkspace({
             clearTabDragState();
           }}
         >
-          {designSystemProject ? (
+          {!materializationPending && designSystemProject ? (
             <button
               type="button"
               className={`ws-tab design-system-tab ${activeTab === DESIGN_SYSTEM_TAB ? 'active' : ''}`}
@@ -3942,9 +3951,9 @@ export function FileWorkspace({
           ) : null}
           <button
             type="button"
-            className={`ws-tab design-files-tab ${designFilesTabActive ? 'active' : ''}`}
+            className={`ws-tab design-files-tab ${materializationPending || designFilesTabActive ? 'active' : ''}`}
             role="tab"
-            aria-selected={designFilesTabActive}
+            aria-selected={materializationPending || designFilesTabActive}
             aria-label={designFilesTabTitle}
             tabIndex={0}
             data-testid="design-files-tab"
@@ -3960,7 +3969,7 @@ export function FileWorkspace({
             </span>
             <span className="ws-tab-label">{designFilesTabLabel}</span>
           </button>
-          {visibleOrderedWorkspaceTabs.map((entry) => {
+          {!materializationPending ? visibleOrderedWorkspaceTabs.map((entry) => {
             if (entry.kind === 'browser') {
               const browserTab = entry.browserTab;
               const browserUrl = browserTab.url?.trim() ?? '';
@@ -4046,9 +4055,9 @@ export function FileWorkspace({
                 onDragEnd={handlers.onDragEnd}
               />
             );
-          })}
+          }) : null}
         </div>
-        <div className="ws-add-tab">
+        {!materializationPending ? <div className="ws-add-tab">
           <button
             ref={launcherBtnRef}
             type="button"
@@ -4064,11 +4073,11 @@ export function FileWorkspace({
           >
             <Icon name="plus" size={15} />
           </button>
-        </div>
+        </div> : null}
         {/* Pinned to the right for project/file actions; the tab launcher sits
             next to the file tabs so its spatial relationship stays clear. */}
         <div className="ws-tabs-actions">
-          {fileActionsBefore ? (
+          {!materializationPending && fileActionsBefore ? (
             <div className="ws-tabs-file-actions-before">{fileActionsBefore}</div>
           ) : null}
           {/* Pure portal host. Whatever file is open owns these actions and
@@ -4082,12 +4091,12 @@ export function FileWorkspace({
             data-app-chrome-file-actions="true"
             hidden={!viewerFileActive}
           />
-          {headerActions ? (
+          {!materializationPending && headerActions ? (
             <div className="ws-tabs-project-actions">{headerActions}</div>
           ) : null}
         </div>
       </div>
-      {launcherOpen ? (
+      {!materializationPending && launcherOpen ? (
         <TabLauncherMenu
           anchor={launcherBtnRef.current}
           files={visibleFiles}
@@ -4137,7 +4146,7 @@ export function FileWorkspace({
           />
         </div>
       ) : null}
-      {viewerOnly ? (
+      {viewerOnly && !materializationPending ? (
         <div className="workspace-readonly-notice" role="status">
           <Icon name="lock" size={14} />
           <span>{readonlyNotice ?? t('workspace.readonlyNotice')}</span>
@@ -4163,7 +4172,7 @@ export function FileWorkspace({
             </button>
           </div>
         ) : null}
-        {browserTabs.filter((browserTab) => mountedBrowserTabIds.has(browserTab.id)).map((browserTab) => (
+        {!materializationPending ? browserTabs.filter((browserTab) => mountedBrowserTabIds.has(browserTab.id)).map((browserTab) => (
           <div
             key={`${projectId}:${browserTab.id}`}
             className={`ws-browser-panel ${activeTab === browserTab.id ? 'active' : ''}`}
@@ -4200,8 +4209,27 @@ export function FileWorkspace({
               }}
             />
           </div>
-        ))}
-        {activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
+        )) : null}
+        {materializationPending ? (
+          <DesignFilesPanel
+            projectId={projectId}
+            viewerOnly
+            downloadPending
+            files={[]}
+            folders={[]}
+            liveArtifacts={[]}
+            onRefreshFiles={noop}
+            onOpenFile={noop}
+            onOpenLiveArtifact={noop}
+            onRenameFile={rejectRenameWhileMaterializing}
+            onDeleteFile={noop}
+            onDeleteFiles={noop}
+            onUpload={noop}
+            onUploadFiles={noop}
+            onPaste={noop}
+            onNewSketch={noop}
+          />
+        ) : activeTab === DESIGN_SYSTEM_TAB && designSystemProject ? (
           <DesignSystemProjectPanel
             projectId={projectId}
             system={designSystemProject}
@@ -4431,7 +4459,7 @@ export function FileWorkspace({
             .
           </div>
         )}
-        {mountedHtmlViewerFiles.map((file) => {
+        {!materializationPending ? mountedHtmlViewerFiles.map((file) => {
           const workspaceActive = activeHtmlViewerFile?.name === file.name;
           return (
             <div
@@ -4464,8 +4492,8 @@ export function FileWorkspace({
               {renderFileViewer(file, workspaceActive)}
             </div>
           );
-        })}
-        {viewerFile ? (
+        }) : null}
+        {!materializationPending && viewerFile ? (
           <div
             ref={(element) => {
               syncInertAttribute(element, !viewerFileActive);
@@ -4495,7 +4523,7 @@ export function FileWorkspace({
           </div>
         ) : null}
       </div>
-      <PageCreatorDialog
+      {!materializationPending ? <PageCreatorDialog
         open={pageCreatorOpen}
         t={t}
         locale={locale}
@@ -4511,17 +4539,17 @@ export function FileWorkspace({
         onClose={() => {
           if (!pageCreating) setPageCreatorOpen(false);
         }}
-      />
-      <input
+      /> : null}
+      {!materializationPending ? <input
         ref={fileInputRef}
         type="file"
         multiple
         data-testid="design-files-upload-input"
         style={{ display: 'none' }}
         onChange={handleFilePicked}
-      />
+      /> : null}
       <AnimatePresence>
-        {showLibraryPicker ? (
+        {!materializationPending && showLibraryPicker ? (
           <LibraryPicker
             onClose={() => setShowLibraryPicker(false)}
             onConfirm={async (assets) => {
@@ -4551,7 +4579,7 @@ export function FileWorkspace({
         ) : null}
       </AnimatePresence>
       <AnimatePresence>
-        {quickSwitcherOpen ? (
+        {!materializationPending && quickSwitcherOpen ? (
           <QuickSwitcher
             projectId={projectId}
             files={visibleFiles}
@@ -6920,7 +6948,7 @@ function initialPrototypePage(title: string, body = DEFAULT_PROTOTYPE_PAGE_BODY)
   <main>
     <section class="hero">
       <div>
-        <div class="eyebrow">Open Design</div>
+        <div class="eyebrow">OpenDesign</div>
         <h1>${safeTitle}</h1>
         <p>${safeBody}</p>
       </div>
@@ -7062,7 +7090,7 @@ function initialSlidesPage(title: string, body = DEFAULT_SLIDES_PAGE_BODY): stri
   <div class="deck-shell">
     <main class="deck-stage" id="deck-stage">
       <section class="slide active cover" data-screen-label="01 Cover">
-        <div class="kicker">Open Design deck</div>
+        <div class="kicker">OpenDesign deck</div>
         <h1>${safeTitle}</h1>
         <p class="body">${safeBody}</p>
         <div class="num">01</div>
@@ -7200,7 +7228,7 @@ function initialDocumentPage(title: string, body = DEFAULT_DOCUMENT_PAGE_BODY): 
 </head>
 <body>
   <article>
-    <div class="meta">Open Design document</div>
+    <div class="meta">OpenDesign document</div>
     <h1>${safeTitle}</h1>
     <p>${safeBody}</p>
     <h2>Purpose</h2>

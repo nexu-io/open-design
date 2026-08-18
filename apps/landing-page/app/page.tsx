@@ -1,5 +1,5 @@
 /*
- * Open Design — Atelier Zero landing page.
+ * OpenDesign — Atelier Zero landing page.
  *
  * Mirrors `design-templates/open-design-landing/example.html` 1:1. When the canonical
  * example.html changes, mirror the diff here and into `app/globals.css`.
@@ -541,7 +541,7 @@ export default function Page({
                 <span className='hero-title-corner bl' aria-hidden='true' />
                 <span className='hero-title-corner br' aria-hidden='true' />
                 <span className='hero-title-brand'>
-                  <BlurText text='Open Design' by='words' start={0} />
+                  <BlurText text='OpenDesign' by='words' start={0} />
                 </span>
                 {/* Two-layer message: canonical category, then the strongest
                     localized design-system and output claim. The agent value
@@ -580,24 +580,18 @@ export default function Page({
                     rate-limited) it falls back to the /download/ page (the
                     per-platform picker) rather than the GitHub releases list. */}
                 <a
-                  className='btn btn-primary hero-download-attention'
+                  className='hm-dl hm-dl-hero'
                   href={href('/download/')}
                   data-download-cta
                   data-direct-download
                   data-download-chip-target
                   data-download-placement='hero'
                 >
-                  <span className='arrow'>{iconDownload}</span>
+                  <em className='hm-di' aria-hidden='true'>
+                    ↓
+                  </em>
                   {home.hero.download}
-                </a>
-                <a className='btn btn-ghost' href={REPO} {...ext}>
-                  <span className='arrow'>{<RemixIcon glyph={RI.github} />}</span>
-                  <span>
-                    Star{' '}
-                    <span className='star-count' data-github-stars>
-                      {github.starsLabel}
-                    </span>
-                  </span>
+                  <u className='hm-sheen' aria-hidden='true' />
                 </a>
               </div>
               {/* `{systems}` in heroSub is substituted with the live
@@ -619,7 +613,7 @@ export default function Page({
                   sizes='(max-width: 768px) 100vw, 60vw'
                   width={2508}
                   height={1450}
-                  alt='Open Design desktop — design files & index.html preview'
+                  alt='OpenDesign desktop — design files & index.html preview'
                   decoding='async'
                   fetchPriority='low'
                   className='hero-shot-img'
@@ -635,7 +629,7 @@ export default function Page({
             <div className='about-grid'>
               <div className='about-copy' data-reveal>
                 <p className='about-kicker'>
-                  {locale === 'zh' ? '为什么选择 Open Design？' : 'Why Open Design?'}
+                  {locale === 'zh' ? '为什么选择 OpenDesign？' : 'Why OpenDesign?'}
                 </p>
                 {/*
                   Text Scroll Reveal (Magic UI / Inspira port): a tall track
@@ -879,7 +873,7 @@ export default function Page({
               <div data-reveal>
                 <h2 className='display'>
                   {t.labsPre}
-                  <em>Open Design</em>
+                  <em>OpenDesign</em>
                   {t.labsPost}
                 </h2>
                 {t.labsLead ? (
@@ -1065,7 +1059,7 @@ export default function Page({
               </div>
               <div className='testimonial-globe' data-reveal='right' data-testimonial-globe>
                 <canvas
-                  aria-label='Open Design global contributor map'
+                  aria-label='OpenDesign global contributor map'
                   className='testimonial-globe-canvas'
                   height={720}
                   width={720}
@@ -1144,7 +1138,7 @@ export default function Page({
         <section className='cta' id='contact' data-od-id='cta'>
           <div className='container'>
             <div className='cta-dance' data-precise-bg>
-              {/* Open Design Home window floating over the mural — sits above the
+              {/* OpenDesign Home window floating over the mural — sits above the
                   painting (::before) but below the CTA copy. Bottom is clipped by
                   the block's overflow:hidden, matching the reference comp.
                   `data-reveal` slides it up from below when the module enters view
@@ -1152,7 +1146,7 @@ export default function Page({
               <img
                 className='cta-window'
                 src='/cta-window.webp'
-                alt='Open Design 桌面端首页'
+                alt='OpenDesign 桌面端首页'
                 width={2996}
                 height={1870}
                 decoding='async'
@@ -1291,10 +1285,11 @@ export default function Page({
               <div className='sub-footer-col'>
                 <h5>{menu.product}</h5>
                 <ul>
-                  <li><a href={href('/')}>Open Design</a></li>
+                  <li><a href={href('/')}>OpenDesign</a></li>
                   <li><a href={href('/html-anything/')}>{ui.footer.htmlAnything}</a></li>
                   <li><a href={href('/html-video/')}>{ui.footer.htmlVideo}</a></li>
                   <li><a href={href('/codex-slides/')}>Codex Slides</a></li>
+                  <li><a href={href('/codex-plugin/')}>Codex Plugin</a></li>
                 </ul>
               </div>
 
@@ -1394,7 +1389,7 @@ export default function Page({
                 in globals.css cover both footers. */}
             <div className='foot-masthead' data-od-id='footer-masthead'>
               <p className='foot-masthead-wordmark'>
-                Open <span className='foot-masthead-accent'>Design</span><span className='foot-masthead-period'>.</span>
+                Open<span className='foot-masthead-accent'>Design</span><span className='foot-masthead-period'>.</span>
               </p>
             </div>
           </div>

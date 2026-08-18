@@ -2497,6 +2497,12 @@
    centered hero (they collapse to 0 when the viewport is narrower than the
    hero cap and the two widths coincide). */
 .home-hero__plugin-presets-wrap {
+  /* One geometry contract for both the loading shell and settled cards.
+     The fixed card height is the natural rendered height of the preview,
+     gap, caption line, padding, and border rounded to a whole pixel. */
+  --home-plugin-preset-width: 248px;
+  --home-plugin-preset-preview-h: 150px;
+  --home-plugin-preset-card-h: 194px;
   width: 100cqw;
   max-width: 100cqw;
   margin-inline: calc((100% - 100cqw) / 2);
@@ -2506,7 +2512,10 @@
    scrolling presets row (not the title above it). */
 .home-hero__rail-scroller {
   position: relative;
-  min-height: 194px;
+  /* Both preset rows use 1px top + 8px bottom padding. Reserving that
+     together with the shared card height prevents the centered Home layout
+     from moving when loading content is replaced. */
+  min-height: calc(var(--home-plugin-preset-card-h) + 9px);
 }
 
 .home-hero__plugin-presets {
@@ -2523,31 +2532,67 @@
 }
 .home-hero__plugin-presets::-webkit-scrollbar { display: none; }
 
+/* Keep the Examples rail's final geometry reserved while the Workspace-scoped
+   plugin catalogue resolves. These placeholders are deliberately static: the
+   real cards already own their entrance animation, and animating the loading
+   shell would recreate the startup twitch this state is meant to prevent. */
+.home-hero__plugin-presets-loading {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  overflow: hidden;
+  padding: 1px 2px 8px;
+}
+.home-hero__plugin-preset-loading {
+  flex: 0 0 var(--home-plugin-preset-width);
+  min-width: 0;
+  height: var(--home-plugin-preset-card-h);
+  min-height: var(--home-plugin-preset-card-h);
+  display: grid;
+  grid-template-rows: var(--home-plugin-preset-preview-h) minmax(0, auto);
+  gap: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-xs);
+}
+.home-hero__plugin-preset-loading-preview {
+  display: block;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+.home-hero__plugin-preset-loading-title {
+  display: block;
+  width: 46%;
+  height: 10px;
+  margin: 1px 10px 0;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text-faint) 18%, var(--bg-subtle));
+}
+
 /* Each preset is wrapped in a positioning cell so the "Open as project"
    overlay can sit over the thumbnail without nesting a button inside the
    card button. The flex sizing lives on the cell; the card button fills it. */
 .home-hero__plugin-preset-cell {
   position: relative;
-  flex: 0 0 248px;
+  flex: 0 0 var(--home-plugin-preset-width);
   min-width: 0;
   display: flex;
   /* One source for the preview row's height: the preview box below pins
      itself to it. */
-  --preset-preview-h: 150px;
+  --preset-preview-h: var(--home-plugin-preset-preview-h);
 }
 
 .home-hero__plugin-preset {
   appearance: none;
   position: relative;
   width: 100%;
-  height: auto;
-  /* Low enough that the caption row hugs its text (150 preview + 8 gap +
-     one 16px line + 6px pad ≈ 180); a taller min just reads as dead space
-     under the title. */
-  min-height: 172px;
+  height: var(--home-plugin-preset-card-h);
+  min-height: var(--home-plugin-preset-card-h);
   min-width: 0;
   display: grid;
-  grid-template-rows: 150px minmax(0, auto);
+  grid-template-rows: var(--home-plugin-preset-preview-h) minmax(0, auto);
   gap: 8px;
   padding: 0;
   border: 1px solid var(--border);
@@ -2883,21 +2928,16 @@
 }
 
 @media (max-width: 900px) {
+  .home-hero__plugin-presets-wrap {
+    --home-plugin-preset-width: 224px;
+    --home-plugin-preset-preview-h: 136px;
+    --home-plugin-preset-card-h: 180px;
+  }
   .home-hero__title {
     font-size: 38.4px;
   }
   .home-hero__prompt-examples-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .home-hero__plugin-preset-cell {
-    flex-basis: 224px;
-  }
-  .home-hero__plugin-preset {
-    min-height: 170px;
-    grid-template-rows: 136px minmax(0, auto);
-  }
-  .home-hero__plugin-preset-preview {
-    min-height: 136px;
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
     transform: scale(0.146);
@@ -2934,22 +2974,17 @@
 }
 
 @media (max-width: 560px) {
+  .home-hero__plugin-presets-wrap {
+    --home-plugin-preset-width: 208px;
+    --home-plugin-preset-preview-h: 126px;
+    --home-plugin-preset-card-h: 170px;
+  }
   .home-hero__type-tabs {
     justify-content: flex-start;
     padding: 0;
   }
   .home-hero__prompt-examples-grid {
     grid-template-columns: 1fr;
-  }
-  .home-hero__plugin-preset-cell {
-    flex-basis: 208px;
-  }
-  .home-hero__plugin-preset {
-    min-height: 160px;
-    grid-template-rows: 126px minmax(0, auto);
-  }
-  .home-hero__plugin-preset-preview {
-    min-height: 126px;
   }
   .home-hero__plugin-preset-preview .plugins-home__html-iframe {
     transform: scale(0.134);

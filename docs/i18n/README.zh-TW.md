@@ -1,17 +1,19 @@
-<h1 align="center">Open Design：開源的 Claude Design 替代方案</h1>
+<h1 align="center">OpenDesign：開源的 Claude Design 替代方案</h1>
 
-> ⚡ **Open Design Cloud——官方模型服務。** 一次儲值，即可在 Open Design 中直接使用 GPT、Claude、Gemini 與 DeepSeek：20+ 旗艦模型、零設定、依實際 token 用量計費。[立即體驗](https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_try_cloud)
+> ⚡ **[OpenDesign Cloud——官方模型服務。](https://open-design.ai/zh/pricing/)** 一次儲值，即可在 OpenDesign 中使用 Agent 與圖像模型：GPT、Claude 與 DeepSeek Agent 模型，以及 GPT Image 2.0、Seedream 5.0 Pro 與 Nano Banana 2.0 圖像模型。
 >
-> 🏅 **Open Design Fellow 計畫現已開放。** 如果你也相信設計應該是開放的——歡迎成為 Open Design Fellow，與核心團隊一同形塑這項產品，並協助更多人參與定義設計的未來。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/mHAjSMV6gz)。
+> 🚀 **[DeepSeek V4 Flash 與 V4 Pro 現已上線。](https://open-design.ai/zh/pricing/)** 將頂級智慧用於原型、簡報、設計系統與日常 Agent 任務。OpenDesign 會員可直接在應用程式內無限量使用兩週。
+>
+> 🧩 **[現已支援 DeepSeek Harness。](https://open-design.ai/zh/agents/deepseek-harness-design/)** 將 DeepSeek 官方 `dsh` Agent Harness 作為原生執行環境接入 OpenDesign，支援結構化思考、工具呼叫、模型探索、取消與工作階段恢復；生成檔案仍留在 OpenDesign 工作流程中供即時預覽與交付。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="Open Design hero banner" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/hero.png" alt="OpenDesign hero banner" width="100%" />
 </p>
 
 <p align="center">
   <a href="https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_website">官方網站</a> ·
   <a href="https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download">下載</a> ·
-  <a href="https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_cloud">Open Design Cloud</a> ·
+  <a href="https://open-design.ai/cloud/?utm_source=github&utm_medium=referral&utm_content=readme_cloud">OpenDesign Cloud</a> ·
   <a href="https://discord.gg/mHAjSMV6gz">Discord</a> ·
   <a href="https://x.com/OpenDesignHQ">追蹤 @OpenDesignHQ</a>
 </p>
@@ -27,11 +29,11 @@
 
 ---
 
-## 什麼是 Open Design
+## 什麼是 OpenDesign
 
 🎨 **本地優先、開源的 Claude Design 替代方案。** &nbsp;🖥️ **macOS 與 Windows 的原生桌面應用程式。** &nbsp;⚡ **100+ 個功能 skills + 獨立渲染範本型錄** · ✨ **151 套品牌級設計系統套件** · 📦 **277 個開箱即用的外掛。** &nbsp;🖼️ 可生成 **網頁 · 桌面 · 行動裝置原型**、**即時儀表板／artifacts**、**簡報**、**圖片**、**影片**，外加 **HyperFrames** 動態圖像。🔒 沙箱化 iframe 預覽 · 支援 HTML / PDF / PPTX / MP4 匯出。 &nbsp;🤖 **可在 Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 25 個不同的本地 CLI 可執行檔上執行**，或透過 BYOK 接上任何相容 OpenAI 的端點。
 
-Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套 **agent 原生** 迴圈——釐清需求、鎖定方向、串流產出 artifact、評析、交付——不再封閉，而是化為一個由 **功能 skills、渲染設計範本、設計系統與外掛組成的檔案系統**，讓你筆電上既有的編碼 agent 都能讀取、寫入、再混搭。你的 CLI 成為設計引擎，你的筆電成為工作室，而你團隊的 `DESIGN.md` 則成為品牌契約。
+OpenDesign 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套 **agent 原生** 迴圈——釐清需求、鎖定方向、串流產出 artifact、評析、交付——不再封閉，而是化為一個由 **功能 skills、渲染設計範本、設計系統與外掛組成的檔案系統**，讓你筆電上既有的編碼 agent 都能讀取、寫入、再混搭。你的 CLI 成為設計引擎，你的筆電成為工作室，而你團隊的 `DESIGN.md` 則成為品牌契約。
 
 它同時也是 **agent 時代的 Figma 替代方案**——不必在畫布上推動像素，而是以真實 CSS、真實字型、真實元件交付單頁 artifact，直接匯出成 HTML / PDF / PPTX / MP4——這些產出早已由你的設計系統塑形，也早已能在你每天使用的 agent 中執行。
 
@@ -40,15 +42,15 @@ Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套
 
 ## 產品導覽
 
-快速看看 Open Design 是什麼、能做什麼。從 **首頁** 起步，用 **自動化** 編排重複的工作流程，在 **設計系統** 中提煉品牌契約，再以 **外掛** 與 **整合** 擴充；在任何專案的 **Studio** 中，同一套設計系統就能串流產出原型、即時 artifact、HyperFrames、簡報與圖片。
+快速了解 OpenDesign 的核心工作流程：從 **Home** 輸入需求，在 **Plugins** 中探索可重複使用的技能，並把品牌參考資料沉澱為 **Design System**；進入任一專案的 **Studio** 後，即可在一處建立並迭代原型、簡報、行動應用程式、圖片、文件與 HyperFrame。
 
 ### 核心頁面
 
 <table>
 <tr>
 <td valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/home.png" alt="Home page" /><br/>
-<sub><b>首頁</b>——總覽入口。選一個 skill 與一套設計系統，輸入需求，從一處啟動一切。</sub>
+<img src="../../docs/screenshots/product-tour/home.png" alt="Home" /><br/>
+<sub><b>Home</b> — 選擇產物類型並輸入需求，再設定設計系統、工作目錄與模型，即可開始創作。</sub>
 </td>
 </tr>
 </table>
@@ -56,58 +58,57 @@ Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/automation.png" alt="Automation page" /><br/>
-<sub><b>自動化</b>——把重複性的設計工作流程編排成可重複使用、可排程的自動化任務。</sub>
+<img src="../../docs/screenshots/product-tour/plugins.png" alt="Plugins" /><br/>
+<sub><b>Plugins</b> — 依類別瀏覽官方技能、搜尋目錄，並透過 <code>Try it</code> 直接啟動工作流程。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/design-system.png" alt="Design System page" /><br/>
-<sub><b>設計系統</b>——把團隊的 <code>DESIGN.md</code> 提煉成一份品牌契約，塑形每一份產出。</sub>
-</td>
-</tr>
-<tr>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/plugin.png" alt="Plugin page" /><br/>
-<sub><b>外掛</b>——瀏覽、安裝並散布工作流程外掛，隨需擴充生成能力。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/integrations.png" alt="Integrations page" /><br/>
-<sub><b>整合</b>——連接外部系統與 MCP 工具，並從任何 IDE、腳本或自動化流程使用 Open Design。</sub>
+<img src="../../docs/screenshots/product-tour/design-system.png" alt="Design System" /><br/>
+<sub><b>Design System</b> — 擷取並完善品牌視覺語言，預覽結果，再在同一個工作區中繼續創作。</sub>
 </td>
 </tr>
 </table>
 
-### Studio——一個專案中的多種 artifact 類型
+### Studio——一個專案中的多種產物
 
-在專案的 Studio 中，同一套設計系統可串流產出多種 artifact 類型：
+進入某個專案的 Studio，對話、生成檔案與即時預覽會圍繞六種產物集中在同一個工作區：
 
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-prototype.png" alt="Prototype" /><br/>
-<sub><b>原型</b>——單頁 HTML artifact，讀取你的設計系統並在沙箱化 iframe 中渲染，可即時預覽，也可下載原始碼。</sub>
+<img src="../../docs/screenshots/product-tour/studio-prototype.png" alt="原型" /><br/>
+<sub><b>原型</b> — 生成或重建 Web 體驗，查看渲染後的頁面，並在原處繼續與 Agent 迭代。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-hyperframe.png" alt="HyperFrame" /><br/>
-<sub><b>HyperFrame</b>——程式化動態與動畫圖像，渲染成真實的 MP4（例如 1920×1080 · 30fps）。</sub>
+<img src="../../docs/screenshots/product-tour/studio-deck.png" alt="簡報" /><br/>
+<sub><b>簡報</b> — 建立多頁簡報，檢查縮圖與講者備註，完成後直接匯出。</sub>
 </td>
 </tr>
 <tr>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-ppt.png" alt="Deck" /><br/>
-<sub><b>簡報</b>——可翻頁、可用鍵盤瀏覽，並可匯出成 PPTX / PDF 的 pitch deck。</sub>
+<img src="../../docs/screenshots/product-tour/studio-mobile-app.png" alt="行動應用程式" /><br/>
+<sub><b>行動應用程式</b> — 在裝置預覽中生成並打磨行動介面，旁邊同步保留對話、輸出檔案與後續操作。</sub>
 </td>
 <td width="50%" valign="top">
-<img src="https://repo-assets.open-design.ai/resources/images/product/studio-image.png" alt="Image" /><br/>
-<sub><b>圖片</b>——品牌級圖片與視覺素材，支援高解析度生成與下載。</sub>
+<img src="../../docs/screenshots/product-tour/studio-image.png" alt="圖片" /><br/>
+<sub><b>圖片</b> — 從專案對話中生成視覺素材，以全尺寸預覽結果，然後下載或開啟。</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-document.png" alt="文件" /><br/>
+<sub><b>文件</b> — 建立精緻的多頁指南與編輯型文件，檢查渲染版面，完成後匯出或分享。</sub>
+</td>
+<td width="50%" valign="top">
+<img src="../../docs/screenshots/product-tour/studio-hyperframe.png" alt="HyperFrame" /><br/>
+<sub><b>HyperFrame</b> — 建立程式碼驅動的動態圖形，在 Studio 中預覽動畫，並匯出最終影片。</sub>
 </td>
 </tr>
 </table>
-
 ---
 
 ## 平台相容性
 
-> Open Design 以 **skills、CLI 與 MCP server** 的形式發行，主流編碼 agent 都能原生使用。安裝 OD 後，只要一句 `od mcp install <agent>` 就能把 MCP server 接進該 agent 的設定，你便能在任何 agent 內呼叫同一組工具。
+> OpenDesign 以 **skills、CLI 與 MCP server** 的形式發行，主流編碼 agent 都能原生使用。安裝 OD 後，只要一句 `od mcp install <agent>` 就能把 MCP server 接進該 agent 的設定，你便能在任何 agent 內呼叫同一組工具。
 
 | 編碼 agent／平台 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; | 狀態 &nbsp;&nbsp; | 一行指令安裝 MCP server &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; |
 |---|:---:|---|
@@ -132,7 +133,7 @@ Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套
 `od mcp install <agent> --print` 可預覽 dry-run · `--uninstall` 可移除 · 完整清單請執行 `od mcp install --help`。
 
 <p align="center">
-  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs Open Design supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
+  <img src="https://repo-assets.open-design.ai/resources/images/coding-agents.png" alt="The 25 coding-agent CLIs OpenDesign supports — Claude Code · Codex · OpenCode · Hermes · Antigravity · Vela · Grok Build · Kimi · Cursor Agent · Qwen · Qoder · GitHub Copilot · Pi · Kiro · Kilo · Mistral Vibe · DeepSeek · Reasonix · Aider · Amp · CodeBuddy · Mimo · AtomCode · Devin · Trae" width="100%" />
 </p>
 
 **沒有安裝任何 CLI？** 位於 `POST /api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream` 的 BYOK 代理可提供相同的迴圈（不需衍生程序）——貼上 `baseUrl` + `apiKey` + `model` 即可，支援 OpenAI、Anthropic、Azure OpenAI、Google Gemini、Ollama、LM Studio、vLLM，或任何相容 OpenAI 的端點。逐目標的 SSRF 防護會在 daemon 邊界阻擋內部 IP／link-local／CGNAT。
@@ -150,16 +151,6 @@ Runtime 定義位於 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/ru
 預設的產出介面。單頁 HTML artifact，讀取你的 `DESIGN.md` 並在沙箱化 iframe 中渲染。
 
 <table>
-<tr>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/01-entry-view.png" alt="Entry view" /><br/>
-<sub><b>入口視圖</b>——選一個 skill、選一套設計系統、輸入需求。原型、儀表板、簡報、行動應用程式、雜誌頁面，共用同一個介面。</sub>
-</td>
-<td width="50%" valign="top">
-<img src="../../docs/screenshots/skills/mobile-onboarding.png" alt="Mobile onboarding" /><br/>
-<sub><b>行動原型</b>——像素精準的 iPhone 15 Pro 外框，多畫面流程。agent 永遠不會重畫手機外框；共用的裝置外框存放於 <code>assets/frames/</code>。</sub>
-</td>
-</tr>
 <tr>
 <td width="50%" valign="top">
 <img src="../../docs/screenshots/skills/dating-web.png" alt="Web prototype dating-web" /><br/>
@@ -232,7 +223,7 @@ Runtime 定義位於 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/ru
 
 ### 5 · 影片與 HyperFrames——agent 原生的動態圖像
 
-**[HyperFrames][hyperframes]** 是 HeyGen 開源、agent 原生的影片框架，在 Open Design 中以一等公民的身分整合。agent 撰寫 HTML + CSS + GSAP，HyperFrames 透過無頭 Chrome + FFmpeg 將其渲染成一支確定性的 MP4。搭配 **Seedance 2.0** 可做電影感的 t2v / i2v，**Veo 3 / Sora 2 / Kling 2** 提供路由後的模型變體，**Suno v5 / Lyria 2** 則負責音訊層。
+**[HyperFrames][hyperframes]** 是 HeyGen 開源、agent 原生的影片框架，在 OpenDesign 中以一等公民的身分整合。agent 撰寫 HTML + CSS + GSAP，HyperFrames 透過無頭 Chrome + FFmpeg 將其渲染成一支確定性的 MP4。搭配 **Seedance 2.0** 可做電影感的 t2v / i2v，**Veo 3 / Sora 2 / Kling 2** 提供路由後的模型變體，**Suno v5 / Lyria 2** 則負責音訊層。
 
 <table>
 <tr>
@@ -255,11 +246,11 @@ Runtime 定義位於 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/ru
 
 ---
 
-## 為什麼選 Open Design
+## 為什麼選 OpenDesign
 
 > **2026 年 4 月，Anthropic 發表了 Claude Design——這是 LLM 首次不再撰寫散文，而是直接交付設計 artifact。** 它爆紅。但它始終封閉原始碼、僅限付費、僅限雲端，並被綁死在 Anthropic 的模型、Anthropic 的 skills、Anthropic 的介面上。無法結帳、無法自架、無法部署到 Vercel、無法換上你自己的 agent。
 
-Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣以 artifact 為先的思維模式，卻沒有任何鎖定：
+OpenDesign（OD）就是那個開源的替代方案。同樣的迴圈、同樣以 artifact 為先的思維模式，卻沒有任何鎖定：
 
 - 🤖 **agent 原生、模型無關。** 我們不附帶 agent。你 `PATH` 上既有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是設計引擎。一鍵即可切換。
 - 🧠 **預設即品牌級。** 每次渲染都把目前套件的 `DESIGN.md` 當作核心品牌契約讀取。儲存庫隨附 151 套設計系統套件；舊套件可以只含 `DESIGN.md`，新套件還可加入 `manifest.json`、`tokens.css`、元件、資產與來源資訊。放進資料夾，選擇器就會找到它。
@@ -270,7 +261,7 @@ Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 
 ### 比較
 
-| | Claude Design | Figma | Lovable / v0 / Bolt | **Open Design** |
+| | Claude Design | Figma | Lovable / v0 / Bolt | **OpenDesign** |
 |---|---|---|---|---|
 | 開源 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | 自架／桌面 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
@@ -287,7 +278,7 @@ Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 
 ### 🖥️ 下載桌面應用程式（推薦——零設定）
 
-使用 Open Design 最快的方式。無須 Node、無須 pnpm、無須 clone。
+使用 OpenDesign 最快的方式。無須 Node、無須 pnpm、無須 clone。
 
 - **macOS**（Apple Silicon · Intel x64）→ [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_macos) 或 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Windows**（x64）→ [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_windows) 或 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
@@ -297,7 +288,7 @@ Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 
 ### 🤖 安裝進你的編碼 agent（無 UI）
 
-你完全不必打開 GUI 也能使用 Open Design——在 Claude Code、Codex、Cursor、Copilot、OpenClaw、Antigravity、Hermes、Kimi 等等之中，把它當成 skill、外掛或 MCP server 來呼叫。
+你完全不必打開 GUI 也能使用 OpenDesign——在 Claude Code、Codex、Cursor、Copilot、OpenClaw、Antigravity、Hermes、Kimi 等等之中，把它當成 skill、外掛或 MCP server 來呼叫。
 
 ```bash
 # One-line install into the agent you're using:
@@ -309,11 +300,11 @@ od mcp install <agent>
 curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 ```
 
-`install.sh` 是包在 `od mcp install` 外的輕量 shell wrapper；它的用途是讓 hosted URL 回傳 shell 指令、而非 landing page 的 HTML fallback，並在你的 shell 解析到非 Open Design 的 `od` 執行檔時快速失敗。
+`install.sh` 是包在 `od mcp install` 外的輕量 shell wrapper；它的用途是讓 hosted URL 回傳 shell 指令、而非 landing page 的 HTML fallback，並在你的 shell 解析到非 OpenDesign 的 `od` 執行檔時快速失敗。
 
 > **WSL2 使用者：** 若你的編碼 agent CLI 跑在 WSL2 內，請先依照
 > [`WSL2 設定指南`](../../docs/wsl-setup.md) 操作。Linux 的 `/usr/bin/od` 可能會
-> 遮蔽 Open Design 的 `od` 指令。
+> 遮蔽 OpenDesign 的 `od` 指令。
 
 接著，在 agent 內：
 
@@ -321,7 +312,7 @@ curl -fsSL https://open-design.ai/install.sh | sh -s <agent>
 > Use open-design to generate a landing page with the Linear design system
 ```
 
-在具備檔案系統的本地 CLI 執行中，agent 會把選定的功能 skill 或設計範本與 `DESIGN.md` 組合、寫入標準專案檔案，Open Design 直接預覽這些檔案。沒有檔案系統工具的 BYOK／純 API 執行則回傳一個完整的 `<artifact>` 區塊。
+在具備檔案系統的本地 CLI 執行中，agent 會把選定的功能 skill 或設計範本與 `DESIGN.md` 組合、寫入標準專案檔案，OpenDesign 直接預覽這些檔案。沒有檔案系統工具的 BYOK／純 API 執行則回傳一個完整的 `<artifact>` 區塊。
 
 ### 🐳 以 Docker 執行
 
@@ -340,7 +331,7 @@ docker compose up -d
 
 [![Deploy on Sealos](https://sealos.io/Deploy-on-Sealos.svg)](https://sealos.io/products/app-store/open-design/)
 
-Sealos App Store 範本會執行已發布的 Open Design Docker 映像，提供持久化工作區儲存，並在公開代理層啟用 Basic Auth。自訂公開或共享 Docker 部署請遵循 [`deploy/README.md`](../../deploy/README.md#local-compose) 中的反向代理與 `OPEN_DESIGN_ALLOWED_ORIGINS` 指引。
+Sealos App Store 範本會執行已發布的 OpenDesign Docker 映像，提供持久化工作區儲存，並在公開代理層啟用 Basic Auth。自訂公開或共享 Docker 部署請遵循 [`deploy/README.md`](../../deploy/README.md#local-compose) 中的反向代理與 `OPEN_DESIGN_ALLOWED_ORIGINS` 指引。
 
 ### 🧑‍💻 從原始碼執行
 
@@ -363,13 +354,13 @@ Node `~24`、pnpm `10.33.x`。WSL2 使用者請參見 [`docs/wsl-setup.md`](../.
 2. **設計師（或 agent）鎖定方向。** 沒有品牌？從 5 個精選方向中挑一個。已有品牌？放進一張截圖／URL → agent 會連接 GitHub、匯入 Figma，並編寫出一份可重複使用的 `DESIGN.md`。
 3. **agent 建立第一份交付物。** 外掛 + 功能 skill 或設計範本 + `DESIGN.md` 都已綁定。具備檔案系統的 CLI 執行會寫入標準專案檔案，預覽隨檔案更新；沒有檔案工具的 BYOK／純 API 執行則回傳一個完整的 `<artifact>` 區塊。
 4. **交接給工程團隊。** 這份 artifact 是真實的 HTML/CSS——把它丟進 Cursor、Codex 或 Claude Code，就能以程式碼繼續開發。或直接匯出 PPTX / PDF / MP4 給行銷團隊。
-5. **Open Design 會隨著你的使用愈來愈聰明。** 你的截圖、字型、色票與確認過的 artifact 會累積成下一次工作階段的預設值。更少返工、更少偏移。
+5. **OpenDesign 會隨著你的使用愈來愈聰明。** 你的截圖、字型、色票與確認過的 artifact 會累積成下一次工作階段的預設值。更少返工、更少偏移。
 
 ---
 
-## 從你的編碼 agent 使用 Open Design
+## 從你的編碼 agent 使用 OpenDesign
 
-Open Design 隨附一個 **stdio MCP server** 與各 agent 專屬的 **安裝腳本**。任何在其他儲存庫中、相容 MCP 的 agent，都能直接讀取你本地 Open Design 專案的檔案——tokens CSS、JSX 元件、入口 HTML——當成一個可按名稱查詢的結構化 API。agent 看到的永遠是即時檔案，而非過期的匯出檔。
+OpenDesign 隨附一個 **stdio MCP server** 與各 agent 專屬的 **安裝腳本**。任何在其他儲存庫中、相容 MCP 的 agent，都能直接讀取你本地 OpenDesign 專案的檔案——tokens CSS、JSX 元件、入口 HTML——當成一個可按名稱查詢的結構化 API。agent 看到的永遠是即時檔案，而非過期的匯出檔。
 
 ```bash
 # One-line install (16+ CLIs supported):
@@ -501,7 +492,7 @@ od plugin uninstall od-default       # uninstall
 
 ### 建立外掛
 
-Open Design 外掛必須包含 `open-design.json` 以及其類型所需的 payload。工作流程 skill 或 scenario 也包含 `SKILL.md`；僅 manifest 的範本與設計系統項目則使用各自的 payload：
+OpenDesign 外掛必須包含 `open-design.json` 以及其類型所需的 payload。工作流程 skill 或 scenario 也包含 `SKILL.md`；僅 manifest 的範本與設計系統項目則使用各自的 payload：
 
 ```
 my-plugin/
@@ -526,7 +517,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ### 貢獻一個外掛
 
-1. 把外掛資料夾放進 [`plugins/community/`](../../plugins/community/)（第三方外掛），或——若要讓它隨 Open Design 一同附帶——放進 [`plugins/_official/`](../../plugins/_official/) 中對應的層級。
+1. 把外掛資料夾放進 [`plugins/community/`](../../plugins/community/)（第三方外掛），或——若要讓它隨 OpenDesign 一同附帶——放進 [`plugins/_official/`](../../plugins/_official/) 中對應的層級。
 2. 通過驗證：`od plugin validate`、`pnpm guard`、`pnpm --filter @open-design/plugin-runtime typecheck`。
 3. 使用 [`plugins/spec/CONTRIBUTING.md`](../../plugins/spec/CONTRIBUTING.md) 中的範本填寫 PR（ID、版本、通道、mode、能力、觸發範例；視覺型外掛請附上截圖／預覽）。
 4. 若要發布到外部 registry（skills.sh / ClawHub / 獨立 GitHub）→ [`plugins/spec/PUBLISHING-REGISTRIES.md`](../../plugins/spec/PUBLISHING-REGISTRIES.md)。
@@ -590,7 +581,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 - [x] Sidecar 協定 + Electron 桌面 + IPC 自動化
 - [x] Artifact lint API + 5 維自我評析的發出前閘門
 - [x] **0.8.0**——外掛市集基礎建設（261 個官方外掛、manifest 規格、各 agent 安裝腳本）
-- [x] **0.9.0**——Open Design Cloud（內建於應用程式的官方 Model Router：零設定、一鍵登入）
+- [x] **0.9.0**——OpenDesign Cloud（內建於應用程式的官方 Model Router：零設定、一鍵登入）
 - [x] 打包的 Electron 建置——macOS（Apple Silicon + Intel）+ Windows（x64）+ Linux AppImage（選用通道）
 - [ ] 註解模式的精準編輯——部分完成；可靠的定點修補開發中
 - [ ] AI 發出的 tweaks 面板 UX——尚未實作
@@ -618,7 +609,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 ## 貢獻
 
-Open Design 之所以能持續前進，是因為貢獻者——設計師、工程師、prompt 作者——不斷現身。許多最常用的 skills、設計系統與外掛，都出自核心團隊以外的人之手。
+OpenDesign 之所以能持續前進，是因為貢獻者——設計師、工程師、prompt 作者——不斷現身。許多最常用的 skills、設計系統與外掛，都出自核心團隊以外的人之手。
 
 ### 🎯 從哪裡開始（最大槓桿、最小改動）
 
@@ -655,9 +646,9 @@ gh pr create --fill
 
 完整的 agent 友善貢獻流程、程式碼風格與 PR 標準 → [`CONTRIBUTING.md`](../../CONTRIBUTING.md)（[Deutsch](CONTRIBUTING.de.md) · [Français](CONTRIBUTING.fr.md) · [简体中文](CONTRIBUTING.zh-CN.md) · [日本語](CONTRIBUTING.ja-JP.md) · [Português](CONTRIBUTING.pt-BR.md)）。
 
-### 🏅 Open Design Fellow 計畫
+### 🏅 OpenDesign Fellow 計畫
 
-我們正在全球招募 **Open Design Fellows**——Fellows 與核心團隊一同形塑產品、在各自地區正式代表 Open Design，並在當地壯大社群，背後有經費支援（$1,000 / MR）、免費的 LLM credits，以及一條直通的審查通道。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/mHAjSMV6gz) 上的公告。
+我們正在全球招募 **OpenDesign Fellows**——Fellows 與核心團隊一同形塑產品、在各自地區正式代表 OpenDesign，並在當地壯大社群，背後有經費支援（$1,000 / MR）、免費的 LLM credits，以及一條直通的審查通道。詳情請見 → [`MAINTAINERS.md`](../../MAINTAINERS.md) 與 [Discord](https://discord.gg/mHAjSMV6gz) 上的公告。
 
 ---
 
@@ -691,7 +682,7 @@ gh pr create --fill
 感謝每一位參與過的人——程式碼、文件、回饋、一則犀利的 issue、一個新的 skill、一套新的設計系統。
 
 <a href="https://github.com/nexu-io/open-design/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="Open Design contributors" />
+  <img src="https://contrib.rocks/image?repo=nexu-io/open-design&max=500&columns=20&anon=1&cache_bust=2026-08-04" alt="OpenDesign contributors" />
 </a>
 
 ---
@@ -699,7 +690,7 @@ gh pr create --fill
 ## 儲存庫活動
 
 <picture>
-  <img alt="Open Design — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
+  <img alt="OpenDesign — repository metrics" src="https://repo-assets.open-design.ai/resources/images/github-metrics.svg" />
 </picture>
 
 上方的 SVG 由 [`.github/workflows/metrics.yml`](../../.github/workflows/metrics.yml) 使用 [`lowlighter/metrics`](https://github.com/lowlighter/metrics) 每日重新生成。
@@ -709,7 +700,7 @@ gh pr create --fill
 ## 給我們一顆星
 
 <p align="center">
-  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star Open Design on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
+  <a href="https://github.com/nexu-io/open-design"><img src="https://repo-assets.open-design.ai/resources/images/star-us.png" alt="Star OpenDesign on GitHub — github.com/nexu-io/open-design" width="100%" /></a>
 </p>
 
 如果這幫你省下了三十分鐘，給它一顆 ★。星星不能付房租——但它們會告訴下一位設計師、agent 與貢獻者，這場實驗值得他們關注。一鍵、三秒，一個真實的訊號。
@@ -718,7 +709,7 @@ gh pr create --fill
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&theme=dark&cache_bust=2026-08-04" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
-    <img alt="Open Design star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
+    <img alt="OpenDesign star history" src="https://api.star-history.com/svg?repos=nexu-io/open-design&type=Date&cache_bust=2026-08-04" />
   </picture>
 </a>
 
@@ -736,7 +727,7 @@ gh pr create --fill
 | [`multica-ai/multica`](https://github.com/multica-ai/multica) | daemon + adapter 架構——PATH 掃描的 agent 偵測、把本地 daemon 作為唯一的特權程序。 |
 | [`VoltAgent/awesome-design-md`](https://github.com/VoltAgent/awesome-design-md) | 最初 9 段式 `DESIGN.md` schema 與 70 套上游衍生系統的歷史來源；目前套件可在此基礎上擴充。 |
 | [`bergside/awesome-design-skills`](https://github.com/bergside/awesome-design-skills) | `design-systems/` 之下新增的 57 個設計 skill 的來源。 |
-| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 動態圖像框架，在 Open Design 中整合為一等公民的 `hyperframes-html`。 |
+| [`heygen-com/hyperframes`](https://github.com/heygen-com/hyperframes) | HTML→MP4 動態圖像框架，在 OpenDesign 中整合為一等公民的 `hyperframes-html`。 |
 | [Claude Code skills][skill] | 我們原封不動採用的 `SKILL.md` 慣例。 |
 
 詳細出處 → [`docs/references.md`](../../docs/references.md)。

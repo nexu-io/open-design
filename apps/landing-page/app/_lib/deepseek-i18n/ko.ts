@@ -10,8 +10,8 @@ export const ko: DeepseekCopyOverride = {
   collectionLede:
     '디자인 작업을 위한 dsh 플러그인 큐레이션. 스크린샷을 읽는 비전 브리지, 에이전트가 그릴 수 있는 캔버스와 생성형 UI, 디자인 리뷰 도구, 그리고 그 모든 것을 미리 보여 주는 워크벤치까지. DeepSeek Harness는 Claude Code·Codex와 같은 SKILL.md 형식을 읽으므로 기존 디자인 스킬 라이브러리를 그대로 가져올 수 있습니다.',
   collectionStats: [
-    { value: '13', label: '엄선한 dsh 플러그인' },
-    { value: '13', label: '출처 저장소' },
+    { value: '19', label: '엄선한 dsh 플러그인' },
+    { value: '19', label: '출처 저장소' },
     { value: 'SKILL.md', label: 'Claude Code & Codex와 공유' },
   ],
   collectionIntro:
@@ -22,17 +22,17 @@ export const ko: DeepseekCopyOverride = {
     '루프를 닫습니다. 실제 페이지에 주석을 달고, 모션 애셋을 컴파일하고, 스킬 라이브러리를 옮겨 옵니다.',
     '하네스 자체를 디자인 워크스페이스로 만듭니다. 채팅 옆의 프리뷰 패널, 워크벤치, 보드까지.',
   ],
-  collectionCloserHeading: '세팅은 건너뛰세요. Open Design 안에서 DeepSeek Harness와 디자인하기',
+  collectionCloserHeading: '세팅은 건너뛰세요. OpenDesign 안에서 DeepSeek Harness와 디자인하기',
   filterAll: '전체',
   collectionCloserBody:
-    'Open Design은 DeepSeek Harness를 감싸고 도는 오픈소스 에이전트 네이티브 디자인 워크스페이스입니다. 시스템과 스킬, 템플릿을 일관되게 지켜 주므로 에이전트가 내놓는 결과물은 온전히 여러분의 것입니다.',
+    'OpenDesign은 DeepSeek Harness를 감싸고 도는 오픈소스 에이전트 네이티브 디자인 워크스페이스입니다. 시스템과 스킬, 템플릿을 일관되게 지켜 주므로 에이전트가 내놓는 결과물은 온전히 여러분의 것입니다.',
 
   categoryVision: '비전 & 입력',
   categoryCanvas: '캔버스 & 생성형 UI',
   categoryWorkflow: '디자인 워크플로',
   categoryWorkspace: '워크스페이스 & 프리뷰',
 
-  ctaDownload: 'Open Design 다운로드',
+  ctaDownload: 'OpenDesign 다운로드',
   ctaStarList: 'DeepSeek Harness에 Star 남기기',
   ctaGuide: 'DeepSeek Harness로 디자인하는 방법 보기',
   ctaBrowseAll: '전체 플러그인 둘러보기',
@@ -71,9 +71,9 @@ export const ko: DeepseekCopyOverride = {
   detailMoreOnList: 'DeepSeek Harness 저장소에서 더 보기',
   detailRelated: '다른 DeepSeek Harness 디자인 플러그인',
   finalEyebrow: '다음 단계',
-  detailCloserHeading: '세팅 없이, Open Design으로 디자인하기',
+  detailCloserHeading: '세팅 없이, OpenDesign으로 디자인하기',
   detailCloserBody:
-    '이 플러그인을 직접 설치해도 되고, Open Design으로 DeepSeek Harness 주위에 잘 정돈된 디자인 레이어를 통째로 두를 수도 있습니다. 키는 직접 가져오고, 산출물도 직접 소유하세요.',
+    '이 플러그인을 직접 설치해도 되고, OpenDesign으로 DeepSeek Harness 주위에 잘 정돈된 디자인 레이어를 통째로 두를 수도 있습니다. 키는 직접 가져오고, 산출물도 직접 소유하세요.',
 
   skills: {
     modlens: {
@@ -269,6 +269,96 @@ export const ko: DeepseekCopyOverride = {
         '한 줄 스크립트로 설치하거나, 웹 프로필에 npm 패키지를 추가하세요.',
         '워크벤치를 열고 우측 사이드바와 하단 패널에 탭을 배치하세요.',
         '에이전트가 만든 결과를 그 자리에서 검토하세요. 프리뷰, diff, 터미널, 브라우저 탭으로.',
+      ],
+    },
+    'dsh-vision-router': {
+      tagline: '텍스트 전용 에이전트를 위한 무료·키 없는 눈. 내장 비전 체인에 열한 가지 픽셀 단위 도구까지.',
+      whatIsIt:
+        '원본 픽셀은 비전 모델 쪽에, 추론은 DeepSeek 쪽에 두는 비전 라우터. "+ Auto Vision" 모델 그룹을 고르고 이미지를 붙여 넣으면, 에이전트가 그라운딩, 크롭, 픽셀 비교, 팔레트, OCR, SVG 트레이스, 배경 제거, HTML 스크린샷 등 열한 가지 픽셀 단위 도구를 계정도 키도 필요 없는 무료 익명 비전 폴백 체인 위에서 몰아갑니다.',
+      whyForDesign: [
+        'UI 복원을 위한 검증 가능한 픽셀 루프. 레퍼런스 → 스크린샷 → 붉은 히트맵의 픽셀 비교 → 수정, 오차가 수렴할 때까지 반복합니다.',
+        '그라운딩과 검출이 원본 이미지 기준 픽셀 박스를 돌려주며, README에는 최종 픽셀 차이 2.54%까지 검증한 재구현 사례가 기록되어 있습니다.',
+        '팔레트 추출, 아이콘 SVG 벡터화, 배경 제거까지, 재구현을 둘러싼 자잘한 디자인 작업을 함께 처리합니다.',
+      ],
+      howWithAgent: [
+        '웹 프로필에 플러그인을 추가하세요. 컴포지션 패치가 파일 하나 손대지 않고 전부 알아서 연결합니다.',
+        '이미지를 보내기 전에 모델 선택기에서 "+ Auto Vision"이 붙은 그룹을 고르세요.',
+        '스크린샷을 붙여 넣고 에이전트가 vision_ground, vision_crop, vision_describe, vision_pixel_diff를 이어 가게 두세요.',
+      ],
+    },
+    'dsh-diagram': {
+      tagline: '세션 안의 어떤 글이든 일회용 이미지가 아니라 편집 가능한 Excalidraw 캔버스로 바꿉니다.',
+      whatIsIt:
+        '하네스 안의 Excalidraw 캔버스. 에이전트가 diagram_create를 호출해 간결한 의미론적 스펙에서 플로차트, 아키텍처 다이어그램, 타임라인, 계층도, 비교도를 만들고, Canvas 탭에서 전체 에디터가 열려 세션 안에서 텍스트, 노드, 연결선을 직접 다듬을 수 있습니다.',
+      whyForDesign: [
+        '일회용이 아니라 편집 가능. 정적으로 생성된 이미지를 받아들이는 대신 진짜 벡터 캔버스에서 계속 작업합니다.',
+        '리비전 기반 compare-and-set 자동 저장이, 오래된 에디터가 더 새로운 작업을 조용히 덮어쓰는 일을 막습니다.',
+        '.excalidraw, SVG, PNG로 내보낼 수 있고, 손으로 고친 내용은 에이전트에게 diagram_read를 요청할 때만 전달됩니다.',
+      ],
+      howWithAgent: [
+        '웹 프로필에 플러그인을 추가하고 dsh web을 다시 시작하세요.',
+        '세션 안의 글을 명확한 다이어그램 하나로 그려 달라고 하면 에이전트가 diagram_create를 호출합니다.',
+        'Canvas 탭을 열어 직접 편집한 뒤 내보내거나, 에이전트가 변경 내용을 읽어 가게 하세요.',
+      ],
+    },
+    'deepseek-harness-genui': {
+      tagline: '작업이 필요할 때 맞춤 React 인터페이스를 틔워 내고, 그 안에서 고른 것이 에이전트로 되돌아갑니다.',
+      whatIsIt:
+        '에이전트 작업을 위한 런타임 인터페이스 레이어. 텍스트가 걸림돌이 될 때 에이전트가 작은 React + TypeScript 앱을 작성해 인라인, Canvas, 전체 화면, localhost로 띄우고, 어려운 관계를 설명하거나 복잡한 결정을 수집하거나 작업 범위 승인을 거쳐 연결된 도구를 조작합니다.',
+      whyForDesign: [
+        '인터페이스가 코드 우선 React라서 레이아웃, 컨트롤, 다이어그램이 스크린샷이 아니라 진짜 컴포넌트입니다.',
+        '저장된 선택, 입력, 초안이 작업으로 돌아가 이후의 에이전트 턴이 읽을 수 있습니다.',
+        '네 가지 비주얼 프로필을 갖춘 DESIGN.md 체계가 생성된 앱을 하나의 디자인 언어로 묶어 줍니다.',
+      ],
+      howWithAgent: [
+        '설치 명령을 실행하세요. 플러그인이 추가된 뒤 Playwright에 필요한 Chromium이 설치됩니다.',
+        '상호작용이 도움이 될 때 인터페이스를 요청하세요. 선택기, 탐색 가능한 모델, 코드 경로 탐색기까지.',
+        '조작한 뒤 이어서 물어보세요. 에이전트가 다시 말해 달라는 대신 여러분이 선택한 내용을 읽어 옵니다.',
+      ],
+    },
+    'dsh-annotate': {
+      tagline: '브라우저 요소를 짚으면 막연한 설명 대신 구조화된 사실이 에이전트에게 전달됩니다.',
+      whatIsIt:
+        '동반 Chrome 확장을 통한 시각적 브라우저 피드백. /annotate로 선택 모드에 들어가면, 클릭하는 요소마다 셀렉터, DOM 사실, 계산된 스타일 하이라이트, 접근성 데이터, 여러분의 메모, 선택적인 뷰포트 스크린샷이 에이전트의 다음 턴에 실립니다.',
+      whyForDesign: [
+        '시각 피드백이 막연한 설명이나 붙여 넣은 스크린샷이 되는 대신 페이지 요소에 붙어 있습니다.',
+        '계산된 스타일과 접근성 데이터가 에이전트가 곧바로 다룰 수 있는 구조화된 사실로 도착합니다.',
+        '호스트, 오리진, 확장 ID로 제한된 루프백 WebSocket 브리지가 채널을 로컬에 묶어 둡니다.',
+      ],
+      howWithAgent: [
+        '리포지토리를 클론해 프로젝트를 하네스 프로필에 추가한 뒤, chrome://extensions에서 browser-extension 폴더를 압축 해제 방식 확장으로 로드하세요.',
+        '/annotate를 실행해 페이지의 요소를 클릭하고 각각에 메모를 붙이세요.',
+        '전송하면 수집된 사실과 뷰포트 스크린샷이 에이전트의 다음 턴에 도착합니다.',
+      ],
+    },
+    'dsh-hyperframes': {
+      tagline: 'HeyGen의 HyperFrames를 이식했습니다. HTML을 완성된 영상으로 바꾸는 공식 스킬 다섯 가지.',
+      whatIsIt:
+        '설치 한 번으로 HeyGen의 공식 HyperFrames 스킬 다섯 가지가 하네스에 등록됩니다. 비주얼 스타일, 팔레트, 자막, 오디오 반응 트랜지션을 갖춘 HTML 영상 합성, hyperframes CLI, 컴포넌트 레지스트리, 웹사이트를 영상으로 바꾸는 파이프라인, GSAP 애니메이션 레퍼런스까지.',
+      whyForDesign: [
+        '이미 쓰던 매체로 하는 모션 디자인. HTML과 CSS가 렌더링된 영상이 됩니다.',
+        '일곱 단계의 website-to-video 파이프라인이 URL 하나를 완성된 클립으로 바꿉니다.',
+        '스킬이 열린 SKILL.md 형식을 쓰므로 같은 세트가 Claude Code, Cursor, Codex로도 이어집니다.',
+      ],
+      howWithAgent: [
+        '웹 프로필에 플러그인을 추가하고 다시 시작하세요.',
+        '"이 URL을 HyperFrames 영상으로 만들어 줘"라고 말해 파이프라인을 시작하세요.',
+        'hyperframes CLI로 렌더링하세요. 의존성은 Node 22+와 FFmpeg뿐입니다.',
+      ],
+    },
+    'dsh-web-preview': {
+      tagline: '워크스페이스를 미리 보고, 프로젝트를 실행하고, 요소에 주석을 다는 글래스 사이드 패널.',
+      whatIsIt:
+        '하네스 웹 UI를 위한 사이드 웹 프리뷰 패널. 워크스페이스 파일을 프리뷰로 서빙하고(Markdown은 렌더링, 코드는 줄 번호와 함께, 이미지와 HTML은 그대로), 프로젝트는 Cargo, package.json, go.mod, Python을 자동 감지해 라이브 로그와 함께 실행되며, 마킹 모드가 요소 주석을 대화로 되돌려 보냅니다.',
+      whyForDesign: [
+        '에이전트가 방금 작성한 프로토타입이 채팅 옆에서 열립니다. 주소창은 동기화되고 패널 너비는 드래그로 조절됩니다.',
+        '마킹 모드가 요소를 호버로 강조하고, 셀렉터와 HTML 스냅샷을 수집해 메모와 함께 대화로 보냅니다.',
+        '링크, 파일 경로, 드롭한 파일이 모두 패널에서 열려 리뷰가 세션을 떠나지 않습니다.',
+      ],
+      howWithAgent: [
+        '웹 프로필 디렉터리에 패키지를 설치한 뒤, 해당 프로필의 cordis.patch.yml에 dsh-web-preview-panel이라는 이름의 insert 항목을 추가해 마운트하세요.',
+        'dsh web을 다시 시작하고 대화 우측 상단의 ▶ 프리뷰 버튼을 여세요.',
+        '패널에서 프로젝트를 실행하고, 요소에 주석을 달고, 로그와 메모를 곧장 에이전트에게 보내세요.',
       ],
     },
   },
