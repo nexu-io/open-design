@@ -2779,10 +2779,10 @@ export function HomeView({
       // route through the default design router; in Ask mode they stay plain
       // chat conversations with no hidden router plugin.
       const resolvedSkillId = submittedActive ? null : activeSkill?.id ?? null;
-      const routedPluginId =
-        sessionMode === 'design'
-          ? submittedActive?.record.id ?? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
-          : submittedActive?.record.id ?? null;
+      const routedPluginId = submittedActive?.record.id
+        ?? (sessionMode === 'design' && !resolvedSkillId
+          ? DEFAULT_UNSELECTED_SCENARIO_PLUGIN_ID
+          : null);
       // The example-prompt override is a one-shot marker. Decide whether to
       // send it now, but defer spending the marker until the create is
       // accepted — a rejected attempt stays retryable and must resend it.
