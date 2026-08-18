@@ -1383,6 +1383,53 @@ describe('AssistantMessage recovered produced files', () => {
     expect(hasProducedFiles).toBe(false);
   });
 
+  it('lists only the authoritative artifact when an earlier edit targeted a wrong project path', () => {
+    const fileName = 'opendesign-b2b-sales-deck.html';
+    const failedPath = `/workspace/projects/wrong-project/${fileName}`;
+    const deliveredPath = `/workspace/projects/project-1/${fileName}`;
+    const file = producedFile(fileName);
+
+    render(
+      <AssistantMessage
+        message={baseMessage({
+          events: [
+            {
+              kind: 'tool_use',
+              id: 'failed-edit',
+              name: 'Edit',
+              input: { file_path: failedPath },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'failed-edit',
+              content: `File ${failedPath} not found`,
+              isError: true,
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_use',
+              id: 'successful-edit',
+              name: 'Edit',
+              input: { file_path: deliveredPath },
+            } as ChatMessage['events'][number],
+            {
+              kind: 'tool_result',
+              toolUseId: 'successful-edit',
+              content: 'Updated successfully.',
+              isError: false,
+            } as ChatMessage['events'][number],
+          ],
+          producedFiles: [file],
+        })}
+        streaming={false}
+        projectId="project-1"
+        projectFiles={[file]}
+      />,
+    );
+
+    expect(screen.getAllByTestId(`file-ops-row-${fileName}`)).toHaveLength(1);
+    expect(screen.queryByTestId('file-ops-toggle')).toBeNull();
+  });
+
   it('shows project files mentioned as plain filenames in the assistant summary', () => {
     const content = '文件列表：\n- browser-war-deck-outline.md';
     render(
