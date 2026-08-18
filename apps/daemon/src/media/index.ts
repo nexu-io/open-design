@@ -414,6 +414,25 @@ export async function generateMedia(args: {
                 ? ['tts']
                 : [],
       };
+    } else if (/^openrouter\//.test(model)) {
+      // OpenRouter models discovered live from its catalogue
+      // (GET /api/v1/images/models) may not be in the static registry.
+      // They all render through renderOpenRouterImage(), which uses
+      // isOpenRouterChatImageModel() internally to pick the correct
+      // endpoint (/chat/completions for Gemini, /images for the rest).
+      isCatalogBypass = true;
+      def = {
+        id: model,
+        label: model,
+        hint: 'OpenRouter',
+        provider: 'openrouter',
+        caps:
+          surface === 'image'
+            ? ['t2i']
+            : surface === 'video'
+              ? ['t2v', 'i2v']
+              : [],
+      };
     } else {
       throw new Error(
         `unknown model: ${model}. Pass --model from the registered list (see /api/media/models), ` +
@@ -1808,6 +1827,17 @@ function sniffImageExt(bytes: Buffer): string {
 // Model IDs follow the same `openrouter/`-prefix convention as video.
 // ---------------------------------------------------------------------------
 
+// Dedicated image-generation models use the OpenRouter /images endpoint
+// (POST /api/v1/images) which returns `{ data: [{ b64_json }] }`.
+// Multi-modal chat models (Gemini variants) continue to use
+// /chat/completions with `modalities: ["image", "text"]`.
+// This heuristic keeps the two paths in sync with the model registry
+// in models.ts — Gemini slugs contain "gemini"; everything else is a
+// dedicated image model.
+function isOpenRouterChatImageModel(wireModel: string): boolean {
+  return wireModel.includes('gemini');
+}
+
 async function renderOpenRouterImage(
   ctx: MediaContext,
   credentials: ProviderConfig,
@@ -1828,41 +1858,90 @@ async function renderOpenRouterImage(
     ? resolved.slice('openrouter/'.length)
     : resolved;
 
-  // Multi-modal models (Gemini variants) accept both image and text
-  // output; image-only models (Flux, Recraft, Sourceful) only accept
-  // ["image"]. We use a simple heuristic on the slug.
-  const modalities: string[] = wireModel.includes('gemini')
-    ? ['image', 'text']
-    : ['image'];
+  const aspectRatio = openRouterAspectFor(ctx.aspect);
+  const headers: Record<string, string> = {
+    'authorization': `Bearer ${credentials.apiKey}`,
+    'content-type': 'application/json',
+    'HTTP-Referer': 'https://opendesign.dev',
+    'X-Title': 'Open Design',
+  };
 
+  // ── Route: multi-modal chat models (Gemini) → /chat/completions ──
+  if (isOpenRouterChatImageModel(wireModel)) {
+    const modalities: string[] = ['image', 'text'];
+
+    const body: Record<string, unknown> = {
+      model: wireModel,
+      messages: [
+        {
+          role: 'user',
+          content: ctx.prompt || 'A high-quality reference image.',
+        },
+      ],
+      modalities,
+      stream: false,
+    };
+
+    // Pass aspect ratio + image size through image_config when specified.
+    const imageConfig: Record<string, unknown> = {
+      aspect_ratio: aspectRatio,
+      image_size: '1K',
+    };
+    body.image_config = imageConfig;
+
+    const resp = await fetch(`${baseUrl}/chat/completions`, withMediaRequestInit(ctx, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(Math.max(OPENAI_IMAGE_HEADERS_TIMEOUT_MS, OPENAI_IMAGE_BODY_TIMEOUT_MS)),
+    }));
+    const text = await resp.text();
+    if (!resp.ok) {
+      throw new Error(`openrouter image ${resp.status}: ${truncate(text, 240)}`);
+    }
+
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error(`openrouter image non-JSON response: ${truncate(text, 200)}`);
+    }
+
+    // Extract the first generated image from the response.
+    const images: any[] | undefined =
+      data?.choices?.[0]?.message?.images;
+    if (!images || images.length === 0) {
+      throw new Error(
+        `openrouter image response contained no images for model ${wireModel}: `
+        + truncate(text, 200),
+      );
+    }
+
+    const dataUrl: string | undefined = images[0]?.image_url?.url;
+    if (!dataUrl) {
+      throw new Error(
+        `openrouter image response missing image_url.url: ${truncate(text, 200)}`,
+      );
+    }
+
+    const bytes = await decodeOpenRouterImagePayload(ctx, dataUrl);
+    return {
+      bytes,
+      providerNote: `openrouter/${wireModel} · ${aspectRatio} · ${bytes.length} bytes`,
+      suggestedExt: sniffImageExt(bytes),
+    };
+  }
+
+  // ── Route: dedicated image models → /images ──────────────────────
   const body: Record<string, unknown> = {
     model: wireModel,
-    messages: [
-      {
-        role: 'user',
-        content: ctx.prompt || 'A high-quality reference image.',
-      },
-    ],
-    modalities,
-    stream: false,
-  };
-
-  // Pass aspect ratio + image size through image_config when specified.
-  const aspectRatio = openRouterAspectFor(ctx.aspect);
-  const imageConfig: Record<string, unknown> = {
+    prompt: ctx.prompt || 'A high-quality reference image.',
     aspect_ratio: aspectRatio,
-    image_size: '1K',
   };
-  body.image_config = imageConfig;
 
-  const resp = await fetch(`${baseUrl}/chat/completions`, withMediaRequestInit(ctx, {
+  const resp = await fetch(`${baseUrl}/images`, withMediaRequestInit(ctx, {
     method: 'POST',
-    headers: {
-      'authorization': `Bearer ${credentials.apiKey}`,
-      'content-type': 'application/json',
-      'HTTP-Referer': 'https://opendesign.dev',
-      'X-Title': 'Open Design',
-    },
+    headers,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(Math.max(OPENAI_IMAGE_HEADERS_TIMEOUT_MS, OPENAI_IMAGE_BODY_TIMEOUT_MS)),
   }));
@@ -1878,37 +1957,25 @@ async function renderOpenRouterImage(
     throw new Error(`openrouter image non-JSON response: ${truncate(text, 200)}`);
   }
 
-  // Extract the first generated image from the response.
-  const images: any[] | undefined =
-    data?.choices?.[0]?.message?.images;
-  if (!images || images.length === 0) {
+  // The /images endpoint returns { data: [{ b64_json, url }] }.
+  const items: any[] | undefined = data?.data;
+  if (!items || items.length === 0) {
     throw new Error(
       `openrouter image response contained no images for model ${wireModel}: `
       + truncate(text, 200),
     );
   }
 
-  const dataUrl: string | undefined = images[0]?.image_url?.url;
-  if (!dataUrl) {
-    throw new Error(
-      `openrouter image response missing image_url.url: ${truncate(text, 200)}`,
-    );
-  }
-
-  // Strip the data URL prefix (e.g. "data:image/png;base64,") and
-  // decode the remaining base64 payload.
-  const b64Match = dataUrl.match(/^data:image\/[^;]+;base64,(.+)$/s);
+  const item = items[0]!;
   let bytes: Buffer;
-  if (b64Match) {
-    bytes = Buffer.from(b64Match[1]!, 'base64');
-  } else if (dataUrl.startsWith('http')) {
-    // Some models may return a plain URL instead of inline base64.
-    const imgResp = await fetch(dataUrl, withMediaRequestInit(ctx));
-    if (!imgResp.ok) throw new Error(`openrouter image download ${imgResp.status}`);
-    bytes = Buffer.from(await imgResp.arrayBuffer());
+  if (item.b64_json) {
+    bytes = Buffer.from(item.b64_json, 'base64');
+  } else if (item.url) {
+    bytes = await decodeOpenRouterImagePayload(ctx, item.url);
   } else {
-    // Assume raw base64 without prefix.
-    bytes = Buffer.from(dataUrl, 'base64');
+    throw new Error(
+      `openrouter image response missing b64_json and url: ${truncate(text, 200)}`,
+    );
   }
 
   return {
@@ -1916,6 +1983,26 @@ async function renderOpenRouterImage(
     providerNote: `openrouter/${wireModel} · ${aspectRatio} · ${bytes.length} bytes`,
     suggestedExt: sniffImageExt(bytes),
   };
+}
+
+/** Decode a base64 data-URL, plain URL, or raw base64 string into bytes. */
+async function decodeOpenRouterImagePayload(
+  ctx: Pick<MediaContext, 'requestInit'>,
+  payload: string,
+): Promise<Buffer> {
+  const b64Match = payload.match(/^data:image\/[^;]+;base64,(.+)$/s);
+  if (b64Match) {
+    return Buffer.from(b64Match[1]!, 'base64');
+  }
+  if (payload.startsWith('http')) {
+    // Route the download through the shared request init so the caller's
+    // dispatcher/proxy applies to plain-URL responses too.
+    const imgResp = await fetch(payload, withMediaRequestInit(ctx));
+    if (!imgResp.ok) throw new Error(`openrouter image download ${imgResp.status}`);
+    return Buffer.from(await imgResp.arrayBuffer());
+  }
+  // Assume raw base64 without prefix.
+  return Buffer.from(payload, 'base64');
 }
 
 // ---------------------------------------------------------------------------

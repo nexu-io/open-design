@@ -164,15 +164,15 @@ export function useAIHubMixAudioModels(enabled = true): MediaModel[] {
 export function useByokImageModelOptions(
   provider: string | undefined,
 ): MediaModel[] {
-  const dynamic = useAIHubMixImageModels(provider === 'aihubmix');
+  const aihubmixDynamic = useAIHubMixImageModels(provider === 'aihubmix');
   return useMemo(() => {
     if (provider === 'aihubmix') {
-      return mergeAihubmixModels(IMAGE_MODELS, dynamic).filter(
+      return mergeAihubmixModels(IMAGE_MODELS, aihubmixDynamic).filter(
         (m) => m.provider === 'aihubmix',
       );
     }
     return IMAGE_MODELS.filter((m) => m.provider === provider);
-  }, [provider, dynamic]);
+  }, [provider, aihubmixDynamic]);
 }
 
 /**

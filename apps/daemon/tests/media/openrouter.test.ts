@@ -524,7 +524,7 @@ describe('openrouter video generation', () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
-// OpenRouter IMAGE generation tests (synchronous, via chat/completions)
+// OpenRouter IMAGE generation tests
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('openrouter image generation', () => {
@@ -594,9 +594,17 @@ describe('openrouter image generation', () => {
     });
   }
 
-  // ─── tests ────────────────────────────────────────────────────────
+  /** /images endpoint response helper. */
+  function imagesResp(data: unknown[], status = 200) {
+    return new Response(JSON.stringify({ data }), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  }
 
-  it('generates an image via chat/completions with base64 response', async () => {
+  // ─── Gemini (chat/completions) tests ─────────────────────────────
+
+  it('generates an image via chat/completions for Gemini models', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       chatResp([{ type: 'image_url', image_url: { url: PNG_DATA_URL } }]),
     );
@@ -642,7 +650,7 @@ describe('openrouter image generation', () => {
     expect(headers.authorization).toBe('Bearer sk-or-img-test-key');
   });
 
-  it('uses /chat/completions endpoint, not /videos', async () => {
+  it('uses /chat/completions endpoint for Gemini, not /images', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       chatResp([{ type: 'image_url', image_url: { url: PNG_DATA_URL } }]),
     );
@@ -652,7 +660,7 @@ describe('openrouter image generation', () => {
 
     const url = fetchMock.mock.calls[0]![0] as string;
     expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
-    expect(url).not.toContain('/videos');
+    expect(url).not.toContain('/images');
   });
 
   it('uses modalities ["image", "text"] for Gemini models', async () => {
@@ -667,19 +675,7 @@ describe('openrouter image generation', () => {
     expect(body.modalities).toEqual(['image', 'text']);
   });
 
-  it('uses modalities ["image"] for non-Gemini models (Flux)', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      chatResp([{ type: 'image_url', image_url: { url: PNG_DATA_URL } }]),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-
-    await generateMedia(imageArgs({ model: 'openrouter/black-forest-labs/flux-1.1-pro' }));
-
-    const body = JSON.parse(fetchMock.mock.calls[0]![1].body);
-    expect(body.modalities).toEqual(['image']);
-  });
-
-  it('passes image_config.aspect_ratio through', async () => {
+  it('passes image_config.aspect_ratio through for Gemini', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       chatResp([{ type: 'image_url', image_url: { url: PNG_DATA_URL } }]),
     );
@@ -706,7 +702,7 @@ describe('openrouter image generation', () => {
     );
   });
 
-  it('throws when response contains no images', async () => {
+  it('throws when Gemini response contains no images', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(JSON.stringify({
         choices: [{
@@ -724,7 +720,7 @@ describe('openrouter image generation', () => {
     );
   });
 
-  it('honours OD_MEDIA_MODEL_ALIASES for image (alias contract regression)', async () => {
+  it('honours OD_MEDIA_MODEL_ALIASES for Gemini image (alias contract regression)', async () => {
     // Set an alias: the catalog id should resolve to a custom wire name.
     process.env.OD_MEDIA_MODEL_ALIASES = JSON.stringify({
       'openrouter/google/gemini-2.5-flash-image': 'my-custom-gemini-img',
@@ -765,5 +761,209 @@ describe('openrouter image generation', () => {
     expect(fetchMock.mock.calls[0]![1].dispatcher).toBe(dispatcher);
     // 2. Download
     expect(fetchMock.mock.calls[1]![1].dispatcher).toBe(dispatcher);
+  });
+
+  // ─── Dedicated image models (/images endpoint) ──────────────────
+
+  it('uses /images endpoint for non-Gemini models (Flux)', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      imagesResp([{ b64_json: PNG_B64 }]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia(imageArgs({ model: 'openrouter/black-forest-labs/flux-1.1-pro' }));
+
+    const url = fetchMock.mock.calls[0]![0] as string;
+    expect(url).toBe('https://openrouter.ai/api/v1/images');
+    expect(url).not.toContain('/chat/completions');
+  });
+
+  it('uses /images endpoint for gpt-image-2', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      imagesResp([{ b64_json: PNG_B64 }]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia(imageArgs({ model: 'openrouter/openai/gpt-image-2' }));
+
+    const url = fetchMock.mock.calls[0]![0] as string;
+    expect(url).toBe('https://openrouter.ai/api/v1/images');
+  });
+
+  it('sends prompt (not messages) for dedicated image models', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      imagesResp([{ b64_json: PNG_B64 }]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia(imageArgs({
+      model: 'openrouter/openai/gpt-image-2',
+      prompt: 'A serene mountain landscape',
+    }));
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(body.prompt).toBe('A serene mountain landscape');
+    expect(body.model).toBe('openai/gpt-image-2');
+    // Should NOT have chat-style keys
+    expect(body).not.toHaveProperty('messages');
+    expect(body).not.toHaveProperty('modalities');
+    expect(body).not.toHaveProperty('stream');
+    expect(body).not.toHaveProperty('image_config');
+  });
+
+  it('generates a complete image via /images with b64_json response', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      imagesResp([{ b64_json: PNG_B64 }]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia(imageArgs({ model: 'openrouter/openai/gpt-image-2' }));
+
+    expect(result.surface).toBe('image');
+    expect(result.providerId).toBe('openrouter');
+    expect(result.providerNote).toContain('openai/gpt-image-2');
+    expect(result.name).toBe('sunset.png');
+
+    const bytes = await readFile(path.join(projectsRoot, 'project-img', 'sunset.png'));
+    expect(bytes.length).toBeGreaterThan(0);
+  });
+
+  it('sends attribution headers on /images requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      imagesResp([{ b64_json: PNG_B64 }]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia(imageArgs({ model: 'openrouter/recraft/recraft-v3' }));
+
+    const headers = fetchMock.mock.calls[0]![1].headers;
+    expect(headers['HTTP-Referer']).toBe('https://opendesign.dev');
+    expect(headers['X-Title']).toBe('Open Design');
+    expect(headers.authorization).toBe('Bearer sk-or-img-test-key');
+  });
+
+  it('strips the openrouter/ prefix for dedicated models', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      imagesResp([{ b64_json: PNG_B64 }]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia(imageArgs({ model: 'openrouter/recraft/recraft-v3' }));
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(body.model).toBe('recraft/recraft-v3');
+    expect(body.model).not.toContain('openrouter/');
+  });
+
+  it('passes aspect_ratio as top-level field in /images request body', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      imagesResp([{ b64_json: PNG_B64 }]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia(imageArgs({ model: 'openrouter/openai/gpt-image-2', aspect: '9:16' }));
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(body.aspect_ratio).toBe('9:16');
+  });
+
+  it('throws on HTTP error from /images endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: { message: 'model not found' } }), {
+        status: 404,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia(imageArgs({ model: 'openrouter/openai/gpt-image-2' }))).rejects.toThrow(
+      /openrouter image 404/,
+    );
+  });
+
+  it('throws when /images response contains no data items', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      imagesResp([]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(generateMedia(imageArgs({ model: 'openrouter/openai/gpt-image-2' }))).rejects.toThrow(
+      /no images/,
+    );
+  });
+
+  // ─── Catalog bypass: dynamically discovered OpenRouter models ────
+
+  it('accepts unregistered openrouter/* models via catalog bypass', async () => {
+    // A model like openrouter/stability/sdxl might not be in the static
+    // registry but can be configured directly on the OpenRouter media
+    // provider. The dispatcher should synthesize a def and route to /images.
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      imagesResp([{ b64_json: PNG_B64 }]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia(imageArgs({
+      model: 'openrouter/stability/sdxl-turbo',
+    }));
+
+    expect(result.surface).toBe('image');
+    expect(result.providerId).toBe('openrouter');
+    expect(result.providerNote).toContain('stability/sdxl-turbo');
+
+    // Should use /images endpoint, not /chat/completions
+    const url = fetchMock.mock.calls[0]![0] as string;
+    expect(url).toBe('https://openrouter.ai/api/v1/images');
+  });
+
+  // ─── Settings-stored credentials regression (issue #4994 review) ─
+
+  it('uses Settings-stored API key when env var is absent', async () => {
+    // Clear the env-var credential so the only source is media-config.json.
+    delete process.env.OD_OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
+
+    // Write a Settings-style config with a stored key.
+    const configDir = path.join(projectRoot, '.od');
+    await mkdir(configDir, { recursive: true });
+    await writeFile(
+      path.join(configDir, 'media-config.json'),
+      JSON.stringify({ providers: { openrouter: { apiKey: 'sk-or-stored-settings-key' } } }),
+      'utf8',
+    );
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      imagesResp([{ b64_json: PNG_B64 }]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateMedia(imageArgs({ model: 'openrouter/openai/gpt-image-2' }));
+
+    // The authorization header must carry the Settings-stored key.
+    const headers = fetchMock.mock.calls[0]![1].headers;
+    expect(headers.authorization).toBe('Bearer sk-or-stored-settings-key');
+  });
+
+  it('routes unregistered openrouter/google/* models via catalog bypass to /chat/completions', async () => {
+    // A future Gemini model not yet in the static registry must still go
+    // through renderOpenRouterImage() and hit /chat/completions (not /images).
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      chatResp([{ type: 'image_url', image_url: { url: PNG_DATA_URL } }]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await generateMedia(imageArgs({
+      model: 'openrouter/google/gemini-2.5-pro-image',
+    }));
+
+    expect(result.surface).toBe('image');
+    expect(result.providerId).toBe('openrouter');
+
+    // Must route to /chat/completions, not /images
+    const url = fetchMock.mock.calls[0]![0] as string;
+    expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
+
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(body.modalities).toEqual(['image', 'text']);
   });
 });

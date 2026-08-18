@@ -485,6 +485,7 @@ export const IMAGE_MODELS: MediaModel[] = [
 
   // OpenRouter image models.
   { id: 'openrouter/google/gemini-2.5-flash-image', label: 'gemini-flash-image (OR)', hint: 'OpenRouter · Gemini', provider: 'openrouter', caps: ['t2i'] },
+  { id: 'openrouter/openai/gpt-image-2', label: 'gpt-image-2 (OR)', hint: 'OpenRouter · OpenAI', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/black-forest-labs/flux-1.1-pro', label: 'flux-1.1-pro (OR)', hint: 'OpenRouter · BFL', provider: 'openrouter', caps: ['t2i'] },
   { id: 'openrouter/recraft/recraft-v3', label: 'recraft-v3 (OR)', hint: 'OpenRouter · Recraft', provider: 'openrouter', caps: ['t2i'] },
 
