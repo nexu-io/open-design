@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { WorkspaceCollabContext } from '@open-design/contracts';
 import { createEnforceWorkspaceProjectMutation } from '../../src/routes/project/index.js';
 import type { WorkspaceResourceAccessInput } from '../../src/collab/workspace-resource-mutation.js';
 
@@ -12,40 +11,6 @@ function request() {
     get(name: string) {
       return headers[name.toLowerCase()];
     },
-  };
-}
-
-function personalContext(
-  overrides: Partial<WorkspaceCollabContext> = {},
-): WorkspaceCollabContext {
-  return {
-    workspaceId: 'workspace-personal',
-    workspaceName: 'Personal',
-    workspaceType: 'personal',
-    workspaceMemberId: 'member-owner',
-    role: 'owner',
-    memberStatus: 'active',
-    lifecycleState: 'active',
-    billingState: 'active',
-    planId: null,
-    providerMode: 'platform_credits',
-    seatSummary: {
-      seatLimit: 1,
-      usedSeats: 1,
-      availableSeats: 0,
-      isSeatFull: true,
-    },
-    permissions: {
-      canManageMembers: true,
-      canManageBilling: true,
-      canInviteMembers: false,
-      canManageAutoRecharge: true,
-      canShareProjects: false,
-      canWriteSyncedFiles: true,
-      canViewWorkspaceSettings: true,
-      canManageSharedResources: true,
-    },
-    ...overrides,
   };
 }
 
@@ -71,8 +36,8 @@ function lookups(row: WorkspaceResourceAccessInput) {
   };
 }
 
-describe('personal local-only project delete authority lease', () => {
-  it('deletes from a warm personal lease without starting the fresh authority request', async () => {
+describe('local project mutation authority', () => {
+  it('deletes locally without consulting either settled or fresh remote authority', async () => {
     const row = localOnlyProject();
     const { exact, any } = lookups(row);
     const fresh = vi.fn(async () => ({
@@ -84,7 +49,7 @@ describe('personal local-only project delete authority lease', () => {
     }));
     const lease = vi.fn(async () => ({
       ok: true as const,
-      context: personalContext(),
+      context: {} as never,
     }));
     const enforce = createEnforceWorkspaceProjectMutation(fresh, lease);
 
@@ -98,18 +63,15 @@ describe('personal local-only project delete authority lease', () => {
       'project-a',
       'delete',
     )).resolves.toBe(true);
-    expect(lease).toHaveBeenCalledTimes(1);
+    expect(lease).not.toHaveBeenCalled();
     expect(fresh).not.toHaveBeenCalled();
   });
 
   it.each([
-    ['Team visibility', localOnlyProject({ visibility: 'team' }), personalContext()],
-    ['hub-backed project', localOnlyProject({ resourceHubResourceId: 'hub-1' }), personalContext()],
-    ['synced project', localOnlyProject({ syncState: 'synced' }), personalContext()],
-    ['different creator', localOnlyProject({ createdByWorkspaceMemberId: 'member-other' }), personalContext()],
-    ['locked membership', localOnlyProject(), personalContext({ lifecycleState: 'locked' })],
-    ['Team workspace', localOnlyProject(), personalContext({ workspaceType: 'team', teamId: 'workspace-personal' })],
-  ])('falls through to fresh authority for %s', async (_label, row, context) => {
+    ['Team visibility', localOnlyProject({ visibility: 'team' })],
+    ['hub-backed project', localOnlyProject({ resourceHubResourceId: 'hub-1' })],
+    ['synced project', localOnlyProject({ syncState: 'synced' })],
+  ])('keeps %s locally mutable during an authority outage', async (_label, row) => {
     const { exact, any } = lookups(row);
     const fresh = vi.fn(async () => ({
       ok: false as const,
@@ -118,7 +80,7 @@ describe('personal local-only project delete authority lease', () => {
       message: 'fresh authority is unavailable',
       retryable: true as const,
     }));
-    const lease = vi.fn(async () => ({ ok: true as const, context }));
+    const lease = vi.fn();
     const sendApiError = vi.fn();
     const enforce = createEnforceWorkspaceProjectMutation(fresh, lease);
 
@@ -131,28 +93,22 @@ describe('personal local-only project delete authority lease', () => {
       {},
       'project-a',
       'delete',
-    )).resolves.toBe(false);
-    expect(lease).toHaveBeenCalledTimes(1);
-    expect(fresh).toHaveBeenCalledTimes(1);
-    expect(sendApiError).toHaveBeenCalledWith(
-      expect.anything(),
-      503,
-      'WORKSPACE_AUTHORITY_UNAVAILABLE',
-      expect.any(String),
-      { retryable: true },
-    );
+    )).resolves.toBe(true);
+    expect(lease).not.toHaveBeenCalled();
+    expect(fresh).not.toHaveBeenCalled();
+    expect(sendApiError).not.toHaveBeenCalled();
   });
 
-  it('keeps non-delete mutations on fresh authority even when the lease is eligible', async () => {
+  it('keeps non-delete mutations off remote authority too', async () => {
     const row = localOnlyProject();
     const { exact, any } = lookups(row);
     const fresh = vi.fn(async () => ({
       ok: true as const,
-      context: personalContext(),
+      context: {} as never,
     }));
     const lease = vi.fn(async () => ({
       ok: true as const,
-      context: personalContext(),
+      context: {} as never,
     }));
     const enforce = createEnforceWorkspaceProjectMutation(fresh, lease);
 
@@ -166,7 +122,35 @@ describe('personal local-only project delete authority lease', () => {
       'project-a',
       'writeFiles',
     )).resolves.toBe(true);
-    expect(fresh).toHaveBeenCalledTimes(1);
+    expect(fresh).not.toHaveBeenCalled();
     expect(lease).not.toHaveBeenCalled();
+  });
+
+  it('still rejects an explicit member that is not the persisted creator', async () => {
+    const row = localOnlyProject({ createdByWorkspaceMemberId: 'member-other' });
+    const { exact, any } = lookups(row);
+    const fresh = vi.fn();
+    const lease = vi.fn();
+    const sendApiError = vi.fn();
+    const enforce = createEnforceWorkspaceProjectMutation(fresh, lease);
+
+    await expect(enforce(
+      request(),
+      {} as any,
+      sendApiError,
+      exact,
+      any,
+      {},
+      'project-a',
+      'delete',
+    )).resolves.toBe(false);
+    expect(fresh).not.toHaveBeenCalled();
+    expect(lease).not.toHaveBeenCalled();
+    expect(sendApiError).toHaveBeenCalledWith(
+      expect.anything(),
+      403,
+      'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      expect.any(String),
+    );
   });
 });

@@ -44,7 +44,8 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { startServer } from '../src/server.js';
-import { openDatabase, updateWorkspaceProject } from '../src/db.js';
+import { openDatabase, updateProject, updateWorkspaceProject } from '../src/db.js';
+import { SHARED_PROJECT_PLACEHOLDER_METADATA_KEY } from '../src/collab/shared-project-placeholder.js';
 
 const WORKSPACE_ID = 'ws-readonly-mirror';
 const OWNER_MEMBER_ID = 'member-owner-readonly-mirror';
@@ -130,6 +131,15 @@ describe('version history on a readonly shared mirror', () => {
     return id;
   }
 
+  async function stampAsUnmaterializedPlaceholder(projectId: string): Promise<void> {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const db = openDatabase(projectsRoot(), { dataDir });
+    expect(updateProject(db, projectId, {
+      metadata: { [SHARED_PROJECT_PLACEHOLDER_METADATA_KEY]: Date.now() },
+    })).not.toBeNull();
+  }
+
   function memberHeaders(memberId: string, role: 'owner' | 'member') {
     return {
       'x-od-workspace-id': WORKSPACE_ID,
@@ -181,6 +191,31 @@ describe('version history on a readonly shared mirror', () => {
     const body = await getVersions(projectId);
 
     expect(body.versions).toEqual([]);
+    expect(await versionRootExists(projectId)).toBe(false);
+  });
+
+  it('keeps the placeholder stamp fail-closed even if its creator was accidentally promoted', async () => {
+    const projectId = await seedTeamProject();
+    await stampAsUnmaterializedPlaceholder(projectId);
+
+    const rename = await fetch(`${baseUrl}/api/projects/${projectId}`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        ...memberHeaders(OWNER_MEMBER_ID, 'owner'),
+      },
+      body: JSON.stringify({ name: 'Must not land before materialization' }),
+    });
+    expect(rename.status).toBe(409);
+    expect(await rename.json()).toMatchObject({
+      error: { code: 'PROJECT_MATERIALIZATION_PENDING' },
+    });
+
+    const versions = await getVersions(
+      projectId,
+      memberHeaders(OWNER_MEMBER_ID, 'owner'),
+    );
+    expect(versions.versions).toEqual([]);
     expect(await versionRootExists(projectId)).toBe(false);
   });
 });

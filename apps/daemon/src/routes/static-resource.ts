@@ -32,7 +32,7 @@ import {
 } from '../db.js';
 import {
   enforceVerifiedWorkspaceResourceMutation,
-  resolveOptionalWorkspaceRequestAuthority,
+  resolveOptionalLocalWorkspaceRequestAuthority,
   type VerifyWorkspaceRequestAuthority,
 } from '../collab/workspace-resource-mutation.js';
 import { listCodexPets, readCodexPetSpritesheet } from '../codex-pets.js';
@@ -283,10 +283,7 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       );
       return undefined;
     }
-    const authority = await resolveOptionalWorkspaceRequestAuthority(
-      scopedRequest,
-      options.verifyAuthority ?? ctx.verifyWorkspaceRequestAuthority,
-    );
+    const authority = resolveOptionalLocalWorkspaceRequestAuthority(scopedRequest);
     if (!authority.ok) {
       sendApiError(res, authority.status, authority.code, authority.message, {
         ...(authority.retryable ? { retryable: true } : {}),
@@ -308,6 +305,16 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
   ): Promise<boolean> => {
     const binding = getWorkspaceResourceByResourceId(db, 'skill', skillId);
     if (!binding) return true;
+    const localAuthority = resolveOptionalLocalWorkspaceRequestAuthority(req);
+    if (!localAuthority.ok) {
+      sendApiError(
+        res,
+        localAuthority.status,
+        localAuthority.code,
+        localAuthority.message,
+      );
+      return false;
+    }
     return enforceVerifiedWorkspaceResourceMutation(
       'skill',
       req,
@@ -318,7 +325,9 @@ export function registerStaticResourceRoutes(app: Express, ctx: RegisterStaticRe
       db,
       skillId,
       capability,
-      ctx.verifyWorkspaceRequestAuthority,
+      localAuthority.context
+        ? async () => ({ ok: true as const, context: localAuthority.context! })
+        : undefined,
     );
   };
   const hasActiveTeamSkillBinding = (

@@ -67,6 +67,7 @@ import {
   WorkspaceTabsBar,
 } from './components/WorkspaceTabsBar';
 import { WorkspaceTopRightAccountCluster } from './components/EntryNavRail';
+import { ProjectWorkspaceRecoveryTip } from './components/ProjectWorkspaceRecoveryTip';
 import {
   DesignSystemCreationFlow,
   DesignSystemDetailView,
@@ -184,8 +185,9 @@ import {
 } from './runtime/amr-auth-retry-continuation';
 import { installFontRecovery } from './runtime/font-recovery';
 import {
-  createDesignSystemProjectFromProject,
+  bootstrapFirstOpenTeamProjectRoute,
   bootstrapProjectRoute,
+  createDesignSystemProjectFromProject,
   createProject,
   createPluginShareProject,
   deleteProject as deleteProjectApi,
@@ -4270,6 +4272,7 @@ function AppInner() {
     workspaceScope?: ProjectWorkspaceScope;
     resolvedDir?: string | null;
     workspaceContext?: WorkspaceCollabContext;
+    awaitingFirstMaterialization?: boolean;
   } | null>(null);
   const [, setRouteProjectSnapshotRevision] = useState(0);
   const activeAccountGeneration = currentWorkspaceAccountGeneration();
@@ -4304,6 +4307,10 @@ function AppInner() {
           : exactOpeningContext
             ? { workspaceContext: exactOpeningContext }
             : {}),
+        ...((preservesBootstrapWitness && previous.awaitingFirstMaterialization)
+          || listedProject.metadata?.sharedProjectPlaceholderAt != null
+          ? { awaitingFirstMaterialization: true }
+          : {}),
       };
       if (exactOpeningContext) projectOpenWorkspaceWitnessRef.current = null;
     } else if (
@@ -4500,6 +4507,8 @@ function AppInner() {
           capturedAfterListGeneration: latestAppliedProjectListGenerationRef.current,
           workspaceScope: bootstrap.scope,
           resolvedDir: bootstrap.resolvedDir,
+          awaitingFirstMaterialization:
+            bootstrap.project.metadata?.sharedProjectPlaceholderAt != null,
         };
         setRouteProjectSnapshotRevision((current) => current + 1);
         return;
@@ -4519,8 +4528,48 @@ function AppInner() {
         });
         return;
       }
-      // Preserve the existing shared-project recovery lane, but only after the
-      // ambient boot has settled enough to supply its exact catalog identity.
+      // A verified Team identity can bootstrap independently of the shell's
+      // project list, so begin local authority + background content work now.
+      const firstOpenTeamContext = exactOpenContext ?? deepLinkContext;
+      if (
+        firstOpenTeamContext?.workspaceType === 'team'
+        && firstOpenTeamContext.memberStatus === 'active'
+        && firstOpenTeamContext.lifecycleState === 'active'
+      ) {
+        const progressive = await bootstrapFirstOpenTeamProjectRoute(projectId, {
+          accountGeneration,
+          exactContext: firstOpenTeamContext,
+        });
+        if (
+          cancelled
+          || accountChanged()
+          || (!exactOpenContext && identityChanged())
+        ) return;
+        if (progressive.kind === 'found') {
+          routeProjectSnapshotRef.current = {
+            project: progressive.project,
+            accountGeneration,
+            capturedAfterListGeneration: latestAppliedProjectListGenerationRef.current,
+            workspaceScope: progressive.scope,
+            resolvedDir: progressive.resolvedDir,
+            workspaceContext: firstOpenTeamContext,
+            awaitingFirstMaterialization:
+              progressive.awaitingFirstMaterialization,
+          };
+          setRouteProjectSnapshotRevision((current) => current + 1);
+          return;
+        }
+        if (progressive.kind === 'forbidden') {
+          setDeepLinkResolutionFailure({ projectId, failure: 'missing' });
+          return;
+        }
+        // `not-found` can be a hub propagation race and `unavailable` includes
+        // old daemons that registered an unbound placeholder. Both retain the
+        // proven, bounded full-pull fallback below.
+      }
+      // The exact Team bootstrap above is independent of the shell project
+      // list, so it intentionally starts while that list is still loading.
+      // Only the legacy catalog+blocking-pull fallback waits for ambient boot.
       if (projectsLoading || !daemonLive) return;
       const resolution = await resolveDeepLinkedTeamSharedProject(projectId, {
         getProject: (id) => getProject(id, deepLinkContext),
@@ -5103,7 +5152,14 @@ function AppInner() {
           </div>
         </div>
       );
-    } else if (activeProject && projectRouteWorkspaceContext.failure) {
+    } else if (
+      activeProject
+      && projectRouteWorkspaceContext.failure
+      && (
+        projectRouteWorkspaceContext.failure === 'forbidden'
+        || activeProjectWorkspaceContext === null
+      )
+    ) {
       appMain = (
         <div className="entry-shell entry-shell--no-header">
           <div className="centered-loader">
@@ -5143,6 +5199,12 @@ function AppInner() {
                   project: routeProjectSnapshotRef.current.project,
                   resolvedDir: routeProjectSnapshotRef.current.resolvedDir,
                 }
+              : undefined
+          }
+          initialMaterializationPending={
+            routeProjectSnapshotRef.current?.project.id === activeProject.id
+              ? routeProjectSnapshotRef.current.awaitingFirstMaterialization
+                ?? (activeProject.metadata?.sharedProjectPlaceholderAt != null)
               : undefined
           }
           projectAuthorizationKey={
@@ -5350,6 +5412,11 @@ function AppInner() {
                 : undefined
             }
           />
+        ) : null}
+        {route.kind === 'project'
+          && activeProjectWorkspaceContext
+          && projectRouteWorkspaceContext.failure === 'unavailable' ? (
+          <ProjectWorkspaceRecoveryTip />
         ) : null}
         <div className="workspace-shell__body">
           {appMain}

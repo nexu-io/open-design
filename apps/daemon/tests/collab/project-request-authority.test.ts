@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import {
-  createAuthorizeProjectRequest,
-  resolveBoundProjectWorkspaceReadAuthority,
-} from '../../src/collab/project-request-authority.js';
+import { createAuthorizeProjectRequest } from '../../src/collab/project-request-authority.js';
 import { verifyWorkspaceRequestContext } from '../../src/collab/request-workspace-context.js';
 import { createCachedWorkspaceDirectoryFetcher } from '../../src/collab/vela-workspace-context.js';
 
@@ -60,23 +57,45 @@ function context(overrides: Record<string, unknown> = {}) {
 }
 
 describe('createAuthorizeProjectRequest', () => {
-  it('preserves the expired-session sign-in signal for derived bound-project reads', () => {
-    const result = resolveBoundProjectWorkspaceReadAuthority('workspace-a', {
-      ok: false,
-      items: [],
-      reason: 'unauthorized',
-      status: 401,
+  it('keeps a first-open placeholder readable/commentable but blocks content writes', async () => {
+    const row = {
+      workspaceId: 'workspace-a',
+      visibility: 'team',
+      resourceState: 'active',
+      // Deliberately model a stale/legacy creator-bound placeholder. Current
+      // materialization keeps this null, but the stamp must independently
+      // fail closed even if a bad binding would otherwise grant writes.
+      createdByWorkspaceMemberId: 'member-a',
+    };
+    const sendApiError = vi.fn();
+    const authorize = createAuthorizeProjectRequest({
+      db: {},
+      getWorkspaceProject: () => row,
+      getWorkspaceProjectByProjectId: () => row,
+      isProjectUnmaterializedPlaceholder: () => true,
+      sendApiError,
     });
+    const req = request({ workspaceId: 'workspace-a', memberId: 'member-a' });
 
-    expect(result).toMatchObject({
-      ok: false,
-      status: 401,
-      code: 'AMR_AUTH_REQUIRED',
-    });
-    expect(result).not.toHaveProperty('retryable');
+    await expect(authorize(req, response(), 'project-a', { mode: 'read' }))
+      .resolves.toBe(true);
+    await expect(authorize(req, response(), 'project-a', {
+      mode: 'write',
+      capability: 'comment',
+    })).resolves.toBe(true);
+    await expect(authorize(req, response(), 'project-a', {
+      mode: 'write',
+      capability: 'writeFiles',
+    })).resolves.toBe(false);
+    expect(sendApiError).toHaveBeenLastCalledWith(
+      expect.anything(),
+      409,
+      'PROJECT_MATERIALIZATION_PENDING',
+      expect.any(String),
+    );
   });
 
-  it('derives a bound project read from persisted server authority when the request is headerless', async () => {
+  it('serves a headerless bound-project read from local binding without remote authority', async () => {
     const row = {
       workspaceId: 'workspace-a',
       visibility: 'personal',
@@ -104,7 +123,7 @@ describe('createAuthorizeProjectRequest', () => {
       'project-a',
       { mode: 'read' },
     )).resolves.toBe(true);
-    expect(resolve).toHaveBeenCalledWith('project-a');
+    expect(resolve).not.toHaveBeenCalled();
     expect(verify).not.toHaveBeenCalled();
     expect(sendApiError).not.toHaveBeenCalled();
   });
@@ -143,7 +162,7 @@ describe('createAuthorizeProjectRequest', () => {
       'project-a',
       { mode: 'read' },
     )).resolves.toBe(false);
-    expect(verify).toHaveBeenCalledTimes(1);
+    expect(verify).not.toHaveBeenCalled();
     expect(resolve).not.toHaveBeenCalled();
     expect(sendApiError).toHaveBeenCalledWith(
       expect.anything(),
@@ -153,7 +172,7 @@ describe('createAuthorizeProjectRequest', () => {
     );
   });
 
-  it('fails a derived bound-project read closed when server authority is unavailable', async () => {
+  it('keeps a bound-project read available when remote authority is unavailable', async () => {
     const row = {
       workspaceId: 'workspace-a',
       visibility: 'team',
@@ -179,17 +198,11 @@ describe('createAuthorizeProjectRequest', () => {
       response(),
       'project-a',
       { mode: 'read' },
-    )).resolves.toBe(false);
-    expect(sendApiError).toHaveBeenCalledWith(
-      expect.anything(),
-      503,
-      'WORKSPACE_AUTHORITY_UNAVAILABLE',
-      expect.any(String),
-      { retryable: true },
-    );
+    )).resolves.toBe(true);
+    expect(sendApiError).not.toHaveBeenCalled();
   });
 
-  it('uses the bounded read verifier without weakening fresh mutation authority', async () => {
+  it('does not probe the membership directory for repeated local reads or writes', async () => {
     const row = {
       workspaceId: 'workspace-a',
       visibility: 'personal',
@@ -242,8 +255,8 @@ describe('createAuthorizeProjectRequest', () => {
       await expect(authorize(req, response(), 'project-a', { mode: 'read' }))
         .resolves.toBe(true);
     }
-    expect(readVerifier).toHaveBeenCalledTimes(6);
-    expect(fetchReadDirectory).toHaveBeenCalledTimes(1);
+    expect(readVerifier).not.toHaveBeenCalled();
+    expect(fetchReadDirectory).not.toHaveBeenCalled();
     expect(mutationVerifier).not.toHaveBeenCalled();
 
     for (let index = 0; index < 2; index += 1) {
@@ -254,10 +267,10 @@ describe('createAuthorizeProjectRequest', () => {
         { mode: 'write', capability: 'writeFiles' },
       )).resolves.toBe(true);
     }
-    expect(readVerifier).toHaveBeenCalledTimes(6);
-    expect(fetchReadDirectory).toHaveBeenCalledTimes(1);
-    expect(mutationVerifier).toHaveBeenCalledTimes(2);
-    expect(fetchFreshMutationDirectory).toHaveBeenCalledTimes(2);
+    expect(readVerifier).not.toHaveBeenCalled();
+    expect(fetchReadDirectory).not.toHaveBeenCalled();
+    expect(mutationVerifier).not.toHaveBeenCalled();
+    expect(fetchFreshMutationDirectory).not.toHaveBeenCalled();
   });
 
   it('preserves unbound legacy reads and writes without consulting authority', async () => {
@@ -283,7 +296,7 @@ describe('createAuthorizeProjectRequest', () => {
     expect(sendApiError).not.toHaveBeenCalled();
   });
 
-  it('does not disclose a bound project to a headerless bootstrap request', async () => {
+  it('keeps a bound local project available to a headerless daemon client', async () => {
     const row = {
       workspaceId: 'workspace-a',
       visibility: 'personal',
@@ -309,19 +322,14 @@ describe('createAuthorizeProjectRequest', () => {
       response(),
       'project-a',
       { mode: 'read' },
-    )).resolves.toBe(false);
-    expect(verify).toHaveBeenCalledTimes(1);
-    expect(sendApiError).toHaveBeenCalledWith(
-      expect.anything(),
-      400,
-      'WORKSPACE_CONTEXT_REQUIRED',
-      expect.any(String),
-      expect.any(Object),
-    );
+    )).resolves.toBe(true);
+    expect(verify).not.toHaveBeenCalled();
+    expect(sendApiError).not.toHaveBeenCalled();
   });
 
   it('keeps locked/frozen Team projects readable but rejects writes', async () => {
     const row = {
+      workspaceId: 'workspace-a',
       visibility: 'team',
       resourceState: 'frozen',
       createdByWorkspaceMemberId: 'member-a',
@@ -395,6 +403,49 @@ describe('createAuthorizeProjectRequest', () => {
     },
   );
 
+  it.each(['rename', 'delete', 'duplicate', 'writeFiles'] as const)(
+    'keeps a materialized member mirror read-only for %s during an authority outage',
+    async (capability) => {
+      const row = {
+        workspaceId: 'workspace-a',
+        visibility: 'team',
+        resourceState: 'active',
+        // The durable shape written by `materializePulledTeamMirror` when the
+        // viewer is not the project owner.
+        createdByWorkspaceMemberId: null,
+      };
+      const verify = vi.fn(async () => ({
+        ok: false as const,
+        status: 503 as const,
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace authority is temporarily unavailable',
+        retryable: true as const,
+      }));
+      const sendApiError = vi.fn();
+      const authorize = createAuthorizeProjectRequest({
+        db: {},
+        getWorkspaceProject: () => row,
+        getWorkspaceProjectByProjectId: () => row,
+        verifyWorkspaceRequestAuthority: verify,
+        sendApiError,
+      });
+
+      await expect(authorize(
+        request({ workspaceId: 'workspace-a', memberId: 'mirror-viewer' }),
+        response(),
+        'project-a',
+        { mode: 'write', capability },
+      )).resolves.toBe(false);
+      expect(verify).not.toHaveBeenCalled();
+      expect(sendApiError).toHaveBeenLastCalledWith(
+        expect.anything(),
+        403,
+        'WORKSPACE_PROJECT_PERMISSION_DENIED',
+        expect.any(String),
+      );
+    },
+  );
+
   it('preserves shared-project comments for active Team viewers', async () => {
     const row = {
       workspaceId: 'workspace-a',
@@ -426,6 +477,7 @@ describe('createAuthorizeProjectRequest', () => {
 
   it('preserves write access for the shared-project owner', async () => {
     const row = {
+      workspaceId: 'workspace-a',
       visibility: 'team',
       resourceState: 'active',
       createdByWorkspaceMemberId: 'member-a',
@@ -453,6 +505,7 @@ describe('createAuthorizeProjectRequest', () => {
     'does not let a Workspace %s mutate another member\'s Personal project',
     async (role) => {
       const row = {
+        workspaceId: 'workspace-a',
         visibility: 'personal',
         resourceState: 'active',
         createdByWorkspaceMemberId: 'project-owner',
@@ -488,6 +541,35 @@ describe('createAuthorizeProjectRequest', () => {
     },
   );
 
+  it('does not expose a Personal project to another member in the same Workspace', async () => {
+    const row = {
+      workspaceId: 'workspace-a',
+      visibility: 'personal',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: 'project-owner',
+    };
+    const sendApiError = vi.fn();
+    const authorize = createAuthorizeProjectRequest({
+      db: {},
+      getWorkspaceProject: () => row,
+      getWorkspaceProjectByProjectId: () => row,
+      sendApiError,
+    });
+
+    await expect(authorize(
+      request({ workspaceId: 'workspace-a', memberId: 'workspace-admin' }),
+      response(),
+      'project-a',
+      { mode: 'read' },
+    )).resolves.toBe(false);
+    expect(sendApiError).toHaveBeenCalledWith(
+      expect.anything(),
+      403,
+      'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      'workspace project read is not allowed',
+    );
+  });
+
   it.each([
     [
       'removed member',
@@ -503,14 +585,15 @@ describe('createAuthorizeProjectRequest', () => {
         retryable: true as const,
       },
     ],
-  ])('fails a bound read closed for %s', async (_label, result) => {
-    const row = { visibility: 'team', resourceState: 'active' };
+  ])('keeps a local bound read available for stale remote state: %s', async (_label, result) => {
+    const row = { workspaceId: 'workspace-a', visibility: 'team', resourceState: 'active' };
+    const verify = vi.fn(async () => result);
     const sendApiError = vi.fn();
     const authorize = createAuthorizeProjectRequest({
       db: {},
       getWorkspaceProject: () => row,
       getWorkspaceProjectByProjectId: () => row,
-      verifyWorkspaceRequestAuthority: async () => result,
+      verifyWorkspaceRequestAuthority: verify,
       sendApiError,
     });
 
@@ -519,18 +602,13 @@ describe('createAuthorizeProjectRequest', () => {
       response(),
       'project-a',
       { mode: 'read' },
-    )).resolves.toBe(false);
-    expect(sendApiError).toHaveBeenCalledWith(
-      expect.anything(),
-      result.status,
-      result.code,
-      result.message,
-      expect.any(Object),
-    );
+    )).resolves.toBe(true);
+    expect(verify).not.toHaveBeenCalled();
+    expect(sendApiError).not.toHaveBeenCalled();
   });
 
   it('denies a freshly verified cross-Workspace identity', async () => {
-    const row = { visibility: 'team', resourceState: 'active' };
+    const row = { workspaceId: 'workspace-a', visibility: 'team', resourceState: 'active' };
     const sendApiError = vi.fn();
     const authorize = createAuthorizeProjectRequest({
       db: {},
@@ -562,7 +640,7 @@ describe('createAuthorizeProjectRequest', () => {
   });
 
   it('accepts an exact navigation query pair and rejects header/query conflict', async () => {
-    const row = { visibility: 'team', resourceState: 'active' };
+    const row = { workspaceId: 'workspace-a', visibility: 'team', resourceState: 'active' };
     const verify = vi.fn(async (req: any) => ({
       ok: true as const,
       context: context({
@@ -591,6 +669,7 @@ describe('createAuthorizeProjectRequest', () => {
       'project-a',
       { mode: 'read', allowNavigationQuery: true },
     )).resolves.toBe(true);
+    expect(verify).not.toHaveBeenCalled();
 
     await expect(authorize(
       request({

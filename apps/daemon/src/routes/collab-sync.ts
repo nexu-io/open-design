@@ -90,6 +90,11 @@ export interface PulledProjectStore {
     input: RegisterPulledProjectInput,
     scope: TeamMirrorPullScope,
   ) => { localRecordChanged: boolean };
+  /** Atomically create a stamped, creator-less Team-bound first-open row. */
+  materializeTeamPlaceholder?: (
+    input: RegisterPulledProjectInput,
+    scope: TeamMirrorPullScope,
+  ) => { localRecordChanged: boolean };
   materializeAuthorizedTeamMirror?: (
     input: RegisterPulledProjectInput,
     scope: TeamMirrorPullScope,
@@ -1058,6 +1063,29 @@ export function registerCollabSyncRoutes(
     // pull lands real hub content (the recvqzaDvUU6B3 fresh-install wipe
     // guard — see collab/shared-project-placeholder.ts).
     markSharedProjectPlaceholder?.(projectId, true);
+  }
+
+  function ensureTeamBoundSharedProjectPlaceholder(
+    projectId: string,
+    scope: TeamMirrorPullScope,
+  ): boolean {
+    if (!projectStore?.materializeTeamPlaceholder) {
+      throw new Error('team placeholder materializer unavailable');
+    }
+    const existing = projectStore.get?.(projectId) ?? null;
+    if (projectStore.has(projectId) && !isUnmaterializedSharedPlaceholder(existing)) {
+      return false;
+    }
+    const now = Date.now();
+    projectStore.materializeTeamPlaceholder({
+      id: projectId,
+      name: PULLED_PROJECT_PLACEHOLDER_NAME,
+      skillId: null,
+      designSystemId: null,
+      createdAt: now,
+      updatedAt: now,
+    }, scope);
+    return true;
   }
 
   /**
@@ -2143,6 +2171,40 @@ export function registerCollabSyncRoutes(
       return res.status(502).json({ error: 'TEAM_PROJECT_PULL_REGISTER_UNAVAILABLE' });
     }
     res.json({ ok: true, version: outcome.version });
+  });
+
+  app.put('/api/projects/:id/collab/bootstrap', async (req, res) => {
+    const projectId = req.params.id;
+    // This endpoint materializes local authority state, so it deliberately uses
+    // the fresh mutation verifier and uncached owner lookup, never status's
+    // bounded read lease. PUT is idempotent and lets the sidecar safely replay
+    // one request on a reset reused socket.
+    const { verification, principal, scope } =
+      await pullAccessForRequest(projectId, req);
+    if (!verification.ok) {
+      return sendWorkspaceVerificationFailure(res, verification);
+    }
+    if (!principal || !scope) {
+      return res.status(404).json({ error: 'TEAM_PROJECT_NOT_FOUND' });
+    }
+    let awaitingFirstMaterialization: boolean;
+    try {
+      awaitingFirstMaterialization = ensureTeamBoundSharedProjectPlaceholder(
+        projectId,
+        scope,
+      );
+    } catch {
+      return res.status(503).json({ error: 'TEAM_PROJECT_BOOTSTRAP_UNAVAILABLE' });
+    }
+    if (awaitingFirstMaterialization) {
+      materializePlaceholderOnOpen(projectId, req, {
+        ownerMemberId: scope.ownerMemberId,
+        callerIsOwner: scope.ownerMemberId === scope.viewerMemberId,
+      });
+    }
+    return res
+      .status(awaitingFirstMaterialization ? 202 : 200)
+      .json({ ok: true, awaitingFirstMaterialization });
   });
 
   app.get('/api/projects/:id/collab/status', async (req, res) => {

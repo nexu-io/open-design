@@ -137,6 +137,12 @@ export interface CollabSyncStatusResponse {
   ownerRole?: CollabMemberRole;
 }
 
+/** Idempotent local bootstrap for a hub-authorized Team project first open. */
+export interface CollabProjectBootstrapResponse {
+  ok: true;
+  awaitingFirstMaterialization: boolean;
+}
+
 /** POST /api/projects/:id/collab/pull response. */
 export interface CollabPullResponse extends OkResponse {
   /** The actual hub version materialized by this pull, or null when unpublished. */

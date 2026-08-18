@@ -4305,6 +4305,25 @@ describe('FileWorkspace add-module menu', () => {
 });
 
 describe('FileWorkspace empty-project generation contract', () => {
+  it('shows the first-materialization syncing surface instead of mounting a cached workspace tab', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('stale.html')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['terminal:stale'], active: 'terminal:stale' }}
+        onTabsStateChange={vi.fn()}
+        materializationPending
+      />,
+    );
+
+    expect(screen.getByTestId('design-files-syncing')).toBeTruthy();
+    expect(screen.queryByTestId('design-files-empty')).toBeNull();
+  });
+
   function assistantMessage(runStatus: 'running' | 'failed'): ChatMessage {
     return {
       id: `msg-${runStatus}`,

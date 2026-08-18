@@ -933,10 +933,9 @@ export function EntryShell({
     teamProjects.projects,
   ]);
   // Open handler for the "全部项目" grid. A project already in the member's local
-  // list opens directly; a team-shared project the member has not pulled yet is
-  // first pulled + registered on the daemon (materialize content + insert a local
-  // project record) so it can open read-only — the member is not the owner, so
-  // the useProjectCollab single-writer path keeps it read-only.
+  // list opens directly. A remote Team project first creates an authority-bound
+  // placeholder, then ProjectView opens while the daemon materializes content in
+  // the background. The placeholder stamp keeps every content writer fail-closed.
   const [pullingProjectId, setPullingProjectId] = useState<string | null>(null);
   async function handleOpenAllProjects(id: string): Promise<boolean> {
     // The grid already reconciled the local row with the authoritative team
@@ -1003,22 +1002,34 @@ export function EntryShell({
       await open();
       return true;
     }
-    // The pull materializes the whole project before it can open; surface it
-    // on the card (spinner overlay) and swallow re-clicks meanwhile —
-    // otherwise the first click reads as dead for the entire download.
+    // Keep the card busy only for the short authority/bootstrap round trip, not
+    // for the full content transfer. PUT is idempotent, so the sidecar may safely
+    // replay it after a reused keep-alive socket resets. A paired older daemon
+    // has no bootstrap route; retain the former blocking POST fallback for that
+    // compatibility case.
     if (pullingProjectId) return false;
     const pullRead = beginWorkspaceScopedRead(workspaceContextRef.current);
     if (!pullRead.context) return false;
     setPullingProjectId(id);
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(id)}/collab/pull`, {
-        method: 'POST',
+      const collabRoute = `/api/projects/${encodeURIComponent(id)}/collab`;
+      let response = await fetch(`${collabRoute}/bootstrap`, {
+        method: 'PUT',
         headers: workspaceProjectHeaders(pullRead.context),
       });
+      if (response.status === 404 || response.status === 405) {
+        response = await fetch(`${collabRoute}/pull`, {
+          method: 'POST',
+          headers: workspaceProjectHeaders(pullRead.context),
+        });
+      }
       if (!pullRead.isStillCurrent(workspaceContextRef.current)) return false;
       if (!response.ok) return false;
       invalidateProjectFilesCache(id, pullRead.context);
-      await Promise.resolve(onProjectsRefresh?.());
+      // The exact route bootstrap and ambient list refresh are independent.
+      // Navigation may read the newly committed placeholder immediately while
+      // the shell refreshes its catalog in parallel.
+      void Promise.resolve(onProjectsRefresh?.());
     } catch {
       return false;
     } finally {

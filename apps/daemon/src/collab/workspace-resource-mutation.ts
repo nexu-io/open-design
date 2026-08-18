@@ -179,6 +179,68 @@ export type OptionalWorkspaceRequestAuthorityResult =
   | Exclude<WorkspaceRequestAuthorityResult, { ok: true }>;
 
 /**
+ * Resolve Workspace identity for daemon-local data-plane work.
+ *
+ * The browser's Workspace headers are attribution and namespace selectors on
+ * this boundary, not a remote authorization token. Local files, conversations,
+ * terminals, Skills, Plugins, and Design Systems must remain usable while Vela
+ * is offline. Consequently this resolver validates only that the identity pair
+ * is complete; it never calls the membership directory and deliberately does
+ * not inherit stale role/lifecycle/permission claims from the browser.
+ *
+ * Operations that publish, share, sync, bill, or otherwise mutate remote Team
+ * state must continue to use `resolveOptionalWorkspaceRequestAuthority` (or a
+ * narrower fresh verifier) at that actual cloud boundary.
+ */
+export function resolveOptionalLocalWorkspaceRequestAuthority(
+  req: any,
+): OptionalWorkspaceRequestAuthorityResult {
+  const claimed = workspaceResourceContextFromRequest(req);
+  if (claimed === null) return { ok: true, context: null };
+  if (claimed === 'missing') {
+    return {
+      ok: false,
+      status: 400,
+      code: 'WORKSPACE_CONTEXT_INCOMPLETE',
+      message: 'both workspace and member identity are required',
+    };
+  }
+  return {
+    ok: true,
+    context: {
+      workspaceId: claimed.workspaceId,
+      workspaceType: claimed.workspaceType,
+      workspaceMemberId: claimed.workspaceMemberId,
+      role: 'member',
+      memberStatus: 'active',
+      lifecycleState: 'active',
+      billingState: 'active',
+      planId: null,
+      providerMode: 'personal_byok',
+      seatSummary: {
+        seatLimit: 0,
+        usedSeats: 0,
+        availableSeats: 0,
+        isSeatFull: false,
+      },
+      permissions: {
+        canManageMembers: false,
+        canManageBilling: false,
+        canInviteMembers: false,
+        canManageAutoRecharge: false,
+        canShareProjects: true,
+        canWriteSyncedFiles: true,
+        canViewWorkspaceSettings: false,
+        canManageSharedResources: false,
+      },
+      ...(claimed.workspaceType === 'team'
+        ? { teamId: claimed.workspaceId }
+        : {}),
+    },
+  };
+}
+
+/**
  * Resolve the three request-scope states shared by resource reads and writes:
  *
  * - no Workspace/member headers: the legacy Personal/global lane;

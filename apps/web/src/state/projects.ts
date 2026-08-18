@@ -14,6 +14,7 @@ import type {
   AppliedPluginSnapshot,
   ApplyResult,
   ChatSessionMode,
+  CollabProjectBootstrapResponse,
   CreateConversationRequest,
   CreateDesignSystemProjectFromProjectResponse,
   DuplicateProjectResponse,
@@ -371,6 +372,18 @@ export type ProjectRouteBootstrapResult =
   | { kind: 'forbidden' }
   | { kind: 'unavailable' };
 
+export type FirstOpenTeamProjectBootstrapResult =
+  | {
+      kind: 'found';
+      project: Project;
+      scope: ProjectWorkspaceScopeResponse['scope'];
+      resolvedDir: string | null;
+      awaitingFirstMaterialization: boolean;
+    }
+  | { kind: 'not-found' }
+  | { kind: 'forbidden' }
+  | { kind: 'unavailable' };
+
 /**
  * Bootstrap a fresh project deep link without borrowing the shell's ambient
  * Workspace. A card-opening witness goes straight through the scoped endpoint;
@@ -504,6 +517,87 @@ export async function bootstrapProjectRoute(
   });
   if (result.kind === 'unavailable') evictCoalescedGet(key);
   return result;
+}
+
+/**
+ * Progressive first-open lane for a Team project that is present in the hub
+ * but absent from this daemon's local data root.
+ *
+ * `/collab/bootstrap` owns the exact-directory authorization, shared-owner
+ * discovery, placeholder stamp, and background single-flight pull. Its
+ * idempotent PUT is safely replayable by the sidecar proxy after a reused
+ * keep-alive socket resets. A current daemon atomically binds the placeholder
+ * to this exact Team principal before answering; the follow-up route bootstrap
+ * proves that local binding through the ordinary scope/detail gates before
+ * ProjectView may mount.
+ * Older daemons leave the row unbound, which deliberately returns `unavailable`
+ * so App keeps the pre-existing full-materialization fallback.
+ */
+export async function bootstrapFirstOpenTeamProjectRoute(
+  projectId: string,
+  options: {
+    accountGeneration: number;
+    exactContext: WorkspaceCollabContext;
+  },
+): Promise<FirstOpenTeamProjectBootstrapResult> {
+  const { exactContext } = options;
+  if (
+    exactContext.workspaceType !== 'team'
+    || exactContext.memberStatus !== 'active'
+    || exactContext.lifecycleState !== 'active'
+  ) {
+    return { kind: 'not-found' };
+  }
+  let bootstrapResponse: CollabProjectBootstrapResponse;
+  try {
+    const response = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/collab/bootstrap`,
+      {
+        method: 'PUT',
+        cache: 'no-store',
+        headers: workspaceProjectHeaders(exactContext),
+      },
+    );
+    if (!response.ok) {
+      if (response.status === 403) return { kind: 'forbidden' };
+      if (response.status === 404) return { kind: 'not-found' };
+      return { kind: 'unavailable' };
+    }
+    bootstrapResponse = (await response.json()) as CollabProjectBootstrapResponse;
+  } catch {
+    return { kind: 'unavailable' };
+  }
+  // The optimistic route read immediately before this helper may have cached
+  // the expected 404 for the same exact principal. The successful PUT changed
+  // local authority state, so that negative read is no longer reusable.
+  evictCoalescedGet([
+    'project-route-bootstrap',
+    options.accountGeneration,
+    projectId,
+    workspaceIdentityCacheKey(exactContext),
+  ].join(':'));
+  const bootstrap = await bootstrapProjectRoute(projectId, {
+    accountGeneration: options.accountGeneration,
+    exactContext,
+  });
+  if (bootstrap.kind === 'forbidden') return { kind: 'unavailable' };
+  if (bootstrap.kind !== 'found') return bootstrap;
+  if (
+    bootstrap.scope.kind !== 'team'
+    || bootstrap.scope.context?.workspaceType !== 'team'
+    || workspaceIdentityCacheKey(bootstrap.scope.context)
+      !== workspaceIdentityCacheKey(exactContext)
+  ) {
+    // A shared placeholder must never be rendered through an unbound/local or
+    // mismatched principal, including when the web is paired with an older
+    // daemon that only registered a row without its Team binding.
+    return { kind: 'unavailable' };
+  }
+  return {
+    ...bootstrap,
+    awaitingFirstMaterialization:
+      bootstrapResponse.awaitingFirstMaterialization === true,
+  };
 }
 
 export async function getProjectDetail(
