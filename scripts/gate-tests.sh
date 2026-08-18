@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # scripts/gate-tests.sh — gate entry for the zenprocess/open-design fork
-# (dagger/qa-fast lane on macgate). Bootstraps Node 24 + pnpm into the
+# (dagger/qa-fast gate lane). Bootstraps Node 24 + pnpm into the
 # worker, then runs the repo's own pre-PR checks for this branch's
 # changed area. Kept minimal so the fast lane stays fast.
 set -euo pipefail
 
 # Force Node 24: the worker ships node 22, but the repo targets node ~24
 # (AGENTS.md: Node 22 is unsupported). The lane runs inside Docker on
-# Linux, so pick the tarball by OS, not by the macgate host.
+# Linux, so pick the tarball by OS, not by the worker host.
 if ! command -v node >/dev/null 2>&1 || ! node -v | grep -q '^v24'; then
   case "$(uname -s)" in
     Darwin) NODE_OS=darwin ;;

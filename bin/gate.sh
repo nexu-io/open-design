@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bin/gate.sh — gate entry for the zenprocess/open-design fork
-# (dagger/qa-fast lane on macgate). Bootstraps Node 24 + pnpm into the
+# (dagger/qa-fast gate lane). Bootstraps Node 24 + pnpm into the
 # worker, then runs the repo's own pre-PR checks for this branch's
 # changed area. Kept minimal so the fast lane stays fast.
 set -euo pipefail
