@@ -11,6 +11,7 @@ import {
   releaseInstallIdentity,
   releaseMetadataVersionFields,
   releaseNamespace,
+  releaseNamespaceCandidates,
 } from "../src/index.js";
 
 describe("@open-design/release", () => {
@@ -62,6 +63,21 @@ describe("@open-design/release", () => {
     expect(releaseNamespace("prerelease", "win")).toBe("release-prerelease-win");
     expect(releaseNamespace("prerelease", "macIntel")).toBe("release-prerelease-intel");
     expect(releaseNamespace("betas", "win")).toBe("release-betas-win");
+  });
+
+  // Regression coverage for nexu-io/open-design#6425: every channel/platform
+  // pair with no known legacy alias must resolve to exactly the canonical
+  // releaseNamespace() value, and the one known outlier (beta on Intel mac,
+  // where release-beta.yml bakes "release-beta-x64" instead of the standard
+  // "-intel" suffix every other channel's Intel-mac build uses) must return
+  // the canonical name FIRST, then the alias.
+  it("surfaces legacy namespace aliases alongside the canonical name", () => {
+    expect(releaseNamespaceCandidates("beta", "macIntel")).toEqual(["release-beta-intel", "release-beta-x64"]);
+    expect(releaseNamespaceCandidates("prerelease", "macIntel")).toEqual(["release-prerelease-intel"]);
+    expect(releaseNamespaceCandidates("preview", "macIntel")).toEqual(["release-preview-intel"]);
+    expect(releaseNamespaceCandidates("beta", "mac")).toEqual(["release-beta"]);
+    expect(releaseNamespaceCandidates("beta", "win")).toEqual(["release-beta-win"]);
+    expect(releaseNamespaceCandidates("stable")).toEqual(["release-stable"]);
   });
 
   it("infers release channels from versions and namespaces", () => {

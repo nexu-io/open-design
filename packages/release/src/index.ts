@@ -155,6 +155,52 @@ export function releaseNamespace(channel: ReleaseChannel, platform: ReleasePlatf
   return suffix.length === 0 ? `release-${channel}` : `release-${channel}-${suffix}`;
 }
 
+/**
+ * Legacy namespace aliases a shipping release workflow still produces
+ * instead of the canonical `releaseNamespace()` value for a given
+ * channel/platform pair. Consumers that need to find a LIVE packaged
+ * install by namespace (e.g. `apps/daemon`'s conventional IPC socket
+ * discovery, see nexu-io/open-design#6425) must probe every alias, not just
+ * the canonical name.
+ *
+ * `beta:macIntel` -> `release-beta-x64`: every other channel's Intel-mac
+ * build follows the standard `-intel` suffix this package derives
+ * (`release-prerelease-intel`, `release-preview-intel`, matching
+ * `.github/workflows/release-prerelease.yml` / `release-preview.yml`), but
+ * `.github/workflows/release-beta.yml`'s mac_x64 job instead bakes the
+ * literal `release-beta-x64` via `tools-pack mac build --namespace
+ * release-beta-x64`. Renaming that shipping workflow's namespace to match
+ * the pattern would orphan already-installed beta Intel users' existing IPC
+ * path -- a separate, higher-risk change. This map exists so that
+ * discrepancy is recorded once, here, where namespace identity is owned,
+ * instead of being re-derived ad hoc by every caller that needs to find a
+ * live packaged daemon.
+ */
+const RELEASE_NAMESPACE_LEGACY_ALIASES: Readonly<Partial<Record<string, readonly string[]>>> = Object.freeze({
+  "beta:macIntel": Object.freeze(["release-beta-x64"]),
+});
+
+function legacyNamespaceAliasKey(channel: ReleaseChannel, platform: ReleasePlatform): string {
+  return `${channel}:${platform}`;
+}
+
+/**
+ * Every namespace a live packaged install of `channel`/`platform` might
+ * currently be using: the canonical `releaseNamespace()` value first,
+ * followed by any known legacy aliases (see
+ * `RELEASE_NAMESPACE_LEGACY_ALIASES`). Most channel/platform pairs have no
+ * aliases and this returns a single-element array equal to
+ * `[releaseNamespace(channel, platform)]`.
+ */
+export function releaseNamespaceCandidates(
+  channel: ReleaseChannel,
+  platform: ReleasePlatform = "mac",
+): readonly string[] {
+  const canonical = releaseNamespace(channel, platform);
+  const aliases = RELEASE_NAMESPACE_LEGACY_ALIASES[legacyNamespaceAliasKey(channel, platform)] ?? [];
+  return aliases.length === 0 ? [canonical] : [canonical, ...aliases];
+}
+
 export function releaseInstallIdentity(channel: ReleaseChannel): ReleaseInstallIdentity {
   const descriptor = releaseChannelDescriptor(channel);
   return {

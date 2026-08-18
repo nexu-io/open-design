@@ -15005,7 +15005,15 @@ export async function startServer({
         // when binding to a specific address (e.g. a Tailscale IP) report that
         // address so remote callers and the sidecar use the correct URL.
         const reportHost = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host;
-        const url = `http://${reportHost}:${resolvedPort}`;
+        // An IPv6 literal (e.g. a supported `OD_BIND_HOST=::1`) must be
+        // bracketed in a URL string -- `new URL('http://::1:7456')` throws
+        // (the bare colons are ambiguous with the port separator), which
+        // would make every consumer of this status URL (the sidecar,
+        // daemon-url.ts's conventional discovery, any client fetching
+        // /api/mcp/install-info) fail before it could even try to reach a
+        // real IPv6-bound daemon. `[::1]:7456` parses correctly.
+        const reportUrlHost = net.isIP(reportHost) === 6 ? `[${reportHost}]` : reportHost;
+        const url = `http://${reportUrlHost}:${resolvedPort}`;
         if (!returnServer) {
           console.log(`[od] daemon listening on ${url}`);
         }
