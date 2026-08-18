@@ -14,9 +14,15 @@ import { resolveProjectStorage, type ProjectStorage } from './project-storage.js
  * and re-syncs the whole tree when a run terminates (agent processes write
  * files directly, bypassing the HTTP write path).
  *
- * All operations are best-effort: a blob-store outage must never break local
- * project work, so callers swallow upload failures (the local tree remains the
- * source of truth and the next sync retries the whole tree).
+ * Consistency rules:
+ *  - All mirror mutations for a project are SERIALIZED through a per-project
+ *    promise chain, so a terminal full-tree sync can never overwrite a newer
+ *    write or resurrect an object that a later delete removed.
+ *  - Full-tree syncs are AUTHORITATIVE: remote objects with no local
+ *    counterpart are deleted, so stale objects can never be restored locally.
+ *  - All operations are best-effort: a blob-store outage must never break
+ *    local project work (the local tree remains the source of truth and the
+ *    next sync retries the whole tree).
  */
 export interface ProjectStorageMirror {
   readonly enabled: true;
@@ -55,46 +61,74 @@ export function createProjectStorageMirror(
   adapter: ProjectStorage,
   projectsRoot: string,
 ): ProjectStorageMirror {
+  // Per-project mutation chains. Each operation awaits the previous one so
+  // uploads, deletes, and full-tree syncs apply in submission order. Links
+  // never reject: the chain must survive a failing op so later ops still run.
+  const chains = new Map<string, Promise<void>>();
+  const enqueue = (projectId: string, op: () => Promise<void>): Promise<void> => {
+    const prev = chains.get(projectId) ?? Promise.resolve();
+    const next = prev.then(op).catch(() => {});
+    chains.set(projectId, next);
+    return next;
+  };
+
   return {
     enabled: true,
     adapter,
-    async uploadFile(projectId, relpath) {
-      const body = await fsp.readFile(path.join(projectsRoot, projectId, relpath));
-      await adapter.writeFile(projectId, relpath, body);
+    uploadFile(projectId, relpath) {
+      return enqueue(projectId, async () => {
+        const body = await fsp.readFile(path.join(projectsRoot, projectId, relpath));
+        await adapter.writeFile(projectId, relpath, body);
+      });
     },
-    async uploadProject(projectId) {
-      const root = path.join(projectsRoot, projectId);
-      const files = await walkFiles(root);
-      for (const file of files) {
-        const rel = path.relative(root, file).split(path.sep).join('/');
-        const body = await fsp.readFile(file);
-        await adapter.writeFile(projectId, rel, body);
-      }
+    uploadProject(projectId) {
+      return enqueue(projectId, async () => {
+        const root = path.join(projectsRoot, projectId);
+        const files = await walkFiles(root);
+        const localRel = new Set(files.map((file) => path.relative(root, file).split(path.sep).join('/')));
+        // Authoritative reconciliation: remote objects without a local
+        // counterpart are deleted so stale objects can never be restored.
+        const remote = await adapter.listFiles(projectId);
+        for (const entry of remote) {
+          if (!localRel.has(entry.path)) {
+            await adapter.deleteFile(projectId, entry.path);
+          }
+        }
+        for (const file of files) {
+          const rel = path.relative(root, file).split(path.sep).join('/');
+          const body = await fsp.readFile(file);
+          await adapter.writeFile(projectId, rel, body);
+        }
+      });
     },
-    async deleteFile(projectId, relpath) {
-      await adapter.deleteFile(projectId, relpath);
+    deleteFile(projectId, relpath) {
+      return enqueue(projectId, () => adapter.deleteFile(projectId, relpath));
     },
-    async deleteProject(projectId) {
-      const entries = await adapter.listFiles(projectId);
-      for (const entry of entries) {
-        await adapter.deleteFile(projectId, entry.path);
-      }
+    deleteProject(projectId) {
+      return enqueue(projectId, async () => {
+        const entries = await adapter.listFiles(projectId);
+        for (const entry of entries) {
+          await adapter.deleteFile(projectId, entry.path);
+        }
+      });
     },
-    async restoreIfEmpty(projectId, localDir) {
-      let entries;
-      try {
-        entries = await fsp.readdir(localDir);
-      } catch {
-        return;
-      }
-      if (entries.length > 0) return;
-      const remote = await adapter.listFiles(projectId);
-      for (const entry of remote) {
-        const body = await adapter.readFile(projectId, entry.path);
-        const target = path.join(localDir, entry.path);
-        await fsp.mkdir(path.dirname(target), { recursive: true });
-        await fsp.writeFile(target, body);
-      }
+    restoreIfEmpty(projectId, localDir) {
+      return enqueue(projectId, async () => {
+        let entries;
+        try {
+          entries = await fsp.readdir(localDir);
+        } catch {
+          return;
+        }
+        if (entries.length > 0) return;
+        const remote = await adapter.listFiles(projectId);
+        for (const entry of remote) {
+          const body = await adapter.readFile(projectId, entry.path);
+          const target = path.join(localDir, entry.path);
+          await fsp.mkdir(path.dirname(target), { recursive: true });
+          await fsp.writeFile(target, body);
+        }
+      });
     },
   };
 }

@@ -1132,9 +1132,14 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   await commitArtifactManifestRename(manifestRename, newName);
   await updateArtifactManifestRefsForRename(dir, oldName, newName);
   if (projectStorageMirror) {
-    // #7043 — rename = delete old key + upload the renamed file.
+    // #7043 — rename mirrors the artifact sidecar too: delete the old file
+    // and old manifest keys, then upload the renamed file and its manifest.
+    const oldManifestName = oldName + '.artifact.json';
+    const newManifestName = newName + '.artifact.json';
     await projectStorageMirror.deleteFile(projectId, oldName).catch(() => {});
+    await projectStorageMirror.deleteFile(projectId, oldManifestName).catch(() => {});
     await projectStorageMirror.uploadFile(projectId, newName).catch(() => {});
+    await projectStorageMirror.uploadFile(projectId, newManifestName).catch(() => {});
   }
 
   const st = await stat(targetPath);

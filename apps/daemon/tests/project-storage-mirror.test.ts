@@ -16,6 +16,10 @@ import { StorageError, type ProjectStorage } from '../src/storage/project-storag
 class FakeStorage implements ProjectStorage {
   map = new Map<string, Buffer>();
   calls: string[] = [];
+  delayMs = 0;
+  private async maybeDelay() {
+    if (this.delayMs > 0) await new Promise((r) => setTimeout(r, this.delayMs));
+  }
   async readFile(projectId: string, relpath: string): Promise<Buffer> {
     const key = projectId + '/' + relpath;
     const body = this.map.get(key);
@@ -23,6 +27,7 @@ class FakeStorage implements ProjectStorage {
     return body;
   }
   async writeFile(projectId: string, relpath: string, body: Buffer) {
+    await this.maybeDelay();
     this.map.set(projectId + '/' + relpath, Buffer.from(body));
     this.calls.push('put:' + projectId + '/' + relpath);
     return { path: relpath, size: body.length, mtimeMs: Date.now() };
@@ -34,6 +39,7 @@ class FakeStorage implements ProjectStorage {
       .map((k) => ({ path: k.slice(prefix.length), size: 0, mtimeMs: 0 }));
   }
   async deleteFile(projectId: string, relpath: string): Promise<void> {
+    await this.maybeDelay();
     this.map.delete(projectId + '/' + relpath);
     this.calls.push('del:' + projectId + '/' + relpath);
   }
@@ -97,6 +103,55 @@ describe('project storage mirror (#7043)', () => {
       await writeFile(path.join(projectDir, 'index.html'), 'local');
       await mirror.restoreIfEmpty('p1', projectDir);
       expect((await readFile(path.join(projectDir, 'index.html'))).toString()).toBe('local');
+    });
+    it('uploadProject reconciles stale remote objects authoritatively', async () => {
+      fake.map.set('p1/index.html', Buffer.from('remote'));
+      fake.map.set('p1/stale.html', Buffer.from('stale'));
+      const projectDir = path.join(dir, 'p1');
+      await mkdir(projectDir, { recursive: true });
+      await writeFile(path.join(projectDir, 'index.html'), 'local');
+      await mirror.uploadProject('p1');
+      expect(fake.map.has('p1/stale.html')).toBe(false);
+      expect(fake.calls).toEqual([
+        'del:p1/stale.html',
+        'put:p1/index.html',
+      ]);
+    });
+
+    it('serializes mirror mutations per project', async () => {
+      fake.delayMs = 25;
+      const projectDir = path.join(dir, 'p1');
+      await mkdir(projectDir, { recursive: true });
+      await writeFile(path.join(projectDir, 'a.html'), 'a');
+      // Fire the sync without awaiting, then immediately queue a delete.
+      const sync = mirror.uploadProject('p1');
+      const del = mirror.deleteFile('p1', 'a.html');
+      await Promise.all([sync, del]);
+      // The delete must land after the sync's write, in submission order.
+      const putIdx = fake.calls.indexOf('put:p1/a.html');
+      const delIdx = fake.calls.indexOf('del:p1/a.html');
+      expect(putIdx).toBeGreaterThanOrEqual(0);
+      expect(delIdx).toBeGreaterThan(putIdx);
+    });
+
+    it('rename mirrors the artifact manifest sidecar too', async () => {
+      const projectDir = path.join(dir, 'p1');
+      await mkdir(projectDir, { recursive: true });
+      await writeFile(path.join(projectDir, 'index.html'), '<h1>old</h1>');
+      await writeFile(path.join(projectDir, 'index.html.artifact.json'), '{"kind":"html"}');
+      const { renameProjectFile, setProjectStorageMirror } = await import('../src/projects.js');
+      const prev = setProjectStorageMirror(mirror);
+      try {
+        await renameProjectFile(dir, 'p1', 'index.html', 'home.html');
+      } finally {
+        setProjectStorageMirror(prev);
+      }
+      expect(fake.calls).toEqual([
+        'del:p1/index.html',
+        'del:p1/index.html.artifact.json',
+        'put:p1/home.html',
+        'put:p1/home.html.artifact.json',
+      ]);
     });
   });
 
