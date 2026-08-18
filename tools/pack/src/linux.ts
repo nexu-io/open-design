@@ -1113,6 +1113,47 @@ async function waitForMarker(markerPath: string, timeoutMs: number): Promise<boo
   return false;
 }
 
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+export type MarkerWaitOptions = {
+  markerPath: string;
+  /** Treat the wait as failed once this process exits. */
+  processPid: number;
+  /** Absolute ceiling; a hung-but-alive process still surfaces an error. */
+  ceilingMs: number;
+  pollIntervalMs?: number;
+};
+
+/**
+ * Waits for the desktop identity marker while the spawned app process is
+ * alive. A process that exits before writing the marker is a failed start and
+ * fails fast; an alive process is just slow (cold AppImage extraction +
+ * Electron + sidecar boot can exceed a fixed timeout on first launch) and
+ * keeps waiting until `ceilingMs`. `isAlive`/`exists` are injectable for
+ * tests.
+ */
+export async function waitForMarkerWithLiveness(
+  options: MarkerWaitOptions,
+  isAlive: (pid: number) => boolean = isProcessAlive,
+  exists: (path: string) => Promise<boolean> = pathExists,
+): Promise<boolean> {
+  const { markerPath, processPid, ceilingMs, pollIntervalMs = 200 } = options;
+  const ceilingDeadline = Date.now() + ceilingMs;
+  while (Date.now() < ceilingDeadline) {
+    if (await exists(markerPath)) return true;
+    if (!isAlive(processPid)) return false;
+    await new Promise((r) => setTimeout(r, pollIntervalMs));
+  }
+  return false;
+}
+
 async function fetchDesktopStatus(config: ToolPackConfig): Promise<DesktopStatusSnapshot | null> {
   try {
     const ipc = resolveAppIpcPath({
@@ -1163,9 +1204,13 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
     logFd: null,
   });
 
-  // 60s ceiling: AppImage --appimage-extract-and-run unpacks ~200MB to /tmp on
-  // first launch before exec'ing the inner electron, which adds substantial
-  // overhead vs mac's direct .app launch.
+  // Cold first launch overhead: AppImage --appimage-extract-and-run unpacks
+  // the ~460MB image to /tmp before exec'ing the inner electron, then the
+  // daemon seeds bundled plugins and the web sidecar boots -- measured well
+  // past 60s on desktop hardware, so a fixed timeout kills healthy starts.
+  // The wait is liveness-aware instead: fail fast only when the spawned
+  // process exits before writing the marker, keep polling while it is alive,
+  // capped by a hard ceiling so a hung-but-alive app still surfaces an error.
   //
   // If the readiness wait or the post-ready status fetch throws, the detached
   // child we just spawned is still running but unidentifiable to a future
@@ -1176,9 +1221,14 @@ export async function startPackedLinuxApp(config: ToolPackConfig): Promise<Linux
   const markerPath = desktopIdentityPath(config);
   let status: DesktopStatusSnapshot | null;
   try {
-    const ready = await waitForMarker(markerPath, 60_000);
+    const ready = await waitForMarkerWithLiveness({
+      markerPath,
+      processPid: child.pid,
+      ceilingMs: 300_000,
+      pollIntervalMs: 200,
+    });
     if (!ready) {
-      throw new Error(`desktop-root.json not written within 60s at ${markerPath}`);
+      throw new Error(`desktop-root.json not written (app process exited or 300s ceiling reached) at ${markerPath}`);
     }
     status = await fetchDesktopStatus(config);
   } catch (error) {

@@ -42,6 +42,7 @@ import {
   stopPackedLinuxApp,
   sanitizeNamespace,
   stopPackedLinuxHeadless,
+  waitForMarkerWithLiveness,
 } from "../src/linux.js";
 
 async function pathExists(path: string): Promise<boolean> {
@@ -1006,5 +1007,71 @@ describe("matchesAppImageProcess", () => {
       installPath,
     );
     expect(ok).toBe(false);
+  });
+});
+
+describe("waitForMarkerWithLiveness", () => {
+  it("returns true when the marker appears while the process is alive", async () => {
+    const exists = vi.fn(async () => true);
+    const ok = await waitForMarkerWithLiveness(
+      { markerPath: "/x/marker", processPid: 1, ceilingMs: 5000, pollIntervalMs: 5 },
+      () => true,
+      exists,
+    );
+    expect(ok).toBe(true);
+    expect(exists).toHaveBeenCalledTimes(1);
+  });
+
+  // Red-on-main spec: the previous fixed-deadline wait kept polling until its
+  // timeout even after the spawned app process died, so a crashed start
+  // surfaced only at the full ceiling. The liveness-aware wait fails fast.
+  it("fails fast when the process exits before the marker appears", async () => {
+    const started = Date.now();
+    const ok = await waitForMarkerWithLiveness(
+      { markerPath: "/x/marker", processPid: 1, ceilingMs: 5000, pollIntervalMs: 5 },
+      () => false,
+      async () => false,
+    );
+    expect(ok).toBe(false);
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
+  it("returns false when the marker never appears and the ceiling is reached", async () => {
+    const ok = await waitForMarkerWithLiveness(
+      { markerPath: "/x/marker", processPid: 1, ceilingMs: 100, pollIntervalMs: 5 },
+      () => true,
+      async () => false,
+    );
+    expect(ok).toBe(false);
+  });
+
+  // The observed defect: a healthy cold start (AppImage extraction + Electron
+  // + sidecar boot) can take longer than the old fixed 60s window, so the
+  // marker legitimately appears late. An alive process must keep waiting.
+  it("keeps waiting while the process stays alive and the marker appears late (slow cold start)", async () => {
+    let calls = 0;
+    const exists = vi.fn(async () => {
+      calls += 1;
+      return calls >= 30; // marker appears only after ~150ms of polling
+    });
+    const ok = await waitForMarkerWithLiveness(
+      { markerPath: "/x/marker", processPid: 1, ceilingMs: 5000, pollIntervalMs: 5 },
+      () => true,
+      exists,
+    );
+    expect(ok).toBe(true);
+    expect(calls).toBeGreaterThanOrEqual(30);
+  });
+
+  it("fails once the process dies after having been alive (marker never appears)", async () => {
+    let checks = 0;
+    const started = Date.now();
+    const ok = await waitForMarkerWithLiveness(
+      { markerPath: "/x/marker", processPid: 1, ceilingMs: 5000, pollIntervalMs: 5 },
+      () => (checks += 1) < 10, // dies after ~50ms of polling
+      async () => false,
+    );
+    expect(ok).toBe(false);
+    expect(Date.now() - started).toBeLessThan(2000);
   });
 });
