@@ -1317,7 +1317,8 @@ export function buildManualEditBridge(enabled: boolean): string {
       ev.preventDefault(); ev.stopPropagation();
       if (!rotationHandle) return;
       dragState = { el: rotationHandle.targetEl, startX: ev.clientX, startY: ev.clientY, handle: 'rotate', id: stableId(rotationHandle.targetEl), moved: false,
-        startLeft: rotationHandle.cx, startTop: rotationHandle.cy, startWidth: 0, startHeight: 0, rotationStart: parseRotation(rotationHandle.targetEl) };
+        startLeft: rotationHandle.cx, startTop: rotationHandle.cy, startWidth: 0, startHeight: 0, rotationStart: parseRotation(rotationHandle.targetEl),
+        cx: rotationHandle.cx, cy: rotationHandle.cy };
       rotationHandle.targetEl.setPointerCapture(ev.pointerId);
       return;
     }
