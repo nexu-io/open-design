@@ -838,7 +838,7 @@ describe('FileWorkspace upload input', () => {
         tabsState={{ tabs: [], active: null }}
         onTabsStateChange={onTabsStateChange}
         onUserActivateTab={onUserActivateTab}
-        openRequest={{ name: 'notes.md', nonce: 1 }}
+        openRequest={{ name: 'notes.md', nonce: 1, source: 'internal' }}
       />,
     );
 
@@ -2979,7 +2979,7 @@ describe('FileWorkspace launcher tab creation', () => {
         onRefreshFiles={vi.fn()}
         isDeck={false}
         tabsState={{ tabs: ['cover.html'], active: 'cover.html', browserTabs }}
-        openRequest={{ name: '__browser__:1', nonce: 1 }}
+        openRequest={{ name: '__browser__:1', nonce: 1, source: 'internal' }}
         onTabsStateChange={onTabsStateChange}
       />,
     );
@@ -3106,7 +3106,7 @@ describe('FileWorkspace launcher tab creation', () => {
         onRefreshFiles={vi.fn()}
         isDeck={false}
         tabsState={{ tabs: ['cover.html'], active: 'cover.html' }}
-        openRequest={{ name: '__design_system__', nonce: 1 }}
+        openRequest={{ name: '__design_system__', nonce: 1, source: 'internal' }}
         onTabsStateChange={onTabsStateChange}
         designSystemProject={{
           id: 'neutral-modern',
@@ -3196,7 +3196,7 @@ describe('FileWorkspace launcher tab creation', () => {
           tabs: ['Web Prototype mutuals-v2.html'],
           active: 'notes.html',
         }}
-        openRequest={{ name: 'Web Prototype mutuals-v2.html', nonce: 1 }}
+        openRequest={{ name: 'Web Prototype mutuals-v2.html', nonce: 1, source: 'internal' }}
         onTabsStateChange={onTabsStateChange}
       />,
     );

@@ -198,7 +198,7 @@ async function waitForSend() {
 
 function latestWorkspaceProps() {
   return fileWorkspaceSpy.mock.calls.at(-1)?.[0] as {
-    openRequest?: { name: string; nonce: number } | null;
+    openRequest?: { name: string; nonce: number; source: string } | null;
     onTabsStateChange?: (next: OpenTabsState) => void;
     onUserActivateTab?: () => void;
     onRefreshFiles?: (options?: unknown) => Promise<unknown>;
@@ -216,12 +216,13 @@ async function landSettledFileList() {
 // on the props across every later render, so the raw prop stream repeats one
 // request many times; de-duping by nonce turns it back into "how many times was
 // focus actually asked to move".
-function openRequestKeys(): Array<{ name: string; nonce: number }> {
+function openRequestKeys(): Array<{ name: string; nonce: number; source: string }> {
   const seen = new Set<string>();
-  const requests: Array<{ name: string; nonce: number }> = [];
+  const requests: Array<{ name: string; nonce: number; source: string }> = [];
   for (const call of fileWorkspaceSpy.mock.calls) {
-    const request = (call[0] as { openRequest?: { name: string; nonce: number } | null })
-      .openRequest;
+    const request = (call[0] as {
+      openRequest?: { name: string; nonce: number; source: string } | null;
+    }).openRequest;
     if (!request) continue;
     const key = `${request.name}@${request.nonce}`;
     if (seen.has(key)) continue;
@@ -897,5 +898,49 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     await turn.releasePersistence();
 
     expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
+  });
+
+  // Reviewer #6842 (nettee, 2026-08-17, round 5): `openRequest` is one prop
+  // carrying two different kinds of open. The workspace can only tell a user's
+  // chat file-link click from a run's auto-open by the `source` this side
+  // stamps on it — get that wrong and the settle watcher is free to open its own
+  // pick over the file the user just clicked. The workspace half of the contract
+  // (what it does with each source, and when it reports) is pinned in
+  // FileWorkspace.userActivationTiming.test.tsx; this is the producing half,
+  // which is all a suite that mocks FileWorkspace out can see.
+  it('stamps a chat file-chip open as the user’s and the run’s auto-open as internal', async () => {
+    // The post-run read already carries a previewable artifact, so the watch's
+    // FIRST evaluation — the one that runs at arming, before any later list
+    // lands — is what opens it. Releasing the read is therefore the whole
+    // trigger. The tests above instead wait for a second list, which is fine for
+    // them (they release immediately) but would put this one, with a user
+    // interaction inserted first, in reach of the 15s wall-clock deadline under
+    // full-suite load.
+    const turn = await runTurnHoldingCompletionRead({
+      projectId: 'project-settle-open-source',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, TURN_A_HTML],
+      settled: [NOTES, OTHER, TURN_A_HTML],
+    });
+
+    // The user clicks a produced-file chip in chat while the finalizer waits.
+    await act(async () => {
+      (chatPaneSpy.mock.calls.at(-1)?.[0] as {
+        onRequestOpenFile?: (name: string) => void;
+      }).onRequestOpenFile?.('other.md');
+    });
+
+    await turn.releaseCompletionRead();
+
+    const bySource = new Map(
+      openRequestKeys().map((request) => [request.name, request.source]),
+    );
+    expect(bySource.get('other.md')).toBe('user');
+    // The run's own open still lands here — this suite's FileWorkspace is a
+    // spy, so nothing consumed the 'user' report above. That it is stamped
+    // 'internal' is the assertion: the real workspace is what turns the pair
+    // into "do not move focus".
+    expect(bySource.get('turn-a.html')).toBe('internal');
   });
 });

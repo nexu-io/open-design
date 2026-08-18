@@ -301,6 +301,8 @@ import {
   FileWorkspace,
   type BrowserOpenRequest,
   type FileRefreshResult,
+  type WorkspaceOpenRequest,
+  type WorkspaceOpenRequestSource,
 } from './FileWorkspace';
 import {
   type PluginFolderAgentAction,
@@ -2507,8 +2509,12 @@ export function ProjectView({
   // Routed to FileWorkspace — bumped whenever the user clicks "open" on a
   // tool card, an attachment chip, or a produced-file chip in chat. We
   // include a nonce so re-clicking the same name after the user closed the
-  // tab still focuses it.
-  const [openRequest, setOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
+  // tab still focuses it. It also carries this project's automatic opens (a
+  // run's produced artifact, brand extraction, the settle re-evaluation), so
+  // `source` says which of the two a request is: the workspace counts only the
+  // user's as "the user took over" when deciding whether an auto-open watch is
+  // still hers to honour.
+  const [openRequest, setOpenRequest] = useState<WorkspaceOpenRequest | null>(null);
   const [browserOpenRequest, setBrowserOpenRequest] = useState<BrowserOpenRequest | null>(null);
   // Like `openRequest`, but additionally asks the preview workspace to open the
   // file's Share/Export menu. Drives the "Share" next-step action: it reuses the
@@ -3551,10 +3557,20 @@ export function ProjectView({
     persistTabsState({ tabs: [primaryFile.name], active: primaryFile.name });
   }, [openTabsState.active, openTabsState.tabs.length, persistTabsState, projectFiles, routeFileName]);
 
-  const requestOpenFile = useCallback((name: string) => {
+  // `source` is required: every caller has to say whether it is relaying a user
+  // gesture or opening on the project's own initiative. Defaulting either way
+  // would silently mislabel whichever kind of caller forgot it, and mislabelling
+  // a user click is exactly what lets the settle watcher overwrite her choice.
+  const requestOpenFile = useCallback((name: string, source: WorkspaceOpenRequestSource) => {
     if (!name) return;
-    setOpenRequest({ name, nonce: Date.now() });
+    setOpenRequest({ name, nonce: Date.now(), source });
   }, []);
+  // Handed to ChatPane, whose file links and produced-file chips are clicked by
+  // the user; ChatPane itself stays a plain `(name) => void` consumer.
+  const handleUserOpenFile = useCallback(
+    (name: string) => requestOpenFile(name, 'user'),
+    [requestOpenFile],
+  );
 
   useEffect(() => {
     const designSystemId = brandReady?.designSystemId;
@@ -3604,7 +3620,8 @@ export function ProjectView({
         openFile?: (fileName: string) => void;
       } = {},
     ) => {
-      const openPersistedFile = options.openFile ?? requestOpenFile;
+      const openPersistedFile =
+        options.openFile ?? ((fileName: string) => requestOpenFile(fileName, 'internal'));
       const persistedHtml = resolvePersistedArtifactHtml({
         artifactHtml: art.html,
         identifier: art.identifier,
@@ -3827,7 +3844,7 @@ export function ProjectView({
       userActivations: workspaceUserActivationsRef.current,
     });
     if (!decision.keepWatching) pendingAutoOpenSettleRef.current = null;
-    if (decision.openFileName) requestOpenFile(decision.openFileName);
+    if (decision.openFileName) requestOpenFile(decision.openFileName, 'internal');
   }, [requestOpenFile]);
 
   // Later lists: every accepted file-list generation (and every focus change,
@@ -4108,7 +4125,7 @@ export function ProjectView({
   // (the parsed segment) so back/forward navigation triggers the same path.
   useEffect(() => {
     if (!routeFileName) return;
-    requestOpenFile(routeFileName);
+    requestOpenFile(routeFileName, 'user');
   }, [routeFileName, requestOpenFile]);
 
   // Sync the URL when the active tab changes, so reload + share-link both
@@ -5405,7 +5422,7 @@ export function ProjectView({
               if (recoveredExistingArtifact) {
                 artifactPersistenceSucceeded = true;
                 savedArtifactRef.current = recoveredExistingArtifact.name;
-                requestOpenFile(recoveredExistingArtifact.name);
+                requestOpenFile(recoveredExistingArtifact.name, 'internal');
               } else {
                 savedArtifactRef.current = null;
                 const persistence = await persistArtifact(
@@ -5449,7 +5466,7 @@ export function ProjectView({
                 projectDetail.resolvedDir,
               ),
             });
-            if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+            if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen, 'internal');
             const deliveryOutcome = resolveDesignDeliveryOutcome({
               sessionMode: message.sessionMode,
               runStatus: 'succeeded',
@@ -5743,7 +5760,7 @@ export function ProjectView({
                   if (recoveredExistingArtifact) {
                     artifactPersistenceSucceeded = true;
                     savedArtifactRef.current = recoveredExistingArtifact.name;
-                    requestOpenFile(recoveredExistingArtifact.name);
+                    requestOpenFile(recoveredExistingArtifact.name, 'internal');
                   } else {
                     savedArtifactRef.current = null;
                     const persistence = await persistArtifact(
@@ -5795,7 +5812,7 @@ export function ProjectView({
                     projectDetail.resolvedDir,
                   ),
                 });
-                if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+                if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen, 'internal');
                 const deliveryContent = needsFullReplay ? replayedContent : message.content;
                 const deliveryEvents = needsFullReplay ? replayedEvents : message.events;
                 const deliveryOutcome = resolveDesignDeliveryOutcome({
@@ -5891,7 +5908,7 @@ export function ProjectView({
                       );
                     if (recoveredExistingArtifact) {
                       savedArtifactRef.current = recoveredExistingArtifact.name;
-                      requestOpenFile(recoveredExistingArtifact.name);
+                      requestOpenFile(recoveredExistingArtifact.name, 'internal');
                     } else {
                       savedArtifactRef.current = null;
                       await persistArtifact(
@@ -5913,7 +5930,7 @@ export function ProjectView({
                       recoveredArtifactMessagesRef.current.add(message.id);
                     }
                     const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
-                    if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+                    if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen, 'internal');
                     if (latestRunStatus?.status === 'succeeded') setError(null);
                     if (
                       shouldPublishRunFinishedEvent
@@ -6302,7 +6319,7 @@ export function ProjectView({
             );
           if (recoveredExistingArtifact) {
             savedArtifactRef.current = recoveredExistingArtifact.name;
-            requestOpenFile(recoveredExistingArtifact.name);
+            requestOpenFile(recoveredExistingArtifact.name, 'internal');
           } else {
             savedArtifactRef.current = null;
             await persistArtifact(
@@ -6326,7 +6343,7 @@ export function ProjectView({
           }
           recoveredArtifactMessagesRef.current.add(message.id);
           const producedArtifactToOpen = selectAutoOpenProducedArtifact(produced, autoOpenArtifactOptions);
-          if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen);
+          if (producedArtifactToOpen) requestOpenFile(producedArtifactToOpen, 'internal');
           // This message's persisted runStatus was already terminal (a
           // precondition of hasRecoverableArtifactMessage); when it has no
           // stored endedAt, fall back to the daemon's authoritative terminal
@@ -7072,7 +7089,7 @@ export function ProjectView({
       const runAutoOpenedFileNames = new Set<string>();
       const requestRunOpenFile = (fileName: string) => {
         if (autoOpenSettleGenerationRef.current !== autoOpenSettleGeneration) return false;
-        requestOpenFile(fileName);
+        requestOpenFile(fileName, 'internal');
         runAutoOpenedFileNames.add(fileName);
         return true;
       };
@@ -7136,7 +7153,7 @@ export function ProjectView({
         if (ev.kind === 'live_artifact') {
           setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, ev));
           void refreshLiveArtifacts().then(() => {
-            if (ev.action !== 'deleted') requestOpenFile(liveArtifactTabId(ev.artifactId));
+            if (ev.action !== 'deleted') requestOpenFile(liveArtifactTabId(ev.artifactId), 'internal');
           });
           onProjectsRefresh();
           return;
@@ -8377,7 +8394,7 @@ export function ProjectView({
               refreshWorkspaceItems(),
             ]);
             bumpFilesRefresh();
-            requestOpenFile(DESIGN_SYSTEM_TAB);
+            requestOpenFile(DESIGN_SYSTEM_TAB, 'internal');
           })();
         });
     }
@@ -9850,7 +9867,7 @@ export function ProjectView({
     const pending = pendingBrandDesignSystemOpenRef.current;
     if (!pending || designSystemProject?.id !== pending) return;
     pendingBrandDesignSystemOpenRef.current = null;
-    requestOpenFile(DESIGN_SYSTEM_TAB);
+    requestOpenFile(DESIGN_SYSTEM_TAB, 'internal');
   }, [designSystemProject?.id, requestOpenFile]);
   useEffect(() => {
     if (!projectIsProgrammaticBrandExtraction || !designSystemProject?.id) {
@@ -9872,7 +9889,7 @@ export function ProjectView({
       return;
     }
     autoOpenedBrandDesignSystemRef.current = designSystemProject.id;
-    requestOpenFile(DESIGN_SYSTEM_TAB);
+    requestOpenFile(DESIGN_SYSTEM_TAB, 'internal');
   }, [
     designSystemProject?.id,
     openTabsState.active,
@@ -9947,7 +9964,7 @@ export function ProjectView({
   // driven by ChatPane's composer ref, so ProjectView no longer wires them here.
   const handleArtifactShare = useCallback(
     (fileName: string) => {
-      requestOpenFile(fileName);
+      requestOpenFile(fileName, 'user');
       setShareRequest({ name: fileName, nonce: Date.now() });
     },
     [requestOpenFile],
@@ -9956,7 +9973,7 @@ export function ProjectView({
   // zip / standalone HTML / save-as-template) instead of a bare file download.
   const handleArtifactDownload = useCallback(
     (fileName: string) => {
-      requestOpenFile(fileName);
+      requestOpenFile(fileName, 'user');
       setDownloadRequest({ name: fileName, nonce: Date.now() });
     },
     [requestOpenFile],
@@ -10367,7 +10384,7 @@ export function ProjectView({
         refreshWorkspaceItems(),
       ]);
       bumpFilesRefresh();
-      requestOpenFile(brandPreviewFile);
+      requestOpenFile(brandPreviewFile, 'internal');
       const returnedConversationId = conversationId?.trim() || null;
       if (returnedConversationId) {
         const stillCurrent = await refreshConversationsForProgrammaticBrandRetry(returnedConversationId);
@@ -10487,11 +10504,11 @@ export function ProjectView({
       }
 
       const liveSnapshot = await readBrandBrowserSnapshotWithRetry(BRAND_BROWSER_TAB_ID);
-      requestOpenFile(brandPreviewFile);
+      requestOpenFile(brandPreviewFile, 'internal');
       if ((await extractSnapshot(liveSnapshot)).status === 'handled') return;
 
       const archivedSnapshot = await downloadBrandBrowserPageArchive(brandExtractionSourceUrl);
-      requestOpenFile(brandPreviewFile);
+      requestOpenFile(brandPreviewFile, 'internal');
       if ((await extractSnapshot(archivedSnapshot)).status === 'handled') return;
 
       // Still no readable local source. Recoverable — clear/settle/download the
@@ -10564,7 +10581,7 @@ export function ProjectView({
       projectFiles,
     });
     setBrandAgentExtractionStarting(true);
-    requestOpenFile(brandExtractionPreviewFileName(projectFiles));
+    requestOpenFile(brandExtractionPreviewFileName(projectFiles), 'internal');
     void handleSend(prompt, [], []).finally(() => setBrandAgentExtractionStarting(false));
   }, [
     brandAgentExtractionStarting,
@@ -11133,7 +11150,7 @@ export function ProjectView({
               onUpdateQueuedSend={updateQueuedChatSend}
               onReorderQueuedSends={reorderCurrentConversationQueuedChatSends}
               onSendQueuedNow={sendQueuedChatSendNow}
-              onRequestOpenFile={requestOpenFile}
+              onRequestOpenFile={handleUserOpenFile}
               onRequestPluginDetails={handleOpenContextPluginDetails}
               onRequestDesignSystemDetails={handleOpenContextDesignSystemDetails}
               onRequestPluginFolderAgentAction={handlePluginFolderAgentAction}
@@ -11513,7 +11530,7 @@ export function ProjectView({
             brandName={brandReadyPrompt.brandName}
             workspaceOffsetPx={workspaceFocused ? 0 : splitLeftPanelWidth + SPLIT_RESIZE_HANDLE_WIDTH}
             onPreview={() => {
-              requestOpenFile(DESIGN_SYSTEM_TAB);
+              requestOpenFile(DESIGN_SYSTEM_TAB, 'user');
               setProjectActionsToast({
                 message: t('project.brandReadyPreviewOpened'),
                 details: null,

@@ -86,7 +86,11 @@ import { DesignSystemPicker } from './DesignSystemPicker';
 import { LibraryPicker } from './LibraryPicker';
 import { notifyConnectorsChanged } from './connectors-events';
 import { connectorAuthSnapshotChanged } from './connectors-state';
-import { FileWorkspace, type FileRefreshResult } from './FileWorkspace';
+import {
+  FileWorkspace,
+  type FileRefreshResult,
+  type WorkspaceOpenRequest,
+} from './FileWorkspace';
 import { Icon, type IconName } from './Icon';
 import { Spinner } from './Loading';
 import { Toast } from './Toast';
@@ -1706,7 +1710,7 @@ export function DesignSystemDetailView({
     tabs: [],
     active: null,
   });
-  const [workspaceOpenRequest, setWorkspaceOpenRequest] = useState<{ name: string; nonce: number } | null>(null);
+  const [workspaceOpenRequest, setWorkspaceOpenRequest] = useState<WorkspaceOpenRequest | null>(null);
   const chatAbortRef = useRef<AbortController | null>(null);
   const chatCancelRef = useRef<AbortController | null>(null);
   const pendingWorkspaceFileWritesRef = useRef<Map<string, string>>(new Map());
@@ -2327,7 +2331,9 @@ export function DesignSystemDetailView({
 
   const requestWorkspaceFileOpen = useCallback((name: string) => {
     if (!name) return;
-    setWorkspaceOpenRequest({ name, nonce: Date.now() });
+    // This flow has no post-turn auto-open watch; every open here is a click in
+    // the design-system workspace, so it is reported as the user's.
+    setWorkspaceOpenRequest({ name, nonce: Date.now(), source: 'user' });
   }, []);
 
   // Known-file set for the design-system chat's file-link routing — same
