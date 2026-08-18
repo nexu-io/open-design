@@ -743,6 +743,11 @@ import { registerChatRoutes } from './routes/chat.js';
 import { registerRunRoutes } from './routes/runs.js';
 import { registerTerminalRoutes } from './routes/terminal.js';
 import { registerBrowserSessionRoutes } from './routes/browser-sessions.js';
+import { registerGroundedPptxRoutes } from './routes/grounded-pptx.js';
+import {
+  CLAUDE_DESIGN_IMPORT_MAX_BYTES,
+  GROUNDED_PPTX_UPLOAD_MAX_BYTES,
+} from './pptx-grounded/upload-limits.js';
 import { createTerminalService } from './terminals.js';
 import { createBrowserSessionService } from './browser-sessions.js';
 import { registerSocialShareRoutes } from './routes/social-share.js';
@@ -1201,6 +1206,7 @@ const ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'artifacts');
 // read path so project-membership, size, and CSP guards cannot be bypassed.
 const CRITIQUE_ARTIFACTS_DIR = path.join(RUNTIME_DATA_DIR, 'critique-artifacts');
 const PROJECTS_DIR = path.join(RUNTIME_DATA_DIR, 'projects');
+const GROUNDED_PPTX_DATA_DIR = path.join(RUNTIME_DATA_DIR, 'grounded-pptx');
 const USER_SKILLS_DIR = path.join(RUNTIME_DATA_DIR, 'skills');
 const USER_DESIGN_SYSTEMS_DIR = path.join(RUNTIME_DATA_DIR, 'design-systems');
 // Brand metadata (brand.json + meta.json per brand) lives here; each brand
@@ -2314,7 +2320,19 @@ const importUpload = multer({
       );
     },
   }),
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: CLAUDE_DESIGN_IMPORT_MAX_BYTES, files: 1 },
+});
+
+const groundedPptxUpload = multer({
+  storage: multer.diskStorage({
+    destination: UPLOAD_DIR,
+    filename: (_req, file, cb) => {
+      file.originalname = decodeMultipartFilename(file.originalname);
+      const safe = sanitizeName(file.originalname);
+      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safe}`);
+    },
+  }),
+  limits: { fileSize: GROUNDED_PPTX_UPLOAD_MAX_BYTES, files: 1 },
 });
 
 const PLUGIN_UPLOAD_MAX_BYTES = 50 * 1024 * 1024;
@@ -7952,6 +7970,16 @@ export async function startServer({
     http: httpDeps,
     projectStore: projectStoreDeps,
     browserSessions: browserSessionService,
+    authorizeProjectRequest,
+  });
+  registerGroundedPptxRoutes(app, {
+    upload: groundedPptxUpload,
+    db,
+    getProject,
+    resolveProjectDir,
+    projectsRoot: PROJECTS_DIR,
+    runtimeDataRoot: RUNTIME_DATA_DIR,
+    groundedPptxDataRoot: GROUNDED_PPTX_DATA_DIR,
     authorizeProjectRequest,
   });
   registerImportRoutes(app, {

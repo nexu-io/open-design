@@ -176,6 +176,7 @@ import {
   PREVIEW_REDIRECT_LOOP_MESSAGE,
 } from '../runtime/srcdoc';
 import { DeckThumbnailRail } from './DeckThumbnailRail';
+import { GroundedPptxViewer } from './GroundedPptxViewer';
 import { parseDeckThumbnails } from '../runtime/deck-thumbnail-parser';
 import {
   buildSpeakerNotesPresenterHtml,
@@ -1955,10 +1956,13 @@ export const FileViewer = memo(function FileViewer({
   if (file.kind === 'text' || file.kind === 'code') {
     return <TextViewer projectId={projectId} file={file} />;
   }
+  if (file.kind === 'presentation') {
+    const fallback = <DocumentPreviewViewer projectId={projectId} file={file} />;
+    return <GroundedPptxViewer projectId={projectId} fileName={file.path ?? file.name} fallback={fallback} />;
+  }
   if (
     file.kind === 'pdf' ||
     file.kind === 'document' ||
-    file.kind === 'presentation' ||
     file.kind === 'spreadsheet'
   ) {
     return <DocumentPreviewViewer projectId={projectId} file={file} />;

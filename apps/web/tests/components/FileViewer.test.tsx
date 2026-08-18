@@ -203,6 +203,30 @@ function baseFile(overrides: Partial<ProjectFile>): ProjectFile {
   };
 }
 
+it('passes a nested presentation path through the FileViewer grounded import integration', async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes('/api/projects/project-1/pptx')) {
+      requests.push({ url, init });
+      return new Response(JSON.stringify({ error: 'not grounded' }), { status: 404 });
+    }
+    return new Response(JSON.stringify({ error: 'not available' }), { status: 404 });
+  }));
+  const file = baseFile({
+    name: 'deck.pptx', path: 'nested/deck.pptx', kind: 'presentation',
+    mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  });
+  renderWithProjectWorkspace(
+    <FileViewer projectId="project-1" projectKind="prototype" file={file} />,
+    null,
+  );
+  fireEvent.click(await screen.findByRole('button', { name: 'Use as grounded PowerPoint' }));
+  await waitFor(() => expect(requests.some(({ init }) =>
+    init?.method === 'POST' && init.body === JSON.stringify({ fileName: 'nested/deck.pptx' }),
+  )).toBe(true));
+});
+
 function createDragDataTransfer() {
   const store = new Map<string, string>();
   return {

@@ -36,6 +36,8 @@
   "dependencies": {
     "@babel/parser": "7.29.3",
     "@modelcontextprotocol/sdk": "1.29.0",
+    "@office-kit/pptx": "0.12.0",
+    "@office-kit/pptx-preview": "0.9.1",
     "@open-design/agui-adapter": "workspace:*",
     "@open-design/contracts": "workspace:*",
     "@open-design/diagnostics": "workspace:*",
