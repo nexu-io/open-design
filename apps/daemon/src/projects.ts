@@ -75,6 +75,24 @@ export function projectDir(projectsRoot, projectId) {
   return path.join(projectsRoot, projectId);
 }
 
+// ---------------------------------------------------------------------------
+// S3 mirror wiring (#7043). The local tree stays the authoritative working
+// copy (agent runtimes spawn with the project dir as cwd); when
+// OD_PROJECT_STORAGE=s3 the mirror pushes mutations to the blob store.
+// Module-level state is set once at daemon startup by server.ts.
+// ---------------------------------------------------------------------------
+let projectStorageMirror: import('./storage/project-storage-mirror.js').ProjectStorageMirror | null = null;
+
+export function setProjectStorageMirror(
+  mirror: import('./storage/project-storage-mirror.js').ProjectStorageMirror | null,
+): void {
+  projectStorageMirror = mirror;
+}
+
+export function getProjectStorageMirror() {
+  return projectStorageMirror;
+}
+
 export class SandboxImportedProjectError extends Error {
   code = 'SANDBOX_IMPORTED_PROJECT_UNAVAILABLE';
 
@@ -142,6 +160,9 @@ export async function ensureProject(projectsRoot, projectId, metadata?) {
   // Git-linked folders already exist; skip mkdir to avoid side-effects.
   if (!usesExternalProjectRoot(metadata)) {
     await mkdir(dir, { recursive: true });
+    // #7043 — a fresh daemon with an empty local tree restores the managed
+    // project from the blob store before the first agent run materializes it.
+    await projectStorageMirror?.restoreIfEmpty(projectId, dir).catch(() => {});
   }
   return dir;
 }
@@ -253,6 +274,18 @@ export async function deleteProjectFolder(projectsRoot, projectId, name, metadat
     const err = new Error('target is not a folder');
     err.code = 'ENOTDIR';
     throw err;
+  }
+  if (projectStorageMirror) {
+    // #7043 — capture the folder's relative paths before the local delete so
+    // the mirror can remove exactly those keys (best-effort).
+    const prefix = safeName + '/';
+    const all = await listFiles(projectsRoot, projectId, { metadata });
+    const folderPaths = all
+      .filter((f) => f.path === safeName || f.path.startsWith(prefix))
+      .map((f) => f.path);
+    for (const p of folderPaths) {
+      await projectStorageMirror.deleteFile(projectId, p).catch(() => {});
+    }
   }
   await rm(target, { recursive: true, force: true });
 }
@@ -916,6 +949,14 @@ export async function writeProjectFile(
     const manifestFileName = artifactManifestNameFor(safeName);
     const manifestTarget = await resolveSafeReal(dir, manifestFileName);
     await writeFile(manifestTarget, JSON.stringify(validatedManifest, null, 2));
+    if (projectStorageMirror) {
+      // #7043 — write-through, best-effort (a store outage must never break
+      // local work; the next uploadProject retries the whole tree).
+      await projectStorageMirror.uploadFile(projectId, safeName).catch(() => {});
+      await projectStorageMirror.uploadFile(projectId, manifestFileName).catch(() => {});
+    }
+  } else if (projectStorageMirror) {
+    await projectStorageMirror.uploadFile(projectId, safeName).catch(() => {});
   }
   const st = await stat(target);
   const persistedManifest = await readManifestForPath(dir, safeName);
@@ -1021,7 +1062,10 @@ export async function deleteProjectFile(projectsRoot, projectId, name, metadata?
   assertVisibleForImportedProject(name, metadata);
   const dir = resolveProjectDir(projectsRoot, projectId, metadata);
   const file = await resolveSafeReal(dir, name);
+  const rel = toProjectPath(path.relative(await realpath(dir).catch(() => dir), file));
   await unlink(file);
+  // #7043 — best-effort write-through delete.
+  await projectStorageMirror?.deleteFile(projectId, rel).catch(() => {});
 }
 
 export async function renameProjectFile(projectsRoot, projectId, fromName, toName, metadata?) {
@@ -1087,6 +1131,11 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   await renameFilePath(source, targetPath, { noOverwrite: true });
   await commitArtifactManifestRename(manifestRename, newName);
   await updateArtifactManifestRefsForRename(dir, oldName, newName);
+  if (projectStorageMirror) {
+    // #7043 — rename = delete old key + upload the renamed file.
+    await projectStorageMirror.deleteFile(projectId, oldName).catch(() => {});
+    await projectStorageMirror.uploadFile(projectId, newName).catch(() => {});
+  }
 
   const st = await stat(targetPath);
   const manifest = await readManifestForPath(dir, newName);

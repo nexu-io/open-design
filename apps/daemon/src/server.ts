@@ -543,6 +543,8 @@ import {
 import {
   resolveExternalMcpServersForRun,
 } from './run-tool-bundle.js';
+import { setProjectStorageMirror } from './projects.js';
+import { resolveProjectStorageMirror } from './storage/project-storage-mirror.js';
 import {
   beginAuth,
   exchangeCodeForToken,
@@ -2572,6 +2574,9 @@ export async function startServer({
   host = normalizeDaemonBindHost(host);
   let resolvedPort = port;
   let daemonShuttingDown = false;
+  // #7043 — when OD_PROJECT_STORAGE=s3, activate the write-through/restore
+  // mirror between the local project working copy and the blob store.
+  setProjectStorageMirror(resolveProjectStorageMirror(process.env, PROJECTS_DIR));
   const extraAllowedOrigins = configuredAllowedOrigins();
   const workspaceAuthorityCacheMode = resolveWorkspaceAuthorityCacheMode(
     process.env.OD_WORKSPACE_AUTHORITY_CACHE_MODE,

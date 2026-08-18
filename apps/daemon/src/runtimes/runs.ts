@@ -11,6 +11,7 @@ import {
 import { createRunLifecycleTracer } from '../run-lifecycle-tracer.js';
 import { projectWorkspaceProvenance } from '../workspace-contract.js';
 import { OPEN_DESIGN_PLUGIN_ID } from '../mcp-observability.js';
+import { getProjectStorageMirror } from '../projects.js';
 import {
   scanRunEventsForUsageAnalytics,
   summarizeRunTimingAnalytics,
@@ -1197,6 +1198,16 @@ export function createChatRunService({
       const finalize = run.onFinalize;
       run.onFinalize = null;
       try { finalize(); } catch { /* best-effort */ }
+    }
+    // #7043 — agent processes write project files directly (outside the HTTP
+    // write path), so the terminal choke point re-syncs the whole managed
+    // project tree to the S3 mirror when one is active. Best-effort and
+    // fire-and-forget: the local tree stays the source of truth.
+    if (typeof run.projectId === 'string' && run.projectId) {
+      const mirror = getProjectStorageMirror();
+      if (mirror) {
+        void mirror.uploadProject(run.projectId).catch(() => {});
+      }
     }
     emit(run, 'end', {
       code,

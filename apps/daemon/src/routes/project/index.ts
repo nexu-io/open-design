@@ -60,7 +60,7 @@ import {
 import { connectorService } from '../../connectors/service.js';
 import type { RouteDeps } from '../../server-context.js';
 import { listSkills } from '../../skills.js';
-import { isSafeId } from '../../projects.js';
+import { getProjectStorageMirror, isSafeId } from '../../projects.js';
 import {
   ensureTeamProjectCommentConversations,
   SYNC_KEEPS_UPDATED_AT,
@@ -4621,6 +4621,8 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       await cancelRunsOwnedBy(design.runs, { projectId: req.params.id });
       dbDeleteProject(db, req.params.id);
       await removeProjectDir(PROJECTS_DIR, req.params.id).catch(() => {});
+      // #7043 — mirror the project delete to the S3 store (best-effort).
+      await getProjectStorageMirror()?.deleteProject(req.params.id).catch(() => {});
       /** @type {import('@open-design/contracts').OkResponse} */
       const body = { ok: true };
       res.json(body);
