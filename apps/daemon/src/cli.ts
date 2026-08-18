@@ -742,7 +742,7 @@ if (first && SUBCOMMAND_MAP[first]) {
   await SUBCOMMAND_MAP[first](rest);
   // Respect a non-zero exit code a handler set via process.exitCode (e.g. a
   // failed `od resource get`); default to 0 when it left it unset.
-  process.exit(process.exitCode ?? 0);
+  await exitAfterClosingDispatcher(process.exitCode ?? 0);
 }
 
 if (argv[0] === 'tools' && argv[1] === 'live-artifacts') {
@@ -1721,18 +1721,18 @@ async function runMediaGenerate(rawArgs) {
     });
   } catch (err) {
     surfaceFetchError(err, daemonUrl);
-    process.exit(3);
+    await exitAfterClosingDispatcher(3);
   }
   if (!resp.ok) {
     const text = await resp.text();
     console.error(`daemon ${resp.status}: ${text}`);
-    process.exit(4);
+    await exitAfterClosingDispatcher(4);
   }
   const accepted = await resp.json();
   const { taskId } = accepted;
   if (!taskId) {
     console.error('daemon did not return a taskId');
-    process.exit(4);
+    await exitAfterClosingDispatcher(4);
   }
   console.error(`task ${taskId} queued (${accepted.status || 'queued'})`);
   await pollUntilDoneOrBudget(daemonUrl, taskId, 0, {
@@ -1781,6 +1781,26 @@ async function runMediaWait(rawArgs) {
   });
 }
 
+// Invariant: no undici keep-alive socket may still be live when the process
+// exits after an HTTP round-trip. The CLI uses Node's global fetch (global
+// undici dispatcher), whose pooled keep-alive sockets would otherwise still be
+// open while process.exit() tears the process down; on Windows/Node 24 that
+// aborts with libuv's UV_HANDLE_CLOSING assertion (src/win/async.c:94,
+// 0xC0000409). Upstream: nodejs/node#56645; fix #61999 is not in a released
+// Node. Removable once a fixed Node is the minimum runtime. destroy() (not
+// close()) is used so teardown can never wait on in-flight requests.
+async function exitAfterClosingDispatcher(code) {
+  const dispatcher = globalThis[Symbol.for('undici.globalDispatcher.1')];
+  if (dispatcher && typeof dispatcher.destroy === 'function') {
+    try {
+      await dispatcher.destroy();
+    } catch {
+      // Already closed.
+    }
+  }
+  process.exit(code);
+}
+
 async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}) {
   const totalBudgetMs = typeof options.totalBudgetMs === 'number' ? options.totalBudgetMs : 25_000;
   const perCallTimeoutMs = 4_000;
@@ -1810,23 +1830,23 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       });
     } catch (err) {
       surfaceFetchError(err, daemonUrl);
-      process.exit(3);
+      await exitAfterClosingDispatcher(3);
     }
     if (resp.status === 404) {
       console.error(`task ${taskId} not found (expired or never queued)`);
-      process.exit(4);
+      await exitAfterClosingDispatcher(4);
     }
     if (!resp.ok) {
       const text = await resp.text();
       console.error(`daemon ${resp.status}: ${text}`);
-      process.exit(4);
+      await exitAfterClosingDispatcher(4);
     }
     let snap;
     try {
       snap = await resp.json();
     } catch {
       console.error('daemon returned non-JSON for /wait');
-      process.exit(4);
+      await exitAfterClosingDispatcher(4);
     }
     lastSnapshot = snap;
     if (Array.isArray(snap.progress)) {
@@ -1854,7 +1874,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
         );
       }
       process.stdout.write(JSON.stringify({ file }) + '\n');
-      process.exit(file.providerError ? 5 : 0);
+      await exitAfterClosingDispatcher(file.providerError ? 5 : 0);
     }
     if (snap.status === 'failed') {
       const msg = snap.error?.message || 'task failed';
@@ -1862,7 +1882,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       process.stdout.write(
         JSON.stringify({ taskId, status: 'failed', error: snap.error || {} }) + '\n',
       );
-      process.exit(snap.error?.status || 5);
+      await exitAfterClosingDispatcher(snap.error?.status || 5);
     }
     if (snap.status === 'interrupted') {
       const msg = snap.error?.message || 'task interrupted';
@@ -1870,7 +1890,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       process.stdout.write(
         JSON.stringify({ taskId, status: 'interrupted', error: snap.error || {} }) + '\n',
       );
-      process.exit(snap.error?.status || 5);
+      await exitAfterClosingDispatcher(snap.error?.status || 5);
     }
   }
 
@@ -1890,7 +1910,7 @@ async function pollUntilDoneOrBudget(daemonUrl, taskId, sinceStart, options = {}
       `Run \`"$OD_NODE_BIN" "$OD_BIN" media wait ${taskId} --since ${since}\` to continue in an agent runtime ` +
       `(${stillRunningHint}).\n`,
   );
-  process.exit(stillRunningExitCode);
+  await exitAfterClosingDispatcher(stillRunningExitCode);
 }
 
 function surfaceFetchError(err, daemonUrl) {
