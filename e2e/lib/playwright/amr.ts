@@ -116,12 +116,51 @@ export async function mockAmrPersonalWorkspace(
   await page.route('**/api/workspace/billing**', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    if (
-      request.method() !== 'GET'
-      || url.pathname !== '/api/workspace/billing'
-      || url.searchParams.get('scope') !== 'account'
-      || url.searchParams.size !== 1
-    ) {
+    if (request.method() !== 'GET' || url.pathname !== '/api/workspace/billing') {
+      await route.fallback();
+      return;
+    }
+    if (url.searchParams.get('scope') === 'workspace') {
+      const workspaceId = url.searchParams.get('workspaceId');
+      if (workspaceId !== AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceId) {
+        await route.fulfill({ status: 404, json: { error: 'workspace_not_found' } });
+        return;
+      }
+      const observedAt = '2026-07-26T00:00:00.000Z';
+      await route.fulfill({
+        json: {
+          summary: null,
+          workspaceBalance: {
+            workspaceId,
+            workspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
+            balanceUsd: accountBalanceUsd,
+            billingScopeVersion: 2,
+            expiresAt: null,
+            updatedAt: observedAt,
+          },
+          workspaceRuntime: {
+            workspaceId,
+            workspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
+            status: 'fresh',
+            revision: '1',
+            observedAt,
+            softExpiresAt: '2099-07-26T00:00:30.000Z',
+            hardExpiresAt: '2099-07-26T00:02:00.000Z',
+            retryAt: null,
+            errorCode: null,
+            reason: 'authoritative-action-read',
+            sourceGapDetected: false,
+          },
+          authoritativeWorkspaceRead: {
+            workspaceId,
+            workspaceMemberId: AMR_PERSONAL_WORKSPACE_CONTEXT.workspaceMemberId,
+            observedAt,
+          },
+        },
+      });
+      return;
+    }
+    if (url.searchParams.get('scope') !== 'account' || url.searchParams.size !== 1) {
       await route.fallback();
       return;
     }

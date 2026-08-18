@@ -110,6 +110,7 @@ export function localProjectWorkspaceAttribution(
 export async function authorizeCreatedProjectWorkspace(
   req: unknown,
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>,
+  configuredEnv?: Record<string, string>,
 ): Promise<CreatedProjectWorkspaceResolution> {
   const claimed = resolveCreatedProjectWorkspace(req);
   if (!claimed.ok || claimed.context === null || !fetchWorkspaceDirectory) {
@@ -155,7 +156,7 @@ export async function authorizeCreatedProjectWorkspace(
     };
   }
 
-  const authoritative = workspaceContextFromDirectoryItem(item);
+  const authoritative = workspaceContextFromDirectoryItem(item, configuredEnv);
   const context: WorkspaceResourceContext = {
     workspaceId: authoritative.workspaceId,
     workspaceType: authoritative.workspaceType,
@@ -211,8 +212,13 @@ export class CreatedProjectWorkspaceResolutionError extends Error {
 export async function createdProjectWorkspaceHome(
   req: unknown,
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>,
+  configuredEnv?: Record<string, string>,
 ): Promise<WorkspaceResourceContext | null> {
-  const authorized = await authorizeCreatedProjectWorkspace(req, fetchWorkspaceDirectory);
+  const authorized = await authorizeCreatedProjectWorkspace(
+    req,
+    fetchWorkspaceDirectory,
+    configuredEnv,
+  );
   if (!authorized.ok) throw new CreatedProjectWorkspaceResolutionError(authorized);
   return authorized.context;
 }
@@ -227,11 +233,13 @@ export type CreatedProjectWorkspaceResolver = (
 
 export function createCreatedProjectWorkspaceResolver(deps: {
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  configuredEnv?: () => Record<string, string>;
 }): CreatedProjectWorkspaceResolver {
   return (req) =>
     createdProjectWorkspaceHome(
       req,
       deps.fetchWorkspaceDirectory,
+      deps.configuredEnv?.(),
     );
 }
 

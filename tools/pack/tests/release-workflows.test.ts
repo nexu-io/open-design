@@ -421,11 +421,12 @@ describe("release workflows", () => {
   });
 
   it("bakes both halves of the workspace-team gate into every shipping lane", async () => {
-    const [beta, preview, prerelease, stable] = await Promise.all([
+    const [beta, preview, prerelease, stable, canary] = await Promise.all([
       readFile(new URL("../../../.github/workflows/release-beta.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-preview.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-prerelease.yml", import.meta.url), "utf8"),
       readFile(new URL("../../../.github/workflows/release-stable.yml", import.meta.url), "utf8"),
+      readFile(new URL("../../../.github/workflows/main-prerelease-win-smoke.yml", import.meta.url), "utf8"),
     ]);
 
     // workspaceTeamTransportEnv (apps/packaged/src/workspace-team.ts) enables the
@@ -439,10 +440,28 @@ describe("release workflows", () => {
       expect(workflow).toContain("OD_VELA_WEB_URL:");
     }
 
+    // Every package-capable lane must carry the complete map. Otherwise a
+    // stable/prod package can switch its AMR API to feature-test while its
+    // console and Workspace links remain on prod (or disappear).
+    for (const workflow of [beta, preview, prerelease, stable, canary]) {
+      expect(workflow).toContain(
+        "OD_VELA_WEB_URL_FEATURE_TEST: ${{ secrets.VELA_WEB_URL_FEATURE_TEST }}",
+      );
+      expect(workflow).toContain(
+        "OD_VELA_WEB_URL_TEST: ${{ secrets.VELA_WEB_URL_TEST }}",
+      );
+      expect(workflow).toContain(
+        "OD_VELA_WEB_URL_PROD: ${{ secrets.VELA_WEB_URL_PROD }}",
+      );
+    }
+
     // beta and prerelease are validation lanes and stay dispatch-driven, so an
     // operator can aim a build at feature-test or test.
     expect(beta).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}");
     expect(prerelease).toContain("OPEN_DESIGN_AMR_PROFILE: ${{ inputs.amr_profile }}");
+    expect(beta).toContain(
+      "(inputs.amr_profile == 'prod' || inputs.amr_profile == '') && secrets.VELA_WEB_URL_PROD || ''",
+    );
 
     // preview and stable are production channels by definition. Pinning the pair
     // instead of accepting an input removes the footgun of publishing a stable

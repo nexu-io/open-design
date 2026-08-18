@@ -136,6 +136,7 @@ import {
   retryFinalResultForRunStatus,
   runArtifactCountForRun,
   runDesignSystemCreatedForRun,
+  runFilesWrittenForRun,
   runPreviewModuleCountForRun,
   runRetryEventsForAnalytics,
   runSideEffectsForRun,
@@ -769,10 +770,14 @@ import {
   headerValue,
   isWorkspaceResourceLocked,
   resolveOptionalWorkspaceRequestAuthority,
+  type WorkspaceRequestAuthorityResult,
   workspaceResourceContext,
   workspaceResourceContextFromRequest,
 } from './collab/workspace-resource-mutation.js';
-import { createAuthorizeProjectRequest } from './collab/project-request-authority.js';
+import {
+  createAuthorizeProjectRequest,
+  resolveBoundProjectWorkspaceReadAuthority,
+} from './collab/project-request-authority.js';
 import { withLastKnownWorkspaceContext } from './collab/workspace-context.js';
 import {
   createWorkspaceTypeRegistry,
@@ -859,6 +864,8 @@ import {
 } from './collab/remembered-team-resource-scopes.js';
 import { readVelaControlApiContext } from './integrations/vela.js';
 import {
+  fetchBillingCheckoutUrl,
+  fetchVelaBillingCatalog,
   fetchVelaBillingSummary,
   fetchVelaWorkspaceBillingProjection,
   isVelaWorkspaceAuthorizationError,
@@ -3192,6 +3199,7 @@ export async function startServer({
       return verifyWorkspaceRequestContext({
         ...input,
         fetchWorkspaceDirectory: fetchDirectory,
+        configuredEnv: configuredAmrEnv(),
       });
     }
     // Local/dev has no signed membership directory. Its explicit request
@@ -3236,7 +3244,7 @@ export async function startServer({
         role: claimed.role,
         memberStatus: claimed.memberStatus,
         lifecycleState: claimed.lifecycleState,
-      }),
+      }, configuredAmrEnv()),
     };
   };
   const verifyWorkspaceReadAuthority = (req: unknown) =>
@@ -3250,6 +3258,7 @@ export async function startServer({
           // A miss is intentionally returned as unavailable. The project gate
           // then falls through to the existing fresh authority verifier.
           fetchWorkspaceDirectory: workspaceDirectoryAuthority.cached,
+          configuredEnv: configuredAmrEnv(),
         })
       : undefined;
   const enforceAuthoritativeProjectMutation = createEnforceWorkspaceProjectMutation(
@@ -3291,7 +3300,9 @@ export async function startServer({
         && item.memberStatus === 'active'
         && item.lifecycleState === 'active',
     );
-    return membership ? workspaceContextFromDirectoryItem(membership) : null;
+    return membership
+      ? workspaceContextFromDirectoryItem(membership, configuredAmrEnv())
+      : null;
   };
   const teamResourceVersions = createTeamResourceVersionStore(RUNTIME_DATA_DIR);
   const teamProjectContentResourceId = (
@@ -3416,6 +3427,7 @@ export async function startServer({
   // verify the exact Workspace/member carried by each request.
   const workspaceContext = withLastKnownWorkspaceContext(
     createWorkspaceContextProviderFromEnv(process.env, {
+      configuredEnv: configuredAmrEnv,
       getActiveWorkspaceId: () => activeWorkspace.get(),
       setLocalSelection: (workspaceId: string) => activeWorkspace.set(workspaceId),
       // Only called after the membership directory CONFIRMS the pinned
@@ -3499,7 +3511,7 @@ export async function startServer({
       if (cached) {
         return {
           ok: true as const,
-          context: workspaceContextFromDirectoryItem(cached),
+          context: workspaceContextFromDirectoryItem(cached, configuredAmrEnv()),
         };
       }
     }
@@ -3517,6 +3529,7 @@ export async function startServer({
     ...(fetchProjectCreationWorkspaceDirectory
       ? { fetchWorkspaceDirectory: fetchProjectCreationWorkspaceDirectory }
       : {}),
+    configuredEnv: configuredAmrEnv,
   });
   function persistWorkspaceProjectSyncState(
     projectId: string,
@@ -3739,7 +3752,9 @@ export async function startServer({
         && item.memberStatus === 'active'
         && item.lifecycleState !== 'deleted',
     );
-    return membership ? workspaceContextFromDirectoryItem(membership) : null;
+    return membership
+      ? workspaceContextFromDirectoryItem(membership, configuredAmrEnv())
+      : null;
   };
 
   // Uncached remote catalog authority for both comment relay delivery and the
@@ -4960,7 +4975,7 @@ export async function startServer({
       readVelaControlApiContext,
       configuredAmrEnv(),
     ),
-    fetch: () => fetchVelaBillingSummary(),
+    fetch: () => fetchVelaBillingSummary({ configuredEnv: configuredAmrEnv() }),
   });
   const workspaceBillingRuntime = createWorkspaceBillingRuntimeCoordinator({
     fetchProjection: async ({ workspaceId }) => {
@@ -4968,7 +4983,9 @@ export async function startServer({
         // The Vela CLI sends only the Bearer credential plus workspace-id
         // candidate. Vela re-derives the member principal server-side, and
         // the runtime validates the returned member id before accepting it.
-        return await fetchVelaWorkspaceBillingProjection(workspaceId);
+        return await fetchVelaWorkspaceBillingProjection(workspaceId, {
+          configuredEnv: configuredAmrEnv(),
+        });
       } catch (error) {
         if (isVelaWorkspaceAuthorizationError(error)) {
           throw new WorkspaceBillingAccessRevokedError();
@@ -5038,6 +5055,7 @@ export async function startServer({
   let workspaceAnalyticsService: AnalyticsService | null = null;
   registerCollabContextRoutes(app, {
     workspaceContext: collab.workspaceContext,
+    configuredEnv: configuredAmrEnv,
     verifyWorkspaceReadAuthority: verifyWorkspaceContextReadAuthority,
     readCachedWorkspaceAuthority: cachedWorkspaceContextForRequest,
     activeWorkspace,
@@ -5047,6 +5065,13 @@ export async function startServer({
     onWorkspaceSwitched: (workspaceId) => warmWorkspaceDigestFaces(workspaceId),
     fetchBilling: accountBillingSummary.read,
     billingRuntime: workspaceBillingRuntime,
+    fetchBillingCatalog: (workspaceId) => fetchVelaBillingCatalog(workspaceId, {
+      configuredEnv: configuredAmrEnv(),
+    }),
+    startCheckout: (input) => fetchBillingCheckoutUrl({
+      ...input,
+      configuredEnv: configuredAmrEnv(),
+    }),
     // Same directory read the route would have made on its own, wrapped so every
     // workspace type it carries is memoized for the team-share invariant.
     listWorkspaceDirectory,
@@ -7313,54 +7338,31 @@ export async function startServer({
     stageProjectDirsForDelete,
     validateLinkedDirs,
   };
-  const authorizeProjectRequest = createAuthorizeProjectRequest({
-    db,
-    getWorkspaceProject,
-    getWorkspaceProjectByProjectId,
-    isProjectRevoked: (_db, projectId) =>
-      revokedTeamProjectMirrors.has(projectId),
-    verifyWorkspaceReadAuthority,
-    verifyWorkspaceRequestAuthority,
-    sendApiError,
-  });
-  const authorizeProjectToolRequest = async (
-    res,
-    projectId,
-    options,
-  ) => {
+  const resolveProjectWorkspaceAuthority = async (
+    projectId: string,
+    options: { fresh: boolean },
+  ): Promise<WorkspaceRequestAuthorityResult | null> => {
     const binding = getWorkspaceProjectByProjectId(db, projectId);
-    if (!binding?.workspaceId) return { workspace: null };
+    if (!binding?.workspaceId) return null;
 
-    let authority;
     if (process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela') {
-      const directory = await fetchFreshMutationWorkspaceDirectory().catch(
-        () => ({ ok: false, items: [] }),
+      const readDirectory = options.fresh
+        ? fetchFreshMutationWorkspaceDirectory
+        : fetchWorkspaceDirectory;
+      const directory = await readDirectory().catch(() => ({
+        ok: false as const,
+        items: [],
+      }));
+      return resolveBoundProjectWorkspaceReadAuthority(
+        binding.workspaceId,
+        directory,
+        configuredAmrEnv(),
       );
-      if (!directory.ok) {
-        sendApiError(
-          res,
-          503,
-          'WORKSPACE_AUTHORITY_UNAVAILABLE',
-          'workspace membership authority is temporarily unavailable',
-          { retryable: true },
-        );
-        return null;
-      }
-      const item = directory.items.find(
-        (candidate) => candidate.workspaceId === binding.workspaceId,
-      );
-      if (!item) {
-        sendApiError(
-          res,
-          403,
-          'WORKSPACE_PROJECT_PERMISSION_DENIED',
-          'workspace project access is not allowed',
-        );
-        return null;
-      }
-      authority = workspaceContextFromDirectoryItem(item);
-    } else {
-      authority = workspaceContextFromDirectoryItem({
+    }
+
+    return {
+      ok: true,
+      context: workspaceContextFromDirectoryItem({
         workspaceId: binding.workspaceId,
         workspaceName: binding.workspaceId,
         workspaceType: 'personal',
@@ -7369,8 +7371,61 @@ export async function startServer({
         role: 'owner',
         memberStatus: 'active',
         lifecycleState: 'active',
-      });
+      }, configuredAmrEnv()),
+    };
+  };
+  const authorizeProjectRequest = createAuthorizeProjectRequest({
+    db,
+    getWorkspaceProject,
+    getWorkspaceProjectByProjectId,
+    isProjectRevoked: (_db, projectId) =>
+      revokedTeamProjectMirrors.has(projectId),
+    verifyWorkspaceReadAuthority,
+    resolveWorkspaceReadAuthority: async (projectId) => {
+      const authority = await resolveProjectWorkspaceAuthority(
+        projectId,
+        { fresh: false },
+      );
+      return authority ?? {
+        ok: false,
+        status: 403,
+        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+        message: 'workspace project access is not allowed',
+      };
+    },
+    verifyWorkspaceRequestAuthority,
+    sendApiError,
+  });
+  const authorizeProjectToolRequest = async (
+    res,
+    projectId,
+    options,
+  ) => {
+    const resolvedAuthority = await resolveProjectWorkspaceAuthority(
+      projectId,
+      { fresh: true },
+    );
+    if (!resolvedAuthority) return { workspace: null };
+    if (!resolvedAuthority.ok) {
+      if (resolvedAuthority.retryable) {
+        sendApiError(
+          res,
+          resolvedAuthority.status,
+          resolvedAuthority.code,
+          resolvedAuthority.message,
+          { retryable: true },
+        );
+      } else {
+        sendApiError(
+          res,
+          resolvedAuthority.status,
+          resolvedAuthority.code,
+          resolvedAuthority.message,
+        );
+      }
+      return null;
     }
+    const authority = resolvedAuthority.context;
     const scopedAuthorize = createAuthorizeProjectRequest({
       db,
       getWorkspaceProject,
@@ -7695,6 +7750,7 @@ export async function startServer({
     isProjectRevoked: (projectId) =>
       revokedTeamProjectMirrors.has(projectId),
     fetchWorkspaceDirectory,
+    configuredEnv: configuredAmrEnv,
     fetchProjectCreationWorkspaceDirectory,
     createWorkspaceOwnedDesignSystem: createWorkspaceOwnedDesignSystemForContext,
     pluginScope: {
@@ -10296,6 +10352,7 @@ export async function startServer({
         artifactCount: runArtifactCountForRun(run),
         designSystemCreated: runDesignSystemCreatedForRun(run),
         previewModuleCount: runPreviewModuleCountForRun(run),
+        filesWritten: runFilesWrittenForRun(run),
       });
       let outcome;
       if (!artifactBaseline || artifactBaseline.contended) {
@@ -10312,6 +10369,7 @@ export async function startServer({
             artifactsModified: diff.modified,
             designSystemCreated: diff.designSystemCreated,
             previewModuleCount: diff.previewModuleCount,
+            filesWritten: diff.filesWritten,
             projectRoot: artifactBaseline.cwd,
             diff,
           };

@@ -371,6 +371,44 @@ describe('AmrLoginPill', () => {
     );
   });
 
+  it('uses the feature-test origin carried by the visible status for management', async () => {
+    const fetchMock = vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/system/open-external') return jsonResponse({ body: { ok: true } });
+      return new Response('{}', { status: 202 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    renderPill({
+      initialStatus: {
+        loggedIn: true,
+        loginInFlight: false,
+        profile: 'feature-test',
+        consoleOrigin: 'https://feature.example',
+        configPath: '/x',
+        user: { id: 'u', email: 'leaf@example.com', plan: 'plus' },
+      },
+      skipInitialRefresh: true,
+      showConsoleAction: true,
+    });
+
+    const link = screen.getByRole('link', { name: 'Manage' }) as HTMLAnchorElement;
+    expect(link.href).toBe('https://feature.example/dashboard?source=open_design');
+    fireEvent.click(link);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
+      '/api/system/open-external',
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.stringContaining('https://feature.example/dashboard'),
+      }),
+    ));
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/attribution/bridge-url',
+      expect.anything(),
+    );
+  });
+
   it('renders a "Signed in" pill (with the Sign-out aria-label) when /status reports a logged-in user', async () => {
     globalThis.fetch = vi.fn(async () =>
       jsonResponse({

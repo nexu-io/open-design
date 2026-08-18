@@ -456,6 +456,15 @@ export interface RunFinishedProps extends Omit<RunCreatedProps, 'area'> {
   // the daemon captured a baseline snapshot for the run.
   artifacts_created?: number;
   artifacts_modified?: number;
+  // Distinct files of ANY type this run created or modified — markdown briefs,
+  // docx exports, JSON data, code, plus everything `artifact_count` covers.
+  // `artifact_count` deliberately counts only renderable outputs (HTML +
+  // image/video/audio), which made a run whose deliverable was `PROMPTS.md`
+  // or `report.docx` indistinguishable from a pure chat turn (sampled 2026-08:
+  // ~1/3 of "artifact_count = 0" successes had written such files). Primary
+  // source is the filesystem snapshot diff; when no baseline exists the
+  // tool-stream fallback reports it with the usual per-agent blind spots.
+  files_written_count?: number;
   // True when the run raised a `<question-form>` clarification. Such runs
   // are intent-clarification turns (the agent stops to ask the user a question)
   // and therefore inherently produce no artifact, so the dashboard can exclude

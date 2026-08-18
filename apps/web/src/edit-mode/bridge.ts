@@ -1082,12 +1082,27 @@ export function buildManualEditBridge(enabled: boolean): string {
     try {
       var baseUrl = new URL(document.baseURI || location.href);
       var nextUrl = new URL(href, baseUrl);
+      if (nextUrl.origin !== baseUrl.origin) return null;
+      var fileRoot = null;
+      var projectMarker = '/api/projects/';
+      var projectIndex = baseUrl.pathname.indexOf(projectMarker);
+      if (projectIndex < 0) return null;
+      var projectIdStart = projectIndex + projectMarker.length;
+      var routeMarkerStart = baseUrl.pathname.indexOf('/', projectIdStart);
+      if (routeMarkerStart < 0 || routeMarkerStart === projectIdStart) return null;
       var rawMarker = '/raw/';
-      var rawIndex = baseUrl.pathname.lastIndexOf(rawMarker);
-      if (nextUrl.origin !== baseUrl.origin || rawIndex < 0) return null;
-      var rawRoot = baseUrl.pathname.slice(0, rawIndex + rawMarker.length);
-      if (nextUrl.pathname.indexOf(rawRoot) !== 0) return null;
-      var fileName = decodeURIComponent(nextUrl.pathname.slice(rawRoot.length));
+      if (baseUrl.pathname.slice(routeMarkerStart, routeMarkerStart + rawMarker.length) === rawMarker) {
+        fileRoot = baseUrl.pathname.slice(0, routeMarkerStart + rawMarker.length);
+      } else {
+        var previewMarker = '/preview/';
+        if (baseUrl.pathname.slice(routeMarkerStart, routeMarkerStart + previewMarker.length) !== previewMarker) return null;
+        var scopeStart = routeMarkerStart + previewMarker.length;
+        var scopeEnd = baseUrl.pathname.indexOf('/', scopeStart);
+        if (scopeEnd < 0 || scopeEnd === scopeStart) return null;
+        fileRoot = baseUrl.pathname.slice(0, scopeEnd + 1);
+      }
+      if (nextUrl.pathname.indexOf(fileRoot) !== 0) return null;
+      var fileName = decodeURIComponent(nextUrl.pathname.slice(fileRoot.length));
       if (
         !fileName ||
         fileName.charAt(0) === '/' ||

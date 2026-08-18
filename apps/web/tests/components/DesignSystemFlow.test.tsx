@@ -18,7 +18,15 @@ import {
   DesignSystemDetailView,
 } from '../../src/components/DesignSystemFlow';
 import { CONNECTORS_CHANGED_EVENT } from '../../src/components/connectors-events';
-import type { AppConfig, Conversation, DesignSystemDetail, DesignSystemSummary, Project, ProjectFile } from '../../src/types';
+import type {
+  AppConfig,
+  ChatMessage,
+  Conversation,
+  DesignSystemDetail,
+  DesignSystemSummary,
+  Project,
+  ProjectFile,
+} from '../../src/types';
 import { I18nProvider } from '../../src/i18n';
 
 const mocks = vi.hoisted(() => ({
@@ -62,21 +70,33 @@ vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: ({
     error,
     initialDraft,
+    messages,
     onNewConversation,
+    onSelectConversation,
     onSend,
     projectFileNames,
     onRequestOpenFile,
+    sendDisabled,
   }: {
     error?: string | null;
     initialDraft?: string;
+    messages?: ChatMessage[];
     onNewConversation?: () => void;
+    onSelectConversation?: (conversationId: string) => void;
     onSend: (prompt: string, attachments: unknown[], commentAttachments: unknown[]) => void;
     projectFileNames?: Set<string>;
     onRequestOpenFile?: (name: string) => void;
+    sendDisabled?: boolean;
   }) => (
     <>
       {error ? <div role="alert">{error}</div> : null}
       {initialDraft ? <div data-testid="chat-initial-draft">{initialDraft}</div> : null}
+      <div
+        data-testid="design-system-chat-state"
+        data-send-disabled={sendDisabled ? 'true' : 'false'}
+      >
+        {messages?.map((message) => <span key={message.id}>{message.content}</span>)}
+      </div>
       <div data-testid="chat-file-names">{[...(projectFileNames ?? [])].join(',')}</div>
       <button
         type="button"
@@ -91,6 +111,13 @@ vi.mock('../../src/components/ChatPane', () => ({
         onClick={() => onNewConversation?.()}
       >
         New
+      </button>
+      <button
+        type="button"
+        data-testid="select-other-conversation"
+        onClick={() => onSelectConversation?.('conv-other')}
+      >
+        Select other
       </button>
       <button
         type="button"
@@ -3545,6 +3572,80 @@ describe('DesignSystemDetailView', () => {
     await waitFor(() =>
       expect(mocks.listMessages).toHaveBeenCalledWith(project.id, fresh.id, null),
     );
+  });
+
+  it('does not expose or submit the previous transcript when the selected conversation read fails', async () => {
+    const system: DesignSystemDetail = {
+      id: 'user:conversation-read-failure',
+      title: 'Conversation Read Failure',
+      category: 'Custom',
+      summary: 'Conversation switching regression fixture.',
+      swatches: [],
+      surface: 'web',
+      body: '# Conversation Read Failure\n',
+      source: 'user',
+      status: 'draft',
+      isEditable: true,
+      projectId: 'ds-conversation-read-failure',
+    };
+    const project: Project = {
+      id: system.projectId!,
+      name: system.title,
+      skillId: null,
+      designSystemId: system.id,
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const previousConversation: Conversation = {
+      id: 'conv-previous',
+      projectId: project.id,
+      title: 'Previous',
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const otherConversation: Conversation = {
+      id: 'conv-other',
+      projectId: project.id,
+      title: 'Other',
+      createdAt: 2,
+      updatedAt: 2,
+    };
+    const previousMessage: ChatMessage = {
+      id: 'previous-message',
+      role: 'assistant',
+      content: 'Previous conversation transcript',
+      createdAt: 1,
+    };
+
+    mocks.fetchDesignSystem.mockResolvedValue(system);
+    mocks.ensureDesignSystemWorkspace.mockResolvedValue({ project, files: [] });
+    mocks.listConversations.mockResolvedValue([previousConversation, otherConversation]);
+    mocks.listMessages
+      .mockResolvedValueOnce([previousMessage])
+      .mockRejectedValueOnce(new Error('workspace directory unavailable'));
+
+    render(
+      <DesignSystemDetailView
+        id={system.id}
+        selectedId={system.id}
+        config={{ mode: 'daemon', agentId: 'codex' } as AppConfig}
+        agents={[]}
+        onBack={() => {}}
+        onSetDefault={() => {}}
+      />,
+    );
+
+    await screen.findByText(previousMessage.content);
+
+    fireEvent.click(screen.getByTestId('select-other-conversation'));
+
+    await waitFor(() => expect(mocks.listMessages).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.queryByText(previousMessage.content)).toBeNull();
+      expect(screen.getByTestId('design-system-chat-state').dataset.sendDisabled).toBe('true');
+    });
+    fireEvent.click(screen.getByTestId('design-system-chat-send'));
+    expect(mocks.streamViaDaemon).not.toHaveBeenCalled();
   });
 
   it('clears a stale creation error after a successful new conversation retry', async () => {

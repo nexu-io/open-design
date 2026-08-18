@@ -2289,25 +2289,23 @@ export function projectFileUrl(
 }
 
 /**
- * Mint the existing daemon-owned, project-scoped preview capability and return
- * its directory URL for srcDoc relative-resource resolution. The daemon binds
- * the capability to the exact Workspace identity and re-authorizes every asset
- * read, so callers must not manufacture a base from raw-file query scope.
+ * Mint the daemon-owned, project-scoped preview capability and return its
+ * directory URL for srcDoc relative-resource resolution. Project ownership is
+ * persisted by the daemon, so the browser must not duplicate that authority in
+ * query parameters or headers. The opaque preview scope authorizes subsequent
+ * asset navigation without exposing Workspace identifiers in iframe URLs.
  */
 export async function fetchProjectPreviewBaseHref(
   projectId: string,
   name: string,
-  workspaceContext: WorkspaceCollabContext,
+  _workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<string | null> {
   const params = new URLSearchParams({ file: name });
-  const requestUrl = workspaceResourceUrl(
-    `/api/projects/${encodeURIComponent(projectId)}/preview-url?${params.toString()}`,
-    workspaceContext,
-  );
+  const requestUrl =
+    `/api/projects/${encodeURIComponent(projectId)}/preview-url?${params.toString()}`;
   try {
     const response = await fetch(requestUrl, {
       cache: 'no-store',
-      headers: workspaceProjectHeaders(workspaceContext),
     });
     if (!response.ok) return null;
     const body = (await response.json()) as ProjectPreviewUrlResponse;
@@ -2952,7 +2950,7 @@ export async function uploadProjectFiles(
 export function projectRawUrl(
   projectId: string,
   filePath: string,
-  workspaceContext?: WorkspaceCollabContext | null,
+  _workspaceContext?: WorkspaceCollabContext | null,
 ): string {
   // Encode each path segment individually so a slash inside the file
   // path stays a path separator, not %2F.
@@ -2960,10 +2958,7 @@ export function projectRawUrl(
     .split('/')
     .map((seg) => encodeURIComponent(seg))
     .join('/');
-  return workspaceResourceUrl(
-    `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`,
-    workspaceContext,
-  );
+  return `/api/projects/${encodeURIComponent(projectId)}/raw/${safePath}`;
 }
 
 export function designSystemStaticUrl(

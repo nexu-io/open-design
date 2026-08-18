@@ -180,6 +180,8 @@ export interface RegisterProjectRoutesDeps extends RouteDeps<'db' | 'design' | '
    * daemon-global active/current state.
    */
   fetchWorkspaceDirectory?: () => Promise<WorkspaceDirectoryFetchResult>;
+  /** Current settings-backed AMR environment for synthesized project contexts. */
+  configuredEnv?: () => Record<string, string>;
   /**
    * Production-only authority for project creation. Kept distinct from the
    * read-side directory fetcher so local/dev and explicitly anonymous callers
@@ -1804,6 +1806,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
     ...(ctx.fetchProjectCreationWorkspaceDirectory
       ? { fetchWorkspaceDirectory: ctx.fetchProjectCreationWorkspaceDirectory }
       : {}),
+    ...(ctx.configuredEnv ? { configuredEnv: ctx.configuredEnv } : {}),
   });
   function sendMissingWorkspaceContext(res: Response) {
     return sendApiError(res, 401, 'WORKSPACE_CONTEXT_REQUIRED', 'workspace context is required');
@@ -4216,6 +4219,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
         projectId: project.id,
         binding,
         directory,
+        ...(ctx.configuredEnv ? { configuredEnv: ctx.configuredEnv() } : {}),
       });
       if (!bootstrap.ok) {
         return sendApiError(
@@ -4244,6 +4248,7 @@ export function registerProjectRoutes(app: Express, ctx: RegisterProjectRoutesDe
       projectId: project.id,
       binding,
       directory,
+      ...(ctx.configuredEnv ? { configuredEnv: ctx.configuredEnv() } : {}),
     });
     /** @type {import('@open-design/contracts').ProjectWorkspaceScopeResponse} */
     const body = { scope };

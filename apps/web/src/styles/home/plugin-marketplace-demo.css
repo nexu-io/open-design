@@ -1510,6 +1510,15 @@
   user-select: none;
 }
 
+/* Deck bakes are 16:9. Centre legacy 1.31-aspect bakes while the versioned
+   preview pipeline replaces them, so any captured outer canvas is cropped
+   symmetrically instead of leaving a thick black strip along one edge. */
+.community-template-card__preview.is-deck .community-template-thumb__image,
+.community-template-card__preview.is-deck .plugins-home__media-img,
+.community-template-card__preview.is-deck .plugins-home__media-video {
+  object-position: center;
+}
+
 .community-template-card__foot {
   display: flex;
   align-items: center;

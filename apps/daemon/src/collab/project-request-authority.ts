@@ -2,10 +2,55 @@ import type { Response } from 'express';
 import {
   enforceVerifiedWorkspaceResourceMutation,
   enforceVerifiedWorkspaceResourceRead,
+  type ResolveWorkspaceResourceReadAuthority,
   type VerifyWorkspaceRequestAuthority,
+  type WorkspaceRequestAuthorityResult,
   type WorkspaceResourceAccessInput,
   type WorkspaceResourceMutationCapability,
 } from './workspace-resource-mutation.js';
+import {
+  workspaceContextFromDirectoryItem,
+  type WorkspaceDirectoryFetchResult,
+} from './vela-workspace-context.js';
+
+export function resolveBoundProjectWorkspaceReadAuthority(
+  workspaceId: string,
+  directory: WorkspaceDirectoryFetchResult,
+  configuredEnv: Record<string, string> = {},
+): WorkspaceRequestAuthorityResult {
+  if (!directory.ok) {
+    if (directory.reason === 'unauthorized') {
+      return {
+        ok: false,
+        status: 401,
+        code: 'AMR_AUTH_REQUIRED',
+        message: 'AMR authorization expired. Sign in again to continue.',
+      };
+    }
+    return {
+      ok: false,
+      status: 503,
+      code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+      message: 'workspace membership authority is temporarily unavailable',
+      retryable: true,
+    };
+  }
+  const item = directory.items.find(
+    (candidate) => candidate.workspaceId === workspaceId,
+  );
+  if (!item) {
+    return {
+      ok: false,
+      status: 403,
+      code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      message: 'workspace project access is not allowed',
+    };
+  }
+  return {
+    ok: true,
+    context: workspaceContextFromDirectoryItem(item, configuredEnv),
+  };
+}
 
 export type AuthorizeProjectRequestOptions =
   | {
@@ -63,6 +108,13 @@ export function createAuthorizeProjectRequest(deps: {
    * fixtures and callers that do not provide separate cache policy.
    */
   verifyWorkspaceReadAuthority?: VerifyWorkspaceRequestAuthority;
+  /**
+   * Resolve a bound project's read authority from its persisted ownership and
+   * the daemon's authenticated membership directory. Headerless browser
+   * navigations use this path instead of requiring client-supplied Workspace
+   * identifiers.
+   */
+  resolveWorkspaceReadAuthority?: ResolveWorkspaceResourceReadAuthority;
   /** Fresh fail-closed authority used for every project mutation. */
   verifyWorkspaceRequestAuthority?: VerifyWorkspaceRequestAuthority;
   /**
@@ -84,6 +136,7 @@ export function createAuthorizeProjectRequest(deps: {
     getWorkspaceProject,
     getWorkspaceProjectByProjectId,
     verifyWorkspaceReadAuthority,
+    resolveWorkspaceReadAuthority,
     verifyWorkspaceRequestAuthority,
     isProjectRevoked,
     sendApiError,
@@ -126,7 +179,12 @@ export function createAuthorizeProjectRequest(deps: {
       db,
       projectId,
       verifyWorkspaceReadAuthority ?? verifyWorkspaceRequestAuthority,
-      options.allowNavigationQuery ? { allowNavigationQuery: true } : {},
+      {
+        ...(options.allowNavigationQuery ? { allowNavigationQuery: true } : {}),
+        ...(resolveWorkspaceReadAuthority
+          ? { resolveAuthority: resolveWorkspaceReadAuthority }
+          : {}),
+      },
     );
   };
 }

@@ -242,6 +242,13 @@ describe('CommunityView catalogue source', () => {
 });
 
 describe('CommunityView previews', () => {
+  it('centres deck media in the 16:9 preview crop while legacy bakes are being replaced', async () => {
+    await renderCommunity();
+
+    expect(renderedCards()[0]!.querySelector('.community-template-card__preview.is-deck'))
+      .not.toBeNull();
+  });
+
   it('shows the plugin\'s own poster on the card and its live page in the full details modal', async () => {
     await renderCommunity();
 
@@ -323,6 +330,37 @@ describe('CommunityView previews', () => {
 });
 
 describe('CommunityView remix', () => {
+  it('shows Remix + Use for duplicable decks, but only Use for prompt-driven media', async () => {
+    await renderCommunity();
+
+    expect(Array.from(
+      renderedCards()[0]!.querySelectorAll<HTMLButtonElement>('.community-template-card__actions button'),
+    ).map((button) => button.textContent?.trim())).toEqual(['Remix', 'Use']);
+
+    fireEvent.click(readFacets().find((facet) => facet.label === 'Image')!.tab);
+    expect(Array.from(
+      renderedCards()[0]!.querySelectorAll<HTMLButtonElement>('.community-template-card__actions button'),
+    ).map((button) => button.textContent?.trim())).toEqual(['Use']);
+    expect(screen.queryByRole('button', { name: 'Copy prompt' })).toBeNull();
+  });
+
+  it('applies a media template as the active composer driver when Use is clicked', async () => {
+    const onUsePlugin = vi.fn();
+    const onUsePrompt = vi.fn();
+    await renderCommunity({ onUsePlugin, onUsePrompt });
+
+    fireEvent.click(readFacets().find((facet) => facet.label === 'Image')!.tab);
+    fireEvent.click(screen.getByRole('button', { name: 'Use' }));
+
+    expect(onUsePlugin).toHaveBeenCalledWith(IMAGE_TEMPLATE, 'use-with-query', {
+      templateId: 'image-template-poster',
+      prompt: 'A typography-led key art poster.',
+      chipId: 'image',
+      projectKind: 'image',
+    });
+    expect(onUsePrompt).not.toHaveBeenCalled();
+  });
+
   it('threads the real plugin id + its curated seed prompt into onRemixTemplate', async () => {
     // The primary "Remix" CTA must not drop the selected template, and it must
     // hand over the plugin's own curated seed rather than a synthesized
@@ -414,11 +452,11 @@ describe('CommunityView remix', () => {
 });
 
 describe('CommunityView use handoff', () => {
-  it('carries the selected Community type with the card prompt action', async () => {
+  it('carries the selected Community type with the card Use action', async () => {
     const onUsePrompt = vi.fn();
     await renderCommunity({ onUsePrompt });
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Prompt' })[0]!);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Use' })[0]!);
 
     expect(onUsePrompt).toHaveBeenCalledWith({
       templateId: 'example-fundraising-deck',

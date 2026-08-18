@@ -281,6 +281,25 @@ export interface RegisterPluginRoutesDeps {
   helpers: PluginRouteHelpers;
 }
 
+function duplicatedProjectKind(plugin: InstalledPluginLike): ProjectMetadata['kind'] {
+  const od = plugin.manifest?.['od'];
+  const mode = od && typeof od === 'object'
+    ? (od as { mode?: unknown }).mode
+    : null;
+  switch (mode) {
+    case 'deck':
+    case 'image':
+    case 'video':
+    case 'audio':
+    case 'brand':
+    case 'template':
+    case 'prototype':
+      return mode;
+    default:
+      return 'prototype';
+  }
+}
+
 export function registerPluginEventRoutes(app: Express, deps: RegisterPluginEventRoutesDeps): void {
   const resolveEventScope = async (req: Request, res: Response) => {
     const authority = await resolveOptionalWorkspaceRequestAuthority(
@@ -719,7 +738,11 @@ export function registerPluginRoutes(app: Express, deps: RegisterPluginRoutesDep
       const conversationId = ids.randomId();
       cleanupProjectId = projectId;
       const metadata: ProjectMetadata = {
-        kind: 'prototype',
+        // Preserve the plugin's artifact contract. Treating every duplicate as
+        // a prototype made deck behavior depend on the copied HTML happening
+        // to match the viewer's heuristic; fixed-canvas/vertical deck examples
+        // then opened without slide chrome or a thumbnail rail.
+        kind: duplicatedProjectKind(plugin),
         templateId: `plugin:${plugin.id}`,
         templateLabel: plugin.title || plugin.id,
         duplicatedFromPluginId: plugin.id,

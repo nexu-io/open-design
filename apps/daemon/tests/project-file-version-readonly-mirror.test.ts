@@ -32,10 +32,10 @@
 // entry stays open per recvq56vFjQKfT), it just gets the truthful empty
 // history instead of a fabricated entry, and leaves nothing behind on disk.
 //
-// A persisted Workspace binding also means a headerless caller is not allowed
-// to enter this data plane. It must prove the exact Workspace/member pair;
-// absence of identity must neither expose history nor fabricate a local
-// baseline version.
+// A persisted Workspace binding lets the daemon derive read authority for a
+// headerless browser request. That derived read must still remain read-only:
+// absence of an explicit writer identity must neither fabricate a local
+// baseline version nor write into the mirror.
 
 import type http from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -174,18 +174,13 @@ describe('version history on a readonly shared mirror', () => {
     expect(await versionRootExists(projectId)).toBe(true);
   });
 
-  it('rejects a headerless caller for a Workspace-bound project without writing', async () => {
+  it('derives a headerless read for a Workspace-bound project without writing', async () => {
     const projectId = await seedTeamProject();
     expect(await versionRootExists(projectId)).toBe(false);
 
-    const response = await fetch(
-      `${baseUrl}/api/projects/${projectId}/files/index.html/versions`,
-    );
+    const body = await getVersions(projectId);
 
-    expect(response.status).toBe(400);
-    await expect(response.json()).resolves.toMatchObject({
-      error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
-    });
+    expect(body.versions).toEqual([]);
     expect(await versionRootExists(projectId)).toBe(false);
   });
 });

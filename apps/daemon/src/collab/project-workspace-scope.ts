@@ -37,6 +37,7 @@ export function resolveProjectWorkspaceScope(input: {
   projectId: string;
   binding: ProjectWorkspaceBinding | null | undefined;
   directory: WorkspaceDirectoryFetchResult;
+  configuredEnv?: Record<string, string>;
 }): ProjectWorkspaceScope {
   const projectId = input.projectId.trim();
   const workspaceId =
@@ -71,7 +72,7 @@ export function resolveProjectWorkspaceScope(input: {
   );
   if (!item) return unavailable();
 
-  const context = workspaceContextFromDirectoryItem(item);
+  const context = workspaceContextFromDirectoryItem(item, input.configuredEnv);
   if (
     context.workspaceId !== workspaceId ||
     !context.workspaceMemberId ||
@@ -109,6 +110,7 @@ export function resolveProjectWorkspaceScopeBootstrap(input: {
   projectId: string;
   binding: ProjectWorkspaceBinding | null | undefined;
   directory: WorkspaceDirectoryFetchResult;
+  configuredEnv?: Record<string, string>;
 }): ProjectWorkspaceScopeBootstrapResult {
   if (!input.binding?.workspaceId) {
     return {

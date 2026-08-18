@@ -186,7 +186,7 @@ describe('project preview containment routes', () => {
     expect(missingBody.error?.message).toContain('assets/missing.png');
   });
 
-  it('binds runtime-created relative assets to the verified Workspace preview authority', async () => {
+  it('derives Workspace authority for headerless project previews and their runtime-created assets', async () => {
     const workspaceId = `workspace-${randomUUID()}`;
     const workspaceMemberId = `member-${randomUUID()}`;
     const projectId = await createProject({ entryFile: 'brand.html' });
@@ -210,13 +210,31 @@ describe('project preview containment routes', () => {
     expect(scopedPlainRawResponse.status).toBe(200);
     expect(await scopedPlainRawResponse.text()).not.toContain('<base href=');
 
+    const unscopedRawResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/raw/brand.html`,
+    );
+    expect(unscopedRawResponse.status).toBe(200);
+    expect(await unscopedRawResponse.text()).not.toContain('<base href=');
+
     const unscopedLogoResponse = await fetch(
       `${baseUrl}/api/projects/${projectId}/raw/logos/mark.png`,
     );
-    expect(unscopedLogoResponse.status).toBe(400);
-    expect(await unscopedLogoResponse.json()).toMatchObject({
-      error: { code: 'WORKSPACE_CONTEXT_REQUIRED' },
-    });
+    expect(unscopedLogoResponse.status).toBe(200);
+    expect(await unscopedLogoResponse.text()).toBe('brand-logo-bytes');
+
+    const previewUrlResponse = await fetch(
+      `${baseUrl}/api/projects/${projectId}/preview-url?file=brand.html`,
+    );
+    expect(previewUrlResponse.status).toBe(200);
+    const previewUrlBody = await previewUrlResponse.json() as { url?: string };
+    expect(previewUrlBody.url).toMatch(
+      new RegExp(`^/api/projects/${projectId}/preview/[A-Za-z0-9_-]{8,128}/brand\\.html$`, 'u'),
+    );
+    const headerlessPreviewResponse = await fetch(
+      new URL(previewUrlBody.url!, baseUrl),
+    );
+    expect(headerlessPreviewResponse.status).toBe(200);
+    expect(await headerlessPreviewResponse.text()).toContain('<title>Brand</title>');
 
     scopeQuery.append('odPreviewBridge', 'scroll');
     const rawResponse = await fetch(
