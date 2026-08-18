@@ -1246,10 +1246,15 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const hasPrompt =
       (typeof requestBody.message === 'string' && requestBody.message.trim().length > 0)
       || (typeof requestBody.currentPrompt === 'string' && requestBody.currentPrompt.trim().length > 0);
-    const hasAttachments = Array.isArray(requestBody.attachments) && requestBody.attachments.length > 0;
+    const hasAttachments = Array.isArray(requestBody.attachments)
+      && requestBody.attachments.length > 0
+      && requestBody.attachments.every((entry) => entry !== null && typeof entry === 'object');
     const hasPluginBriefSource =
-      (typeof requestBody.pluginId === 'string' && requestBody.pluginId.length > 0)
-      || (typeof requestBody.appliedPluginSnapshotId === 'string' && requestBody.appliedPluginSnapshotId.length > 0);
+      (typeof requestBody.pluginId === 'string'
+        && requestBody.pluginId.length > 0
+        && Boolean(getInstalledPlugin(db, requestBody.pluginId)))
+      || (typeof requestBody.appliedPluginSnapshotId === 'string'
+        && requestBody.appliedPluginSnapshotId.length > 0);
     if (!hasPrompt && !hasAttachments && !hasPluginBriefSource) {
       return sendApiError(
         res,

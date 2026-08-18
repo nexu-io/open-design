@@ -38,6 +38,23 @@ describe('run creation input validation (#7040)', () => {
     expect(resp.status).toBe(400);
   });
 
+  it('rejects malformed source fields', async () => {
+    const cases = [
+      { message: {} },
+      { message: 42 },
+      { attachments: [null, 42] },
+      { pluginId: 'definitely-not-installed' },
+    ];
+    for (const body of cases) {
+      const resp = await fetch(baseUrl + '/api/runs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      expect(resp.status, JSON.stringify(body)).toBe(400);
+    }
+  });
+
   it('still accepts a normal prompt', async () => {
     const resp = await fetch(baseUrl + '/api/runs', {
       method: 'POST',
