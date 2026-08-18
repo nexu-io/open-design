@@ -520,10 +520,15 @@ export function createClaudeStreamHandler(
         ...(isError ? { isError: true } : {}),
       });
       if (isError) {
+        const message = errorResultMessage(obj);
         onEvent({
           type: 'error',
-          message: errorResultMessage(obj),
-          code: typeof obj.subtype === 'string' && obj.subtype ? obj.subtype : 'result_error',
+          message,
+          code: isPromptTooLongResult(message)
+            ? 'AGENT_PROMPT_TOO_LARGE'
+            : typeof obj.subtype === 'string' && obj.subtype
+              ? obj.subtype
+              : 'result_error',
           // Marks this as the run's terminal error (the CLI is exiting), not an
           // in-stream hiccup. Consumers with their own result-frame
           // classification (connection test #4501) skip terminal errors.
@@ -544,6 +549,10 @@ export function createClaudeStreamHandler(
     if (typeof obj.result === 'string' && obj.result.trim()) return obj.result;
     if (typeof obj.subtype === 'string' && obj.subtype) return `Claude run failed: ${obj.subtype}`;
     return 'Claude run failed';
+  }
+
+  function isPromptTooLongResult(message: string): boolean {
+    return /^(?:API Error:\s*)?Prompt is too long\.?$/i.test(message.trim());
   }
 
   function assistantText(content: unknown[]): string {

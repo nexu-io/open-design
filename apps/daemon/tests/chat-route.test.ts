@@ -3040,6 +3040,108 @@ process.exit(1);
     );
   });
 
+  it('prefers a terminal Claude prompt-length error over auth-shaped stderr (#6979)', async () => {
+    await withFakeAgent(
+      'claude',
+      `
+console.error(JSON.stringify({ apiKeySource: 'none' }));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'Prompt is too long',
+  stop_reason: null,
+}));
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        await waitForRunStatus(baseUrl, runId);
+        const statusResponse = await fetch(`${baseUrl}/api/runs/${runId}`);
+        const statusBody = await statusResponse.json() as {
+          status: string;
+          failureCategory: string | null;
+          failureDetail: string | null;
+        };
+
+        expect(eventsBody).toContain('AGENT_PROMPT_TOO_LARGE');
+        expect(eventsBody).toContain('Prompt is too long');
+        expect(eventsBody).toContain('"retryable":false');
+        expect(eventsBody).not.toContain('could not authenticate');
+        expect(statusBody).toMatchObject({
+          status: 'failed',
+          failureCategory: 'prompt_too_large',
+          failureDetail: 'prompt_too_large',
+        });
+      },
+    );
+  });
+
+  it('does not treat prompt-length text in an assistant payload as the terminal cause (#6979)', async () => {
+    await withFakeAgent(
+      'claude',
+      `
+console.log(JSON.stringify({
+  type: 'assistant',
+  parent_tool_use_id: null,
+  message: {
+    id: 'msg-prompt-text',
+    content: [{ type: 'text', text: 'The upstream phrase was: Prompt is too long.' }],
+    stop_reason: 'end_turn',
+  },
+}));
+console.log(JSON.stringify({
+  type: 'result',
+  subtype: 'error_during_execution',
+  is_error: true,
+  result: 'A different terminal failure',
+  stop_reason: null,
+}));
+process.exit(1);
+`,
+      async () => {
+        const createResponse = await fetch(`${baseUrl}/api/runs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: 'claude',
+            message: 'hello',
+          }),
+        });
+        expect(createResponse.status).toBe(202);
+        const { runId } = await createResponse.json() as { runId: string };
+
+        const eventsController = new AbortController();
+        const eventsResponse = await fetch(`${baseUrl}/api/runs/${runId}/events`, {
+          signal: eventsController.signal,
+        });
+        const eventsBody = await readSseUntil(eventsResponse, 'event: error');
+        eventsController.abort();
+        await waitForRunStatus(baseUrl, runId);
+
+        expect(eventsBody).toContain('AGENT_EXECUTION_FAILED');
+        expect(eventsBody).toContain('A different terminal failure');
+        expect(eventsBody).not.toContain('AGENT_PROMPT_TOO_LARGE');
+      },
+    );
+  });
+
   it('caps oversized inactivity overrides so Node does not fire the timer immediately', async () => {
     const previous = process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS;
     process.env.OD_CHAT_RUN_INACTIVITY_TIMEOUT_MS = '10000000000';
