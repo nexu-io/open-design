@@ -2618,6 +2618,11 @@ export async function startServer({
   // wall — well past 4mb for image/markup-heavy sites. Give it a dedicated limit
   // (registered before the global parser so it claims the body first).
   app.use('/api/brands/:id/extract-from-html', express.json({ limit: '32mb' }));
+  // #7040 — run creation payloads are small prompts; a dedicated 1mb cap
+  // rejects oversized junk at the boundary before it can mint a run row.
+  // Registered before the global parser so it claims the /api/runs body first
+  // (express.json is a no-op once a body has already been read).
+  app.use('/api/runs', express.json({ limit: '1mb' }));
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 

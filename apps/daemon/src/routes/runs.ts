@@ -1240,6 +1240,24 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
     const requestBody = toJsonRecord(req.body);
+    // #7040 — reject requests with no usable prompt before a run row is
+    // minted. Attachments-only sends and plugin-brief runs stay valid: those
+    // flows synthesize the user message server-side.
+    const hasPrompt =
+      (typeof requestBody.message === 'string' && requestBody.message.trim().length > 0)
+      || (typeof requestBody.currentPrompt === 'string' && requestBody.currentPrompt.trim().length > 0);
+    const hasAttachments = Array.isArray(requestBody.attachments) && requestBody.attachments.length > 0;
+    const hasPluginBriefSource =
+      (typeof requestBody.pluginId === 'string' && requestBody.pluginId.length > 0)
+      || (typeof requestBody.appliedPluginSnapshotId === 'string' && requestBody.appliedPluginSnapshotId.length > 0);
+    if (!hasPrompt && !hasAttachments && !hasPluginBriefSource) {
+      return sendApiError(
+        res,
+        400,
+        'VALIDATION_FAILED',
+        'run requires a non-empty message, attachments, or a plugin',
+      );
+    }
     const requestAnalyticsContext = readAnalyticsContext(req);
     const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
