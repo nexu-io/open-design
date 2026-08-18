@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - [Fixed] Long speaker notes are now scrollable inside the presenter view instead of being clipped when notes push the layout past the viewport. (#6271)
+- [Fixed] The MCP bridge now honors an `OD_MCP_WORKSPACE_ID` env var so accounts with both a personal and a team workspace can point MCP project/run tools at the team workspace instead of always defaulting to the personal one.
 
 ## [0.9.0] - 2026-05-29
 

@@ -218,3 +218,104 @@ describe('MCP headerless fallback (#6569)', () => {
     expect(body.projects[0]?.name).toBe('Unbound');
   });
 });
+
+describe('MCP workspace selection for multi-workspace accounts', () => {
+  const MULTI_DIRECTORY = {
+    items: [
+      {
+        workspaceId: 'ws-team',
+        workspaceName: 'Team',
+        workspaceType: 'team',
+        workspaceMemberId: 'mem-team',
+        role: 'owner',
+        memberStatus: 'active',
+        lifecycleState: 'active',
+      },
+      {
+        workspaceId: 'ws-personal',
+        workspaceName: 'Personal',
+        workspaceType: 'personal',
+        workspaceMemberId: 'mem-personal',
+        role: 'owner',
+        memberStatus: 'active',
+        lifecycleState: 'active',
+      },
+    ],
+    activeWorkspaceId: null,
+  };
+
+  function multiDirectoryResponse(): Response {
+    return new Response(JSON.stringify(MULTI_DIRECTORY), { status: 200 });
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function listProjectsFetchMock(seen: Array<{ url: string; init?: RequestInit | undefined }>) {
+    return vi.fn(async (url: string, init?: RequestInit) => {
+      seen.push({ url, init });
+      if (url.endsWith('/api/workspace/directory')) return multiDirectoryResponse();
+      if (url.includes('/api/workspaces/ws-team/projects')) {
+        return new Response(
+          JSON.stringify({
+            projects: [{ id: 't1', name: 'Team Demo', workspaceId: 'ws-team' }],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes('/api/workspaces/ws-personal/projects')) {
+        return new Response(
+          JSON.stringify({
+            projects: [{ id: 'p1', name: 'Personal Demo', workspaceId: 'ws-personal' }],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ projects: [] }), { status: 200 });
+    });
+  }
+
+  it('defaults to the personal workspace when no override is set', async () => {
+    const seen: Array<{ url: string; init?: RequestInit | undefined }> = [];
+    vi.stubGlobal('fetch', listProjectsFetchMock(seen));
+
+    const result = await handleMcpToolCall(BASE, 'list_projects', {});
+
+    const scoped = seen.find((c) => c.url.includes('/api/workspaces/ws-personal/projects'));
+    expect(scoped).toBeTruthy();
+    expect((scoped?.init?.headers as Record<string, string>)['x-od-workspace-id']).toBe('ws-personal');
+    expect((scoped?.init?.headers as Record<string, string>)['x-od-workspace-member-id']).toBe('mem-personal');
+    const body = firstJson<{ projects: Array<{ name: string }> }>(result);
+    expect(body.projects[0]?.name).toBe('Personal Demo');
+  });
+
+  it('OD_MCP_WORKSPACE_ID pins the bridge to the team workspace', async () => {
+    vi.stubEnv('OD_MCP_WORKSPACE_ID', 'ws-team');
+    const seen: Array<{ url: string; init?: RequestInit | undefined }> = [];
+    vi.stubGlobal('fetch', listProjectsFetchMock(seen));
+
+    const result = await handleMcpToolCall(BASE, 'list_projects', {});
+
+    const scoped = seen.find((c) => c.url.includes('/api/workspaces/ws-team/projects'));
+    expect(scoped).toBeTruthy();
+    expect((scoped?.init?.headers as Record<string, string>)['x-od-workspace-id']).toBe('ws-team');
+    expect((scoped?.init?.headers as Record<string, string>)['x-od-workspace-member-id']).toBe('mem-team');
+    const body = firstJson<{ projects: Array<{ name: string }> }>(result);
+    expect(body.projects[0]?.name).toBe('Team Demo');
+  });
+
+  it('falls back to the default pick when the override is not an active membership', async () => {
+    vi.stubEnv('OD_MCP_WORKSPACE_ID', 'ws-gone');
+    const seen: Array<{ url: string; init?: RequestInit | undefined }> = [];
+    vi.stubGlobal('fetch', listProjectsFetchMock(seen));
+
+    const result = await handleMcpToolCall(BASE, 'list_projects', {});
+
+    const scoped = seen.find((c) => c.url.includes('/api/workspaces/ws-personal/projects'));
+    expect(scoped).toBeTruthy();
+    expect((scoped?.init?.headers as Record<string, string>)['x-od-workspace-id']).toBe('ws-personal');
+    const body = firstJson<{ projects: Array<{ name: string }> }>(result);
+    expect(body.projects[0]?.name).toBe('Personal Demo');
+  });
+});
