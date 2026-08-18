@@ -776,4 +776,598 @@ describe('deploy provider routes', () => {
       await rm(stateRoot, { recursive: true, force: true });
     }
   });
+
+  // --- target threading tests (issue #4483) ---
+
+  function makeCfPagesMockForRouteTarget(options: {
+    previewDeployUrl: string;
+    captureFormData: { branch: string | undefined };
+    expectedPagesProject: string;
+  }) {
+    const { previewDeployUrl, captureFormData, expectedPagesProject } = options;
+    const realFetch = globalThis.fetch;
+    return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      if (url.endsWith(`/pages/projects/${expectedPagesProject}`) && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { name: expectedPagesProject } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith(`/pages/projects/${expectedPagesProject}/upload-token`) && method === 'GET') {
+        return new Response(JSON.stringify({ success: true, result: { jwt: 'pages-upload-jwt' } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/check-missing') && method === 'POST') {
+        return new Response(JSON.stringify({ success: true, result: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith('/pages/assets/upsert-hashes') && method === 'POST') {
+        return new Response(JSON.stringify({ success: true, result: null }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.endsWith(`/pages/projects/${expectedPagesProject}/deployments`) && method === 'POST') {
+        const form = init?.body as FormData;
+        captureFormData.branch = form?.get('branch') as string | undefined ?? undefined;
+        return new Response(JSON.stringify({
+          success: true,
+          result: { id: 'cf_dep_target_test', url: previewDeployUrl },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+  }
+
+  it('threads target=preview from POST body into the deployment record', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-target-preview-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    const projectId = `cf-target-preview-${Date.now()}`;
+    const expectedPagesProject = cloudflarePagesProjectNameForProject(projectId, 'Target preview test');
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    try {
+      const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'Target preview test',
+          skillId: null,
+          designSystemId: null,
+        }),
+      });
+      expect(createProjectResp.status).toBe(200);
+
+      const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+          token: 'cloudflare-token-secret',
+          accountId: 'account_123',
+        }),
+      });
+      expect(saveResp.status).toBe(200);
+
+      const captureFormData: { branch: string | undefined } = { branch: undefined };
+      const fetchMock = makeCfPagesMockForRouteTarget({
+        previewDeployUrl: `https://abc123.${expectedPagesProject}.pages.dev`,
+        captureFormData,
+        expectedPagesProject,
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+            target: 'preview',
+          }),
+        });
+        const deployBody = await deployResp.text();
+        expect(deployResp.status, deployBody).toBe(200);
+        const deployment = JSON.parse(deployBody) as { target: string };
+        // Route must persist the actual requested target, not always 'preview'
+        expect(deployment.target).toBe('preview');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('threads target=production from POST body into the deployment record', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-target-prod-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    const projectId = `cf-target-prod-${Date.now()}`;
+    const expectedPagesProject = cloudflarePagesProjectNameForProject(projectId, 'Target prod test');
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    try {
+      const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'Target prod test',
+          skillId: null,
+          designSystemId: null,
+        }),
+      });
+      expect(createProjectResp.status).toBe(200);
+
+      const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+          token: 'cloudflare-token-secret',
+          accountId: 'account_123',
+        }),
+      });
+      expect(saveResp.status).toBe(200);
+
+      const captureFormData: { branch: string | undefined } = { branch: undefined };
+      const fetchMock = makeCfPagesMockForRouteTarget({
+        previewDeployUrl: `https://abc123.${expectedPagesProject}.pages.dev`,
+        captureFormData,
+        expectedPagesProject,
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+            target: 'production',
+          }),
+        });
+        const deployBody = await deployResp.text();
+        expect(deployResp.status, deployBody).toBe(200);
+        const deployment = JSON.parse(deployBody) as { target: string };
+        // An explicit target='production' in the body must be reflected in
+        // the persisted record; the current code hardcodes 'preview' and will fail.
+        expect(deployment.target).toBe('production');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  // --- target validation tests (P1 finding on PR #4576) ---
+
+  /**
+   * Helper: minimal project + CF config setup, no fetch mock needed.
+   * Returns the projectId so callers can POST to /deploy.
+   */
+  async function setupProjectAndCfConfig(
+    stateRoot: string,
+    projectIdPrefix: string,
+    projectName: string,
+  ): Promise<string> {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const projectId = `${projectIdPrefix}-${Date.now()}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: projectName, skillId: null, designSystemId: null }),
+    });
+    expect(createProjectResp.status).toBe(200);
+    const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+        token: 'cloudflare-token-secret',
+        accountId: 'account_123',
+      }),
+    });
+    expect(saveResp.status).toBe(200);
+    return projectId;
+  }
+
+  it('rejects a misspelled target value with HTTP 400 and does not invoke Cloudflare deploy', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-invalid-target-typo-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndCfConfig(stateRoot, 'cf-invalid-typo', 'Invalid target typo test');
+
+      // Stub fetch so any accidental external call fails loudly — the route
+      // must return 400 BEFORE attempting a Cloudflare API call.
+      const realFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`No Cloudflare deploy call expected for an invalid target: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+            target: 'preveiw', // deliberate typo — not 'preview' or 'production'
+          }),
+        });
+        // Must reject with 400, not silently coerce to 'production'
+        expect(deployResp.status).toBe(400);
+        // Cloudflare deploy endpoint must never have been called
+        const cfDeployCalls = fetchMock.mock.calls.filter((args) => {
+          const u = typeof args[0] === 'string' ? args[0] : args[0] instanceof Request ? args[0].url : String(args[0]);
+          return !u.startsWith(baseUrl);
+        });
+        expect(cfDeployCalls).toHaveLength(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an empty-string target value with HTTP 400 and does not invoke Cloudflare deploy', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-invalid-target-empty-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndCfConfig(stateRoot, 'cf-invalid-empty', 'Invalid target empty test');
+
+      const realFetch = globalThis.fetch;
+      const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === 'string'
+            ? input
+            : input instanceof Request
+              ? input.url
+              : String(input);
+        if (url.startsWith(baseUrl)) return realFetch(input, init);
+        throw new Error(`No Cloudflare deploy call expected for an empty-string target: ${url}`);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+            target: '', // supplied but empty — not a valid value, not the same as omitted
+          }),
+        });
+        // An explicitly supplied empty string is an invalid target; must be 400
+        expect(deployResp.status).toBe(400);
+        const cfDeployCalls = fetchMock.mock.calls.filter((args) => {
+          const u = typeof args[0] === 'string' ? args[0] : args[0] instanceof Request ? args[0].url : String(args[0]);
+          return !u.startsWith(baseUrl);
+        });
+        expect(cfDeployCalls).toHaveLength(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Regression guards — these must PASS both before and after the fix to pin
+  // the correct contract for the two valid explicit values and the omitted case.
+
+  it('defaults to target=production and records production in the deployment when no target is sent', async () => {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-target-default-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    const projectId = `cf-target-default-${Date.now()}`;
+    const expectedPagesProject = cloudflarePagesProjectNameForProject(projectId, 'Target default test');
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    try {
+      const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: projectId,
+          name: 'Target default test',
+          skillId: null,
+          designSystemId: null,
+        }),
+      });
+      expect(createProjectResp.status).toBe(200);
+
+      const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+          token: 'cloudflare-token-secret',
+          accountId: 'account_123',
+        }),
+      });
+      expect(saveResp.status).toBe(200);
+
+      const captureFormData: { branch: string | undefined } = { branch: undefined };
+      const fetchMock = makeCfPagesMockForRouteTarget({
+        previewDeployUrl: `https://abc123.${expectedPagesProject}.pages.dev`,
+        captureFormData,
+        expectedPagesProject,
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
+            // no target field — should default to production
+          }),
+        });
+        const deployBody = await deployResp.text();
+        expect(deployResp.status, deployBody).toBe(200);
+        const deployment = JSON.parse(deployBody) as { target: string };
+        // When target is not supplied the deployment record must say 'production',
+        // not 'preview' (which is the current hardcoded behaviour)
+        expect(deployment.target).toBe('production');
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  // --- Vercel production-target rejection tests (P2 review finding on PR #4576) ---
+  //
+  // Vercel production-target deploys are out of scope for this PR (which only
+  // adds target support for Cloudflare Pages). The route must reject
+  // providerId === VERCEL_PROVIDER_ID + resolved target === 'production' with
+  // HTTP 400 / BAD_REQUEST *before* attempting any deploy call, instead of
+  // silently deploying as preview.
+
+  /**
+   * Helper: minimal project + Vercel config setup, no fetch mock needed.
+   * Returns the projectId so callers can POST to /deploy.
+   */
+  async function setupProjectAndVercelConfig(
+    projectIdPrefix: string,
+    projectName: string,
+  ): Promise<string> {
+    const dataDir = process.env.OD_DATA_DIR;
+    if (!dataDir) throw new Error('OD_DATA_DIR is required for daemon route tests');
+    const projectId = `${projectIdPrefix}-${Date.now()}`;
+    const dir = await ensureProject(path.join(dataDir, 'projects'), projectId);
+    await writeFile(path.join(dir, 'index.html'), '<!doctype html><h1>Hello</h1>');
+    const createProjectResp = await fetch(`${baseUrl}/api/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: projectName, skillId: null, designSystemId: null }),
+    });
+    expect(createProjectResp.status).toBe(200);
+    const saveResp = await fetch(`${baseUrl}/api/deploy/config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: VERCEL_PROVIDER_ID,
+        token: 'vercel-token-secret',
+      }),
+    });
+    expect(saveResp.status).toBe(200);
+    return projectId;
+  }
+
+  function makeVercelDeployMock() {
+    const realFetch = globalThis.fetch;
+    return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url =
+        typeof input === 'string'
+          ? input
+          : input instanceof Request
+            ? input.url
+            : String(input);
+      const method = init?.method || (input instanceof Request ? input.method : 'GET');
+      if (url.startsWith(baseUrl)) return realFetch(input, init);
+      if (url.includes('/v13/deployments') && method === 'POST') {
+        return new Response(JSON.stringify({
+          id: 'vercel-dep-still-works',
+          readyState: 'READY',
+          url: 'vercel-still-works.example',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url.includes('/v13/deployments/vercel-dep-still-works') && method === 'GET') {
+        return new Response(JSON.stringify({
+          id: 'vercel-dep-still-works',
+          readyState: 'READY',
+          url: 'vercel-still-works.example',
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      if (url === 'https://vercel-still-works.example' && method === 'HEAD') {
+        return new Response('', { status: 200 });
+      }
+      throw new Error(`Unexpected fetch: ${method} ${url}`);
+    });
+  }
+
+  it('rejects vercel-self target=production with 400 BAD_REQUEST before attempting a deploy', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-vercel-prod-reject-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndVercelConfig('vercel-prod-reject', 'Vercel production reject test');
+
+      // Use a fetch mock that WOULD happily complete a Vercel deploy if the
+      // route called it — this is the same mock the "still works" companion
+      // tests use for a legitimate preview deploy. If the route's guard is
+      // missing (today's bug), the deploy proceeds and this mock lets it
+      // succeed with 200, which is exactly the silent-preview-deploy bug
+      // this test must catch. A correct fix never reaches this mock at all.
+      const fetchMock = makeVercelDeployMock();
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: VERCEL_PROVIDER_ID,
+            target: 'production',
+          }),
+        });
+        const bodyText = await deployResp.text();
+        // Must reject with 400, not silently deploy as preview (the bug: this
+        // currently returns 200 with a deployment that is actually 'preview').
+        expect(deployResp.status, bodyText).toBe(400);
+        const body = JSON.parse(bodyText) as { error?: { code?: string; message?: string } };
+        expect(body.error?.code).toBe('BAD_REQUEST');
+        expect(body.error?.message).toMatch(/production|target/i);
+
+        // The Vercel deploy endpoint must never have been called — the route
+        // must reject before attempting any deploy call.
+        const vercelDeployCalls = fetchMock.mock.calls.filter((args) => {
+          const u = typeof args[0] === 'string' ? args[0] : args[0] instanceof Request ? args[0].url : String(args[0]);
+          return !u.startsWith(baseUrl);
+        });
+        expect(vercelDeployCalls).toHaveLength(0);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('still deploys vercel-self successfully when target=preview is explicit (no regression)', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-vercel-preview-ok-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndVercelConfig('vercel-preview-ok', 'Vercel preview still works test');
+
+      const fetchMock = makeVercelDeployMock();
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: VERCEL_PROVIDER_ID,
+            target: 'preview',
+          }),
+        });
+        const bodyText = await deployResp.text();
+        expect(deployResp.status, bodyText).toBe(200);
+        const deployment = JSON.parse(bodyText) as { providerId: string; url: string; status: string };
+        expect(deployment).toMatchObject({
+          providerId: VERCEL_PROVIDER_ID,
+          url: 'https://vercel-still-works.example',
+          status: 'ready',
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
+
+  it('still deploys vercel-self successfully when target is omitted (no regression)', async () => {
+    const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'od-deploy-route-vercel-omitted-ok-'));
+    const priorStateRoot = process.env.OD_USER_STATE_DIR;
+    process.env.OD_USER_STATE_DIR = stateRoot;
+    try {
+      const projectId = await setupProjectAndVercelConfig('vercel-omitted-ok', 'Vercel omitted target still works test');
+
+      const fetchMock = makeVercelDeployMock();
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        const deployResp = await fetch(`${baseUrl}/api/projects/${projectId}/deploy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileName: 'index.html',
+            providerId: VERCEL_PROVIDER_ID,
+            // no target field — must keep working exactly as before the fix.
+          }),
+        });
+        const bodyText = await deployResp.text();
+        expect(deployResp.status, bodyText).toBe(200);
+        const deployment = JSON.parse(bodyText) as { providerId: string; url: string; status: string };
+        expect(deployment).toMatchObject({
+          providerId: VERCEL_PROVIDER_ID,
+          url: 'https://vercel-still-works.example',
+          status: 'ready',
+        });
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    } finally {
+      if (priorStateRoot === undefined) delete process.env.OD_USER_STATE_DIR;
+      else process.env.OD_USER_STATE_DIR = priorStateRoot;
+      await rm(stateRoot, { recursive: true, force: true });
+    }
+  });
 });

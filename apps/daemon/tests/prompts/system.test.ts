@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
+import { INTEGRATIONS_MCP_PATH } from '@open-design/contracts';
 
 import {
   composeSystemPrompt,
@@ -124,51 +125,21 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('Do NOT launch your own browser to do this');
   });
 
-  it('preserves canonical default task-type options under locale overrides', () => {
+  it('does not inject a default task-type form under locale overrides', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-CN' });
 
-    expect(prompt).toContain(
-      'keep the `taskType` option labels as the canonical routing choices',
-    );
-    for (const option of [
-      'Prototype',
-      'Live artifact',
-      'Slide deck',
-      'Image',
-      'Video',
-      'HyperFrames',
-      'Audio',
-      'Other',
-    ]) {
-      expect(prompt).toContain(`"${option}"`);
-    }
-    expect(prompt).not.toContain('option labels as `原型`');
-    expect(prompt).not.toContain('`实时作品`');
+    expect(prompt).not.toContain('<question-form id="task-type"');
+    expect(prompt).not.toContain('keep the `taskType` option labels');
   });
 
-  it('preserves canonical default task-type options for zh-TW locale overrides', () => {
+  it('keeps zh-TW locale guidance without injecting the router form', () => {
     const prompt = composeSystemPrompt({ locale: 'zh-TW' });
 
     expect(prompt).toContain('# UI locale override');
     expect(prompt).toContain('`zh-TW` (Traditional Chinese)');
-    expect(prompt).toContain(
-      'keep the `taskType` option labels as the canonical routing choices',
-    );
-    for (const option of [
-      'Prototype',
-      'Live artifact',
-      'Slide deck',
-      'Image',
-      'Video',
-      'HyperFrames',
-      'Audio',
-      'Other',
-    ]) {
-      expect(prompt).toContain(`"${option}"`);
-    }
+    expect(prompt).not.toContain('<question-form id="task-type"');
+    expect(prompt).not.toContain('keep the `taskType` option labels');
     expect(prompt).not.toContain('快速简报 — 30 秒');
-    expect(prompt).not.toContain('option labels as `原型`');
-    expect(prompt).not.toContain('`实时作品`');
   });
 
   it('treats an active design system as the visual direction', () => {
@@ -261,10 +232,9 @@ describe('composeSystemPrompt', () => {
         skillMode: surface,
         metadata: { kind: surface } as any,
       });
-      expect(prompt).not.toContain('<question-form id="discovery"');
-      expect(prompt).not.toContain('Quick brief — 30 seconds');
-      expect(prompt).not.toContain('Read once, in batches');
-      expect(prompt).not.toContain('Filesystem handoff is canonical');
+      expect(prompt).not.toContain('# Open Design Charter');
+      expect(prompt).not.toContain('## Requirements Clarification Phase');
+      expect(prompt).not.toContain('## Delivery');
       // Nor the Ask-mode charter (fourth-round finding): CHAT_MODE_OVERRIDE
       // forbids creating media, contradicting the media contract below.
       expect(prompt).not.toContain('# Ask mode');
@@ -272,7 +242,18 @@ describe('composeSystemPrompt', () => {
     }
     // Non-media slim runs keep the charter head.
     const design = composeSystemPrompt({ promptCoreVariant: 'slim' });
-    expect(design).toContain('<question-form id="discovery"');
+    expect(design).toContain('# Open Design Charter');
+    expect(design).toContain('## Requirements Clarification Phase');
+  });
+
+  it('pins Cloud nano-banana shorthand and forbids reading generated media bytes back into context', () => {
+    const prompt = composeSystemPrompt({
+      skillMode: 'image',
+      metadata: { kind: 'image', imageModel: 'vela/nano-banana-2' } as any,
+    });
+
+    expect(prompt).toContain('`nano-banana` and `nano-banana-2` mean');
+    expect(prompt).toContain('Do not call `Read` on the generated image');
   });
 
   it('injects the html-in-canvas preflight for the hyperframes skill', () => {
@@ -369,6 +350,14 @@ describe('composeSystemPrompt', () => {
     expect(prompt).toContain('no dark-on-dark labels');
   });
 
+  it('injects nested-diagram discipline only through deck surfaces', () => {
+    const heading = '## Nested / concentric diagram discipline';
+
+    expect(composeSystemPrompt({ skillMode: 'deck' })).toContain(heading);
+    expect(composeSystemPrompt({ metadata: { kind: 'deck' } as any })).toContain(heading);
+    expect(composeSystemPrompt({ metadata: { kind: 'prototype' } as any })).not.toContain(heading);
+  });
+
   it('resolves a non-media primary surface ahead of composed media mentions', () => {
     expect(resolveExclusiveSurface({
       skillMode: 'deck',
@@ -398,9 +387,54 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('Do not output generated source code in a `<artifact type="text/html">...</artifact>` block.');
     });
 
+    it('uses Vela media defaults only for AMR and forbids direct Vela calls', () => {
+      const amrPrompt = composeSystemPrompt({
+        agentId: 'amr',
+        metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
+      });
+      expect(amrPrompt).toContain('Image model: `vela/gpt-image-2`');
+      expect(amrPrompt).toContain(
+        'Video model: `vela/doubao-seedance-2-0-260128`',
+      );
+      expect(amrPrompt).toContain('### Open Design Cloud media defaults');
+      expect(amrPrompt).not.toContain('### Run-scoped BYOK media defaults');
+      expect(amrPrompt).toContain('Never invoke the `vela` CLI directly');
+      expect(amrPrompt).toContain('trusted Workspace attribution');
+
+      const claudePrompt = composeSystemPrompt({ agentId: 'claude' });
+      expect(claudePrompt).not.toContain('Image model: `vela/gpt-image-2`');
+      expect(claudePrompt).toContain('`--model flux-pro-ultra`');
+    });
+
+    it('keeps image completion copy generic while retaining internal diagnostics', () => {
+      const imagePrompt = composeSystemPrompt({
+        agentId: 'amr',
+        locale: 'zh-CN',
+        metadata: { kind: 'image', imageModel: 'vela/gpt-image-2' } as any,
+      });
+      expect(imagePrompt).toContain('reply exactly `图片已生成`');
+      expect(imagePrompt).toContain('reply exactly `图片生成服务暂时不可用`');
+      expect(imagePrompt).toContain('tool output and daemon logs');
+      expect(imagePrompt).not.toContain('the filename, the model used');
+      expect(imagePrompt).not.toContain('surface them verbatim to the user');
+      expect(imagePrompt).not.toContain('quote the real stderr / exit code');
+
+      const prototypePrompt = composeSystemPrompt({
+        agentId: 'amr',
+        locale: 'zh-CN',
+        metadata: { kind: 'prototype' } as any,
+      });
+      expect(prototypePrompt).toContain('reply exactly `图片已生成`');
+      expect(prototypePrompt).toContain('reply exactly `图片生成服务暂时不可用`');
+      expect(prototypePrompt).toContain('IMAGE_MODEL="vela/gpt-image-2"');
+      expect(prototypePrompt).not.toContain(
+        'For the best fal image model use `--model flux-pro-ultra`',
+      );
+    });
+
     it('prioritizes question forms over native tool calls when clarifying', () => {
       const prompt = composeSystemPrompt({ agentId: 'amr' });
-      expect(prompt).toContain('## Clarifying questions mid-conversation');
+      expect(prompt).toContain('## Structured clarification on any turn');
       expect(prompt).toContain('`<question-form>` is assistant text for the Open Design UI, not a native tool call');
       expect(prompt).toContain(
         'emit the complete `<question-form>...</question-form>` block directly in the assistant message before any TodoWrite, file write/edit, Bash, or other native tool call',
@@ -521,7 +555,12 @@ describe('composeSystemPrompt', () => {
         '**Do NOT call any tool whose name matches `mcp__<server>__authenticate` or `mcp__<server>__complete_authentication`',
       );
       expect(directive).toContain('localhost:<random>/callback');
-      expect(directive).toContain('Settings → External MCP');
+      // Reconnect lives in the top-level Integrations view, NOT in Settings:
+      // `mcpClient` kept its Settings render block but lost its sidebar nav
+      // item, so "Settings → External MCP" named a place users cannot navigate
+      // to. Asserted through the contract so this cannot drift again.
+      expect(directive).toContain(INTEGRATIONS_MCP_PATH);
+      expect(directive).not.toContain('Settings → External MCP');
     });
 
     it('skips entries with blank ids and emits nothing when none remain', () => {
@@ -674,6 +713,62 @@ describe('composeSystemPrompt', () => {
       expect(prompt).toContain('preview/colors.html: Colors; colors');
       expect(prompt).toContain('source/evidence.md: import evidence notes');
       expect(prompt).toContain('Keep the push prompt light');
+    });
+
+    it('routes listed business intents through the structured resolver before generation', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# x\n\nbody',
+        designSystemComponentsManifest: sampleComponentsManifest,
+        designSystemFixtureHtml: sampleFixtureHtml,
+        designSystemIntentIndex:
+          'Canonical business intents declared by the active design system:\n- `account.settings.save` → Button.primary — Save account changes',
+        executionProfile: 'filesystem',
+      });
+
+      expect(prompt).toContain('## Structured component intent routing — default');
+      expect(prompt).toContain('tools design-systems resolve --intent <canonical-intent>');
+      expect(prompt).toContain('`account.settings.save` → Button.primary');
+      expect(prompt).toContain('include every required state');
+      expect(prompt).toContain('sole component-selection authority');
+      expect(prompt).not.toContain('match component shapes from the reference component manifest');
+      expect(prompt).not.toContain('## Reference component manifest');
+      expect(prompt).not.toContain('## Reference fixture');
+      expect(prompt).not.toContain('components.manifest schema v1');
+      expect(prompt).not.toContain('class="btn btn-primary"');
+    });
+
+    it('keeps text-artifact runs honest when they cannot call the resolver', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'default',
+        designSystemBody: '# x\n\nbody',
+        designSystemIntentIndex:
+          'Canonical business intents declared by the active design system:\n- `account.settings.save` → Button.primary',
+        executionProfile: 'text_artifact',
+      });
+
+      expect(prompt).toContain('This runtime cannot call the resolver');
+      expect(prompt).not.toContain('tools design-systems resolve --intent <canonical-intent>');
+      expect(prompt).toContain('do not invent hidden variants, properties, states, or implementation details');
+    });
+
+    it('surfaces a declared invalid runtime instead of silently presenting it as legacy', () => {
+      const prompt = composeSystemPrompt({
+        designSystemTitle: 'broken',
+        designSystemBody: '# x\n\nbody',
+        designSystemComponentsManifest: sampleComponentsManifest,
+        designSystemFixtureHtml: sampleFixtureHtml,
+        designSystemRuntimeIssue: 'manifests/intent-map.json: unknown component MissingButton',
+      });
+
+      expect(prompt).toContain('## Structured design-system runtime unavailable — broken');
+      expect(prompt).toContain('Do not silently treat it as a valid legacy component map');
+      expect(prompt).toContain('unknown component MissingButton');
+      expect(prompt).toContain('do not fall back to a legacy manifest or fixture');
+      expect(prompt).not.toContain('## Reference component manifest');
+      expect(prompt).not.toContain('## Reference fixture');
+      expect(prompt).not.toContain('components.manifest schema v1');
+      expect(prompt).not.toContain('class="btn btn-primary"');
     });
 
     it('adds importMode guidance when the manifest declares consumption semantics', () => {

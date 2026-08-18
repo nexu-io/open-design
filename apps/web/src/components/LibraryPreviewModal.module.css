@@ -7,7 +7,8 @@
   justify-content: center;
   padding: 32px;
   background: rgba(17, 24, 39, 0.55);
-  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 
 .modal {
@@ -66,7 +67,7 @@
   width: 38px;
   height: 38px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-large, 8px);
   background: var(--bg-elevated);
   color: var(--text);
   cursor: pointer;
@@ -175,7 +176,7 @@
 }
 .fontHuge {
   margin: 0 0 12px;
-  font-size: 120px;
+  font-size: 64px;
   line-height: 1;
 }
 .fontRow {
@@ -228,7 +229,7 @@
 .paletteChip {
   width: 26px;
   height: 26px;
-  border-radius: 6px;
+  border-radius: var(--radius-medium, 4px);
   border: 1px solid var(--border);
 }
 

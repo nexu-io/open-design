@@ -1,4 +1,4 @@
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os, { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { ToolPackConfig } from "../src/config.js";
 import {
+  copyMacPrebundleRuntimeDependencies,
   copyResourceTree,
   createMacElectronRebuildOptions,
   renderMacPackagedConfig,
@@ -74,6 +75,12 @@ afterEach(() => {
 });
 
 describe("resolveSeededAppConfigPaths", () => {
+  it("declares the Workspace invite URL scheme in the packaged app metadata", async () => {
+    const source = await readFile(new URL("../src/mac/builder.ts", import.meta.url), "utf8");
+    expect(source).toContain("protocols: [");
+    expect(source).toContain('schemes: ["opendesign"]');
+  });
+
   it("uses workspace .od by default", () => {
     const config = makeConfig("/work");
     expect(resolveSeededAppConfigPaths(config)).toEqual({
@@ -174,10 +181,74 @@ describe("copyResourceTree", () => {
       for (const name of resourceNames) {
         await mkdir(join(root, name), { recursive: true });
       }
+      const dshRuntimeRoot = join(root, "packages", "dsh-runtime");
+      await mkdir(join(dshRuntimeRoot, "dist", "types"), { recursive: true });
+      await writeFile(
+        join(dshRuntimeRoot, "package.json"),
+        `${JSON.stringify({
+          name: "@open-design/dsh-runtime",
+          version: "0.1.0",
+          files: ["dist"],
+        }, null, 2)}\n`,
+        "utf8",
+      );
+      await writeFile(join(dshRuntimeRoot, "dist", "index.js"), "export {};\n", "utf8");
+      await writeFile(join(dshRuntimeRoot, "dist", "types", "index.d.ts"), "export {};\n", "utf8");
 
       await copyResourceTree(config, paths);
 
       expect(await pathExists(join(paths.resourceRoot, "bin", "node"))).toBe(false);
+      const dshRuntimeResourceRoot = join(paths.resourceRoot, "agent-runtimes", "deepseek-harness");
+      await expect(readFile(join(dshRuntimeResourceRoot, "manifest.json"), "utf8")).resolves.toContain(
+        '"packageName": "@open-design/dsh-runtime"',
+      );
+      expect((await readdir(dshRuntimeResourceRoot)).filter((entry) => entry.endsWith(".tgz"))).toHaveLength(1);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("copyMacPrebundleRuntimeDependencies", () => {
+  it("copies the pinned prebuilt fsevents binding into the assembled app", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const config = makeConfig(root);
+      const chokidarRoot = join(root, "apps", "daemon", "node_modules", "chokidar");
+      const sourceRoot = join(chokidarRoot, "node_modules", "fsevents");
+      const appRoot = join(root, "assembled", "app");
+      await mkdir(sourceRoot, { recursive: true });
+      await writeFile(join(chokidarRoot, "package.json"), '{"name":"chokidar","version":"3.6.0"}\n', "utf8");
+      await writeFile(join(sourceRoot, "package.json"), '{"name":"fsevents","version":"2.3.3"}\n', "utf8");
+      await writeFile(join(sourceRoot, "fsevents.js"), "module.exports = {};\n", "utf8");
+      await writeFile(join(sourceRoot, "fsevents.node"), "prebuilt-native-binding", "utf8");
+
+      await copyMacPrebundleRuntimeDependencies(config, appRoot);
+
+      await expect(readFile(join(appRoot, "node_modules", "fsevents", "fsevents.node"), "utf8")).resolves.toBe(
+        "prebuilt-native-binding",
+      );
+      await expect(readFile(join(appRoot, "node_modules", "fsevents", "fsevents.js"), "utf8")).resolves.toBe(
+        "module.exports = {};\n",
+      );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects a workspace fsevents version that drifted from the assembly contract", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const config = makeConfig(root);
+      const chokidarRoot = join(root, "apps", "daemon", "node_modules", "chokidar");
+      const sourceRoot = join(chokidarRoot, "node_modules", "fsevents");
+      await mkdir(sourceRoot, { recursive: true });
+      await writeFile(join(chokidarRoot, "package.json"), '{"name":"chokidar","version":"3.6.0"}\n', "utf8");
+      await writeFile(join(sourceRoot, "package.json"), '{"name":"fsevents","version":"2.3.2"}\n', "utf8");
+
+      await expect(copyMacPrebundleRuntimeDependencies(config, join(root, "assembled", "app"))).rejects.toThrow(
+        /fsevents expected 2\.3\.3, found 2\.3\.2/,
+      );
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -223,12 +294,54 @@ describe("renderMacPackagedConfig", () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  // The vela web origin is the workspace-team console link the daemon derives
+  // its settings / members / dashboard URLs from. It arrives from a CI secret
+  // rather than the source tree, so packaging has to carry it into the bundle
+  // (same chain as posthogKey) or the feature stays dark in the packaged app.
+  it("bakes the injected vela web origin for a workspace-team build", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const config = makeConfig(root, {
+        amrProfile: "feature-test",
+        velaWebUrl: "https://vela.example.invalid",
+      });
+
+      const packagedConfig = JSON.parse(
+        renderMacPackagedConfig({
+          appVersion: "1.2.3-beta.0",
+          config,
+          usePrebundledStandaloneWeb: true,
+        }),
+      ) as Record<string, unknown>;
+
+      expect(packagedConfig.velaWebUrl).toBe("https://vela.example.invalid");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it("omits the vela web origin when the build was given none", async () => {
+    const root = await mkdtemp(join(tmpdir(), "open-design-tools-pack-mac-"));
+    try {
+      const packagedConfig = JSON.parse(
+        renderMacPackagedConfig({
+          appVersion: "1.2.3",
+          config: makeConfig(root),
+          usePrebundledStandaloneWeb: true,
+        }),
+      ) as Record<string, unknown>;
+
+      expect(packagedConfig).not.toHaveProperty("velaWebUrl");
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("runElectronBuilder", () => {
   async function prepareElectronBuilderConfig(root: string, overrides: Partial<ToolPackConfig>) {
     const cliPath = join(root, "fake-electron-builder.mjs");
-    await writeFile(cliPath, "process.exit(0);\n", "utf8");
 
     const config = makeConfig(root, {
       appVersion: "1.2.3-prerelease.4",
@@ -238,6 +351,29 @@ describe("runElectronBuilder", () => {
       ...overrides,
     });
     const paths = resolveMacPaths(config);
+    const nodePtyPrebuildRoot = join(
+      paths.appPath,
+      "Contents",
+      "Resources",
+      "app",
+      "node_modules",
+      "node-pty",
+      "prebuilds",
+      `darwin-${process.arch}`,
+    );
+    await writeFile(
+      cliPath,
+      [
+        'import { chmod, mkdir, writeFile } from "node:fs/promises";',
+        `const prebuildRoot = ${JSON.stringify(nodePtyPrebuildRoot)};`,
+        "await mkdir(prebuildRoot, { recursive: true });",
+        'await writeFile(new URL("pty.node", `file://${prebuildRoot}/`), Buffer.alloc(32 * 1024, 1));',
+        'await writeFile(new URL("spawn-helper", `file://${prebuildRoot}/`), "#!/bin/sh\\nexit 0\\n", "utf8");',
+        'await chmod(new URL("spawn-helper", `file://${prebuildRoot}/`), 0o755);',
+        "",
+      ].join("\n"),
+      "utf8",
+    );
 
     await runElectronBuilder(config, paths, ["dir"]);
 

@@ -2,6 +2,58 @@ import { DEFAULT_MODEL_OPTION, clampCodexReasoning } from './shared.js';
 import type { RuntimeModelOption } from '../types.js';
 import type { RuntimeAgentDef } from '../types.js';
 
+function parseCodexStringList(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const values = raw
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter(Boolean);
+  return values.length > 0 ? values : undefined;
+}
+
+function parseCodexServiceTiers(raw: unknown): RuntimeModelOption[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: RuntimeModelOption[] = [];
+  const seen = new Set<string>();
+  for (const tier of raw) {
+    if (!tier || typeof tier !== 'object') continue;
+    const entry = tier as {
+      id?: unknown;
+      name?: unknown;
+      label?: unknown;
+    };
+    const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    const label =
+      typeof entry.name === 'string' && entry.name.trim()
+        ? entry.name.trim()
+        : typeof entry.label === 'string' && entry.label.trim()
+          ? entry.label.trim()
+        : id;
+    out.push({ id, label });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+const CODEX_SPEED_TIER_SERVICE_TIER_OPTIONS: Record<string, RuntimeModelOption> = {
+  fast: { id: 'priority', label: 'Fast' },
+};
+
+function parseCodexServiceTiersFromSpeedTiers(
+  speedTiers: readonly string[] | undefined,
+): RuntimeModelOption[] | undefined {
+  if (!speedTiers) return undefined;
+  const out: RuntimeModelOption[] = [];
+  const seen = new Set<string>();
+  for (const raw of speedTiers) {
+    const option = CODEX_SPEED_TIER_SERVICE_TIER_OPTIONS[raw.toLowerCase()];
+    if (!option || seen.has(option.id)) continue;
+    seen.add(option.id);
+    out.push({ ...option });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | null {
   let parsed: unknown;
   try {
@@ -10,7 +62,9 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
     return null;
   }
   if (!parsed || typeof parsed !== 'object') return null;
-  const models = (parsed as { models?: unknown }).models;
+  const models = Array.isArray(parsed)
+    ? parsed
+    : (parsed as { models?: unknown }).models;
   if (!Array.isArray(models)) return null;
 
   const out = [DEFAULT_MODEL_OPTION];
@@ -23,6 +77,8 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
       display_name?: unknown;
       name?: unknown;
       visibility?: unknown;
+      additional_speed_tiers?: unknown;
+      service_tiers?: unknown;
     };
     if (entry.visibility === 'hidden') continue;
     const id =
@@ -39,9 +95,85 @@ export function parseCodexDebugModels(stdout: string): RuntimeModelOption[] | nu
         : typeof entry.name === 'string' && entry.name.trim()
           ? entry.name.trim()
           : id;
-    out.push({ id, label });
+    const model: RuntimeModelOption = { id, label };
+    const additionalSpeedTiers = parseCodexStringList(
+      entry.additional_speed_tiers,
+    );
+    if (additionalSpeedTiers) model.additionalSpeedTiers = additionalSpeedTiers;
+    const serviceTierOptions =
+      parseCodexServiceTiers(entry.service_tiers) ??
+      parseCodexServiceTiersFromSpeedTiers(additionalSpeedTiers);
+    if (serviceTierOptions) model.serviceTierOptions = serviceTierOptions;
+    out.push(model);
   }
   return out.length > 1 ? out : null;
+}
+
+const GPT_5_5_SERVICE_TIER_OPTIONS: RuntimeModelOption[] = [
+  { id: 'priority', label: 'Fast' },
+];
+
+// Codex applies `shell_environment_policy` again when its shell tool starts a
+// command. That second boundary is independent from the environment the daemon
+// passes to the Codex process itself. In particular, the supported
+// `inherit = "core"` policy removes every Open Design wrapper variable, so a
+// prompt can see the documented `$OD_NODE_BIN` / `$OD_BIN` invocation yet the
+// actual command expands both paths to empty strings.
+//
+// Start from the daemon-built process environment, then use Codex's
+// `include_only` policy to retain only the small cross-platform shell baseline
+// plus the run-scoped wrapper contract. Credentials inherited by the daemon
+// remain unavailable unless they are one of the explicit Open Design
+// capabilities below. `OD_TOOL_TOKEN` stays in the environment channel rather
+// than being copied into argv, process listings, or Codex config files.
+const CODEX_SHELL_ENVIRONMENT_INCLUDE_KEYS = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'TMPDIR',
+  'TMP',
+  'TEMP',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'COLORTERM',
+  'SYSTEMROOT',
+  'COMSPEC',
+  'PATHEXT',
+  'USERPROFILE',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'OD_BIN',
+  'OD_NODE_BIN',
+  'OD_DAEMON_URL',
+  'OD_TOOL_TOKEN',
+  'OD_DATA_DIR',
+  'OD_PROJECT_ID',
+  'OD_PROJECT_DIR',
+] as const;
+
+export function codexOpenDesignShellEnvironmentArgs(): string[] {
+  const includeOnly = CODEX_SHELL_ENVIRONMENT_INCLUDE_KEYS
+    .map((key) => `"${key}"`)
+    .join(',');
+  return [
+    '-c',
+    // A login shell can source user profile files after Codex applies the
+    // whitelist and reintroduce credentials that the daemon intentionally
+    // withheld. Structured DS wrappers need a deterministic, run-scoped
+    // environment, so keep tool shells non-login for daemon-launched Codex.
+    'allow_login_shell=false',
+    '-c',
+    'shell_environment_policy.inherit="all"',
+    '-c',
+    'shell_environment_policy.ignore_default_excludes=true',
+    '-c',
+    `shell_environment_policy.include_only=[${includeOnly}]`,
+  ];
 }
 
 export function codexNeedsDangerFullAccessSandbox(
@@ -76,7 +208,12 @@ export const codexAgentDef = {
     },
     fallbackModels: [
       DEFAULT_MODEL_OPTION,
-      { id: 'gpt-5.5', label: 'gpt-5.5' },
+      {
+        id: 'gpt-5.5',
+        label: 'gpt-5.5',
+        additionalSpeedTiers: ['fast'],
+        serviceTierOptions: GPT_5_5_SERVICE_TIER_OPTIONS,
+      },
       { id: 'gpt-5.4', label: 'gpt-5.4' },
       { id: 'gpt-5.4-mini', label: 'gpt-5.4-mini' },
       { id: 'gpt-5.3-codex', label: 'gpt-5.3-codex' },
@@ -154,9 +291,13 @@ export const codexAgentDef = {
       const args = resumeSessionId
         ? ['exec', 'resume', '--json', '--skip-git-repo-check', ...sandboxArgs]
         : ['exec', '--json', '--skip-git-repo-check', ...sandboxArgs];
-      if (process.env.OD_CODEX_DISABLE_PLUGINS === '1') {
+      if (
+        runtimeContext.disablePlugins === true
+        || process.env.OD_CODEX_DISABLE_PLUGINS === '1'
+      ) {
         args.push('--disable', 'plugins');
       }
+      args.push(...codexOpenDesignShellEnvironmentArgs());
       // `-C <cwd>` and `--add-dir <dir>` are CREATE-only flags: `codex exec
       // resume` rejects both (`error: unexpected argument '-C' found`), so
       // appending them on a resume turn would make the follow-up turn die
@@ -184,6 +325,9 @@ export const codexAgentDef = {
         // Codex accepts `-c key=value` config overrides; reasoning effort
         // is exposed as `model_reasoning_effort`.
         args.push('-c', `model_reasoning_effort="${effort}"`);
+      }
+      if (options.serviceTier && options.serviceTier !== 'default') {
+        args.push('-c', `service_tier="${options.serviceTier}"`);
       }
       // The resume thread id is the positional SESSION_ID argument of
       // `codex exec resume`; it must come after the flags. The prompt is

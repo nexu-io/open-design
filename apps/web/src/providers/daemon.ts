@@ -12,6 +12,14 @@
 import type { AgentEvent, ChatCommentAttachment, ChatMessage } from '../types';
 import type { AmrEntryAttribution } from '../analytics/amr-attribution';
 import type {
+  AmrAuthErrorKind,
+  AmrAuthNetworkPath,
+  AmrAuthStage,
+  AmrAuthStageResult,
+  AmrAuthStageSource,
+} from '@open-design/contracts/analytics';
+import type {
+  ApiErrorResponse,
   ChatAnalyticsHints,
   ChatRunCreateResponse,
   ChatRunListResponse,
@@ -29,8 +37,11 @@ import type {
   ResearchOptions,
   RunContextSelection,
   SseErrorPayload,
+  WorkspaceCollabContext,
 } from '@open-design/contracts';
 import type { StreamHandlers } from './anthropic';
+import { workspaceProjectHeaders } from '../state/projects';
+import { setRuntimeAmrConsoleOrigin } from '../runtime/amr-guidance';
 
 /**
  * Returns the front-end carrier that's about to send this request:
@@ -58,6 +69,7 @@ import { trackRunProgress, trackRunStart, trackRunTerminal } from '../observabil
 const MAX_TRANSCRIPT_MESSAGE_CHARS = 12_000;
 const LARGE_TOOL_RESULT_CHARS = 8_000;
 const HIGH_INPUT_TOKEN_WARNING_THRESHOLD = 200_000;
+const RUN_CREATE_AUTHORITY_RETRY_DELAYS_MS = [500, 1_000, 2_000] as const;
 const BYOK_OPENCODE_AGENT_ID = 'byok-opencode';
 const API_MODE_AGENT_IDS = new Set([
   'anthropic-api',
@@ -286,6 +298,7 @@ export interface DaemonStreamOptions {
   projectId?: string | null;
   conversationId?: string | null;
   sessionMode?: ChatSessionMode;
+  userMessageId?: string | null;
   assistantMessageId?: string | null;
   clientRequestId?: string | null;
   skillId?: string | null;
@@ -299,11 +312,12 @@ export interface DaemonStreamOptions {
   // exist, and stitches them into the user message as `@<path>` hints.
   attachments?: string[];
   commentAttachments?: ChatCommentAttachment[];
-  // Per-CLI model + reasoning the user picked in the model menu. Both are
+  // Per-CLI model + reasoning / service tier the user picked in the model menu. These are
   // optional; the daemon validates them against the agent's declared
   // options and falls back to the CLI default when missing.
   model?: string | null;
   reasoning?: string | null;
+  serviceTier?: string | null;
   byokProvider?: ByokChatProviderConfig;
   byokMediaDefaults?: ChatRequest['byokMediaDefaults'];
   research?: ResearchOptions;
@@ -312,9 +326,21 @@ export interface DaemonStreamOptions {
   mediaExecution?: MediaExecutionPolicy;
   titleGeneration?: { enabled?: boolean };
   locale?: string;
+  // The caller's current workspace identity, attached as `x-od-workspace-*`
+  // headers on POST /api/runs so the daemon's workspace-resource mutation
+  // gate (see `enforceWorkspaceProjectMutation` in
+  // `apps/daemon/src/routes/runs.ts`) can tell a team member apart from a
+  // headerless caller. Mirrors `workspaceProjectHeaders` usage on every
+  // other project write (rename/delete/duplicate/comments/file writes) —
+  // omitting it here would make POST /api/runs the one write path that
+  // forgets to identify the caller. Null/omitted for signed-out / personal
+  // (non-workspace) usage, matching those other call sites.
+  workspaceContext?: WorkspaceCollabContext | null;
   initialLastEventId?: string | null;
   onRunCreated?: (runId: string) => void;
   onRunStatus?: (status: ChatRunStatus) => void;
+  /** Authoritative project-relative artifacts created or modified by the run. */
+  onArtifactPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
   // v2 analytics context propagated to run_created / run_finished.
   // Optional; the daemon only consumes these to shape PostHog props
@@ -324,14 +350,18 @@ export interface DaemonStreamOptions {
 }
 
 export interface DaemonReattachOptions {
+  /** Runtime that owns the reattached run, when persisted with its message. */
+  agentId?: string;
   runId: string;
   projectId?: string | null;
   conversationId?: string | null;
+  workspaceContext?: WorkspaceCollabContext | null;
   signal: AbortSignal;
   cancelSignal?: AbortSignal;
   handlers: DaemonStreamHandlers;
   initialLastEventId?: string | null;
   onRunStatus?: (status: ChatRunStatus) => void;
+  onArtifactPaths?: (paths: string[]) => void;
   onRunEventId?: (eventId: string) => void;
   /** Publish a current-run success outcome to the app-level upgrade gate. */
   publishRunFinishedEvent?: boolean;
@@ -341,6 +371,7 @@ export const RUNS_CHANGED_EVENT = 'open-design:runs-changed';
 export const DAEMON_RUN_FINISHED_EVENT = 'open-design:daemon-run-finished';
 
 export interface DaemonRunFinishedEventDetail {
+  agentId: string;
   runId: string;
   projectId: string;
   conversationId: string;
@@ -353,6 +384,7 @@ export function publishDaemonRunFinishedEvent(
 ): void {
   if (
     typeof window === 'undefined'
+    || detail.agentId !== 'amr'
     || !detail.runId.trim()
     || !detail.projectId.trim()
     || !detail.conversationId.trim()
@@ -447,6 +479,30 @@ function readNumberField(record: Record<string, unknown> | null, key: string): n
 function readBooleanField(record: Record<string, unknown> | null, key: string): boolean | null {
   const value = record?.[key];
   return typeof value === 'boolean' ? value : null;
+}
+
+function daemonCreateRunError(response: Response, responseText: string): Error {
+  let payload: ApiErrorResponse | null = null;
+  try {
+    payload = JSON.parse(responseText) as ApiErrorResponse;
+  } catch {
+    // Older daemons and proxy failures can return plain text.
+  }
+  const apiError = payload?.error;
+  if (!apiError || typeof apiError !== 'object') {
+    return new Error(`daemon ${response.status}: ${responseText || 'no body'}`);
+  }
+  const error = new Error(apiError.message || `Open Design service returned ${response.status}`) as Error & {
+    code?: string;
+    requestId?: string;
+    retryable?: boolean;
+    status?: number;
+  };
+  error.status = response.status;
+  error.code = apiError.code;
+  error.retryable = apiError.retryable === true;
+  if (apiError.requestId) error.requestId = apiError.requestId;
+  return error;
 }
 
 interface OpenCodeSessionErrorDetails {
@@ -634,6 +690,7 @@ export async function streamViaDaemon({
   projectId,
   conversationId,
   sessionMode,
+  userMessageId,
   assistantMessageId,
   clientRequestId,
   skillId,
@@ -643,6 +700,7 @@ export async function streamViaDaemon({
   commentAttachments,
   model,
   reasoning,
+  serviceTier,
   byokProvider,
   byokMediaDefaults,
   research,
@@ -651,9 +709,11 @@ export async function streamViaDaemon({
   mediaExecution,
   titleGeneration,
   locale,
+  workspaceContext,
   initialLastEventId,
   onRunCreated,
   onRunStatus,
+  onArtifactPaths,
   onRunEventId,
   analyticsHints,
 }: DaemonStreamOptions): Promise<void> {
@@ -672,6 +732,7 @@ export async function streamViaDaemon({
     projectId: projectId ?? null,
     conversationId: conversationId ?? null,
     sessionMode,
+    userMessageId: userMessageId ?? null,
     assistantMessageId: assistantMessageId ?? null,
     clientRequestId: clientRequestId ?? null,
     skillId: skillId ?? null,
@@ -681,6 +742,7 @@ export async function streamViaDaemon({
     commentAttachments: commentAttachments ?? [],
     model: model ?? null,
     reasoning: reasoning ?? null,
+    serviceTier: serviceTier ?? null,
     ...(byokProvider ? { byokProvider } : {}),
     ...(byokMediaDefaults ? { byokMediaDefaults } : {}),
     locale,
@@ -694,23 +756,45 @@ export async function streamViaDaemon({
   const body = JSON.stringify(request);
 
   try {
-    const createResp = await fetch('/api/runs', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Tells the daemon which front-end carrier started the run so the
-        // telemetry trace can be tagged 'client:desktop' vs 'client:web'.
-        // The daemon falls back to a User-Agent sniff when this header is
-        // absent (e.g. third-party clients), so omitting it in tests is OK.
-        'X-OD-Client': detectClientType(),
-      },
-      body,
-    });
+    let createResp: Response;
+    for (let attempt = 0; ; attempt += 1) {
+      createResp = await fetch('/api/runs', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Tells the daemon which front-end carrier started the run so the
+          // telemetry trace can be tagged 'client:desktop' vs 'client:web'.
+          // The daemon falls back to a User-Agent sniff when this header is
+          // absent (e.g. third-party clients), so omitting it in tests is OK.
+          'X-OD-Client': detectClientType(),
+          // Identifies the caller's workspace to the daemon's workspace-resource
+          // mutation gate (see `enforceWorkspaceProjectMutation` in
+          // apps/daemon/src/routes/runs.ts) — without it, a team member's own
+          // run on a team-bound project 401s exactly like an unauthenticated
+          // caller's would. Omitted (headers stay absent) for signed-out /
+          // personal usage, matching every other workspace-gated write.
+          ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+        },
+        body,
+      });
+      if (createResp.ok) break;
+
+      const errorBody = await createResp.clone().json().catch(() => null) as ApiErrorResponse | null;
+      const error = errorBody?.error;
+      const retryableAuthorityOutage =
+        createResp.status === 503
+        && error?.code === 'WORKSPACE_AUTHORITY_UNAVAILABLE'
+        && error.retryable === true;
+      const delayMs = RUN_CREATE_AUTHORITY_RETRY_DELAYS_MS[attempt];
+      if (!retryableAuthorityOutage || delayMs === undefined || cancelSignal?.aborted) break;
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+      if (cancelSignal?.aborted) return;
+    }
 
     if (!createResp.ok) {
       const text = await createResp.text().catch(() => '');
       emitRunStatus('failed');
-      handlers.onError(new Error(`daemon ${createResp.status}: ${text || 'no body'}`));
+      handlers.onError(daemonCreateRunError(createResp, text));
       return;
     }
 
@@ -736,9 +820,11 @@ export async function streamViaDaemon({
       handlers,
       initialLastEventId,
       onRunStatus: emitRunStatus,
+      onArtifactPaths,
       onRunEventId,
       projectId,
       conversationId,
+      workspaceContext,
       publishRunFinishedEvent: true,
     });
   } catch (err) {
@@ -758,9 +844,16 @@ export async function reattachDaemonRun(options: DaemonReattachOptions): Promise
   });
 }
 
-export async function fetchChatRunStatus(runId: string): Promise<ChatRunStatusResponse | null> {
+export async function fetchChatRunStatus(
+  runId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<ChatRunStatusResponse | null> {
   try {
-    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+    const resp = await fetch(`/api/runs/${encodeURIComponent(runId)}`, {
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
     if (!resp.ok) return null;
     return (await resp.json()) as ChatRunStatusResponse;
   } catch {
@@ -862,6 +955,8 @@ export interface VelaLiveAccount {
 
 export interface VelaLoginStatus {
   loggedIn: boolean;
+  sessionState?: import('@open-design/contracts').AmrSessionState;
+  credentialRevision?: string;
   loginInFlight?: boolean;
   profile: string;
   user: VelaUser | null;
@@ -873,6 +968,26 @@ export interface VelaLoginStatus {
   activationUrl?: string;
   userCode?: string;
   browserOpenFailed?: boolean;
+  // Origin of the vela web console this runtime talks to, when the daemon was
+  // given one (OD_VELA_WEB_URL, baked into packaged builds from a CI secret).
+  // The client builds wallet / plans / upgrade links from it; internal AMR
+  // environments therefore need no hostname literal in this public bundle.
+  // Absent for prod and fork builds.
+  consoleOrigin?: string;
+  authAttemptId?: string;
+  authStages?: VelaLoginAuthStage[];
+  authRoute?: AmrAuthNetworkPath;
+  fallbackUsed?: boolean;
+}
+
+export interface VelaLoginAuthStage {
+  sequence: number;
+  stage: AmrAuthStage;
+  result: AmrAuthStageResult;
+  source: AmrAuthStageSource;
+  occurredAt: string;
+  route: AmrAuthNetworkPath;
+  errorKind?: AmrAuthErrorKind;
 }
 
 // AMR (vela) login surfaces three thin endpoints on the daemon:
@@ -886,7 +1001,14 @@ export async function fetchVelaLoginStatus(options: { refresh?: boolean } = {}):
     const query = options.refresh ? '?refresh=1' : '';
     const resp = await fetch(`/api/integrations/vela/status${query}`, { cache: 'no-store' });
     if (!resp.ok) return null;
-    return (await resp.json()) as VelaLoginStatus;
+    const status = (await resp.json()) as VelaLoginStatus;
+    // Every AMR status read refreshes the runtime console origin, so the console
+    // links stay correct no matter which surface (login pill, model switcher,
+    // avatar menu, low-balance dialog) triggered the fetch. Doing it here rather
+    // than in each caller is what keeps the origin out of web source: no caller
+    // needs to know the hostname of the environment it is pointed at.
+    setRuntimeAmrConsoleOrigin(status.consoleOrigin);
+    return status;
   } catch {
     return null;
   }
@@ -919,39 +1041,89 @@ export interface StartVelaLoginResult {
   pid?: number;
   alreadyRunning?: boolean;
   error?: string;
+  authAttemptId?: string;
+  authStages?: VelaLoginAuthStage[];
+  authRoute?: AmrAuthNetworkPath;
+  fallbackUsed?: boolean;
 }
 
 export async function startVelaLogin(
   attribution?: AmrEntryAttribution | null,
   odDeviceId?: string | null,
+  authAttemptId?: string,
 ): Promise<StartVelaLoginResult> {
   try {
     const loginAttribution =
       attribution && odDeviceId ? { ...attribution, odDeviceId } : attribution;
+    const canonicalAuthAttemptId = authAttemptId
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(authAttemptId)
+      ? authAttemptId
+      : null;
+    const authRequestId = authAttemptId
+      && /^pending-amr-auth-[a-z0-9]+-[a-z0-9]+$/.test(authAttemptId)
+      ? authAttemptId
+      : null;
+    const payload = {
+      ...(loginAttribution ? { attribution: loginAttribution } : {}),
+      ...(canonicalAuthAttemptId ? { authAttemptId: canonicalAuthAttemptId } : {}),
+      ...(authRequestId ? { authRequestId } : {}),
+    };
     const resp = await fetch('/api/integrations/vela/login', {
       method: 'POST',
-      headers: loginAttribution ? { 'Content-Type': 'application/json' } : undefined,
-      body: loginAttribution ? JSON.stringify({ attribution: loginAttribution }) : undefined,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
+    const body = (await resp.json().catch(() => null)) as Omit<
+      StartVelaLoginResult,
+      'ok' | 'status' | 'alreadyRunning'
+    > | null;
     if (resp.ok) {
-      const body = (await resp.json()) as { pid?: number };
-      return { ok: true, status: resp.status, pid: body.pid };
+      return { ok: true, status: resp.status, ...(body ?? {}) };
     }
-    const body = (await resp.json().catch(() => null)) as { error?: string } | null;
     return {
       ok: false,
       status: resp.status,
       alreadyRunning: resp.status === 409,
       error: body?.error ?? '',
+      ...(body?.authAttemptId ? { authAttemptId: body.authAttemptId } : {}),
+      ...(body?.authStages ? { authStages: body.authStages } : {}),
+      ...(body?.authRoute ? { authRoute: body.authRoute } : {}),
+      ...(body?.fallbackUsed !== undefined
+        ? { fallbackUsed: body.fallbackUsed }
+        : {}),
     };
   } catch (err) {
     return { ok: false, status: 0, error: err instanceof Error ? err.message : String(err) };
   }
 }
 
-export async function cancelVelaLogin(): Promise<{ ok: boolean; canceled?: boolean }> {
+export async function cancelVelaLogin(
+  authAttemptId?: string,
+): Promise<{ ok: boolean; canceled?: boolean }> {
+  const hasTarget = authAttemptId !== undefined;
+  const canonicalAuthAttemptId = authAttemptId
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(authAttemptId)
+    ? authAttemptId
+    : null;
+  const authRequestId = authAttemptId
+    && /^pending-amr-auth-[a-z0-9]+-[a-z0-9]+$/.test(authAttemptId)
+    ? authAttemptId
+    : null;
+  if (hasTarget && !canonicalAuthAttemptId && !authRequestId) {
+    return { ok: false };
+  }
   try {
-    const resp = await fetch('/api/integrations/vela/login/cancel', { method: 'POST' });
+    const resp = await fetch('/api/integrations/vela/login/cancel', {
+      method: 'POST',
+      ...(hasTarget
+        ? {
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(canonicalAuthAttemptId
+              ? { authAttemptId: canonicalAuthAttemptId }
+              : { authRequestId }),
+          }
+        : {}),
+    });
     if (!resp.ok) return { ok: false };
     const body = (await resp.json().catch(() => null)) as { canceled?: boolean } | null;
     return { ok: true, canceled: body?.canceled };
@@ -975,19 +1147,20 @@ export async function velaLogout(): Promise<{ ok: boolean }> {
 // the PUT /messages/:id round-trip).
 export async function reportChatRunFeedback(req: {
   runId: string;
-  projectId: string;
-  conversationId: string;
-  assistantMessageId: string;
   rating: 'positive' | 'negative';
   reasonCodes: string[];
   hasCustomReason: boolean;
   customReason: string;
-}): Promise<void> {
+}, workspaceContext?: WorkspaceCollabContext | null): Promise<void> {
   try {
-    await fetch(`/api/runs/${encodeURIComponent(req.runId)}/feedback`, {
+    const { runId, ...feedback } = req;
+    await fetch(`/api/runs/${encodeURIComponent(runId)}/feedback`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(workspaceContext ? workspaceProjectHeaders(workspaceContext) : {}),
+      },
+      body: JSON.stringify(feedback),
     });
   } catch {
     // Best-effort.
@@ -997,10 +1170,15 @@ export async function reportChatRunFeedback(req: {
 export async function listActiveChatRuns(
   projectId: string,
   conversationId: string,
+  workspaceContext?: WorkspaceCollabContext | null,
 ): Promise<ChatRunStatusResponse[]> {
   try {
     const qs = new URLSearchParams({ projectId, conversationId, status: 'active' });
-    const resp = await fetch(`/api/runs?${qs.toString()}`);
+    const resp = await fetch(`/api/runs?${qs.toString()}`, {
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
     if (!resp.ok) return [];
     const body = (await resp.json()) as ChatRunListResponse;
     return body.runs ?? [];
@@ -1009,9 +1187,15 @@ export async function listActiveChatRuns(
   }
 }
 
-export async function listProjectRuns(): Promise<ChatRunStatusResponse[]> {
+export async function listProjectRuns(
+  workspaceContext?: WorkspaceCollabContext | null,
+): Promise<ChatRunStatusResponse[]> {
   try {
-    const resp = await fetch('/api/runs');
+    const resp = await fetch('/api/runs', {
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    });
     if (!resp.ok) return [];
     const body = (await resp.json()) as ChatRunListResponse;
     return body.runs ?? [];
@@ -1028,11 +1212,13 @@ async function consumeDaemonRun({
   handlers,
   initialLastEventId,
   onRunStatus,
+  onArtifactPaths,
   onRunEventId,
   projectId,
   conversationId,
+  workspaceContext,
   publishRunFinishedEvent,
-}: DaemonReattachOptions & { agentId?: string }): Promise<void> {
+}: DaemonReattachOptions): Promise<void> {
   let acc = '';
   let stderrBuf = '';
   let exitCode: number | null = null;
@@ -1064,12 +1250,24 @@ async function consumeDaemonRun({
     if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return;
     resolvedArtifactCount = value;
   };
+  const reportArtifactPaths = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+    const paths = value.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    );
+    onArtifactPaths?.([...new Set(paths)]);
+  };
   let lastEventId: string | null = initialLastEventId ?? null;
   let canceled = false;
   const cancelRun = () => {
     if (canceled) return;
     canceled = true;
-    void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST' }).catch(() => {});
+    void fetch(`/api/runs/${encodeURIComponent(runId)}/cancel`, {
+      method: 'POST',
+      ...(workspaceContext
+        ? { headers: workspaceProjectHeaders(workspaceContext) }
+        : {}),
+    }).catch(() => {});
   };
 
   cancelSignal?.addEventListener('abort', cancelRun, { once: true });
@@ -1086,6 +1284,9 @@ async function consumeDaemonRun({
         resp = await fetch(`/api/runs/${encodeURIComponent(runId)}/events${qs}`, {
           method: 'GET',
           signal,
+          ...(workspaceContext
+            ? { headers: workspaceProjectHeaders(workspaceContext) }
+            : {}),
         });
       } catch (err) {
         if ((err as Error).name === 'AbortError') throw err;
@@ -1207,6 +1408,7 @@ async function consumeDaemonRun({
             if (event.data.failureCategory) endFailureCategory = event.data.failureCategory;
             if (event.data.failureDetail) endFailureDetail = event.data.failureDetail;
             reportArtifactCount(event.data.artifactCount);
+            reportArtifactPaths(event.data.artifactPaths);
             // `serverDeclaredSuccess` records whether the server explicitly
             // set `status: 'succeeded'` in the end payload — the local
             // `'succeeded'` fallback below does not count and must keep
@@ -1219,7 +1421,7 @@ async function consumeDaemonRun({
       }
       let shouldResetReconnects = sawStreamProgress;
       if (pendingStructuredError && endStatus === null) {
-        const status = await fetchChatRunStatus(runId).catch(() => null);
+        const status = await fetchChatRunStatus(runId, workspaceContext).catch(() => null);
         if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
           endStatus = status.status;
           exitCode = status.exitCode ?? null;
@@ -1234,6 +1436,7 @@ async function consumeDaemonRun({
           if (status.failureCategory) endFailureCategory = status.failureCategory;
           if (status.failureDetail) endFailureDetail = status.failureDetail;
           reportArtifactCount(status.artifactCount);
+          reportArtifactPaths(status.artifactPaths);
           onRunStatus?.(endStatus);
           break;
         }
@@ -1252,7 +1455,7 @@ async function consumeDaemonRun({
     }
 
     if (endStatus === null) {
-      const status = await fetchChatRunStatus(runId);
+      const status = await fetchChatRunStatus(runId, workspaceContext);
       if (status && isChatRunStatus(status.status) && status.status !== 'queued' && status.status !== 'running') {
         endStatus = status.status;
         exitCode = status.exitCode ?? null;
@@ -1266,6 +1469,7 @@ async function consumeDaemonRun({
         if (status.failureCategory) endFailureCategory = status.failureCategory;
         if (status.failureDetail) endFailureDetail = status.failureDetail;
         reportArtifactCount(status.artifactCount);
+        reportArtifactPaths(status.artifactPaths);
         onRunStatus?.(endStatus);
       } else {
         onRunStatus?.('failed');
@@ -1328,6 +1532,7 @@ async function consumeDaemonRun({
     }
     if (
       publishRunFinishedEvent
+      && agentId === 'amr'
       && Boolean(projectId?.trim())
       && Boolean(conversationId?.trim())
       && serverDeclaredSuccess
@@ -1336,6 +1541,7 @@ async function consumeDaemonRun({
       && resolvedArtifactCount > 0
     ) {
       publishDaemonRunFinishedEvent({
+        agentId,
         runId,
         projectId: projectId!,
         conversationId: conversationId!,

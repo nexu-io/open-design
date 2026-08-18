@@ -3,13 +3,13 @@ title: "Open Design 0.10.0: the all-in-one design workspace"
 date: 2026-06-11
 category: "Product"
 readingTime: 7
-summary: "Tag open-design-v0.10.0 — 405 PRs from 68 contributors in nine days. Codename \"the all-in-one Agentic design workspace.\" This release collapses the whole flow — concept, refinement, and handoff — into a single window, so the work stops living across a dozen tabs."
+summary: "open-design-v0.10.0 — 405 PRs from 68 contributors in nine days. Codename \"the all-in-one Agentic design workspace.\" This release collapses the whole flow — concept, refinement, and handoff — into a single window, so the work stops living across a dozen tabs."
 i18n:
   zh:
     title: "Open Design 0.10.0：一体化设计工作空间"
-    summary: "标签 open-design-v0.10.0 —— 九天内 68 位贡献者提交了 405 个 PR。代号「一体化 Agentic 设计工作空间」。本次发布把从构思、精修到交付的整条流程收进同一个窗口，工作不再散落在十几个标签页之间。"
+    summary: "open-design-v0.10.0 —— 九天内 68 位贡献者提交了 405 个 PR。代号「一体化 Agentic 设计工作空间」。本次发布把从构思、精修到交付的整条流程收进同一个窗口，工作不再散落在十几个标签页之间。"
     bodyHtml: |
-      <p>标签 <code>open-design-v0.10.0</code>，于 2026 年 6 月 11 日发布。<strong>九天内 68 位贡献者提交了 405 个 PR。</strong>代号「一体化 Agentic 设计工作空间」—— 这是一次<strong>单窗口发布</strong>。前三次发布让「开始」变得廉价，而这一次让「<em>持续</em>」也变得廉价。从最初的构思到最终的交付，工作不再散落在十几个标签页和三个应用之间。</p>
+      <p><code>open-design-v0.10.0</code>，于 2026 年 6 月 11 日发布。<strong>九天内 68 位贡献者提交了 405 个 PR。</strong>代号「一体化 Agentic 设计工作空间」—— 这是一次<strong>单窗口发布</strong>。前三次发布让「开始」变得廉价，而这一次让「<em>持续</em>」也变得廉价。从最初的构思到最终的交付，工作不再散落在十几个标签页和三个应用之间。</p>
       <p>想看完整版本，可以查阅 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">GitHub 上的发布说明</a>。本文是精简版：底层改了什么、你今天能用它做什么，以及从哪里开始。</p>
 
       <h2>为什么标签页之间的反复横跳是一种税</h2>
@@ -139,9 +139,9 @@ i18n:
       </ul>
   ja:
     title: "Open Design 0.10.0：オールインワンのデザインワークスペース"
-    summary: "タグ open-design-v0.10.0 — 9日間で68人のコントリビューターから405件のPR。コードネームは「オールインワンのエージェント型デザインワークスペース」。このリリースは、コンセプト・洗練・ハンドオフという一連のフロー全体を単一のウィンドウへと集約し、作業が何枚ものタブにまたがって散らばることをなくします。"
+    summary: "open-design-v0.10.0 — 9日間で68人のコントリビューターから405件のPR。コードネームは「オールインワンのエージェント型デザインワークスペース」。このリリースは、コンセプト・洗練・ハンドオフという一連のフロー全体を単一のウィンドウへと集約し、作業が何枚ものタブにまたがって散らばることをなくします。"
     bodyHtml: |
-      <p>タグ <code>open-design-v0.10.0</code>、2026年6月11日にリリース。<strong>9日間で68人のコントリビューターから405件のPR。</strong>コードネームは「オールインワンのエージェント型デザインワークスペース」——これは<strong>ワンウィンドウのリリース</strong>です。直近3回のリリースは始めることのコストを下げましたが、今回は<em>続ける</em>ことのコストを下げます。最初のコンセプトから最終的なハンドオフまで、作業が何枚ものタブと3つのアプリにまたがって散らばることはもうありません。</p>
+      <p><code>open-design-v0.10.0</code>、2026年6月11日にリリース。<strong>9日間で68人のコントリビューターから405件のPR。</strong>コードネームは「オールインワンのエージェント型デザインワークスペース」——これは<strong>ワンウィンドウのリリース</strong>です。直近3回のリリースは始めることのコストを下げましたが、今回は<em>続ける</em>ことのコストを下げます。最初のコンセプトから最終的なハンドオフまで、作業が何枚ものタブと3つのアプリにまたがって散らばることはもうありません。</p>
       <p>詳細版が読みたい方は、<a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">GitHub のリリースノート</a>をご覧ください。本記事は短縮版です：内部で何が変わったか、今日それで何ができるか、そしてどこから始めればよいか。</p>
 
       <h2>なぜタブの行き来が「税」だったのか</h2>
@@ -205,9 +205,9 @@ i18n:
       </ul>
   ko:
     title: "Open Design 0.10.0: 올인원 디자인 워크스페이스"
-    summary: "태그 open-design-v0.10.0 — 9일 동안 68명의 기여자가 만든 405개의 PR. 코드명은 \"올인원 에이전트 기반 디자인 워크스페이스\". 이번 릴리스는 콘셉트, 다듬기, 핸드오프로 이어지는 전체 흐름을 하나의 창으로 모아, 작업이 더 이상 수많은 탭을 넘나들지 않도록 합니다."
+    summary: "open-design-v0.10.0 — 9일 동안 68명의 기여자가 만든 405개의 PR. 코드명은 \"올인원 에이전트 기반 디자인 워크스페이스\". 이번 릴리스는 콘셉트, 다듬기, 핸드오프로 이어지는 전체 흐름을 하나의 창으로 모아, 작업이 더 이상 수많은 탭을 넘나들지 않도록 합니다."
     bodyHtml: |
-      <p>태그 <code>open-design-v0.10.0</code>, 2026년 6월 11일 출시. <strong>9일 동안 68명의 기여자가 만든 405개의 PR.</strong> 코드명 "올인원 에이전트 기반 디자인 워크스페이스" — 이것은 <strong>단일 창 릴리스</strong>입니다. 지난 세 번의 릴리스가 시작을 저렴하게 만들었다면, 이번 릴리스는 <em>머무는</em> 일을 저렴하게 만듭니다. 첫 콘셉트부터 최종 핸드오프까지, 작업은 더 이상 수많은 탭과 세 개의 앱에 흩어지지 않습니다.</p>
+      <p><code>open-design-v0.10.0</code>, 2026년 6월 11일 출시. <strong>9일 동안 68명의 기여자가 만든 405개의 PR.</strong> 코드명 "올인원 에이전트 기반 디자인 워크스페이스" — 이것은 <strong>단일 창 릴리스</strong>입니다. 지난 세 번의 릴리스가 시작을 저렴하게 만들었다면, 이번 릴리스는 <em>머무는</em> 일을 저렴하게 만듭니다. 첫 콘셉트부터 최종 핸드오프까지, 작업은 더 이상 수많은 탭과 세 개의 앱에 흩어지지 않습니다.</p>
       <p>긴 버전이 궁금하다면 <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">GitHub의 릴리스 노트</a>에 담겨 있습니다. 이 글은 짧은 버전입니다: 내부에서 무엇이 바뀌었는지, 오늘 그것으로 무엇을 할 수 있는지, 그리고 어디서 시작하면 되는지.</p>
 
       <h2>탭을 넘나드는 일이 왜 비용이었나</h2>
@@ -271,9 +271,9 @@ i18n:
       </ul>
   de:
     title: "Open Design 0.10.0: der All-in-One-Design-Workspace"
-    summary: "Tag open-design-v0.10.0 — 405 PRs von 68 Mitwirkenden in neun Tagen. Codename „der All-in-One Agentic Design-Workspace\". Dieses Release fasst den gesamten Ablauf — Konzept, Verfeinerung und Übergabe — in einem einzigen Fenster zusammen, sodass die Arbeit nicht mehr über ein Dutzend Tabs verstreut ist."
+    summary: "open-design-v0.10.0 — 405 PRs von 68 Mitwirkenden in neun Tagen. Codename „der All-in-One Agentic Design-Workspace\". Dieses Release fasst den gesamten Ablauf — Konzept, Verfeinerung und Übergabe — in einem einzigen Fenster zusammen, sodass die Arbeit nicht mehr über ein Dutzend Tabs verstreut ist."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.10.0</code>, veröffentlicht am 11. Juni 2026. <strong>405 PRs von 68 Mitwirkenden in neun Tagen.</strong> Codename „der All-in-One Agentic Design-Workspace" — dies ist das <strong>Ein-Fenster-Release</strong>. Die letzten drei Releases haben den Einstieg günstig gemacht; dieses macht das <em>Dranbleiben</em> günstig. Vom ersten Konzept bis zur finalen Übergabe ist die Arbeit nicht mehr über ein Dutzend Tabs und drei Apps verstreut.</p>
+      <p><code>open-design-v0.10.0</code>, veröffentlicht am 11. Juni 2026. <strong>405 PRs von 68 Mitwirkenden in neun Tagen.</strong> Codename „der All-in-One Agentic Design-Workspace" — dies ist das <strong>Ein-Fenster-Release</strong>. Die letzten drei Releases haben den Einstieg günstig gemacht; dieses macht das <em>Dranbleiben</em> günstig. Vom ersten Konzept bis zur finalen Übergabe ist die Arbeit nicht mehr über ein Dutzend Tabs und drei Apps verstreut.</p>
       <p>Wenn du die ausführliche Version möchtest, findest du sie in den <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">Release Notes auf GitHub</a>. Dieser Beitrag ist die Kurzfassung: was sich unter der Haube geändert hat, was du heute damit machen kannst und wo du anfängst.</p>
 
       <h2>Warum das Tab-Springen die eigentliche Steuer war</h2>
@@ -337,9 +337,9 @@ i18n:
       </ul>
   fr:
     title: "Open Design 0.10.0 : l'espace de travail de conception tout-en-un"
-    summary: "Tag open-design-v0.10.0 — 405 PR de 68 contributeurs en neuf jours. Nom de code « l'espace de travail de conception Agentic tout-en-un ». Cette version réunit l'ensemble du flux — concept, affinement et transfert — dans une seule fenêtre, pour que le travail cesse de se disperser sur une douzaine d'onglets."
+    summary: "open-design-v0.10.0 — 405 PR de 68 contributeurs en neuf jours. Nom de code « l'espace de travail de conception Agentic tout-en-un ». Cette version réunit l'ensemble du flux — concept, affinement et transfert — dans une seule fenêtre, pour que le travail cesse de se disperser sur une douzaine d'onglets."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.10.0</code>, publié le 11 juin 2026. <strong>405 PR de 68 contributeurs en neuf jours.</strong> Nom de code « l'espace de travail de conception Agentic tout-en-un » — voici la <strong>version une seule fenêtre</strong>. Les trois dernières versions ont rendu le démarrage peu coûteux ; celle-ci rend le fait de <em>rester</em> peu coûteux. Du premier concept au transfert final, le travail ne se disperse plus sur une douzaine d'onglets et trois applications.</p>
+      <p><code>open-design-v0.10.0</code>, publié le 11 juin 2026. <strong>405 PR de 68 contributeurs en neuf jours.</strong> Nom de code « l'espace de travail de conception Agentic tout-en-un » — voici la <strong>version une seule fenêtre</strong>. Les trois dernières versions ont rendu le démarrage peu coûteux ; celle-ci rend le fait de <em>rester</em> peu coûteux. Du premier concept au transfert final, le travail ne se disperse plus sur une douzaine d'onglets et trois applications.</p>
       <p>Si vous voulez la version longue, les <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">notes de version sur GitHub</a> la contiennent. Cet article est la version courte : ce qui a changé sous le capot, ce que vous pouvez en faire dès aujourd'hui, et par où commencer.</p>
 
       <h2>Pourquoi sauter d'onglet en onglet était une taxe</h2>
@@ -403,9 +403,9 @@ i18n:
       </ul>
   ru:
     title: "Open Design 0.10.0: единое рабочее пространство для дизайна"
-    summary: "Тег open-design-v0.10.0 — 405 PR от 68 контрибьюторов за девять дней. Кодовое название «единое агентное рабочее пространство для дизайна». Этот релиз сворачивает весь процесс — замысел, доработку и передачу — в одно окно, чтобы работа больше не была разбросана по десятку вкладок."
+    summary: "open-design-v0.10.0 — 405 PR от 68 контрибьюторов за девять дней. Кодовое название «единое агентное рабочее пространство для дизайна». Этот релиз сворачивает весь процесс — замысел, доработку и передачу — в одно окно, чтобы работа больше не была разбросана по десятку вкладок."
     bodyHtml: |
-      <p>Тег <code>open-design-v0.10.0</code>, выпущен 11 июня 2026 года. <strong>405 PR от 68 контрибьюторов за девять дней.</strong> Кодовое название «единое агентное рабочее пространство для дизайна» — это <strong>релиз одного окна</strong>. Три предыдущих релиза сделали дешёвым начало работы; этот делает дешёвым <em>её продолжение</em>. От первого замысла до финальной передачи работа больше не разбросана по десятку вкладок и трём приложениям.</p>
+      <p><code>open-design-v0.10.0</code>, выпущен 11 июня 2026 года. <strong>405 PR от 68 контрибьюторов за девять дней.</strong> Кодовое название «единое агентное рабочее пространство для дизайна» — это <strong>релиз одного окна</strong>. Три предыдущих релиза сделали дешёвым начало работы; этот делает дешёвым <em>её продолжение</em>. От первого замысла до финальной передачи работа больше не разбросана по десятку вкладок и трём приложениям.</p>
       <p>Если вам нужна развёрнутая версия, она есть в <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">примечаниях к релизу на GitHub</a>. Этот пост — краткая версия: что изменилось под капотом, что вы можете сделать с этим уже сегодня и с чего начать.</p>
 
       <h2>Почему прыжки по вкладкам были налогом</h2>
@@ -469,9 +469,9 @@ i18n:
       </ul>
   es:
     title: "Open Design 0.10.0: el espacio de trabajo de diseño todo en uno"
-    summary: "Tag open-design-v0.10.0: 405 PRs de 68 colaboradores en nueve días. Nombre en clave «el espacio de trabajo de diseño Agentic todo en uno». Esta versión condensa todo el flujo —concepto, refinamiento y entrega— en una sola ventana, para que el trabajo deje de repartirse entre una docena de pestañas."
+    summary: "open-design-v0.10.0: 405 PRs de 68 colaboradores en nueve días. Nombre en clave «el espacio de trabajo de diseño Agentic todo en uno». Esta versión condensa todo el flujo —concepto, refinamiento y entrega— en una sola ventana, para que el trabajo deje de repartirse entre una docena de pestañas."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.10.0</code>, publicado el 11 de junio de 2026. <strong>405 PRs de 68 colaboradores en nueve días.</strong> Nombre en clave «el espacio de trabajo de diseño Agentic todo en uno»: esta es la <strong>versión de una sola ventana</strong>. Las tres versiones anteriores abarataron el empezar; esta abarata el <em>permanecer</em>. Desde el primer concepto hasta la entrega final, el trabajo ya no se dispersa entre una docena de pestañas y tres aplicaciones.</p>
+      <p><code>open-design-v0.10.0</code>, publicado el 11 de junio de 2026. <strong>405 PRs de 68 colaboradores en nueve días.</strong> Nombre en clave «el espacio de trabajo de diseño Agentic todo en uno»: esta es la <strong>versión de una sola ventana</strong>. Las tres versiones anteriores abarataron el empezar; esta abarata el <em>permanecer</em>. Desde el primer concepto hasta la entrega final, el trabajo ya no se dispersa entre una docena de pestañas y tres aplicaciones.</p>
       <p>Si quieres la versión larga, las <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">notas de la versión en GitHub</a> la tienen. Esta publicación es la versión corta: qué cambió por dentro, qué puedes hacer con ello hoy y por dónde empezar.</p>
 
       <h2>Por qué saltar entre pestañas era el impuesto</h2>
@@ -535,9 +535,9 @@ i18n:
       </ul>
   pt-br:
     title: "Open Design 0.10.0: o espaço de trabalho de design tudo-em-um"
-    summary: "Tag open-design-v0.10.0 — 405 PRs de 68 contribuidores em nove dias. Codinome \"o espaço de trabalho de design Agentic tudo-em-um\". Esta versão reúne todo o fluxo — conceito, refinamento e entrega — em uma única janela, para que o trabalho deixe de viver espalhado por uma dúzia de abas."
+    summary: "open-design-v0.10.0 — 405 PRs de 68 contribuidores em nove dias. Codinome \"o espaço de trabalho de design Agentic tudo-em-um\". Esta versão reúne todo o fluxo — conceito, refinamento e entrega — em uma única janela, para que o trabalho deixe de viver espalhado por uma dúzia de abas."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.10.0</code>, lançada em 11 de junho de 2026. <strong>405 PRs de 68 contribuidores em nove dias.</strong> Codinome "o espaço de trabalho de design Agentic tudo-em-um" — esta é a <strong>versão de janela única</strong>. As três últimas versões tornaram barato começar; esta torna barato <em>permanecer</em>. Do primeiro conceito à entrega final, o trabalho não se espalha mais por uma dúzia de abas e três aplicativos.</p>
+      <p><code>open-design-v0.10.0</code>, lançada em 11 de junho de 2026. <strong>405 PRs de 68 contribuidores em nove dias.</strong> Codinome "o espaço de trabalho de design Agentic tudo-em-um" — esta é a <strong>versão de janela única</strong>. As três últimas versões tornaram barato começar; esta torna barato <em>permanecer</em>. Do primeiro conceito à entrega final, o trabalho não se espalha mais por uma dúzia de abas e três aplicativos.</p>
       <p>Se você quer a versão longa, as <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">notas de versão no GitHub</a> têm tudo. Este post é a versão curta: o que mudou por baixo dos panos, o que você pode fazer com isso hoje e por onde começar.</p>
 
       <h2>Por que pular entre abas era o imposto</h2>
@@ -601,9 +601,9 @@ i18n:
       </ul>
   it:
     title: "Open Design 0.10.0: lo spazio di lavoro per il design tutto-in-uno"
-    summary: "Tag open-design-v0.10.0 — 405 PR da 68 contributori in nove giorni. Nome in codice \"lo spazio di lavoro per il design Agentic tutto-in-uno\". Questa release comprime l'intero flusso — concept, perfezionamento e handoff — in un'unica finestra, così il lavoro smette di vivere sparso tra una dozzina di schede."
+    summary: "open-design-v0.10.0 — 405 PR da 68 contributori in nove giorni. Nome in codice \"lo spazio di lavoro per il design Agentic tutto-in-uno\". Questa release comprime l'intero flusso — concept, perfezionamento e handoff — in un'unica finestra, così il lavoro smette di vivere sparso tra una dozzina di schede."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.10.0</code>, rilasciato l'11 giugno 2026. <strong>405 PR da 68 contributori in nove giorni.</strong> Nome in codice "lo spazio di lavoro per il design Agentic tutto-in-uno" — questa è la <strong>release a finestra unica</strong>. Le ultime tre release hanno reso economico iniziare; questa rende economico <em>restare</em>. Dal primo concept all'handoff finale, il lavoro non si disperde più tra una dozzina di schede e tre applicazioni.</p>
+      <p><code>open-design-v0.10.0</code>, rilasciato l'11 giugno 2026. <strong>405 PR da 68 contributori in nove giorni.</strong> Nome in codice "lo spazio di lavoro per il design Agentic tutto-in-uno" — questa è la <strong>release a finestra unica</strong>. Le ultime tre release hanno reso economico iniziare; questa rende economico <em>restare</em>. Dal primo concept all'handoff finale, il lavoro non si disperde più tra una dozzina di schede e tre applicazioni.</p>
       <p>Se vuoi la versione lunga, le <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">note di rilascio su GitHub</a> ce l'hanno. Questo post è la versione breve: cosa è cambiato sotto il cofano, cosa puoi farci oggi e da dove iniziare.</p>
 
       <h2>Perché saltare tra le schede era la tassa</h2>
@@ -667,9 +667,9 @@ i18n:
       </ul>
   vi:
     title: "Open Design 0.10.0: không gian làm việc thiết kế tất-cả-trong-một"
-    summary: "Tag open-design-v0.10.0 — 405 PR từ 68 người đóng góp trong chín ngày. Tên mã \"không gian làm việc thiết kế Agentic tất-cả-trong-một.\" Bản phát hành này gom toàn bộ quy trình — ý tưởng, tinh chỉnh và bàn giao — vào một cửa sổ duy nhất, để công việc không còn trải dài qua hàng chục tab."
+    summary: "open-design-v0.10.0 — 405 PR từ 68 người đóng góp trong chín ngày. Tên mã \"không gian làm việc thiết kế Agentic tất-cả-trong-một.\" Bản phát hành này gom toàn bộ quy trình — ý tưởng, tinh chỉnh và bàn giao — vào một cửa sổ duy nhất, để công việc không còn trải dài qua hàng chục tab."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.10.0</code>, phát hành ngày 11 tháng 6 năm 2026. <strong>405 PR từ 68 người đóng góp trong chín ngày.</strong> Tên mã "không gian làm việc thiết kế Agentic tất-cả-trong-một" — đây là <strong>bản phát hành một-cửa-sổ</strong>. Ba bản phát hành trước làm cho việc bắt đầu trở nên ít tốn kém; bản này làm cho việc <em>ở lại</em> ít tốn kém. Từ ý tưởng đầu tiên đến bàn giao cuối cùng, công việc không còn tản mát qua hàng chục tab và ba ứng dụng.</p>
+      <p><code>open-design-v0.10.0</code>, phát hành ngày 11 tháng 6 năm 2026. <strong>405 PR từ 68 người đóng góp trong chín ngày.</strong> Tên mã "không gian làm việc thiết kế Agentic tất-cả-trong-một" — đây là <strong>bản phát hành một-cửa-sổ</strong>. Ba bản phát hành trước làm cho việc bắt đầu trở nên ít tốn kém; bản này làm cho việc <em>ở lại</em> ít tốn kém. Từ ý tưởng đầu tiên đến bàn giao cuối cùng, công việc không còn tản mát qua hàng chục tab và ba ứng dụng.</p>
       <p>Nếu bạn muốn bản đầy đủ, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">ghi chú phát hành trên GitHub</a> có sẵn. Bài viết này là bản ngắn gọn: những gì đã thay đổi bên trong, bạn có thể làm gì với nó ngay hôm nay, và bắt đầu từ đâu.</p>
 
       <h2>Vì sao nhảy qua lại giữa các tab là một khoản thuế</h2>
@@ -733,9 +733,9 @@ i18n:
       </ul>
   pl:
     title: "Open Design 0.10.0: kompleksowa przestrzeń robocza do projektowania"
-    summary: "Tag open-design-v0.10.0 — 405 PR-ów od 68 współtwórców w dziewięć dni. Kryptonim „kompleksowa, agentowa przestrzeń robocza do projektowania”. To wydanie zwija cały przepływ — koncepcję, dopracowanie i przekazanie — w jedno okno, dzięki czemu praca przestaje rozpraszać się po kilkunastu kartach."
+    summary: "open-design-v0.10.0 — 405 PR-ów od 68 współtwórców w dziewięć dni. Kryptonim „kompleksowa, agentowa przestrzeń robocza do projektowania”. To wydanie zwija cały przepływ — koncepcję, dopracowanie i przekazanie — w jedno okno, dzięki czemu praca przestaje rozpraszać się po kilkunastu kartach."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.10.0</code>, wydany 11 czerwca 2026. <strong>405 PR-ów od 68 współtwórców w dziewięć dni.</strong> Kryptonim „kompleksowa, agentowa przestrzeń robocza do projektowania” — to <strong>wydanie jednego okna</strong>. Trzy ostatnie wydania sprawiły, że rozpoczęcie pracy stało się tanie; to sprawia, że tanie staje się jej <em>kontynuowanie</em>. Od pierwszej koncepcji po finalne przekazanie praca nie rozprasza się już po kilkunastu kartach i trzech aplikacjach.</p>
+      <p><code>open-design-v0.10.0</code>, wydany 11 czerwca 2026. <strong>405 PR-ów od 68 współtwórców w dziewięć dni.</strong> Kryptonim „kompleksowa, agentowa przestrzeń robocza do projektowania” — to <strong>wydanie jednego okna</strong>. Trzy ostatnie wydania sprawiły, że rozpoczęcie pracy stało się tanie; to sprawia, że tanie staje się jej <em>kontynuowanie</em>. Od pierwszej koncepcji po finalne przekazanie praca nie rozprasza się już po kilkunastu kartach i trzech aplikacjach.</p>
       <p>Jeśli chcesz dłuższej wersji, znajdziesz ją w <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">informacjach o wydaniu na GitHub</a>. Ten wpis to wersja skrócona: co zmieniło się pod maską, co możesz z tym zrobić już dziś i od czego zacząć.</p>
 
       <h2>Dlaczego przeskakiwanie między kartami było podatkiem</h2>
@@ -799,9 +799,9 @@ i18n:
       </ul>
   id:
     title: "Open Design 0.10.0: ruang kerja desain serba-satu"
-    summary: "Tag open-design-v0.10.0 — 405 PR dari 68 kontributor dalam sembilan hari. Nama kode \"ruang kerja desain Agentic serba-satu.\" Rilis ini meleburkan seluruh alur kerja — konsep, penyempurnaan, dan serah terima — ke dalam satu jendela, sehingga pekerjaan tidak lagi tersebar di belasan tab."
+    summary: "open-design-v0.10.0 — 405 PR dari 68 kontributor dalam sembilan hari. Nama kode \"ruang kerja desain Agentic serba-satu.\" Rilis ini meleburkan seluruh alur kerja — konsep, penyempurnaan, dan serah terima — ke dalam satu jendela, sehingga pekerjaan tidak lagi tersebar di belasan tab."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.10.0</code>, dirilis 11 Juni 2026. <strong>405 PR dari 68 kontributor dalam sembilan hari.</strong> Nama kode "ruang kerja desain Agentic serba-satu" — inilah <strong>rilis satu jendela</strong>. Tiga rilis terakhir membuat memulai jadi murah; yang ini membuat <em>bertahan</em> jadi murah. Dari konsep pertama sampai serah terima akhir, pekerjaan tidak lagi tercerai-berai di belasan tab dan tiga aplikasi.</p>
+      <p><code>open-design-v0.10.0</code>, dirilis 11 Juni 2026. <strong>405 PR dari 68 kontributor dalam sembilan hari.</strong> Nama kode "ruang kerja desain Agentic serba-satu" — inilah <strong>rilis satu jendela</strong>. Tiga rilis terakhir membuat memulai jadi murah; yang ini membuat <em>bertahan</em> jadi murah. Dari konsep pertama sampai serah terima akhir, pekerjaan tidak lagi tercerai-berai di belasan tab dan tiga aplikasi.</p>
       <p>Kalau ingin versi panjangnya, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">catatan rilis di GitHub</a> sudah menyediakannya. Tulisan ini adalah versi singkatnya: apa yang berubah di balik layar, apa yang bisa Anda lakukan dengannya hari ini, dan dari mana memulai.</p>
 
       <h2>Mengapa berpindah-pindah tab itu mahal</h2>
@@ -865,9 +865,9 @@ i18n:
       </ul>
   nl:
     title: "Open Design 0.10.0: de alles-in-één designworkspace"
-    summary: "Tag open-design-v0.10.0 — 405 PR's van 68 bijdragers in negen dagen. Codenaam \"de alles-in-één Agentic designworkspace.\" Deze release brengt de hele flow — concept, verfijning en overdracht — samen in één venster, zodat het werk niet langer verspreid raakt over een dozijn tabbladen."
+    summary: "open-design-v0.10.0 — 405 PR's van 68 bijdragers in negen dagen. Codenaam \"de alles-in-één Agentic designworkspace.\" Deze release brengt de hele flow — concept, verfijning en overdracht — samen in één venster, zodat het werk niet langer verspreid raakt over een dozijn tabbladen."
     bodyHtml: |
-      <p>Tag <code>open-design-v0.10.0</code>, uitgebracht op 11 juni 2026. <strong>405 PR's van 68 bijdragers in negen dagen.</strong> Codenaam "de alles-in-één Agentic designworkspace" — dit is de <strong>één-venster-release</strong>. De vorige drie releases maakten beginnen goedkoop; deze maakt <em>blijven</em> goedkoop. Van het eerste concept tot de uiteindelijke overdracht raakt het werk niet langer verspreid over een dozijn tabbladen en drie apps.</p>
+      <p><code>open-design-v0.10.0</code>, uitgebracht op 11 juni 2026. <strong>405 PR's van 68 bijdragers in negen dagen.</strong> Codenaam "de alles-in-één Agentic designworkspace" — dit is de <strong>één-venster-release</strong>. De vorige drie releases maakten beginnen goedkoop; deze maakt <em>blijven</em> goedkoop. Van het eerste concept tot de uiteindelijke overdracht raakt het werk niet langer verspreid over een dozijn tabbladen en drie apps.</p>
       <p>Wil je de uitgebreide versie, dan vind je die in de <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">release notes op GitHub</a>. Dit bericht is de korte versie: wat er onder de motorkap is veranderd, wat je er vandaag mee kunt doen en waar je begint.</p>
 
       <h2>Waarom tabbladhoppen de prijs was</h2>
@@ -997,9 +997,9 @@ i18n:
       </ul>
   tr:
     title: "Open Design 0.10.0: hepsi bir arada tasarım çalışma alanı"
-    summary: "Etiket open-design-v0.10.0 — dokuz günde 68 katkıda bulunandan 405 PR. Kod adı \"hepsi bir arada Agentic tasarım çalışma alanı.\" Bu sürüm tüm akışı — kavram, iyileştirme ve teslim — tek bir pencerede toplar, böylece iş artık bir düzine sekmeye dağılmaz."
+    summary: "open-design-v0.10.0 — dokuz günde 68 katkıda bulunandan 405 PR. Kod adı \"hepsi bir arada Agentic tasarım çalışma alanı.\" Bu sürüm tüm akışı — kavram, iyileştirme ve teslim — tek bir pencerede toplar, böylece iş artık bir düzine sekmeye dağılmaz."
     bodyHtml: |
-      <p>Etiket <code>open-design-v0.10.0</code>, 11 Haziran 2026'da yayınlandı. <strong>Dokuz günde 68 katkıda bulunandan 405 PR.</strong> Kod adı "hepsi bir arada Agentic tasarım çalışma alanı" — bu, <strong>tek pencere sürümü</strong>. Son üç sürüm başlamayı ucuzlattı; bu sürüm <em>devam etmeyi</em> ucuzlatıyor. İlk kavramdan son teslime kadar iş artık bir düzine sekme ile üç uygulama arasında dağılmıyor.</p>
+      <p><code>open-design-v0.10.0</code>, 11 Haziran 2026'da yayınlandı. <strong>Dokuz günde 68 katkıda bulunandan 405 PR.</strong> Kod adı "hepsi bir arada Agentic tasarım çalışma alanı" — bu, <strong>tek pencere sürümü</strong>. Son üç sürüm başlamayı ucuzlattı; bu sürüm <em>devam etmeyi</em> ucuzlatıyor. İlk kavramdan son teslime kadar iş artık bir düzine sekme ile üç uygulama arasında dağılmıyor.</p>
       <p>Uzun versiyonunu istiyorsanız, <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">GitHub'daki sürüm notları</a> hepsini içeriyor. Bu yazı kısa versiyon: kaputun altında ne değişti, bununla bugün ne yapabilirsiniz ve nereden başlamalısınız.</p>
 
       <h2>Sekme atlamak neden bir vergiydi</h2>
@@ -1063,9 +1063,9 @@ i18n:
       </ul>
   uk:
     title: "Open Design 0.10.0: універсальний робочий простір для дизайну"
-    summary: "Тег open-design-v0.10.0 — 405 PR від 68 контриб'юторів за дев'ять днів. Кодова назва «універсальний агентний робочий простір для дизайну». Цей реліз згортає весь процес — концепцію, доопрацювання та передачу — в одне вікно, тож робота більше не розкидана по десятку вкладок."
+    summary: "open-design-v0.10.0 — 405 PR від 68 контриб'юторів за дев'ять днів. Кодова назва «універсальний агентний робочий простір для дизайну». Цей реліз згортає весь процес — концепцію, доопрацювання та передачу — в одне вікно, тож робота більше не розкидана по десятку вкладок."
     bodyHtml: |
-      <p>Тег <code>open-design-v0.10.0</code>, випущено 11 червня 2026 року. <strong>405 PR від 68 контриб'юторів за дев'ять днів.</strong> Кодова назва «універсальний агентний робочий простір для дизайну» — це <strong>реліз одного вікна</strong>. Останні три релізи зробили дешевим початок роботи; цей робить дешевим <em>її продовження</em>. Від першої концепції до фінальної передачі робота більше не розпорошується по десятку вкладок і трьох застосунках.</p>
+      <p><code>open-design-v0.10.0</code>, випущено 11 червня 2026 року. <strong>405 PR від 68 контриб'юторів за дев'ять днів.</strong> Кодова назва «універсальний агентний робочий простір для дизайну» — це <strong>реліз одного вікна</strong>. Останні три релізи зробили дешевим початок роботи; цей робить дешевим <em>її продовження</em>. Від першої концепції до фінальної передачі робота більше не розпорошується по десятку вкладок і трьох застосунках.</p>
       <p>Якщо вам потрібна розгорнута версія, її містять <a href="https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0">примітки до релізу на GitHub</a>. Цей допис — коротка версія: що змінилося під капотом, що з цим можна зробити вже сьогодні і з чого почати.</p>
 
       <h2>Чому стрибки між вкладками були податком</h2>
@@ -1129,7 +1129,7 @@ i18n:
       </ul>
 ---
 
-Tag `open-design-v0.10.0`, shipped 11 June 2026. **405 PRs from 68 contributors in nine days.** Codename "the all-in-one Agentic design workspace" — this is the **one-window release**. The last three releases made starting cheap; this one makes *staying* cheap. From the first concept to the final handoff, the work no longer scatters across a dozen tabs and three apps.
+`open-design-v0.10.0`, shipped 11 June 2026. **405 PRs from 68 contributors in nine days.** Codename "the all-in-one Agentic design workspace" — this is the **one-window release**. The last three releases made starting cheap; this one makes *staying* cheap. From the first concept to the final handoff, the work no longer scatters across a dozen tabs and three apps.
 
 If you want the long version, the [release notes on GitHub](https://github.com/nexu-io/open-design/releases/tag/open-design-v0.10.0) have it. This post is the short version: what changed under the hood, what you can do with it today, and where to start.
 

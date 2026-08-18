@@ -9,7 +9,7 @@
 - **Node.js：** `~24`（Node 24.x）。程式碼庫在 `package.json#engines` 中強制要求該版本。
 - **pnpm：** `10.33.x`。程式碼庫透過 `packageManager` 固定為 `pnpm@10.33.2`；若使用 Corepack，該固定版本將被自動選中。
 - **作業系統：** 主要支援 macOS、Linux、WSL2。Windows 原生環境大部分流程也可執行，但 WSL2 是更穩定的基準。
-- **可選的本地 agent CLI：** Claude Code、Codex、Devin for Terminal、Gemini CLI、OpenCode、Cursor Agent、Qwen、Qoder CLI、GitHub Copilot CLI 等。即使未安裝任何 CLI，也可在 Settings 中切換至 BYOK API 模式。
+- **可選的本地 agent CLI：** Open Design 透過 registry 支援 Claude Code、Codex、Devin for Terminal、OpenCode、Cursor Agent、Qwen、Qoder CLI、GitHub Copilot CLI 等本地 runtime；目前清單以 [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) 為準。即使未安裝任何本地 runtime，也可使用在 Settings 中設定的 BYOK runtime。
 
 `nvm` / `fnm` 為可選的便捷工具，並非專案必要依賴。如需使用，請在執行 pnpm 之前安裝並切換到 Node 24：
 
@@ -45,16 +45,11 @@ pnpm tools-dev run web # 在前景啟動 daemon + web
 pnpm tools-dev # 在背景啟動 daemon + web + desktop
 ```
 
-首次載入時，應用程式會掃描已安裝的 code-agent CLI（Claude Code / Codex / Devin for Terminal / Gemini / OpenCode / Cursor Agent / Qwen / Qoder CLI），並自動選擇其中之一；預設使用 `web-prototype` skill 與 `Neutral Modern` design system。輸入 prompt，點擊 **Send**。Agent 將以串流方式輸出至左側面板；`<artifact>` 標籤會被解析，HTML 在右側即時渲染。執行完成後，點擊 **Save to disk** 儲存 artifact。在記錄或修改任何 artifact 儲存路徑之前，必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。
+首次載入時，應用程式會偵測可用的本地 runtime，並顯示在 Settings 中設定的 BYOK runtime。選擇 runtime、design template 與 design system，輸入 prompt，然後點擊 **Send**。結構化的本地 runtime 會寫入規範專案檔案並串流傳送檔案/工具事件；檔案工作區與預覽由這些寫入更新。純文字與 BYOK 執行則回傳一個完整的 `<artifact>` 區塊供宿主解析。在記錄或修改任何 artifact 儲存路徑之前，必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。
 
-**Design system** 下拉選單內建 **129 套 design system** —— 包含 2 套手工編寫的 starter（Neutral Modern、Warm Editorial）、70 套打包的產品級系統，以及來自 [`awesome-design-skills`](https://github.com/bergside/awesome-design-skills) 的 57 個 design skill。選擇任意一套，所有原型都會應用該品牌的視覺風格。
+**Design systems** 目錄直接從 [`design-systems/`](../../design-systems/) 下的 `DESIGN.md` 套件載入。選擇任意一套，即可將該品牌的視覺語言套用到 artifact。
 
-**Skill** 下拉選單按 mode 分組（Prototype / Deck / Template / Design system），每個 mode 的預設 skill 帶有 `· default` 後綴。內建 skill 如下：
-
-- **Prototype** —— `web-prototype`（通用）、`saas-landing`、`dashboard`、`pricing-page`、`docs-page`、`blog-post`、`mobile-app`。
-- **Deck / PPT** —— `simple-deck`（單檔案橫向翻頁）與 `magazine-web-ppt`（`guizang-ppt` 捆綁包，來自 [`op7418/guizang-ppt-skill`](https://github.com/op7418/guizang-ppt-skill) —— deck mode 的預設 skill，自帶 assets/template 與 4 份 reference）。附帶 sidefile 的 skill 會自動添加一段 "Skill root (absolute)" frontmatter，使 agent 能夠基於真實的磁碟路徑解析 `assets/template.html` 與 `references/*.md`，而非在自身 CWD 中猜測。
-
-將 skill 與 design system 組合使用，僅需一句 prompt 即可產出符合版面配置規範、並採用所選視覺語言的原型或 deck。
+**Templates** 目錄來自 [`design-templates/`](../../design-templates/)，依原型、deck、文件、圖像、影片與音訊等 artifact 格式組織。[`skills/`](../../skills/) 則保留給 agent 在工作過程中呼叫的功能性能力。將 template 與 design system 組合使用，即可產出採用所選視覺語言的 artifact。
 
 ## 其他腳本
 
@@ -267,17 +262,17 @@ location /api/ {
 
 | 模式 | picker 中的值 | 請求流轉路徑 |
 |---|---|---|
-| **Local CLI**（daemon 偵測到 agent 時的預設模式） | "Local CLI" | 前端 → daemon `/api/chat` → `spawn(<agent>, ...)` → stdout → SSE → artifact 解析器 → 預覽 |
-| **API 模式**（fallback / 未安裝 CLI） | "Anthropic API" / "OpenAI API" / "Azure OpenAI" / "Google Gemini" | 前端 → daemon `/api/proxy/{provider}/stream` → provider SSE 歸一化為 `delta/end/error` → artifact 解析器 → 預覽 |
+| **Local CLI**（daemon 偵測到 agent 時的預設模式） | "Local CLI" | 前端 → daemon `/api/chat` → `spawn(<agent>, ...)` → 結構化工具/檔案事件經 SSE 傳輸 → 專案檔案 → 預覽。plain-stream CLI 改走 text-artifact 路徑。 |
+| **API 模式**（fallback / 未安裝 CLI） | "Anthropic API" / "OpenAI API" / "Atlas Cloud" / "Azure OpenAI" / "Google Gemini" | 前端 → daemon `/api/proxy/{provider}/stream` → provider SSE 歸一化為 `delta/end/error` → `<artifact>` 解析器 → 預覽 |
 
-兩種模式都會傳入**同一個** `<artifact>` 解析器與**同一個**沙箱 iframe。區別僅在於傳輸層和 system prompt 的投遞方式（本地 CLI 沒有獨立的 system 通道，因此組合好的 prompt 會被摺疊進 user message）。
+兩種模式最終進入同一個檔案工作區與沙箱預覽，但交付契約不同。具備檔案系統能力的 runtime 寫入規範檔案，不應在 `<artifact>` 中重複原始碼；plain/純文字與 BYOK 執行沒有檔案工具，其規範交付物是 `<artifact>` 中的完整 HTML。執行 profile 由 runtime transport 決定。
 
 ## Prompt 組合
 
 每次 send 時，應用程式都會從三層建構 system prompt，然後傳送至 provider：
 
 ```
-BASE_SYSTEM_PROMPT   （輸出契約：用 <artifact> 包裹，不使用 code fence）
+BASE_SYSTEM_PROMPT   （按執行 profile 採用檔案或 <artifact> 交付）
    + 目前啟用的 design system 正文  （DESIGN.md —— 色板 / 字型 / 版面配置）
    + 目前啟用的 skill 正文          （SKILL.md —— 工作流與輸出規則）
 ```
@@ -293,9 +288,12 @@ open-design/
 │   │   └── src/
 │   │       ├── cli.ts             # `od` bin 入口
 │   │       ├── server.ts          # /api/* + 靜態資源
-│   │       ├── agents.ts          # 掃描 PATH 中的 claude/codex/devin/gemini/opencode/cursor-agent/qwen/qoder/copilot
+│   │       ├── agents.ts          # runtime 模組的相容性匯出
+│   │       ├── runtimes/
+│   │       │   ├── registry.ts    # 支援的 runtime registry
+│   │       │   └── defs/          # 各 runtime 的啟動與參數定義
 │   │       ├── skills.ts          # SKILL.md loader（frontmatter 解析器）
-│   │       └── design-systems.ts  # DESIGN.md loader
+│   │       └── design-systems/    # DESIGN.md loader 與服務
 │   │   ├── sidecar/           # tools-dev daemon sidecar 包裝層
 │   │   └── tests/             # daemon 包的測試
 │   ├── web/                   # Next.js 16 App Router + React 客戶端
@@ -304,7 +302,7 @@ open-design/
 │       │   ├── App.tsx        # 調度 mode / skill / DS picker + send
 │       │   ├── providers/     # daemon + BYOK API transport
 │       │   ├── prompts/       # system、discovery、directions、deck framework
-│       │   ├── artifacts/     # 串流 <artifact> 解析器 + manifest
+│       │   ├── artifacts/     # text-artifact 解析 + artifact manifest
 │       │   ├── runtime/       # iframe srcdoc、markdown、export 輔助函數
 │       │   └── state/         # localStorage + 由 daemon 持久化的專案狀態
 │       ├── sidecar/           # tools-dev web sidecar 包裝層
@@ -317,24 +315,9 @@ open-design/
 │   └── platform/              # 通用 process/platform 原語
 ├── tools/dev/                 # `pnpm tools-dev` 生命週期與 inspect CLI
 ├── e2e/                       # Playwright UI + 外部整合 / Vitest 測試場
-├── skills/                    # SKILL.md —— 任何 Claude Code skill 程式碼庫均可直接放入
-│   ├── web-prototype/         # 通用單螢幕原型（prototype mode 的預設）
-│   ├── saas-landing/          # 行銷頁（hero / features / pricing / CTA）
-│   ├── dashboard/             # 後台 / 分析 dashboard
-│   ├── pricing-page/          # 獨立的定價 + 對比頁
-│   ├── docs-page/             # 三欄文件版面配置
-│   ├── blog-post/             # 長文編輯風格
-│   ├── mobile-app/            # 手機邊框單螢幕
-│   ├── simple-deck/           # 最小化橫向翻頁 deck
-│   └── guizang-ppt/           # magazine-web-ppt —— deck/PPT 預設捆綁包
-│       ├── SKILL.md
-│       ├── assets/template.html
-│       └── references/{themes,layouts,components,checklist}.md
-├── design-systems/            # DESIGN.md —— 9 段式 schema（awesome-claude-design）
-│   ├── default/               # Neutral Modern（starter）
-│   ├── warm-editorial/        # Warm Editorial（starter）
-│   ├── README.md              # 目錄概覽
-│   └── …129 systems           # 2 套 starter · 70 套產品系統 · 57 個 design skill
+├── skills/                    # agent 在工作過程中呼叫的功能性能力
+├── design-templates/          # 原型、deck、文件與媒體的渲染目錄
+├── design-systems/            # 以 DESIGN.md 為基礎的品牌套件
 ├── scripts/sync-design-systems.ts    # 從上游 getdesign tarball 重新匯入
 ├── docs/                      # 產品願景 + spec
 ├── pnpm-workspace.yaml        # apps/* + packages/* + tools/* + e2e
@@ -343,17 +326,17 @@ open-design/
 
 ## 排障
 
-- **"no agents found on PATH"** —— 安裝以下 CLI 之一：`claude`、`codex`、`devin`、`gemini`、`opencode`、`cursor-agent`、`qwen`、`qodercli`、`copilot`。或者在 Settings 中切換至 API mode，填入 provider key。
-- **daemon 在 /api/chat 上返回 500** —— 查看 daemon 終端機的 stderr 尾部；通常是 CLI 拒絕了傳入的參數。不同 CLI 的 argv 結構各異；如需調整，請參閱 `apps/daemon/src/agents.ts` 中的 `buildArgs`。
+- **"no agents found on PATH"** —— 安裝 [`apps/daemon/src/runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts) 中註冊的任一本地 runtime，確認 daemon 能找到其執行檔，然後在 **Settings → Execution mode** 中執行 **Rescan**；也可以在 Settings 中設定 BYOK runtime。
+- **daemon 在 /api/chat 上返回 500** —— 查看 daemon 終端機的 stderr 尾部；通常是 CLI 拒絕了傳入的參數。不同 CLI 的 argv 結構各異；如需調整，請查看 `apps/daemon/src/runtimes/defs/` 中對應的定義。
 - **媒體生成發生錯誤，`OD_BIN` 缺失、或 daemon URL 為 `:0`** —— 執行上述媒體 dispatcher 問題排除步驟。請勿重複使用既有的 CLI 會話；從 Open Design 應用程式中重新開啟專案，daemon 才會注入新的 `OD_*` 變數。
 - **Codex 載入的插件上下文過多** —— 使用 `OD_CODEX_DISABLE_PLUGINS=1 pnpm tools-dev` 啟動 Open Design，daemon 啟動 Codex 時會傳入 `--disable plugins`。
-- **artifact 始終不渲染** —— 模型輸出了文字但未使用 `<artifact>` 包裹。請確認 system prompt 已正確傳遞（查看 daemon 日誌），然後考慮更換能力更強的模型或更嚴格的 skill。
+- **artifact 始終不渲染** —— 先確認本次執行的交付 profile。對於具備檔案系統能力的本地 runtime，檢查 agent 是否建立了可預覽的專案檔案、檔案事件是否抵達 daemon；此路徑不應把原始碼放進 `<artifact>`。對於 plain/純文字或 BYOK 執行，檢查是否存在一個完整的 `<artifact>` 區塊，並在 daemon 日誌中定位第一處失敗邊界。
 
 ## 回到產品願景
 
 本 Quickstart 對應 [`docs/`](../../docs/) 中 spec 的可執行起點；spec 描述了其演進方向（見 [`docs/roadmap.md`](../../docs/roadmap.md)）。要點如下：
 
 - `docs/architecture.md` 描述了目前這套已交付的 stack：前端為 Next.js 16 App Router，後端為本地 daemon；`apps/web/next.config.ts` 在 dev 模式下進行 rewrite，使瀏覽器始終透過同一套 `/api` 入口通訊。
-- `docs/skills-protocol.md` 描述了完整的 `od:` frontmatter（型別化輸入、slider、能力 gating）。目前 MVP 僅讀取 `name` / `description` / `triggers` / `od.mode` / `od.design_system.requires` —— 如需支援更多欄位，請擴展 `apps/daemon/src/skills.ts`。
-- `docs/agent-adapters.md` 展望了更豐富的 dispatch（能力偵測、串流 tool call）。我們的 `apps/daemon/src/agents.ts` 是最小化的 dispatcher —— 剛好足夠驗證鏈路通暢。
-- `docs/modes.md` 列出了四種 mode：prototype / deck / template / design-system。前兩種已提供對應的 skill；picker 已按 `mode` 過濾。
+- `docs/skills-protocol.md` 描述目前的 `SKILL.md`/`od:` frontmatter，以及功能性 skill 與渲染範本的分離。`apps/daemon/src/skills.ts` 中的解析與正規化邏輯是實作層事實來源。
+- `docs/agent-adapters.md` 描述 adapter contract。各 runtime 的啟動、參數、模型與 stream 設定位於 `apps/daemon/src/runtimes/defs/`，並在 `apps/daemon/src/runtimes/registry.ts` 中註冊；`apps/daemon/src/agents.ts` 是相容性匯出層。
+- `docs/modes.md` 區分六個 New Project 頁籤與七個正規化 registry mode（`prototype`、`deck`、`template`、`design-system`、`image`、`video`、`audio`）。

@@ -3,11 +3,14 @@
   position: relative;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(0, 380px);
+  /* Single column: the panel has no detail/preview pane — the card grid IS
+     the preview surface and a click opens the file in a workspace tab. */
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
-  background: var(--bg);
+  /* #5517 material: the panel rides the app wash like the file preview does
+     (veil-canvas), instead of painting an edge-to-edge solid ground. */
+  background: var(--veil-canvas);
 }
-.df-panel.no-preview { grid-template-columns: minmax(0, 1fr); }
 .df-reloading-overlay {
   position: absolute;
   inset: 0;
@@ -16,7 +19,8 @@
   align-items: center;
   justify-content: center;
   background: color-mix(in srgb, var(--bg) 70%, transparent);
-  backdrop-filter: blur(1px);
+  -webkit-backdrop-filter: var(--scrim-backdrop);
+  backdrop-filter: var(--scrim-backdrop);
 }
 .paste-text-dialog-backdrop.modal-backdrop {
   z-index: 2000;
@@ -26,7 +30,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--bg);
+  background: transparent;
   border-right: 1px solid var(--border);
   /* Query container so the toolbar can react to the *list column* width
      (which depends on the chat/preview split, not the viewport). */
@@ -233,11 +237,11 @@
   cursor: pointer;
 }
 
-/* Batch-selection action bar. Shown above the list when any row is selected. */
+/* Batch-selection action bar. Shown above the list when any row is selected.
+   Scrolls with the content (the sticky slot at top:0 belongs to the category
+   tab bar, which stays pinned; two sticky bars there would occlude each
+   other). */
 .df-batch-bar {
-  position: sticky;
-  top: 0;
-  z-index: 3;
   margin: 0 20px 8px;
   padding: 7px 12px;
   display: flex;
@@ -287,6 +291,56 @@
   color: var(--red);
 }
 .df-batch-clear { color: var(--text-faint); }
+/* Category tab bar — one group visible at a time; a tab only exists when
+   its group has content, so empty categories disappear entirely. The bar
+   scrolls with the content and paints no background of its own: the panel's
+   veil-canvas wash shows through, so only the tab pills read as UI (the old
+   sticky near-opaque strip rendered as a full-width gray band). */
+.df-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  /* .df-body already owns the 20px page inset. Keep this bar on that same
+     content baseline instead of applying a second horizontal inset. */
+  padding: 8px 0 10px;
+}
+.df-tab {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  /* Pill shape wants more horizontal breathing room than the old rounded
+     rectangle. */
+  padding: 6px 14px;
+  border-radius: var(--radius-pill, 999px);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: color 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.df-tab:hover {
+  color: var(--text-strong);
+  background: var(--bg-fill-tertiary);
+}
+.df-tab.active {
+  color: var(--text-strong);
+  background: var(--bg-fill-secondary);
+  font-weight: 600;
+}
+.df-tab:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 52%, transparent);
+  outline-offset: 1px;
+}
+.df-tab-count {
+  color: var(--text-faint);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.df-tab.active .df-tab-count {
+  color: var(--text-muted);
+}
 .df-section { display: flex; flex-direction: column; gap: 0; }
 .df-section + .df-section { margin-top: 0; }
 .df-section-label {
@@ -457,7 +511,7 @@
 .df-row.selected .df-row-sub,
 .df-row.selected .df-row-size,
 .df-row.selected .df-row-time { color: rgba(255, 255, 255, 0.82); }
-.df-row.selected .df-row-check { color: var(--blue); }
+.df-row.selected .df-row-check { color: #fff; }
 
 .df-row-check {
   display: inline-flex;
@@ -486,32 +540,9 @@
   outline: none;
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
 }
-.df-row-check-box {
-  width: 15px;
-  height: 15px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--text-muted) 62%, transparent);
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
-  color: var(--accent-strong);
-  box-sizing: border-box;
-}
-.df-row-check[aria-checked="true"] .df-row-check-box {
-  border-color: var(--accent-strong);
-  background: var(--accent-strong);
-  color: #fff;
-}
-.df-row.selected .df-row-check .df-row-check-box {
-  border-color: rgba(255, 255, 255, 0.62);
-  background: transparent;
-}
-.df-row.selected .df-row-check[aria-checked="true"] .df-row-check-box {
-  border-color: rgba(255, 255, 255, 0.95);
-  background: #fff;
-  color: var(--blue);
-}
+/* The Remix checkbox glyph carries the box shape itself; the check span only
+   colors it. */
+.df-row-check[aria-checked="true"] { color: var(--accent-strong); }
 .df-dir-row .df-row-check { cursor: default; }
 
 .df-row-icon {
@@ -607,14 +638,20 @@
   white-space: nowrap;
 }
 .df-row-menu {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   background: transparent;
   border: none;
-  padding: 4px 6px;
   color: var(--text-muted);
   font-size: 16px;
-  border-radius: var(--radius-xs);
+  /* Fixed square box + pill radius = a circular hover fill. */
+  border-radius: 999px;
   opacity: 0;
-  transition: opacity 120ms var(--ease-out);
+  transition: opacity 120ms var(--ease-out), background 120ms var(--ease-out), color 120ms var(--ease-out);
 }
 .df-row:hover .df-row-menu { opacity: 1; }
 .df-row-menu:focus { opacity: 1; }
@@ -660,27 +697,117 @@
   color: var(--text-muted);
   font-size: 13px;
   min-height: 320px;
-  background-color: var(--bg);
-  background-image:
-    linear-gradient(to right, var(--border-soft) 1px, transparent 1px),
-    linear-gradient(to bottom, var(--border-soft) 1px, transparent 1px);
-  background-size: 24px 24px;
-  background-position: -1px -1px;
+  /* Plain pure-white surface — grid pattern removed. */
+  background-color: #fff;
 }
 .df-empty-pill {
+  /* Chrome-less: the illustration / title / actions sit directly on the
+     empty-state surface — no card border, fill, or shadow around them. */
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
-  padding: 28px 36px;
-  border-radius: 24px;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-  box-shadow:
-    0 1px 0 rgba(15, 15, 15, 0.02),
-    0 8px 24px -12px rgba(15, 15, 15, 0.08);
+  padding: 0;
   max-width: min(560px, 92%);
   text-align: center;
+}
+/* Fanned deck of blank ghost cards above the title — suggests "your generated
+   designs will fan out here". Three cards spread from a shared bottom pivot. */
+.df-empty-stack {
+  position: relative;
+  width: 148px;
+  height: 96px;
+  margin-bottom: 2px;
+}
+.df-empty-stack-card {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 70px;
+  height: 88px;
+  margin-left: -35px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  /* Borderless white cards — the shadow alone lifts the fan off the page.
+     Each card carries its CTA's icon (pencil / globe / blocks) instead of
+     skeleton shapes; the icon takes the CTA's accent on the paired hover. */
+  border: 0;
+  background: var(--bg-app, #fff);
+  box-shadow: 0 6px 16px -9px rgba(15, 15, 15, 0.28);
+  color: var(--text-faint);
+  transform-origin: bottom center;
+  transition:
+    transform 280ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 280ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.df-empty-stack-card .od-icon {
+  transition: color 280ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.df-empty-stack-card--left {
+  transform: translateX(-30px) rotate(-13deg);
+  z-index: 1;
+}
+.df-empty-stack-card--right {
+  transform: translateX(30px) rotate(13deg);
+  z-index: 1;
+}
+.df-empty-stack-card--front {
+  transform: rotate(0deg);
+  z-index: 2;
+  box-shadow: 0 10px 22px -10px rgba(15, 15, 15, 0.3);
+}
+/* Hover a single card → only THAT card enlarges and pops to the front. Each
+   keeps its own fan offset/rotation (so it grows in place instead of jumping
+   to center), just scaled up with a stronger shadow. */
+.df-empty-stack-card--left:hover {
+  transform: translateX(-30px) rotate(-13deg) scale(1.12);
+  z-index: 3;
+  box-shadow: 0 16px 30px -12px rgba(15, 15, 15, 0.34);
+}
+.df-empty-stack-card--right:hover {
+  transform: translateX(30px) rotate(13deg) scale(1.12);
+  z-index: 3;
+  box-shadow: 0 16px 30px -12px rgba(15, 15, 15, 0.34);
+}
+.df-empty-stack-card--front:hover {
+  transform: rotate(0deg) scale(1.12);
+  z-index: 3;
+  box-shadow: 0 16px 30px -12px rgba(15, 15, 15, 0.34);
+}
+/* Hovering a CTA below pops its counterpart card in the fan — left / front /
+   right ↔ New sketch (red) / New Browser (green) / Create design system
+   (blue) — and its icon takes the CTA's accent. No border or wash: the pop +
+   icon color alone carry the pairing. */
+.df-empty-pill:has(.df-empty-cta-primary:hover:not(:disabled)) .df-empty-stack-card--left {
+  transform: translateX(-30px) rotate(-13deg) scale(1.12);
+  z-index: 3;
+  box-shadow: 0 16px 30px -12px rgba(15, 15, 15, 0.34);
+}
+.df-empty-pill:has(.df-empty-cta-secondary:hover:not(:disabled)) .df-empty-stack-card--front {
+  transform: rotate(0deg) scale(1.12);
+  z-index: 3;
+  box-shadow: 0 16px 30px -12px rgba(15, 15, 15, 0.34);
+}
+.df-empty-pill:has(.df-empty-cta-tertiary:hover:not(:disabled)) .df-empty-stack-card--right {
+  transform: translateX(30px) rotate(13deg) scale(1.12);
+  z-index: 3;
+  box-shadow: 0 16px 30px -12px rgba(15, 15, 15, 0.34);
+}
+.df-empty-pill:has(.df-empty-cta-primary:hover:not(:disabled)) .df-empty-stack-card--left .od-icon {
+  color: var(--red);
+}
+.df-empty-pill:has(.df-empty-cta-secondary:hover:not(:disabled)) .df-empty-stack-card--front .od-icon {
+  color: var(--green);
+}
+.df-empty-pill:has(.df-empty-cta-tertiary:hover:not(:disabled)) .df-empty-stack-card--right .od-icon {
+  color: var(--blue);
+}
+@media (prefers-reduced-motion: reduce) {
+  .df-empty-stack-card {
+    transition: none;
+  }
 }
 .df-empty-title {
   font-size: 16px;
@@ -688,6 +815,20 @@
   font-weight: 500;
   letter-spacing: -0.005em;
   line-height: 1.3;
+}
+/* A shared project whose local mirror hasn't caught up yet: a small row
+   pairing the downloading badge with a "syncing" sentence, instead of the
+   illustrated empty state + create CTAs (which don't apply — content is on
+   its way, not absent). See DesignFilesPanel's `downloadPending` prop. */
+.df-empty-syncing .df-empty-pill {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+.df-empty-syncing .df-empty-title {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 .df-empty-actions {
   display: flex;
@@ -701,50 +842,89 @@
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border: 1px solid var(--border);
+  /* Hairline a step lighter than the default --border so the pills read
+     softly against the white panel. */
+  border: 1px solid var(--border-soft);
   border-radius: var(--radius-pill);
   background: var(--bg);
   color: var(--text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   flex-shrink: 0;
   transition: background 120ms var(--ease-out), border-color 120ms var(--ease-out);
 }
+.df-empty-cta:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
 .df-empty-cta-primary {
-  background: var(--text-strong);
-  border-color: var(--text-strong);
-  color: var(--bg-panel);
+  background: var(--bg);
+  border-color: var(--border-soft);
+  color: var(--text);
 }
 .df-empty-cta-secondary {
   background: var(--bg);
+  border-color: var(--border-soft);
+  color: var(--text);
 }
 .df-empty-cta-tertiary {
-  background: transparent;
-  color: var(--text-muted);
-}
-.df-empty-cta:hover {
-  background: var(--bg-subtle);
-  border-color: var(--border-strong);
-}
-.df-empty-cta-primary:hover {
-  background: var(--text);
-  border-color: var(--text);
-}
-.df-empty-cta-tertiary:hover {
+  background: var(--bg);
+  border-color: var(--border-soft);
   color: var(--text);
+}
+/* Icon accents — the spec's semantic red / green / blue tokens (tokens.css),
+   one per action, in button order. Selector targets the Remix Icon <i>
+   (.od-icon) the Icon component actually renders — not svg. Text stays
+   neutral per the spec's neutral-button rule; tokens flip with the theme. */
+.df-empty-cta-primary .od-icon {
+  color: var(--red);
+}
+.df-empty-cta-secondary .od-icon {
+  color: var(--green);
+}
+.df-empty-cta-tertiary .od-icon {
+  color: var(--blue);
+}
+/* Moved-in doc / upload pills (from the top toolbar). No purple design token
+   exists (--purple resolves to ink gray), so the violet is a literal — the
+   same #8b5cf6 the community accents already use. */
+.df-empty-cta-doc .od-icon {
+  color: var(--green);
+}
+.df-empty-cta-upload .od-icon {
+  color: #8b5cf6;
+}
+/* Hover: only the pill's stroke takes the icon's color — the surface stays
+   white and the label stays neutral. */
+.df-empty-cta:hover:not(:disabled) {
+  background: var(--bg);
+  color: var(--text);
+}
+.df-empty-cta-primary:hover:not(:disabled) {
+  border-color: var(--red);
+}
+.df-empty-cta-secondary:hover:not(:disabled) {
+  border-color: var(--green);
+}
+.df-empty-cta-tertiary:hover:not(:disabled) {
+  border-color: var(--blue);
+}
+.df-empty-cta-doc:hover:not(:disabled) {
+  border-color: var(--green);
+}
+.df-empty-cta-upload:hover:not(:disabled) {
+  border-color: #8b5cf6;
 }
 .df-empty-cta:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* Static useful-info footer pinned above the drop zone. */
-/* Footer cluster pinned to the bottom: drag hint above the useful-info. */
-/* Footer band pinned to the bottom, mirroring Claude Design's empty-state
-   hint strip: a faint warm band carrying the drag hint above a typewriter
-   "tip" line. */
+/* Drag-to-upload: the whole panel is a drop target. While dragging files
+   over the Design Files panel, an accent overlay invites the drop. */
+
 .df-footer-info {
   margin: auto 0 0;
   min-height: 100px;
@@ -897,83 +1077,283 @@
   max-width: 48ch;
 }
 
-/* Right preview pane in design files */
-.df-preview {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: var(--bg);
-  border-left: 1px solid var(--border);
-  position: relative;
+/* Page thumbnail-card grid: HTML pages render as cards with a live page
+   preview on top and a name / kind / time strip below, replacing the compact
+   rows (the right-side preview pane stays, driven by single-click). */
+.df-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 14px;
+  /* Horizontal inset comes from .df-body's own padding; adding more here
+     would misalign the cards with the section label and file rows. */
+  padding: 2px 0 14px;
 }
-.df-preview-empty {
-  flex: 1;
+/* Masonry waterfall for the Images section: column-width driven CSS columns,
+   cards keep their natural image aspect so column heights interleave. */
+.df-image-masonry {
+  columns: 220px;
+  column-gap: 14px;
+  padding: 2px 0 14px;
+}
+.df-image-masonry .df-card {
+  display: inline-flex;
+  width: 100%;
+  break-inside: avoid;
+  margin: 0 0 14px;
+}
+.df-card--image .df-card-thumb {
+  /* Lazy images have no intrinsic height until their headers arrive. Reserve a
+     real card-sized box during that window instead of collapsing each masonry
+     item into a one-pixel border line. Loaded images switch back to their
+     natural aspect so the waterfall keeps its varied rhythm. */
+  aspect-ratio: 4 / 3;
+  /* No meta strip below — the image is the whole card. */
+  border-bottom: 0;
+}
+.df-card--image .df-card-thumb[data-image-status="loaded"] {
+  aspect-ratio: auto;
+}
+.df-card--image .df-card-thumb img {
+  display: block;
+  width: 100%;
+  height: auto;
+  opacity: 0;
+  transition: opacity 200ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.df-card--image .df-card-thumb img[data-loaded="true"] {
+  opacity: 1;
+}
+.df-image-skeleton,
+.df-image-error {
+  position: absolute;
+  inset: 0;
+}
+.df-image-skeleton {
+  background:
+    linear-gradient(
+      105deg,
+      transparent 35%,
+      color-mix(in srgb, var(--bg-panel) 72%, transparent) 50%,
+      transparent 65%
+    ),
+    var(--bg-subtle);
+  background-size: 220% 100%;
+  animation: df-image-skeleton-sheen 1.4s ease-in-out infinite;
+}
+.df-image-error {
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--text-faint);
-  font-size: 13px;
-  padding: 32px;
+  background: var(--bg-subtle);
 }
-.df-preview-thumb {
-  margin: 16px;
+@keyframes df-image-skeleton-sheen {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .df-image-skeleton {
+    animation: none;
+  }
+}
+/* Row menu floats over the image's top-right corner (mirrors the check chip
+   top-left): hover-revealed chip so the bare image stays clean. */
+.df-card--image .df-card-menu-overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, #fff 92%, transparent);
+  box-shadow: var(--shadow-xs);
+  opacity: 0;
+  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms var(--ease-out);
+}
+.df-card--image:hover .df-card-menu-overlay,
+.df-card--image .df-card-menu-overlay:focus-visible {
+  opacity: 1;
+}
+.df-card--image .df-card-menu-overlay:hover {
+  background: var(--bg-subtle);
+}
+.df-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
-  background: var(--bg-panel);
+  background: #fff;
   box-shadow: var(--shadow-sm);
   overflow: hidden;
-  aspect-ratio: 16/10;
-  flex-shrink: 0;
-  position: relative;
+  transition: border-color 120ms cubic-bezier(0.23, 1, 0.32, 1), box-shadow 120ms cubic-bezier(0.23, 1, 0.32, 1);
 }
-.df-preview-thumb.is-openable {
-  cursor: pointer;
-  transition: border-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
+.df-card:hover {
+  /* Same hover affordance as the home recent-projects cards. */
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md, var(--shadow-sm));
 }
-/* Hover affordance lives on the container border, NOT a translucent layer
-   over the iframe: painting a semi-transparent fill on top of a sandboxed
-   iframe makes Chromium/Electron repaint the iframe white on hover. */
-.df-preview-thumb.is-openable:hover {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-}
-.df-preview-thumb-open {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
+.df-card.selected { border-color: var(--blue); }
+/* This panel keeps the right-hand preview pane: the card whose file is being
+   previewed carries the same border accent as a selected card. */
+.df-card.active { border-color: var(--blue); }
+.df-card-thumb {
+  display: block;
   width: 100%;
-  height: 100%;
+  /* Reset the global `button { height: 36px }` primitive so the
+     aspect-ratio box can size the cover. */
+  height: auto;
+  aspect-ratio: 16/9;
   padding: 0;
   border: 0;
-  border-radius: inherit;
-  background: transparent;
+  border-bottom: 1px solid var(--border-soft);
+  border-radius: 0;
+  background: #fff;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
 }
-.df-preview-thumb-open:focus-visible {
-  outline: 2px solid var(--accent);
+.df-card-thumb,
+button.df-card-thumb:hover:not(:disabled),
+button.df-card-thumb:active:not(:disabled),
+button.df-card-thumb:focus:not(:disabled) {
+  background: #fff;
+  box-shadow: none;
+  filter: none;
+}
+.df-card-thumb:focus-visible {
+  outline: 2px solid var(--blue);
   outline-offset: -3px;
 }
-.df-preview-thumb iframe,
-.df-preview-thumb img,
-.df-preview-thumb video {
-  width: 100%; height: 100%; border: none; background: white; object-fit: cover; display: block;
-}
-/* The transparent overlay button already captures the click; letting hover
-   fall through to the iframe avoids any compositing repaint flash. */
-.df-preview-thumb iframe {
-  pointer-events: none;
-}
-.df-preview-thumb .sketch-preview,
-.df-preview-thumb .sketch-preview svg {
+/* Clicks land on the thumb button; the sandboxed iframe never sees hover, so
+   Chromium doesn't repaint it white mid-hover. */
+.df-card-thumb iframe {
   width: 100%;
   height: 100%;
+  border: none;
+  background: #fff;
   display: block;
+  pointer-events: none;
 }
-.df-preview-thumb audio {
-  width: calc(100% - 24px);
+.df-thumb-scale-host {
   position: absolute;
-  left: 12px;
-  bottom: 12px;
+  inset: 0;
+  overflow: hidden;
 }
+.df-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 6px;
+  min-width: 0;
+}
+.df-card-meta-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+}
+.df-card-name-btn {
+  all: unset;
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  cursor: pointer;
+  /* Padding + matching negative margin: the hover chip hugs the name text
+     without shifting the meta layout. */
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: var(--radius-xs);
+  transition: background 120ms var(--ease-out);
+}
+/* Only the name lights up: a light-gray chip on hover marks the click target;
+   the kind · time line below stays untouched. */
+.df-card-name-btn:hover {
+  background: var(--bg-subtle);
+}
+.df-card-name-btn.is-renamable { cursor: text; }
+.df-card-name-btn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.df-card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  min-width: 0;
+}
+.df-card-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  min-width: 0;
+}
+.df-card .df-row-menu {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.df-card:hover .df-row-menu,
+.df-card .df-row-menu:focus { opacity: 1; }
+/* Selection checkbox floats over the thumb's top-left corner on a small chip
+   so it stays legible above arbitrary page content. */
+.df-card-check {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  /* The Remix checkbox glyph carries the box shape itself; the chip only
+     provides a translucent backdrop for legibility over thumbnails. */
+  background: color-mix(in srgb, #fff 92%, transparent);
+  box-shadow: var(--shadow-xs);
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  opacity: 0;
+  transition: opacity 120ms cubic-bezier(0.23, 1, 0.32, 1), background 120ms var(--ease-out), color 120ms var(--ease-out);
+}
+.df-card:hover .df-card-check,
+.df-card-check:focus-visible,
+.df-card-check[aria-checked="true"],
+.df-panel.has-selection .df-card-check { opacity: 1; }
+.df-card-check:hover { background: var(--bg-subtle); color: var(--text); }
+.df-card-check[aria-checked="true"] { color: var(--accent-strong); }
+/* The rename input replaces only the name line; the kind · time sub stays
+   visible below it, so it stretches to the meta-text column width. */
+.df-card .df-rename-input {
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
+}
+/* Glyph placeholder inside a card thumb (too-large or still-loading HTML):
+   reuse the preview-pane placeholder, sized down for the card box. */
+.df-card-thumb .df-preview-placeholder {
+  font-size: 30px;
+}
+
+/* Glyph fallback inside a card thumb when the page can't be inlined
+   (over the size cap, still fetching, or the fetch failed). */
 .df-preview-placeholder {
   width: 100%;
   height: 100%;
@@ -985,137 +1365,15 @@
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--bg-panel) 88%, var(--accent)) 0%, var(--bg-panel) 100%);
 }
-.df-preview-meta {
-  padding: 0 16px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  text-align: center;
-  align-items: center;
-}
-.df-preview-open-cta {
-  align-self: stretch;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  min-height: 36px;
-  margin-bottom: 4px;
-  padding: 0 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--bg-panel);
-  color: var(--text-strong);
-  box-shadow: var(--shadow-xs);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 120ms cubic-bezier(0.23, 1, 0.32, 1), border-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.df-preview-open-cta:hover {
-  background: var(--bg-panel);
-  border-color: var(--accent);
-  color: var(--accent);
-}
-.df-preview-open-cta:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-.df-preview-download {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--text-muted);
-  text-decoration: none;
-}
-.df-preview-download:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
-.df-preview-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-strong);
-  word-break: break-word;
-}
-.df-preview-kind { font-size: 12px; color: var(--text-muted); }
-.df-preview-stats { font-size: 11.5px; color: var(--text-muted); }
-.df-preview-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  flex-wrap: wrap;
-}
-.df-preview-actions button,
-.df-preview-actions .ghost-link {
-  font-size: 12px;
-  min-height: 30px;
-  padding: 0 11px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: var(--radius-pill);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  text-decoration: none;
-}
-.df-preview-actions button:hover,
-.df-preview-actions .ghost-link:hover {
-  background: var(--bg-subtle);
-  border-color: var(--border-strong);
-}
-.df-preview-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 4;
-  width: 30px;
-  height: 30px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
-  color: var(--text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: var(--shadow-xs);
-  transition: opacity 120ms var(--ease-out), background 120ms var(--ease-out), border-color 120ms var(--ease-out), color 120ms var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .df-preview-close {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .df-preview:hover .df-preview-close,
-  .df-preview-close:focus-visible {
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-
-@media (any-pointer: coarse) {
-  .df-preview-close {
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-.df-preview-close:hover {
-  background: var(--bg-subtle);
-  border-color: var(--border-strong);
-  color: var(--text-strong);
-}
 
 /* Row context menu */
 .df-row-popover {
   position: fixed;
   z-index: 200;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
+  background: var(--glass-regular);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--material-separator);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md);
   padding: 4px;
@@ -1124,6 +1382,9 @@
   flex-direction: column;
 }
 .df-row-popover button {
+  width: 100%;
+  display: flex;
+  justify-content: flex-start;
   background: transparent;
   border: none;
   padding: 7px 10px;
@@ -1131,6 +1392,10 @@
   text-align: left;
   border-radius: var(--radius-xs);
   color: var(--text);
+}
+.df-row-popover a {
+  display: block;
+  width: 100%;
 }
 .df-row-popover button:hover { background: var(--bg-subtle); }
 .df-row-popover button.danger { color: var(--red); }

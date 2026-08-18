@@ -11,7 +11,7 @@
  * Simplified Chinese; other locales fall back to English).
  */
 import Layout from '../../../_components/sub-page-layout.astro';
-import LazyImg from '../../../_components/lazy-img.astro';
+import SolutionProofMedia from '../../../_components/solution-proof-media.astro';
 import { getInfoPageCopy } from '../../../info-page-i18n';
 import { getSolutionPageCopy } from '../../../solution-pages-i18n';
 import { getCommonCopy, localeFromPath, localizedHref, localePath, stripLocaleFromPath } from '../../../i18n';
@@ -87,19 +87,18 @@ const jsonLd = [
         <h1 class="display">{page.heading}</h1>
         <p class="lead">{page.lead}</p>
         <div class="solution-hero-cta">
-          <a class="btn btn-primary" href={href('/download/')}>{common.downloadDesktop}</a>
+          <a class="btn btn-primary solution-download-cta hero-download-attention" href={href('/download/')} data-download-cta data-direct-download data-download-placement="solution_hero">{common.downloadDesktop}</a>
           <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
         </div>
       </header>
-      <figure class="solution-hero">
-        <LazyImg
-          src="/solutions/ai-landing-page-generator-hero.webp"
-          alt={page.heroImageAlt}
-          loading="priority"
-          width={1280}
-          height={853}
-        />
-      </figure>
+      <SolutionProofMedia
+        src="/lab-cards/prototype.webp"
+        alt={page.heroImageAlt}
+        href={href(page.exampleHref)}
+        linkLabel={page.exampleLinkLabel}
+        width={1592}
+        height={1000}
+      />
     </div>
 
     <div class="tldr-card">
@@ -200,8 +199,8 @@ const jsonLd = [
         <p>{page.ctaBody}</p>
       </div>
       <div class="info-cta-actions">
-        <a class="btn btn-primary" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
-        <a class="btn btn-ghost" href={REPO_RELEASES} target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+        <a class="btn btn-primary solution-download-cta hero-download-attention" href={REPO_RELEASES} data-download-cta data-direct-download data-download-placement="solution_footer" target="_blank" rel="noreferrer noopener">{common.downloadDesktop}</a>
+        <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
       </div>
       <div class="info-cta-meta">
         <span class="stamp">● {common.apache}</span>

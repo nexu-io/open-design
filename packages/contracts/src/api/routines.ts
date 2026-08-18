@@ -4,6 +4,7 @@
 
 import type { AutomationSourceIngestionResponse } from './automations.js';
 import type { RunContextSelection } from './context.js';
+import type { AutomationWorkspaceScope } from './app-config.js';
 
 export type RoutineScheduleKind =
   | 'hourly'
@@ -96,12 +97,20 @@ export interface Routine {
   target: RoutineProjectTarget;
   skillId: string | null;
   agentId: string | null;
-  context?: RunContextSelection;
+  context?: RoutineContextSelection;
   enabled: boolean;
   nextRunAt: number | null;
   lastRun: RoutineLastRunSummary | null;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface RoutineContextSelection extends RunContextSelection {
+  /**
+   * Persisted only for create_each_run. Reuse routines derive their Workspace
+   * from the target project's binding instead of this field.
+   */
+  workspaceScope?: AutomationWorkspaceScope | null;
 }
 
 export interface RoutineRun {
@@ -126,7 +135,7 @@ export interface CreateRoutineRequest {
   target: RoutineProjectTarget;
   skillId?: string | null;
   agentId?: string | null;
-  context?: RunContextSelection;
+  context?: RoutineContextSelection;
   enabled?: boolean;
 }
 
@@ -137,7 +146,7 @@ export interface UpdateRoutineRequest {
   target?: RoutineProjectTarget;
   skillId?: string | null;
   agentId?: string | null;
-  context?: RunContextSelection;
+  context?: RoutineContextSelection;
   enabled?: boolean;
 }
 

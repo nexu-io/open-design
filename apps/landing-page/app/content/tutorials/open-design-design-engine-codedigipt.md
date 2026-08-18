@@ -1,7 +1,7 @@
 ---
 title: 'Open Design — Turn the Agent You Already Have Into a Design Engine'
 youtubeId: Z9_ruLqDJkM
-summary: A practical guide to the part of Open Design most tutorials skip — choosing and swapping the model behind it. Your coding agent is the engine; the model you point it at is the quality knob. Install it, wire up Gemini CLI or Claude, and learn to match the model to the job. Based on Codedigipt's hands-on walkthrough.
+summary: A practical guide to the part of Open Design most tutorials skip — choosing and swapping the model behind it. Your coding agent is the engine; the model you point it at is the quality knob. Codedigipt's recording wires up Gemini CLI or Claude; current releases replace the retired direct Gemini runtime with Google Gemini through BYOK. Based on Codedigipt's hands-on walkthrough.
 date: 2026-05-03
 category: Demo
 durationSeconds: 924
@@ -16,7 +16,7 @@ This guide focuses on the part of Open Design most walkthroughs gloss over: **th
 
 ## What is Open Design?
 
-Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. It doesn't ship its own model — it scans your machine for the CLIs you already have (Claude Code, Codex, Cursor, Gemini, Copilot, OpenCode, and a couple of dozen more) and uses that agent as the design engine. So the work runs on the subscription or free credits you already have, not a second design bill.
+Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. It doesn't ship its own model — it scans your machine for the supported CLIs you already have (Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a couple of dozen more) and uses that agent as the design engine. So the work runs on the subscription or free credits you already have, not a second design bill.
 
 - **Open source, Apache-2.0** — clone it, self-host it, read every line.
 - **Runs locally** — your projects are folders on your own machine.
@@ -55,7 +55,7 @@ Open the local URL it prints — it resolves a dynamic port, so don't hardcode o
 
 This is the step that matters. Open the settings (configure execution mode) and pick the agent that will drive generation from the CLIs Open Design detected on your machine. Anything not installed shows as disabled.
 
-- **Gemini CLI** — Codedigipt's pick for the design phase: strong design instincts, and free-tier credits go a long way. Generation rides on those credits.
+- **Google Gemini through BYOK** — Codedigipt's recording used the now-retired direct Gemini CLI runtime. In current releases, configure Google Gemini as a BYOK provider (executed through the isolated OpenCode adapter) to use Gemini models and their provider-side allowance.
 - **Claude Code** — point it at a design-capable model (Sonnet or Opus) for the highest-fidelity output.
 - **OpenCode** — ships with capable default models (e.g. MiniMax, GLM) if you'd rather not configure anything.
 - **Anthropic API (BYOK)** — no CLI? Drop in an API key and pick the model directly. This lets you use Claude-quality output **without a separate Claude Design subscription** — you bring the key, Open Design brings the design surface.

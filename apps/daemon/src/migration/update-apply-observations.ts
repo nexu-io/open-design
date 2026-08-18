@@ -21,7 +21,7 @@ const INSTALLER_OBSERVATION_SCHEMA_VERSION = 1;
 const INSTALLER_OBSERVATION_KIND = 'installer_apply_observation';
 const INSTALLER_OBSERVATION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-type InstallerObservationArtifactType = 'dmg' | 'installer';
+type InstallerObservationArtifactType = 'dmg' | 'installer' | 'payload';
 type InstallerObservationChannel = ReleaseChannel;
 type InstallerObservationDeliveryStatus =
   | 'submitted'
@@ -104,7 +104,7 @@ function isInstallerObservationSummary(value: unknown): value is InstallerObserv
     isReleaseChannel(channel) &&
     typeof value.platform === 'string' &&
     typeof value.arch === 'string' &&
-    (artifactType === 'dmg' || artifactType === 'installer') &&
+    (artifactType === 'dmg' || artifactType === 'installer' || artifactType === 'payload') &&
     typeof value.fromVersion === 'string' &&
     typeof value.toVersion === 'string' &&
     typeof value.attemptedAt === 'string' &&

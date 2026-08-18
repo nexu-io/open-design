@@ -14,7 +14,15 @@
  *   { type: 'od:slide-state', active: number, count: number }
  * after every navigation so the host can render its own counter / dots.
  */
-import { injectDeckStageFallback } from '@open-design/contracts/runtime/deck-stage-fallback';
+import {
+  DECK_EXPLICIT_SLIDE_SELECTOR,
+  DECK_LEGACY_SCREEN_LABEL_RE_SOURCE,
+  DECK_LEGACY_SCREEN_SLIDE_SELECTOR,
+  DECK_SLIDE_SELECTOR,
+  DECK_STRUCTURED_SLIDE_SELECTOR,
+  injectDeckStageFallback,
+} from '@open-design/contracts/runtime/deck-stage-fallback';
+import { buildPreviewObservabilityBridge } from '@open-design/contracts/runtime/preview-observability';
 
 import {
   buildManualEditBridge,
@@ -37,6 +45,9 @@ export type SrcdocOptions = {
   paletteBridge?: boolean;
   initialPalette?: string | null;
   previewFocusGuard?: boolean;
+  /** Install the live-preview error and white-screen reporting bridge. Keep
+   * this disabled for exports, captures, thumbnails, and historical previews. */
+  previewObservability?: boolean;
   /**
    * Force every CSS animation/transition to complete instantly so the
    * document settles at its final visual state and stops repainting. Meant
@@ -51,6 +62,13 @@ export type SrcdocOptions = {
    * This guarantees that the iframe's `srcdoc` attribute is updated in the DOM
    * and the browser re-parses the document (issue #4650). */
   reloadKey?: number;
+  /** Document-owned identity for preview content-size reports. The host rejects
+   * reports from a previous srcdoc document even if it echoed a newer request. */
+  previewMeasurementEpoch?: string;
+  /** Identity of this exact srcdoc artifact generation. The injected bridge
+   * echoes it only after all document-side listeners are installed, allowing
+   * the host to reject a stale ready signal from the document being replaced. */
+  transportActivationGeneration?: string;
 };
 
 // --- Redirect-loop guard -------------------------------------------------
@@ -383,7 +401,13 @@ export function buildSrcdoc(
   // is inert on documents that never self-redirect. Injected right after the
   // sandbox shim so it is installed before any author script or meta refresh.
   const withRedirectGuard = injectPreviewRedirectGuard(withShim, { blockLoadTimeScriptRedirect });
-  const withKeydownRegistry = options.deck ? injectDeckKeydownRegistryHook(withRedirectGuard) : withRedirectGuard;
+  // Runtime errors stay in the iframe's Window and never bubble to the host.
+  // Live previews opt in so exports and other off-screen srcdoc consumers do
+  // not emit diagnostics that no host observer is prepared to consume.
+  const withObservability = options.previewObservability
+    ? injectAfterHeadOpen(withRedirectGuard, buildPreviewObservabilityBridge())
+    : withRedirectGuard;
+  const withKeydownRegistry = options.deck ? injectDeckKeydownRegistryHook(withObservability) : withObservability;
   const withFocusGuard = options.previewFocusGuard
     ? injectPreviewFocusGuard(withKeydownRegistry)
     : withKeydownRegistry;
@@ -425,7 +449,11 @@ export function buildSrcdoc(
   // visible flash) every time the host toggle flips.
   const withTweaks = injectTweaksBridge(withEdit);
   const withTransport = injectSrcdocTransportActivationBridge(
-    injectExportCaptureBridge(injectSnapshotBridge(withTweaks)),
+    injectExportCaptureBridge(injectSnapshotBridge(injectPreviewContentSizeBridge(
+      withTweaks,
+      options.previewMeasurementEpoch ?? '',
+    ))),
+    options.transportActivationGeneration ?? '',
   );
   // Embed the reload counter so the srcdoc string differs across reloads even
   // when the underlying HTML bytes are identical.  This ensures the browser
@@ -457,7 +485,7 @@ export function buildLazySrcdocTransport(): string {
     <script data-od-lazy-srcdoc-transport>(function(){
       window.addEventListener('message', function(ev){
         var data = ev && ev.data;
-        if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string') return;
+        if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string' || typeof data.generation !== 'string' || !data.generation) return;
         document.open();
         document.write(data.html);
         document.close();
@@ -506,17 +534,40 @@ export function canActivateSrcDocTransport(state: SrcDocActivationInputs): boole
   return true;
 }
 
-function injectSrcdocTransportActivationBridge(doc: string): string {
+function injectSrcdocTransportActivationBridge(doc: string, generation: string): string {
+  const encodedGeneration = JSON.stringify(generation);
   const script = `<script data-od-srcdoc-transport-activation>(function(){
+  var generation = ${encodedGeneration};
+  function announceReady(probeId){
+    if (!generation) return;
+    try {
+      if (window.parent && window.parent !== window) {
+        var message = { type: 'od:srcdoc-transport-activated', generation: generation };
+        if (typeof probeId === 'string' && probeId) message.probeId = probeId;
+        window.parent.postMessage(message, '*');
+      }
+    } catch (_) { /* sandboxed parent */ }
+  }
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
-    if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string') return;
+    if (data && data.type === 'od:srcdoc-transport-ready-probe') {
+      if (data.generation === generation) announceReady(data.probeId);
+      return;
+    }
+    if (!data || data.type !== 'od:srcdoc-transport-activate' || typeof data.html !== 'string' || typeof data.generation !== 'string' || !data.generation) return;
     document.open();
     document.write(data.html);
     document.close();
   });
+  announceReady();
 })();</script>`;
-  return injectBeforeBodyEnd(doc, script);
+  // Install the activation witness before authored styles/scripts. A srcDoc
+  // navigation can otherwise be healthy but spend seconds in a blocking
+  // external script before reaching a body-end bridge, which makes the host's
+  // missing-ACK recovery indistinguishable from a genuinely aborted
+  // `about:srcdoc` navigation. Placing the bridge first also runs it before an
+  // authored meta CSP can disable later inline scripts.
+  return injectAfterHeadOpen(doc, script);
 }
 
 function injectSnapshotBridge(doc: string): string {
@@ -720,6 +771,95 @@ function injectSnapshotBridge(doc: string): string {
       window.parent.postMessage({ type: 'od:snapshot:result', id: String(data.id), error: String(err && err.message || err) }, '*');
     });
   });
+})();</script>`;
+  return injectBeforeBodyEnd(doc, script);
+}
+
+function injectPreviewContentSizeBridge(doc: string, documentEpoch: string): string {
+  const serializedDocumentEpoch = JSON.stringify(documentEpoch).replace(/</g, '\\u003c');
+  const script = `<script data-od-preview-content-size-bridge>(function(){
+  if (window.__odPreviewContentSizeBridge) return;
+  window.__odPreviewContentSizeBridge = true;
+  var pending = false;
+  var lastRequest = null;
+  var documentEpoch = ${serializedDocumentEpoch};
+  function measure(){
+    var root = document.documentElement;
+    var body = document.body || root;
+    if (!root) return null;
+    var scrollValues = [
+      root.scrollWidth,
+      body && body.scrollWidth,
+    ];
+    var clientValues = [
+      root.clientWidth,
+      body && body.clientWidth
+    ];
+    var scrollWidth = 0;
+    var clientWidth = 0;
+    for (var i = 0; i < scrollValues.length; i += 1) {
+      var nextScroll = Number(scrollValues[i] || 0);
+      if (Number.isFinite(nextScroll) && nextScroll > scrollWidth) scrollWidth = nextScroll;
+    }
+    for (var j = 0; j < clientValues.length; j += 1) {
+      var nextClient = Number(clientValues[j] || 0);
+      if (Number.isFinite(nextClient) && nextClient > clientWidth) clientWidth = nextClient;
+    }
+    return {
+      scrollWidth: scrollWidth > 0 ? Math.ceil(scrollWidth) : null,
+      clientWidth: clientWidth > 0 ? Math.ceil(clientWidth) : null
+    };
+  }
+  function post(){
+    if (!lastRequest) return;
+    var size = measure();
+    try {
+      window.parent.postMessage({
+        type: 'od:preview-content-size',
+        measurementId: lastRequest.measurementId,
+        generation: lastRequest.generation,
+        documentEpoch: documentEpoch,
+        scrollWidth: size && size.scrollWidth,
+        clientWidth: size && size.clientWidth
+      }, '*');
+    } catch (_) {}
+  }
+  function schedule(){
+    if (pending) return;
+    pending = true;
+    window.requestAnimationFrame(function(){
+      pending = false;
+      post();
+    });
+  }
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (!data || data.type !== 'od:preview-content-size-request') return;
+    if (typeof data.measurementId !== 'string' || typeof data.generation !== 'string') return;
+    lastRequest = {
+      measurementId: data.measurementId,
+      generation: data.generation
+    };
+    schedule();
+  });
+  window.addEventListener('resize', schedule);
+  if (typeof ResizeObserver !== 'undefined') {
+    try {
+      var observer = new ResizeObserver(schedule);
+      observer.observe(document.documentElement);
+      if (document.body) observer.observe(document.body);
+    } catch (_) {}
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', schedule);
+  } else {
+    setTimeout(schedule, 0);
+  }
+  setTimeout(schedule, 80);
+  setTimeout(schedule, 260);
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(schedule).catch(function(){});
+  }
 })();</script>`;
   return injectBeforeBodyEnd(doc, script);
 }
@@ -1168,7 +1308,12 @@ function injectBeforeBodyEnd(doc: string, payload: string): string {
   return doc + payload;
 }
 
+export function htmlHasAuthoredBase(doc: string): boolean {
+  return /<base\b/i.test(doc);
+}
+
 function injectBaseHref(doc: string, baseHref: string): string {
+  if (htmlHasAuthoredBase(doc)) return doc;
   const safeHref = escapeAttr(baseHref);
   const tag = `<base href="${safeHref}">`;
   if (/<head[^>]*>/i.test(doc)) {
@@ -1224,6 +1369,38 @@ function injectSandboxShim(doc: string): string {
   }
   tryShim('localStorage');
   tryShim('sessionStorage');
+  // A <base href> pointing at the artifact's real /raw/ URL (injectBaseHref,
+  // below) is what lets relative asset paths resolve inside this opaque
+  // srcDoc document. That same base is what breaks history.pushState /
+  // replaceState: a bare-hash call like replaceState(null, '', '#/3') — the
+  // exact pattern generated decks use for their own slide routing — resolves
+  // against the <base> into a real http(s) URL, and the browser throws
+  // SecurityError because the DOCUMENT's own origin is the opaque "null" of
+  // about:srcdoc, which can never match a concrete origin. A deck whose own
+  // navigation function calls replaceState before it finishes updating the
+  // slide DOM (ordering varies by generated template) aborts mid-navigation
+  // on that throw, leaving the main canvas blank until a manual reload —
+  // the thumbnail rail is unaffected because it does not run the deck's
+  // script per-thumbnail. Wrap both methods so that failure degrades to a
+  // no-op instead of interrupting the caller: the iframe's address bar was
+  // never visible to the user anyway, so losing the hash update here is
+  // invisible.
+  function shimHistoryMethod(name){
+    try {
+      var h = window.history;
+      var original = h && h[name];
+      if (typeof original !== 'function') return;
+      h[name] = function(state, title, url){
+        try {
+          return original.call(h, state, title, url);
+        } catch (_) {
+          return undefined;
+        }
+      };
+    } catch (_) {}
+  }
+  shimHistoryMethod('pushState');
+  shimHistoryMethod('replaceState');
   document.addEventListener('click', (e) => {
     if (!e.target || !(e.target instanceof Element)) return;
     var link = e.target.closest('a[href]');
@@ -2047,9 +2224,147 @@ function meaningfulDomFallbackTarget(el) {
     rebuildStyleSheet();
     postOverrides();
   }
+  // Reapply the bounded UI state captured from the URL-loaded twin before
+  // Manual Edit became active. data-od-* stays owned by this srcDoc's bridges.
+  function runtimeStateAttributeAllowed(name){
+    return name === 'class' ||
+      name === 'style' ||
+      name === 'hidden' ||
+      name === 'open' ||
+      name.indexOf('aria-') === 0 ||
+      (name.indexOf('data-') === 0 && name.indexOf('data-od-') !== 0);
+  }
+  function applyRuntimeStateAttributes(el, attrs){
+    if (!el || !attrs || typeof attrs !== 'object') return;
+    var current = Array.prototype.slice.call(el.attributes || []);
+    for (var i = 0; i < current.length; i++) {
+      var currentName = current[i] && current[i].name;
+      if (
+        currentName &&
+        runtimeStateAttributeAllowed(currentName) &&
+        !Object.prototype.hasOwnProperty.call(attrs, currentName)
+      ) {
+        try { el.removeAttribute(currentName); } catch (_) {}
+      }
+    }
+    var names = Object.keys(attrs).slice(0, 64);
+    for (var a = 0; a < names.length; a++) {
+      var name = names[a];
+      var value = attrs[name];
+      if (!runtimeStateAttributeAllowed(name) || typeof value !== 'string' || value.length > 20000) continue;
+      try { el.setAttribute(name, value); } catch (_) {}
+    }
+  }
+  function runtimeStateElementAtPath(path){
+    if (!Array.isArray(path) || path.length > 64) return null;
+    var node = document.body;
+    for (var i = 0; node && i < path.length; i++) {
+      var index = Number(path[i]);
+      if (!Number.isInteger(index) || index < 0 || index > 100000) return null;
+      node = node.children && node.children[index];
+    }
+    return node || null;
+  }
+  function runtimeStateElement(entry){
+    var el = null;
+    if (entry && typeof entry.id === 'string' && entry.id.length <= 4096) {
+      try { el = document.getElementById(entry.id); } catch (_) { el = null; }
+    }
+    if (!el && entry && typeof entry.odId === 'string' && entry.odId.length <= 4096) {
+      try { el = document.querySelector('[data-od-id="' + esc(entry.odId) + '"]'); } catch (_) { el = null; }
+    }
+    if (!el) el = runtimeStateElementAtPath(entry && entry.path);
+    if (!el || String(el.tagName || '').toLowerCase() !== String(entry && entry.tag || '').toLowerCase()) return null;
+    return el;
+  }
+  function restoreRuntimeState(state){
+    if (
+      !state ||
+      state.version !== 1 ||
+      !Array.isArray(state.entries) ||
+      state.entries.length > 3500
+    ) return;
+    if (Array.isArray(state.roots) && state.roots.length <= 64) {
+      var rootHtmlLength = 0;
+      for (var r = 0; r < state.roots.length; r++) {
+        var root = state.roots[r];
+        if (!root || typeof root !== 'object' || typeof root.html !== 'string') continue;
+        rootHtmlLength += root.html.length;
+        if (rootHtmlLength > 2097152) break;
+        var currentRoot = runtimeStateElement(root);
+        if (!currentRoot) continue;
+        // Preserve the root node itself: application closures and delegated
+        // listeners frequently retain #app/#root by identity.
+        currentRoot.innerHTML = root.html;
+      }
+    }
+    applyRuntimeStateAttributes(document.documentElement, state.htmlAttrs);
+    applyRuntimeStateAttributes(document.body, state.bodyAttrs);
+    for (var i = 0; i < state.entries.length; i++) {
+      var entry = state.entries[i];
+      if (!entry || typeof entry !== 'object') continue;
+      var el = runtimeStateElement(entry);
+      if (!el) continue;
+      applyRuntimeStateAttributes(el, entry.attrs);
+      var tag = String(el.tagName || '').toLowerCase();
+      if (
+        (tag === 'input' || tag === 'textarea' || tag === 'select') &&
+        typeof entry.value === 'string' &&
+        entry.value.length <= 100000
+      ) {
+        try { el.value = entry.value; } catch (_) {}
+      }
+      if (tag === 'input' && typeof entry.checked === 'boolean') {
+        try { el.checked = entry.checked; } catch (_) {}
+      }
+      if (tag === 'select' && Number.isInteger(entry.selectedIndex)) {
+        try { el.selectedIndex = entry.selectedIndex; } catch (_) {}
+      }
+      if (Number.isFinite(entry.scrollLeft)) {
+        try { el.scrollLeft = entry.scrollLeft; } catch (_) {}
+      }
+      if (Number.isFinite(entry.scrollTop)) {
+        try { el.scrollTop = entry.scrollTop; } catch (_) {}
+      }
+    }
+    if (typeof state.hash === 'string' && state.hash.length <= 4096 && state.hash !== window.location.hash) {
+      try { window.history.replaceState(null, '', state.hash || 'about:srcdoc'); } catch (_) {}
+    }
+    if (active()) setTimeout(postTargets, 0);
+  }
+  var runtimeStateRestoreSequence = 0;
+  function cancelScheduledRuntimeStateRestore(){
+    runtimeStateRestoreSequence += 1;
+  }
+  // Retried restores help state survive an asynchronous artifact boot, but
+  // after the user interacts the live document is authoritative. Invalidate
+  // the pending handoff before its rAF/timeout callbacks can replay stale state.
+  document.addEventListener('pointerdown', cancelScheduledRuntimeStateRestore, true);
+  document.addEventListener('click', cancelScheduledRuntimeStateRestore, true);
+  document.addEventListener('keydown', cancelScheduledRuntimeStateRestore, true);
+  document.addEventListener('input', cancelScheduledRuntimeStateRestore, true);
+  document.addEventListener('change', cancelScheduledRuntimeStateRestore, true);
+  document.addEventListener('scroll', cancelScheduledRuntimeStateRestore, true);
+  function scheduleRuntimeStateRestore(state){
+    runtimeStateRestoreSequence += 1;
+    var sequence = runtimeStateRestoreSequence;
+    function restoreIfCurrent(){
+      if (sequence !== runtimeStateRestoreSequence) return;
+      restoreRuntimeState(state);
+    }
+    restoreIfCurrent();
+    window.requestAnimationFrame(function(){
+      restoreIfCurrent();
+      window.setTimeout(restoreIfCurrent, 80);
+    });
+  }
   window.addEventListener('message', function(ev){
     var data = ev && ev.data;
     if (!data || !data.type) return;
+    if (data.type === 'od:preview-runtime-state-restore') {
+      scheduleRuntimeStateRestore(data.state);
+      return;
+    }
     if (data.type === 'od:comment-mode') {
       commentEnabled = !!data.enabled;
       mode = data.mode === 'pod' ? 'pod' : 'picker';
@@ -2516,8 +2831,24 @@ function injectDeckBridge(
   const hasInlineKeydownListener = !!options.artifactHasKeydownNavigation;
   const isFrameworkDeck = /\bid\s*=\s*["']deck-stage["']/i.test(doc);
   const clickNavigation = !!options.clickNavigation && !isFrameworkDeck;
+  // Framework decks (`id="deck-stage"`) get the inverse fix. Their skeleton
+  // documents `.deck-shell` as plain block flow precisely so the 1920x1080
+  // stage's natural top-left is (0, 0) — `fit()` then does ALL the centering
+  // through `translate(tx, ty) scale(s)` with `transform-origin: top left`.
+  // Generated decks routinely violate that contract and re-declare the shell
+  // as a centering flex container. Two things break at once: the stage becomes
+  // a flex item, so its default `flex-shrink: 1` collapses `width: 1920px`
+  // down to the pane width (a ~770px preview yields a 770x1080 stage — the
+  // 16:9 canvas silently turns portrait, issue #47), and the flex centering
+  // offsets the stage away from (0, 0) so `fit()`'s translate stacks on top of
+  // a non-zero layout position. Restoring block flow + no shrink puts the
+  // stage back where `fit()` already assumes it is. Both declarations are
+  // no-ops on a deck that copied the skeleton verbatim.
   const styleFix = isFrameworkDeck
-    ? ''
+    ? `<style data-od-deck-fix>
+.deck-shell { display: block !important; }
+.deck-stage { flex-shrink: 0 !important; }
+</style>`
     : `<style data-od-deck-fix>
 .stage, .deck-stage, .deck-shell { place-content: center !important; }
 </style>`;
@@ -2558,15 +2889,97 @@ function injectDeckBridge(
     }, true);
   }
   window.__odDeckBridgeOwnListenerInstall = false;
+  function deckStageSlides(stage){
+    if (!stage) return [];
+    var nested = stage.querySelectorAll(${JSON.stringify(DECK_SLIDE_SELECTOR)});
+    var direct = [];
+    for (var i = 0; i < nested.length; i++) {
+      if (nested[i].parentElement === stage) direct.push(nested[i]);
+    }
+    return direct.length ? direct : nested;
+  }
+  function legacyScreenSlides(){
+    var candidates = document.querySelectorAll(${JSON.stringify(DECK_LEGACY_SCREEN_SLIDE_SELECTOR)});
+    var labelRe = new RegExp(${JSON.stringify(DECK_LEGACY_SCREEN_LABEL_RE_SOURCE)}, 'i');
+    var groups = [];
+    for (var i = 0; i < candidates.length; i++) {
+      var match = labelRe.exec(candidates[i].getAttribute('data-screen-label') || '');
+      if (!match || !candidates[i].parentNode) continue;
+      var group = null;
+      for (var j = 0; j < groups.length; j++) {
+        if (groups[j].parent === candidates[i].parentNode) { group = groups[j]; break; }
+      }
+      if (!group) {
+        group = { parent: candidates[i].parentNode, slides: [], numbers: {} };
+        groups.push(group);
+      }
+      group.slides.push(candidates[i]);
+      group.numbers[String(Number(match[1]))] = true;
+    }
+    var best = [];
+    for (var k = 0; k < groups.length; k++) {
+      if (Object.keys(groups[k].numbers).length > 1 && groups[k].slides.length > best.length) {
+        best = groups[k].slides;
+      }
+    }
+    return best;
+  }
   function slides(){
-    // Structured selectors first so decorative .slide markup in non-deck
-    // pages (icons, badges, code samples) is not counted as deck slides;
-    // fall back to all .slide only when nothing structured matched, so
-    // freeform decks that nest slides under an extra wrapper still report
-    // the real count instead of leaving the host counter at 1 / 0.
-    var structured = document.querySelectorAll('deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide');
+    // An explicit deck-stage owns its descendants, so unrelated annotated
+    // screens elsewhere in the document cannot leak into its count. Otherwise
+    // prefer direct children of recognized legacy containers before falling
+    // back to every supported persisted slide marker.
+    var stageSlides = deckStageSlides(document.querySelector('deck-stage'));
+    if (stageSlides.length) return stageSlides;
+    var structured = document.querySelectorAll(${JSON.stringify(DECK_STRUCTURED_SLIDE_SELECTOR)});
     if (structured.length) return structured;
-    return document.querySelectorAll('.slide');
+    var explicit = document.querySelectorAll(${JSON.stringify(DECK_EXPLICIT_SLIDE_SELECTOR)});
+    if (explicit.length) return explicit;
+    return legacyScreenSlides();
+  }
+  function deckStageForSlides(list){
+    var stage = document.querySelector('deck-stage');
+    if (!stage) return null;
+    if (list && list.length && !stage.contains(list[0])) return null;
+    return stage;
+  }
+  function activeIndexFromDeckStage(list){
+    var stage = deckStageForSlides(list);
+    if (!stage) return -1;
+    var index = Number(stage.index);
+    if (!Number.isFinite(index)) return -1;
+    index = Math.floor(index);
+    return index >= 0 && index < list.length ? index : -1;
+  }
+  function navigateViaDeckStage(list, action, index){
+    if (!list.length) return false;
+    var stage = deckStageForSlides(list);
+    if (!stage) return false;
+    try {
+      if (action === 'go' && typeof index === 'number' && typeof stage.goTo === 'function') {
+        stage.goTo(index);
+      } else if (action === 'next' && typeof stage.next === 'function') {
+        stage.next();
+      } else if (action === 'prev' && typeof stage.prev === 'function') {
+        stage.prev();
+      } else if (action === 'first' && typeof stage.reset === 'function') {
+        stage.reset();
+      } else if (action === 'first' && typeof stage.goTo === 'function') {
+        stage.goTo(0);
+      } else if (action === 'last' && typeof stage.goTo === 'function') {
+        stage.goTo(list.length - 1);
+      } else {
+        return false;
+      }
+      // Public deck-stage methods are synchronous in the authored runtime.
+      // Report here for older implementations that do not emit slidechange;
+      // modern implementations also emit the event and are harmlessly
+      // coalesced by React state equality in the host.
+      report();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
   function scrollOverflow(el){
     if (!el) return 0;
@@ -2665,6 +3078,8 @@ function injectDeckBridge(
       var w = Math.max(1, window.innerWidth);
       return Math.max(0, Math.min(list.length - 1, Math.round(maxScrollLeft() / w)));
     }
+    var byDeckStage = activeIndexFromDeckStage(list);
+    if (byDeckStage >= 0) return byDeckStage;
     var byTransform = activeIndexFromTransform(list);
     if (byTransform >= 0) return byTransform;
     var byClass = findActiveByClass(list);
@@ -2963,6 +3378,7 @@ function injectDeckBridge(
   function go(action){
     var list = slides();
     if (!list.length) return;
+    if (navigateViaDeckStage(list, action)) return;
     if (isScrollDeck()) {
       scrollGo(Math.max(0, Math.min(list.length - 1, targetFor(action, list))));
       return;
@@ -2983,6 +3399,7 @@ function injectDeckBridge(
     var list = slides();
     if (!list.length) return;
     var target = Math.max(0, Math.min(list.length - 1, i));
+    if (navigateViaDeckStage(list, 'go', target)) return;
     if (isScrollDeck()) { scrollGo(target); return; }
     if (activeIndex(list) === target) { report(); return; }
     stepToIndexViaKeys(target, function(stepped){
@@ -3066,6 +3483,17 @@ function injectDeckBridge(
       }
     } catch (e) {}
   }
+  // Runtime-managed decks can also move themselves through their own tap
+  // zones, keyboard handler, or public API. Normalize both generations of
+  // deck-stage state notification back into the host-owned slide protocol.
+  document.addEventListener('slidechange', function(ev){
+    var stage = document.querySelector('deck-stage');
+    if (stage && ev.target === stage) report();
+  });
+  window.addEventListener('message', function(ev){
+    var data = ev && ev.data;
+    if (data && typeof data.slideIndexChanged === 'number') report();
+  });
   window.__odDeckSlideState = function(){
     var list = slides();
     return { active: activeIndex(list), count: list.length };

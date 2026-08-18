@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { execFile } from 'node:child_process';
-import { access, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -9,6 +9,10 @@ import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 
 import { createPackagedSmokeReport } from '@/vitest/packaged-report';
+import {
+  assertPackagedPtySmokeResult,
+  packagedPtySmokeExpression,
+} from '@/vitest/packaged-pty-smoke';
 import { releaseAppVersionArgs } from '@/vitest/packaged-release-version';
 import {
   applyPackagedUpdateEnv,
@@ -35,6 +39,8 @@ const updateMetadataUrl = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_U
 const updateVersion = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_VERSION);
 const updateBuildJsonPath = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_BUILD_JSON_PATH);
 const updateFixture = normalizeOptionalEnv(process.env.OD_PACKAGED_E2E_MAC_UPDATE_FIXTURE);
+const packagedInviteDeeplink =
+  'opendesign://workspace/invite/continue?workspace_id=packaged-smoke-workspace&member_id=packaged-smoke-member&invite_id=packaged-smoke-invite&nonce=packaged-smoke-nonce';
 
 const outputNamespaceRoot = join(toolsPackDir, 'out', 'mac', 'namespaces', namespace);
 const runtimeNamespaceRoot = join(toolsPackDir, 'runtime', 'mac', 'namespaces', namespace);
@@ -49,12 +55,64 @@ const healthExpression = `
     };
   })()
 `;
+const upgradePersistenceProjectId = `packaged-upgrade-persistence-${Date.now().toString(36)}`;
+const upgradePersistenceSeedExpression = `
+  (async () => {
+    const projectId = ${JSON.stringify(upgradePersistenceProjectId)};
+    const html = '<!doctype html><html><head><style>' +
+      'html,body{margin:0}.slide{width:1920px;height:1080px;display:flex;align-items:center;justify-content:center;font:96px sans-serif;color:white}' +
+      '.slide:first-child{background:#17324d}.slide:last-child{background:#8b3a2b}' +
+      '</style></head><body><section class="slide">Upgrade From Outer</section><section class="slide">Persistence Check</section></body></html>';
+    const created = await fetch('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: projectId, name: 'Packaged upgrade persistence' }),
+    });
+    const written = created.ok
+      ? await fetch('/api/projects/' + encodeURIComponent(projectId) + '/files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'deck.html', content: html }),
+        })
+      : null;
+    return {
+      createdOk: created.ok,
+      createdStatus: created.status,
+      projectId,
+      writtenOk: written?.ok ?? false,
+      writtenStatus: written?.status ?? null,
+    };
+  })()
+`;
+
+function existingProjectPptxExportExpression(projectId: string): string {
+  return `
+  (async () => {
+    const projectId = ${JSON.stringify(projectId)};
+    const exported = await fetch('/api/projects/' + encodeURIComponent(projectId) + '/export/pptx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileName: 'deck.html' }),
+    });
+    const bytes = new Uint8Array(await exported.arrayBuffer());
+    return {
+      byteLength: bytes.length,
+      contentType: exported.headers.get('content-type'),
+      magic: String.fromCharCode(...bytes.slice(0, 2)),
+      projectId,
+      status: exported.status,
+    };
+  })()
+  `;
+}
 const updaterPopupExpression = `
   (() => {
     const popup = document.querySelector('[data-testid="updater-popup"]');
     const button = document.querySelector('[data-testid="updater-install-button"]');
+    const reinstallLink = document.querySelector('[data-testid="updater-reinstall-learn-more"]');
     return {
       installButtonVisible: button instanceof HTMLButtonElement && !button.disabled,
+      reinstallLinkVisible: reinstallLink instanceof HTMLElement,
       text: popup?.textContent?.trim() ?? null,
       title: popup?.querySelector('h2')?.textContent?.trim() ?? null,
       visible: popup instanceof HTMLElement,
@@ -83,26 +141,13 @@ const packagedOnboardingExpression = `
   (() => {
     const onboardingShell = document.querySelector('.entry-shell--onboarding');
     const onboardingModal = document.querySelector('.entry-onboarding-modal');
-    // Redesigned connect step: a cloud sign-in landing (primary CTA + two
-    // secondary runtime links) replaces the old selectable runtime cards.
+    // Identity is the first gate; runtime selection follows Cloud sign-in.
     const cloudSignIn = document.querySelector('.onboarding-cloud__primary');
-    const secondaryLinks = Array.from(
-      document.querySelectorAll('.onboarding-cloud__secondary'),
-    );
-    const localLink = secondaryLinks[0] ?? null;
-    const byokLink = secondaryLinks[1] ?? null;
-    const backToCloud = document.querySelector('.onboarding-view__back-to-cloud');
-    const setupPanel = document.querySelector('.onboarding-view__setup-panel');
 
     return {
-      backVisible: backToCloud instanceof HTMLElement,
-      byokLinkVisible: byokLink instanceof HTMLElement,
       cloudSignInVisible: cloudSignIn instanceof HTMLElement,
       href: location.href,
-      inputCount: setupPanel instanceof HTMLElement ? setupPanel.querySelectorAll('input').length : 0,
-      localLinkVisible: localLink instanceof HTMLElement,
       onboardingVisible: onboardingShell instanceof HTMLElement && onboardingModal instanceof HTMLElement,
-      setupPanelVisible: setupPanel instanceof HTMLElement,
       text: onboardingModal?.textContent?.trim().slice(0, 2000) ?? null,
       title: document.title,
     };
@@ -182,6 +227,12 @@ type MacInspectResult = {
       dryRun?: boolean;
       path: string;
     };
+    reinstall?: {
+      installedVersion?: string;
+      minVersion?: string;
+      reason: string;
+      url?: string;
+    };
     state: string;
   };
   launcher: LauncherSnapshot;
@@ -194,6 +245,8 @@ type LauncherSnapshot = {
   channel: string;
   error?: string;
   exists: boolean;
+  handoff: unknown | null;
+  handoffPath: string;
   lastSuccessful: LauncherPointer | null;
   namespace: string;
   root: string;
@@ -224,8 +277,44 @@ type HealthEvalValue = {
   title: string;
 };
 
+type PptxExportEvalValue = {
+  byteLength: number;
+  contentType: string | null;
+  magic: string;
+  projectId: string;
+  status: number;
+};
+
+type UpgradePersistenceSeed = {
+  createdOk: boolean;
+  createdStatus: number;
+  projectId: string;
+  writtenOk: boolean;
+  writtenStatus: number | null;
+};
+
+type DesktopIdentityMarker = {
+  appPath: string;
+  executablePath: string;
+  pid: number;
+  version: number;
+};
+
+type PayloadRuntimeAcceptance = {
+  coldStart: {
+    health: HealthEvalValue;
+    identity: DesktopIdentityMarker;
+    launcher: LauncherSnapshot;
+    pptx: PptxExportEvalValue;
+    start: MacStartResult;
+  };
+  identity: DesktopIdentityMarker;
+  pptx: PptxExportEvalValue;
+};
+
 type UpdaterPopupEvalValue = {
   installButtonVisible: boolean;
+  reinstallLinkVisible: boolean;
   text: string | null;
   title: string | null;
   visible: boolean;
@@ -236,20 +325,18 @@ type UpdaterClickEvalValue = {
   reason?: string;
 };
 
-// The redesigned connect step exposes the two alternative runtimes as
-// secondary links on the cloud sign-in landing (AMR is the primary cloud CTA,
-// not a selectable link).
-type OnboardingRuntime = 'local' | 'byok';
+type UpdaterRecoverySummary = {
+  cleared: NonNullable<MacInspectResult['update']>;
+  downloadedBeforeClear: NonNullable<MacInspectResult['update']>;
+  dryRunInstall: MacInspectResult['update'] | null;
+  popup: UpdaterPopupEvalValue;
+  recovered: NonNullable<MacInspectResult['update']>;
+};
 
 type PackagedOnboardingEvalValue = {
-  backVisible: boolean;
-  byokLinkVisible: boolean;
   cloudSignInVisible: boolean;
   href: string;
-  inputCount: number;
-  localLinkVisible: boolean;
   onboardingVisible: boolean;
-  setupPanelVisible: boolean;
   text: string | null;
   title: string;
 };
@@ -270,12 +357,18 @@ macDescribe('packaged mac runtime smoke', () => {
     const report = await createPackagedSmokeReport('mac');
     const updateEnv = captureUpdateEnv();
     let payloadFixture: ToolsServeUpdaterFixture | null = null;
+    let recoveryFixture: ToolsServeUpdaterFixture | null = null;
+    let recoveryPayloadPath: string | null = null;
     let logs: LogsResult | { skipped: true } = { skipped: true };
     let popup: UpdaterPopupEvalValue | { skipped: true } = { skipped: true };
     let updateInstall: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
     let updateStatus: NonNullable<MacInspectResult['update']> | { skipped: true } = { skipped: true };
+    let payloadRuntime: PayloadRuntimeAcceptance | { skipped: true } = { skipped: true };
+    let updaterRecovery: UpdaterRecoverySummary | { skipped: true } = { skipped: true };
+    let upgradePersistence: UpgradePersistenceSeed | { skipped: true } = { skipped: true };
     let passed = false;
     try {
+      await resetPackagedRuntimeState();
       const install = await runToolsPackJson<MacInstallResult>('install');
       installedAppPath = install.installedAppPath;
 
@@ -283,6 +376,7 @@ macDescribe('packaged mac runtime smoke', () => {
       expect(install.detached).toBe(true);
       expectPathInside(install.dmgPath, join(outputNamespaceRoot, 'dmg'));
       expectPathInside(install.installedAppPath, join(outputNamespaceRoot, 'install', 'Applications'));
+      await assertMacInviteProtocolRegistration(install.installedAppPath);
 
       await seedPackagedOnboardingComplete();
 
@@ -295,6 +389,7 @@ macDescribe('packaged mac runtime smoke', () => {
           assertToolsServeFixtureEnabled('mac', updateFixture);
           const localPayload = await resolveLocalPayloadUpdateFixture();
           expectedPayloadUpdateVersion = localPayload.targetVersion;
+          recoveryPayloadPath = localPayload.payloadPath;
           payloadFixture = await startToolsServeUpdaterFixture({
             channel: updateScenario.channel,
             payloadPath: localPayload.payloadPath,
@@ -336,14 +431,51 @@ macDescribe('packaged mac runtime smoke', () => {
       } else {
         expect(value.health.version).toEqual(expect.any(String));
       }
+      const ptyInspect = await runToolsPackJson<MacInspectResult>('inspect', [
+        '--expr',
+        packagedPtySmokeExpression('darwin'),
+      ]);
+      const pty = assertPackagedPtySmokeResult(ptyInspect.eval?.value);
+      expect(pty.projectCreateStatus).toBe(200);
+      expect(pty.projectSeedStatus).toBe(200);
+      expect(pty.terminalCreateStatus).toBe(200);
+      expect(pty.stdinStatus).toBe(200);
+      expect(pty.output).toContain(pty.marker);
+      expect(pty.exitCode, JSON.stringify(pty, null, 2)).toBe(0);
+      expect(pty.cleanup.terminalStatus).toBe(200);
+      expect(pty.cleanup.projectStatus).toBe(200);
       assertLauncherPointer(inspect.launcher.active, updateScenario.expectedCurrentVersion, 0, 'initial active');
       assertLauncherPointer(inspect.launcher.lastSuccessful, updateScenario.expectedCurrentVersion, 0, 'initial lastSuccessful');
+
+      const protocolHotPid = inspect.status?.pid ?? start.pid;
+      await invokeMacInviteDeeplink(install.installedAppPath);
+      const protocolHotInspect = await waitForHealthyDesktop();
+      expect(protocolHotInspect.status?.pid).toBe(protocolHotPid);
+
+      if (verifyCoreOnly) {
+        const protocolStop = await runToolsPackJson<MacStopResult>('stop');
+        started = false;
+        expect(protocolStop.status).not.toBe('partial');
+        expect(protocolStop.remainingPids).toEqual([]);
+
+        await invokeMacInviteDeeplink(install.installedAppPath);
+        started = true;
+        const protocolColdInspect = await waitForHealthyDesktop();
+        expect(protocolColdInspect.status?.state).toBe('running');
+        expect(protocolColdInspect.status?.pid).not.toBe(protocolHotPid);
+      }
 
       if (!verifyCoreOnly) {
         const updaterVersion = expectedPayloadUpdateVersion;
         if (updaterVersion == null || updaterVersion.length === 0) {
           throw new Error('full packaged mac payload smoke requires an update target version');
         }
+        const persistenceInspect = await runToolsPackJson<MacInspectResult>('inspect', [
+          '--expr',
+          upgradePersistenceSeedExpression,
+        ]);
+        const persistence = assertUpgradePersistenceSeed(persistenceInspect.eval?.value);
+        upgradePersistence = persistence;
         const readyUpdate = await waitForUpdaterStatus(
           (status) =>
             status.update?.state === 'downloaded' &&
@@ -382,14 +514,170 @@ macDescribe('packaged mac runtime smoke', () => {
         expect(postUpdateHealth.status).toBe(200);
         expect(postUpdateHealth.health.ok).toBe(true);
         expect(postUpdateHealth.health.version).toBe(updaterVersion);
-        assertLauncherPointer(postUpdateInspect.launcher.active, updaterVersion, 1, 'post-relaunch active');
-        assertLauncherPointer(postUpdateInspect.launcher.lastSuccessful, updaterVersion, 1, 'post-relaunch lastSuccessful');
+        const confirmedGeneration = settledLauncherGeneration(postUpdateInspect.launcher, updaterVersion);
+        if (confirmedGeneration == null) throw new Error('post-update launcher did not settle on the target version');
+        assertLauncherPointer(
+          postUpdateInspect.launcher.active,
+          updaterVersion,
+          confirmedGeneration,
+          'post-relaunch active',
+        );
+        assertLauncherPointer(
+          postUpdateInspect.launcher.lastSuccessful,
+          updaterVersion,
+          confirmedGeneration,
+          'post-relaunch lastSuccessful',
+        );
         const terminalUpdate = await waitForUpdaterStatus(
           (status) => status.update?.state === 'not-available' && status.update.currentVersion === updaterVersion,
           'post-relaunch updater terminal state',
         );
         if (terminalUpdate.update == null) throw new Error('mac terminal update status is missing');
         updateInstall = terminalUpdate.update;
+
+        const identity = await readDesktopIdentityMarker();
+        assertPayloadDesktopIdentity(identity, postUpdateInspect.launcher, updaterVersion);
+        expect(postUpdateInspect.launcher.attempt).toBeNull();
+        assertSettledDesktopHandoff(postUpdateInspect.launcher.handoff);
+
+        const persistedPptxExpression = existingProjectPptxExportExpression(persistence.projectId);
+        const pptxInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', persistedPptxExpression]);
+        const pptx = assertPptxExportEvalValue(pptxInspect.eval?.value);
+        expect(pptx.projectId).toBe(persistence.projectId);
+
+        const coldStop = await runToolsPackJson<MacStopResult>('stop');
+        started = false;
+        expect(coldStop.status).not.toBe('partial');
+        expect(coldStop.remainingPids).toEqual([]);
+
+        const coldStart = await runToolsPackJson<MacStartResult>('start');
+        started = true;
+        expect(coldStart.source).toBe('installed');
+        expect(coldStart.appPath).toBe(install.installedAppPath);
+        const coldInspect = await waitForHealthyDesktopVersion(updaterVersion, identity.pid);
+        const coldHealth = assertHealthEvalValue(coldInspect.eval?.value);
+        expect(coldHealth.status).toBe(200);
+        expect(coldHealth.health.ok).toBe(true);
+        expect(coldHealth.health.version).toBe(updaterVersion);
+        const coldGeneration = settledLauncherGeneration(coldInspect.launcher, updaterVersion);
+        if (coldGeneration == null) throw new Error('cold-start launcher did not settle on the target version');
+        expect(coldGeneration).toBeGreaterThanOrEqual(confirmedGeneration);
+        assertLauncherPointer(coldInspect.launcher.active, updaterVersion, coldGeneration, 'cold-start active');
+        assertLauncherPointer(
+          coldInspect.launcher.lastSuccessful,
+          updaterVersion,
+          coldGeneration,
+          'cold-start lastSuccessful',
+        );
+        expect(coldInspect.launcher.attempt).toBeNull();
+        assertSettledDesktopHandoff(coldInspect.launcher.handoff);
+        const coldIdentity = await readDesktopIdentityMarker();
+        assertPayloadDesktopIdentity(coldIdentity, coldInspect.launcher, updaterVersion);
+        expect(coldIdentity.pid).not.toBe(identity.pid);
+        const coldPptxInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', persistedPptxExpression]);
+        const coldPptx = assertPptxExportEvalValue(coldPptxInspect.eval?.value);
+        expect(coldPptx.projectId).toBe(persistence.projectId);
+        payloadRuntime = {
+          coldStart: {
+            health: coldHealth,
+            identity: coldIdentity,
+            launcher: coldInspect.launcher,
+            pptx: coldPptx,
+            start: coldStart,
+          },
+          identity,
+          pptx,
+        };
+
+        // Same-version reinstall + clear-cache recovery (mirrors the Windows
+        // lane's runSameVersionUpdaterRecoveryAcceptance): the physical outer
+        // is still the base install while the running payload is already at
+        // the target version, so only an installed-outer-aware floor can
+        // offer this installer reinstall. macOS has no silent DMG install to
+        // execute, so the installer open is asserted in dry-run mode instead
+        // of the Windows NSIS transaction.
+        if (recoveryPayloadPath != null) {
+          await payloadFixture?.close().catch((error: unknown) => {
+            console.error('failed to close payload update fixture before recovery', error);
+          });
+          payloadFixture = null;
+          recoveryFixture = await startToolsServeUpdaterFixture({
+            channel: updateScenario.channel,
+            controlLauncherVersionMin: updaterVersion,
+            controlLauncherVersionUrl: 'https://example.test/updater-recovery',
+            payloadPath: recoveryPayloadPath,
+            platform: 'mac',
+            version: updaterVersion,
+            workspaceRoot,
+          });
+          applyPackagedUpdateEnv(process.env, updateScenario, recoveryFixture.info.metadataUrl, { openDryRun: true });
+
+          const recoveryStop = await runToolsPackJson<MacStopResult>('stop');
+          started = false;
+          expect(recoveryStop.status).not.toBe('partial');
+          const recoveryStart = await runToolsPackJson<MacStartResult>('start');
+          started = true;
+          expect(recoveryStart.source).toBe('installed');
+          await waitForHealthyDesktopVersion(updaterVersion, coldIdentity.pid);
+
+          const reinstallReady = await waitForUpdaterStatus(
+            (inspect) =>
+              inspect.update?.state === 'downloaded' &&
+              inspect.update.artifact?.type === 'dmg' &&
+              inspect.update.availableVersion === updaterVersion,
+            'same-version reinstall downloaded',
+          );
+          if (reinstallReady.update == null) throw new Error('same-version reinstall did not return updater status');
+          expect(reinstallReady.update.currentVersion).toBe(updaterVersion);
+          expect(reinstallReady.update.reinstall).toEqual({
+            installedVersion: updateScenario.expectedCurrentVersion,
+            minVersion: updaterVersion,
+            reason: 'outer-below-min',
+            url: 'https://example.test/updater-recovery',
+          });
+
+          const reinstallPopup = await openReadyUpdaterPrompt(updaterVersion);
+          expect(reinstallPopup.visible).toBe(true);
+          expect(reinstallPopup.installButtonVisible).toBe(true);
+          expect(reinstallPopup.reinstallLinkVisible).toBe(true);
+
+          const clearedInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'clear-cache']);
+          if (clearedInspect.update == null) throw new Error('clear-cache did not return updater status');
+          expect(clearedInspect.update.state).toBe('idle');
+          expect(clearedInspect.update.downloadPath).toBeUndefined();
+          expect(clearedInspect.update.installResult).toBeUndefined();
+          expect(clearedInspect.update.reinstall).toBeUndefined();
+          // Retained launcher versions must survive a manual clear.
+          expect(clearedInspect.launcher.active).toEqual(reinstallReady.launcher.active);
+          expect(clearedInspect.launcher.lastSuccessful).toEqual(reinstallReady.launcher.lastSuccessful);
+
+          // Recovery: an explicit re-check re-derives the reinstall offer and
+          // re-downloads the installer artifact from the clean slate.
+          await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'check']);
+          const recovered = await waitForUpdaterStatus(
+            (inspect) =>
+              inspect.update?.state === 'downloaded' &&
+              inspect.update.artifact?.type === 'dmg' &&
+              inspect.update.reinstall != null,
+            'post-clear reinstall recovery',
+          );
+          if (recovered.update == null) throw new Error('post-clear recovery did not return updater status');
+
+          const dryRunInstall = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'install']);
+          expect(dryRunInstall.update?.installResult?.dryRun).toBe(true);
+
+          // Leave a pristine updater behind for the final stop/uninstall.
+          const resetInspect = await runToolsPackJson<MacInspectResult>('inspect', ['--update-action', 'clear-cache']);
+          expect(resetInspect.update?.state).toBe('idle');
+
+          updaterRecovery = {
+            cleared: clearedInspect.update,
+            downloadedBeforeClear: reinstallReady.update,
+            dryRunInstall: dryRunInstall.update ?? null,
+            popup: reinstallPopup,
+            recovered: recovered.update,
+          };
+        }
       }
 
       await mkdir(dirname(screenshotPath), { recursive: true });
@@ -425,6 +713,8 @@ macDescribe('packaged mac runtime smoke', () => {
         },
         logs: 'skipped' in logs ? logs : summarizeLogs(logs),
         namespace,
+        payloadRuntime,
+        pty,
         screenshot: report.screenshotRelpath,
         start: {
           appPath: start.appPath,
@@ -441,12 +731,17 @@ macDescribe('packaged mac runtime smoke', () => {
           status: updateStatus,
           install: updateInstall,
         },
+        updaterRecovery,
+        upgradePersistence,
       });
       passed = true;
     } finally {
       restoreUpdateEnv(updateEnv);
       await payloadFixture?.close().catch((error: unknown) => {
         console.error('failed to close payload update fixture', error);
+      });
+      await recoveryFixture?.close().catch((error: unknown) => {
+        console.error('failed to close updater recovery fixture', error);
       });
       if (!passed) {
         await printPackagedLogs().catch((error: unknown) => {
@@ -462,14 +757,259 @@ macDescribe('packaged mac runtime smoke', () => {
         installedAppPath = null;
       }
     }
-  }, 180_000);
+  }, 360_000);
+
+  // Silent startup update acceptance: with the daemon-owned allowSilentUpdates
+  // preference on, a payload downloaded in a previous session must apply on
+  // the next cold start's first scheduler tick — install, quit, and relaunch —
+  // without any user-facing updater action.
+  const silentUpdateTest = !verifyCoreOnly && updateFixture === 'tools-serve' ? test : test.skip;
+  silentUpdateTest('applies a downloaded payload silently on the next cold start', async () => {
+    const updateEnv = captureUpdateEnv();
+    let payloadFixtureLocal: ToolsServeUpdaterFixture | null = null;
+    let cleanupStarted = false;
+    let cleanupInstalled = false;
+    try {
+      const localPayload = await resolveLocalPayloadUpdateFixture();
+      const targetVersion = localPayload.targetVersion;
+
+      await resetPackagedRuntimeState();
+      await runToolsPackJson<MacInstallResult>('install');
+      cleanupInstalled = true;
+      await seedPackagedOnboardingComplete();
+
+      payloadFixtureLocal = await startToolsServeUpdaterFixture({
+        channel: updateScenario.channel,
+        payloadPath: localPayload.payloadPath,
+        platform: 'mac',
+        version: targetVersion,
+        workspaceRoot,
+      });
+      applyPackagedUpdateEnv(process.env, updateScenario, payloadFixtureLocal.info.metadataUrl, { openDryRun: false });
+
+      const start = await runToolsPackJson<MacStartResult>('start');
+      cleanupStarted = true;
+      expect(start.source).toBe('installed');
+      await waitForUpdaterStatus(
+        (status) =>
+          status.update?.state === 'downloaded' &&
+          status.update.availableVersion === targetVersion &&
+          status.update.artifact?.type === 'payload',
+        'payload downloaded before silent restart',
+      );
+
+      // Enable the daemon-owned preference through the production HTTP path
+      // (the same GET + merged PUT the web settings surface performs).
+      const enableSilent = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', `
+        (async () => {
+          const current = await (await fetch('/api/app-config')).json();
+          const response = await fetch('/api/app-config', {
+            headers: { 'content-type': 'application/json' },
+            method: 'PUT',
+            body: JSON.stringify({ ...(current.config ?? {}), allowSilentUpdates: true }),
+          });
+          const written = await response.json();
+          return { ok: response.ok, allowSilentUpdates: written.config?.allowSilentUpdates };
+        })()
+      `]);
+      expect(enableSilent.eval?.value).toEqual({ allowSilentUpdates: true, ok: true });
+
+      const stop = await runToolsPackJson<MacStopResult>('stop');
+      cleanupStarted = false;
+      expect(stop.status).not.toBe('partial');
+
+      // Cold start: the first scheduler tick applies the already-downloaded
+      // payload silently and relaunches; no updater action is issued here.
+      const coldStart = await runToolsPackJson<MacStartResult>('start');
+      cleanupStarted = true;
+      expect(coldStart.source).toBe('installed');
+      const silent = await waitForHealthyDesktopVersion(targetVersion, start.pid);
+      const silentHealth = assertHealthEvalValue(silent.eval?.value);
+      expect(silentHealth.health.version).toBe(targetVersion);
+      const silentGeneration = settledLauncherGeneration(silent.launcher, targetVersion);
+      expect(silentGeneration).not.toBeNull();
+      expect(silent.launcher.active?.version).toBe(targetVersion);
+      expect(silent.launcher.lastSuccessful?.version).toBe(targetVersion);
+      expect(silent.launcher.attempt).toBeNull();
+
+      const terminal = await waitForUpdaterStatus(
+        (status) => status.update?.state === 'not-available' && status.update.currentVersion === targetVersion,
+        'silent update terminal state',
+      );
+      expect(terminal.update?.currentVersion).toBe(targetVersion);
+    } finally {
+      restoreUpdateEnv(updateEnv);
+      await payloadFixtureLocal?.close().catch((error: unknown) => {
+        console.error('failed to close silent update fixture', error);
+      });
+      if (cleanupStarted) {
+        await runToolsPackJson<MacStopResult>('stop').catch((error: unknown) => {
+          console.error('failed to stop packaged mac app during silent-update cleanup', error);
+        });
+      }
+      if (cleanupInstalled) {
+        await runToolsPackJson<MacUninstallResult>('uninstall').catch((error: unknown) => {
+          console.error('failed to uninstall packaged mac app during silent-update cleanup', error);
+        });
+      }
+    }
+  }, 360_000);
+
+  // Crash-rollback acceptance: a payload that spawns but dies before its own
+  // bookkeeping must leave the pre-armed attempt behind, and the next cold
+  // start must roll back to the last successful version instead of retrying
+  // the broken payload forever. A follow-up update with a healthy payload
+  // then self-heals to the target version.
+  const rollbackTest = !verifyCoreOnly && updateFixture === 'tools-serve' ? test : test.skip;
+  rollbackTest('rolls back a crashing payload and self-heals on the next good update', async () => {
+    const updateEnv = captureUpdateEnv();
+    let corruptFixture: ToolsServeUpdaterFixture | null = null;
+    let goodFixture: ToolsServeUpdaterFixture | null = null;
+    const corruptWorkDir = join(toolsPackDir, 'corrupt-payload-fixture');
+    let cleanupStarted = false;
+    let cleanupInstalled = false;
+    try {
+      const localPayload = await resolveLocalPayloadUpdateFixture();
+      const targetVersion = localPayload.targetVersion;
+      const corruptPayloadPath = await buildCorruptedMacPayloadFixture(localPayload.payloadPath, corruptWorkDir);
+
+      await resetPackagedRuntimeState();
+      const install = await runToolsPackJson<MacInstallResult>('install');
+      cleanupInstalled = true;
+      await seedPackagedOnboardingComplete();
+
+      corruptFixture = await startToolsServeUpdaterFixture({
+        channel: updateScenario.channel,
+        payloadPath: corruptPayloadPath,
+        platform: 'mac',
+        version: targetVersion,
+        workspaceRoot,
+      });
+      applyPackagedUpdateEnv(process.env, updateScenario, corruptFixture.info.metadataUrl, { openDryRun: false });
+
+      const start = await runToolsPackJson<MacStartResult>('start');
+      cleanupStarted = true;
+      expect(start.source).toBe('installed');
+
+      const readyUpdate = await waitForUpdaterStatus(
+        (status) =>
+          status.update?.state === 'downloaded' &&
+          status.update.availableVersion === targetVersion &&
+          status.update.artifact?.type === 'payload',
+        'corrupt payload downloaded',
+      );
+      const launcherRuntimePath = readyUpdate.launcher.runtimePath;
+      const launcherAttemptsPath = readyUpdate.launcher.attemptsPath;
+
+      const popup = await openReadyUpdaterPrompt(targetVersion);
+      expect(popup.installButtonVisible).toBe(true);
+      const clickInstall = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickUpdaterInstallExpression]);
+      expect(assertUpdaterClickEvalValue(clickInstall.eval?.value).clicked).toBe(true);
+
+      // The app quits for the relaunch; the corrupted payload stub then exits
+      // before any launcher bookkeeping. Wait for the desktop to disappear.
+      await waitForDesktopGone('crashing payload never became the desktop');
+      cleanupStarted = false;
+
+      // The pre-armed attempt is the rollback evidence the crash left behind.
+      const strandedAttempt = JSON.parse(await readFile(launcherAttemptsPath, 'utf8')) as {
+        generation?: number;
+        version?: string;
+      };
+      expect(strandedAttempt.version).toBe(targetVersion);
+      const strandedRuntime = JSON.parse(await readFile(launcherRuntimePath, 'utf8')) as {
+        active?: { generation?: number; version?: string };
+        lastSuccessful?: { generation?: number; version?: string };
+      };
+      expect(strandedRuntime.active?.version).toBe(targetVersion);
+      expect(strandedRuntime.lastSuccessful?.version).toBe(updateScenario.expectedCurrentVersion);
+      expect(strandedAttempt.generation).toBe(strandedRuntime.active?.generation);
+
+      // Cold start rolls back: the installed outer sees the unconfirmed
+      // attempt, selects lastSuccessful, and serves the base version again.
+      const rollbackStart = await runToolsPackJson<MacStartResult>('start');
+      cleanupStarted = true;
+      expect(rollbackStart.source).toBe('installed');
+      const rolledBack = await waitForHealthyDesktopVersion(updateScenario.expectedCurrentVersion, start.pid, false);
+      const rolledBackHealth = assertHealthEvalValue(rolledBack.eval?.value);
+      expect(rolledBackHealth.health.version).toBe(updateScenario.expectedCurrentVersion);
+      expect(rolledBack.launcher.lastSuccessful?.version).toBe(updateScenario.expectedCurrentVersion);
+      // Degraded steady state: the broken pointer stays active with its
+      // attempt as evidence until a healthy release replaces it.
+      expect(rolledBack.launcher.active?.version).toBe(targetVersion);
+      expect(rolledBack.launcher.attempt?.version).toBe(targetVersion);
+
+      // Self-heal: real recovery releases ship as version+1 (versioned
+      // artifacts are immutable), so the next update arrives under a bumped
+      // version with a healthy payload and converges.
+      const healedVersion = bumpCountedVersion(targetVersion);
+      const healedPayloadPath = await buildVersionBumpedMacPayloadFixture(
+        localPayload.payloadPath,
+        corruptWorkDir,
+        healedVersion,
+      );
+      await corruptFixture.close();
+      corruptFixture = null;
+      goodFixture = await startToolsServeUpdaterFixture({
+        channel: updateScenario.channel,
+        payloadPath: healedPayloadPath,
+        platform: 'mac',
+        version: healedVersion,
+        workspaceRoot,
+      });
+      applyPackagedUpdateEnv(process.env, updateScenario, goodFixture.info.metadataUrl, { openDryRun: false });
+      const healStop = await runToolsPackJson<MacStopResult>('stop');
+      cleanupStarted = false;
+      expect(healStop.status).not.toBe('partial');
+      const healStart = await runToolsPackJson<MacStartResult>('start');
+      cleanupStarted = true;
+      expect(healStart.source).toBe('installed');
+      await waitForUpdaterStatus(
+        (status) =>
+          status.update?.state === 'downloaded' &&
+          status.update.availableVersion === healedVersion &&
+          status.update.artifact?.type === 'payload',
+        'healthy payload downloaded after rollback',
+      );
+      await openReadyUpdaterPrompt(healedVersion);
+      const healClick = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickUpdaterInstallExpression]);
+      expect(assertUpdaterClickEvalValue(healClick.eval?.value).clicked).toBe(true);
+      const healed = await waitForHealthyDesktopVersion(healedVersion, rollbackStart.pid);
+      const healedHealth = assertHealthEvalValue(healed.eval?.value);
+      expect(healedHealth.health.version).toBe(healedVersion);
+      const healedGeneration = settledLauncherGeneration(healed.launcher, healedVersion);
+      expect(healedGeneration).not.toBeNull();
+      expect(healed.launcher.active?.version).toBe(healedVersion);
+      expect(healed.launcher.lastSuccessful?.version).toBe(healedVersion);
+      expect(healed.launcher.attempt).toBeNull();
+    } finally {
+      restoreUpdateEnv(updateEnv);
+      await corruptFixture?.close().catch((error: unknown) => {
+        console.error('failed to close corrupt payload fixture', error);
+      });
+      await goodFixture?.close().catch((error: unknown) => {
+        console.error('failed to close healthy payload fixture', error);
+      });
+      await rm(corruptWorkDir, { force: true, recursive: true }).catch(() => undefined);
+      if (cleanupStarted) {
+        await runToolsPackJson<MacStopResult>('stop').catch((error: unknown) => {
+          console.error('failed to stop packaged mac app during rollback cleanup', error);
+        });
+      }
+      if (cleanupInstalled) {
+        await runToolsPackJson<MacUninstallResult>('uninstall').catch((error: unknown) => {
+          console.error('failed to uninstall packaged mac app during rollback cleanup', error);
+        });
+      }
+    }
+  }, 360_000);
 });
 
 macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
   let installedAppPath: string | null = null;
   let started = false;
 
-  test('[P0] @electron-smoke starts a fresh packaged app on onboarding with AMR, Local CLI, and BYOK visible', async () => {
+  test('[P0] @electron-smoke starts a fresh packaged app on the Cloud identity gate', async () => {
     const report = await createPackagedSmokeReport('mac');
     let passed = false;
     try {
@@ -495,41 +1035,11 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
       expect(health.health.ok).toBe(true);
 
       const initial = await waitForPackagedOnboarding((snapshot) =>
-        snapshot.onboardingVisible &&
-        snapshot.cloudSignInVisible &&
-        snapshot.localLinkVisible &&
-        snapshot.byokLinkVisible,
-        'fresh packaged onboarding cloud sign-in landing',
+        snapshot.onboardingVisible && snapshot.cloudSignInVisible,
+        'fresh packaged onboarding Cloud identity gate',
       );
       expect(initial.href).toMatch(/^(od:\/\/app\/|http:\/\/127\.0\.0\.1:\d+\/)/);
       expect(initial.cloudSignInVisible).toBe(true);
-      expect(initial.localLinkVisible).toBe(true);
-      expect(initial.byokLinkVisible).toBe(true);
-
-      // Expand the BYOK panel from the landing, then collapse back via Back.
-      await clickPackagedOnboardingRuntime('byok');
-      const byok = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.setupPanelVisible && snapshot.inputCount > 0,
-        'packaged onboarding BYOK setup panel',
-      );
-      expect(byok.setupPanelVisible).toBe(true);
-
-      // The secondary links only live on the landing, so Back before Local.
-      await clickPackagedOnboardingBack();
-      await clickPackagedOnboardingRuntime('local');
-      const local = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.setupPanelVisible,
-        'packaged onboarding Local CLI setup panel',
-      );
-      expect(local.setupPanelVisible).toBe(true);
-
-      // Back once more lands on the cloud sign-in surface for the screenshot.
-      await clickPackagedOnboardingBack();
-      const landing = await waitForPackagedOnboarding(
-        (snapshot) => snapshot.cloudSignInVisible && !snapshot.setupPanelVisible,
-        'packaged onboarding cloud sign-in landing after Back',
-      );
-      expect(landing.cloudSignInVisible).toBe(true);
 
       const onboardingScreenshotPath = join(toolsPackDir, 'screenshots', `${namespace}-onboarding.png`);
       await mkdir(dirname(onboardingScreenshotPath), { recursive: true });
@@ -538,11 +1048,8 @@ macOnboardingDescribe('packaged mac onboarding AMR smoke', () => {
       expect(await fileSizeBytes(onboardingScreenshotPath)).toBeGreaterThan(0);
       await report.report.save('screenshots/open-design-mac-onboarding-smoke.png', await readFile(onboardingScreenshotPath));
       await report.report.json('onboarding-summary.json', {
-        byok,
         health,
         initial,
-        landing,
-        local,
         namespace,
         screenshot: 'screenshots/open-design-mac-onboarding-smoke.png',
         start: {
@@ -635,7 +1142,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       mode: 'api',
       apiKey: 'sk-test',
       baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       agentId: null,
       skillId: null,
       designSystemId: null,
@@ -662,10 +1169,18 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.selectedProtocol).toBe('Anthropic API');
       expect(snapshot.quickFillProvider).toBe('DeepSeek — Anthropic');
       expect(snapshot.baseUrl).toBe('https://api.deepseek.com/anthropic');
-      expect(snapshot.model).toBe('deepseek-chat');
+      expect(snapshot.model).toBe('deepseek-v4-flash');
     });
   }, 45_000);
 
+  // #5517 removed the theme segmented control from Settings, so the packaged
+  // "preview then save" appearance loop is now driven by the accent swatches —
+  // the only appearance control the section still owns. The invariants under
+  // test are the same ones the theme leg used to prove: the edit previews
+  // immediately on the live document, and it survives the dialog closing via
+  // Save. The seeded `theme` is a LEGACY dark value: the theme setting is gone
+  // and the app ships light-only, so the packaged runtime must coerce it to
+  // light on read rather than carry it into the document.
   test('previews and saves the desktop appearance preference', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
@@ -680,19 +1195,22 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       onboardingCompleted: true,
       mediaProviders: {},
       agentModels: {},
-      theme: 'system',
+      theme: 'dark',
     }, 'theme');
 
     await desktop.openSettings();
     await openDesktopSettingsSection(desktop, 'Appearance');
-    await clickDesktopSegmentButton(desktop, 'Dark');
+    await clickDesktopAccentSwatch(desktop, '#87ea5c');
 
     await waitFor(async () => {
       const snapshot = await readDesktopAppearanceSnapshot(desktop);
       expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.activeTheme).toBe('Dark');
-      expect(snapshot.documentTheme).toBe('dark');
-      expect(snapshot.savedTheme).toBe('system');
+      // Live preview lands on the document before anything is saved.
+      expect(snapshot.documentAccent).toBe('#87ea5c');
+      // The seeded legacy `dark` never reaches the document, and the coerced
+      // value is written back so the dark preference stops existing on disk.
+      expect(snapshot.documentTheme).toBe('light');
+      expect(snapshot.savedTheme).toBe('light');
     });
 
     await clickDesktopSettingsFooterButton(desktop, 'primary');
@@ -700,8 +1218,9 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     await waitFor(async () => {
       const snapshot = await readDesktopAppearanceSnapshot(desktop);
       expect(snapshot.dialogOpen).toBe(false);
-      expect(snapshot.documentTheme).toBe('dark');
-      expect(snapshot.savedTheme).toBe('dark');
+      expect(snapshot.documentAccent).toBe('#87ea5c');
+      expect(snapshot.savedAccent).toBe('#87ea5c');
+      expect(snapshot.savedTheme).toBe('light');
     });
   }, 45_000);
 
@@ -748,7 +1267,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       mode: 'daemon',
       apiKey: 'sk-test',
       baseUrl: 'https://api.deepseek.com',
-      model: 'deepseek-chat',
+      model: 'deepseek-v4-flash',
       apiProtocol: 'openai',
       apiProviderBaseUrl: 'https://api.deepseek.com',
       agentId: 'codex',
@@ -774,7 +1293,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.selectedProtocol).toBe('OpenAI API');
       expect(snapshot.quickFillProvider).toBe('DeepSeek — OpenAI');
       expect(snapshot.baseUrl).toBe('https://api.deepseek.com');
-      expect(snapshot.model).toBe('deepseek-chat');
+      expect(snapshot.model).toBe('deepseek-v4-flash');
     });
 
     await clickDesktopExecutionModeTab(desktop, 'Local CLI');
@@ -794,7 +1313,7 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.selectedProtocol).toBe('OpenAI API');
       expect(snapshot.quickFillProvider).toBe('DeepSeek — OpenAI');
       expect(snapshot.baseUrl).toBe('https://api.deepseek.com');
-      expect(snapshot.model).toBe('deepseek-chat');
+      expect(snapshot.model).toBe('deepseek-v4-flash');
     });
   }, 45_000);
 
@@ -886,252 +1405,6 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.drawerVisible).toBe(false);
       expect(snapshot.gridVisible).toBe(true);
     });
-  }, 45_000);
-
-  test('opens the Orbit section from the desktop shell and renders its primary surface', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: true },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Orbit');
-      expect(snapshot.sectionTitle).toBe('Orbit');
-      expect(snapshot.runButtonVisible).toBe(true);
-      expect(snapshot.gateVisible || snapshot.automationCardVisible).toBe(true);
-    });
-  }, 45_000);
-
-  test('renders the Orbit Open artifact link as a desktop new-tab link when a live artifact target exists', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: true },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.eval(`
-      (() => {
-        const originalFetch = window.fetch.bind(window);
-        window.fetch = async (input, init) => {
-          const url = typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-          if (url === '/api/orbit/status') {
-            return new Response(JSON.stringify({
-              running: false,
-              nextRunAt: null,
-              lastRun: {
-                completedAt: '2026-05-06T10:00:00.000Z',
-                trigger: 'manual',
-                templateSkillId: 'orbit-general',
-                connectorsChecked: 5,
-                connectorsSucceeded: 3,
-                connectorsSkipped: 2,
-                connectorsFailed: 0,
-                markdown: 'General latest summary',
-                artifactId: 'artifact-123',
-                artifactProjectId: 'project-456',
-              },
-              lastRunsByTemplate: {
-                'orbit-general': {
-                  completedAt: '2026-05-06T10:00:00.000Z',
-                  trigger: 'manual',
-                  templateSkillId: 'orbit-general',
-                  connectorsChecked: 5,
-                  connectorsSucceeded: 3,
-                  connectorsSkipped: 2,
-                  connectorsFailed: 0,
-                  markdown: 'General latest summary',
-                  artifactId: 'artifact-123',
-                  artifactProjectId: 'project-456',
-                },
-              },
-            }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-          return originalFetch(input, init);
-        };
-        return true;
-      })()
-    `);
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Orbit');
-      expect(snapshot.sectionTitle).toBe('Orbit');
-      expect(snapshot.openArtifactHref).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
-      expect(snapshot.openArtifactTarget).toBe('_blank');
-      expect(snapshot.openArtifactRel).toContain('noreferrer');
-    });
-  }, 45_000);
-
-  test('clicking the Orbit Open artifact link keeps the desktop settings dialog stable', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: true },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.eval(`
-      (() => {
-        const originalFetch = window.fetch.bind(window);
-        window.fetch = async (input, init) => {
-          const url = typeof input === 'string'
-            ? input
-            : input instanceof Request
-              ? input.url
-              : String(input);
-          if (url === '/api/orbit/status') {
-            return new Response(JSON.stringify({
-              running: false,
-              nextRunAt: null,
-              lastRun: {
-                completedAt: '2026-05-06T10:00:00.000Z',
-                trigger: 'manual',
-                templateSkillId: 'orbit-general',
-                connectorsChecked: 5,
-                connectorsSucceeded: 3,
-                connectorsSkipped: 2,
-                connectorsFailed: 0,
-                markdown: 'General latest summary',
-                artifactId: 'artifact-123',
-                artifactProjectId: 'project-456',
-              },
-              lastRunsByTemplate: {
-                'orbit-general': {
-                  completedAt: '2026-05-06T10:00:00.000Z',
-                  trigger: 'manual',
-                  templateSkillId: 'orbit-general',
-                  connectorsChecked: 5,
-                  connectorsSucceeded: 3,
-                  connectorsSkipped: 2,
-                  connectorsFailed: 0,
-                  markdown: 'General latest summary',
-                  artifactId: 'artifact-123',
-                  artifactProjectId: 'project-456',
-                },
-              },
-            }), {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-          return originalFetch(input, init);
-        };
-        window.__odLastOpenArtifactHref = null;
-        window.__odOpenArtifactClickCount = 0;
-        if (!window.__odOpenArtifactClickCaptureInstalled) {
-          document.addEventListener('click', (event) => {
-            const target = event.target instanceof Element ? event.target.closest('a') : null;
-            if (!(target instanceof HTMLAnchorElement)) return;
-            if (target.textContent?.trim() !== 'Open artifact') return;
-            window.__odLastOpenArtifactHref = target.getAttribute('href');
-            window.__odOpenArtifactClickCount += 1;
-            event.preventDefault();
-          }, true);
-          window.__odOpenArtifactClickCaptureInstalled = true;
-        }
-        return true;
-      })()
-    `);
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.openArtifactHref).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
-    });
-
-    const clicked = await desktop.eval<boolean>(`
-      (() => {
-        const link = Array.from(document.querySelectorAll('a'))
-          .find((node) => node.textContent?.trim() === 'Open artifact');
-        if (!(link instanceof HTMLAnchorElement)) return false;
-        link.click();
-        return true;
-      })()
-    `);
-    expect(clicked).toBe(true);
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Orbit');
-      expect(snapshot.sectionTitle).toBe('Orbit');
-      expect(snapshot.openArtifactHref).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
-    });
-
-    const clickCapture = await desktop.eval<{ count: number; href: string | null }>(`
-      (() => ({
-        count: typeof window.__odOpenArtifactClickCount === 'number' ? window.__odOpenArtifactClickCount : 0,
-        href: typeof window.__odLastOpenArtifactHref === 'string' ? window.__odLastOpenArtifactHref : null,
-      }))()
-    `);
-    expect(clickCapture.count).toBeGreaterThan(0);
-    expect(clickCapture.href).toBe('/api/live-artifacts/artifact-123/preview?projectId=project-456');
   }, 45_000);
 
   test('keeps the desktop workspace stable when the artifact Open link is clicked', async () => {
@@ -1244,56 +1517,6 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     expect(clickCapture.href).toBe('/api/projects/' + seeded.projectId + '/raw/desktop-open.html?v=0&r=0');
   }, 45_000);
 
-  test('routes the Orbit gate CTA to the Connectors section inside the desktop shell', async () => {
-    await seedDesktopConfig(desktop, {
-      mode: 'api',
-      apiKey: 'sk-test',
-      baseUrl: 'https://api.openai.com/v1',
-      model: 'gpt-4o',
-      apiProtocol: 'openai',
-      apiProviderBaseUrl: 'https://api.openai.com/v1',
-      agentId: null,
-      skillId: null,
-      designSystemId: null,
-      composio: { apiKeyConfigured: false },
-      orbit: {
-        enabled: false,
-        time: '09:00',
-        templateSkillId: 'orbit-general',
-      },
-      onboardingCompleted: true,
-      mediaProviders: {},
-      agentModels: {},
-      theme: 'system',
-    }, 'model');
-
-    await desktop.openSettings();
-    await openDesktopSettingsSection(desktop, 'Orbit');
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopOrbitSnapshot(desktop);
-      expect(snapshot.gateVisible).toBe(true);
-    });
-
-    const clicked = await desktop.eval<boolean>(`
-      (() => {
-        const action = document.querySelector('[data-testid="orbit-config-gate-action"]');
-        if (!(action instanceof HTMLElement)) return false;
-        action.click();
-        return true;
-      })()
-    `);
-    expect(clicked).toBe(true);
-
-    await waitFor(async () => {
-      const snapshot = await readDesktopConnectorsSnapshot(desktop);
-      expect(snapshot.dialogOpen).toBe(true);
-      expect(snapshot.heading).toBe('Connectors');
-      expect(snapshot.sectionTitle).toBe('Connectors');
-      expect(snapshot.apiKeyLabelVisible).toBe(true);
-    });
-  }, 45_000);
-
   test('opens the Media providers section from the desktop shell and shows provider controls', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
@@ -1353,7 +1576,13 @@ desktopMacDescribe('mac desktop settings smoke', () => {
     });
   }, 45_000);
 
-  test('opens the Appearance section from the desktop shell and shows theme controls', async () => {
+  // #5517 (product confirmed 2026-07-20) removed the 系统/浅色/深色 segmented
+  // control from Appearance; the theme now moves only through the account
+  // menu's 切换主题 row. The point of this test is unchanged — the packaged
+  // desktop shell can reach the Appearance section and render its controls —
+  // so it now asserts on the accent swatches, the section's surviving control,
+  // and guards that the theme segmented control has not come back.
+  test('opens the Appearance section from the desktop shell and shows the accent controls', async () => {
     await seedDesktopConfig(desktop, {
       mode: 'api',
       apiKey: 'sk-test',
@@ -1378,9 +1607,9 @@ desktopMacDescribe('mac desktop settings smoke', () => {
       expect(snapshot.dialogOpen).toBe(true);
       expect(snapshot.heading).toBe('Appearance');
       expect(snapshot.sectionTitle).toBe('Appearance');
-      expect(snapshot.systemVisible).toBe(true);
-      expect(snapshot.lightVisible).toBe(true);
-      expect(snapshot.darkVisible).toBe(true);
+      expect(snapshot.accentSwatchesVisible).toBe(true);
+      expect(snapshot.defaultAccentVisible).toBe(true);
+      expect(snapshot.themeSegControlVisible).toBe(false);
     });
   }, 45_000);
 });
@@ -1525,9 +1754,10 @@ type DesktopLocalCliSnapshot = {
 };
 
 type DesktopAppearanceSnapshot = {
-  activeTheme: string | null;
   dialogOpen: boolean;
+  documentAccent: string | null;
   documentTheme: string | null;
+  savedAccent: string | null;
   savedTheme: string | null;
 };
 
@@ -1539,18 +1769,6 @@ type DesktopConnectorsSnapshot = {
   gateVisible: boolean;
   gridVisible: boolean;
   heading: string | null;
-  sectionTitle: string | null;
-};
-
-type DesktopOrbitSnapshot = {
-  automationCardVisible: boolean;
-  dialogOpen: boolean;
-  gateVisible: boolean;
-  heading: string | null;
-  openArtifactHref: string | null;
-  openArtifactRel: string | null;
-  openArtifactTarget: string | null;
-  runButtonVisible: boolean;
   sectionTitle: string | null;
 };
 
@@ -1571,12 +1789,13 @@ type DesktopAboutSnapshot = {
 };
 
 type DesktopAppearanceSectionSnapshot = {
-  darkVisible: boolean;
+  accentSwatchesVisible: boolean;
+  defaultAccentVisible: boolean;
   dialogOpen: boolean;
   heading: string | null;
-  lightVisible: boolean;
   sectionTitle: string | null;
-  systemVisible: boolean;
+  /** #5517 removed it; kept as a negative assertion so it cannot creep back. */
+  themeSegControlVisible: boolean;
 };
 
 type DesktopArtifactOpenSnapshot = {
@@ -1653,16 +1872,26 @@ async function clickDesktopExecutionModeTab(
   expect(clicked).toBe(true);
 }
 
-async function clickDesktopSegmentButton(
+/**
+ * Click an accent swatch in the Settings › Appearance section.
+ *
+ * Replaces the old `clickDesktopSegmentButton` theme helper: the
+ * 系统/浅色/深色 segmented control is gone (#5517 hid it, and the theme setting
+ * was removed outright because the app ships light-only), leaving the accent
+ * swatches as the only appearance control Settings still owns. Swatches carry
+ * the hex as their aria-label (the default swatch is "Default accent color").
+ */
+async function clickDesktopAccentSwatch(
   desktop: DesktopHarness,
   label: string,
 ): Promise<void> {
   const clicked = await desktop.eval<boolean>(`
     (() => {
-      const button = Array.from(document.querySelectorAll('[role="dialog"] button'))
-        .find((node) => node.textContent?.trim() === ${JSON.stringify(label)});
-      if (!(button instanceof HTMLElement)) return false;
-      button.click();
+      const swatch = document.querySelector(
+        '[role="dialog"] .pet-swatches [role="radio"][aria-label=' + ${JSON.stringify(JSON.stringify(label))} + ']',
+      );
+      if (!(swatch instanceof HTMLElement)) return false;
+      swatch.click();
       return true;
     })()
   `);
@@ -1729,13 +1958,11 @@ async function readDesktopAppearanceSnapshot(
     (() => {
       const raw = window.localStorage.getItem(${JSON.stringify(STORAGE_KEY)});
       const config = raw ? JSON.parse(raw) : {};
-      const activeButton = Array.from(document.querySelectorAll('[role="dialog"] button[aria-pressed="true"]'))
-        .find((node) => ['Light', 'Dark', 'System'].includes(node.textContent?.trim() ?? ''));
-
       return {
-        activeTheme: activeButton?.textContent?.trim() ?? null,
         dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
+        documentAccent: document.documentElement.style.getPropertyValue('--accent').trim() || null,
         documentTheme: document.documentElement.getAttribute('data-theme'),
+        savedAccent: typeof config.accentColor === 'string' ? config.accentColor : null,
         savedTheme: typeof config.theme === 'string' ? config.theme : null,
       };
     })()
@@ -1761,31 +1988,6 @@ async function readDesktopConnectorsSnapshot(
         gateVisible: Boolean(document.querySelector('[data-testid="connector-gate"]')),
         gridVisible: Boolean(document.querySelector('[data-testid="connector-grid-wrap"]')),
         heading: document.querySelector('[role="dialog"] h2')?.textContent?.trim() ?? null,
-        sectionTitle,
-      };
-    })()
-  `);
-}
-
-async function readDesktopOrbitSnapshot(
-  desktop: DesktopHarness,
-): Promise<DesktopOrbitSnapshot> {
-  return await desktop.eval<DesktopOrbitSnapshot>(`
-    (() => {
-      const sectionTitle = document.querySelector('.orbit-section .orbit-hero-title')
-        ?.textContent?.trim() ?? null;
-      const openArtifactLink = Array.from(document.querySelectorAll('a'))
-        .find((node) => node.textContent?.trim() === 'Open artifact');
-      return {
-        automationCardVisible: Boolean(document.querySelector('[data-testid="orbit-automation-card"]')),
-        dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
-        gateVisible: Boolean(document.querySelector('[data-testid="orbit-config-gate"]')),
-        heading: document.querySelector('[role="dialog"] h2')?.textContent?.trim() ?? null,
-        openArtifactHref: openArtifactLink?.getAttribute('href') ?? null,
-        openArtifactRel: openArtifactLink?.getAttribute('rel') ?? null,
-        openArtifactTarget: openArtifactLink?.getAttribute('target') ?? null,
-        runButtonVisible: Boolean(Array.from(document.querySelectorAll('button'))
-          .find((node) => node.textContent?.trim() === 'Run it now')),
         sectionTitle,
       };
     })()
@@ -1838,15 +2040,23 @@ async function readDesktopAppearanceSectionSnapshot(
     (() => {
       const sectionTitle = document.querySelector('.settings-section .section-head h3')
         ?.textContent?.trim() ?? null;
-      const labels = Array.from(document.querySelectorAll('.seg-control .seg-title'))
-        .map((node) => node.textContent?.trim() ?? '');
+      const accentGroup = document.querySelector('.settings-section .pet-swatches[role="radiogroup"]');
+      const accentSwatches = accentGroup
+        ? Array.from(accentGroup.querySelectorAll('[role="radio"]'))
+        : [];
       return {
-        darkVisible: labels.includes('Dark'),
+        accentSwatchesVisible: accentSwatches.length > 0,
+        defaultAccentVisible: accentSwatches.some(
+          (node) => node.getAttribute('aria-label') === 'Default accent color',
+        ),
         dialogOpen: Boolean(document.querySelector('[role="dialog"]')),
         heading: document.querySelector('[role="dialog"] h2')?.textContent?.trim() ?? null,
-        lightVisible: labels.includes('Light'),
         sectionTitle,
-        systemVisible: labels.includes('System'),
+        // Scoped by aria-label: the Notifications controls in the same dialog
+        // are seg-controls too, and they are not what #5517 removed.
+        themeSegControlVisible: Boolean(
+          document.querySelector('.seg-control[aria-label="Appearance"]'),
+        ),
       };
     })()
   `);
@@ -1930,7 +2140,14 @@ async function waitForHealthyDesktop(): Promise<MacInspectResult> {
   throw new Error(`packaged mac runtime did not become healthy: ${formatUnknown(lastResult)}`);
 }
 
-async function waitForHealthyDesktopVersion(expectedVersion: string, previousPid: number | null | undefined): Promise<MacInspectResult> {
+async function waitForHealthyDesktopVersion(
+  expectedVersion: string,
+  previousPid: number | null | undefined,
+  // The rollback degraded steady state deliberately keeps the broken pointer
+  // active (with its attempt as evidence), so callers waiting on a rolled-back
+  // desktop must not require settled launcher pointers.
+  requireSettledLauncher = true,
+): Promise<MacInspectResult> {
   const timeoutMs = 120_000;
   const startedAt = Date.now();
   let lastResult: unknown = null;
@@ -1945,7 +2162,8 @@ async function waitForHealthyDesktopVersion(expectedVersion: string, previousPid
           value?.status === 200 &&
           value.health.ok === true &&
           value.health.version === expectedVersion &&
-          (previousPid == null || inspect.status.pid !== previousPid)
+          (previousPid == null || inspect.status.pid !== previousPid) &&
+          (!requireSettledLauncher || settledLauncherGeneration(inspect.launcher, expectedVersion) != null)
         ) {
           return inspect;
         }
@@ -1984,22 +2202,6 @@ async function waitForPackagedOnboarding(
   throw new Error(`${label}: packaged onboarding timed out: ${formatUnknown(lastResult)}`);
 }
 
-async function clickPackagedOnboardingRuntime(runtime: OnboardingRuntime): Promise<void> {
-  const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickPackagedOnboardingRuntimeExpression(runtime)]);
-  const value = inspect.eval?.value;
-  if (!isRecord(value) || value.clicked !== true) {
-    throw new Error(`failed to click packaged onboarding ${runtime} runtime: ${formatUnknown(value)}`);
-  }
-}
-
-async function clickPackagedOnboardingBack(): Promise<void> {
-  const inspect = await runToolsPackJson<MacInspectResult>('inspect', ['--expr', clickPackagedOnboardingBackExpression()]);
-  const value = inspect.eval?.value;
-  if (!isRecord(value) || value.clicked !== true) {
-    throw new Error(`failed to click packaged onboarding back: ${formatUnknown(value)}`);
-  }
-}
-
 async function waitForUpdaterStatus(
   predicate: (inspect: MacInspectResult) => boolean,
   label: string,
@@ -2018,6 +2220,114 @@ async function waitForUpdaterStatus(
     await delay(750);
   }
   throw new Error(`${label}: updater status timed out: ${formatUnknown(lastResult)}`);
+}
+
+async function repackMacPayloadFixture(
+  payloadZipPath: string,
+  workDir: string,
+  outputName: string,
+  mutate: (extractRoot: string, manifest: { entry?: { executable?: string }; version?: string }) => Promise<void>,
+): Promise<string> {
+  const extractRoot = join(workDir, `${outputName}-extract`);
+  await rm(extractRoot, { force: true, recursive: true });
+  await mkdir(extractRoot, { recursive: true });
+  await execFileAsync('ditto', ['-x', '-k', payloadZipPath, extractRoot]);
+  const manifestPath = join(extractRoot, 'manifest.json');
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as {
+    entry?: { executable?: string };
+    version?: string;
+  };
+  await mutate(extractRoot, manifest);
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  const zipPath = join(workDir, `${outputName}.zip`);
+  await rm(zipPath, { force: true });
+  await execFileAsync('ditto', ['-c', '-k', '--sequesterRsrc', '--rsrc', extractRoot, zipPath]);
+  return zipPath;
+}
+
+/**
+ * Build a checksum-valid payload zip whose desktop executable dies before any
+ * launcher bookkeeping — the faithful shape of a broken release that passes
+ * every integrity gate (zip sha256, manifest validation, activation) and then
+ * crashes pre-main.
+ */
+async function buildCorruptedMacPayloadFixture(payloadZipPath: string, workDir: string): Promise<string> {
+  return await repackMacPayloadFixture(payloadZipPath, workDir, 'corrupt-payload', async (extractRoot, manifest) => {
+    const executableRelPath = manifest.entry?.executable;
+    if (executableRelPath == null || executableRelPath.length === 0) {
+      throw new Error(`payload manifest has no entry.executable: ${payloadZipPath}`);
+    }
+    const executablePath = join(extractRoot, executableRelPath);
+    await writeFile(executablePath, '#!/bin/sh\nexit 87\n', 'utf8');
+    await chmod(executablePath, 0o755);
+  });
+}
+
+/**
+ * Re-version a healthy payload zip to the next counted release. Real recovery
+ * releases ship as version+1 (versioned artifacts are immutable), so the
+ * self-heal update must arrive under a bumped version rather than overwriting
+ * the broken pointer's version root. The desktop binary is unchanged — the
+ * running version is config/manifest-driven.
+ */
+async function buildVersionBumpedMacPayloadFixture(
+  payloadZipPath: string,
+  workDir: string,
+  bumpedVersion: string,
+): Promise<string> {
+  return await repackMacPayloadFixture(payloadZipPath, workDir, 'healed-payload', async (extractRoot, manifest) => {
+    manifest.version = bumpedVersion;
+    const executableRelPath = manifest.entry?.executable;
+    if (executableRelPath == null || executableRelPath.length === 0) {
+      throw new Error(`payload manifest has no entry.executable: ${payloadZipPath}`);
+    }
+    // <bundle>.app/Contents/MacOS/<binary> → <bundle>.app/Contents/Resources
+    const configPath = join(extractRoot, dirname(dirname(executableRelPath)), 'Resources', 'open-design-config.json');
+    const config = JSON.parse(await readFile(configPath, 'utf8')) as { appVersion?: string };
+    config.appVersion = bumpedVersion;
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  });
+}
+
+function bumpCountedVersion(version: string): string {
+  const match = /^(.*[.-](?:beta|betas|prerelease|preview))\.(\d+)$/.exec(version);
+  if (match?.[1] == null || match[2] == null) {
+    throw new Error(`rollback acceptance requires a counted version to bump: ${version}`);
+  }
+  return `${match[1]}.${Number(match[2]) + 1}`;
+}
+
+/**
+ * Reset the namespace to a pristine pre-install state. `uninstall` removes the
+ * installed app but deliberately keeps runtime data; lifecycle tests must not
+ * inherit the previous test's (or a previous local run's) launcher pointers,
+ * update store, or daemon preferences, so each test starts from zero.
+ */
+async function resetPackagedRuntimeState(): Promise<void> {
+  await runToolsPackJson<MacStopResult>('stop').catch(() => undefined);
+  await runToolsPackJson<MacUninstallResult>('uninstall').catch(() => undefined);
+  await rm(runtimeNamespaceRoot, { force: true, recursive: true }).catch(() => undefined);
+  await rm(
+    join(toolsPackDir, 'runtime', 'mac', 'launcher', 'channels', updateScenario.channel, 'namespaces', namespace),
+    { force: true, recursive: true },
+  ).catch(() => undefined);
+}
+
+async function waitForDesktopGone(label: string, timeoutMs = 120_000): Promise<void> {
+  const startedAt = Date.now();
+  let lastResult: unknown = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    try {
+      const inspect = await runToolsPackJson<MacInspectResult>('inspect');
+      lastResult = inspect;
+      if (inspect.status == null || inspect.status.state !== 'running') return;
+    } catch {
+      // A dead desktop IPC socket is exactly the expected terminal state.
+      return;
+    }
+    await delay(1000);
+  }
+  throw new Error(`${label}: desktop still running: ${formatUnknown(lastResult)}`);
 }
 
 async function openReadyUpdaterPrompt(version: string): Promise<UpdaterPopupEvalValue> {
@@ -2070,6 +2380,74 @@ async function waitForUpdaterPopupMatching(
   throw new Error(`${label}: updater popup timed out: ${formatUnknown(lastResult)}`);
 }
 
+async function readDesktopIdentityMarker(): Promise<DesktopIdentityMarker> {
+  const markerPath = join(runtimeNamespaceRoot, 'runtime', 'desktop-root.json');
+  const value = JSON.parse(await readFile(markerPath, 'utf8')) as unknown;
+  if (
+    !isRecord(value) ||
+    typeof value.appPath !== 'string' ||
+    typeof value.executablePath !== 'string' ||
+    typeof value.pid !== 'number' ||
+    value.version !== 1
+  ) {
+    throw new Error(`invalid packaged desktop identity at ${markerPath}: ${formatUnknown(value)}`);
+  }
+  return value as DesktopIdentityMarker;
+}
+
+function assertPayloadDesktopIdentity(
+  identity: DesktopIdentityMarker,
+  launcher: LauncherSnapshot,
+  version: string,
+): void {
+  const payloadRoot = join(launcher.versionsRoot, version, 'payload');
+  expect(identity.pid).toBeGreaterThan(0);
+  expectPathInside(identity.appPath, payloadRoot);
+  expectPathInside(identity.executablePath, payloadRoot);
+}
+
+function assertPptxExportEvalValue(value: unknown): PptxExportEvalValue {
+  if (
+    !isRecord(value) ||
+    typeof value.byteLength !== 'number' ||
+    (value.contentType != null && typeof value.contentType !== 'string') ||
+    typeof value.magic !== 'string' ||
+    typeof value.projectId !== 'string' ||
+    typeof value.status !== 'number'
+  ) {
+    throw new Error(`unexpected PPTX export eval value: ${formatUnknown(value)}`);
+  }
+  expect(value.status).toBe(200);
+  expect(value.contentType).toContain(
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  );
+  expect(value.byteLength).toBeGreaterThan(0);
+  expect(value.magic).toBe('PK');
+  return value as PptxExportEvalValue;
+}
+
+function assertUpgradePersistenceSeed(value: unknown): UpgradePersistenceSeed {
+  if (
+    !isRecord(value) ||
+    typeof value.createdOk !== 'boolean' ||
+    typeof value.createdStatus !== 'number' ||
+    typeof value.projectId !== 'string' ||
+    typeof value.writtenOk !== 'boolean' ||
+    (value.writtenStatus != null && typeof value.writtenStatus !== 'number')
+  ) {
+    throw new Error(`unexpected upgrade persistence seed value: ${formatUnknown(value)}`);
+  }
+  expect(value.createdOk).toBe(true);
+  expect(value.writtenOk).toBe(true);
+  return value as UpgradePersistenceSeed;
+}
+
+function assertSettledDesktopHandoff(value: unknown | null): void {
+  if (value == null) return;
+  if (!isRecord(value)) throw new Error(`invalid launcher desktop handoff: ${formatUnknown(value)}`);
+  expect(value.state).toBe('confirmed');
+}
+
 function assertLauncherPointer(
   pointer: LauncherPointer | null,
   expectedVersion: string,
@@ -2080,6 +2458,25 @@ function assertLauncherPointer(
     generation: expectedGeneration,
     version: expectedVersion,
   });
+}
+
+function settledLauncherGeneration(launcher: LauncherSnapshot, expectedVersion: string): number | null {
+  const active = launcher.active;
+  const lastSuccessful = launcher.lastSuccessful;
+  if (
+    active == null ||
+    lastSuccessful == null ||
+    active.version !== expectedVersion ||
+    lastSuccessful.version !== expectedVersion ||
+    active.generation !== lastSuccessful.generation ||
+    launcher.attempt != null
+  ) {
+    return null;
+  }
+  if (launcher.handoff != null && (!isRecord(launcher.handoff) || launcher.handoff.state !== 'confirmed')) {
+    return null;
+  }
+  return active.generation;
 }
 
 function assertLogPathsAndContent(result: LogsResult): void {
@@ -2135,39 +2532,6 @@ function assertUpdaterClickEvalValue(value: unknown): UpdaterClickEvalValue {
   return normalized;
 }
 
-function clickPackagedOnboardingRuntimeExpression(runtime: OnboardingRuntime): string {
-  // Secondary runtime links on the cloud landing, in DOM order: [0] Local,
-  // [1] BYOK. Clicking one expands its setup panel.
-  const index = runtime === 'local' ? 0 : 1;
-  return `
-    (async () => {
-      const links = Array.from(document.querySelectorAll('.onboarding-cloud__secondary'));
-      const target = links[${index}] ?? null;
-      if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-runtime-link', runtime: ${JSON.stringify(runtime)} };
-      }
-      target.click();
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return { clicked: true, runtime: ${JSON.stringify(runtime)} };
-    })()
-  `;
-}
-
-function clickPackagedOnboardingBackExpression(): string {
-  // Collapse an expanded runtime setup panel back to the cloud sign-in landing.
-  return `
-    (async () => {
-      const target = document.querySelector('.onboarding-view__back-to-cloud');
-      if (!(target instanceof HTMLElement)) {
-        return { clicked: false, reason: 'missing-back' };
-      }
-      target.click();
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      return { clicked: true };
-    })()
-  `;
-}
-
 function asHealthEvalValue(value: unknown): HealthEvalValue | null {
   if (!isRecord(value)) return null;
   if (typeof value.href !== 'string' || typeof value.status !== 'number' || typeof value.title !== 'string') return null;
@@ -2177,14 +2541,9 @@ function asHealthEvalValue(value: unknown): HealthEvalValue | null {
 
 function asPackagedOnboardingEvalValue(value: unknown): PackagedOnboardingEvalValue | null {
   if (!isRecord(value)) return null;
-  if (typeof value.backVisible !== 'boolean') return null;
-  if (typeof value.byokLinkVisible !== 'boolean') return null;
   if (typeof value.cloudSignInVisible !== 'boolean') return null;
   if (typeof value.href !== 'string') return null;
-  if (typeof value.inputCount !== 'number') return null;
-  if (typeof value.localLinkVisible !== 'boolean') return null;
   if (typeof value.onboardingVisible !== 'boolean') return null;
-  if (typeof value.setupPanelVisible !== 'boolean') return null;
   if (value.text != null && typeof value.text !== 'string') return null;
   if (typeof value.title !== 'string') return null;
   return value as PackagedOnboardingEvalValue;
@@ -2194,6 +2553,7 @@ function asUpdaterPopupEvalValue(value: unknown): UpdaterPopupEvalValue | null {
   if (!isRecord(value)) return null;
   if (typeof value.visible !== 'boolean') return null;
   if (typeof value.installButtonVisible !== 'boolean') return null;
+  if (typeof value.reinstallLinkVisible !== 'boolean') return null;
   if (value.title != null && typeof value.title !== 'string') return null;
   if (value.text != null && typeof value.text !== 'string') return null;
   return value as UpdaterPopupEvalValue;
@@ -2213,6 +2573,30 @@ function expectPathInside(filePath: string, expectedRoot: string): void {
     normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}${sep}`),
     `${normalizedPath} should be inside ${normalizedRoot}`,
   ).toBe(true);
+}
+
+async function assertMacInviteProtocolRegistration(installedAppPath: string): Promise<void> {
+  const plistPath = join(installedAppPath, 'Contents', 'Info.plist');
+  const { stdout } = await execFileAsync('/usr/bin/plutil', [
+    '-convert',
+    'json',
+    '-o',
+    '-',
+    plistPath,
+  ]);
+  const plist = JSON.parse(stdout) as {
+    CFBundleURLTypes?: Array<{ CFBundleURLSchemes?: string[] }>;
+  };
+  const schemes = (plist.CFBundleURLTypes ?? []).flatMap(
+    (entry) => entry.CFBundleURLSchemes ?? [],
+  );
+  expect(schemes).toContain('opendesign');
+}
+
+async function invokeMacInviteDeeplink(installedAppPath: string): Promise<void> {
+  // `-a` pins delivery to this namespace's installed test bundle instead of a
+  // developer's stable Open Design app that may own the same global scheme.
+  await execFileAsync('/usr/bin/open', ['-a', installedAppPath, packagedInviteDeeplink]);
 }
 
 async function pathExists(filePath: string): Promise<boolean> {

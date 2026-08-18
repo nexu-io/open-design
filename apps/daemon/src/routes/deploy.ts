@@ -1,7 +1,10 @@
 import type { Express } from 'express';
 import type { RouteDeps } from '../server-context.js';
+import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 
-export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {}
+export interface RegisterDeployRoutesDeps extends RouteDeps<'db' | 'http' | 'paths' | 'ids' | 'deploy' | 'projectStore'> {
+  authorizeProjectRequest: AuthorizeProjectRequest;
+}
 
 export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps) {
   const { db } = ctx;
@@ -58,8 +61,12 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
     }
   });
 
-  app.get('/api/projects/:id/deployments', (req, res) => {
+  app.get('/api/projects/:id/deployments', async (req, res) => {
     try {
+      if (!getProject(db, req.params.id)) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
       /** @type {import('@open-design/contracts').ProjectDeploymentsResponse} */
       const body = { deployments: publicDeployments(listDeployments(db, req.params.id)) };
       res.json(body);
@@ -70,7 +77,27 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
 
   app.post('/api/projects/:id/deploy', async (req, res) => {
     try {
-      const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages } = req.body || {};
+      const { fileName, providerId = VERCEL_PROVIDER_ID, cloudflarePages, target: rawTarget } = req.body || {};
+      // Omitted target defaults to production; any supplied value must be exact.
+      if (rawTarget !== undefined && rawTarget !== 'preview' && rawTarget !== 'production') {
+        return sendApiError(res, 400, 'BAD_REQUEST', 'invalid target: expected "preview" or "production"');
+      }
+      const target: 'preview' | 'production' = rawTarget === 'preview' ? 'preview' : 'production';
+      // Vercel production-target deploys are out of scope for this PR (P2 review
+      // finding on PR #4576) — deployToVercel() never receives `target` and
+      // always behaves as preview, so an explicit target=production request
+      // must be rejected before any deploy call instead of silently deploying
+      // as preview. Only the explicitly-supplied raw value gates this: the
+      // omitted-target default (which resolves to 'production' above for
+      // Cloudflare Pages parity) must keep deploying Vercel as before.
+      if (providerId === VERCEL_PROVIDER_ID && rawTarget === 'production') {
+        return sendApiError(
+          res,
+          400,
+          'BAD_REQUEST',
+          'Vercel does not support target=production yet; use target=preview or omit target',
+        );
+      }
       if (!isDeployProviderId(providerId)) {
         return sendApiError(
           res,
@@ -82,9 +109,18 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
       if (typeof fileName !== 'string' || !fileName.trim()) {
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
+      const deployProject = getProject(db, req.params.id);
+      if (!deployProject) {
+        return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+      }
+      if (!await ctx.authorizeProjectRequest(
+        req,
+        res,
+        req.params.id,
+        { mode: 'write', capability: 'writeFiles' },
+      )) return;
 
       const prior = getDeployment(db, req.params.id, fileName, providerId);
-      const deployProject = getProject(db, req.params.id);
       const files = await buildDeployFileSet(
         PROJECTS_DIR,
         req.params.id,
@@ -106,6 +142,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
             projectId: req.params.id,
             cloudflarePages,
             priorMetadata: prior?.providerMetadata,
+            target,
           })
         : await deployToVercel({
             config: await readDeployConfig(VERCEL_PROVIDER_ID),
@@ -122,7 +159,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         url: result.url,
         deploymentId: result.deploymentId,
         deploymentCount: (prior?.deploymentCount ?? 0) + 1,
-        target: 'preview',
+        target: result.target ?? target,
         status: result.status,
         statusMessage: result.statusMessage,
         reachableAt: result.reachableAt,
@@ -166,6 +203,7 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
         return sendApiError(res, 400, 'BAD_REQUEST', 'fileName required');
       }
       const preflightProject = getProject(db, req.params.id);
+      if (!await ctx.authorizeProjectRequest(req, res, req.params.id, { mode: 'read' })) return;
       /** @type {import('@open-design/contracts').DeployPreflightResponse} */
       const body = await prepareDeployPreflight(
         PROJECTS_DIR,
@@ -194,17 +232,29 @@ export function registerDeployRoutes(app: Express, ctx: RegisterDeployRoutesDeps
 
 }
 
-export interface RegisterDeploymentCheckRoutesDeps extends RouteDeps<'db' | 'http' | 'deploy'> {}
+export interface RegisterDeploymentCheckRoutesDeps extends RouteDeps<'db' | 'http' | 'deploy' | 'projectStore'> {
+  authorizeProjectRequest: AuthorizeProjectRequest;
+}
 
 export function registerDeploymentCheckRoutes(app: Express, ctx: RegisterDeploymentCheckRoutesDeps) {
   const { db } = ctx;
   const { sendApiError } = ctx.http;
+  const { getProject } = ctx.projectStore;
   const { getDeploymentById, CLOUDFLARE_PAGES_PROVIDER_ID, cloudflarePagesProjectNameFromDeployment, checkCloudflarePagesDeploymentLinks, checkDeploymentUrl, upsertDeployment, publicDeployment } = ctx.deploy;
 
   app.post(
     '/api/projects/:id/deployments/:deploymentId/check-link',
     async (req, res) => {
       try {
+        if (!getProject(db, req.params.id)) {
+          return sendApiError(res, 404, 'PROJECT_NOT_FOUND', 'project not found');
+        }
+        if (!await ctx.authorizeProjectRequest(
+          req,
+          res,
+          req.params.id,
+          { mode: 'write', capability: 'writeFiles' },
+        )) return;
         const existing = getDeploymentById(
           db,
           req.params.id,

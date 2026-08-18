@@ -959,6 +959,7 @@ export const IT_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   'claymorphism': 'Forme morbide e arrotondate, simili a 3D, che imitano l\'argilla malleabile con elementi giocosi e gonfi e superfici colorate.',
   'clean': 'Design incentrato sulla semplicità, con ampio spazio bianco, tipografia leggibile e una palette di colori limitata per ridurre il disordine visivo.',
   'clickhouse': 'Database analitico veloce. Stile di documentazione tecnica con accenti gialli.',
+  'cloudflare-kumo': 'Sistema di componenti Cloudflare per app web moderne: token semantici chiaro/scuro, tipografia Inter compatta, superfici neutre stratificate, controlli accessibili e linee guida cromatiche per i grafici.',
   'cohere': 'Piattaforma AI enterprise. Gradienti vivaci, estetica da dashboard ricca di dati.',
   'coinbase': 'Exchange di criptovalute. Identità blu pulita, incentrata sulla fiducia, dal carattere istituzionale.',
   'colorful': 'Palette e gradienti vivaci e ad alto contrasto per esperienze utente coinvolgenti, memorabili e moderne.',

@@ -67,6 +67,7 @@ import type {
   PreviewAnnotationStyle,
   PreviewCommentSelectionKind,
   PreviewComment,
+  PreviewCommentAnchorState,
   PreviewCommentAttachment,
   PreviewCommentStatus,
   PreviewCommentTarget,
@@ -87,6 +88,7 @@ import type {
   SkillDetail,
   SkillSummary,
   InstallInput,
+  InstallSkillRequest,
   InstallSkillResponse,
   InstallDesignSystemResponse,
   UninstallResponse,
@@ -361,6 +363,10 @@ export interface OrbitConfig {
   time: string;
   /** Optional skill id from the examples gallery where scenario === "orbit". */
   templateSkillId?: string | null;
+  workspaceScope?: {
+    workspaceId: string;
+    workspaceMemberId: string;
+  } | null;
 }
 
 export interface PetConfig {
@@ -399,6 +405,8 @@ export interface AppConfig {
   apiProtocolConfigs?: Partial<Record<ApiProtocol, ApiProtocolConfig>>;
   /** BYOK provider drafts keyed by protocol + selected provider base URL. */
   byokProviderConfigDrafts?: Record<string, ByokProviderConfigDraft>;
+  /** Provider draft restored first when Settings returns to BYOK. */
+  byokPendingProviderKey?: string;
   /** Internal config schema/migration version for localStorage upgrades. */
   configMigrationVersion?: number;
   /** Base URL of the selected known provider; cleared once the user customizes provider fields. */
@@ -539,6 +547,8 @@ export interface AgentModelOption {
   inputPriceUsdPerMillion?: number;
   outputPriceUsdPerMillion?: number;
   metadata?: ModelMetadata;
+  additionalSpeedTiers?: string[];
+  serviceTierOptions?: AgentModelOption[];
 }
 
 export type Surface = 'web' | 'image' | 'video' | 'audio';
@@ -612,6 +622,7 @@ export type {
   Project,
   ProjectPlatform,
   PreviewComment,
+  PreviewCommentAnchorState,
   PreviewCommentAttachment,
   PreviewCommentStatus,
   PreviewCommentTarget,
@@ -636,6 +647,7 @@ export type {
   SkillDetail,
   SkillSummary,
   InstallInput,
+  InstallSkillRequest,
   InstallSkillResponse,
   InstallDesignSystemResponse,
   UninstallResponse,

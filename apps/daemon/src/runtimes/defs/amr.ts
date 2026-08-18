@@ -668,4 +668,9 @@ export const amrAgentDef = {
   // provider is still working. Keep the outer chat watchdog aligned with the
   // 30-minute ACP stage timeout so the daemon does not fail the run first.
   inactivityTimeoutMs: 30 * 60 * 1000,
+  // Once the ACP handshake has completed and session/prompt is waiting on the
+  // provider, transport/status heartbeats must not leave the UI in Preparing
+  // indefinitely. Two minutes leaves conservative provider-startup headroom
+  // while still bounding the user's wait and one safe same-run retry.
+  firstOutputTimeoutMs: 2 * 60 * 1000,
 } satisfies RuntimeAgentDef;

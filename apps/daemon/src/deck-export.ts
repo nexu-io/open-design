@@ -8,13 +8,33 @@ import type { DesktopRenderSlidesInput } from '@open-design/sidecar-proto';
 
 // pptxgenjs ships a default-export class, but its NodeNext typings resolve the
 // default to the module namespace (no construct signature). At runtime the ESM
-// build's default IS the class, so reach it and re-type as a constructor.
+// build's default IS the class — except under tsx (the tools-dev daemon
+// runtime), which loads the CJS build and double-wraps it so `Module.default`
+// is `{ default: PptxGenJS }`, and `new PptxGenJSModule.default()` dies with
+// "PptxGenJS is not a constructor". Resolve every known shape once at module
+// load: bare CJS (the namespace itself is the class), pure ESM (default = the
+// class), and tsx CJS interop (default.default = the class).
 type PptxInstance = InstanceType<typeof import('pptxgenjs').default>;
-const PptxGenJS = PptxGenJSModule.default as unknown as { new (): PptxInstance };
+export type PptxConstructor = { new (): PptxInstance };
+
+export function resolvePptxConstructor(mod: unknown): PptxConstructor {
+  if (typeof mod === 'function') return mod as PptxConstructor;
+  const candidate = (mod as { default?: unknown } | null | undefined)?.default;
+  if (typeof candidate === 'function') return candidate as PptxConstructor;
+  const nested = (candidate as { default?: unknown } | null | undefined)?.default;
+  if (typeof nested === 'function') return nested as PptxConstructor;
+  throw new Error(
+    'unable to resolve the PptxGenJS constructor from the pptxgenjs module shape '
+      + `(typeof module: ${typeof mod}, typeof default: ${typeof candidate})`,
+  );
+}
+
+const PptxGenJS: PptxConstructor = resolvePptxConstructor(PptxGenJSModule);
 
 import { readProjectFile } from './projects.js';
 
 export interface BuildDeckRenderInputOptions {
+  baseHref?: string;
   daemonUrl: string;
   // Explicit page-vs-deck signal (the web knows whether the artifact is a deck).
   deck?: boolean;
@@ -52,8 +72,8 @@ export interface DeckRenderRequest {
 /**
  * Reads a deck HTML file and prepares the {@link DesktopRenderSlidesInput} the
  * desktop renderer needs. Mirrors {@link buildDesktopPdfExportInput} in
- * pdf-export.ts: same `<base href>` derivation so the rendered deck resolves
- * its relative CSS/JS/image assets through the daemon's `/raw/` route.
+ * pdf-export.ts: the default `<base href>` resolves relative assets through
+ * `/raw/`; authorized callers can supply a narrower renderer-only base.
  */
 export async function buildDeckRenderInput(
   options: BuildDeckRenderInputOptions,
@@ -69,7 +89,7 @@ export async function buildDeckRenderInput(
     defaultFilename: safeDisplayFilename(title, 'deck'),
     title,
     input: {
-      baseHref: rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
+      baseHref: options.baseHref ?? rawBaseHref(options.daemonUrl, options.projectId, options.fileName),
       html: injectDeckStageFallback(html),
       ...(options.deck == null ? {} : { deck: options.deck }),
       ...(options.editable == null ? {} : { editable: options.editable }),

@@ -51,6 +51,51 @@ export async function readDomToPptxBundleFile(candidate: string): Promise<string
   return bytes.toString("utf8");
 }
 
+type FontStylesheetFetcher = (
+  url: string,
+  init?: RequestInit,
+) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>;
+
+const GOOGLE_FONT_STYLESHEET_TIMEOUT_MS = 10_000;
+
+export async function fetchGoogleFontStylesheets(
+  urls: string[],
+  fetcher: FontStylesheetFetcher = fetch,
+): Promise<Array<{ cssText: string; url: string }>> {
+  const stylesheets: Array<{ cssText: string; url: string }> = [];
+  for (const url of urls) {
+    const controller = new AbortController();
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      if (new URL(url).hostname !== "fonts.googleapis.com") continue;
+      // A generic UA makes Google Fonts return complete TTF faces. Chromium's
+      // WOFF2 subsets are less reliable in the vendored PowerPoint converter.
+      const stylesheet = await Promise.race([
+        (async () => {
+          const response = await fetcher(url, {
+            headers: { "user-agent": "Mozilla/5.0" },
+            signal: controller.signal,
+          });
+          if (!response.ok) return null;
+          return { cssText: await response.text(), url };
+        })(),
+        new Promise<null>((resolve) => {
+          timeout = setTimeout(() => {
+            controller.abort();
+            resolve(null);
+          }, GOOGLE_FONT_STYLESHEET_TIMEOUT_MS);
+        }),
+      ]);
+      if (stylesheet) stylesheets.push(stylesheet);
+    } catch {
+      // The renderer-side fetch remains the fallback when prefetching fails.
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout);
+    }
+  }
+  return stylesheets;
+}
+
 // Returns the rendered images either as on-disk files (when the daemon provided
 // an `outputDir`) or as base64 data URLs (legacy/fallback). Writing files keeps
 // tens of MB of image bytes off the JSON IPC channel — the daemon, which owns
@@ -105,6 +150,7 @@ export const HIDE_CHROME_SELECTOR =
 // mode clones (`.mini-slide .slide`, `.overview .slide`) are filtered out in the
 // page rather than via a rigid direct-child selector, which missed nested decks.
 const SLIDE_SELECTOR = ".slide, [data-screen-label], .deck-slide, .ppt-slide";
+export const DECK_STAGE_SELECTOR = "deck-stage, #deck-stage, .deck-stage";
 // JS expression (used inside executeJavaScript) returning the real slides.
 const REAL_SLIDES_JS =
   "Array.prototype.slice.call(document.querySelectorAll('.slide, [data-screen-label], .deck-slide, .ppt-slide')).filter(function(el){return !el.closest('.mini-slide, .overview, .notes-overlay, .thumb')})";
@@ -214,7 +260,7 @@ export async function renderDeckSlides(
     // Deck mode only: now apply the deck DOM prep (hide presenter chrome, freeze
     // animations) so each slide reaches its final state for capture.
     await window.webContents.executeJavaScript(
-      `(${prepareDeckStage.toString()})(${JSON.stringify(HIDE_CHROME_SELECTOR)})`,
+      `(${prepareDeckStage.toString()})(${JSON.stringify(HIDE_CHROME_SELECTOR)}, ${JSON.stringify(DECK_STAGE_SELECTOR)})`,
       true,
     );
 
@@ -229,7 +275,10 @@ export async function renderDeckSlides(
     await nextFrames(window);
 
     // Pin the stage to the measured slide size.
-    await window.webContents.executeJavaScript(`(${pinDeckStage.toString()})(${stage.w}, ${stage.h})`, true);
+    await window.webContents.executeJavaScript(
+      `(${pinDeckStage.toString()})(${stage.w}, ${stage.h}, ${JSON.stringify(DECK_STAGE_SELECTOR)})`,
+      true,
+    );
 
     // Editable PPTX: hand the live, laid-out slides to the vendored dom-to-pptx
     // engine (native shapes/text) instead of capturing images.
@@ -336,7 +385,7 @@ export function requestedRenderSize(
 async function measureSlideStage(window: BrowserWindow): Promise<Stage> {
   try {
     const measured = (await window.webContents.executeJavaScript(
-      `(${measureSlide.toString()})(${JSON.stringify(SLIDE_SELECTOR)})`,
+      `(${measureSlide.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${JSON.stringify(DECK_STAGE_SELECTOR)})`,
       true,
     )) as { w: number; h: number } | null;
     if (
@@ -399,11 +448,16 @@ async function renderEditablePptx(
     true,
   );
   await nextFrames(window);
+  const importedStylesheetUrls = (await window.webContents.executeJavaScript(
+    `(${collectImportedStylesheetUrls.toString()})()`,
+    true,
+  )) as string[];
+  const importedStylesheetOverrides = await fetchGoogleFontStylesheets(importedStylesheetUrls);
   await window.webContents.executeJavaScript(await loadDomToPptxBundle(), true);
   // runDomToPptx calls cjkPromotedFontFamily by name; define it in the same scope
   // as the serialized body so the reference resolves inside the render window.
   const out = (await window.webContents.executeJavaScript(
-    `(() => { const cjkPromotedFontFamily = ${cjkPromotedFontFamily.toString()}; return (${runDomToPptx.toString()})(${JSON.stringify(SLIDE_SELECTOR)}); })()`,
+    `(() => { const cjkPromotedFontFamily = ${cjkPromotedFontFamily.toString()}; return (${runDomToPptx.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${JSON.stringify(importedStylesheetOverrides)}); })()`,
     true,
   )) as { b64?: string; error?: string };
   if (!out || out.error || !out.b64) {
@@ -958,6 +1012,23 @@ function showAllSlides(slideSelector: string): number {
   return slides.length;
 }
 
+function collectImportedStylesheetUrls(): string[] {
+  const urls = new Set<string>();
+  const pattern = /@import\s+(?:url\(\s*)?(?:(["'])([\s\S]*?)\1|([^"')\s;]+))\s*\)?[^;]*;/giu;
+  document.querySelectorAll("style").forEach((style) => {
+    for (const match of (style.textContent || "").matchAll(pattern)) {
+      const raw = match[2] || match[3];
+      if (!raw) continue;
+      try {
+        urls.add(new URL(raw, document.baseURI).href);
+      } catch {
+        // Ignore malformed author CSS and let the normal browser fallback apply.
+      }
+    }
+  });
+  return Array.from(urls);
+}
+
 // Picks the typeface the exported PPTX should name for a run of `text`, given its
 // CSS `font-family` stack. dom-to-pptx names ONE typeface per run — the first
 // family in the stack — and writes it to the PowerPoint `<a:latin>`, `<a:ea>`
@@ -1001,7 +1072,130 @@ export function cjkPromotedFontFamily(fontFamily: string, text: string): string 
 // Serialized into the page: runs the injected dom-to-pptx engine over every real
 // slide and returns the .pptx bytes as base64 (or an error). Fonts are
 // auto-detected + embedded; SVGs stay vector (editable in PowerPoint).
-export async function runDomToPptx(slideSelector: string): Promise<{ b64?: string; error?: string }> {
+export async function runDomToPptx(
+  slideSelector: string,
+  importedStylesheetOverrides: Array<{ cssText: string; url: string }> = [],
+): Promise<{ b64?: string; error?: string }> {
+  function importedStylesheetUrls(cssText: string, baseHref: string): string[] {
+    const urls: string[] = [];
+    const importPattern =
+      /@import\s+(?:url\(\s*)?(?:(["'])([\s\S]*?)\1|([^"')\s;]+))\s*\)?[^;]*;/giu;
+    for (const match of cssText.matchAll(importPattern)) {
+      const raw = match[2] || match[3];
+      if (!raw) continue;
+      try {
+        urls.push(new URL(raw, baseHref).href);
+      } catch {
+        // Ignore malformed author CSS and let the existing font fallback apply.
+      }
+    }
+    return urls;
+  }
+
+  function importedFontFaceCss(cssText: string, baseHref: string): string {
+    const faces = (cssText.match(/@font-face\s*\{[\s\S]*?\}/giu) || []).map((rule) => {
+      const value = (property: string): string =>
+        rule.match(new RegExp(`${property}\\s*:\\s*([^;]+)`, "iu"))?.[1]?.trim() || "";
+      return {
+        family: value("font-family").replace(/^['"]|['"]$/g, ""),
+        rule,
+        style: value("font-style").toLowerCase() || "normal",
+        unicodeRange: value("unicode-range"),
+        weight: value("font-weight").toLowerCase() || "400",
+      };
+    });
+    const preferredFace = new Map<string, { rank: number; style: string; weight: string }>();
+    for (const face of faces) {
+      const rank = face.style === "normal" ? (face.weight === "400" || face.weight === "normal" ? 0 : 1) : 2;
+      const current = preferredFace.get(face.family);
+      if (!current || rank < current.rank) {
+        preferredFace.set(face.family, { rank, style: face.style, weight: face.weight });
+      }
+    }
+
+    const preferredRule = new Map<string, { rank: number; rule: string }>();
+    for (const face of faces) {
+      const preferred = preferredFace.get(face.family);
+      if (preferred?.style !== face.style || preferred.weight !== face.weight) continue;
+      // Google Fonts commonly returns one @font-face per unicode subset. The
+      // vendored converter can fail while merging some families' subsets, so
+      // prefer the complete face when present, then its Latin core subset.
+      const rank = face.unicodeRange === "" ? 0 : /U\+0000-00FF/iu.test(face.unicodeRange) ? 1 : 2;
+      const current = preferredRule.get(face.family);
+      if (!current || rank < current.rank) preferredRule.set(face.family, { rank, rule: face.rule });
+    }
+
+    return faces
+      .filter((face) => preferredRule.get(face.family)?.rule === face.rule)
+      .map((rule) =>
+        rule.rule.replace(/url\(\s*(["']?)([^"')]+)\1\s*\)/giu, (_match, _quote, raw: string) => {
+          try {
+            return `url("${new URL(raw.trim(), baseHref).href}")`;
+          } catch {
+            return `url("${raw.trim()}")`;
+          }
+        }),
+      )
+      .join("\n");
+  }
+
+  // dom-to-pptx's autoEmbedFonts scanner sees top-level CSSFontFaceRule entries,
+  // but many Open Design decks load Google Fonts through an inline `@import`.
+  // Expand those imports into a throwaway top-level style so the vendored engine
+  // can discover and embed the actual font files instead of only writing their
+  // family names into the PPTX. The render window is destroyed after export, so
+  // this never mutates the authored HTML or the live preview.
+  async function exposeImportedFontFaces(): Promise<Array<{ name: string; urls: string[] }>> {
+    const importedUrls = new Set<string>();
+    document.querySelectorAll("style").forEach((style) => {
+      for (const url of importedStylesheetUrls(style.textContent || "", document.baseURI)) {
+        importedUrls.add(url);
+      }
+    });
+    if (importedUrls.size === 0) return [];
+
+    const visited = new Set<string>();
+    const fontFaceRules: string[] = [];
+    const collect = async (url: string): Promise<void> => {
+      if (visited.has(url)) return;
+      visited.add(url);
+      try {
+        const override = importedStylesheetOverrides.find((entry) => entry.url === url);
+        const response = override ? null : await fetch(url);
+        if (response && !response.ok) throw new Error(`HTTP ${response.status}`);
+        const cssText = override?.cssText ?? (await response!.text());
+        for (const nested of importedStylesheetUrls(cssText, url)) await collect(nested);
+        const fontCss = importedFontFaceCss(cssText, url);
+        if (fontCss) fontFaceRules.push(fontCss);
+      } catch (error) {
+        console.warn("Cannot expose imported fonts for editable PPTX:", url, error);
+      }
+    };
+    for (const url of importedUrls) await collect(url);
+    if (fontFaceRules.length === 0) return [];
+
+    const combinedCss = fontFaceRules.join("\n");
+    const style = document.createElement("style");
+    style.setAttribute("data-od-pptx-imported-font-faces", "true");
+    style.textContent = combinedCss;
+    document.head.appendChild(style);
+
+    const fontsByFamily = new Map<string, Set<string>>();
+    for (const rule of combinedCss.match(/@font-face\s*\{[\s\S]*?\}/giu) || []) {
+      const family = rule
+        .match(/font-family\s*:\s*([^;]+)/iu)?.[1]
+        ?.trim()
+        .replace(/^['"]|['"]$/g, "");
+      if (!family) continue;
+      const urls = fontsByFamily.get(family) || new Set<string>();
+      for (const match of rule.matchAll(/url\(\s*["']?([^"')]+)["']?\s*\)/giu)) {
+        if (match[1]) urls.add(match[1]);
+      }
+      if (urls.size > 0) fontsByFamily.set(family, urls);
+    }
+    return Array.from(fontsByFamily, ([name, urls]) => ({ name, urls: Array.from(urls) }));
+  }
+
   function isTransparentColor(input: string): boolean {
     const value = input.trim().toLowerCase();
     return value === "" || value === "transparent" || value === "rgba(0, 0, 0, 0)";
@@ -1128,6 +1322,20 @@ export async function runDomToPptx(slideSelector: string): Promise<{ b64?: strin
     }
   }
 
+  // An authored `<br>` is a deliberate line boundary. Prevent PowerPoint/WPS
+  // from applying a second soft wrap inside either line when its font metrics
+  // differ slightly from Chromium's. dom-to-pptx maps `white-space: nowrap` to
+  // `wrap: false` while retaining explicit breakLine runs.
+  function stabilizeAuthoredHeadingLines(slides: HTMLElement[]): void {
+    for (const slide of slides) {
+      slide.querySelectorAll<HTMLElement>("h1, h2, h3").forEach((heading) => {
+        if (heading.querySelector("br")) {
+          heading.style.setProperty("white-space", "nowrap", "important");
+        }
+      });
+    }
+  }
+
   // Reorder each text run's font-family so CJK runs name their CJK typeface (not
   // the Latin webfont that leads our template stacks) before dom-to-pptx reads it,
   // so PowerPoint/WPS/Keynote all resolve the same real font. See
@@ -1166,8 +1374,11 @@ export async function runDomToPptx(slideSelector: string): Promise<{ b64?: strin
       .call(document.querySelectorAll(slideSelector))
       .filter((el) => !(el as HTMLElement).closest(".mini-slide, .overview, .notes-overlay, .thumb"));
     if (slides.length === 0) return { error: "no slides to export" };
+    const importedFonts = await exposeImportedFontFaces();
+    await document.fonts?.ready;
     ensureExplicitSlideBackgrounds(slides as HTMLElement[]);
     stabilizeLargeSingleLineText(slides as HTMLElement[]);
+    stabilizeAuthoredHeadingLines(slides as HTMLElement[]);
     promoteCjkTypefaces(slides as HTMLElement[]);
     // dom-to-pptx assumes `node.className` is a string, but SVG elements expose
     // an SVGAnimatedString, so its DOM walk throws on decks containing inline SVG.
@@ -1190,6 +1401,7 @@ export async function runDomToPptx(slideSelector: string): Promise<{ b64?: strin
       fileName: "deck.pptx",
       skipDownload: true,
       autoEmbedFonts: true,
+      ...(importedFonts.length > 0 ? { fonts: importedFonts } : {}),
       svgAsVector: true,
     });
     if (!blob || typeof (blob as Blob).arrayBuffer !== "function") {
@@ -1211,7 +1423,7 @@ export async function runDomToPptx(slideSelector: string): Promise<{ b64?: strin
 // chrome, switch any <deck-stage> runtime to authored (1:1) size, and freeze
 // animations/transitions so each slide (and its reveal-on-show inner elements,
 // e.g. `.slide.visible .reveal`) reaches its final state.
-function prepareDeckStage(hideSelector: string): void {
+export function prepareDeckStage(hideSelector: string, stageSelector: string): void {
   document.querySelectorAll(hideSelector).forEach((el) => {
     (el as HTMLElement).style.setProperty("display", "none", "important");
   });
@@ -1221,8 +1433,11 @@ function prepareDeckStage(hideSelector: string): void {
   // it here (no-op for plain `.slide` decks that have no <deck-stage>), or a
   // deck whose authored canvas differs from the 1920x1080 capture viewport would
   // be measured + captured at the preview-scaled size instead of 1:1.
-  document.querySelectorAll("deck-stage").forEach((el) => {
+  document.querySelectorAll(stageSelector).forEach((el) => {
     el.setAttribute("noscale", "");
+    const style = (el as HTMLElement).style;
+    style.setProperty("transform", "none", "important");
+    style.setProperty("transform-origin", "top left", "important");
   });
   const s = document.createElement("style");
   s.textContent =
@@ -1233,11 +1448,11 @@ function prepareDeckStage(hideSelector: string): void {
 // Deck-only: pin to the measured WxH stage so each slide captures
 // deterministically. NOT applied in page mode — an ordinary page must keep its
 // natural width/height.
-function pinDeckStage(w: number, h: number): void {
+function pinDeckStage(w: number, h: number, stageSelector: string): void {
   const style = document.createElement("style");
   style.textContent =
     `html,body{margin:0!important;padding:0!important;width:${w}px!important;height:${h}px!important;overflow:hidden!important}` +
-    `.deck,deck-stage{width:${w}px!important;height:${h}px!important}`;
+    `.deck,${stageSelector}{width:${w}px!important;height:${h}px!important}`;
   document.head.appendChild(style);
 }
 
@@ -1245,7 +1460,7 @@ function pinDeckStage(w: number, h: number): void {
 // that already has a non-zero layout rect (covers decks that hide inactive
 // slides via opacity/visibility); if every slide is display:none, force-measures
 // the first one off-screen. Returns the authored DIP size or null.
-function measureSlide(slideSelector: string): { w: number; h: number } | null {
+function measureSlide(slideSelector: string, stageSelector: string): { w: number; h: number } | null {
   function positiveCssNumber(value: unknown): number | null {
     if (typeof value === "number") return Number.isFinite(value) && value > 1 ? value : null;
     if (typeof value !== "string") return null;
@@ -1266,10 +1481,17 @@ function measureSlide(slideSelector: string): { w: number; h: number } | null {
       (stage as unknown as { designHeight?: unknown }).designHeight,
     );
     if (byProp) return byProp;
-    return sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+    const byAttr = sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+    if (byAttr) return byAttr;
+    const byStyle = sizePair(stage.style?.width, stage.style?.height);
+    if (byStyle) return byStyle;
+    const computed = window.getComputedStyle?.(stage);
+    const byComputed = computed ? sizePair(computed.width, computed.height) : null;
+    if (byComputed) return byComputed;
+    return sizePair(stage.offsetWidth, stage.offsetHeight);
   }
   function measureAuthored(el: HTMLElement): { w: number; h: number } | null {
-    const stage = el.closest("deck-stage") as HTMLElement | null;
+    const stage = el.closest(stageSelector) as HTMLElement | null;
     const stageSize = stage ? deckStageAuthoredSize(stage) : null;
     if (stageSize) return stageSize;
     const attrSize = sizePair(el.getAttribute("width"), el.getAttribute("height"));
@@ -1314,7 +1536,7 @@ function measureSlide(slideSelector: string): { w: number; h: number } | null {
 // is intentionally left to the caller as a last resort because it includes
 // fit-to-viewport transforms.
 export function measureAuthoredSlideBox(el: HTMLElement): { w: number; h: number } | null {
-  const stage = el.closest("deck-stage") as HTMLElement | null;
+  const stage = el.closest(DECK_STAGE_SELECTOR) as HTMLElement | null;
   const stageSize = stage ? deckStageAuthoredSize(stage) : null;
   if (stageSize) return stageSize;
 
@@ -1341,7 +1563,15 @@ function deckStageAuthoredSize(stage: HTMLElement): { w: number; h: number } | n
     (stage as unknown as { designHeight?: unknown }).designHeight,
   );
   if (byProp) return byProp;
-  return sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+  const byAttr = sizePair(stage.getAttribute("width"), stage.getAttribute("height"));
+  if (byAttr) return byAttr;
+  const byStyle = sizePair(stage.style?.width, stage.style?.height);
+  if (byStyle) return byStyle;
+  const view = stage.ownerDocument?.defaultView;
+  const computed = view?.getComputedStyle?.(stage);
+  const byComputed = computed ? sizePair(computed.width, computed.height) : null;
+  if (byComputed) return byComputed;
+  return sizePair(stage.offsetWidth, stage.offsetHeight);
 }
 
 function sizePair(w: unknown, h: unknown): { w: number; h: number } | null {

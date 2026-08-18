@@ -8,11 +8,31 @@ import {
   createAgentRuntimeToolPrompt,
   createDaemonDataDirConfiguredAgentEnv,
   createOpenDesignToolEnv,
+  resolveOpenDesignNodeBin,
 } from '../../src/server.js';
 import { applyAgentLaunchEnv } from '../../src/runtimes/launch.js';
 import { spawnEnvForAgent } from '../../src/runtimes/env.js';
 
 describe('agent runtime tool environment', () => {
+  it('prefers explicit OD_NODE_BIN over the process executable', () => {
+    expect(resolveOpenDesignNodeBin({
+      env: { OD_NODE_BIN: 'C:\\Open Design\\resources\\open-design\\bin\\node.exe' },
+      execPath: 'C:\\Users\\Ada\\AppData\\Roaming\\Open Design\\en\\hash\\Open Design.exe',
+      platform: 'win32',
+      resourceRoot: null,
+    })).toBe('C:\\Open Design\\resources\\open-design\\bin\\node.exe');
+  });
+
+  it('resolves the bundled resource node before falling back to process.execPath', () => {
+    expect(resolveOpenDesignNodeBin({
+      env: {},
+      execPath: 'C:\\Users\\Ada\\AppData\\Roaming\\Open Design\\en\\hash\\Open Design.exe',
+      platform: 'win32',
+      resourceRoot: 'C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\resources\\open-design',
+      exists: (candidate) => candidate.endsWith('\\resources\\open-design\\bin\\node.exe'),
+    })).toBe('C:\\Users\\Ada\\AppData\\Local\\Programs\\Open Design\\resources\\open-design\\bin\\node.exe');
+  });
+
   it('injects daemon URL and run-scoped tool token into agent sessions', () => {
     const env = createAgentRuntimeEnv(
       { PATH: '/bin', OD_TOOL_TOKEN: 'stale-token' },
@@ -80,6 +100,22 @@ describe('agent runtime tool environment', () => {
     expect(env.OD_DAEMON_URL).toBe('http://127.0.0.1:7456');
     expect(env.OD_NODE_BIN).toBe('/opt/open-design/bin/node');
     expect(env.OD_TOOL_TOKEN).toBeUndefined();
+  });
+
+  it('does not expose the broad daemon API token to run-scoped agent sessions', () => {
+    const env = createAgentRuntimeEnv(
+      {
+        PATH: '/bin',
+        OD_API_TOKEN: 'broad-daemon-token',
+        Od_Api_Token: 'windows-cased-broad-token',
+      },
+      'http://100.64.0.10:7456',
+      { token: 'run-scoped-token' },
+      '/opt/open-design/bin/node',
+    );
+
+    expect(env.OD_TOOL_TOKEN).toBe('run-scoped-token');
+    expect(Object.keys(env).some((key) => key.toUpperCase() === 'OD_API_TOKEN')).toBe(false);
   });
 
   it('pins the daemon runtime data dir into agent sessions', () => {

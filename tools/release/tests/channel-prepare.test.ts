@@ -140,6 +140,29 @@ async function writeFakeGhScript(root: string): Promise<string> {
   return scriptPath;
 }
 
+/**
+ * Hermetic stand-in for the repository's `open-design-v*` tags. The prepare
+ * scripts derive the latest-stable floor from `git tag --list`, so without
+ * this the tests depend on whatever tags the local clone happens to have —
+ * green on tagless CI checkouts, permanently red on any developer clone once
+ * real stable tags advance past main's package version. `GIT_DIR` redirects
+ * the spawned scripts' git to a throwaway repo holding exactly the tags the
+ * test declares.
+ */
+async function createHermeticTagRepoEnv(stableTags: string[]): Promise<Record<string, string>> {
+  const gitRoot = await mkdtemp(join(tmpdir(), "od-tools-release-tags-"));
+  await execFileAsync("git", ["init", "--quiet"], { cwd: gitRoot });
+  await execFileAsync(
+    "git",
+    ["-c", "user.email=channel-prepare@test", "-c", "user.name=channel-prepare", "commit", "--allow-empty", "--quiet", "-m", "seed"],
+    { cwd: gitRoot },
+  );
+  for (const tag of stableTags) {
+    await execFileAsync("git", ["tag", tag], { cwd: gitRoot });
+  }
+  return { GIT_DIR: join(gitRoot, ".git") };
+}
+
 async function readPackagedVersion(): Promise<string> {
   const packageJson = JSON.parse(await readFile(packagedPackageJsonPath, "utf8")) as { version?: unknown };
   if (typeof packageJson.version !== "string" || packageJson.version.length === 0) {
@@ -245,6 +268,9 @@ describe("tools-release local channel prepare validation", () => {
         OPEN_DESIGN_GH_NODE_SCRIPT: fakeGh,
         OPEN_DESIGN_STABLE_METADATA_URL: `${server.origin}/stable/latest/metadata.json`,
         OPEN_DESIGN_STABLE_VERSION: packagedVersion,
+        // Matches the stable fixture metadata above and keeps the tag-derived
+        // latest-stable floor below any real packaged version.
+        ...(await createHermeticTagRepoEnv(["open-design-v0.9.0"])),
       };
 
       const beta = await runPrepare("beta", {
@@ -336,10 +362,32 @@ describe("tools-release local channel prepare validation", () => {
         GITHUB_REPOSITORY: "nexu-io/open-design",
         GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
         OPEN_DESIGN_PREVIEW_METADATA_URL: `${server.origin}/preview/latest/metadata.json`,
+        ...(await createHermeticTagRepoEnv(["open-design-v0.10.0"])),
       });
 
       expect(preview.stdout).toContain(`[release-preview] base version: ${packagedVersion}`);
       expect(preview.outputs.release_version).toBe(`${packagedVersion}-preview.1`);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("rejects a preview prepare whose packaged version does not clear the latest stable tag", async () => {
+    const objects: Record<string, unknown> = {
+      "preview/latest/metadata.json": countedMetadata("preview", "0.10.0-preview.2", 2),
+    };
+    const server = await startMetadataServer(objects);
+
+    try {
+      await expect(
+        runPrepare("preview", {
+          GITHUB_REF_NAME: "main",
+          GITHUB_REPOSITORY: "nexu-io/open-design",
+          GITHUB_SHA: "0123456789abcdef0123456789abcdef01234567",
+          OPEN_DESIGN_PREVIEW_METADATA_URL: `${server.origin}/preview/latest/metadata.json`,
+          ...(await createHermeticTagRepoEnv(["open-design-v99.0.0"])),
+        }),
+      ).rejects.toThrow(/must be strictly greater than latest stable 99\.0\.0/);
     } finally {
       await server.close();
     }

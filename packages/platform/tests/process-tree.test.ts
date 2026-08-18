@@ -1,6 +1,14 @@
+import { spawn } from "node:child_process";
+
 import { describe, expect, it } from "vitest";
 
-import { collectProcessTreePids, type ProcessSnapshot } from "../src/index.js";
+import {
+  collectProcessTreePids,
+  processCommandExactlyRunsExecutable,
+  stopProcesses,
+  type ProcessSnapshot,
+  waitForProcessExit,
+} from "../src/index.js";
 
 function snapshot(pid: number, ppid: number, command = `pid-${pid}`): ProcessSnapshot {
   return { command, pid, ppid };
@@ -38,4 +46,81 @@ describe("collectProcessTreePids", () => {
     const processes = [snapshot(100, 200), snapshot(200, 100)];
     expect(collectProcessTreePids(processes, [100])).toEqual([200, 100]);
   });
+});
+
+describe("processCommandExactlyRunsExecutable", () => {
+  it("accepts exact POSIX and quoted Windows executable commands", () => {
+    expect(processCommandExactlyRunsExecutable(
+      "/Applications/Open Design.app/Contents/MacOS/Open Design",
+      "/Applications/Open Design.app/Contents/MacOS/Open Design",
+      "darwin",
+    )).toBe(true);
+    expect(processCommandExactlyRunsExecutable(
+      '"C:\\Program Files\\Open Design\\Open Design.exe"',
+      "C:\\Program Files\\Open Design\\Open Design.exe",
+      "win32",
+    )).toBe(true);
+  });
+
+  it("rejects arguments and lookalike executable prefixes", () => {
+    const executable = "/Applications/Open Design.app/Contents/MacOS/Open Design";
+    expect(processCommandExactlyRunsExecutable(`${executable} --inspect`, executable, "darwin")).toBe(false);
+    expect(processCommandExactlyRunsExecutable(`${executable} Helper`, executable, "darwin")).toBe(false);
+
+    const windowsExecutable = "C:\\Program Files\\Open Design\\Open Design.exe";
+    expect(processCommandExactlyRunsExecutable(
+      `"${windowsExecutable}" od://project/123`,
+      windowsExecutable,
+      "win32",
+    )).toBe(false);
+    expect(processCommandExactlyRunsExecutable(
+      `"${windowsExecutable}.old"`,
+      windowsExecutable,
+      "win32",
+    )).toBe(false);
+  });
+
+  it("compares Windows executable paths case-insensitively", () => {
+    expect(processCommandExactlyRunsExecutable(
+      '"C:\\PROGRAM FILES\\OPEN DESIGN\\OPEN DESIGN.EXE"',
+      "c:\\Program Files\\Open Design\\Open Design.exe",
+      "win32",
+    )).toBe(true);
+  });
+});
+
+describe("stopProcesses", () => {
+  it.skipIf(process.platform === "win32")(
+    "escalates to SIGKILL when a child ignores SIGTERM",
+    async () => {
+      const child = spawn(
+        process.execPath,
+        [
+          "-e",
+          "process.on('SIGTERM',()=>{});process.stdout.write('ready\\n');setInterval(()=>{},1000)",
+        ],
+        { stdio: ["ignore", "pipe", "ignore"] },
+      );
+      const pid = child.pid;
+      if (pid == null) throw new Error("test child did not start");
+      await new Promise<void>((resolve, reject) => {
+        child.once("error", reject);
+        child.stdout?.once("data", () => resolve());
+      });
+
+      try {
+        const result = await stopProcesses([pid], {
+          termGraceMs: 100,
+          killGraceMs: 1_000,
+        });
+        expect(result.forcedPids).toContain(pid);
+        expect(result.remainingPids).toEqual([]);
+        expect(result.stoppedPids).toContain(pid);
+      } finally {
+        child.kill("SIGKILL");
+        await waitForProcessExit(pid, 1_000);
+      }
+    },
+    5_000,
+  );
 });

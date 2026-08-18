@@ -1,3 +1,4 @@
+import type { ProjectKind, SkillSummary } from '@open-design/contracts';
 import type { PluginUseAction } from '../plugins-home/useActions';
 
 export type HomePromptHandoff =
@@ -17,6 +18,15 @@ export type HomePromptHandoff =
     source: 'plugin-use';
     action: PluginUseAction;
     inputs?: Record<string, unknown>;
+    /** Preserve the Home creation type when a template is picked elsewhere. */
+    chipId?: string;
+    projectKind?: ProjectKind;
+  }
+  | {
+    id: number;
+    skill: SkillSummary;
+    focus: boolean;
+    source: 'skill-use';
   };
 
 export const PLUGIN_AUTHORING_GOAL_INPUT = 'pluginGoal';
@@ -95,12 +105,25 @@ export function createPluginAuthoringHandoff(
   };
 }
 
+/**
+ * Hands a skill picked outside the composer (the 扩展 marketplace) to the home
+ * hero, which selects it exactly as the composer's own skill picker would.
+ */
+export function createSkillUseHandoff(
+  id: number,
+  skill: SkillSummary,
+): HomePromptHandoff {
+  return { id, skill, focus: true, source: 'skill-use' };
+}
+
 export function createPluginUseHandoff(
   id: number,
   pluginId: string,
   options: {
     action?: PluginUseAction;
     inputs?: Record<string, unknown>;
+    chipId?: string;
+    projectKind?: ProjectKind;
   } = {},
 ): HomePromptHandoff {
   return {
@@ -108,7 +131,36 @@ export function createPluginUseHandoff(
     pluginId,
     action: options.action ?? 'use',
     ...(options.inputs ? { inputs: options.inputs } : {}),
+    ...(options.chipId ? { chipId: options.chipId } : {}),
+    ...(options.projectKind ? { projectKind: options.projectKind } : {}),
     focus: true,
     source: 'plugin-use',
   };
+}
+
+/**
+ * A handoff published by a surface that is about to navigate away, for the home
+ * entry to pick up once it mounts.
+ *
+ * `EntryShell` owns `homePromptHandoff` in component state, which is enough for
+ * its own in-place surfaces (the marketplace tab calls `usePluginFromLibrary`
+ * and only switches view). It is not enough for the `/marketplace/<id>` detail
+ * route: `App` renders `PluginDetailView` outside `EntryShell`, so navigating
+ * home unmounts the holder and drops the handoff with it.
+ *
+ * Module scope — deliberately not `window` — so the value survives that unmount
+ * without becoming globally reachable. Reads are destructive: a handoff is a
+ * one-shot instruction, and leaving it behind would re-apply the plugin on the
+ * next visit to home.
+ */
+let pendingHomePromptHandoff: HomePromptHandoff | null = null;
+
+export function stashHomePromptHandoff(handoff: HomePromptHandoff): void {
+  pendingHomePromptHandoff = handoff;
+}
+
+export function takeHomePromptHandoff(): HomePromptHandoff | null {
+  const handoff = pendingHomePromptHandoff;
+  pendingHomePromptHandoff = null;
+  return handoff;
 }

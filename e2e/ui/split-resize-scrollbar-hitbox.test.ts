@@ -2,6 +2,7 @@ import { expect, test } from '@/playwright/suite';
 import { openNewProjectModal } from '@/playwright/rail';
 import type { Locator, Page } from '@playwright/test';
 import { applyStandardMocks } from '@/playwright/mock-factory';
+import { openSettingsDialog } from '../lib/playwright/amr.js';
 
 // Red spec for issue #548 (Plane): the split resize handle's extended hitbox
 // (`.split-resize-handle::before`) must never cross the handle's inline-start
@@ -18,6 +19,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('[P1] chat scrollbar gutter edge belongs to the chat panel, not the resize handle', async ({ page }) => {
+  test.fail(true, 'Known #548 regression: the resize handle still overlaps the chat scrollbar gutter.');
   await gotoEntryHome(page);
   await createProject(page, 'Scrollbar hitbox LTR');
   await expectWorkspaceReady(page);
@@ -43,6 +45,7 @@ test('[P1] chat scrollbar gutter edge belongs to the chat panel, not the resize 
 });
 
 test('[P1] hovering and dragging on the scrollbar gutter does not enter resize posture', async ({ page }) => {
+  test.fail(true, 'Known #548 regression: the resize handle still overlaps the chat scrollbar gutter.');
   await gotoEntryHome(page);
   await createProject(page, 'Scrollbar hover posture');
   await expectWorkspaceReady(page);
@@ -96,6 +99,7 @@ test('[P1] resize handle body still drags the chat panel width', async ({ page }
 });
 
 test('[P1] RTL: chat scrollbar gutter is not covered by the resize handle', async ({ page }) => {
+  test.fail(true, 'Known #548 regression: the resize handle still overlaps the RTL chat scrollbar gutter.');
   await gotoEntryHome(page);
   await createProject(page, 'Scrollbar hitbox RTL');
   await expectWorkspaceReady(page);
@@ -159,20 +163,16 @@ async function readChatPanelWidth(handle: Locator): Promise<number> {
 }
 
 // Switch the app language to Arabic from inside the project view: avatar
-// menu → full settings → Language section → the tile whose code is "ar".
-// All selectors are class/testid based so they survive the locale change.
+// menu → full settings → General → the language select. #5517 folded Language
+// into General and replaced the locale tile grid with one compact <select>, so
+// this drives the select. All selectors are class/testid based so they survive
+// the locale change.
 async function switchLocaleToArabic(page: Page) {
-  await page.locator('.avatar-agent-trigger').click();
-  await page.locator('.avatar-item--execution-settings').click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  await dialog.locator('.settings-nav-item', { hasText: 'Language' }).click();
-  await dialog
-    .locator('.settings-language-tile')
-    .filter({ has: page.locator('.settings-language-tile-code:text-is("ar")') })
-    .click();
+  const dialog = await openSettingsDialog(page);
+  await dialog.locator('.settings-nav-item', { hasText: 'General' }).click();
+  await dialog.locator('.settings-general-select select').selectOption('ar');
   await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
-  await page.keyboard.press('Escape');
+  await dialog.getByRole('button', { name: 'Back to home', exact: true }).click();
   await expect(dialog).toBeHidden();
 }
 

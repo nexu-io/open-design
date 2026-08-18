@@ -1,5 +1,5 @@
 import { mkdtemp, rm } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -108,6 +108,35 @@ describe("generic sidecar path boundary", () => {
 
     expect(resolveNamespace({ contract: fakeContract, env })).toBe("selected");
     expect(resolveSidecarBase({ contract: fakeContract, env, projectRoot: "/repo/product", source: "tool" })).toBe(resolve("/runtime/base"));
+  });
+
+  it("does not read cwd when an explicit or environment base is available", () => {
+    const explicitBase = resolve(tmpdir(), "runtime-explicit");
+    const environmentBase = resolve(tmpdir(), "runtime-env");
+    const launchBase = resolve(tmpdir(), "runtime-launch");
+    const cwd = vi.spyOn(process, "cwd").mockImplementation(() => {
+      throw new Error("uv_cwd");
+    });
+    const stamp: FakeStamp = {
+      app: "api",
+      ipc: resolveAppIpcPath({ app: "api", contract: fakeContract, namespace: "alpha" }),
+      mode: "dev",
+      namespace: "alpha",
+      source: "tool",
+    };
+
+    try {
+      expect(resolveSidecarBase({ base: explicitBase, contract: fakeContract, source: "tool" })).toBe(explicitBase);
+      expect(resolveSidecarBase({ contract: fakeContract, env: { FAKE_BASE: environmentBase }, source: "tool" })).toBe(
+        environmentBase,
+      );
+      expect(createSidecarLaunchEnv({ base: launchBase, contract: fakeContract, extraEnv: {}, stamp })).toMatchObject({
+        FAKE_BASE: launchBase,
+      });
+      expect(cwd).not.toHaveBeenCalled();
+    } finally {
+      cwd.mockRestore();
+    }
   });
 });
 

@@ -1,12 +1,12 @@
 {
   "name": "@open-design/landing-page",
-  "version": "0.15.1",
+  "version": "0.19.2",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx scripts/vendor-enhancers.ts && astro dev --host 127.0.0.1 --port 17574",
     "build": "astro check && pnpm run build:static",
-    "build:static": "tsx scripts/vendor-enhancers.ts && astro build && tsx scripts/copy-example-html.ts",
+    "build:static": "pnpm test && tsx scripts/vendor-enhancers.ts && astro build && tsx scripts/verify-localized-template-routes.ts && tsx scripts/copy-example-html.ts",
     "vendor:enhancers": "tsx scripts/vendor-enhancers.ts",
     "preview": "astro preview --host 127.0.0.1 --port 17574",
     "previews": "tsx scripts/generate-previews.ts",

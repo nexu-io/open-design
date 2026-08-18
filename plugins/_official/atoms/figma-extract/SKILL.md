@@ -58,7 +58,7 @@ different file).
 
 ## Status
 
-Reserved id, prompt-only fragment in v1. The Figma REST + node-walk
-implementation lands in spec §16 Phase 6; until then plugins that
-declare this atom rely on their bundled MCP server (typically the
-community `@community/figma-mcp`) for the actual fetch.
+Implemented by the daemon runner in
+`apps/daemon/src/plugins/atoms/figma-extract.ts`. It fetches and walks the
+Figma REST tree, records unsupported nodes, lifts tokens, and rasterizes
+supported assets.

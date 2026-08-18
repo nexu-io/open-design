@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { isAbsolute, join, win32 } from "node:path";
+import { join, posix, win32 } from "node:path";
 
 import { APP_KEYS, normalizeNamespace } from "@open-design/sidecar-proto";
 
@@ -60,7 +60,7 @@ function resolvePackagedDataRoot(
     const expanded = expandHomePrefix(odDataDir);
     const isAbs = process.platform === "win32"
       ? win32.isAbsolute(expanded)
-      : isAbsolute(expanded);
+      : posix.isAbsolute(expanded);
     if (!isAbs) {
       throw new PackagedPathAccessError(
         [

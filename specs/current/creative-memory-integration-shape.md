@@ -218,11 +218,13 @@ agent identity, or feature flag.
 - Critique theater addendum — gated on `cfg.enabled`, suppressed on media.
 - Active-design visual-direction override — gated on the brand being bound.
 - Connected external MCP directive — gated on connected MCP servers.
-- Claude-only `AskUserQuestion` clarifying-questions block — gated on
-  agent identity.
+- Mid-conversation `<question-form>` clarification guidance — available to
+  every agent because the form is UI-parsed assistant-text markup, not a
+  native tool call.
 
-Source: `apps/daemon/src/prompts/system.ts:430-650`. The exact line numbers
-are unstable; the gating conditions and order are the durable shape.
+Source: the tail assembly in `buildSystemPrompt` in
+`apps/daemon/src/prompts/system.ts`. The exact line numbers are unstable; the
+gating conditions and order are the durable shape.
 
 The existing precedence rule, declared in the `## Personal memory` block's
 own narrative, is: **personal memory is preferences, not hard rules; brand
@@ -362,11 +364,11 @@ The engine defaults to `<package install dir>/memory/<userId>/preferences.json`
 overridable via `MEMORY_STORAGE_ROOT`. For Open Design integration, two
 decisions:
 
-- **Default location.** Lean: `<OD_DATA_DIR>/memory/<userId>/preferences.json`
-  so memory follows the same `OD_DATA_DIR` precedence as other daemon state
-  (`AGENTS.md` FAQ "Where is data written?"). Packaged installs and Home
-  Manager / NixOS modules already point `OD_DATA_DIR` at a writable directory;
-  memory should ride that contract.
+- **Default ownership.** Memory is daemon-managed state. The integration must
+  receive an explicit storage root derived from the daemon's already-resolved
+  `RUNTIME_DATA_DIR`; it must not independently reinterpret `OD_DATA_DIR` or
+  choose a cwd-relative fallback. The exact daemon path is intentionally left
+  to root [`AGENTS.md`](../../AGENTS.md) → **Daemon data directory contract**.
 - **Portability.** `od memory export --to <path>` and `od memory import <path>`
   for moving memory across machines without a cloud sync layer. The engine's
   storage is already plain JSON; this is just CLI plumbing.

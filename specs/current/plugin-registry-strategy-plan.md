@@ -623,10 +623,12 @@ Goal: upgrade from "installed plugin gallery" to "multi-source plugin registry".
 - [x] Rename the Home page official shelf copy to `Official starters` or `Official installed`, and add a lightweight `Browse registry` path to `/plugins` so Home stays a fast-use surface while `/plugins` remains the registry console.
 - [x] Make `Create plugin` launch an agent-assisted authoring flow backed by `od plugin scaffold/validate/pack/publish`, including local install/run validation before publish and `gh` login/whoami checks before opening a registry PR. Current slice updates the agent prompt and CLI wrapper; full GitHub PR mutation remains in P2.
 - [x] Add public `/plugins/` route on `apps/landing-page` for open-design.ai: searchable official/community registry listing, static plugin detail pages, canonical/OG/Twitter metadata, JSON-LD item/detail data, and homepage/header entry points.
-- [ ] Add source filters: Official, Community, My plugins, Team, specific source.
+- [x] Add Available-source filtering for all configured sources or one specific marketplace source.
+- [ ] Add the broader semantic filters across surfaces: Official, Community, My plugins, and Team.
 - [x] Add detail provenance, publisher, version, integrity, command, and risk sections to the public website detail route; in-app drawer polish remains tracked separately.
 - [ ] Add GitHub host/auth status, cached status, and refresh policy to the source manager.
-- [x] Add public plugin detail `od://` deep links and static search JSON. README rendering and preview galleries remain content-quality follow-ups.
+- [x] Add public plugin detail `od://` deep links, static search JSON, and manifest-backed detail previews for entries with poster/video or local HTML examples.
+- [ ] Add README rendering and richer multi-item preview galleries as content-quality follow-ups.
 - [ ] Decide whether `/marketplace` should redirect to `/plugins/` or remain an alias for compatibility.
 
 ### P4: Private, Enterprise, And Offline

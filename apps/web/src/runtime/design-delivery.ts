@@ -117,3 +117,42 @@ export function designDeliveryVerificationPending(
   if (isIntermediateDesignTurn(message.content, message.events)) return false;
   return message.producedFiles === undefined || message.traceObjectFiles === undefined;
 }
+
+/**
+ * A succeeded Design message that still lacks delivery metadata long after its
+ * run finished is a historical row whose delivery never materialized (e.g. a
+ * row persisted by an older build before the final project-file refresh, or an
+ * interrupted persistence path). Auto-replaying such a row on every reload is
+ * the #6505 loop — the metadata will never appear, so each reload re-enters the
+ * reattach path and the chat stays visually loading.
+ *
+ * Reconcile only within a short window after the run's terminal time (enough
+ * for the run-status event to race ahead of the project-file refresh the
+ * `designDeliveryVerificationPending` gap exists to absorb); past that window
+ * the row is treated as a terminal outcome instead of being replayed.
+ */
+export function designDeliveryReconciliationStale(
+  message: Pick<
+    ChatMessage,
+    | 'sessionMode'
+    | 'runStatus'
+    | 'resultDeliveryState'
+    | 'endedAt'
+    | 'startedAt'
+    | 'createdAt'
+  >,
+  now: number = Date.now(),
+): boolean {
+  if (message.sessionMode !== 'design' || message.runStatus !== 'succeeded') return false;
+  if (message.resultDeliveryState) return false;
+  // The #6505 legacy shape can lack `endedAt` entirely (rows persisted before
+  // `endedAt` existed), so bound the reconciliation age from any persisted
+  // terminal timestamp — `endedAt` first, then the run/message start time. A
+  // row with no timestamp at all defers to the existing verification logic.
+  const terminalAt = message.endedAt ?? message.startedAt ?? message.createdAt;
+  if (terminalAt == null) return false;
+  return now - terminalAt > DESIGN_DELIVERY_RECONCILIATION_WINDOW_MS;
+}
+
+/** How long after a run's terminal time a Design-mode delivery may be reconciled. */
+export const DESIGN_DELIVERY_RECONCILIATION_WINDOW_MS = 5 * 60 * 1000;

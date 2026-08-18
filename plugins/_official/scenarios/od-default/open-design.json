@@ -25,26 +25,26 @@
   },
   "version": "0.1.0",
   "publishedAt": "2026-05-12T23:01:12Z",
-  "description": "Hidden fallback scenario for free-form Home prompts. It asks the user which task type to build, then continues through the matching design flow.",
+  "description": "Hidden fallback scenario for free-form Home prompts. It infers the task type and asks only when the brief cannot be routed reliably.",
   "description_i18n": {
-    "en": "Hidden fallback scenario for free-form Home prompts. It asks the user which task type to build, then continues through the matching design flow.",
-    "zh-CN": "面向 Home 自由提示的隐藏 fallback 场景：先询问用户要做哪种任务，再走对应的设计流。",
-    "zh-TW": "面向 Home 自由提示的隱藏 fallback 場景：先詢問使用者要做哪種任務，再走對應的設計流程。",
-    "ja": "Home の自由形式プロンプト向けの隠れたフォールバックシナリオ。タスク種別をユーザーに尋ね、対応するデザインフローへ続けます。",
-    "ko": "Home의 자유 입력 프롬프트를 위한 숨겨진 폴백 시나리오. 어떤 작업을 만들지 사용자에게 묻고 해당 디자인 플로로 이어집니다.",
-    "de": "Versteckter Fallback für freie Home-Prompts. Fragt den Nutzer, welcher Task-Typ gebaut werden soll, und wechselt dann in den passenden Design-Flow.",
-    "fr": "Scénario de repli caché pour les prompts libres de Home. Demande à l'utilisateur quel type de tâche construire, puis enchaîne sur le flow de design correspondant.",
-    "ru": "Скрытый fallback-сценарий для свободных промтов на Home. Спрашивает у пользователя, какой тип задачи строить, и продолжает в соответствующем дизайн-потоке.",
-    "es": "Escenario de fallback oculto para prompts libres en Home. Pregunta al usuario qué tipo de tarea construir y continúa por el flow de diseño correspondiente.",
-    "pt-BR": "Cenário de fallback oculto para prompts livres no Home. Pergunta ao usuário qual tipo de tarefa construir e segue pelo flow de design correspondente.",
-    "it": "Scenario di fallback nascosto per i prompt liberi della Home. Chiede all'utente quale tipo di task costruire e prosegue nel flow di design corrispondente.",
-    "vi": "Kịch bản fallback ẩn cho prompt tự do ở Home. Hỏi người dùng muốn xây loại task nào rồi đi tiếp qua design flow tương ứng.",
-    "pl": "Ukryty scenariusz fallback dla swobodnych promptów Home. Pyta użytkownika, jaki typ zadania zbudować, i kontynuuje przez pasujący design flow.",
-    "id": "Skenario fallback tersembunyi untuk prompt bebas di Home. Bertanya jenis tugas apa yang akan dibangun, lalu lanjut ke design flow yang cocok.",
-    "nl": "Verborgen fallback-scenario voor vrije Home-prompts. Vraagt de gebruiker welk taaktype te bouwen en gaat dan verder via de bijpassende designflow.",
-    "ar": "سيناريو احتياطي مخفي للموجهات الحرة في Home. يسأل المستخدم عن نوع المهمة ثم ينتقل إلى تدفق التصميم المطابق.",
-    "tr": "Home'daki serbest promptlar için gizli yedek senaryo. Hangi görev türünün kurulacağını sorar ve eşleşen tasarım akışıyla devam eder.",
-    "uk": "Прихований резервний сценарій для вільних промтів на Home. Питає користувача, який тип задачі будувати, і переходить у відповідний дизайн-потік."
+    "en": "Hidden fallback scenario for free-form Home prompts. It infers the task type and asks only when the brief cannot be routed reliably.",
+    "zh-CN": "面向 Home 自由提示的隐藏 fallback 场景：先推断任务类型，仅在无法可靠路由时询问。",
+    "zh-TW": "面向 Home 自由提示的隱藏 fallback 場景：先推斷任務類型，僅在無法可靠路由時詢問。",
+    "ja": "Home の自由形式プロンプト向けの隠れたフォールバックシナリオ。タスク種別を推定し、確実に振り分けられない場合だけ質問します。",
+    "ko": "Home 자유 입력 프롬프트를 위한 숨겨진 폴백 시나리오입니다. 작업 유형을 추론하고 확실하게 라우팅할 수 없을 때만 질문합니다.",
+    "de": "Versteckter Fallback für freie Home-Prompts. Leitet den Aufgabentyp ab und fragt nur, wenn keine zuverlässige Zuordnung möglich ist.",
+    "fr": "Scénario de repli caché pour les prompts libres de Home. Il déduit le type de tâche et ne pose une question que si le routage reste incertain.",
+    "ru": "Скрытый fallback-сценарий для свободных промтов Home. Определяет тип задачи и спрашивает только тогда, когда надежная маршрутизация невозможна.",
+    "es": "Escenario de fallback oculto para prompts libres en Home. Infiere el tipo de tarea y solo pregunta cuando no puede enrutarla con fiabilidad.",
+    "pt-BR": "Cenário de fallback oculto para prompts livres no Home. Infere o tipo de tarefa e só pergunta quando não consegue encaminhá-la com segurança.",
+    "it": "Scenario di fallback nascosto per i prompt liberi della Home. Deduce il tipo di attività e chiede solo quando non può instradarla in modo affidabile.",
+    "vi": "Kịch bản fallback ẩn cho prompt tự do ở Home. Hệ thống suy luận loại tác vụ và chỉ hỏi khi không thể định tuyến một cách đáng tin cậy.",
+    "pl": "Ukryty scenariusz fallback dla swobodnych promptów Home. Wnioskuje typ zadania i pyta tylko wtedy, gdy nie może go wiarygodnie skierować.",
+    "id": "Skenario fallback tersembunyi untuk prompt bebas di Home. Menyimpulkan jenis tugas dan hanya bertanya ketika tidak dapat merutekannya dengan andal.",
+    "nl": "Verborgen fallback-scenario voor vrije Home-prompts. Leidt het taaktype af en vraagt alleen wanneer betrouwbare routering niet mogelijk is.",
+    "ar": "سيناريو احتياطي مخفي للموجهات الحرة في Home. يستنتج نوع المهمة ولا يسأل إلا عندما يتعذر توجيهها بشكل موثوق.",
+    "tr": "Home'daki serbest promptlar için gizli yedek senaryo. Görev türünü çıkarır ve yalnızca güvenilir biçimde yönlendiremediğinde sorar.",
+    "uk": "Прихований резервний сценарій для вільних промтів Home. Визначає тип задачі й запитує лише тоді, коли не може надійно її спрямувати."
   },
   "license": "MIT",
   "author": {
@@ -77,16 +77,15 @@
         "typography",
         "color",
         "anti-ai-slop"
+      ],
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
       ]
     },
     "pipeline": {
       "stages": [
-        {
-          "id": "task-type",
-          "atoms": [
-            "discovery-question-form"
-          ]
-        },
         {
           "id": "discovery",
           "atoms": [
@@ -120,46 +119,9 @@
         }
       ]
     },
-    "genui": {
-      "surfaces": [
-        {
-          "id": "task-type",
-          "kind": "choice",
-          "persist": "conversation",
-          "trigger": {
-            "stageId": "task-type",
-            "atom": "discovery-question-form"
-          },
-          "prompt": "What type of design task should this free-form prompt create?",
-          "schema": {
-            "type": "object",
-            "required": [
-              "taskType"
-            ],
-            "properties": {
-              "taskType": {
-                "type": "string",
-                "title": "Task type",
-                "enum": [
-                  "prototype",
-                  "live-artifact",
-                  "deck",
-                  "image",
-                  "video",
-                  "hyperframes",
-                  "audio",
-                  "other"
-                ]
-              }
-            }
-          }
-        }
-      ]
-    },
     "capabilities": [
       "prompt:inject",
       "pipeline:*",
-      "genui:choice",
       "media:image",
       "media:video",
       "media:audio",
@@ -167,8 +129,8 @@
     ],
     "useCase": {
       "query": {
-        "en": "Route a free-form Home prompt by asking the task type first, then continue through the matching design workflow.",
-        "zh-CN": "先询问自由输入属于哪一类设计任务，然后进入匹配的设计工作流。"
+        "en": "Route a free-form Home prompt by inferring its task type, asking only when the route is materially ambiguous.",
+        "zh-CN": "先从自由输入推断设计任务类型，仅在路由存在实质歧义时询问。"
       },
       "exampleOutputs": []
     },

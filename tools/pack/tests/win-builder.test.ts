@@ -86,6 +86,25 @@ describe("materializeCachedUnpackedForInstaller", () => {
         `${JSON.stringify({ name: "open-design-packaged-app", version: "0.5.0-beta.1" })}\n`,
         "utf8",
       );
+      const nodePtyPrebuildRoot = join(
+        cachedUnpackedRoot,
+        "resources",
+        "app",
+        "node_modules",
+        "node-pty",
+        "prebuilds",
+        "win32-x64",
+      );
+      await mkdir(nodePtyPrebuildRoot, { recursive: true });
+      for (const fileName of [
+        "conpty.node",
+        "conpty_console_list.node",
+        "pty.node",
+        "winpty-agent.exe",
+        "winpty.dll",
+      ]) {
+        await writeFile(join(nodePtyPrebuildRoot, fileName), Buffer.alloc(32 * 1024, 1));
+      }
       await mkdir(join(paths.packagedConfigPath, ".."), { recursive: true });
       await writeFile(
         paths.packagedConfigPath,

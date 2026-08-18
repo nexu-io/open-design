@@ -16,7 +16,7 @@ Picking a visual direction usually means rebuilding when you change your mind. T
 
 ## What is Open Design?
 
-Open Design is an open-source, local-first alternative to closed cloud design tools. The core idea is *bring your own agent*: it's not the AI brain, it's the conductor. It **auto-detects the coding agents already on your machine** (Claude Code, Codex, Gemini, DeepSeek, and more) and turns them into UI/UX designers — no ecosystem lock-in, no weekly cap, and everything runs locally (your files, your SQLite, your projects stay on your device).
+Open Design is an open-source, local-first alternative to closed cloud design tools. The core idea is *bring your own agent*: it's not the AI brain, it's the conductor. It **auto-detects the coding agents already on your machine** (Claude Code, Codex, OpenCode, DeepSeek, and more) and turns them into UI/UX designers — no ecosystem lock-in, no weekly cap, and everything runs locally (your files, your SQLite, your projects stay on your device).
 
 - **Open source, Apache-2.0** — clone it, self-host it, or just download the app.
 - **Any model** — pick whatever fits your budget and workflow.

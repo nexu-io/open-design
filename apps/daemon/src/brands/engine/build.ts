@@ -29,7 +29,7 @@ import type { Brand, AssetKind } from "../schema.js";
 import { injectFontFaces, type FontFile } from "../fonts.js";
 import { prefetchBrand, type PrefetchResult } from "../prefetch.js";
 import type { BrandSystem, DesignTokens, SeedToken, ThemeAlgorithm } from "./types.js";
-import { deriveTokens } from "./derive.js";
+import { deriveTokens, defaultThemeAlgorithm } from "./derive.js";
 import { seedFromBrand, seedFromMaterial } from "./seed.js";
 import { tokensToJson, tokensToCssVars, tokensToThemeJson } from "./export.js";
 import { renderKitPage } from "./kit.js";
@@ -200,7 +200,10 @@ function assemble({ slug, brand, seed, extraFiles, fontFiles, fontsBase = "../" 
   files["scripts/apply-design-tokens.mjs"] = applyDesignTokensScript();
 
   // ── antd ConfigProvider theme ──
-  files["theme.json"] = tokensToThemeJson(seed, "default");
+  // Route through defaultThemeAlgorithm so a dark-first seed exports
+  // algorithm:"dark" here too, matching the dark math already baked into
+  // tokens.default.json / variables.css / kit.html.
+  files["theme.json"] = tokensToThemeJson(seed, defaultThemeAlgorithm(seed));
 
   // kit/index sit at the bundle root, artifacts one level deeper — each doc's
   // @font-face urls are relative to its own location.

@@ -21,6 +21,7 @@ const WORKSPACE_BUILD_PACKAGES = [
   { directory: "packages/agui-adapter", name: "@open-design/agui-adapter" },
   { directory: "packages/plugin-runtime", name: "@open-design/plugin-runtime" },
   { directory: "packages/diagnostics", name: "@open-design/diagnostics" },
+  { directory: "packages/dsh-runtime", name: "@open-design/dsh-runtime" },
   { directory: "apps/daemon", name: "@open-design/daemon" },
   { directory: "apps/web", name: "@open-design/web" },
   { directory: "apps/desktop", name: "@open-design/desktop" },
@@ -41,6 +42,7 @@ const BUILD_COMMANDS = [
   { args: ["--filter", "@open-design/agui-adapter", "build"] },
   { args: ["--filter", "@open-design/plugin-runtime", "build"] },
   { args: ["--filter", "@open-design/diagnostics", "build"] },
+  { args: ["--filter", "@open-design/dsh-runtime", "build"] },
   { args: ["--filter", "@open-design/daemon", "build"] },
   { args: ["--filter", "@open-design/web", "build"], env: ["OD_WEB_OUTPUT_MODE"] },
   { args: ["--filter", "@open-design/web", "build:sidecar"] },
@@ -137,6 +139,8 @@ function workspaceBuildOutputFiles(config: ToolPackConfig): string[] {
     "packages/plugin-runtime/dist/index.d.ts",
     "packages/diagnostics/dist/index.mjs",
     "packages/diagnostics/dist/index.d.ts",
+    "packages/dsh-runtime/dist/index.js",
+    "packages/dsh-runtime/dist/types/index.d.ts",
     "apps/daemon/dist/cli.js",
     "apps/daemon/dist/cli.d.ts",
     "apps/daemon/dist/sidecar/index.js",
@@ -165,6 +169,7 @@ function workspaceBuildArtifacts(config: ToolPackConfig): WorkspaceBuildArtifact
     "packages/agui-adapter/dist",
     "packages/plugin-runtime/dist",
     "packages/diagnostics/dist",
+    "packages/dsh-runtime/dist",
     "apps/daemon/dist",
     "apps/web/dist",
     "apps/desktop/dist",
@@ -306,7 +311,7 @@ export async function ensureWorkspaceBuildArtifacts(
   config: ToolPackConfig,
   cache: ToolPackCache,
   build: () => Promise<void>,
-): Promise<void> {
+): Promise<string> {
   const key = await createWorkspaceBuildCacheKey(config);
   const nodeId = `${config.platform}.workspace-build`;
   const artifacts = workspaceBuildArtifacts(config);
@@ -364,4 +369,5 @@ export async function ensureWorkspaceBuildArtifacts(
     },
     seedFrom: versionFamilyAlias == null ? [] : [{ aliasKey: versionFamilyAlias, materialize }],
   });
+  return key;
 }

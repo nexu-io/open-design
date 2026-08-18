@@ -83,10 +83,17 @@ export function resolveSidecarBase<TStamp extends SidecarStampShape>({
   base,
   contract,
   env = process.env,
-  projectRoot = process.cwd(),
+  projectRoot,
   source,
 }: BaseResolutionOptions<TStamp>): string {
-  return resolve(base ?? env[contract.env.base] ?? resolveSourceRuntimeRoot({ contract, projectRoot, source }));
+  const explicitBase = base ?? env[contract.env.base];
+  if (explicitBase != null && explicitBase.length > 0) return resolve(explicitBase);
+
+  return resolve(resolveSourceRuntimeRoot({
+    contract,
+    projectRoot: projectRoot ?? process.cwd(),
+    source,
+  }));
 }
 
 /**

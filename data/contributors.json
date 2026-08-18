@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-06-03T10:40:24.829Z",
-  "totalContributors": 1,
+  "generatedAt": "2026-08-05T22:19:50.233Z",
+  "totalContributors": 2,
   "contributors": {
     "zoeforfun": {
       "username": "zoeforfun",
@@ -22,6 +22,29 @@
         {
           "tier": "signal",
           "reachedAt": "2026-06-03T10:40:24.829Z"
+        }
+      ]
+    },
+    "lefarcen": {
+      "username": "lefarcen",
+      "avatarUrl": "https://avatars.githubusercontent.com/u/20859779?v=4",
+      "points": 42,
+      "tier": "signal",
+      "prsMerged": 2,
+      "reviews": 0,
+      "discussionsAnswered": 0,
+      "issuesAccepted": 0,
+      "streakWeeks": 0,
+      "lastActiveAt": "2026-08-05T22:19:50.233Z",
+      "founding": false,
+      "tierHistory": [
+        {
+          "tier": "spark",
+          "reachedAt": "2026-08-05T06:27:33.952Z"
+        },
+        {
+          "tier": "signal",
+          "reachedAt": "2026-08-05T06:27:33.952Z"
         }
       ]
     }

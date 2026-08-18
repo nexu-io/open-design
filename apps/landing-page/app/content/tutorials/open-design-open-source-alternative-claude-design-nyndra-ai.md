@@ -16,7 +16,7 @@ Most AI design tools improvise from a blank prompt and it shows. This guide is a
 
 ## The idea: you don't ship an agent
 
-Open Design's premise is that the strongest coding agents already live on your laptop, so it doesn't ship one — it **wires the agent you have into a skill-driven design workflow**. A local daemon gives that agent a real project folder with real read/write/bash/web-fetch tools — not a sandboxed toy. It auto-detects your CLIs (Claude Code, Codex, Cursor, Gemini, Qwen, Copilot — many total), and if you have more than one, you swap the active one with a single click, no config edits.
+Open Design's premise is that the strongest coding agents already live on your laptop, so it doesn't ship one — it **wires the agent you have into a skill-driven design workflow**. A local daemon gives that agent a real project folder with real read/write/bash/web-fetch tools — not a sandboxed toy. It auto-detects your CLIs (Claude Code, Codex, Cursor, OpenCode, Qwen, Copilot — many total), and if you have more than one, you swap the active one with a single click, no config edits.
 
 ## Why the output looks designed: the deterministic loop
 

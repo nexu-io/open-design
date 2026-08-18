@@ -1,0 +1,1231 @@
+/* Launch Week Vol.01 — every rule scoped to .lw so nothing leaks site-wide. */
+
+/* Self-hosted like the rest of the site (no third-party font request).
+   Latin subsets only: 36 KB total. Albert Sans already ships in globals.css. */
+@font-face {
+  font-family: 'Anton';
+  src: url('/launch-week/fonts/anton-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/launch-week/fonts/plexmono-500.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/launch-week/fonts/plexmono-600.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ============================================================
+   Open Design Launch Week — mockup v1
+   Direction C: pinned campaign cabin (left) + scrolling drops rail (right)
+   Desktop-first. Assets referenced from ../assets/.
+   ============================================================ */
+.lw {
+  --paper: #eeeae2;
+  --paper-light: #f8f5ed;
+  --ink: #070707;
+  --acid: #63fe13;
+  --kill-red: #eb2b1f;
+  --paint-blue: #0758c9;
+  --olive: #6b6b1f;
+
+  /* Four locked colour layers — never cross these:
+     acid  = Open Design / LIVE / CTA / selection / decisive action
+     red   = KILL, verdicts, danger
+     ink   = CLASSIFIED, withheld
+     day-* = chapter identity ONLY (paint strokes, day numeral, hairline rules).
+             Never on chips, status tags, buttons or the selection frame.
+     Warm/cool alternate so consecutive days never look alike. */
+  --day-01: #1266d6;  /* cobalt */
+  --day-02: #f15a43;  /* coral  */
+  --day-03: #23aee6;  /* cyan   */
+  --day-04: #f47a22;  /* burnt orange */
+  --day-05: #968300;  /* olive  */
+  --display: "Anton", Impact, "Arial Narrow", sans-serif;
+  --body: "Albert Sans", Arial, sans-serif;
+  --utility: "IBM Plex Mono", ui-monospace, monospace;
+
+  /* torn edges — hand-authored, irregular depths (matches the reference build) */
+  --torn-panel-right: polygon(0 0, 95% 0, 99% 3%, 96% 7%, 100% 11%, 97% 15%, 99% 19%, 96% 23%, 100% 27%, 97% 31%, 99% 35%, 96% 39%, 100% 43%, 97% 47%, 99% 51%, 96% 55%, 100% 59%, 97% 63%, 99% 67%, 96% 71%, 100% 75%, 97% 79%, 99% 83%, 96% 87%, 100% 91%, 97% 95%, 99% 100%, 0 100%);
+  --torn-ticket: polygon(2% 0, 98% 0, 100% 3%, 98% 7%, 100% 11%, 98% 15%, 100% 19%, 98% 23%, 100% 27%, 98% 31%, 100% 35%, 98% 39%, 100% 43%, 98% 47%, 100% 51%, 98% 55%, 100% 59%, 98% 63%, 100% 67%, 98% 71%, 100% 75%, 98% 79%, 100% 83%, 98% 87%, 100% 91%, 98% 95%, 100% 100%, 2% 100%, 0 96%, 2% 92%, 0 88%, 2% 84%, 0 80%, 2% 76%, 0 72%, 2% 68%, 0 64%, 2% 60%, 0 56%, 2% 52%, 0 48%, 2% 44%, 0 40%, 2% 36%, 0 32%, 2% 28%, 0 24%, 2% 20%, 0 16%, 2% 12%, 0 8%, 2% 4%);
+  /* ONE page gutter for every full-width section — the page's vertical rhythm
+     depends on every edge sharing this value */
+  --gutter: clamp(28px, 5.5vw, 96px);
+  --pad-block: clamp(30px, 3.6vw, 60px);   /* inner padding: cards, tickets */
+  /* ripped highlighter stroke behind display type */
+  --torn-marker: polygon(0 10%, 8% 3%, 21% 9%, 35% 2%, 50% 8%, 65% 3%, 80% 9%, 100% 1%, 98% 90%, 83% 97%, 67% 91%, 51% 98%, 34% 91%, 18% 97%, 1% 91%);
+}
+.lw * { box-sizing: border-box;
+}
+/* The scroll port is the document, so the snap rules have to live on html.
+   This file is only imported by the Launch Week page, so the scope holds. */
+html:has(main.lw) {
+  scroll-behavior: smooth;
+  /* proximity, not mandatory — the lineup's sticky card stack must stay free */
+  scroll-snap-type: y proximity;
+  scroll-padding-top: var(--lw-header, 85px);
+}
+@media (prefers-reduced-motion: reduce) {
+  html:has(main.lw) { scroll-snap-type: none; }
+}
+.lw { background: var(--ink); }.lw .hero, .lw .join { scroll-snap-align: start; }
+.lw .join { min-height: 100svh; }
+.lw {
+  /* Not using .sub-main: this page is full-bleed and must butt straight against
+     the site footer, so it declares only the offset it needs — clearance for
+     the sticky nav. */
+  max-width: none;
+  margin: 0;
+  padding: var(--lw-header, 85px) 0 0;
+  overflow-x: clip;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--body);
+  font-weight: 500;
+}
+.lw a { color: inherit; text-decoration: none;
+}
+.lw ::selection { color: var(--ink); background: var(--acid);
+}
+.lw img { display: block;
+}
+.lw .mono { font-family: var(--utility);
+}
+.lw .sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+.lw :focus-visible { outline: 3px solid var(--acid); outline-offset: 3px;
+}
+.lw .button {
+  min-height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  padding: 13px 18px;
+  border: 2px solid var(--ink);
+  font: 600 11px/1 var(--utility);
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.lw .button:hover { transform: translate(-3px,-3px); box-shadow: 6px 6px 0 var(--ink);
+}
+.lw .button.is-solid { background: var(--ink); color: var(--paper-light);
+}
+.lw .button.is-solid:hover { box-shadow: 6px 6px 0 var(--acid);
+}
+.lw .button.is-acid { background: var(--acid); color: var(--ink);
+}
+.lw .eyebrow {
+  margin: 0 0 14px;
+  font: 600 11px/1 var(--utility);
+  letter-spacing: .14em;
+}
+/* ---------- campaign hero (screen 1) ---------- */
+.lw .hero {
+  position: relative;
+  /* every major section is one screen — the page is read a screen at a time */
+  height: calc(100svh - var(--lw-header, 85px));
+  min-height: 640px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background:
+    url("/launch-week/kv-desktop.webp") center / cover no-repeat,
+    var(--paper);
+}
+/* the hero reads as an artboard, not a sheet of paper: a drawing grid over the
+   washed paint (house move — open-design.ai builds its hero the same way) */
+.lw .lw-wash {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  background:
+    repeating-linear-gradient(to right, rgba(7,7,7,.055) 0 1px, transparent 1px 220px),
+    repeating-linear-gradient(to bottom, rgba(7,7,7,.055) 0 1px, transparent 1px 220px),
+    repeating-linear-gradient(to right, rgba(7,7,7,.026) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(to bottom, rgba(7,7,7,.026) 0 1px, transparent 1px 44px),
+    radial-gradient(ellipse 62% 52% at 50% 48%, rgba(238,234,226,.94) 28%, rgba(238,234,226,.78) 56%, rgba(238,234,226,.3) 82%, rgba(238,234,226,.08) 100%);
+  pointer-events: none;
+}
+/* the lower-left is closed with the plate's own fractured-splatter texture —
+   discontinuous flecks and halftone tears, not a solid stroke. Two crops of the
+   same field at different angles so nothing reads as mirrored. */
+.lw .hero > *:not(.lw-wash) { position: relative; z-index: 2;
+}
+/* pinned to the artboard's top edge — reads as part of the canvas, not as
+   copy floating inside it. The page's real nav is the site header above. */
+/* the campaign's own eyebrow, in the hero where it belongs — the site header
+   above already carries the brand, so a second strip only read as a second nav */
+.lw .hero-eyebrow {
+  margin: 0 0 clamp(20px, 3.6vh, 34px);
+  color: rgba(7,7,7,.6);
+  font: 600 clamp(10px, .82vw, 12px)/1 var(--utility);
+  letter-spacing: .22em;
+}
+.lw .hero-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(16px, 2.6vh, 32px);
+  padding: 0 var(--gutter);
+  text-align: center;
+}
+/* question and explainer read as one horizontal band, divided by a hairline.
+   The sideways pairing is what creates the breathing room — not another line. */
+.lw .hero-lower { display: flex; flex-direction: column; align-items: center; gap: clamp(24px, 3.8vh, 42px); margin-top: clamp(14px, 3.2vh, 40px);
+}
+.lw .hero-band {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(20px, 2.8vw, 40px);
+  text-align: left;
+}
+.lw .hero-band .hero-q { justify-content: flex-start;
+}
+/* the one line spoken at normal volume, stating the format nothing else states */
+.lw .hero-note {
+  max-width: none;
+  white-space: nowrap;
+  margin: 0;
+  padding-left: clamp(20px, 2.8vw, 40px);
+  border-left: 1.5px solid rgba(7,7,7,.2);
+  color: rgba(7,7,7,.74);
+  font: 600 clamp(12px, .9vw, 15px)/1.75 var(--body);
+}
+.lw .hero-ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px;
+}
+.lw .hero-ctas .button { background: var(--paper-light);
+}
+.lw .hero-ctas .button.is-acid { background: var(--acid);
+}
+/* the campaign question — stateless, and the only place the model partners live */
+.lw .hero-q {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px 15px;
+  margin: 0;
+  font: 400 clamp(20px, min(2.1vw, 3.6vh), 34px)/1.1 var(--display);
+  letter-spacing: .005em;
+  text-transform: uppercase;
+}
+.lw .hero-q .models { display: inline-flex; align-items: center; gap: 11px;
+}
+/* partner marks sit in ink so the hero keeps its three-colour system;
+   colour returns on hover, which also proves the row is interactive */
+.lw .hero-q .models img {
+  height: 1.05em;
+  width: 1.05em;
+  filter: grayscale(1) contrast(1.35) brightness(.42);
+  transition: filter .22s ease;
+}
+.lw .hero-q:hover .models img { filter: none;
+}
+.lw .hero-q .plus { font-size: .78em;
+}
+/* OD's own lockup is already mono — no filter, it stays as designed */
+.lw .hero-q .od-lockup { height: 1em; width: auto;
+}
+.lw .hero-q .kill {
+  display: inline-block;
+  margin-left: 5px;
+  color: var(--kill-red);
+}
+/* type scales on BOTH axes so the hero always fits one screen */
+.lw .hero-brand h1 {
+  margin: 0;
+  white-space: nowrap;
+  font: 400 clamp(52px, min(8.6vw, 15vh), 132px)/.9 var(--display);
+  letter-spacing: .002em;
+  text-transform: uppercase;
+}
+/* edition stamp — "VOL." runs up the side so a big 01 can't be read as Day 01 */
+.lw .hero-brand h1 .ed {
+  position: relative;
+  display: inline-block;
+  margin-left: .2em;
+  -webkit-text-stroke: 2.5px var(--ink);
+  color: transparent;
+  letter-spacing: .03em;
+}
+.lw .hero-brand h1 .ed em {
+  position: absolute;
+  left: -1.35em;
+  top: .35em;
+  writing-mode: vertical-rl;
+  -webkit-text-stroke: 0;
+  color: var(--ink);
+  font: 600 .13em/1 var(--utility);
+  font-style: normal;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* the campaign headline — ripped marker stroke under the wordmark */
+/* house move: acid behaves like a highlighter under the words, never a slab.
+   One visual accent per screen — the wordmark. Everything else stays quiet. */
+.lw .hero-brand .promise {
+  position: relative;
+  display: inline-block;
+  width: fit-content;
+  margin: 18px auto 0;
+  padding: 0 .1em;
+  color: var(--ink);
+  font: 800 clamp(22px, min(3vw, 5vh), 46px)/1.1 var(--body);
+  letter-spacing: -.022em;
+  white-space: nowrap;
+}
+.lw .hero-brand .promise::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 74% -.1em -.04em -.1em;
+  background: var(--acid);
+  clip-path: var(--torn-marker);
+  transform: rotate(-.6deg);
+}
+/* selection marquee — Open Design's own canvas UI, borrowed as house furniture.
+   Also the layer that makes this read as a product page, not a printed poster. */
+.lw .hero-brand { position: relative; width: fit-content; max-width: 100%; margin: 0 auto;
+}
+.lw .sel-marquee {
+  position: absolute;
+  inset: -30px -44px -26px -44px;
+  border: 2px solid var(--acid);
+  background-image:
+    linear-gradient(var(--acid), var(--acid)), linear-gradient(var(--acid), var(--acid)),
+    linear-gradient(var(--acid), var(--acid)), linear-gradient(var(--acid), var(--acid));
+  background-position: left top, right top, right bottom, left bottom;
+  background-repeat: no-repeat;
+  background-size: 10px 10px;
+  pointer-events: none;
+}
+/* rotation handle — the detail that makes it read as OD's real canvas selection */
+.lw .sel-marquee::before {
+  content: "";
+  position: absolute;
+  top: -15px; left: 50%;
+  width: 1px; height: 15px;
+  background: var(--acid);
+}
+.lw .sel-marquee::after {
+  content: "";
+  position: absolute;
+  top: -23px; left: 50%;
+  width: 8px; height: 8px;
+  border: 2px solid var(--acid);
+  background: var(--paper);
+  transform: translateX(-50%);
+}
+/* today's drop — the hero's live content, not decoration. It changes daily. */
+/* ONE object in the right rail: an ink ticket whose stub carries the community.
+   Ink against paper — the material no longer repeats, and it rhymes with the
+   All-Week Pass stub further down the page. */
+.lw .today-ticket {
+  position: relative;
+  z-index: 3;
+  margin-left: clamp(-64px, -3.6vw, -30px);
+  display: flex;
+  flex-direction: column;
+  color: var(--ink);
+  background: var(--paper-light);
+  border: 2px solid var(--ink);
+  box-shadow: 6px 7px 0 var(--ink);
+  clip-path: var(--torn-ticket);
+  transform: rotate(.5deg);
+}
+.lw .tt-body { padding: clamp(26px, 2.4vw, 36px) clamp(24px, 2.2vw, 34px) clamp(24px, 2.2vw, 32px);
+}
+.lw .tt-kicker {
+  margin: 0 0 20px;
+  color: rgba(7,7,7,.5);
+  font: 600 10px/1 var(--utility);
+  letter-spacing: .22em;
+}
+.lw .tt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 12px;
+  color: rgba(7,7,7,.62);
+  font: 600 10px/1 var(--utility);
+  letter-spacing: .08em;
+}
+.lw .tt-meta .tt-live { width: 84px; height: auto; transform: rotate(-3deg);
+}
+.lw .tt-code {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--ink);
+  font: 600 10px/1.4 var(--utility);
+  letter-spacing: .09em;
+}
+.lw .today-ticket h2 {
+  margin: 0 0 20px;
+  font: 400 clamp(28px, 2.4vw, 40px)/.94 var(--display);
+  letter-spacing: -.02em;
+}
+.lw .today-ticket .killstrip { font-size: clamp(19px, 1.5vw, 25px); margin-bottom: 20px;
+}
+.lw .tt-watch {
+  display: inline-block;
+  padding-bottom: 4px;
+  border-bottom: 1.5px solid rgba(7,7,7,.45);
+  color: rgba(7,7,7,.66);
+  font: 600 10px/1 var(--utility);
+  letter-spacing: .06em;
+}
+.lw .tt-watch:hover { color: var(--ink); border-bottom-color: var(--ink);
+}
+/* perforation: dashed rule with a punched notch bitten out of each edge */
+.lw .tt-perf {
+  position: relative;
+  height: 0;
+  border-top: 2px dashed rgba(7,7,7,.45);
+}
+.lw .tt-perf::before, .lw .tt-perf::after {
+  content: "";
+  position: absolute;
+  top: -14px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--paper);
+}
+/* half of each circle is clipped away by the ticket outline, leaving a bitten notch */
+.lw .tt-perf::before { left: 0; transform: translateX(-52%);
+}
+.lw .tt-perf::after { right: 0; transform: translateX(52%);
+}
+/* the stub — quieter than the body, same object */
+.lw .tt-stub { background: rgba(7,7,7,.045); padding: clamp(20px, 2vw, 28px) clamp(24px, 2.2vw, 34px) clamp(22px, 2.1vw, 30px);
+}
+.lw .tt-stub .cf-title {
+  margin: 0;
+  font: 400 clamp(19px, 1.5vw, 25px)/1.05 var(--display);
+  letter-spacing: -.01em;
+  text-transform: uppercase;
+}
+.lw .tt-stub .cf-list {
+  max-width: 44ch;
+  margin: 9px 0 0;
+  color: rgba(7,7,7,.6);
+  font: 600 9px/1.6 var(--utility);
+  letter-spacing: .06em;
+}
+.lw .tt-stub .cf-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0 0;
+}
+.lw .tt-stub .cf-links a {
+  flex: 1 1 150px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 15px;
+  border: 2px solid var(--ink);
+  font: 600 11px/1 var(--utility);
+  letter-spacing: .05em;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.lw .tt-stub .cf-links a:first-child { background: var(--acid);
+}
+.lw .tt-stub .cf-links a:last-child { background: var(--paper-light);
+}
+.lw .tt-stub .cf-links a:hover { transform: translate(-3px,-3px); box-shadow: 5px 5px 0 var(--ink);
+}
+/* kill-list ticker — the hero's closing rule */
+.lw .killticker {
+  flex-shrink: 0; /* never let the hero's flex column squash this bar */
+  display: flex;
+  align-items: center;
+  gap: 34px;
+  padding: 13px var(--gutter);
+  background: var(--ink);
+  color: var(--paper-light);
+}
+.lw .killticker .kt-label { flex-shrink: 0;
+}
+.lw .killticker .kt-label b {
+  display: block;
+  font: 400 22px/1 var(--display);
+  text-transform: uppercase;
+}
+/* responsive: five tapes share the row evenly — they grow on wide screens
+   and shrink on narrow ones instead of overflowing */
+.lw .killticker ol {
+  list-style: none;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  gap: clamp(8px, 1vw, 18px);
+  margin: 0;
+  padding: 0;
+}
+.lw .killticker li { flex: 1 1 0; min-width: 0; display: flex;
+}
+/* real KV tape: black body with a torn paper edge, white type on top */
+.lw .killticker a {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 13px clamp(8px, 1.2vw, 26px);
+  color: var(--paper-light);
+  font: 600 clamp(10px, .88vw, 13px)/1 var(--utility);
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+/* tape marks TODAY only — used as emphasis, not as repeated texture */
+.lw .killticker li.is-today a {
+  background: url("/launch-week/tape-02.svg") center / 100% 100% no-repeat;
+  transform: rotate(-1deg) scale(1.02);
+}
+.lw .killticker a em { font-style: normal; color: var(--acid);
+}
+.lw .killticker a em.done { color: rgba(248,245,237,.5);
+}
+.lw .killticker a .classified { color: var(--kill-red);
+}
+/* orchestrated load — one moment, then quiet */
+@media (prefers-reduced-motion: no-preference) {
+  .lw .hero-brand h1, .lw .hero-brand .promise, .lw .hero-lower, .lw .killticker {
+    animation: rise .72s cubic-bezier(.23,1,.32,1) both;
+}
+.lw .hero-brand h1 { animation-delay: .08s;
+}
+.lw .hero-brand .promise { animation-delay: .2s;
+}
+.lw .hero-lower { animation-delay: .3s;
+}
+.lw .killticker { animation-delay: .5s;
+}
+}
+/* house entrance: blur-in, matching open-design.ai's .blur-word */
+.lw @keyframes rise {.lw 0% { opacity: 0; filter: blur(10px); transform: translateY(-26px);
+}
+.lw 50% { opacity: .5; filter: blur(5px); transform: translateY(4px);
+}
+.lw 100% { opacity: 1; filter: blur(0); transform: translateY(0);
+}
+}
+/* the page sits inside the open-design.ai site header — no in-page nav bar */
+.lw #drops, .lw #inside, .lw #open-call, .lw #community, .lw .drop[id] { scroll-margin-top: 24px;
+}
+/* ---------- dual rail ---------- */
+.lw .dualrail {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(230px, .26fr) minmax(0, .74fr);
+  color: var(--ink);
+  background:
+    linear-gradient(to right, var(--ink) 0 24.4%, transparent 24.4%),
+    url("/launch-week/paper.webp") 0 0 / 512px 512px repeat,
+    var(--paper);
+}
+.lw .dualrail::after { /* faint halftone over the whole spine */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .07;
+  background-image: repeating-radial-gradient(circle at 18% 22%, #000 0 1px, transparent 1px 5px);
+  mix-blend-mode: multiply;
+}
+/* left cabin — ink panel with torn right edge (kill-list identity) */
+.lw .cabin {
+  position: sticky;
+  top: var(--lw-header, 85px);
+  z-index: 2;
+  min-height: calc(100svh - var(--lw-header, 85px));
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--pad-block) clamp(22px, 3.2vw, 50px);
+  color: var(--paper-light);
+  background: var(--ink);
+  overflow: hidden;
+  clip-path: var(--torn-panel-right);
+}
+.lw .cabin > * { position: relative; z-index: 1;
+}
+.lw .cabin .eyebrow { color: var(--acid);
+}
+.lw .cabin-title {
+  margin: 0;
+  font: 400 clamp(44px, min(5.4vw, 10vh), 96px)/.9 var(--display);
+  text-transform: uppercase;
+}
+.lw .cabin-sub {
+  max-width: 24ch;
+  margin: clamp(16px, 3vh, 26px) 0 0;
+  font-size: clamp(15px, 1.8vh, 17px);
+  line-height: 1.5;
+}
+/* right rail */
+.lw .drop-stack { position: relative;
+}
+.lw .rail {
+  position: relative;
+  z-index: 1;
+  --stack-top: calc(var(--lw-header, 85px) + clamp(24px, 3vh, 48px));
+  --peek: 24px;
+  padding: clamp(60px, 8vw, 120px) var(--gutter) clamp(50px, 6vw, 90px);
+}
+/* drop card — two-column grid: meta spine | content.
+   All five cards share ONE container size and ONE type scale (parallel structure). */
+/* sticky stack: each card pins a little lower than the last, so scrolling
+   builds a pile of papers instead of scrolling past five separate panels.
+   Index comes from data-launch-day so it survives the classified swap. */
+.lw .drop {
+  position: sticky;
+  top: calc(var(--stack-top) + var(--i, 0) * var(--peek));
+  min-height: min(520px, 58vh);
+  display: grid;
+  grid-template-columns: clamp(92px, 9vw, 132px) minmax(0, 1fr);
+  gap: clamp(20px, 3vw, 48px);
+  align-content: center;
+  margin: 0 0 clamp(30px, 3.4vw, 48px);
+  padding: var(--pad-block);
+  overflow: hidden;
+  color: var(--ink);
+  background: var(--paper-light);
+  border: 3px solid var(--ink);
+  box-shadow: clamp(9px, 1.2vw, 16px) clamp(9px, 1.2vw, 16px) 0 var(--ink);
+  transform: rotate(-.35deg);
+}
+.lw .drop:nth-child(even) { transform: rotate(.35deg);
+}
+.lw .drop:last-child { margin-bottom: 0;
+}
+.lw .drop[data-launch-day="1"] { --i: 0; z-index: 1;
+}
+.lw .drop[data-launch-day="2"] { --i: 1; z-index: 2;
+}
+.lw .drop[data-launch-day="3"] { --i: 2; z-index: 3;
+}
+.lw .drop[data-launch-day="4"] { --i: 3; z-index: 4;
+}
+.lw .drop[data-launch-day="5"] { --i: 4; z-index: 5;
+}
+/* one dominant alpha stroke per day — real extracted paint, no cropped rectangle */
+.lw .drop::before {
+  content: "";
+  position: absolute;
+  /* per-day tuning: every stroke has its own paint-mass centroid and density,
+     so anchor + scale + opacity are set per day rather than shared */
+  inset: var(--stroke-inset, auto -8% -22% 46%);
+  height: var(--stroke-h, 86%);
+  background: var(--drop-stroke) right bottom / var(--stroke-size, contain) no-repeat;
+  opacity: var(--stroke-op, .5);
+  pointer-events: none;
+}
+.lw .drop[data-launch-day="1"] { --day-color: var(--day-01); --drop-stroke: url("/launch-week/stroke-02-cobalt-right.webp");
+}
+.lw .drop[data-launch-day="2"] { --day-color: var(--day-02); --drop-stroke: url("/launch-week/stroke-r2-04-coral-horizontal.webp"); --stroke-inset: auto -10% -10% 62%; --stroke-h: 74%; --stroke-op: .34;
+}
+.lw .drop[data-launch-day="3"] { --day-color: var(--day-03); --drop-stroke: url("/launch-week/stroke-r2-01-cyan-vertical.webp"); --stroke-inset: auto -8% -14% 68%; --stroke-h: 66%; --stroke-op: .32;
+}
+.lw .drop[data-launch-day="4"] { --day-color: var(--day-04); --drop-stroke: url("/launch-week/stroke-08-orange-lower.webp");
+}
+.lw .drop[data-launch-day="5"] { --day-color: var(--day-05); --drop-stroke: url("/launch-week/stroke-09-olive-bottom.webp");
+}
+/* the day colour is allowed here and nowhere else: a hairline rule + the day numeral */
+.lw .drop .drop-meta .day-no {
+  display: block;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--day-color, var(--ink));
+  color: var(--day-color, var(--ink));
+  font: 400 clamp(26px, 2.4vw, 38px)/1 var(--display);
+  letter-spacing: .02em;
+}
+.lw .drop-meta {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding-top: 8px;
+  font: 600 10px/1 var(--utility);
+}
+.lw .drop-meta .day { color: rgba(7,7,7,.6); letter-spacing: .08em;
+}
+/* red is reserved for KILL? and CLASSIFIED — past/future states recede in dimmed ink */
+.lw .drop-meta .status--released, .lw .drop-meta .status--upnext { color: rgba(7,7,7,.55);
+}
+.lw .drop .live-stamp {
+  display: block;
+  width: 100%;
+  max-width: 132px;
+  height: auto;
+  margin-top: 4px;
+  transform: rotate(-4.5deg);
+}
+.lw .drop-meta .status--live { width: fit-content; padding: 5px 7px; color: var(--ink); background: var(--acid); animation: pulse 1.6s infinite;
+}@keyframes pulse {.lw 50% { opacity: .55;
+}
+}
+.lw .drop-content { position: relative; z-index: 2;
+}
+/* plain caption, matching the hero ticket: acid stays on the verdict line only */
+.lw .drop-code {
+  display: block;
+  margin: 0 0 14px;
+  color: var(--ink);
+  font: 600 clamp(10px, .88vw, 13px)/1.4 var(--utility);
+  letter-spacing: .1em;
+}
+.lw .drop h3 {
+  max-width: 760px;
+  margin: 0;
+  font: 400 clamp(44px, 4.6vw, 74px)/.9 var(--display);
+  letter-spacing: -.02em;
+}
+.lw .drop .proof {
+  max-width: 630px;
+  margin: 22px 0;
+  font-size: clamp(16px, 1.25vw, 19px);
+  line-height: 1.5;
+}
+.lw .killstrip {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  padding: .18em .38em .22em;
+  color: var(--ink);
+  background: var(--acid);
+  font: 400 clamp(26px, 2.8vw, 42px)/1 var(--display);
+  letter-spacing: -.01em;
+  transform: rotate(-.7deg);
+  clip-path: var(--torn-marker);
+}
+/* logo + brand name never split across lines */
+.lw .brand-target { display: inline-flex; align-items: center; gap: 12px; vertical-align: -.06em;
+}
+.lw .brand-target img { height: .72em; width: .72em; object-fit: contain;
+}
+.lw .drop .watch {
+  display: inline-block;
+  margin-top: 30px;
+  padding-bottom: 5px;
+  border-bottom: 2px solid var(--ink);
+  font: 600 11px/1 var(--utility);
+  letter-spacing: .06em;
+}
+/* classified variant — withheld content earns no real estate: a compressed strip */
+/* a sealed drop is a whole card with its contents withheld — same footprint and
+   same place in the stack, so the pile reads on day one when traffic peaks */
+.lw .drop.is-classified {
+  color: var(--paper-light);
+  background: var(--ink);
+  box-shadow: clamp(9px, 1.2vw, 16px) clamp(9px, 1.2vw, 16px) 0 rgba(7,7,7,.4);
+}
+.lw .drop.is-classified::before { opacity: .5; mix-blend-mode: screen;
+}
+.lw .drop.is-classified .drop-meta { gap: 11px; padding-top: 6%;
+}
+.lw .drop.is-classified .drop-meta .day { color: rgba(248,245,237,.6);
+}
+.lw .drop.is-classified .classified-tag { color: var(--kill-red); letter-spacing: .18em;
+}
+/* TBA is how a lineup poster prints an unannounced act — the slot keeps its
+   billing, only the name is missing. Reads as anticipation, not censorship. */
+.lw .drop.is-classified .drop-content { position: relative;
+}
+/* withheld content has a shape: blacked-out lines where the copy would be */
+.lw .drop.is-classified .redact {
+  display: grid;
+  gap: clamp(12px, 1.5vh, 20px);
+  width: 74%;
+}
+.lw .drop.is-classified .redact i { display: block; height: 30px; background: #151515;
+}
+.lw .drop.is-classified .redact i:nth-child(1) { width: 88%; height: 40px;
+}
+.lw .drop.is-classified .redact i:nth-child(2) { width: 100%; height: 52px;
+}
+.lw .drop.is-classified .redact i:nth-child(3) { width: 74%; height: 52px;
+}
+.lw .drop.is-classified .redact i:nth-child(4) { width: 84%;
+}
+.lw .drop.is-classified .redact i:nth-child(5) { width: 56%;
+}
+.lw .drop.is-classified .redact i:nth-child(6) { width: 66%; height: 38px;
+}
+/* the stamp presses onto the redacted lines rather than floating in the void */
+.lw .drop.is-classified .tba {
+  position: absolute;
+  right: 4%;
+  top: 50%;
+  margin: 0;
+  transform: translateY(-50%);
+}
+.lw .drop.is-classified .tba img {
+  width: clamp(132px, 13vw, 200px);
+  height: auto;
+  filter: invert(1);
+  opacity: .95;
+  transform: rotate(-6deg);
+}
+
+/* production = Day 01 released, Day 02 live, Day 03–05 still classified */
+/* ---------- get inside — ported verbatim from the reference build (.join) ---------- */
+.lw .join {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(18px, 2vw, 30px) clamp(24px, 3.4vw, 54px);
+  align-items: stretch;
+  padding: clamp(34px, 4vw, 62px) var(--gutter);
+  background:
+    linear-gradient(rgba(238,234,226,.88), rgba(238,234,226,.94)),
+    url("/launch-week/kv-desktop.webp") center / cover no-repeat;
+  border-top: 18px solid var(--ink);
+}
+/* section divider is the plain 18px ink band from border-top — no marquee text;
+   text-on-black-strip is reserved for the hero kill ticker */
+.lw .join > * { position: relative; z-index: 1;
+}
+.lw .join-heading {
+  grid-column: 1 / -1;
+  align-self: end;
+  display: flex;
+  align-items: end;
+  gap: 44px;
+  padding-bottom: 14px;
+  border-bottom: 3px solid var(--ink);
+}
+.lw .join-heading .eyebrow { width: fit-content; padding: 5px 8px; color: var(--acid); background: var(--ink);
+}
+/* quiet heading — the tickets are this screen's poster, the frame doesn't shout */
+.lw .join-heading h2 {
+  margin: 10px 0 0;
+  color: var(--ink);
+  font: 400 clamp(52px, 5.4vw, 82px)/.88 var(--display);
+  letter-spacing: -.01em;
+  text-transform: uppercase;
+}
+.lw .join-deck { max-width: 47ch; margin: 0; padding-bottom: 4px; text-align: right; font-size: 16px; line-height: 1.45;
+}
+.lw .ticket {
+  position: relative;
+  min-height: min(500px, 50vh);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 20px;
+  padding: var(--pad-block);
+  overflow: hidden;
+  border: 3px solid var(--ink);
+  box-shadow: 13px 13px 0 var(--ink);
+  clip-path: var(--torn-ticket);
+}
+.lw .pass-ticket { background: var(--acid); transform: rotate(-1.2deg);
+}
+.lw .challenge-ticket { color: white; background: var(--ink); transform: rotate(1deg);
+}
+/* paint bleeds THROUGH each ticket, not pasted on it:
+   oversized crop pushed off the top-right edge (the ticket clips the rectangle),
+   left/bottom dissolved by mask, blended into the ticket's own color.
+   Each ticket samples a different region of the same KV painting. */
+.lw .ticket::after {
+  content: "";
+  position: absolute;
+  width: 62%;
+  height: 52%;
+  right: -16%;
+  top: -8%;
+  background: url("/launch-week/kv-desktop.webp") no-repeat;
+  background-size: 280% auto;
+  -webkit-mask: linear-gradient(215deg, #000 40%, rgba(0,0,0,0) 82%);
+          mask: linear-gradient(215deg, #000 40%, rgba(0,0,0,0) 82%);
+  pointer-events: none;
+}
+.lw .pass-ticket::after {
+  background-position: 72% 62%;      /* saturated blue/orange sweep */
+  transform: rotate(-8deg);
+  mix-blend-mode: multiply;
+  opacity: .7;
+}
+.lw .challenge-ticket::after {
+  background-position: 86% 16%;      /* green-smear corner */
+  transform: rotate(6deg);
+  mix-blend-mode: screen;
+  opacity: .34;   /* screen on ink made this the loudest thing in the section */
+}
+.lw .ticket > * { position: relative; z-index: 1;
+}
+.lw .ticket-kicker { margin: 0 0 16px; font: 600 11px/1 var(--utility); letter-spacing: .1em;
+}
+.lw .ticket-bridge { margin: 16px 0 0; font: 700 13px/1.2 var(--utility); letter-spacing: .04em;
+}
+.lw .ticket h3 { margin: 0; font: 400 clamp(42px, 3.7vw, 62px)/.9 var(--display);
+}
+.lw .ticket-copy { max-width: 48ch; margin: 10px 0 0; font-size: 15px; line-height: 1.42;
+}
+.lw .ticket-drop { padding: 15px 0; border-block: 2px dashed var(--ink);
+}
+.lw .ticket-drop span { display: block; margin-bottom: 12px; font: 600 9px/1 var(--utility); letter-spacing: .09em;
+}
+.lw .ticket-drop strong { display: block; font: 400 clamp(20px, 1.9vw, 30px)/1.02 var(--display);
+}
+.lw .ticket-drop p { margin: 11px 0 0; font-size: 14px; line-height: 1.45;
+}
+.lw .go-slogan {
+  max-width: 16ch;
+  margin: 0 0 12px;
+  font: 400 clamp(34px, 3.2vw, 54px)/.92 var(--display);
+  text-transform: uppercase;
+}
+.lw .reaction-callout { display: grid; gap: 8px; padding: 15px 0; border-block: 2px dashed white;
+}
+.lw .reaction-callout strong { color: var(--acid); font: 400 clamp(27px, 2.4vw, 40px)/1 var(--display);
+}
+.lw .reward-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid rgba(255,255,255,.34);
+  border-left: 1px solid rgba(255,255,255,.34);
+}
+.lw .reward-grid li {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 13px 15px;
+  border-right: 1px solid rgba(255,255,255,.34);
+  border-bottom: 1px solid rgba(255,255,255,.34);
+  color: var(--paper-light);
+  font: 600 clamp(11px, .92vw, 13px)/1.35 var(--utility);
+  letter-spacing: .05em;
+}
+.lw .barcode { position: absolute; right: 28px; top: 28px; width: 58px; height: 18px; background: repeating-linear-gradient(90deg, #000 0 2px, transparent 2px 5px);
+}
+/* ticket stub — the tear-off half of the All-Week Pass.
+   Perforation is a real dashed line + punched notches at both ends. */
+.lw .pass-ticket { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 0;
+}
+.lw .pass-ticket > .pass-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 20px;
+  padding-right: clamp(20px, 2.4vw, 36px);
+}
+.lw .pass-stub {
+  position: relative;
+  align-self: stretch;
+  /* span the ticket's full height so the notches land on its real edges */
+  margin: calc(var(--pad-block) * -1) 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: calc(var(--pad-block) + 6px) 0 calc(var(--pad-block) + 6px) clamp(18px, 2.2vw, 32px);
+  border-left: 3px dashed rgba(7,7,7,.5);
+}
+/* punched notches — half-circles bitten out of the ticket's top and bottom edge */
+.lw .pass-stub::before, .lw .pass-stub::after {
+  content: "";
+  position: absolute;
+  left: -14px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--paper);
+}
+.lw .pass-stub::before { top: -13px;
+}
+.lw .pass-stub::after { bottom: -13px;
+}
+.lw .pass-stub .stub-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font: 600 9px/1 var(--utility);
+  letter-spacing: .22em;
+  white-space: nowrap;
+}
+.lw .pass-stub .stub-no {
+  writing-mode: vertical-rl;
+  font: 400 clamp(22px, 2.1vw, 32px)/1 var(--display);
+  letter-spacing: .06em;
+}
+.lw .pass-stub .stub-barcode {
+  flex: 1;
+  width: 22px;
+  min-height: 90px;
+  background: repeating-linear-gradient(180deg, var(--ink) 0 2px, transparent 2px 5px);
+}
+/* quiet bar — acid lives only on the primary button */
+/* Closes like the house `.v4final`: one left-aligned column stepping down from
+   headline to copy to a single row of buttons, over a darkened image rather
+   than flat black. The image here is our own plate, so the campaign's material
+   carries through to the last screen. */
+.lw .finale {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(88px, 9vw, 132px) var(--gutter);
+  color: var(--paper-light);
+  background: var(--ink);
+}
+.lw .finale::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(7,7,7,.86), rgba(7,7,7,.93)),
+    url("/launch-week/kv-desktop.webp") center / cover no-repeat;
+  pointer-events: none;
+}
+.lw .finale-row { position: relative; z-index: 1; max-width: 860px; }
+.lw .finale .eyebrow { color: var(--acid); }
+.lw .finale h2 {
+  margin: 0 0 18px;
+  font: 400 clamp(52px, 5.6vw, 96px)/.94 var(--display);
+  letter-spacing: -.01em;
+  text-transform: uppercase;
+}
+.lw .finale h2 .turn { color: var(--acid); }
+.lw .finale p {
+  max-width: 46ch;
+  margin: 0 0 34px;
+  color: rgba(248,245,237,.74);
+  font-size: clamp(16px, 1.3vw, 18px);
+  line-height: 1.6;
+}
+.lw .finale .ctas { display: flex; flex-wrap: wrap; gap: 14px; }
+.lw .finale .button { width: auto; border-color: var(--paper-light); color: var(--paper-light); }
+.lw .finale .button.is-acid { background: var(--acid); border-color: var(--acid); color: var(--ink); }
+/* ============================================================
+   Scroll & interaction motion — all of it inside one
+   prefers-reduced-motion guard, all of it transform/opacity only.
+   Written as vanilla CSS + a tiny IntersectionObserver so it ports
+   straight into the Astro landing page (which ships zero JS by default).
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference) {
+/* P0 · cards rise into view */
+.lw .reveal { opacity: 0; transform: translateY(26px);
+}
+.lw .reveal.is-in {
+    opacity: 1;
+    transform: none;
+    transition: opacity .6s cubic-bezier(.23,1,.32,1), transform .6s cubic-bezier(.23,1,.32,1);
+}
+/* P1 · TBA lands like a stamp being pressed */
+.lw .drop.is-classified .tba img { opacity: 0; transform: rotate(-14deg) scale(1.5);
+}
+.lw .drop.is-classified .tba.is-in img {
+    opacity: .95;
+    transform: rotate(-6deg) scale(1);
+    transition: opacity .16s ease-out, transform .26s cubic-bezier(.2,1.5,.4,1);
+}
+/* P1 · the selection frame answers the cursor */
+.lw .hero-brand .sel-marquee { transition: border-color .25s ease;
+}
+.lw .hero-brand .sel-marquee::after, .lw .hero-main:hover .sel-marquee { transition: transform .25s ease, background .25s ease;
+}
+.lw .hero-main:hover .sel-marquee { background-size: 14px 14px;
+}
+/* P2 · today's tape breathes in the kill list */
+.lw .killticker li.is-today a { animation: tapeBreathe 2.8s ease-in-out infinite;
+}@keyframes tapeBreathe {.lw 50% { transform: rotate(-1deg) scale(1.035);
+}
+}
+}
+/* the selection frame's handles grow on hover — outside the motion guard so the
+   state change still reads for reduced-motion users, just without the easing */
+.lw .hero-main:hover .sel-marquee { background-size: 14px 14px;
+}
+
+/* mockup-only preview switcher */
+
+/* ---- state, resolved at runtime from the drop schedule ---- */
+.lw .killticker a [data-state-label] { font-style: normal; }
+.lw .killticker a .is-live { color: var(--acid); }
+.lw .killticker a .is-done { color: rgba(248,245,237,.5); }
+.lw .killticker a .is-classified { color: var(--kill-red); }
+.lw .drop [data-status] { color: rgba(7,7,7,.55); }
+.lw .drop .live-stamp { display: none; }
+.lw .drop[data-state="live"] .live-stamp { display: block; }
+.lw .drop[hidden] { display: none; }
+/* Pre-script truth for a no-JS visitor: every day sealed. That is honest on any
+   date — the script then opens whichever days have actually happened. */
+.lw .drop:not(.is-classified) { display: none; }
+.lw .drop:not(.is-classified):not([hidden]) { display: grid; }
+
+
+
+/* CJK sets much wider than Anton at the same size, so the drop headlines and the
+   lineup title overflow their two lines. Give those scripts their own step. */
+:where(:lang(zh), :lang(ja), :lang(ko)) .lw .drop h3 {
+  font-size: clamp(30px, 3.2vw, 50px);
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+:where(:lang(zh), :lang(ja), :lang(ko)) .lw .cabin-title {
+  font-size: clamp(36px, min(4.4vw, 8vh), 72px);
+  line-height: 1.08;
+}
+:where(:lang(zh), :lang(ja), :lang(ko)) .lw .today-ticket h2,
+:where(:lang(zh), :lang(ja), :lang(ko)) .lw .ticket h3,
+:where(:lang(zh), :lang(ja), :lang(ko)) .lw .join-heading h2 {
+  font-size: clamp(26px, 2.9vw, 44px);
+  line-height: 1.15;
+}
+:where(:lang(zh), :lang(ja), :lang(ko)) .lw .finale h2 {
+  font-size: clamp(38px, 4.2vw, 66px);
+  line-height: 1.12;
+}
+
+
+/* the two community buttons carry very different word lengths per locale;
+   a shared minimum keeps the pair from looking lopsided */
+.lw .hero-ctas .button,
+.lw .finale .ctas .button { min-width: 210px; }
+
+
+/* ---------- narrow screens ---------- */
+@media (max-width: 900px) {
+  /* A fixed-height hero clips whatever doesn't fit. On a phone the content is
+     the thing that must win, so let the section grow past one screen instead. */
+  .lw .hero { height: auto; min-height: calc(100svh - var(--lw-header, 85px)); }
+
+  /* Five day-labels cannot share one row on a phone; they stack and the tape
+     marks today the same way it does on desktop. */
+  .lw .killticker {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 16px var(--gutter) 20px;
+  }
+  .lw .killticker ol { flex-direction: column; gap: 7px; }
+  .lw .killticker li { flex: none; }
+  .lw .killticker a { justify-content: flex-start; padding: 11px 16px; font-size: 11px; }
+
+  /* the lineup stops being two columns: the panel becomes a normal heading */
+  .lw .dualrail { grid-template-columns: 1fr; background: var(--paper); }
+  .lw .cabin {
+    position: static;
+    min-height: 0;
+    clip-path: none;
+    padding: clamp(34px, 8vw, 56px) var(--gutter);
+  }
+  .lw .rail { padding: clamp(26px, 7vw, 44px) var(--gutter) clamp(40px, 9vw, 64px); }
+  .lw .drop { grid-template-columns: 1fr; gap: 18px; min-height: 0; }
+  .lw .drop-meta { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 12px; }
+  .lw .drop .day-no { margin: 0; padding: 0; border: 0; }
+  .lw .drop .live-stamp { max-width: 92px; }
+  .lw .drop.is-classified .tba { position: static; transform: none; margin-top: 18px; }
+  .lw .drop.is-classified .tba img { width: 120px; }
+  .lw .drop.is-classified .redact { width: 100%; }
+
+  /* the sticky stack needs a scroll port taller than the cards to feel right */
+  .lw .drop { position: relative; top: auto; }
+  .lw .drop-stack { padding-bottom: 0; }
+
+  /* one column for the tickets, and the stub returns to the flow */
+  .lw .join { grid-template-columns: 1fr; min-height: 0; }
+  .lw .ticket { min-height: 0; }
+  /* the grid track has to be told it may shrink, or it keeps the desktop
+     intrinsic width and pushes past the ticket's own border box */
+  .lw .pass-ticket { grid-template-columns: minmax(0, 1fr); }
+  .lw .pass-ticket > .pass-body { min-width: 0; padding-right: 0; }
+  .lw .ticket > * { min-width: 0; }
+  .lw .pass-stub {
+    margin: 0;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: 18px 0 0;
+    border-left: 0;
+    border-top: 3px dashed rgba(7,7,7,.5);
+  }
+  .lw .pass-stub::before, .lw .pass-stub::after { display: none; }
+  .lw .pass-stub .stub-label, .lw .pass-stub .stub-no { writing-mode: horizontal-tb; }
+  .lw .pass-stub .stub-barcode { min-height: 0; width: 90px; height: 22px;
+    background: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 5px); }
+  .lw .reward-grid { grid-template-columns: 1fr; }
+
+  .lw .finale { min-height: 0; padding: clamp(48px, 11vw, 72px) var(--gutter); }
+  .lw .finale .ctas { flex-direction: column; align-items: stretch; }
+  .lw .hero-ctas { flex-direction: column; align-items: stretch; width: 100%; }
+  .lw .hero-ctas .button, .lw .finale .ctas .button { min-width: 0; }
+  /* nowrap keeps the lockup on one line on desktop; every translated slogan is
+     longer than the English, so on a phone it has to be allowed to wrap. */
+  .lw .hero-brand h1, .lw .hero-brand .promise { white-space: normal; }
+  .lw .hero-brand .promise::before { inset: auto -.1em -.04em -.1em; height: .34em; }
+
+  .lw .hero-band { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .lw .hero-note { padding-left: 0; border-left: 0; border-top: 1.5px solid rgba(7,7,7,.22); padding-top: 14px; }
+  .lw .join-heading { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .lw .join-deck { text-align: left; }
+}
+
+/* ── Community CTA: brand marks + the reason to click ────────────────
+   Joey read the two buttons as easy to skim past — they were set in the
+   same mono as everything else around them. The marks give each one a
+   shape the eye catches before it reads, and the line underneath answers
+   the question the buttons never did: why join at all.
+   Marks are laid out on the text baseline and sized to cap height so they
+   read as part of the label rather than as decoration beside it. */
+.lw .button .btn-mark {
+  height: 1.18em;
+  width: auto;
+  vertical-align: -0.2em;
+  margin-right: 0.5em;
+  /* Discord blurple and the Feishu bird both fight the acid fill at full
+     strength; a hair of desaturation settles them without going grey. */
+  filter: saturate(0.92);
+}
+
+.lw .hero-ctas .cta-note {
+  flex-basis: 100%;
+  margin: 0.85rem 0 0;
+  font-family: var(--utility);
+  font-size: 0.75rem;
+  letter-spacing: 0.01em;
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
+}
+
+@media (max-width: 900px) {
+  /* The stack turns the row into a column, and a 100% basis there means full
+     HEIGHT — the note wraps into a second column beside the buttons and off
+     the screen. On a phone it is simply the next item down. */
+  .lw .hero-ctas .cta-note {
+    flex-basis: auto;
+    text-align: center;
+    font-size: 0.72rem;
+    margin-top: 0.7rem;
+  }
+}

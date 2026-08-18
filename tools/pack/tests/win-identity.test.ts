@@ -6,7 +6,10 @@ import { promisify } from "node:util";
 
 import { describe, expect, it } from "vitest";
 
-import { createLauncherRuntimeSyncPowerShellScript } from "../src/win/custom-installer.js";
+import {
+  createLauncherRuntimeSyncPowerShellScript,
+  createNsisQuotedCommandLiteral,
+} from "../src/win/custom-installer.js";
 import { resolveWinInstallIdentity } from "../src/win/identity.js";
 
 const execFileAsync = promisify(execFile);
@@ -81,6 +84,46 @@ describe("resolveWinInstallIdentity", () => {
     const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
     expect(source).toContain('WriteRegStr HKCU "${registryKey}" "DisplayName" "${productName}"');
     expect(source).not.toContain('"DisplayName" "${productName} \\${APP_VERSION}"');
+  });
+
+  it("emits a valid NSIS command literal for executable paths containing spaces", () => {
+    expect(createNsisQuotedCommandLiteral(["$INSTDIR\\Open Design.exe", "%1"])).toBe(
+      `'"$INSTDIR\\Open Design.exe" "%1"'`,
+    );
+    expect(createNsisQuotedCommandLiteral(["$INSTDIR\\Open Design.exe"])).toBe(
+      `'"$INSTDIR\\Open Design.exe"'`,
+    );
+  });
+
+  it("removes an Electron-refreshed invite protocol while this install still owns it", async () => {
+    const source = await readFile(new URL("../src/win/custom-installer.ts", import.meta.url), "utf8");
+    expect(source).toContain('const inviteProtocolKey = "Software\\\\Classes\\\\opendesign"');
+    expect(source).toContain('WriteRegStr HKCU "${inviteProtocolKey}" "URL Protocol" ""');
+    expect(source).toContain(
+      'WriteRegStr HKCU "${inviteProtocolKey}\\\\shell\\\\open\\\\command" "" ${inviteProtocolCommand}',
+    );
+    expect(source).toContain('$INSTDIR\\\\${exeName}');
+    expect(source).toContain(
+      'ReadRegStr $0 HKCU "${inviteProtocolKey}\\\\shell\\\\open\\\\command" ""',
+    );
+    expect(source).toContain(
+      "const inviteProtocolExecutablePrefix = createNsisQuotedCommandLiteral([`$INSTDIR\\\\${exeName}`])",
+    );
+    expect(source).toContain("StrCpy $1 ${inviteProtocolExecutablePrefix}");
+    expect(source).toContain("StrLen $2 $1");
+    expect(source).toContain("StrCpy $3 $0 $2");
+    expect(source).toContain("StrCmp $3 $1 0 preserve_invite_protocol");
+    expect(source).not.toContain(
+      "StrCmp $0 ${inviteProtocolCommand} 0 preserve_invite_protocol",
+    );
+    expect(source).toContain('DeleteRegKey HKCU "${inviteProtocolKey}"');
+    expect(source).toContain("preserve_invite_protocol:");
+    expect(source.indexOf("StrCmp $3 $1")).toBeLessThan(
+      source.indexOf('DeleteRegKey HKCU "${inviteProtocolKey}"'),
+    );
+    expect(source.indexOf('DeleteRegKey HKCU "${inviteProtocolKey}"')).toBeLessThan(
+      source.indexOf("preserve_invite_protocol:"),
+    );
   });
 
   it("checks the silent install target directory for running instances before overwriting files", async () => {

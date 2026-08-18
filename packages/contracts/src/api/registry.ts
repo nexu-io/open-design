@@ -20,6 +20,12 @@ export interface AgentModelOption {
   outputPriceUsdPerMillion?: number;
   /** Provider/catalog-owned model picker metadata. */
   metadata?: ModelMetadata;
+  /** Raw Codex `additional_speed_tiers` values, when the CLI catalog exposes them. */
+  additionalSpeedTiers?: string[];
+  /** Service tiers supported by this model, keyed by Codex config id. */
+  serviceTierOptions?: AgentModelOption[];
+  /** Reasoning efforts advertised for this exact model route. */
+  reasoningOptions?: AgentModelOption[];
 }
 
 /**
@@ -69,6 +75,12 @@ export type AgentDiagnosticReason =
   | 'shim-broken'
   /** A user-set `*_BIN` override points at a missing/invalid file. */
   | 'configured-bin-invalid'
+  /** The binary ran, but its version could not be read under a strict policy. */
+  | 'version-probe-failed'
+  /** The installed CLI version is outside this Open Design build's tested set. */
+  | 'untested-version'
+  /** A required external runtime profile or companion failed its handshake. */
+  | 'runtime-profile-incompatible'
   /** Installed and invocable, but the CLI is not authenticated. */
   | 'auth-missing'
   /** Installed, but auth status could not be verified. */
@@ -128,7 +140,8 @@ export interface AgentInfo {
   externalMcpInjection?:
     | 'claude-mcp-json'
     | 'acp-merge'
-    | 'opencode-env-content';
+    | 'opencode-env-content'
+    | 'mimo-env-content';
   /**
    * When `false`, the Settings model picker hides the "Custom (fill below)"
    * option and the free-text input. Use this for agents whose CLI doesn't
@@ -203,6 +216,18 @@ export interface SkillSummary {
   // prompt" fast-create on a derived card still composes the parent's
   // SKILL.md body.
   aggregatesExamples: boolean;
+  /**
+   * True for a skill materialized locally from a TEAMMATE's team share (the
+   * puller's copy — never set on the sharer's own skill; mirrors
+   * `DesignSystemSummary.teamSynced` / the puller-side marker
+   * `syncSharedTeamSkill`'s `markTeamSynced` stamps into `workspace_resources`
+   * as `visibility: 'team'`). Without this, a pulled skill was indistinguishable
+   * from one the caller authored themselves — `source` reads `'user'` either
+   * way — so unsharing it team-side made it silently reappear in "Personal"
+   * instead of just dropping out of the Team scope like design-system/plugin
+   * already do.
+   */
+  teamSynced?: boolean;
 }
 
 // Body shape for POST /api/skills/import. The daemon turns this into a
@@ -288,6 +313,24 @@ export interface DesignSystemSummary {
   updatedAt?: string;
   provenance?: DesignSystemProvenance;
   projectId?: string;
+  teamSynced?: boolean;
+  /**
+   * This system's id is present in the current caller's explicitly scoped
+   * team-resource index. Unlike `teamSynced`, this also covers the original
+   * local copy owned by the member who shared it. It is display/catalog
+   * membership only and must never be used as mutation authority.
+   */
+  teamShared?: boolean;
+  /**
+   * Whether the current caller may mutate (edit / publish-toggle / delete)
+   * this design system, mirroring the daemon's own `canMutateUserDesignSystem`
+   * gate exactly (recvqb6mfyqXLD): true for anything the caller authored
+   * themselves, and for a `teamSynced` copy true only when the caller is the
+   * original sharer or a workspace owner/admin. Only the single-item GET
+   * (`/api/design-systems/:id`) response computes this per-caller verdict —
+   * treat a missing value (e.g. from the bulk list) as `true`.
+   */
+  canMutate?: boolean;
 }
 
 export interface DesignSystemDetail extends DesignSystemSummary {
@@ -675,6 +718,13 @@ export interface SyncCommunityPetsResponse {
 export type InstallInput =
   | { source: 'github'; url: string }
   | { source: 'local'; path: string };
+
+// Plugin-compatible remote source accepted by POST /api/skills/install:
+// a root `https://github.com/owner/repo` URL, `github:owner/repo`, or a public
+// HTTPS `.tar.gz` / `.tgz` archive.
+export interface InstallSkillRequest {
+  source: string;
+}
 
 export interface InstallSkillResponse {
   skill: SkillSummary;

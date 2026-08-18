@@ -17,6 +17,9 @@ import {
 import { getResolvedDeviceId } from '../analytics/client';
 import {
   beginAmrAuthTracking,
+  confirmAmrAuthTracking,
+  observeAmrAuthTracking,
+  reconcileAmrAuthAttemptId,
   resolveAmrAuthTracking,
 } from '../analytics/amr-auth';
 import { useI18n } from '../i18n';
@@ -26,9 +29,16 @@ import {
   AMR_LOGIN_STARTUP_SETTLE_MS,
   amrLoginPollOutcome,
   amrLoginStatusEventReason,
+  isAmrSessionAuthenticated,
   notifyAmrLoginStatusChanged,
 } from './amrLoginPolling';
-import { Icon } from './Icon';
+import {
+  notifyTeamProjectsChanged,
+  notifyWorkspaceBillingRefresh,
+  notifyWorkspaceContextRefresh,
+} from '../collab/useWorkspaceContext';
+import { Icon, type IconName } from './Icon';
+import { SignOutConfirmDialog } from './SignOutConfirmDialog';
 import { amrConsoleUrlForProfile, amrProfileBadgeLabel } from '../runtime/amr-guidance';
 
 interface AmrLoginPillProps {
@@ -38,6 +48,7 @@ interface AmrLoginPillProps {
   initialStatus?: VelaLoginStatus | null;
   skipInitialRefresh?: boolean;
   signInLabel?: string;
+  signInIcon?: IconName;
   amrEntrySourceDetail?: TrackingAmrEntrySource;
   metricsConsent?: boolean;
   installationId?: string | null;
@@ -47,6 +58,7 @@ interface AmrLoginPillProps {
   iconOnlySignOut?: boolean;
   onSignInStarted?: () => void;
   onStatusChange?: (status: VelaLoginStatus | null) => void;
+  onSignedOut?: () => void | Promise<void>;
 }
 
 const AMR_LOGIN_REUSE_ENTRY_SOURCES: readonly TrackingAmrEntrySource[] = [
@@ -74,6 +86,7 @@ export interface AmrAccountControlProps {
   hideSignedOutStatus?: boolean;
   hideSignedInStatus?: boolean;
   signInLabel?: string;
+  signInIcon?: IconName;
   showConsoleAction?: boolean;
   consoleUrl?: string;
   iconOnlySignOut?: boolean;
@@ -122,6 +135,7 @@ export function AmrAccountControl({
   hideSignedOutStatus = false,
   hideSignedInStatus = false,
   signInLabel,
+  signInIcon,
   showConsoleAction = false,
   consoleUrl,
   iconOnlySignOut = false,
@@ -232,6 +246,7 @@ export function AmrAccountControl({
           disabled={signInDisabled}
           onClick={onSignIn}
         >
+          {signInIcon ? <Icon name={signInIcon} size={15} aria-hidden /> : null}
           {signInLabel ?? t('settings.amrSignIn')}
         </button>
       ) : null}
@@ -273,6 +288,7 @@ export function AmrLoginPill({
   initialStatus = null,
   skipInitialRefresh = false,
   signInLabel,
+  signInIcon,
   amrEntrySourceDetail,
   metricsConsent = false,
   installationId,
@@ -282,6 +298,7 @@ export function AmrLoginPill({
   iconOnlySignOut = false,
   onSignInStarted,
   onStatusChange,
+  onSignedOut,
 }: AmrLoginPillProps) {
   const { t } = useI18n();
   const analytics = useAnalytics();
@@ -292,6 +309,9 @@ export function AmrLoginPill({
   const pollRef = useRef<number | null>(null);
   const loginStartedAtRef = useRef<number | null>(null);
   const loginPendingRef = useRef(false);
+  const loginStartPendingRef = useRef(false);
+  const loginCancelRequestedRef = useRef(false);
+  const authAttemptIdRef = useRef<string | null>(null);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -302,12 +322,17 @@ export function AmrLoginPill({
 
   const refresh = useCallback(async () => {
     const next = await fetchVelaLoginStatus();
+    if (next?.authAttemptId) authAttemptIdRef.current = next.authAttemptId;
+    const authAttemptId = authAttemptIdRef.current;
+    if (next && authAttemptId) {
+      observeAmrAuthTracking(analytics.track, next, authAttemptId);
+    }
     if (next) {
       setStatus(next);
       onStatusChange?.(next);
     }
     return next;
-  }, [onStatusChange]);
+  }, [analytics.track, onStatusChange]);
 
   useEffect(() => {
     if (!skipInitialRefresh) void refresh();
@@ -320,12 +345,15 @@ export function AmrLoginPill({
 
   useEffect(() => {
     setStatus(initialStatus);
+    if (initialStatus?.authAttemptId) {
+      authAttemptIdRef.current = initialStatus.authAttemptId;
+    }
     // A signed-in status pushed in from the host (e.g. the Settings card
     // refetching on window focus after an out-of-band login) is authoritative:
     // clear any stale login error/pending the early-stopped poll left behind so
     // `accountStatus`, which ranks `errorMessage` above `loggedIn`, doesn't keep
     // the pill stuck on Authorize.
-    if (initialStatus?.loggedIn) {
+    if (isAmrSessionAuthenticated(initialStatus)) {
       stopPolling();
       loginStartedAtRef.current = null;
       loginPendingRef.current = false;
@@ -347,19 +375,44 @@ export function AmrLoginPill({
     onStatusChange?.(status);
   }, [onStatusChange, status]);
 
-  const startPolling = useCallback((startedAt = Date.now()) => {
+  const startPolling = useCallback((
+    startedAt = Date.now(),
+    authAttemptId = authAttemptIdRef.current,
+  ) => {
     stopPolling();
     loginStartedAtRef.current = startedAt;
+    if (authAttemptId) authAttemptIdRef.current = authAttemptId;
     const tick = async () => {
       const next = await refresh();
       const outcome = amrLoginPollOutcome(next, startedAt);
       if (outcome === 'signed-in') {
-        resolveAmrAuthTracking(analytics.track, 'success', undefined, {
-          signedInUserId: next?.user?.id ?? null,
-        });
+        if (authAttemptId) {
+          resolveAmrAuthTracking(analytics.track, 'success', undefined, {
+            authAttemptId,
+            signedInUserId: next?.user?.id ?? null,
+          });
+        }
         // Wake the app-level status sync so configure_type flips to 'amr'
         // on the very next capture, not on an unrelated later refresh.
         notifyAmrLoginStatusChanged();
+        // This pill is a THIRD place AMR sign-in success is detected
+        // (CloudSignInTip's finishSignedIn() and EntryShell's
+        // pollAmrLoginCompletion() are the other two) and must fire the same
+        // workspace-surface nudges they do. Before this, the pill relied on
+        // App.tsx's global AMR_LOGIN_STATUS_EVENT listener eventually
+        // resetting every open tab back to a fresh Home mount (see
+        // deriveTabIdentityScope), whose remount happens to start
+        // useWorkspaceContext from a null module cache — a side effect that
+        // may not run for a while (or ever, if the user never returns to
+        // Home), not a deliberate refresh. Firing these immediately means
+        // every mounted workspace surface updates as soon as sign-in
+        // actually resolves, regardless of what the tab does afterward.
+        // `forceCoalescedGet` (behind these three notifiers) already
+        // collapses a later remount's from-scratch fetch into this one when
+        // it lands inside the coalescing window.
+        notifyWorkspaceContextRefresh();
+        notifyWorkspaceBillingRefresh();
+        notifyTeamProjectsChanged();
         stopPolling();
         loginStartedAtRef.current = null;
         loginPendingRef.current = false;
@@ -369,12 +422,23 @@ export function AmrLoginPill({
       if (outcome === 'stopped' || outcome === 'timed-out') {
         stopPolling();
         if (outcome === 'timed-out') {
-          resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout');
-          void cancelVelaLogin().then(() =>
-            notifyAmrLoginStatusChanged('login-canceled'),
-          );
+          if (authAttemptId) {
+            resolveAmrAuthTracking(analytics.track, 'timeout', 'login_timeout', {
+              authAttemptId,
+            });
+            void cancelVelaLogin(authAttemptId).then((result) =>
+              notifyAmrLoginStatusChanged(
+                result.canceled === true ? 'login-canceled' : 'status-changed',
+              ),
+            );
+          }
         } else {
-          resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped');
+          if (authAttemptId) {
+            resolveAmrAuthTracking(analytics.track, 'failed', 'login_stopped', {
+              authAttemptId,
+            });
+          }
+          console.error('[amr-login] poll loop stopped without a terminal status', { outcome });
         }
         loginStartedAtRef.current = null;
         loginPendingRef.current = false;
@@ -421,7 +485,8 @@ export function AmrLoginPill({
       }
       void refresh().then((next) => {
         if (!next) return;
-        if (next.loggedIn) {
+        if (next.authAttemptId) authAttemptIdRef.current = next.authAttemptId;
+        if (isAmrSessionAuthenticated(next)) {
           stopPolling();
           loginStartedAtRef.current = null;
           loginPendingRef.current = false;
@@ -433,7 +498,10 @@ export function AmrLoginPill({
         if (next.loginInFlight) {
           setErrorMessage(null);
           setPending('login');
-          startPolling();
+          startPolling(
+            loginStartedAtRef.current ?? Date.now(),
+            next.authAttemptId ?? null,
+          );
           return;
         }
         const pendingStartup =
@@ -457,6 +525,7 @@ export function AmrLoginPill({
       event.stopPropagation();
       if (loginPendingRef.current) return;
       loginPendingRef.current = true;
+      loginCancelRequestedRef.current = false;
       const startedAt = Date.now();
       loginStartedAtRef.current = startedAt;
       setErrorMessage(null);
@@ -468,23 +537,113 @@ export function AmrLoginPill({
             reuseExistingFrom: AMR_LOGIN_REUSE_ENTRY_SOURCES,
           })
         : null;
-      beginAmrAuthTracking(attribution, startedAt);
+      const provisionalAuthAttemptId = beginAmrAuthTracking(
+        attribution,
+        startedAt,
+      );
+      authAttemptIdRef.current = provisionalAuthAttemptId;
       const odDeviceId = amrHandoffDeviceId({
         metricsConsent,
         resolvedDeviceId: getResolvedDeviceId(),
         installationId,
       });
-      const result = await startVelaLogin(attribution, odDeviceId);
+      loginStartPendingRef.current = true;
+      const result = await startVelaLogin(
+        attribution,
+        odDeviceId,
+        provisionalAuthAttemptId,
+      ).finally(() => {
+        loginStartPendingRef.current = false;
+      });
+      const authAttemptId = reconcileAmrAuthAttemptId(
+        provisionalAuthAttemptId,
+        result.authAttemptId,
+        { joinedExisting: result.alreadyRunning === true },
+      );
+      authAttemptIdRef.current = authAttemptId;
+      if (result.ok || result.alreadyRunning) {
+        confirmAmrAuthTracking(analytics.track, authAttemptId, {
+          joinedExisting: result.alreadyRunning === true,
+        });
+      }
+      observeAmrAuthTracking(analytics.track, result, authAttemptId);
+      if (loginCancelRequestedRef.current) {
+        if (result.ok || result.alreadyRunning) {
+          const cancelResult = await cancelVelaLogin(authAttemptId);
+          if (!cancelResult.ok) {
+            loginCancelRequestedRef.current = false;
+            loginStartedAtRef.current = null;
+            loginPendingRef.current = false;
+            setPending(null);
+            setErrorMessage(t('settings.amrLoginErrorCompact'));
+            return;
+          }
+          if (cancelResult.canceled !== true) {
+            const next = await refresh();
+            loginCancelRequestedRef.current = false;
+            if (next?.loginInFlight) {
+              loginPendingRef.current = true;
+              setPending('login');
+              startPolling(startedAt, next.authAttemptId ?? authAttemptId);
+            } else {
+              loginStartedAtRef.current = null;
+              loginPendingRef.current = false;
+              setPending(null);
+            }
+            return;
+          }
+          resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
+            authAttemptId,
+          });
+          closeAmrActivationWindowBestEffort();
+          loginCancelRequestedRef.current = false;
+          loginStartedAtRef.current = null;
+          loginPendingRef.current = false;
+          setStatus((current) => (
+            current
+              ? { ...current, loggedIn: false, loginInFlight: false, user: null }
+              : current
+          ));
+          setPending(null);
+          setCanceledVisible(true);
+          notifyAmrLoginStatusChanged('login-canceled');
+          return;
+        }
+        resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
+          authAttemptId,
+        });
+        loginCancelRequestedRef.current = false;
+        loginStartedAtRef.current = null;
+        loginPendingRef.current = false;
+        setPending(null);
+        return;
+      }
       if (!result.ok && !result.alreadyRunning) {
-        resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed');
+        resolveAmrAuthTracking(analytics.track, 'failed', 'spawn_failed', {
+          authAttemptId,
+        });
+        console.error('[amr-login] startVelaLogin failed', result);
         loginStartedAtRef.current = null;
         loginPendingRef.current = false;
         setPending(null);
         setErrorMessage(result.error || t('settings.amrLoginErrorCompact'));
         return;
       }
+      // Dispatch only — do not ALSO call `startPolling(startedAt)` directly
+      // here. This pill is itself subscribed to AMR_LOGIN_STATUS_EVENT (see
+      // the effect above), so the dispatch below already reaches this same
+      // instance's 'login-started' branch synchronously and starts polling.
+      // Calling `startPolling` a second time here used to race two
+      // concurrent `tick()` loops against the same login: `startPolling`'s
+      // own `stopPolling()` cancels the OTHER call's `setInterval`, but not
+      // its already-in-flight immediate `tick()`, so both loops independently
+      // observed the poll landing on signed-in and each fired every
+      // sign-in-success notifier (notifyAmrLoginStatusChanged +
+      // the three workspace refreshes below) once — a real duplicate network
+      // request per notifier, not just a redundant event. Every other
+      // mounted pill instance already relies solely on this same broadcast
+      // to start its own polling; the initiating instance must too.
       notifyAmrLoginStatusChanged('login-started');
-      startPolling(startedAt);
     },
     [
       amrEntrySourceDetail,
@@ -492,7 +651,6 @@ export function AmrLoginPill({
       installationId,
       metricsConsent,
       onSignInStarted,
-      startPolling,
       t,
     ],
   );
@@ -500,19 +658,49 @@ export function AmrLoginPill({
   const handleCancelLogin = useCallback(
     async (event: MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
-      resolveAmrAuthTracking(analytics.track, 'cancelled');
+      const loginStartPending = loginStartPendingRef.current;
+      const authAttemptId = authAttemptIdRef.current;
       stopPolling();
       setErrorMessage(null);
       setPending('cancel');
-      const result = await cancelVelaLogin();
-      closeAmrActivationWindowBestEffort();
-      loginStartedAtRef.current = null;
-      loginPendingRef.current = false;
+      const result = authAttemptId
+        ? await cancelVelaLogin(authAttemptId)
+        : { ok: false, canceled: false };
       if (!result.ok) {
+        console.error('[amr-login] cancelVelaLogin failed', result);
+        loginStartedAtRef.current = null;
+        loginPendingRef.current = false;
         setPending(null);
         setErrorMessage(t('settings.amrLoginErrorCompact'));
         return;
       }
+      if (result.canceled !== true) {
+        setPending(null);
+        const next = await refresh();
+        if (loginStartPending && next?.loginInFlight !== true) {
+          loginCancelRequestedRef.current = true;
+          setPending('cancel');
+          return;
+        }
+        if (next?.loginInFlight) {
+          const startedAt = loginStartedAtRef.current ?? Date.now();
+          loginPendingRef.current = true;
+          setPending('login');
+          startPolling(startedAt, next.authAttemptId ?? null);
+        } else {
+          loginStartedAtRef.current = null;
+          loginPendingRef.current = false;
+        }
+        return;
+      }
+      if (authAttemptId) {
+        resolveAmrAuthTracking(analytics.track, 'cancelled', undefined, {
+          authAttemptId,
+        });
+      }
+      closeAmrActivationWindowBestEffort();
+      loginStartedAtRef.current = null;
+      loginPendingRef.current = false;
       setStatus((current) => (
         current
           ? { ...current, loggedIn: false, loginInFlight: false, user: null }
@@ -528,26 +716,43 @@ export function AmrLoginPill({
       setCanceledVisible(true);
       notifyAmrLoginStatusChanged('login-canceled');
     },
-    [analytics.track, stopPolling, t],
+    [analytics.track, refresh, startPolling, stopPolling, t],
   );
 
-  const handleLogout = useCallback(
-    async (event: MouseEvent<HTMLButtonElement>) => {
-      event.stopPropagation();
-      setErrorMessage(null);
-      setPending('logout');
-      const result = await velaLogout();
-      loginStartedAtRef.current = null;
-      loginPendingRef.current = false;
-      setPending(null);
-      if (!result.ok) {
-        setErrorMessage(t('settings.amrLoginErrorCompact'));
-        return;
-      }
-      await refresh();
-      notifyAmrLoginStatusChanged('status-changed');
-    },
-    [refresh, t],
+  // recvqgMWpJZqhL: the pill's sign-out button only ARMS the confirmation
+  // dialog; `performLogout` (the real daemon logout) runs on explicit confirm.
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
+
+  const handleLogout = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setConfirmingLogout(true);
+  }, []);
+
+  const performLogout = useCallback(async () => {
+    setErrorMessage(null);
+    setPending('logout');
+    const result = await velaLogout();
+    loginStartedAtRef.current = null;
+    loginPendingRef.current = false;
+    setPending(null);
+    setConfirmingLogout(false);
+    if (!result.ok) {
+      console.error('[amr-login] velaLogout failed', result);
+      setErrorMessage(t('settings.amrLoginErrorCompact'));
+      return;
+    }
+    await refresh();
+    notifyAmrLoginStatusChanged('status-changed');
+    await onSignedOut?.();
+  }, [onSignedOut, refresh, t]);
+
+  // Keep the management link on the same status snapshot that supplies the
+  // visible profile badge and account data. The module-level runtime origin is
+  // only a compatibility fallback; it can be reset by a dev hot reload while
+  // React retains the feature-test status shown on this card.
+  const statusConsoleUrl = amrConsoleUrlForProfile(
+    status?.profile,
+    status?.consoleOrigin,
   );
 
   const handleConsoleClick = useCallback(
@@ -563,7 +768,7 @@ export function AmrLoginPill({
         installationId,
       });
       const url = attributedAmrUrl(
-        amrConsoleUrlForProfile(status?.profile),
+        statusConsoleUrl,
         attribution,
         deviceId,
       );
@@ -573,17 +778,17 @@ export function AmrLoginPill({
       // Open the final, attributed URL directly to mint the browser bridge.
       void openExternalUrl(url);
     },
-    [analytics.track, installationId, metricsConsent, status?.profile],
+    [analytics.track, installationId, metricsConsent, statusConsoleUrl],
   );
 
-  const loggedIn = status?.loggedIn === true;
+  const loggedIn = isAmrSessionAuthenticated(status);
   const userEmail = status?.user?.email ?? '';
   const loginInFlight =
-    pending === 'login' || (status?.loggedIn !== true && status?.loginInFlight === true);
+    pending === 'login' || (!loggedIn && status?.loginInFlight === true);
   const logoutInFlight = pending === 'logout';
   const cancelInFlight = pending === 'cancel';
   const activeLoginActivationStatus =
-    showActivationDetails && status?.loggedIn !== true && status?.loginInFlight === true
+    showActivationDetails && !loggedIn && status?.loginInFlight === true
       ? status
       : null;
   const accountStatus: AmrAccountControlStatus = errorMessage
@@ -612,7 +817,9 @@ export function AmrLoginPill({
         hideSignedOutStatus={hideSignedOutStatus}
         hideSignedInStatus={hideSignedInStatus}
         signInLabel={signInLabel}
+        signInIcon={signInIcon}
         showConsoleAction={showConsoleAction}
+        consoleUrl={statusConsoleUrl}
         iconOnlySignOut={iconOnlySignOut}
         signInDisabled={loginInFlight}
         signOutDisabled={logoutInFlight}
@@ -626,6 +833,13 @@ export function AmrLoginPill({
         onConsoleClick={showConsoleAction ? handleConsoleClick : undefined}
         className={loggedIn ? 'amr-login-pill-status' : undefined}
       />
+      {confirmingLogout ? (
+        <SignOutConfirmDialog
+          busy={logoutInFlight}
+          onCancel={() => setConfirmingLogout(false)}
+          onConfirm={() => void performLogout()}
+        />
+      ) : null}
     </div>
   );
 }

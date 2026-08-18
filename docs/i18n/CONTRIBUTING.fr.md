@@ -17,9 +17,10 @@ une PR doit atteindre avant d’être mergée.
 
 | Si vous voulez… | Vous ajoutez en réalité | Où cela vit | Taille |
 |---|---|---|---|
-| Faire générer à OD un nouveau type d'artifact (facture, écran iOS Settings, one-pager…) | un **Skill** | [`skills/<your-skill>/`](../../skills/) | un dossier, ~2 fichiers |
-| Faire parler à OD le langage visuel d'une nouvelle marque | un **Design System** | [`design-systems/<brand>/DESIGN.md`](../../design-systems/) | un fichier Markdown |
-| Brancher une nouvelle CLI de coding agent | un **Agent adapter** | [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) | ~10 lignes dans un tableau |
+| Faire générer à OD un nouveau type d'artifact (facture, écran iOS Settings, one-pager…) | un **template de design** | [`design-templates/<your-template>/`](../../design-templates/) | un dossier avec `SKILL.md` et ses assets de rendu |
+| Ajouter une capacité fonctionnelle invoquée par les agents pendant une tâche | un **Skill** | [`skills/<your-skill>/`](../../skills/) | un dossier avec `SKILL.md` et des ressources optionnelles |
+| Faire parler à OD le langage visuel d'une nouvelle marque | un **Design System** | [`design-systems/<brand>/`](../../design-systems/) | un paquet : `manifest.json`, `DESIGN.md` et `tokens.css` |
+| Brancher une nouvelle CLI de coding agent | un **Agent adapter** | [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) | une définition et une entrée de registre |
 | Ajouter une feature, corriger un bug, reprendre un pattern UX de [`open-codesign`][ocod] | du code | `apps/web/src/`, `apps/daemon/` | PR classique |
 | Améliorer la doc, porter une section en Français / Deutsch / 中文, corriger une faute | documentation | `README.md`, `README.fr.md`, `README.de.md`, `README.zh-CN.md`, `docs/`, `QUICKSTART.md` | une PR |
 
@@ -58,17 +59,19 @@ de dev la plus rapide.
 
 ---
 
-## Ajouter un nouveau Skill
+## Ajouter un nouveau template de design
 
-Un Skill est un dossier sous [`skills/`](../../skills/) avec un `SKILL.md` à la
-racine. Il suit la convention Claude Code [`SKILL.md`][skill], plus notre
-extension optionnelle `od:`. **Aucune étape d'enregistrement.** Déposez le
-dossier, redémarrez le daemon, et le picker l'affiche.
+Un template de design est un dossier sous [`design-templates/`](../../design-templates/)
+avec un `SKILL.md` à la racine. Il suit la convention Claude Code
+[`SKILL.md`][skill], plus notre extension optionnelle `od:`, et regroupe la
+forme et les ressources de rendu d'un artifact affiché dans la galerie Templates.
 
-### Structure d'un dossier Skill
+### → Voir [`docs/skills-contributing.md`](../../docs/skills-contributing.md) pour le guide complet
+
+### Structure d'un dossier de template
 
 ```text
-skills/your-skill/
+design-templates/your-template/
 ├── SKILL.md                    # requis
 ├── assets/template.html        # optionnel mais recommandé — seed file
 ├── references/                 # optionnel — fichiers de connaissance lus par l'agent
@@ -82,13 +85,13 @@ skills/your-skill/
 
 Les trois premières clés sont la spec Claude Code de base : `name`,
 `description`, `triggers`. Tout ce qui est sous `od:` est spécifique à OD et
-optionnel, mais **`od.mode`** décide dans quel groupe le Skill apparaît. La
+optionnel, mais **`od.mode`** décide dans quel groupe le template apparaît. La
 valeur est extensible ; les modes courants incluent Prototype, Deck, Image,
 Video, Audio, Design system et Utility.
 
 ```yaml
 ---
-name: your-skill
+name: your-template
 description: |
   One-paragraph elevator pitch. The agent reads this verbatim to decide
   if the user's brief matches. Be concrete: surface, audience, what's in
@@ -104,30 +107,34 @@ od:
   featured: 1               # any positive integer surfaces it under "Showcase examples"
   preview:
     type: html              # html | jsx | pptx | markdown
-    entry: index.html
   design_system:
-    requires: true          # does the skill read the active DESIGN.md?
-    sections: [color, typography, layout, components]
-  example_prompt: "A copy-pastable prompt that nicely shows what this skill does."
+    requires: true          # does the template read the active DESIGN.md?
+  craft:
+    requires: [typography, color, anti-ai-slop]
+  example_prompt: "A copy-pastable prompt that nicely shows what this template does."
 ---
 
-# Your Skill
+# Your Template
 
 Body is free-form Markdown describing the workflow the agent should follow…
 ```
 
-La grammaire complète — typed inputs, paramètres de sliders, capability gating
-— se trouve dans [`docs/skills-protocol.md`](../../docs/skills-protocol.md).
+La grammaire active complète (`od.mode`, `od.surface`, `od.craft.requires`,
+`od.critique.policy`, les indices de galerie, etc.) se trouve dans
+[`docs/skills-protocol.md`](../../docs/skills-protocol.md). D'anciens champs
+portables comme `od.inputs`, `od.parameters` et `od.capabilities_required`
+peuvent encore apparaître dans des bundles externes, mais le registre des
+skills/templates ne les consomme pas.
 
-### Critères de merge pour un nouveau Skill
+### Critères de merge pour un nouveau template
 
-Nous sommes exigeants sur les Skills parce qu'ils constituent la partie la plus
-visible pour l'utilisateur. Un nouveau Skill doit :
+Nous sommes exigeants sur les templates parce qu'ils constituent une partie
+visible pour l'utilisateur. Un nouveau template doit :
 
 1. **Livrer un vrai `example.html`.** Construit à la main, ouvrable directement
    depuis le disque, avec un niveau qu'un designer pourrait réellement livrer.
    Pas de lorem ipsum, pas de hero placeholder en `<svg><rect/></svg>`. Si vous
-   ne pouvez pas construire l'exemple vous-même, le Skill n'est probablement
+   ne pouvez pas construire l'exemple vous-même, le template n'est probablement
    pas prêt.
 2. **Passer l'anti-AI-slop checklist** dans le body. Pas de gradients violets,
    pas d'icônes emoji génériques, pas de carte arrondie avec accent en bord
@@ -137,126 +144,141 @@ visible pour l'utilisateur. Un nouveau Skill doit :
    écrivez `—` ou un bloc gris libellé, pas "10× faster".
 4. **Avoir un `references/checklist.md`** avec au moins les gates P0, c'est-à-dire
    ce que l'agent doit vérifier avant d'émettre `<artifact>`. Reprenez le format
-   de [`skills/guizang-ppt/references/checklist.md`](../../skills/guizang-ppt/) ou
-   [`skills/dating-web/references/checklist.md`](../../skills/dating-web/).
-5. **Ajouter une capture** sous `docs/screenshots/skills/<skill>.png` si le Skill
+   de [`design-templates/guizang-ppt/references/checklist.md`](../../design-templates/guizang-ppt/) ou
+   [`design-templates/dating-web/references/checklist.md`](../../design-templates/dating-web/).
+5. **Ajouter une capture** sous `docs/screenshots/skills/<skill>.png` si le template
    est featured. PNG, environ 1024×640 retina, capturé depuis le vrai
    `example.html` avec un zoom navigateur adapté.
 6. **Rester dans un dossier autonome.** Pas d'import CDN au-delà de ce que les
-   autres Skills utilisent déjà ; pas de fonte sans licence ; pas d'image de
+   autres templates utilisent déjà ; pas de fonte sans licence ; pas d'image de
    plus d'environ 250 KB.
 
-Si vous forkez un Skill existant (par exemple partir de `dating-web` pour en
+Si vous forkez un template existant (par exemple partir de `dating-web` pour en
 faire `recruiting-web`), conservez la LICENSE et l'attribution d'auteur dans
 `references/`, et mentionnez-le dans la description de la PR.
 
-### Skills existants à imiter
+### Templates existants à imiter
 
-- Prototype visuel single-screen : [`skills/dating-web/`](../../skills/dating-web/),
-  [`skills/digital-eguide/`](../../skills/digital-eguide/)
-- Flow mobile multi-frame : [`skills/mobile-onboarding/`](../../skills/mobile-onboarding/),
-  [`skills/gamified-app/`](../../skills/gamified-app/)
-- Document / template sans Design System requis : [`skills/pm-spec/`](../../skills/pm-spec/),
-  [`skills/weekly-update/`](../../skills/weekly-update/)
-- Deck mode : [`skills/guizang-ppt/`](../../skills/guizang-ppt/) (bundle repris tel
+- Prototype visuel single-screen : [`design-templates/dating-web/`](../../design-templates/dating-web/),
+  [`design-templates/digital-eguide/`](../../design-templates/digital-eguide/)
+- Flow mobile multi-frame : [`design-templates/mobile-onboarding/`](../../design-templates/mobile-onboarding/),
+  [`design-templates/gamified-app/`](../../design-templates/gamified-app/)
+- Document / template sans Design System requis : [`design-templates/pm-spec/`](../../design-templates/pm-spec/),
+  [`design-templates/weekly-update/`](../../design-templates/weekly-update/)
+- Deck mode : [`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/) (bundle repris tel
   quel depuis [op7418/guizang-ppt-skill][guizang]) et
-  [`skills/simple-deck/`](../../skills/simple-deck/)
+  [`design-templates/simple-deck/`](../../design-templates/simple-deck/)
+
+---
+
+## Ajouter un Skill fonctionnel
+
+Un Skill fonctionnel est une capacité que l'agent invoque pendant une tâche pour travailler sur les entrées de l'utilisateur. Consultez [`skills/README.md`](../../skills/README.md) pour la frontière de responsabilité, [`skills/AGENTS.md`](../../skills/AGENTS.md) pour le contrat du dossier et [`docs/skills-protocol.md`](../../docs/skills-protocol.md) pour la grammaire `SKILL.md` partagée. Le scanner paresseux du daemon parcourt les racines de Skills à la prochaine requête `/api/skills` : aucun rebuild ni redémarrage du daemon n'est nécessaire en local.
 
 ---
 
 ## Ajouter un nouveau Design System
 
-Un design system est un seul fichier [`DESIGN.md`](../../design-systems/README.md)
-sous `design-systems/<slug>/`. **Un fichier, pas de code.** Déposez-le,
-redémarrez le daemon, le picker l'affiche dans sa catégorie.
+Un nouveau design system du dépôt est un package sous
+[`design-systems/<slug>/`](../../design-systems/), pas un fichier Markdown isolé.
+Les 151 systèmes fournis utilisent désormais le contrat de package ci-dessous.
+Le daemon accepte encore les dossiers contenant uniquement `DESIGN.md` pour la
+compatibilité avec les contenus anciens ou installés par l'utilisateur, mais ce
+n'est pas la cible d'authoring. Le catalogue est rescanné à chaque requête
+`/api/design-systems` : rafraîchissez la surface Design System après une
+modification, sans redémarrer le daemon.
 
-### Structure d'un dossier Design System
+### Structure minimale du package
 
 ```text
 design-systems/your-brand/
-└── DESIGN.md
+├── manifest.json
+├── DESIGN.md
+└── tokens.css
 ```
+
+`manifest.json` porte l'id stable, le nom affiché, la catégorie, la description,
+la provenance et les chemins déclarés. `DESIGN.md` explique l'intention aux
+agents ; `tokens.css` est la feuille de tokens sémantiques compilée canonique.
+Le contrat complet se trouve dans [`docs/design-systems.md`](../../docs/design-systems.md)
+et [`design-systems/_schema/AGENTS.md`](../../design-systems/_schema/AGENTS.md).
 
 ### Forme de `DESIGN.md`
 
 ```markdown
-# Design System Inspired by YourBrand
+# YourBrand Design System
 
-> Category: Developer Tools
-> One-line summary that shows in the picker preview.
-
-## 1. Visual Theme & Atmosphere
+## Visual Theme
 …
 
-## 2. Color
-- Primary: `#hex` / `oklch(...)`
-- …
-
-## 3. Typography
+## Color Roles
 …
 
-## 4. Spacing & Grid
-## 5. Layout & Composition
-## 6. Components
-## 7. Motion & Interaction
-## 8. Voice & Brand
-## 9. Anti-patterns
+## Typography
+…
+
+## Layout and Spacing
+## Components and States
+## Motion and Interaction
+## Accessibility
+## Anti-patterns
 ```
 
-Le schéma à 9 sections est fixe : c'est ce que les Skill bodies cherchent. Le
-premier H1 devient le label dans le picker (le préfixe `Design System Inspired by`
-est retiré automatiquement), et la ligne `> Category: …` décide du groupe.
-Les catégories existantes sont listées dans [`design-systems/README.md`](../../design-systems/README.md) ;
-si votre marque ne rentre vraiment nulle part, vous pouvez en introduire une
-nouvelle, mais **essayez d'abord les catégories existantes**.
+Il n'existe pas de schéma fixe à neuf sections. Le guard de qualité exige au
+moins sept sections H2 substantielles, sans imposer leurs noms, leur ordre ou
+leur numérotation. Utilisez des titres adaptés au système réel.
 
 ### Critères de merge pour un nouveau Design System
 
-1. **Les 9 sections sont présentes.** Des sections vides sont acceptables pour
-   les informations difficiles à trouver (par exemple des tokens de motion),
-   mais les headings doivent exister, sinon la recherche utilisée par le prompt
-   risque de casser.
-2. **Les hex codes sont réels.** Échantillonnez directement depuis le site ou
-   le produit de la marque, pas de mémoire ni à partir d'une supposition de l'IA. Le
-   protocole d'extraction brand-spec en 5 étapes du README s'applique aussi aux
-   mainteneurs.
-3. **Les valeurs OKLch pour les couleurs d'accent** sont un plus : elles rendent
-   les palettes plus prévisibles entre light/dark.
-4. **Pas de fluff marketing.** La tagline d'une marque n'est pas un design token.
-   Coupez-la.
-5. **Le slug utilise l'ASCII** : `linear.app` devient `linear-app`, `x.ai`
-   devient `x-ai`. Les systèmes importés suivent déjà cette convention ;
-   imitez-la.
+1. **Livrer les trois fichiers requis.** Le slug du dossier et `manifest.id`
+   correspondent et utilisent un ASCII normalisé (`linear.app` → `linear-app`,
+   `x.ai` → `x-ai`).
+2. **Écrire au moins sept H2 substantielles.** N'ajoutez pas de titres vides
+   uniquement pour atteindre le compte.
+3. **Garder prose et tokens cohérents.** Couleurs, typo, espacement et motion
+   décrits dans `DESIGN.md` doivent correspondre à `tokens.css`, qui doit passer
+   les guards de tokens partagés.
+4. **Utiliser des preuves réelles et une provenance claire.** Échantillonnez le
+   produit ou site source et consignez la source dans le manifest ou les preuves
+   du package.
+5. **Rédiger une copie catalogue utile.** `manifest.name`, `category` et
+   `description` sont les métadonnées principales du picker ; évitez le fluff.
 
-Les product systems livrés sont importés depuis [`VoltAgent/awesome-design-md`][acd2]
+Les product systems dérivés de l'upstream sont importés depuis [`VoltAgent/awesome-design-md`][acd2]
 via [`scripts/sync-design-systems.ts`](../../scripts/sync-design-systems.ts). Si votre
 marque appartient à cet upstream, **envoyez d'abord la PR là-bas** : OD le
-récupérera au prochain sync. Le dossier `design-systems/` sert aux systèmes qui
-ne rentrent pas upstream, plus nos starters écrits à la main.
+récupérera au prochain sync. Le dossier `design-systems/` contient aussi des
+ajouts propres au projet qui ne rentrent pas upstream.
 
 ---
 
 ## Ajouter une nouvelle CLI de coding agent
 
 Brancher un nouvel agent (par exemple une CLI `foo-coder`) revient à ajouter
-une entrée dans [`apps/daemon/src/agents.ts`](../../apps/daemon/src/agents.ts) :
+une définition dans [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runtimes/defs/) et une entrée dans `runtimes/registry.ts` :
 
-```javascript
-{
+```ts
+import type { RuntimeAgentDef } from '../types.js';
+
+export const fooAgentDef = {
   id: 'foo',
   name: 'Foo Coder',
   bin: 'foo',
   versionArgs: ['--version'],
+  fallbackModels: [{ id: 'default', label: 'Default', default: true }],
   buildArgs: (prompt) => ['exec', '-p', prompt],
   streamFormat: 'plain',           // or 'claude-stream-json' if it speaks that
-}
+} satisfies RuntimeAgentDef;
 ```
 
-C'est tout : le daemon la détecte dans le `PATH`, le picker l'affiche et le
-chemin chat fonctionne. Si la CLI émet des **typed events** (comme
-`--output-format stream-json` de Claude Code), ajoutez un parser dans
-[`apps/daemon/src/runtimes/claude-stream.ts`](../../apps/daemon/src/runtimes/claude-stream.ts) et mettez
-`streamFormat: 'claude-stream-json'`.
+Importez la définition dans [`runtimes/registry.ts`](../../apps/daemon/src/runtimes/registry.ts)
+et ajoutez-la à `BASE_AGENT_DEFS` ; le moteur partagé la détecte alors dans le
+`PATH`, l'affiche dans le picker et construit son invocation. Réutilisez un
+`streamFormat` existant lorsque la forme du wire correspond. Un format wire
+réellement nouveau exige aussi un parser sous [`apps/daemon/src/runtimes/`](../../apps/daemon/src/runtimes/)
+ou [`apps/daemon/src/agent-protocol/`](../../apps/daemon/src/agent-protocol/),
+des tests de parser et une branche de dispatch correspondante dans
+[`server.ts`](../../apps/daemon/src/server.ts).
 
 Critères de merge :
 
@@ -417,9 +439,12 @@ Pour garder le projet focalisé, merci de ne pas ouvrir de PR qui :
 - **Remplace le daemon par une fonction serverless.** Le rôle du daemon est de
   posséder un vrai `cwd` et de spawn une vraie CLI. Déployer la SPA sur Vercel
   est très bien ; le daemon reste un daemon.
-- **Ajoute de la télémétrie / analytics / phone-home.** OD est local-first.
-  Les seuls appels sortants vont vers des providers explicitement configurés
-  par l'utilisateur.
+- **Ajoute de la télémétrie ou une collecte externe hors du contrat de
+  confidentialité.** Les analytics produit et le replay de session masqué sont
+  soumis au consentement ; la télémétrie nettoyée de sécurité/fiabilité reste
+  active dans les builds configurés. Tout nouvel événement, champ ou
+  destinataire doit respecter les limites de consentement, minimisation et
+  nettoyage décrites dans [`PRIVACY.md`](../../PRIVACY.md).
 - **Bundle un binaire** sans fichier de licence ni attribution d'auteur à côté.
 
 Si vous n'êtes pas sûr que votre idée rentre dans le projet, ouvrez une
@@ -462,7 +487,7 @@ se fait tout seul.
 
 En contribuant, vous acceptez que votre contribution soit licenciée sous la
 [licence Apache-2.0](../../LICENSE) de ce repo, à l'exception des fichiers dans
-[`skills/guizang-ppt/`](../../skills/guizang-ppt/), qui conservent leur licence MIT
+[`design-templates/guizang-ppt/`](../../design-templates/guizang-ppt/), qui conservent leur licence MIT
 originale et l'attribution d'auteur à [op7418](https://github.com/op7418).
 
 [skill]: https://docs.anthropic.com/en/docs/claude-code/skills

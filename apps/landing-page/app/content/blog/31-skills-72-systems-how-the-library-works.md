@@ -82,7 +82,7 @@ i18n:
       <li>把一次 skill 调用喂进去</li>
       <li>把输出收集回来</li>
       </ul>
-      <p>我们今天为 12 个 agent 提供了 adapter：Claude、Codex、Gemini、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen。daemon 会自动检测哪些已存在，并在首次启动时以下拉菜单的形式提供它们——你什么都不用配置，只会看到你已经拥有的那些 agent。</p>
+      <p>我们今天为 25 个本地 CLI runtime 提供 adapter，包括 Claude、Codex、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen 等。daemon 会自动检测哪些已存在，并在首次启动时以下拉菜单的形式提供它们——你什么都不用配置，只会看到你已经拥有的那些 agent。</p>
 
 
 
@@ -221,7 +221,7 @@ i18n:
       <li>把一次技能呼叫導進去</li>
       <li>把輸出收回來</li>
       </ul>
-      <p>我們如今為 12 個 agent 出貨轉接器：Claude、Codex、Gemini、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen。daemon 會自動偵測哪些存在，並在首次啟動時以下拉選單提供它們——你什麼都不用設定，你只會看到你已經擁有的那些 agent。</p>
+      <p>我們如今為 25 個本機 CLI runtime 提供轉接器，包括 Claude、Codex、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen 等。daemon 會自動偵測哪些存在，並在首次啟動時以下拉選單提供它們——你什麼都不用設定，你只會看到你已經擁有的那些 agent。</p>
 
 
 
@@ -360,7 +360,7 @@ i18n:
       <li>スキルの呼び出しを流し込む</li>
       <li>出力を回収する</li>
       </ul>
-      <p>私たちは現在 12 のエージェント向けにアダプターを提供しています：Claude、Codex、Gemini、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen。daemon はどれが存在するかを自動検出し、初回起動時にドロップダウンとして提示します。何も設定する必要はなく、すでに持っているエージェントが見えるだけです。</p>
+      <p>現在、Claude、Codex、Cursor、Copilot、OpenCode、Devin、Hermes、Pi、Kimi、Kiro、Qwen など、25 のローカル CLI runtime 向けにアダプターを提供しています。daemon はどれが存在するかを自動検出し、初回起動時にドロップダウンとして提示します。何も設定する必要はなく、すでに持っているエージェントが見えるだけです。</p>
 
 
       <table><thead><tr><th>プリミティブ</th><th>存在する場所</th><th>ファイル</th><th>信頼できる情報源</th></tr></thead><tbody><tr><td>スキル</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>ディスク上のファイル</td></tr><tr><td>システム</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>ディスク上のファイル</td></tr><tr><td>アダプター</td><td><code>adapters/</code></td><td>1 つの <code>.ts</code> ファイル</td><td><code>register()</code> 呼び出し</td></tr></tbody></table>
@@ -472,7 +472,7 @@ i18n:
       <li>스킬 호출을 파이프로 전달</li>
       <li>출력을 다시 수집</li>
       </ul>
-      <p>오늘날 우리는 12개 에이전트에 대한 어댑터를 제공합니다: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. daemon은 어느 것이 존재하는지 자동으로 감지하고 첫 부팅 시 드롭다운으로 제시합니다 — 아무것도 설정할 필요 없이, 이미 가지고 있는 에이전트가 그냥 보일 뿐입니다.</p>
+      <p>오늘날 우리는 Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen 등을 포함한 25개의 로컬 CLI runtime용 어댑터를 제공합니다. daemon은 어느 것이 존재하는지 자동으로 감지하고 첫 부팅 시 드롭다운으로 제시합니다 — 아무것도 설정할 필요 없이, 이미 가지고 있는 에이전트가 그냥 보일 뿐입니다.</p>
 
 
 
@@ -624,7 +624,7 @@ i18n:
       <li>einen Skill-Aufruf hineinleitet</li>
       <li>die Ausgabe wieder einsammelt</li>
       </ul>
-      <p>Wir liefern heute Adapter für 12 Agenten aus: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Der daemon erkennt automatisch, welche vorhanden sind, und bietet sie beim ersten Start als Dropdown an — du konfigurierst nichts, du siehst einfach die Agenten, die du bereits hast.</p>
+      <p>Wir liefern heute Adapter für 25 lokale CLI-Runtimes aus, darunter Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro und Qwen. Der daemon erkennt automatisch, welche vorhanden sind, und bietet sie beim ersten Start als Dropdown an — du konfigurierst nichts, du siehst einfach die Agenten, die du bereits hast.</p>
 
 
 
@@ -776,7 +776,7 @@ i18n:
       <li>y acheminer une invocation de skill</li>
       <li>récupérer la sortie</li>
       </ul>
-      <p>Nous livrons aujourd'hui des adaptateurs pour 12 agents : Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Le daemon détecte automatiquement ceux qui sont présents et les propose dans un menu déroulant au premier démarrage — vous ne configurez rien, vous voyez simplement les agents que vous avez déjà.</p>
+      <p>Nous livrons aujourd'hui des adaptateurs pour 25 runtimes CLI locaux, dont Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro et Qwen. Le daemon détecte automatiquement ceux qui sont présents et les propose dans un menu déroulant au premier démarrage — vous ne configurez rien, vous voyez simplement les agents que vous avez déjà.</p>
 
 
 
@@ -915,7 +915,7 @@ i18n:
       <li>передавать вызов навыка внутрь</li>
       <li>собирать результат обратно</li>
       </ul>
-      <p>Сегодня мы поставляем адаптеры для 12 агентов: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon автоматически определяет, какие из них присутствуют, и предлагает их в виде выпадающего списка при первом запуске — вы ничего не настраиваете, вы просто видите агентов, которые у вас уже есть.</p>
+      <p>Сегодня мы поставляем адаптеры для 25 локальных CLI runtime, включая Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro и Qwen. Daemon автоматически определяет, какие из них присутствуют, и предлагает их в виде выпадающего списка при первом запуске — вы ничего не настраиваете, вы просто видите агентов, которые у вас уже есть.</p>
 
 
 
@@ -1067,7 +1067,7 @@ i18n:
       <li>canalizar una invocación de skill hacia él</li>
       <li>recopilar la salida de vuelta</li>
       </ul>
-      <p>Hoy distribuimos adapters para 12 agentes: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. El daemon detecta automáticamente cuáles están presentes y los ofrece como un desplegable en el primer arranque — no configuras nada, simplemente ves los agentes que ya tienes.</p>
+      <p>Hoy distribuimos adapters para 25 runtimes CLI locales, incluidos Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro y Qwen. El daemon detecta automáticamente cuáles están presentes y los ofrece como un desplegable en el primer arranque — no configuras nada, simplemente ves los agentes que ya tienes.</p>
 
 
 
@@ -1181,7 +1181,7 @@ i18n:
       <li>encaminhar uma invocação de skill para dentro</li>
       <li>coletar a saída de volta</li>
       </ul>
-      <p>Hoje entregamos adaptadores para 12 agentes: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. O daemon detecta automaticamente quais estão presentes e os oferece como um dropdown na primeira inicialização — você não configura nada, apenas vê os agentes que já tem.</p>
+      <p>Hoje entregamos adaptadores para 25 runtimes CLI locais, incluindo Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro e Qwen. O daemon detecta automaticamente quais estão presentes e os oferece como um dropdown na primeira inicialização — você não configura nada, apenas vê os agentes que já tem.</p>
 
 
 
@@ -1320,7 +1320,7 @@ i18n:
       <li>inviare un'invocazione di skill</li>
       <li>raccogliere indietro l'output</li>
       </ul>
-      <p>Oggi rilasciamo adattatori per 12 agenti: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Il daemon rileva automaticamente quali sono presenti e li offre come menu a tendina al primo avvio: non configuri nulla, vedi semplicemente gli agenti che hai già.</p>
+      <p>Oggi rilasciamo adattatori per 25 runtime CLI locali, tra cui Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro e Qwen. Il daemon rileva automaticamente quali sono presenti e li offre come menu a tendina al primo avvio: non configuri nulla, vedi semplicemente gli agenti che hai già.</p>
 
 
 
@@ -1434,7 +1434,7 @@ i18n:
       <li>đưa một lời gọi skill vào</li>
       <li>thu thập đầu ra trở lại</li>
       </ul>
-      <p>Hôm nay chúng tôi ship adapter cho 12 agent: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon tự động phát hiện cái nào hiện diện và cung cấp chúng dưới dạng menu thả xuống ở lần khởi động đầu tiên — bạn không cấu hình gì cả, bạn chỉ thấy các agent bạn đã có sẵn.</p>
+      <p>Hôm nay chúng tôi ship adapter cho 25 runtime CLI cục bộ, gồm Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro và Qwen. Daemon tự động phát hiện cái nào hiện diện và cung cấp chúng dưới dạng menu thả xuống ở lần khởi động đầu tiên — bạn không cấu hình gì cả, bạn chỉ thấy các agent bạn đã có sẵn.</p>
 
 
 
@@ -1575,7 +1575,7 @@ i18n:
       <li>przekazać do niego wywołanie umiejętności</li>
       <li>zebrać wyjście z powrotem</li>
       </ul>
-      <p>Dziś dostarczamy adaptery dla 12 agentów: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon automatycznie wykrywa, które są obecne, i oferuje je jako listę rozwijaną przy pierwszym uruchomieniu — niczego nie konfigurujesz, po prostu widzisz agentów, których już masz.</p>
+      <p>Dziś dostarczamy adaptery dla 25 lokalnych runtime CLI, w tym Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro i Qwen. Daemon automatycznie wykrywa, które są obecne, i oferuje je jako listę rozwijaną przy pierwszym uruchomieniu — niczego nie konfigurujesz, po prostu widzisz agentów, których już masz.</p>
 
 
 
@@ -1714,7 +1714,7 @@ i18n:
       <li>menyalurkan invokasi skill ke dalamnya</li>
       <li>mengumpulkan kembali output-nya</li>
       </ul>
-      <p>Saat ini kami mengirimkan adapter untuk 12 agent: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon mendeteksi secara otomatis mana yang ada dan menawarkannya sebagai dropdown saat boot pertama — Anda tidak mengonfigurasi apa pun, Anda hanya melihat agent yang sudah Anda miliki.</p>
+      <p>Saat ini kami mengirimkan adapter untuk 25 runtime CLI lokal, termasuk Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, dan Qwen. Daemon mendeteksi secara otomatis mana yang ada dan menawarkannya sebagai dropdown saat boot pertama — Anda tidak mengonfigurasi apa pun, Anda hanya melihat agent yang sudah Anda miliki.</p>
 
 
 
@@ -1853,7 +1853,7 @@ i18n:
       <li>een skill-aanroep erin doorgeeft</li>
       <li>de output weer verzamelt</li>
       </ul>
-      <p>We leveren vandaag adapters voor 12 agents: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. De daemon detecteert automatisch welke aanwezig zijn en biedt ze aan als een dropdown bij de eerste start — je configureert niets, je ziet gewoon de agents die je al hebt.</p>
+      <p>We leveren vandaag adapters voor 25 lokale CLI-runtimes, waaronder Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro en Qwen. De daemon detecteert automatisch welke aanwezig zijn en biedt ze aan als een dropdown bij de eerste start — je configureert niets, je ziet gewoon de agents die je al hebt.</p>
 
 
 
@@ -1991,7 +1991,7 @@ i18n:
       <li>يُمرّر استدعاء مهارة إليه</li>
       <li>يجمع المُخرَج عائدًا</li>
       </ul>
-      <p>نشحن اليوم مُحوّلات لـ 12 عميلًا: Claude، وCodex، وGemini، وCursor، وCopilot، وOpenCode، وDevin، وHermes، وPi، وKimi، وKiro، وQwen. تكتشف الـ daemon تلقائيًا أيّها موجود وتعرضها كقائمة منسدلة عند الإقلاع الأول — لا تُعدّ أي شيء، بل ترى فقط العملاء الذين لديك بالفعل.</p>
+      <p>نشحن اليوم مُحوّلات لـ 25 بيئة CLI محلية، منها Claude وCodex وCursor وCopilot وOpenCode وDevin وHermes وPi وKimi وKiro وQwen. تكتشف الـ daemon تلقائيًا أيّها موجود وتعرضها كقائمة منسدلة عند الإقلاع الأول — لا تُعدّ أي شيء، بل ترى فقط العملاء الذين لديك بالفعل.</p>
       <table><thead><tr><th>العنصر الأساسي</th><th>يقيم في</th><th>الملف</th><th>مصدر الحقيقة</th></tr></thead><tbody><tr><td>المهارة</td><td><code>skills/</code></td><td><code>SKILL.md</code></td><td>الملف على القرص</td></tr><tr><td>النظام</td><td><code>design-systems/</code></td><td><code>DESIGN.md</code></td><td>الملف على القرص</td></tr><tr><td>المُحوّل</td><td><code>adapters/</code></td><td>ملف <code>.ts</code> واحد</td><td>استدعاء <code>register()</code></td></tr></tbody></table>
       <p>إذا أردت إضافة مُحوّل جديد، فالملف نحو 80 سطرًا من TypeScript واستدعاء <code>register()</code> واحد. لا SDK لتتعلّمه، ولا إذن لتطلبه، ولا سجلّ مركزي لتنشر إليه. العميل نفسه الذي تثق به فعلًا على حاسوبك المحمول يصبح المحرّك — Open Design لا يستبدله أبدًا. (تتناول القطعة المُرافقة <a href="/blog/byok-design-workflow-claude-codex-qwen/">سير عمل التصميم بنظام BYOK</a> توجيه مُحوّل إلى مفتاحك الخاص.)</p>
       <h2>الـ daemon: الحلقة التي تربطها معًا</h2>
@@ -2101,7 +2101,7 @@ i18n:
       <li>bir beceri çağrısını içeri aktarmak</li>
       <li>çıktıyı geri toplamak</li>
       </ul>
-      <p>Bugün 12 ajan için adaptör sunuyoruz: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon, hangilerinin mevcut olduğunu otomatik olarak tespit eder ve ilk açılışta bunları bir açılır menü olarak sunar — hiçbir şey yapılandırmazsınız, sadece zaten sahip olduğunuz ajanları görürsünüz.</p>
+      <p>Bugün Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro ve Qwen dahil 25 yerel CLI runtime için adaptör sunuyoruz. Daemon, hangilerinin mevcut olduğunu otomatik olarak tespit eder ve ilk açılışta bunları bir açılır menü olarak sunar — hiçbir şey yapılandırmazsınız, sadece zaten sahip olduğunuz ajanları görürsünüz.</p>
 
 
 
@@ -2239,7 +2239,7 @@ i18n:
       <li>передавати в нього виклик навички</li>
       <li>збирати результат назад</li>
       </ul>
-      <p>Сьогодні ми постачаємо адаптери для 12 агентів: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. Daemon автоматично виявляє присутні й пропонує їх у випадному списку при першому завантаженні — ви нічого не налаштовуєте, ви просто бачите агентів, які у вас уже є.</p>
+      <p>Сьогодні ми постачаємо адаптери для 25 локальних CLI runtime, зокрема Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro та Qwen. Daemon автоматично виявляє присутні й пропонує їх у випадному списку при першому завантаженні — ви нічого не налаштовуєте, ви просто бачите агентів, які у вас уже є.</p>
 
 
 
@@ -2404,7 +2404,7 @@ Skills and systems are inert text. Adapters are the small amount of code that co
 - pipe a skill invocation in
 - collect the output back
 
-We ship adapters for 12 agents today: Claude, Codex, Gemini, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen. The daemon auto-detects which ones are present and offers them as a dropdown on first boot — you don't configure anything, you just see the agents you already have.
+We ship adapters for 25 local CLI runtimes today, including Claude, Codex, Cursor, Copilot, OpenCode, Devin, Hermes, Pi, Kimi, Kiro, Qwen, and more. The daemon auto-detects which ones are present and offers them as a dropdown on first boot — you don't configure anything, you just see the agents you already have.
 
 | Primitive | Lives in | File | Source of truth |
 | --- | --- | --- | --- |

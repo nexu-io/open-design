@@ -2,9 +2,10 @@
 /*
  * /careers/ — short, roles-led hiring page.
  *
- * Deliberately light (per "less is more"): a punchy intro, an email-to-apply
- * CTA up front, then the open roles as a card grid, each summarised in one
- * sentence. Applications go to join@open-design.ai — there is no form.
+ * Deliberately light (per "less is more"): a punchy intro, the apply email
+ * shown up front, then the open roles as a card grid, each summarised in one
+ * sentence. Applications go to join@open-design.ai — the address is shown as
+ * plain text (no mailto link / no form); applicants email it themselves.
  * All 11 landing locales are authored: en is the source, the other 10 are
  * Agent-translated (brand/technical terms — Open Design, Agent, SEM, QA,
  * SRE… — kept verbatim). Localized routes are produced by `[locale]/careers/`.
@@ -25,11 +26,8 @@ type CareersCopy = {
   h1: string;
   lead: string;
   apply: string;
-  applyCta: string;
-  applySubjectPrefix: string;
   rolesHead: string;
   location: string;
-  roleApply: string;
   roles: Role[];
   closing: string;
 };
@@ -43,11 +41,8 @@ const COPY = {
     h1: 'Join Open Design',
     lead: 'Open Design is one of the fastest-growing open-source projects in the world — and we are just getting started. We are building the agent-native design platform: the coding agent already on your laptop, stepping out of the code window to actually design, produce, and ship. A small, senior team moving at a speed the industry rarely sees.',
     apply: 'Email your resume and tell us which direction fits. Compensation is open for the right person.',
-    applyCta: 'Email your resume',
-    applySubjectPrefix: 'Open Design — ',
     rolesHead: 'Open roles',
     location: 'Based in Shanghai, China · on-site',
-    roleApply: 'Apply',
     roles: [
       { title: 'Product Manager (Growth × Agent Strategy)', blurb: 'Turn agent capability into growth and revenue — own the free-to-paid journey, pricing, and the roadmap for what the agent should do next.' },
       { title: 'Growth Engineer', blurb: 'Engineer global organic growth — produce and distribute content at scale, and hit real volume with almost no paid spend.' },
@@ -69,11 +64,8 @@ const COPY = {
     h1: '加入 Open Design',
     lead: 'Open Design 是全球增长最快的开源项目之一——而我们才刚刚开始。我们在做 agent-native 的设计平台：让你电脑里已有的 coding agent 走出代码窗口，真正去做设计、做产品、做交付。我们是一支精干、资深的团队，正在以行业罕见的速度前进。',
     apply: '把简历发邮件给我们，并说明你适合的方向。人选合适，薪资空间开放。',
-    applyCta: '发送简历',
-    applySubjectPrefix: 'Open Design 应聘 — ',
     rolesHead: '开放岗位',
     location: '工作地点：中国 · 上海',
-    roleApply: '投递',
     roles: [
       { title: '产品经理（增长商业化 × Agent 策略）', blurb: '站在增长、商业化与 Agent 策略的交叉点，把 Agent 能力做成可增长、可变现的产品路径。' },
       { title: '增长工程师', blurb: '以工程化方式做全球自然增长，批量生产分发内容，在低投放下做出量级。' },
@@ -95,11 +87,8 @@ const COPY = {
     h1: "Open Design に参加する",
     lead: "Open Design は世界で最も急成長しているオープンソースプロジェクトのひとつ——そして、まだ始まったばかりです。私たちが築いているのは agent-native なデザインプラットフォーム。すでにあなたのノートPCにいる coding agent が、コードの枠を飛び出して、実際にデザインし、制作し、届けます。業界でも稀に見るスピードで動く、少数精鋭のシニアチームです。",
     apply: "履歴書を添えて、どの方向性が合いそうかをお知らせください。ふさわしい方には報酬はオープンです。",
-    applyCta: "履歴書をメールで送る",
-    applySubjectPrefix: "Open Design 応募 — ",
     rolesHead: "募集中のポジション",
     location: "勤務地：中国・上海 · オンサイト",
-    roleApply: "応募する",
     roles: [
       { title: "プロダクトマネージャー（グロース × Agent 戦略）", blurb: "Agent の能力をグロースと収益につなげる——無料から有料への導線、価格設計、そして Agent が次に何をすべきかのロードマップをオーナーとして担います。" },
       { title: "グロースエンジニア", blurb: "グローバルなオーガニックグロースを設計する——コンテンツを大規模に制作・配信し、ほぼ広告費ゼロで本物のボリュームを叩き出します。" },
@@ -121,11 +110,8 @@ const COPY = {
     h1: "Open Design에 합류하세요",
     lead: "Open Design은 세계에서 가장 빠르게 성장하는 오픈소스 프로젝트 중 하나이며, 이제 막 시작했을 뿐입니다. 우리는 agent-native 디자인 플랫폼을 만들고 있습니다. 이미 여러분의 노트북에 있는 coding agent가 코드 창을 벗어나 실제로 디자인하고, 만들고, 출시합니다. 업계에서 좀처럼 보기 힘든 속도로 움직이는 소수 정예의 시니어 팀입니다.",
     apply: "이력서를 이메일로 보내고 어떤 방향이 맞는지 알려주세요. 적임자에게는 보상 조건이 열려 있습니다.",
-    applyCta: "이력서 보내기",
-    applySubjectPrefix: "Open Design 지원 — ",
     rolesHead: "채용 중인 포지션",
     location: "중국 상하이 근무 · 온사이트",
-    roleApply: "지원하기",
     roles: [
       { title: "프로덕트 매니저 (Growth × Agent 전략)", blurb: "Agent 역량을 성장과 매출로 전환합니다 — 무료에서 유료로 이어지는 여정, 가격 정책, 그리고 Agent가 다음에 무엇을 해야 할지에 대한 로드맵을 책임집니다." },
       { title: "그로스 엔지니어", blurb: "글로벌 오가닉 성장을 엔지니어링합니다 — 콘텐츠를 대규모로 생산·배포하고, 유료 지출 거의 없이 실질적인 볼륨을 달성합니다." },
@@ -147,11 +133,8 @@ const COPY = {
     h1: "Werde Teil von Open Design",
     lead: "Open Design ist eines der am schnellsten wachsenden Open-Source-Projekte der Welt — und wir fangen gerade erst an. Wir bauen die agent-native Design-Plattform: der coding agent, der bereits auf deinem Laptop läuft, tritt aus dem Code-Fenster heraus, um wirklich zu designen, zu produzieren und auszuliefern. Ein kleines, erfahrenes Team, das sich mit einem Tempo bewegt, das die Branche selten sieht.",
     apply: "Schick uns deinen Lebenslauf und sag uns, welche Richtung zu dir passt. Die Vergütung ist für die richtige Person offen.",
-    applyCta: "Lebenslauf per E-Mail senden",
-    applySubjectPrefix: "Open Design Bewerbung — ",
     rolesHead: "Offene Stellen",
     location: "Standort Shanghai, China · vor Ort",
-    roleApply: "Bewerben",
     roles: [
       { title: "Product Manager (Growth × Agent Strategy)", blurb: "Verwandle Agent-Fähigkeiten in Wachstum und Umsatz — verantworte die Free-to-Paid-Journey, das Pricing und die Roadmap dafür, was der Agent als Nächstes können soll." },
       { title: "Growth Engineer", blurb: "Entwickle globales organisches Wachstum — produziere und verbreite Inhalte im großen Maßstab und erreiche echtes Volumen fast ganz ohne bezahlte Ausgaben." },
@@ -173,11 +156,8 @@ const COPY = {
     h1: "Rejoignez Open Design",
     lead: "Open Design est l'un des projets open source à la croissance la plus rapide au monde — et nous ne faisons que commencer. Nous construisons la plateforme de design agent-native : le coding agent déjà présent sur votre ordinateur, qui sort de la fenêtre de code pour vraiment concevoir, produire et livrer. Une équipe réduite et senior, qui avance à une vitesse que l'industrie voit rarement.",
     apply: "Envoyez votre CV et dites-nous quelle direction vous correspond. La rémunération est ouverte pour la bonne personne.",
-    applyCta: "Envoyer votre CV",
-    applySubjectPrefix: "Open Design Candidature — ",
     rolesHead: "Postes ouverts",
     location: "Basé à Shanghai, Chine · sur site",
-    roleApply: "Postuler",
     roles: [
       { title: "Product Manager (Growth × Stratégie Agent)", blurb: "Transformez la capacité de l'agent en croissance et en revenus — pilotez le parcours du gratuit au payant, la tarification et la roadmap de ce que l'agent doit faire ensuite." },
       { title: "Growth Engineer", blurb: "Concevez la croissance organique mondiale — produisez et diffusez du contenu à grande échelle, et atteignez un volume réel avec quasiment aucune dépense payante." },
@@ -199,11 +179,8 @@ const COPY = {
     h1: "Присоединяйтесь к Open Design",
     lead: "Open Design — один из самых быстрорастущих open-source проектов в мире, и мы только начинаем. Мы создаём agent-native платформу для дизайна: coding agent, который уже стоит на вашем ноутбуке, выходит из окна кода, чтобы по-настоящему проектировать, создавать и запускать. Небольшая команда сильных специалистов, работающая на скорости, которую индустрия видит редко.",
     apply: "Пришлите резюме и напишите, какое направление вам ближе. Для подходящего человека вознаграждение обсуждается индивидуально.",
-    applyCta: "Отправить резюме",
-    applySubjectPrefix: "Open Design Отклик — ",
     rolesHead: "Открытые вакансии",
     location: "Шанхай, Китай · работа в офисе (on-site)",
-    roleApply: "Откликнуться",
     roles: [
       { title: "Product Manager (Growth × Agent Strategy)", blurb: "Превращайте возможности Agent в рост и выручку — отвечайте за путь от free к paid, ценообразование и дорожную карту того, что Agent должен уметь дальше." },
       { title: "Growth Engineer", blurb: "Конструируйте глобальный органический рост — производите и распространяйте контент в масштабе и добивайтесь реальных объёмов почти без платного бюджета." },
@@ -225,11 +202,8 @@ const COPY = {
     h1: "Únete a Open Design",
     lead: "Open Design es uno de los proyectos de código abierto de más rápido crecimiento del mundo, y esto no ha hecho más que empezar. Estamos construyendo la plataforma de diseño agent-native: el coding agent que ya tienes en tu portátil, que sale de la ventana de código para diseñar, producir y lanzar de verdad. Un equipo pequeño y senior que avanza a una velocidad que la industria rara vez ve.",
     apply: "Envíanos tu currículum por correo y dinos qué dirección encaja contigo. La compensación es abierta para la persona adecuada.",
-    applyCta: "Envía tu currículum",
-    applySubjectPrefix: "Open Design Candidatura — ",
     rolesHead: "Vacantes abiertas",
     location: "Con base en Shanghái, China · presencial",
-    roleApply: "Postúlate",
     roles: [
       { title: "Product Manager (Growth × Estrategia de Agent)", blurb: "Convierte la capacidad del agent en crecimiento e ingresos: haz tuyo el recorrido de free a paid, el pricing y la hoja de ruta de lo que el agent debe hacer a continuación." },
       { title: "Growth Engineer", blurb: "Diseña el crecimiento orgánico global: produce y distribuye contenido a escala y alcanza volumen real casi sin inversión pagada." },
@@ -251,11 +225,8 @@ const COPY = {
     h1: "Junte-se ao Open Design",
     lead: "O Open Design é um dos projetos open-source que mais crescem no mundo — e estamos apenas começando. Estamos construindo a plataforma de design agent-native: o coding agent que já está no seu laptop, saindo da janela de código para de fato projetar, produzir e lançar. Um time pequeno e sênior, movendo-se a uma velocidade que a indústria raramente vê.",
     apply: "Envie seu currículo por e-mail e conte qual direção combina com você. A remuneração é aberta para a pessoa certa.",
-    applyCta: "Envie seu currículo por e-mail",
-    applySubjectPrefix: "Open Design Candidatura — ",
     rolesHead: "Vagas abertas",
     location: "Sediado em Xangai, China · presencial",
-    roleApply: "Candidatar-se",
     roles: [
       { title: "Product Manager (Growth × Estratégia de Agent)", blurb: "Transforme a capacidade do Agent em growth e receita — seja dono da jornada free-to-paid, do pricing e do roadmap do que o Agent deve fazer a seguir." },
       { title: "Growth Engineer", blurb: "Faça a engenharia do crescimento orgânico global — produza e distribua conteúdo em escala e atinja volume real com quase nenhum gasto pago." },
@@ -277,11 +248,8 @@ const COPY = {
     h1: "Entra in Open Design",
     lead: "Open Design è uno dei progetti open-source in più rapida crescita al mondo — e siamo solo all'inizio. Stiamo costruendo la piattaforma di design agent-native: il coding agent che hai già sul tuo laptop, che esce dalla finestra del codice per progettare, produrre e rilasciare davvero. Un team piccolo e senior che si muove a una velocità che il settore vede di rado.",
     apply: "Inviaci il tuo curriculum e dicci quale direzione fa per te. La retribuzione è aperta per la persona giusta.",
-    applyCta: "Invia il tuo curriculum",
-    applySubjectPrefix: "Open Design Candidatura — ",
     rolesHead: "Posizioni aperte",
     location: "Con sede a Shanghai, Cina · in sede",
-    roleApply: "Candidati",
     roles: [
       { title: "Product Manager (Growth × Agent Strategy)", blurb: "Trasforma le capacità dell'Agent in crescita e ricavi — gestisci il percorso da free a paid, il pricing e la roadmap di ciò che l'Agent dovrà fare in seguito." },
       { title: "Growth Engineer", blurb: "Progetta la crescita organica globale — produci e distribuisci contenuti su larga scala e raggiungi volumi reali quasi senza spesa in advertising." },
@@ -303,11 +271,8 @@ const COPY = {
     h1: "Open Design'a Katılın",
     lead: "Open Design, dünyanın en hızlı büyüyen açık kaynak projelerinden biri — ve daha yeni başlıyoruz. agent-native tasarım platformunu inşa ediyoruz: zaten dizüstü bilgisayarınızdaki coding agent, kod penceresinden çıkıp gerçekten tasarlamaya, üretmeye ve ürünü yayına almaya geçiyor. Sektörün nadiren gördüğü bir hızla ilerleyen, küçük ve kıdemli bir ekip.",
     apply: "Özgeçmişinizi e-posta ile gönderin ve hangi yönün size uygun olduğunu belirtin. Doğru kişi için ücret esnektir.",
-    applyCta: "Özgeçmişinizi gönderin",
-    applySubjectPrefix: "Open Design Başvuru — ",
     rolesHead: "Açık pozisyonlar",
     location: "Şanghay, Çin merkezli · ofiste",
-    roleApply: "Başvur",
     roles: [
       { title: "Product Manager (Büyüme × Agent Stratejisi)", blurb: "Agent yeteneklerini büyümeye ve gelire dönüştürün — ücretsizden ücretliye geçiş yolculuğunu, fiyatlandırmayı ve agent'ın bir sonraki adımda ne yapması gerektiğine dair yol haritasını sahiplenin." },
       { title: "Growth Engineer", blurb: "Küresel organik büyümeyi mühendislikle kurgulayın — içeriği ölçekte üretip dağıtın ve neredeyse hiç ücretli harcama olmadan gerçek hacme ulaşın." },
@@ -351,8 +316,7 @@ const jsonLd = {
         <div class="careers-apply">
           <p class="careers-apply-line">{c.apply}</p>
           <div class="careers-actions">
-            <a class="btn btn-primary" href={`mailto:${APPLY_EMAIL}`}>{c.applyCta} →</a>
-            <a class="careers-email" href={`mailto:${APPLY_EMAIL}`}>{APPLY_EMAIL}</a>
+            <span class="careers-email">{APPLY_EMAIL}</span>
           </div>
         </div>
       </div>
@@ -364,20 +328,16 @@ const jsonLd = {
       <ul class="careers-roles">
         {c.roles.map((r) => (
           <li>
-            <a
-              class="careers-role"
-              href={`mailto:${APPLY_EMAIL}?subject=${encodeURIComponent(c.applySubjectPrefix + r.title)}`}
-            >
+            <div class="careers-role">
               <span class="careers-role-title">{r.title}</span>
               <span class="careers-role-blurb">{r.blurb}</span>
-              <span class="careers-role-apply">{c.roleApply} →</span>
-            </a>
+            </div>
           </li>
         ))}
       </ul>
       <div class="careers-closing">
         <span class="careers-closing-text">{c.closing}</span>
-        <a class="btn btn-ghost" href={`mailto:${APPLY_EMAIL}`}>{c.applyCta} →</a>
+        <span class="careers-email">{APPLY_EMAIL}</span>
       </div>
     </section>
   </article>
@@ -473,13 +433,11 @@ const jsonLd = {
       flex-wrap: wrap;
     }
     .careers-email {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--ink-soft, #434343);
-      text-decoration: none;
-    }
-    .careers-email:hover {
-      text-decoration: underline;
+      font-size: clamp(20px, 2.6vw, 26px);
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--ink, #262626);
+      user-select: all;
     }
     .careers-block {
       margin-top: 48px;
@@ -518,13 +476,6 @@ const jsonLd = {
       border: 1px solid var(--line, #d9d9d9);
       border-radius: 16px;
       background: #fff;
-      text-decoration: none;
-      transition: border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
-    }
-    .careers-role:hover {
-      border-color: var(--ink, #262626);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
     }
     .careers-role-title {
       font-size: 16px;
@@ -537,17 +488,6 @@ const jsonLd = {
       font-size: 14.5px;
       line-height: 1.6;
       color: var(--ink-soft, #595959);
-    }
-    .careers-role-apply {
-      margin-top: 4px;
-      font-size: 13px;
-      font-weight: 700;
-      letter-spacing: 0.01em;
-      color: var(--ink-mute, #8c8c8c);
-      transition: color 0.16s ease;
-    }
-    .careers-role:hover .careers-role-apply {
-      color: var(--ui-brand-ink, #3fa006);
     }
     .careers-closing {
       display: flex;

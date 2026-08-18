@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { JSDOM } from 'jsdom';
+import { DECK_STRUCTURED_SLIDE_SELECTOR } from '@open-design/contracts/runtime/deck-stage-fallback';
 import { buildSrcdoc } from '../../src/runtime/srcdoc';
 
 const deckHtml = `<!doctype html>
@@ -29,6 +30,34 @@ const brokenDeckStageHtml = `<!doctype html>
 </html>`;
 
 describe('buildSrcdoc', () => {
+  it('preserves an artifact-authored base instead of overriding its navigation semantics', () => {
+    const authored = '<base href="https://cdn.example/assets/">';
+    const doc = buildSrcdoc(
+      `<!doctype html><html><head>${authored}</head><body></body></html>`,
+      { baseHref: '/api/projects/project-1/preview/scope-1/' },
+    );
+
+    expect(doc).toContain(authored);
+    expect(doc).not.toContain('/api/projects/project-1/preview/scope-1/');
+    expect(new JSDOM(doc).window.document.querySelectorAll('base')).toHaveLength(1);
+  });
+
+  it('echoes the witnessed content-size generation with separate scroll and client widths', () => {
+    const doc = buildSrcdoc('<main>Preview</main>', {
+      previewMeasurementEpoch: 'revision-42',
+    });
+
+    expect(doc).toContain('data-od-preview-content-size-bridge');
+    expect(doc).toContain('lastRequest.measurementId');
+    expect(doc).toContain('lastRequest.generation');
+    expect(doc).toContain('var documentEpoch = "revision-42"');
+    expect(doc).toContain('documentEpoch: documentEpoch');
+    expect(doc).toContain('scrollWidth: size && size.scrollWidth');
+    expect(doc).toContain('clientWidth: size && size.clientWidth');
+    expect(doc).toContain("typeof data.measurementId !== 'string'");
+    expect(doc).not.toContain("type: 'od:preview-content-size', width:");
+  });
+
   it('injects an initial slide index for deck previews', () => {
     const doc = buildSrcdoc(deckHtml, { deck: true, initialSlideIndex: 2 });
 
@@ -64,6 +93,29 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain("type: 'od:snapshot:result'");
     expect(srcdoc).toContain('copyComputedStyle');
     expect(srcdoc).toContain('foreignObject');
+  });
+
+  it('injects preview observability before author scripts', () => {
+    const html = '<!doctype html><html><head><script>throw new Error("boot")</script></head><body></body></html>';
+    const srcdoc = buildSrcdoc(html, { previewObservability: true });
+
+    expect(srcdoc).toContain('data-od-preview-observability');
+    expect(srcdoc).toContain("send('runtime_error'");
+    expect(srcdoc).toContain("send('white_screen'");
+    expect(srcdoc.indexOf('data-od-preview-observability')).toBeLessThan(
+      srcdoc.indexOf('<script>throw new Error("boot")</script>'),
+    );
+    expect(buildSrcdoc(html)).not.toContain('data-od-preview-observability');
+  });
+
+  it('echoes the host challenge token from the srcDoc transport readiness probe', () => {
+    const srcdoc = buildSrcdoc('<main>Preview</main>', {
+      transportActivationGeneration: 'generation-42',
+    });
+
+    expect(srcdoc).toContain("data.type === 'od:srcdoc-transport-ready-probe'");
+    expect(srcdoc).toContain('announceReady(data.probeId)');
+    expect(srcdoc).toContain('message.probeId = probeId');
   });
 
   it('paints an opaque background before drawing so empty rasters never flatten to black', () => {
@@ -133,7 +185,7 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('data-od-deck-stage-fallback');
     expect(srcdoc).toContain("window.customElements.define('deck-stage'");
     expect(srcdoc).toContain(
-      "document.querySelectorAll('deck-stage > .slide, .deck > .slide, .deck-stage > .slide, .deck-shell > .slide, body > .slide')",
+      `document.querySelectorAll(${JSON.stringify(DECK_STRUCTURED_SLIDE_SELECTOR)})`,
     );
     expect(srcdoc.indexOf('data-od-deck-stage-fallback')).toBeLessThan(
       srcdoc.indexOf('data-od-deck-bridge'),

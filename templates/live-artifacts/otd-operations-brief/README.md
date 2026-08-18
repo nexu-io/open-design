@@ -66,7 +66,7 @@ od/
     └── provenance.json    ← rewrite with real source descriptors before publishing
 ```
 
-The `live-artifact` skill (see `skills/live-artifact/SKILL.md`) is the recommended on-ramp — point it at this folder and ask the agent to wire in your data source.
+The `live-artifact` skill (see `design-templates/live-artifact/SKILL.md`) is the recommended on-ramp — point it at this folder and ask the agent to wire in your data source.
 
 ## Source attribution
 

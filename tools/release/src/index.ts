@@ -45,6 +45,18 @@ cli
   });
 
 cli
+  .command("publish-dogfood", "Upload unpublished build artifacts to the dogfood prefix for manual distribution")
+  .action(async () => {
+    await import("./storage/publish-dogfood.ts");
+  });
+
+cli
+  .command("publish-dsh-bootstrap", "Publish immutable DeepSeek Harness bootstrap installers")
+  .action(async () => {
+    await import("./storage/publish-dsh-bootstrap.ts");
+  });
+
+cli
   .command("prepare-release-note", "Discover and validate release note sources")
   .action(async () => {
     await import("./release-note/prepare.ts");

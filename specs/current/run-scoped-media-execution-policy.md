@@ -11,9 +11,21 @@ OD whether a run may generate media bytes, emit structured media requests
 without executing them, or delegate those requests to a generic external media
 executor. The default preserves current OD behavior.
 
-This is a strategy and implementation-shape document. It is intended to be the
-first review artifact before code lands, following the maintainer pattern from
-recent architecture threads:
+## Implementation status
+
+The first enforcement slice has landed with the `enabled` and `disabled`
+modes, optional surface/model allowlists, run persistence, prompt/imagegen
+gating, and the token-gated `/api/tools/media/generate` route. The
+`request-only` resource lifecycle and generic `external` executor described
+below remain proposed follow-up work; no current API exposes them. This
+distinction is intentional so readers do not mistake the full strategy for the
+current contract in `packages/contracts/src/api/media.ts`.
+
+This is a strategy and implementation-shape document. It began as the first
+review artifact before implementation; the status above now separates the
+landed enforcement slice from the still-proposed request/executor work. That
+review-first shape follows the maintainer pattern from recent architecture
+threads:
 
 - Issue [#2146](https://github.com/nexu-io/open-design/issues/2146) accepted a
   focused contract proposal before implementation.
@@ -33,12 +45,12 @@ first code patch small, and do not make OD a provider router or account owner.
 
 Open Design already has a media dispatcher. It is local-first and daemon-owned:
 
-- `apps/daemon/src/media-routes.ts` exposes the project media endpoints,
+- `apps/daemon/src/routes/media.ts` exposes the project media endpoints,
   including `POST /api/projects/:id/media/generate`.
-- `apps/daemon/src/media.ts` owns `generateMedia`, model/provider dispatch, and
+- `apps/daemon/src/media/index.ts` owns `generateMedia`, model/provider dispatch, and
   file writes into the project.
-- `apps/daemon/src/media-config.ts` owns local provider credentials and config.
-- `apps/daemon/src/media-tasks.ts` owns task snapshots, progress, waits, and
+- `apps/daemon/src/media/config.ts` owns local provider credentials and config.
+- `apps/daemon/src/media/tasks.ts` owns task snapshots, progress, waits, and
   persistence.
 - `apps/daemon/src/cli.ts` exposes `od media generate` and `od media wait` as
   the shell-callable surface used by agents.
@@ -378,7 +390,7 @@ the daemon-owned request row is the source of truth.
 
 ### Run creation and storage
 
-`apps/daemon/src/runs.ts` should store the effective policy on the run object.
+`apps/daemon/src/runtimes/runs.ts` should store the effective policy on the run object.
 If a caller omits the policy, set `enabled`. If a caller provides unknown modes
 or invalid executor config, reject at the HTTP boundary.
 
@@ -428,10 +440,6 @@ mode:
 | `disabled` | State that media generation is disabled for this run and the agent must not call `od media generate` or external media tools. |
 | `request-only` | Instruct the agent to create media requests through the OD wrapper. State that OD will not execute provider calls. |
 | `external` | Instruct the agent to create/delegate media requests through OD wrapper only. Do not name provider credentials or direct provider APIs. |
-
-The Codex built-in imagegen override must render only when the effective policy
-is `enabled`. Otherwise Codex can bypass OD's dispatcher and violate the run
-policy.
 
 ### External MCP tools
 
@@ -588,11 +596,11 @@ Use the existing fake-agent harness:
    first patch modes, resource shape, and whether external ships now or later.
 2. Add contract types in `packages/contracts` for policy, media requests, route
    DTOs, and SSE payloads.
-3. Store effective policy on runs in `apps/daemon/src/runs.ts`; expose it in
+3. Store effective policy on runs in `apps/daemon/src/runtimes/runs.ts`; expose it in
    run status responses.
-4. Add `apps/daemon/src/media-policy.ts` with pure helpers:
-   `normalizeMediaExecutionPolicy`, `assertMediaAllowed`,
-   `shouldRenderMediaContract`, and `shouldRenderCodexImagegenOverrideForPolicy`.
+4. Add `apps/daemon/src/media/policy.ts` with pure helpers:
+   `normalizeMediaExecutionPolicy`, `assertMediaAllowed`, and
+   `shouldRenderMediaContract`.
 5. Extend `apps/daemon/src/tool-tokens.ts` with media endpoint/operation grants.
 6. Add `/api/tools/media/generate` and media request CRUD/fulfill routes.
 7. Update `apps/daemon/src/cli.ts` so in-run `od media generate` uses the
@@ -619,16 +627,16 @@ Contracts:
 
 Daemon:
 
-- `apps/daemon/src/runs.ts`
+- `apps/daemon/src/runtimes/runs.ts`
 - `apps/daemon/src/server.ts`
-- `apps/daemon/src/media-routes.ts`
-- `apps/daemon/src/media.ts`
-- `apps/daemon/src/media-tasks.ts`
+- `apps/daemon/src/routes/media.ts`
+- `apps/daemon/src/media/index.ts`
+- `apps/daemon/src/media/tasks.ts`
 - `apps/daemon/src/tool-tokens.ts`
 - `apps/daemon/src/cli.ts`
 - `apps/daemon/src/prompts/media-contract.ts`
 - `apps/daemon/src/prompts/system.ts`
-- new `apps/daemon/src/media-policy.ts`
+- `apps/daemon/src/media/policy.ts`
 - new `apps/daemon/src/media-requests.ts`
 
 Web, if a minimal visible status surface lands:
@@ -638,10 +646,10 @@ Web, if a minimal visible status surface lands:
 
 Tests:
 
-- `apps/daemon/tests/media-policy.test.ts`
+- `apps/daemon/tests/media/policy.test.ts`
 - `apps/daemon/tests/media-requests.test.ts`
-- `apps/daemon/tests/media-routes.test.ts` or adjacent existing media route
-  suites
+- `apps/daemon/tests/media/policy-routes.test.ts` for the landed policy route
+  slice, plus a future request-route suite
 - `apps/daemon/tests/cli-media.test.ts` if CLI tests are already split there,
   otherwise the existing CLI test area
 - `e2e/lib/fake-agents.ts`
@@ -660,11 +668,6 @@ Docs:
 If in-run `od media generate` falls back to `/api/projects/:id/media/generate`
 after token failure, the policy is ineffective. The CLI must fail closed when a
 token is present.
-
-### Risk: Codex imagegen bypass
-
-The Codex built-in imagegen override is a direct byte-generation path. It must
-be gated by effective policy, not only by agent/model metadata.
 
 ### Risk: request-only modeled as plain text
 

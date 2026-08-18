@@ -1,7 +1,7 @@
 ---
 title: 'I Replaced Claude Design With This Opensource Alternative!'
 youtubeId: rZh4zVT2LKY
-summary: 'Set up Open Design to run fully local — pair it with a local model runner like Ollama and your own command-line agents (OpenCode, Claude Code, Codex, Gemini) for a private, free, bring-your-own-agent alternative to Claude Design.'
+summary: 'Set up Open Design to run fully local — pair it with a local model runner like Ollama and your own command-line agents (OpenCode, Claude Code, Codex, Qwen) for a private, free, bring-your-own-agent alternative to Claude Design.'
 date: 2026-05-04
 category: Getting started
 durationSeconds: 390
@@ -16,7 +16,7 @@ This guide shows you how to run Open Design **entirely on your own machine** —
 
 ## What is Open Design?
 
-Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design and Figma. The thing that makes a fully local setup possible is its core architecture: instead of being wired to one model provider, Open Design runs **on top of the coding agent you already use**. Claude Code, Codex, Cursor, Gemini, GitHub Copilot, OpenCode, and more all plug in. It is "bring your own agent" rather than just bring your own key.
+Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design and Figma. The thing that makes a fully local setup possible is its core architecture: instead of being wired to one model provider, Open Design runs **on top of the coding agent you already use**. Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, Qwen, and more all plug in. It is "bring your own agent" rather than just bring your own key.
 
 That matters for this tutorial because if the agent you pick runs locally — an open command-line agent driving a local model through a runner like Ollama — then the whole loop stays on your machine. No credits burned, no prompts shipped to a remote API.
 
@@ -69,14 +69,14 @@ To drive Open Design from the terminal — calling it as a skill or MCP server i
 
 ```bash
 od mcp install <agent>
-# od ships with Open Design; <agent> = claude | codex | cursor | copilot | gemini | opencode | …
+# od ships with Open Design; <agent> = claude | codex | cursor | copilot | opencode | kiro | …
 ```
 
 Then ask, inside the agent: `Use open-design to generate a dense analytics dashboard with the Airbnb design system`.
 
 ## First run: connect your local agent
 
-The first time you launch Open Design, it scans your machine and shows every command-line agent it found — Claude Code, OpenCode, Codex, Gemini, and others. This is the moment that makes a local-only workflow real: you choose which agent generates your designs.
+The first time you launch Open Design, it scans your machine and shows every supported command-line agent it found — Claude Code, OpenCode, Codex, Qwen, and others. This is the moment that makes a local-only workflow real: you choose which agent generates your designs.
 
 - **Pick a local agent to avoid spending credits.** Claude Code is excellent, but it draws on your Claude credits. Choosing a free, local option like **OpenCode** instead means generation runs on your machine for nothing. OpenCode bundles several free models (MiniMax among them) and can sit in front of a local runner such as **Ollama**, so the model never leaves your computer.
 - **Add provider API keys only if you want them.** There is a place to paste keys for Anthropic, OpenAI, Azure, and Google Gemini if you ever want to reach for a hosted model. For a fully local run, you can skip this entirely.
@@ -128,7 +128,7 @@ Yes. Open Design itself is open source (Apache-2.0) and free to run. If you poin
 Pick a local command-line agent during first run instead of a cloud one. Because Open Design runs on top of whichever agent you choose, a local agent and local model mean your prompts and designs never leave your computer.
 
 **Which coding agents does it support?**
-21+ agents, including Claude Code, Codex, Cursor, Gemini, GitHub Copilot, and OpenCode. Open Design detects the CLIs already installed on your machine and lets you choose which one drives generation.
+21+ agents, including Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, and Qwen. Open Design detects the CLIs already installed on your machine and lets you choose which one drives generation.
 
 **How is it different from Claude Design?**
 Same familiar, browser-based feel, but open-source, local-first, and agent-pluggable. You bring your own agent (local or hosted), you are not forced to define a design system up front, and you can do extra things Claude Design can't — like deploying directly to Vercel and generating slides, images, and video from the same workspace.

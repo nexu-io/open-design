@@ -5,6 +5,7 @@ import {
   buildLegacyMaxTokensParam,
   buildMaxCompletionTokensParam,
   buildOpenAIChatTokenParam,
+  isAzureOpenAIHostname,
   isUnsupportedMaxTokensError,
 } from '../integrations/openai-chat-token-params.js';
 import {
@@ -33,9 +34,11 @@ import {
 import { isSafeId as isSafeProjectId } from '../projects.js';
 import { projectKindToTracking } from '@open-design/contracts/analytics';
 import { proxyDispatcherRequestInit, validateUserProviderBaseUrl } from '../connectionTest.js';
+import { isKnownReasoningEffort, resolveModelForServiceTier } from '../runtimes/models.js';
 import { googleStreamGenerateContentUrl } from '../integrations/google-models.js';
 import { createRoleMarkerGuard } from '../role-marker-guard.js';
 import { authorizeReasoningEgress, sendReasoningEgressDenial } from '../reasoning-egress.js';
+import type { AuthorizeProjectRequest } from '../collab/project-request-authority.js';
 
 // Allowlist for the `/feedback` route. Mirrors the
 // ChatMessageFeedbackReasonCode union in packages/contracts/src/api/chat.ts.
@@ -55,12 +58,15 @@ const FEEDBACK_REASON_ALLOWLIST: ReadonlySet<string> = new Set([
   'other',
 ]);
 
-export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry'> {}
+export interface RegisterChatRoutesDeps extends RouteDeps<'db' | 'design' | 'http' | 'chat' | 'agents' | 'critique' | 'validation' | 'lifecycle' | 'paths' | 'telemetry' | 'appConfig'> {
+  authorizeProjectRequest: AuthorizeProjectRequest;
+}
 
 export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   const { db, design } = ctx;
   const { sendApiError, createSseResponse } = ctx.http;
-  const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, sanitizeCustomModel, listProviderModels } = ctx.agents;
+  const { readAppConfig } = ctx.appConfig;
+  const { testProviderConnection, testAgentConnection, getAgentDef, isKnownModel, isKnownServiceTier, sanitizeCustomModel, listProviderModels } = ctx.agents;
   const {
     handleCritiqueArtifact,
     handleCritiqueInterrupt,
@@ -104,20 +110,40 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   app.post('/api/runs/:id/feedback', async (req, res) => {
     const runId = req.params.id;
     const body = (req.body ?? {}) as Partial<{
-      projectId: string;
-      conversationId: string;
-      assistantMessageId: string;
       rating: 'positive' | 'negative';
       reasonCodes: string[];
       hasCustomReason: boolean;
       customReason: string;
-    }>;
+    }> & Record<string, unknown>;
     if (!runId) {
       return sendApiError(res, 400, 'INVALID_RUN_ID', 'runId missing');
+    }
+    const callerOwnedContextFields = [
+      'projectId',
+      'conversationId',
+      'assistantMessageId',
+    ].filter((field) => Object.prototype.hasOwnProperty.call(body, field));
+    if (callerOwnedContextFields.length > 0) {
+      return sendApiError(
+        res,
+        400,
+        'INVALID_FEEDBACK_CONTEXT',
+        'feedback project, conversation, and message identity are derived from the run',
+      );
     }
     if (body.rating !== 'positive' && body.rating !== 'negative') {
       return sendApiError(res, 400, 'INVALID_RATING', 'rating must be positive or negative');
     }
+    const run = design.runs.get(runId);
+    if (!run || typeof run.projectId !== 'string' || !run.projectId) {
+      return sendApiError(res, 404, 'NOT_FOUND', 'run not found');
+    }
+    if (!await ctx.authorizeProjectRequest(
+      req,
+      res,
+      run.projectId,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
     // Drop anything outside the contract-side reason allowlist and
     // deduplicate; otherwise a malformed or replayed client payload could
     // create unknown Langfuse categories or duplicate score ids in the
@@ -139,11 +165,13 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       return;
     }
     // Build score metadata bag that lands in the Langfuse score body.
-    // Mirrors the PostHog event so analysts can cross-reference.
+    // Mirrors the PostHog event so analysts can cross-reference. Every
+    // identity field comes from the daemon-owned run object; request bodies
+    // cannot retarget a score to another project/conversation/message.
     const scoreMetadata: Record<string, unknown> = {
-      projectId: body.projectId,
-      conversationId: body.conversationId,
-      assistantMessageId: body.assistantMessageId,
+      projectId: run.projectId,
+      conversationId: run.conversationId ?? null,
+      assistantMessageId: run.assistantMessageId ?? null,
       hasCustomReason: body.hasCustomReason === true,
       customReason,
     };
@@ -319,11 +347,18 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         try {
           const def = getAgentDef(body.agentId);
           const testStart = Date.now();
-          const safeModel =
-            def && typeof body.model === 'string'
-              ? isKnownModel(def, body.model)
-                ? body.model
-                : sanitizeCustomModel(body.model)
+          const appConfig = await readAppConfig(ctx.paths.RUNTIME_DATA_DIR).catch(() => ({}));
+          const configuredModel =
+            def && typeof appConfig.agentModels?.[def.id]?.model === 'string'
+              ? appConfig.agentModels[def.id].model
+              : undefined;
+          const requestedModel =
+            typeof body.model === 'string' ? body.model : configuredModel;
+          let safeModel =
+            def && typeof requestedModel === 'string'
+              ? isKnownModel(def, requestedModel)
+                ? requestedModel
+                : sanitizeCustomModel(requestedModel)
               : undefined;
           if (def && typeof body.model === 'string' && body.model.trim() && !safeModel) {
             return res.json({
@@ -338,13 +373,27 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
           const safeReasoning =
             def &&
             typeof body.reasoning === 'string' &&
-            Array.isArray(def.reasoningOptions)
-              ? (def.reasoningOptions.find((r: any) => r.id === body.reasoning)?.id ?? undefined)
+            isKnownReasoningEffort(def, safeModel, body.reasoning)
+              ? body.reasoning
+              : undefined;
+          safeModel = def
+            ? resolveModelForServiceTier(
+                def,
+                safeModel,
+                typeof body.serviceTier === 'string' ? body.serviceTier : null,
+              ) ?? undefined
+            : safeModel;
+          const safeServiceTier =
+            def &&
+            typeof body.serviceTier === 'string' &&
+            isKnownServiceTier(def, safeModel, body.serviceTier)
+              ? body.serviceTier
               : undefined;
           const result = await testAgentConnection({
             agentId: body.agentId,
             model: safeModel ?? undefined,
             reasoning: safeReasoning,
+            serviceTier: safeServiceTier,
             agentCliEnv:
               body.agentCliEnv && typeof body.agentCliEnv === 'object'
                 ? body.agentCliEnv
@@ -376,9 +425,19 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
 
   // POST /api/projects/:projectId/critique/:runId/interrupt
   // Cascades an AbortController to the in-flight orchestrator for the given run.
+  const critiqueInterruptHandler =
+    handleCritiqueInterrupt(db, critiqueRunRegistry);
   app.post(
     '/api/projects/:projectId/critique/:runId/interrupt',
-    handleCritiqueInterrupt(db, critiqueRunRegistry),
+    async (req, res) => {
+      if (!await ctx.authorizeProjectRequest(
+        req,
+        res,
+        req.params.projectId,
+        { mode: 'write', capability: 'writeFiles' },
+      )) return;
+      critiqueInterruptHandler(req, res);
+    },
   );
 
   // GET /api/projects/:projectId/critique/:runId/artifact
@@ -389,12 +448,21 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
   //
   // Response cap is threaded from cfg.parserMaxBlockBytes so a row that
   // the orchestrator + writer accepted is always retrievable.
+  const critiqueArtifactHandler = handleCritiqueArtifact(db, {
+    artifactsRoot: critiqueArtifactsRoot,
+    responseCapBytes: critiqueResponseCapBytes,
+  });
   app.get(
     '/api/projects/:projectId/critique/:runId/artifact',
-    handleCritiqueArtifact(db, {
-      artifactsRoot: critiqueArtifactsRoot,
-      responseCapBytes: critiqueResponseCapBytes,
-    }),
+    async (req, res) => {
+      if (!await ctx.authorizeProjectRequest(
+        req,
+        res,
+        req.params.projectId,
+        { mode: 'read', allowNavigationQuery: true },
+      )) return;
+      await critiqueArtifactHandler(req, res);
+    },
   );
 
   // ---- API Proxy (SSE) for API-compatible endpoints ------------------------
@@ -1002,15 +1070,23 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       payloadMessages.unshift({ role: 'system', content: systemPrompt });
     }
 
+    const effectiveMaxTokens =
+      typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192;
     const payload: any = {
       model,
       messages: payloadMessages,
-      ...buildOpenAIChatTokenParam(
-        model,
-        typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : 8192,
-      ),
+      ...buildOpenAIChatTokenParam(model, effectiveMaxTokens),
       stream: true,
     };
+    const retryPayload = {
+      model,
+      messages: payloadMessages,
+      ...buildMaxCompletionTokensParam(effectiveMaxTokens),
+      stream: true,
+    };
+    const canRetryUnsupportedMaxTokens = isAzureOpenAIHostname(
+      validated.parsed!.hostname,
+    );
 
     const sse = createSseResponse(res);
     let proxyDispatcher: ReturnType<typeof proxyDispatcherRequestInit> | null = null;
@@ -1018,7 +1094,7 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
       proxyDispatcher = proxyDispatcherRequestInit();
       const signal = clientDisconnectSignal(res);
       sse.send('start', { model });
-      const response = await fetch(url, {
+      const requestInit = {
         ...proxyDispatcher.requestInit,
         signal,
         method: 'POST',
@@ -1030,21 +1106,40 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
             'X-Title': 'Open Design',
           } : {}),
         },
+        redirect: 'error' as const,
+      };
+      let response = await fetch(url, {
+        ...requestInit,
         body: JSON.stringify(payload),
-        redirect: 'error',
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(
-          `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
-        );
-        sendProxyError(sse, `Upstream error: ${response.status}`, {
-          code: proxyErrorCode(response.status),
-          details: errorText,
-          retryable: response.status === 429 || response.status >= 500,
-        });
-        return sse.end();
+        let errorText = await response.text();
+        if (
+          canRetryUnsupportedMaxTokens &&
+          response.status === 400 &&
+          isUnsupportedMaxTokensError(errorText)
+        ) {
+          console.warn(
+            `[proxy:openai] retrying Azure-hosted request with max_completion_tokens model=${model}`,
+          );
+          response = await fetch(url, {
+            ...requestInit,
+            body: JSON.stringify(retryPayload),
+          });
+          errorText = response.ok ? '' : await response.text();
+        }
+        if (!response.ok) {
+          console.error(
+            `[proxy:openai] upstream error: ${response.status} ${redactAuthTokens(errorText)}`,
+          );
+          sendProxyError(sse, `Upstream error: ${response.status}`, {
+            code: proxyErrorCode(response.status),
+            details: errorText,
+            retryable: response.status === 429 || response.status >= 500,
+          });
+          return sse.end();
+        }
       }
 
       let ended = false;
@@ -1490,6 +1585,21 @@ export function registerChatRoutes(app: Express, ctx: RegisterChatRoutesDeps) {
         'projectId is required and must be a safe identifier',
       );
     }
+    // The provider completion may immediately request a media tool that writes
+    // into this project. Authorize the whole loop before URL resolution,
+    // upstream egress, credential seeding, or tool execution so a read-only
+    // Team member cannot spend a BYOK key or mutate the creator's files.
+    //
+    // The shared gate preserves the signed-out/local compatibility contract:
+    // a project with no persisted Workspace binding is accepted without
+    // consulting cloud authority. Only a bound project must prove the exact
+    // creator-capable Workspace identity.
+    if (!await ctx.authorizeProjectRequest(
+      req,
+      res,
+      projectId,
+      { mode: 'write', capability: 'writeFiles' },
+    )) return;
 
     const effectiveBaseUrl = baseUrl || opts.defaultBaseUrl;
     const validated = await validateExternalApiBaseUrl(effectiveBaseUrl);

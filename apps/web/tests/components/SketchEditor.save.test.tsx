@@ -115,6 +115,9 @@ vi.mock('../../src/i18n', () => ({
     locale: 'zh-CN',
     t: (key: string) => key,
   }),
+  // Toast reaches for the t-only shorthand; a mock without it makes every
+  // render that surfaces a toast throw before the assertion runs.
+  useT: () => (key: string) => key,
 }));
 
 beforeAll(() => {

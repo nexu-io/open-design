@@ -225,6 +225,8 @@ export const FR_DESIGN_SYSTEM_SUMMARIES: Record<string, string> = {
   claude: 'Assistant IA d’Anthropic. Accent terracotta chaud, layout éditorial clair.',
   clay: 'Agence créative. Formes organiques, gradients doux, mise en page très éditoriale et dirigée.',
   clickhouse: 'Base analytics rapide. Style documentation technique avec accent jaune.',
+  'cloudflare-kumo':
+    'Système de composants de Cloudflare pour les apps web modernes : tokens sémantiques clair/sombre, typographie Inter compacte, surfaces neutres en couches, contrôles accessibles et couleurs pensées pour les graphiques.',
   cohere: 'Plateforme IA enterprise. Gradients vivants, esthétique dashboard riche en données.',
   coinbase: 'Exchange crypto. Identité bleue claire, confiance, sensation institutionnelle.',
   composio: 'Plateforme d’intégrations d’outils. Dark moderne avec icônes d’intégration colorées.',

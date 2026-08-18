@@ -467,13 +467,14 @@ export async function listCloudflarePagesZones(config: DeployConfig) {
   };
 }
 
-export async function deployToCloudflarePages(input: { config: DeployConfig; files: DeployFile[]; projectId?: string; cloudflarePages?: unknown; priorMetadata?: JsonObject | undefined }) {
+export async function deployToCloudflarePages(input: { config: DeployConfig; files: DeployFile[]; projectId?: string; cloudflarePages?: unknown; priorMetadata?: JsonObject | undefined; target?: 'preview' | 'production' }) {
   const {
     config,
     files,
     projectId = '',
     cloudflarePages = undefined,
     priorMetadata = undefined,
+    target = 'production',
   } = input || {};
   if (!config?.token) throw new DeployError('Cloudflare API token is required.', 400);
   if (!config?.accountId) throw new DeployError('Cloudflare account ID is required.', 400);
@@ -495,7 +496,8 @@ export async function deployToCloudflarePages(input: { config: DeployConfig; fil
     manifest[`/${file.file}`] = cloudflarePagesAssetHash(file);
   }
   form.append('manifest', JSON.stringify(manifest));
-  form.append('branch', 'main');
+  const deployBranch = target === 'preview' ? 'preview' : 'main';
+  form.append('branch', deployBranch);
 
   const deployResp = await fetch(cloudflarePagesProjectUrl(config, 'deployments'), {
     method: 'POST',
@@ -509,11 +511,16 @@ export async function deployToCloudflarePages(input: { config: DeployConfig; fil
 
   const deployment = deployed?.result ?? deployed;
   const productionUrl = cloudflarePagesProductionUrl(config);
+  const urlCandidates = target === 'preview'
+    ? (deployment?.url ? [deployment.url] : [])
+    : (productionUrl ? [productionUrl] : [deployment?.url]);
   const link = await waitForReachableDeploymentUrl(
-    productionUrl ? [productionUrl] : [deployment?.url],
+    urlCandidates,
     { providerLabel: 'Cloudflare Pages' },
   );
-  const pagesDevUrl = productionUrl || link.url || deploymentUrl(deployment);
+  const pagesDevUrl = target === 'preview'
+    ? (link.url || deploymentUrl(deployment) || productionUrl)
+    : (productionUrl || link.url || deploymentUrl(deployment));
   const pagesDev = {
     url: pagesDevUrl,
     status: normalizeDeploymentLinkStatus(link.status),
@@ -540,7 +547,7 @@ export async function deployToCloudflarePages(input: { config: DeployConfig; fil
     providerId: CLOUDFLARE_PAGES_PROVIDER_ID,
     url: pagesDevUrl,
     deploymentId: deployment?.id,
-    target: 'preview',
+    target,
     status: aggregate.status,
     statusMessage: aggregate.statusMessage,
     reachableAt: link.reachableAt,

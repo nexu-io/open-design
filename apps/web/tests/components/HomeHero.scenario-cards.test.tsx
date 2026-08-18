@@ -70,29 +70,39 @@ function renderHero(overrides: Partial<React.ComponentProps<typeof HomeHero>> = 
   render(<HomeHero {...props} />);
 }
 
+// #5517 removed the illustrated scenario-card rail from Home; scenarios are
+// picked from the composer footer's radial template picker instead.
+function openTemplatePicker() {
+  fireEvent.click(screen.getByTestId('home-hero-template-trigger'));
+}
+
 describe('HomeHero scenario cards', () => {
-  it('renders each create scenario card with a title and a description', () => {
+  it('labels each create scenario in the composer template picker', () => {
     renderHero();
-    const prototype = screen.getByTestId('home-hero-rail-prototype');
-    expect(prototype.textContent).toContain('Prototype');
-    expect(prototype.textContent).toContain('Interactive app mockups');
-
-    const deck = screen.getByTestId('home-hero-rail-deck');
-    expect(deck.textContent).toContain('Presentations & pitch decks');
+    openTemplatePicker();
+    expect(
+      screen.getByTestId('home-hero-template-wedge-prototype').getAttribute('aria-label'),
+    ).toContain('UI Mockup');
+    expect(
+      screen.getByTestId('home-hero-template-wedge-deck').getAttribute('aria-label'),
+    ).toContain('Slide deck');
   });
 
-  it('leads the create rail with Website clone, then the slide deck', () => {
+  it('leads the create rail with UI Mockup, then Slide deck, and trails Website clone', () => {
     const ordered = orderedCreateChips();
-    expect(ordered[0]?.id).toBe('web-clone');
-    expect(ordered[1]?.id).toBe('deck');
+    const ids = ordered.map((chip) => chip.id);
+    expect(ids.slice(0, 2)).toEqual(['prototype', 'deck']);
+    // Website clone sits behind every other explicit rail type (only the
+    // unlisted catalog tail, e.g. Brand Kit, follows), so the visible pill
+    // row overflows it into the 全部 popover at typical widths.
+    expect(ids.indexOf('web-clone')).toBeGreaterThan(ids.indexOf('audio'));
   });
 
-  it('adds the finer-grained scenarios as create cards routed to a scenario plugin', () => {
+  it('adds the finer-grained scenarios as templates routed to a scenario plugin', () => {
     renderHero();
+    openTemplatePicker();
     for (const id of ['wireframe', 'mobile', 'document']) {
-      const card = screen.getByTestId(`home-hero-rail-${id}`);
-      const tabs = screen.getByTestId('home-hero-type-tabs');
-      expect(tabs.contains(card)).toBe(true);
+      expect(screen.getByTestId(`home-hero-template-wedge-${id}`)).toBeTruthy();
       expect(findChip(id)?.action.kind).toBe('apply-scenario');
     }
     // Wireframe reuses the web-prototype seed at lo-fi fidelity.

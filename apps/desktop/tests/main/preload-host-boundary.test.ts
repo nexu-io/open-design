@@ -28,8 +28,12 @@ describe("desktop preload host boundary", () => {
     expect(source).toContain("'--od-os-locale='");
     expect(source).toContain("osLocale");
     expect(source).toContain("invokeUpdater('install'");
+    expect(source).toContain("invokeUpdater('clear-cache'");
     expect(source).toContain("od:update:quit");
     expect(source).toContain("od:update:status-changed");
+    expect(source).toContain("od:update:open-dialog");
+    expect(source).toContain("od:update:set-menu-labels");
+    expect(source).toContain("subscribeOpenDialog");
     expect(source).toContain("od:app-config-changed");
     expect(source).toContain("open-design:app-config-changed");
     expect(source).toContain("window.dispatchEvent(new CustomEvent(APP_CONFIG_CHANGED_EVENT))");

@@ -15,7 +15,7 @@ For general contribution flow, see [CONTRIBUTING.md](CONTRIBUTING.md). The "Loca
 ### Step 1: Choose Your Language Code
 
 Pick a standard code:
-- Two-letter for most languages: `de`, `fr`, `it`, `sv`
+- Two-letter for most languages: `de`, `fr`, `sv`, `vi`
 - Regional variants when needed: `pt-BR`, `zh-CN`, `zh-TW`, `es-ES`
 - Use hyphens, not underscores: `zh-CN` ✅ not `zh_CN` ❌
 
@@ -25,14 +25,14 @@ Translations live in `docs/i18n/`; only the English `README.md` stays in the rep
 
 ```bash
 # Copy and translate
-cp README.md docs/i18n/README.it.md
-# Edit docs/i18n/README.it.md in your editor
+cp README.md docs/i18n/README.sv.md
+# Edit docs/i18n/README.sv.md in your editor
 ```
 
 **What to translate:**
 - ✅ All text, headings, descriptions
 - ✅ Alt text: `alt="Open Design banner"`
-- ✅ Link text: `[Quickstart](../../QUICKSTART.md)` → `[Guida rapida](QUICKSTART.it.md)` (paths are relative to `docs/i18n/`: link a translated core doc as a sibling filename, or fall back to the English target at `../../QUICKSTART.md`)
+- ✅ Link text: `[Quickstart](../../QUICKSTART.md)` → `[Snabbstart](QUICKSTART.sv.md)` (paths are relative to `docs/i18n/`: link a translated core doc as a sibling filename, or fall back to the English target at `../../QUICKSTART.md`)
 
 **What NOT to translate:**
 - ❌ Code snippets, commands, file paths
@@ -43,47 +43,31 @@ cp README.md docs/i18n/README.it.md
 ### Step 3: Update ALL Language Switchers (Critical!)
 
 **This is the most commonly forgotten step.** You must update the language switcher in:
-1. Your new `docs/i18n/README.it.md` (bold your language)
+1. Your new `docs/i18n/README.sv.md` (bold your language)
 2. **Every existing README** — the English `README.md` in the repo root *and* every `docs/i18n/README.*.md` (add your language as a link)
 
 The switcher uses two link conventions depending on which file it lives in:
 
 - **English root `README.md`** — bold `English`; link translations with the `docs/i18n/` prefix:
   ```html
-  <p align="center"><b>English</b> · <a href="docs/i18n/README.es.md">Español</a> · ... · <a href="docs/i18n/README.it.md">Italiano</a></p>
+  <p align="center"><b>English</b> · <a href="docs/i18n/README.es.md">Español</a> · ... · <a href="docs/i18n/README.sv.md">Svenska</a></p>
   ```
 - **Translated `docs/i18n/README.xx.md`** — bold your own language; link English with `../../README.md` and the other translations as sibling filenames:
   ```html
-  <p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · ... · <b>Italiano</b></p>
+  <p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · ... · <b>Svenska</b></p>
   ```
 
-**Files to update:** `README.md` (root), `docs/i18n/README.ar.md`, `docs/i18n/README.de.md`, `docs/i18n/README.es.md`, `docs/i18n/README.fr.md`, `docs/i18n/README.ja-JP.md`, `docs/i18n/README.ko.md`, `docs/i18n/README.pt-BR.md`, `docs/i18n/README.ru.md`, `docs/i18n/README.tr.md`, `docs/i18n/README.uk.md`, `docs/i18n/README.zh-CN.md`, `docs/i18n/README.zh-TW.md`
+**Files to update:** `README.md` at the repository root and every file returned by `git ls-files 'docs/i18n/README.*.md'`. Do not maintain a copied filename list here; `pnpm i18n:check` verifies that every switcher has the same set.
 
 ### Step 4: Add UI Dictionary (Optional but Recommended)
 
-Create `apps/web/src/i18n/locales/it.ts`:
+Create `apps/web/src/i18n/locales/sv.ts` by copying `en.ts`, then translate every value while preserving every key and placeholder. Locale dictionaries are complete, explicit `Dict` implementations; do not use `...en` to hide missing keys.
 
-```typescript
-import type { Dict } from '../types';
-import { en } from './en';
-
-export const it: Dict = {
-  ...en, // Fallback to English for missing keys
-  // Translate these UI strings
-  'common.create': 'Crea',
-  'common.cancel': 'Annulla',
-  'settings.language': 'Lingua',
-  'entry.tabDesigns': 'Design',
-  'entry.tabTemplates': 'Modelli',
-  // ... see en.ts for full list
-};
-```
-
-> **Note:** The `Dict` type enforces that all keys match those in `en.ts`. Invented keys like `'nav.home'` will fail TypeScript compilation.
+> **Note:** The `Dict` type and `apps/web/tests/i18n/locales.test.ts` enforce alignment with `en.ts`, including placeholder names. The runtime's English fallback is defensive compatibility behavior, not permission to ship a partial dictionary.
 
 Then register it in `apps/web/src/i18n/index.tsx` and `apps/web/src/i18n/types.ts` (see [detailed steps below](#adding-a-new-locale)).
 
-**Don't forget to update test fixtures:** Add your locale code to `EXPECTED_LOCALES` in `apps/web/tests/i18n/locales.test.ts` and add a `LOCALE_LABEL` assertion (e.g., `expect(LOCALE_LABEL.it).toBe('Italiano');`). Run `pnpm --filter @open-design/web test` to verify.
+**Don't forget to update test fixtures:** Add your locale code to `EXPECTED_LOCALES` in `apps/web/tests/i18n/locales.test.ts` and add a `LOCALE_LABEL` assertion (e.g., `expect(LOCALE_LABEL.sv).toBe('Svenska');`). Run `pnpm --filter @open-design/web test` to verify.
 
 ### Step 5: Test and Submit
 
@@ -94,11 +78,11 @@ pnpm typecheck
 # Run i18n checks
 pnpm i18n:check
 
-# Visual check: open your docs/i18n/README.it.md in GitHub preview
+# Visual check: open your docs/i18n/README.sv.md in GitHub preview
 # Verify all links work, images load, language switcher displays correctly
 ```
 
-**PR title:** `feat(i18n): add Italian translation`
+**PR title:** `feat(i18n): add Swedish translation`
 
 **PR checklist:**
 - [ ] README translated
@@ -129,7 +113,7 @@ Open Design currently supports **19 languages** across different surfaces:
 | Polski (Polish)      | `pl`    | —      | ✅      | —         | active |
 | Português (Brasil)   | `pt-BR` | ✅     | ✅      | ✅        | active |
 | Русский (Russian)    | `ru`    | ✅     | ✅      | —         | active |
-| ภาษาไทย (Thai)       | `th`    | —      | ✅      | —         | active |
+| ภาษาไทย (Thai)       | `th`    | ✅     | ✅      | ✅        | active |
 | Türkçe (Turkish)     | `tr`    | ✅     | ✅      | —         | active |
 | Українська           | `uk`    | ✅     | ✅      | —         | active |
 | 简体中文             | `zh-CN` | ✅     | ✅      | ✅        | active |
@@ -164,18 +148,18 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
 2. **Update [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts):**
    - Extend the `Locale` union with your code
    - Append your code to the `LOCALES` array
-   - Add a `LOCALE_LABEL[<code>]` entry — use the **native name** of the language (`Italiano`, `日本語`, not `it`, `ja`)
+   - Add a `LOCALE_LABEL[<code>]` entry — use the **native name** of the language (`Svenska`, `日本語`, not `sv`, `ja`)
 
    ```typescript
-   export type Locale = 'en' | 'de' | 'fr' | 'it' | /* ... */;
+   export type Locale = 'en' | 'de' | 'fr' | 'sv' | /* ... */;
    
-   export const LOCALES: Locale[] = ['en', 'de', 'fr', 'it', /* ... */];
+   export const LOCALES: Locale[] = ['en', 'de', 'fr', 'sv', /* ... */];
    
    export const LOCALE_LABEL: Record<Locale, string> = {
      en: 'English',
      de: 'Deutsch',
      fr: 'Français',
-     it: 'Italiano',
+     sv: 'Svenska',
      // ...
    };
    ```
@@ -183,10 +167,10 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
    **Then update test fixtures:** In [`apps/web/tests/i18n/locales.test.ts`](apps/web/tests/i18n/locales.test.ts), add your locale to the `EXPECTED_LOCALES` array and add a `LOCALE_LABEL` assertion:
    
    ```typescript
-   const EXPECTED_LOCALES = ['en', 'id', 'de', /* ... */, 'it', /* ... */];
+   const EXPECTED_LOCALES = ['en', 'id', 'de', /* ... */, 'sv', /* ... */];
    
    // In the test body:
-   expect(LOCALE_LABEL.it).toBe('Italiano');
+   expect(LOCALE_LABEL.sv).toBe('Svenska');
    ```
 
    **If your locale is RTL (Arabic, Hebrew, Persian, Urdu, etc.):** also append your code to `RTL_LOCALES` in [`apps/web/src/i18n/index.tsx`](apps/web/src/i18n/index.tsx). This array controls the `dir="rtl"` attribute on `<html>` at runtime — without it the web UI renders LTR regardless of language. The current list is:
@@ -197,36 +181,20 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
 
 3. **Create the dictionary** at `apps/web/src/i18n/locales/<code>.ts`:
    - Copy from `en.ts` and translate the values
-   - Keys must match `en.ts` exactly
-   - Missing keys fall back to English at runtime
-   - Use `...en` spread for partial translations
-
-   ```typescript
-   import type { Dict } from '../types';
-   import { en } from './en';
-
-  export const it: Dict = {
-    ...en, // Fallback for untranslated keys
-    'common.create': 'Crea',
-    'common.cancel': 'Annulla',
-    'common.save': 'Salva',
-    'settings.language': 'Lingua',
-    'entry.tabDesigns': 'Design',
-    'entry.tabTemplates': 'Modelli',
-    // ... translate all keys from en.ts
-  };
-   ```
+   - Declare every key explicitly; keys and placeholder names must match `en.ts` exactly
+   - Do not spread `en` into a partial locale. Typecheck and the locale test are intended to expose omissions at review time
+   - The translator still has an English fallback as a defensive runtime boundary, but maintained dictionaries must not depend on it
 
 4. **Register your dictionary** in [`apps/web/src/i18n/index.tsx`](apps/web/src/i18n/index.tsx):
 
    ```typescript
-   import { it } from './locales/it';
+   import { sv } from './locales/sv';
    // ...
    const DICTS: Record<Locale, Dict> = {
      en,
      de,
      fr,
-     it, // Add your locale here
+     sv, // Add your locale here
      // ...
    };
    ```
@@ -236,23 +204,17 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
    - Repository precedent may use a documentation-region code that differs from the UI dict code when that is the familiar docs filename, such as `README.ja-JP.md` with UI locale `ja`, or `README.es.md` with UI locale `es-ES`
    - Translate all prose, headings, alt text, and link text
    - Keep code snippets, URLs, and brand names in English
-   - Fix relative paths for the new location: links to repo-root resources (`apps/`, `docs/`, `LICENSE`, the English `README.md`, etc.) need a `../../` prefix; links to a sibling translated core doc stay as a bare filename. Example: `[Quickstart](../../QUICKSTART.md)` → `[Guida rapida](QUICKSTART.it.md)` if that translation exists, else `[Guida rapida](../../QUICKSTART.md)`
+   - Fix relative paths for the new location: links to repo-root resources (`apps/`, `docs/`, `LICENSE`, the English `README.md`, etc.) need a `../../` prefix; links to a sibling translated core doc stay as a bare filename. Example: `[Quickstart](../../QUICKSTART.md)` → `[Snabbstart](QUICKSTART.sv.md)` if that translation exists, else `[Snabbstart](../../QUICKSTART.md)`
 
 6. **Update the language switcher in EVERY README** — the root `README.md` and every `docs/i18n/README.*.md` (line ~25 of each):
    - Match the order used in the English README
    - Include the same set everywhere
-   - Bold the current language: `<b>Italiano</b>`
+   - Bold the current language: `<b>Svenska</b>`
    - The link form differs by file location (see below)
 
-   **English root `README.md`** — bold `English`, link translations with the `docs/i18n/` prefix:
-   ```html
-   <p align="center"><b>English</b> · <a href="docs/i18n/README.es.md">Español</a> · <a href="docs/i18n/README.pt-BR.md">Português</a> · <a href="docs/i18n/README.de.md">Deutsch</a> · <a href="docs/i18n/README.fr.md">Français</a> · <a href="docs/i18n/README.zh-CN.md">简体中文</a> · <a href="docs/i18n/README.zh-TW.md">繁體中文</a> · <a href="docs/i18n/README.ko.md">한국어</a> · <a href="docs/i18n/README.ja-JP.md">日本語</a> · <a href="docs/i18n/README.ar.md">العربية</a> · <a href="docs/i18n/README.ru.md">Русский</a> · <a href="docs/i18n/README.uk.md">Українська</a> · <a href="docs/i18n/README.tr.md">Türkçe</a> · <a href="docs/i18n/README.it.md">Italiano</a></p>
-   ```
+   **English root `README.md`** — bold `English`, link translations with the `docs/i18n/` prefix. Copy the current switcher from `README.md`, append the new `docs/i18n/README.<code>.md` link, and keep English bold. The checked-in switcher is the source to copy; do not copy a hard-coded language list from this guide.
 
-   **Translated `docs/i18n/README.<code>.md`** — link English with `../../README.md`, the other translations as sibling filenames, bold your own:
-   ```html
-   <p align="center"><a href="../../README.md">English</a> · <a href="README.es.md">Español</a> · <a href="README.pt-BR.md">Português</a> · <a href="README.de.md">Deutsch</a> · <a href="README.fr.md">Français</a> · <a href="README.zh-CN.md">简体中文</a> · <a href="README.zh-TW.md">繁體中文</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja-JP.md">日本語</a> · <a href="README.ar.md">العربية</a> · <a href="README.ru.md">Русский</a> · <a href="README.uk.md">Українська</a> · <a href="README.tr.md">Türkçe</a> · <b>Italiano</b></p>
-   ```
+   **Translated `docs/i18n/README.<code>.md`** — link English with `../../README.md`, the other translations as sibling filenames, bold your own. Copy a current translated switcher, add the new locale, and bold the new language. `pnpm i18n:check` validates the result.
 
 7. **(Optional) Translate core docs:**
    - Copy `QUICKSTART.md` → `docs/i18n/QUICKSTART.<code>.md`
@@ -279,7 +241,7 @@ The `LOCALES` array in [`apps/web/src/i18n/types.ts`](apps/web/src/i18n/types.ts
 - ✅ Alt text in images: `alt="Open Design banner"` → `alt="Banner di Open Design"`
 - ✅ Badge labels where appropriate: `discord-join` → `discord-unisciti`
 - ✅ Code comments in examples (if instructional)
-- ✅ Link text: `[Quickstart](../../QUICKSTART.md)` → `[Guida rapida](QUICKSTART.it.md)` (sibling translation in `docs/i18n/` if it exists; otherwise keep the English target `../../QUICKSTART.md`)
+- ✅ Link text: `[Quickstart](../../QUICKSTART.md)` → `[Snabbstart](QUICKSTART.sv.md)` (sibling translation in `docs/i18n/` if it exists; otherwise keep the English target `../../QUICKSTART.md`)
 
 **What NOT to translate:**
 - ❌ Code snippets (commands, file paths, variable names)
@@ -558,10 +520,10 @@ Open your translated README in GitHub's preview or a local Markdown viewer:
 Check all internal links point to existing files:
 
 ```bash
-# Example: verify Italian links (translations live in docs/i18n/)
-grep -o 'README\.[a-z-]*\.md' docs/i18n/README.it.md | sort -u
-grep -o 'QUICKSTART\.[a-z-]*\.md' docs/i18n/README.it.md | sort -u
-grep -o 'CONTRIBUTING\.[a-z-]*\.md' docs/i18n/README.it.md | sort -u
+# Example: verify Swedish links (translations live in docs/i18n/)
+grep -o 'README\.[a-z-]*\.md' docs/i18n/README.sv.md | sort -u
+grep -o 'QUICKSTART\.[a-z-]*\.md' docs/i18n/README.sv.md | sort -u
+grep -o 'CONTRIBUTING\.[a-z-]*\.md' docs/i18n/README.sv.md | sort -u
 ```
 
 All linked files should exist in the repository. Sibling translations resolve relative to `docs/i18n/`; English sources resolve via the `../../` prefix. If a translated file doesn't exist yet, link to the English version at `../../`.
@@ -570,7 +532,7 @@ All linked files should exist in the repository. Sibling translations resolve re
 
 Verify the language switcher in your new file:
 - ✅ Lists all supported languages
-- ✅ Current language is bolded: `<b>Italiano</b>`
+- ✅ Current language is bolded: `<b>Svenska</b>`
 - ✅ All other languages are links (sibling `<a href="README.es.md">` from a `docs/i18n/` file; `docs/i18n/`-prefixed from the root `README.md`)
 - ✅ Links use correct file names (e.g., `README.ja-JP.md` not `README.ja.md`)
 - ✅ Order matches the standard order
@@ -610,7 +572,6 @@ feat(i18n): add [Language] translation
 ```
 
 **Examples:**
-- `feat(i18n): add Italian translation`
 - `feat(i18n): add Swedish translation`
 - `feat(i18n): add Vietnamese translation`
 
@@ -630,18 +591,7 @@ Adds [Language] translation for Open Design documentation.
 ## Files Modified
 Updated language switcher in:
 - [x] README.md (root)
-- [x] docs/i18n/README.ar.md
-- [x] docs/i18n/README.de.md
-- [x] docs/i18n/README.es.md
-- [x] docs/i18n/README.fr.md
-- [x] docs/i18n/README.ja-JP.md
-- [x] docs/i18n/README.ko.md
-- [x] docs/i18n/README.pt-BR.md
-- [x] docs/i18n/README.ru.md
-- [x] docs/i18n/README.tr.md
-- [x] docs/i18n/README.uk.md
-- [x] docs/i18n/README.zh-CN.md
-- [x] docs/i18n/README.zh-TW.md
+- [x] Every existing translation returned by `git ls-files 'docs/i18n/README.*.md'`
 
 ## Translation Notes
 [Any regional choices, terminology decisions, or context for reviewers]
@@ -690,7 +640,7 @@ Translations are **not automatically updated** when the English source changes. 
 
 When a PR changes English copy, check which surface changed and update the matching translated surfaces deliberately:
 
-- **UI chrome:** Update `apps/web/src/i18n/locales/en.ts` first, then add translated values to active locale dictionaries when the PR owns that refresh. Partial dictionaries may inherit from English with `...en`.
+- **UI chrome:** Update `apps/web/src/i18n/locales/en.ts` first, then add the same explicit keys and matching placeholders to every locale dictionary. Do not use `...en` to make an incomplete dictionary appear complete.
 - **README:** Keep language switchers in sync across the root `README.md` and every `docs/i18n/README.*.md`. Check badge counts, Quickstart links, supported agent lists, and release/download links against the English `README.md` during a refresh.
 - **Core docs:** Keep translated `docs/i18n/QUICKSTART.*.md` and `docs/i18n/CONTRIBUTING.*.md` aligned with their English source (`QUICKSTART.md`, `CONTRIBUTING.md` in root) when the locale owns those docs.
 - **Display metadata:** Update `apps/web/src/i18n/content*.ts` alongside `content.ts` when that locale maintains display metadata.
@@ -709,47 +659,21 @@ This enforces:
 
 These are structural issues that must be fixed before merge.
 
-### Known Drift
-
-Several translated READMEs currently lag behind English in:
-- Badge counts
-- Supported agent lists
-- Quickstart/download links
-
-These will be cleaned up in focused PRs. See [Backport policy](#backport-policy) below.
+The locale test verifies exact key and placeholder parity across every registered dictionary. Individual values still require human language review; structural parity is not proof of translation quality.
 
 ---
 
 ## 📋 Backport Policy
 
-When the English README or UI dict gains new sections/keys, contributors are **not required** to backport. The English fallback covers missing keys at runtime. Locale maintainers (volunteers, often the original author) are encouraged to refresh in a follow-up PR.
+When the English README gains new sections, locale maintainers may refresh prose in a focused follow-up. UI dictionary keys are different: every registered locale must add every new key in the same change so typecheck and `apps/web/tests/i18n/locales.test.ts` continue to pass. The runtime fallback is a defensive boundary, not the maintenance policy.
 
 **Keep refresh PRs focused: one locale per PR, no mixed feature work.**
 
-### Drift Threshold
+### Drift handling
 
-A locale is considered drifted when **either**:
-
-- **≥20 untranslated UI keys** vs. `en.ts` (today this is checked manually with a key-diff; a CI warning is tracked as a follow-up — see [Open questions](#open-questions)), **or**
-- **No refresh PR in 6+ months** while the English README or dict has changed
-
-These are tripwires for moving a locale to **stale** status (below); they're not auto-rejection rules.
-
-### Stale Locales
-
-We don't delete locales. When a locale crosses a drift tripwire above:
-
-1. Add a `⚠️ Stale (last refreshed YYYY-MM)` cell to its row in the [Supported Languages](#-supported-languages) table.
-2. Drop a frontmatter comment at the top of the locale's `.ts` file:
-
-   ```typescript
-   // ⚠️ Stale: last refreshed 2025-09. See TRANSLATIONS.md.
-   export const fr: Dict = { ... };
-   ```
-
-3. The locale keeps compiling and rendering — readers still get partially-translated UI, which is better than removing it.
-
-A new contributor can pick it up by submitting a refresh PR; the markers come off when the drift threshold is back under control.
+- Missing or extra UI keys and placeholder mismatches are hard failures, not a stale-status threshold.
+- English values accidentally copied into a locale are semantic translation defects. Fix them when found and add a focused assertion for high-risk surfaces when useful.
+- README and core-doc prose can still drift independently because those documents are maintained manually. Compare the locale with its English source and use code/history evidence before changing technical claims.
 
 ### Partial Translations
 
@@ -758,9 +682,9 @@ It's okay to translate only README initially. Add QUICKSTART and CONTRIBUTING la
 **Mark partial translations in your PR:**
 ```markdown
 ## Translation Status
-- [x] docs/i18n/README.it.md (complete)
-- [ ] docs/i18n/QUICKSTART.it.md (planned)
-- [ ] docs/i18n/CONTRIBUTING.it.md (planned)
+- [x] docs/i18n/README.sv.md (complete)
+- [ ] docs/i18n/QUICKSTART.sv.md (planned)
+- [ ] docs/i18n/CONTRIBUTING.sv.md (planned)
 ```
 
 ---
@@ -808,7 +732,7 @@ After the first use, you can use just the English term.
 
 **README:** Markdown and GitHub automatically handle RTL text direction — just write naturally in your language and keep code blocks / URLs left-to-right.
 
-**UI locale:** The web app does not auto-detect. You must append your locale code to `RTL_LOCALES` in [`apps/web/src/i18n/index.tsx`](apps/web/src/i18n/index.tsx) (currently `['ar', 'fa']`). Without this, the `<html dir="rtl">` attribute is never set and the UI renders LTR regardless of language. See the [detailed steps](#adding-a-new-locale) under step 2.
+**UI locale:** The web app auto-detects supported OS/browser languages and preserves an explicit user selection. Directionality is registered separately: append a new RTL locale to `RTL_LOCALES` in [`apps/web/src/i18n/index.tsx`](apps/web/src/i18n/index.tsx) (currently `['ar', 'fa']`) so `<html dir="rtl">` is set. See the [detailed steps](#adding-a-new-locale) under step 2.
 
 ```markdown
 <!-- README: Arabic text flows RTL automatically -->
@@ -889,7 +813,6 @@ If yes to all, it's good enough!
 
 Genuinely undecided — flagged so contributors know they're live design discussions:
 
-- **Source-of-truth drift CI.** A `pnpm i18n:diff` script that compares each locale's keys to `en.ts` and warns (not fails) when a locale exceeds the 20-key drift threshold. Tracked as a follow-up after this doc lands.
 - **README freshness signal.** A small badge or front-matter timestamp on each `README.<code>.md` could help readers gauge how current a translation is.
 - **Native-speaker review window.** Whether `~7 days` is too short for smaller language communities — adjust if real data shows otherwise.
 
@@ -899,10 +822,10 @@ If you have an opinion on any of the above, open an issue or comment on [#195](h
 
 ## 🚧 Deferred Decisions
 
-These items are **decided to defer** — the team has agreed not to act on them now, with rough triggers for revisiting:
+These remain deferred despite the repository now carrying 19 UI locales; crossing the old locale-count triggers did not itself adopt a tool or generation contract. Either change needs an explicit maintainer decision:
 
-- **Translation memory tooling** (Crowdin / Weblate / Lingui). Re-evaluate once the project hits ~12-15 active locales **or** when contributors start visibly duplicating effort across PRs.
-- **README template-driven generation** (e.g. [NRG](https://github.com/nanolaba/readme-generator), custom `.src.md` build scripts, All Contributors-style tooling). Re-evaluate once the project hits ≥15 locales **or** README structural edits become more frequent than monthly. Discussion in [#195](https://github.com/nexu-io/open-design/issues/195): template-driven generation solves the "update line 27 in 10 README variants" brittleness, but forces a shared structure that today's locale variants intentionally diverge from (e.g. `README.zh-TW.md`'s "上手體驗" section, the pt-BR / pt-PT precedent for content-level — not just translation-level — differences). Worth revisiting once locale voice is more settled or the manual-update cost grows.
+- **Translation memory tooling** (Crowdin / Weblate / Lingui).
+- **README template-driven generation** (e.g. [NRG](https://github.com/nanolaba/readme-generator), custom `.src.md` build scripts, All Contributors-style tooling). Discussion in [#195](https://github.com/nexu-io/open-design/issues/195) captures the tradeoff between switcher maintenance and locale-specific structure.
 
 ---
 

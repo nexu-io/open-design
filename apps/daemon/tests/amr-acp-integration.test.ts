@@ -22,7 +22,11 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { attachAcpSession, detectAcpModels } from '../src/agent-protocol/index.js';
-import { classifyAmrAccountFailure } from '../src/integrations/vela-errors.js';
+import { acpTelemetryToolCallId } from '../src/agent-protocol/acp/updates.js';
+import {
+  DEFAULT_AMR_RECHARGE_URL,
+  classifyAmrAccountFailure,
+} from '../src/integrations/vela-errors.js';
 import { AmrModelLoadingCache } from '../src/runtimes/amr-model-cache.js';
 import {
   amrAgentDef,
@@ -959,7 +963,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(classifyAmrAccountFailure(message)).toMatchObject({
       code: 'AMR_INSUFFICIENT_BALANCE',
       action: 'recharge',
-      actionUrl: 'https://open-design.ai/amr/wallet?source=open_design',
+      actionUrl: DEFAULT_AMR_RECHARGE_URL,
     });
   });
 
@@ -1002,6 +1006,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(payload?.error?.details).toMatchObject({
       kind: 'amr_account',
       action: 'recharge',
+      actionUrl: DEFAULT_AMR_RECHARGE_URL,
     });
     expect(String(payload?.message ?? '')).toContain('AMR Cloud reported insufficient balance');
   });
@@ -1053,6 +1058,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(payload?.error?.details).toMatchObject({
       kind: 'amr_account',
       action: 'recharge',
+      actionUrl: DEFAULT_AMR_RECHARGE_URL,
       promoted_by: 'open_design_acp_retry_status',
     });
     expect(String(payload?.message ?? '')).toContain('AMR Cloud reported insufficient balance');
@@ -1092,6 +1098,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(payload?.error?.details).toMatchObject({
       kind: 'amr_account',
       action: 'recharge',
+      actionUrl: DEFAULT_AMR_RECHARGE_URL,
       promoted_by: 'open_design_acp_stderr_retry_status',
     });
     expect(String(payload?.message ?? '')).toContain('AMR Cloud reported insufficient balance');
@@ -1132,6 +1139,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(payload?.error?.details).toMatchObject({
       kind: 'amr_account',
       action: 'recharge',
+      actionUrl: DEFAULT_AMR_RECHARGE_URL,
       promoted_by: 'open_design_acp_stderr_retry_status',
     });
   });
@@ -1266,6 +1274,59 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(agentEvents).not.toContainEqual(expect.objectContaining({ type: 'tool_use' }));
   });
 
+  it('fails AMR turns when think-only tool completes via status-only frame (no title)', async () => {
+    // Sticky thinkOnly: pending title "Thinking" then terminal status-only must
+    // not emit tool_use and must still take the no-visible-output failure path.
+    const child = spawnAcpUpdateFixture(
+      [
+        {
+          sessionUpdate: 'tool_call',
+          toolCallId: 'call_think',
+          title: 'Thinking',
+          status: 'pending',
+        },
+        {
+          sessionUpdate: 'tool_call_update',
+          toolCallId: 'call_think',
+          status: 'completed',
+        },
+      ],
+      { inputTokens: 10, outputTokens: 100, totalTokens: 110 },
+    );
+    const errors: Array<{ event: string; payload: unknown }> = [];
+    const agentEvents: unknown[] = [];
+    try {
+      const session = attachAcpSession({
+        child: child as never,
+        prompt: 'Generate a test',
+        cwd: process.cwd(),
+        model: 'step-3.7-flash',
+        mcpServers: [],
+        modelUnavailableErrorCode: 'AMR_MODEL_UNAVAILABLE',
+        send: (event, payload) => {
+          if (event === 'error') errors.push({ event, payload });
+          if (event === 'agent') agentEvents.push(payload);
+        },
+      });
+
+      await waitForExit(child);
+      expect(session.hasFatalError()).toBe(true);
+      expect(session.completedSuccessfully()).toBe(false);
+    } finally {
+      if (child.exitCode === null) child.kill('SIGTERM');
+    }
+
+    const payload = errors[0]?.payload as {
+      message?: unknown;
+      error?: { code?: unknown; retryable?: unknown; details?: Record<string, unknown> };
+    };
+    expect(String(payload?.message ?? '')).toContain('did not produce visible assistant text');
+    expect(payload?.error?.code).toBe('AGENT_EXECUTION_FAILED');
+    expect(payload?.error?.retryable).toBe(true);
+    expect(agentEvents).not.toContainEqual(expect.objectContaining({ type: 'tool_use' }));
+    expect(agentEvents).not.toContainEqual(expect.objectContaining({ type: 'tool_result' }));
+  });
+
   it('accepts ACP message chunks that carry text outside content.text', async () => {
     const child = spawnAcpUpdateFixture([
       {
@@ -1360,7 +1421,7 @@ describe('AMR ACP transport — end-to-end against fake vela stub', () => {
     expect(agentEvents).toContainEqual(
       expect.objectContaining({
         type: 'tool_use',
-        id: 'write_1',
+        id: acpTelemetryToolCallId('write_1'),
         name: 'Write',
         input: { file_path: 'index.html' },
       }),

@@ -4,6 +4,13 @@ import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProjectView } from '../../src/components/ProjectView';
 import type { QuestionForm } from '../../src/artifacts/question-form';
+import type { ChatMessage } from '../../src/types';
+import { ProjectConversationsHttpError } from '../../src/state/projects';
+
+const analyticsMocks = vi.hoisted(() => ({
+  newRequestId: vi.fn(() => 'fork-request-1'),
+  track: vi.fn(),
+}));
 
 const listConversations = vi.fn();
 const listMessages = vi.fn();
@@ -32,10 +39,12 @@ const saveTabs = vi.fn();
 // regression we want to pin).
 const chatPaneProps: {
   onDeleteConversation?: (id: string) => Promise<void> | void;
+  onForkFromMessage?: (message: ChatMessage) => Promise<void> | void;
   onSubmitQuestionForm?: (text: string) => void;
   questionFormSubmitDisabled?: boolean;
   activeConversationId?: string | null;
   conversations?: Array<{ id: string; title?: string | null }>;
+  messages?: ChatMessage[];
 } = {};
 
 const fileWorkspaceProps: {
@@ -53,6 +62,16 @@ vi.mock('../../src/i18n', () => ({
 
 vi.mock('../../src/providers/anthropic', () => ({
   streamMessage: vi.fn(),
+}));
+
+vi.mock('../../src/analytics/provider', () => ({
+  useAnalytics: () => ({
+    newRequestId: analyticsMocks.newRequestId,
+    setConfigureGlobals: vi.fn(),
+    setConsent: vi.fn(),
+    setIdentity: vi.fn(),
+    track: analyticsMocks.track,
+  }),
 }));
 
 vi.mock('../../src/providers/daemon', () => ({
@@ -81,6 +100,11 @@ vi.mock('../../src/router', () => ({
 }));
 
 vi.mock('../../src/state/projects', () => ({
+  ProjectConversationsHttpError: class ProjectConversationsHttpError extends Error {
+    constructor(readonly status: number, message = `conversations ${status}`) {
+      super(message);
+    }
+  },
   createConversation: (...args: unknown[]) => createConversation(...args),
   deleteConversation: (...args: unknown[]) => deleteConversation(...args),
   getTemplate: (...args: unknown[]) => getTemplate(...args),
@@ -104,16 +128,20 @@ vi.mock('../../src/components/AvatarMenu', () => ({
 vi.mock('../../src/components/ChatPane', () => ({
   ChatPane: (props: {
     onDeleteConversation?: (id: string) => Promise<void> | void;
+    onForkFromMessage?: (message: ChatMessage) => Promise<void> | void;
     onSubmitQuestionForm?: (text: string) => void;
     questionFormSubmitDisabled?: boolean;
     activeConversationId?: string | null;
     conversations?: Array<{ id: string; title?: string | null }>;
+    messages?: ChatMessage[];
   }) => {
     chatPaneProps.onDeleteConversation = props.onDeleteConversation;
+    chatPaneProps.onForkFromMessage = props.onForkFromMessage;
     chatPaneProps.onSubmitQuestionForm = props.onSubmitQuestionForm;
     chatPaneProps.questionFormSubmitDisabled = props.questionFormSubmitDisabled;
     chatPaneProps.activeConversationId = props.activeConversationId;
     chatPaneProps.conversations = props.conversations;
+    chatPaneProps.messages = props.messages;
     return null;
   },
 }));
@@ -165,11 +193,14 @@ describe('ProjectView conversation delete', () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    analyticsMocks.newRequestId.mockReturnValue('fork-request-1');
     chatPaneProps.onDeleteConversation = undefined;
+    chatPaneProps.onForkFromMessage = undefined;
     chatPaneProps.onSubmitQuestionForm = undefined;
     chatPaneProps.questionFormSubmitDisabled = undefined;
     chatPaneProps.activeConversationId = undefined;
     chatPaneProps.conversations = undefined;
+    chatPaneProps.messages = undefined;
     fileWorkspaceProps.questionForm = undefined;
   });
 
@@ -212,7 +243,7 @@ describe('ProjectView conversation delete', () => {
       await chatPaneProps.onDeleteConversation!('conv-1');
     });
 
-    expect(deleteConversation).toHaveBeenCalledWith('project-1', 'conv-1');
+    expect(deleteConversation).toHaveBeenCalledWith('project-1', 'conv-1', null);
     expect(onProjectsRefresh).toHaveBeenCalledTimes(1);
   });
 
@@ -245,7 +276,7 @@ describe('ProjectView conversation delete', () => {
       await chatPaneProps.onDeleteConversation!('conv-1');
     });
 
-    expect(deleteConversation).toHaveBeenCalledWith('project-1', 'conv-1');
+    expect(deleteConversation).toHaveBeenCalledWith('project-1', 'conv-1', null);
     expect(onProjectsRefresh).not.toHaveBeenCalled();
   });
 
@@ -305,7 +336,13 @@ describe('ProjectView conversation delete', () => {
       await chatPaneProps.onDeleteConversation!('conv-1');
     });
 
-    await waitFor(() => expect(createConversation).toHaveBeenCalledWith('project-1'));
+    await waitFor(() =>
+      expect(createConversation).toHaveBeenCalledWith(
+        'project-1',
+        undefined,
+        { workspaceContext: null },
+      ),
+    );
     await waitFor(() => expect(chatPaneProps.activeConversationId).toBe('conv-fresh'));
     expect(chatPaneProps.conversations?.map((conversation) => conversation.id)).toEqual(['conv-fresh']);
   });
@@ -356,7 +393,154 @@ describe('ProjectView conversation delete', () => {
     renderProjectView(vi.fn());
 
     await waitFor(() => expect(chatPaneProps.onSubmitQuestionForm).toBeDefined());
-    expect(chatPaneProps.questionFormSubmitDisabled).toBe(false);
+    await waitFor(() => expect(chatPaneProps.questionFormSubmitDisabled).toBe(false));
     expect(fileWorkspaceProps.questionForm).toBeUndefined();
+  });
+});
+
+describe('ProjectView conversation fork analytics', () => {
+  const sourceMessages: ChatMessage[] = [
+    { id: 'user-1', role: 'user', content: 'First request' },
+    {
+      id: 'assistant-1',
+      role: 'assistant',
+      content: 'First response',
+      agentId: 'claude',
+      runId: 'run-1',
+      runStatus: 'succeeded',
+    },
+    { id: 'user-2', role: 'user', content: 'Second request' },
+    {
+      id: 'assistant-2',
+      role: 'assistant',
+      content: 'Second response',
+      agentId: 'claude',
+      runId: 'run-2',
+      runStatus: 'succeeded',
+    },
+  ];
+
+  beforeEach(() => {
+    analyticsMocks.newRequestId.mockReturnValue('fork-request-1');
+    analyticsMocks.track.mockClear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    chatPaneProps.onForkFromMessage = undefined;
+    chatPaneProps.messages = undefined;
+  });
+
+  function prepareForkHarness() {
+    listConversations.mockResolvedValue([{ id: 'conv-1', title: 'Conversation 1' }]);
+    listMessages.mockResolvedValue(sourceMessages);
+    fetchPreviewComments.mockResolvedValue([]);
+    loadTabs.mockResolvedValue({ tabs: [], activeTabId: null });
+    fetchProjectFiles.mockResolvedValue([]);
+    fetchLiveArtifacts.mockResolvedValue([]);
+    fetchSkill.mockResolvedValue(null);
+    fetchDesignSystem.mockResolvedValue(null);
+    getTemplate.mockResolvedValue(null);
+    fetchChatRunStatus.mockResolvedValue(null);
+    listActiveChatRuns.mockResolvedValue([]);
+    listProjectRuns.mockResolvedValue([]);
+    reattachDaemonRun.mockResolvedValue(undefined);
+  }
+
+  it('tracks the fork click and successful result with one request id', async () => {
+    prepareForkHarness();
+    createConversation.mockResolvedValue({ id: 'conv-fork', title: 'Conversation 1 fork' });
+
+    renderProjectView(vi.fn());
+
+    await waitFor(() => expect(chatPaneProps.messages).toEqual(sourceMessages));
+    await act(async () => {
+      await chatPaneProps.onForkFromMessage?.(sourceMessages[1]!);
+    });
+
+    expect(analyticsMocks.newRequestId).toHaveBeenCalledTimes(1);
+    expect(analyticsMocks.track).toHaveBeenCalledWith(
+      'ui_click',
+      expect.objectContaining({
+        page_name: 'chat_panel',
+        area: 'chat_panel',
+        element: 'assistant_fork_button',
+        action: 'fork_conversation',
+        project_id: 'project-1',
+        conversation_id: 'conv-1',
+        assistant_message_id: 'assistant-1',
+        source_run_id: 'run-1',
+        source_agent_id: 'claude',
+        agent_provider_id: 'claude_code',
+        fork_point: 'historical',
+        seed_message_count: 2,
+        conversation_message_count: 4,
+        messages_after_fork_count: 2,
+        session_mode: 'design',
+      }),
+      { requestId: 'fork-request-1' },
+    );
+    expect(analyticsMocks.track).toHaveBeenCalledWith(
+      'conversation_fork_result',
+      expect.objectContaining({
+        result: 'success',
+        target_conversation_id: 'conv-fork',
+        duration_ms: expect.any(Number),
+      }),
+      { requestId: 'fork-request-1' },
+    );
+  });
+
+  it('tracks a failed fork result without reporting success', async () => {
+    prepareForkHarness();
+    createConversation.mockRejectedValue(new TypeError('Failed to fetch'));
+
+    renderProjectView(vi.fn());
+
+    await waitFor(() => expect(chatPaneProps.messages).toEqual(sourceMessages));
+    await act(async () => {
+      await chatPaneProps.onForkFromMessage?.(sourceMessages[3]!);
+    });
+
+    expect(analyticsMocks.track).toHaveBeenCalledWith(
+      'conversation_fork_result',
+      expect.objectContaining({
+        fork_point: 'latest',
+        seed_message_count: 4,
+        messages_after_fork_count: 0,
+        result: 'failed',
+        target_conversation_id: null,
+        error_code: 'network_error',
+        duration_ms: expect.any(Number),
+      }),
+      { requestId: 'fork-request-1' },
+    );
+    expect(
+      analyticsMocks.track.mock.calls.filter(([event]) => event === 'conversation_fork_result'),
+    ).toHaveLength(1);
+  });
+
+  it('classifies daemon body-limit failures for rollout monitoring', async () => {
+    prepareForkHarness();
+    createConversation.mockRejectedValue(
+      new ProjectConversationsHttpError(413, 'request body too large'),
+    );
+
+    renderProjectView(vi.fn());
+
+    await waitFor(() => expect(chatPaneProps.messages).toEqual(sourceMessages));
+    await act(async () => {
+      await chatPaneProps.onForkFromMessage?.(sourceMessages[3]!);
+    });
+
+    expect(analyticsMocks.track).toHaveBeenCalledWith(
+      'conversation_fork_result',
+      expect.objectContaining({
+        result: 'failed',
+        error_code: 'payload_too_large',
+      }),
+      { requestId: 'fork-request-1' },
+    );
   });
 });

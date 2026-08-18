@@ -8,7 +8,7 @@
 // for graceful fallback across the ~138 brands without compiled tokens
 // today.
 
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -24,6 +24,7 @@ import {
   readDesignSystemPackageInfo,
   readDesignSystemPullFile,
   resolveDesignSystemAssets,
+  resolveDesignSystemRuntimePromptContext,
 } from '../../src/design-systems/index.js';
 
 function fresh(): string {
@@ -160,10 +161,19 @@ describe('readDesignSystemAssets', () => {
       body: '# Sample',
       tokensCss: ':root { --accent: #222; }',
     });
+    const changedIntent = digestDesignSystemContext({
+      id: 'sample',
+      title: 'Sample',
+      body: '# Sample',
+      tokensCss: ':root { --accent: #111; }',
+      intentIndex: '- `account.settings.save` → Button.primary',
+    });
 
     expect(base).toMatch(/^[a-f0-9]{64}$/);
     expect(changed).toMatch(/^[a-f0-9]{64}$/);
     expect(changed).not.toBe(base);
+    expect(changedIntent).toMatch(/^[a-f0-9]{64}$/);
+    expect(changedIntent).not.toBe(base);
     expect(digestDesignSystemContext({ id: 'empty' })).toBeNull();
   });
 
@@ -551,6 +561,59 @@ describe('isDesignTokenChannelEnabled (PR-D env gate)', () => {
 // run that whole pipeline (env gate → readDesignSystemAssets per
 // root → fallback chain → DesignSystemAssets shape) end-to-end.
 describe('resolveDesignSystemAssets (PR-D server-layer asset resolution)', () => {
+  it('keeps user-prefixed runtime and prompt assets on the same exact package root', async () => {
+    clearDesignSystemAssetsCacheForTests();
+    const builtInRoot = fresh();
+    const userRoot = fresh();
+    writeDesignSystemProject(builtInRoot, 'default', {
+      tokens: ':root { --authority: built-in; }',
+      components: '<button class="built-in">Built-in fixture</button>',
+    });
+
+    const userDir = path.join(userRoot, 'default');
+    cpSync(
+      path.resolve(import.meta.dirname, '../fixtures/design-systems/runtime-v3'),
+      userDir,
+      { recursive: true },
+    );
+    const manifestPath = path.join(userDir, 'manifest.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+      id: string;
+      usage?: string;
+      files: { components?: string };
+    };
+    manifest.id = 'default';
+    manifest.usage = 'USAGE.md';
+    manifest.files.components = 'components.html';
+    writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    writeFileSync(path.join(userDir, 'USAGE.md'), '# User package usage\n');
+    writeFileSync(path.join(userDir, 'tokens.css'), ':root { --authority: user; }');
+    writeFileSync(
+      path.join(userDir, 'components.html'),
+      '<button class="user-runtime">User fixture</button>',
+    );
+
+    const assets = await resolveDesignSystemAssets('user:default', builtInRoot, userRoot, {});
+    const runtime = await resolveDesignSystemRuntimePromptContext(
+      'user:default',
+      builtInRoot,
+      userRoot,
+      {},
+    );
+
+    expect(assets).toMatchObject({
+      usageMd: '# User package usage\n',
+      tokensCss: ':root { --authority: user; }',
+      fixtureHtml: '<button class="user-runtime">User fixture</button>',
+    });
+    expect(assets.componentsManifest).toContain('components.manifest schema v1 for user:default');
+    expect(runtime).toMatchObject({
+      mode: 'structured',
+      intentIndex: expect.stringContaining('`account.settings.save` → Button.primary'),
+    });
+    clearDesignSystemAssetsCacheForTests();
+  });
+
   it('returns the built-in assets when the channel is enabled (env unset, default-on)', async () => {
     const builtInRoot = fresh();
     const userRoot = fresh();

@@ -15,7 +15,8 @@
 //   - 'json'   : the agent reads a JSON config file with a known schema.
 //                We deep-merge one server entry, never clobbering the
 //                rest of the file. Used for cursor / copilot / cline /
-//                opencode / openclaw / antigravity / kiro / trae.
+//                opencode / openclaw / antigravity / kiro / raven / trae /
+//                claude-desktop.
 //   - 'manual' : we could not verify the agent's config path/format
 //                authoritatively (pi / hermes / vibe). We refuse to write
 //                a guessed path and instead print a ready-to-paste
@@ -33,6 +34,7 @@ export const AGENT_SLUGS = [
   'claude',
   'codex',
   'reasonix',
+  'raven',
   'cursor',
   'copilot',
   'openclaw',
@@ -45,6 +47,7 @@ export const AGENT_SLUGS = [
   'kiro',
   'trae',
   'opencode',
+  'claude-desktop',
 ] as const;
 
 export type AgentSlug = (typeof AGENT_SLUGS)[number];
@@ -212,6 +215,15 @@ export function planAgentInstall(
         serverKey: serverName,
         entry: jsonEntry(spec, { type: 'stdio' }),
       };
+    case 'raven':
+      return {
+        kind: 'json',
+        slug,
+        configPath: path.join(home, '.raven', 'config.json'),
+        keyPath: ['tools', 'mcpServers'],
+        serverKey: serverName,
+        entry: { ...jsonEntry(spec, { type: 'stdio' }), env: spec.env },
+      };
     case 'copilot':
       // GitHub Copilot CLI: ~/.copilot/mcp-config.json, type "local".
       // (VS Code Copilot uses a different `servers` key in
@@ -288,6 +300,27 @@ export function planAgentInstall(
         serverKey: serverName,
         entry: jsonEntry(spec),
       };
+    case 'claude-desktop':
+      if (platform !== 'darwin' && platform !== 'win32') {
+        return {
+          kind: 'manual',
+          slug,
+          format: 'json',
+          configPath: null,
+          snippet: genericMcpServersSnippet(spec, serverName),
+          reason:
+            'Automatic MCP configuration for Claude Desktop is ' +
+            'currently supported only on macOS and Windows.',
+        };
+      }
+      return {
+        kind: 'json',
+        slug,
+        configPath: claudeDesktopConfigPath(home, platform),
+        keyPath: ['mcpServers'],
+        serverKey: serverName,
+        entry: jsonEntry(spec, { type: 'stdio' }),
+      };
 
     // ----- Unverified formats: print-only, never write -----
     case 'vibe':
@@ -358,6 +391,16 @@ function traeConfigPath(home: string, platform: NodeJS.Platform): string {
     return path.join(appData, 'Trae', 'User', 'mcp.json');
   }
   return path.join(home, '.config', 'Trae', 'User', 'mcp.json');
+}
+
+function claudeDesktopConfigPath(home: string, platform: NodeJS.Platform): string {
+  if (platform === 'darwin') {
+    return path.join(home, 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+  }
+  // platform === 'win32' — the planAgentInstall case already guards
+  // against unsupported platforms before calling this helper.
+  const appData = process.env.APPDATA ?? path.join(home, 'AppData', 'Roaming');
+  return path.join(appData, 'Claude', 'claude_desktop_config.json');
 }
 
 // --- Pure JSON merge / removal (the heart of the 'json' strategy) -------

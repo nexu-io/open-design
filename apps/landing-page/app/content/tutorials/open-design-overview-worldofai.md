@@ -18,7 +18,7 @@ This guide is the written companion to WorldofAI's overview of Open Design — l
 
 Open Design is an open-source, local-first design platform — an agent-native alternative to Claude Design and Figma. The core idea is simple but unusual: instead of being a closed app wired to one model provider, Open Design runs **on top of the coding agent you already use**.
 
-Point it at a project folder and it scans your machine for installed coding-agent CLIs — Claude Code, Codex, Cursor, Gemini, Copilot, OpenCode, and a long list of others — then lets you pick one to drive generation. That CLI becomes your design agent. You are not bringing your own *key* and paying a markup on top; you are bringing your own *agent* and running design through the subscription or plan you already pay for.
+Point it at a project folder and it scans your machine for installed, supported coding-agent CLIs — Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a long list of others — then lets you pick one to drive generation. That CLI becomes your design agent. You are not bringing your own *key* and paying a markup on top; you are bringing your own *agent* and running design through the subscription or plan you already pay for.
 
 And it is genuinely local. There is a daemon underneath with real file-system access: it reads and writes files, runs commands, and persists state in a local SQLite database. Your designs live in your own folders, your projects are yours, and nothing has to round-trip through someone else's cloud. On top of that local runtime sit export pipelines (HTML, PDF, slide decks, ZIP), Claude Design ZIP import, and MCP servers for agent-to-agent access to your design files — so this slots into the tools you already have rather than replacing them.
 
@@ -28,7 +28,7 @@ Open Design became one of the fastest-growing open-source projects on GitHub, an
 
 **It is open source and free.** Apache-2.0 licensed — clone it, self-host it, read every line. There is no subscription gating access and no separate seat to buy. You only pay for the model and media usage of whatever agent and providers you connect. Claude Design, by contrast, sits behind a paywall and burns through rate limits fast; a couple of serious generations and you are already weighing the extra-usage bill.
 
-**It is bring-your-own-agent, not just bring-your-own-key.** This is the part that flips the calculus. Most "open alternatives" still bolt you to one model — you swap an API key but you are still in someone's ecosystem. Open Design detects the coding-agent CLIs already on your system and routes generation through whichever one you choose. Want to run on Codex with high reasoning effort? Prefer Claude Code, OpenCode, Gemini CLI, or an efficient open model like MiniMax for web work? Your call, per project. No multi-model lock-in. And if you do not have a CLI set up, an OpenAI-compatible bring-your-own-key proxy runs the same workflow without the local configuration.
+**It is bring-your-own-agent, not just bring-your-own-key.** This is the part that flips the calculus. Most "open alternatives" still bolt you to one model — you swap an API key but you are still in someone's ecosystem. Open Design detects the coding-agent CLIs already on your system and routes generation through whichever one you choose. Want to run on Codex with high reasoning effort? Prefer Claude Code, OpenCode, Qwen, or an efficient open model like MiniMax for web work? Your call, per project. No multi-model lock-in. And if you do not have a CLI set up, configure a BYOK provider; Open Design runs it through the isolated OpenCode adapter.
 
 ![The built-in design-systems library.](/tutorials/open-design-overview-worldofai/02-design-systems.webp)
 *Real-world design systems you can snap into any project — so you are not starting from a blank canvas.*
@@ -75,7 +75,7 @@ Then open the local URL it prints (the port is assigned dynamically — copy the
 
 ```bash
 od mcp install <agent>
-# od ships with Open Design; <agent> = claude | codex | cursor | copilot | gemini | opencode | …
+# od ships with Open Design; <agent> = claude | codex | cursor | copilot | opencode | kiro | …
 ```
 
 The first launch opens the welcome daemon, where you configure the basics: pick a default agent and model (the app auto-detects local CLIs, or plug in an OpenAI-compatible key), optionally add media-provider keys for image/video/audio, and wire up any MCP services. Save, get started, then create a prototype — give it a name, choose **High fidelity** over wireframe, and write your brief. The agent asks a few clarifying questions (platform, article angle, design direction), plans its work, reads the design system, and builds the artifact. In WorldofAI's run, Codex produced a clean newsletter landing page in about five minutes — billed against his own Codex plan, routed entirely through Open Design's skills.
@@ -97,7 +97,7 @@ Yes — it is open source under Apache-2.0, with no subscription. You only pay f
 Bring-your-own-key still ties you to one provider — you just supply the key. Open Design detects the coding-agent CLIs already on your machine and lets you choose which one drives generation, per project. No single-model lock-in.
 
 **Do I have to use Claude?**
-No. Claude Code is one option among many — Codex, Cursor, Gemini, Copilot, OpenCode, and more are all supported, and you can switch agents from the workspace whenever you like.
+No. Claude Code is one option among many — Codex, Cursor, Copilot, OpenCode, Qwen, and more are all supported, and you can switch agents from the workspace whenever you like.
 
 **Is it only for UI mockups?**
 No. The same workspace produces landing pages, slide and pitch decks, magazine layouts, mobile app interfaces, images, and video — and because the design is built on code, it goes from design straight to production.

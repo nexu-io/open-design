@@ -3,7 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises
 import os from 'node:os';
 import path from 'node:path';
 
-import { runConnectorsToolCli } from '../src/tools-connectors-cli.js';
+import { auditDesignSystemPackage, runConnectorsToolCli } from '../src/tools-connectors-cli.js';
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -276,6 +276,23 @@ const AUDIT_TOKENS_CSS = `@font-face {
 }
 
 ${UNBOUND_FONT_AUDIT_TOKENS_CSS}`;
+
+const SPLIT_AUDIT_COLORS_AND_TYPE_CSS = AUDIT_TOKENS_CSS
+  .replace(/^  --cherry-(?:radius|space)-.*\n/gmu, '')
+  .replace(
+    /\n\}\n$/u,
+    '\n  --cherry-font-size-body: 16px;\n  --cherry-line-height-body: 1.5;\n}\n',
+  );
+
+const SPLIT_AUDIT_LAYOUT_TOKENS_CSS = `:root {
+  --cherry-radius-sm: 6px;
+  --cherry-radius-md: 10px;
+  --cherry-space-1: 4px;
+  --cherry-space-2: 8px;
+  --cherry-space-3: 12px;
+  --cherry-space-4: 16px;
+}
+`;
 
 const AUDIT_COMPONENT_FILES = [
   'App.jsx',
@@ -882,6 +899,20 @@ exit 128
       ok: true,
       errors: [],
     });
+
+    await cleanupTempDir(tmpDir);
+  });
+
+  it('accepts tokens.css as a companion for spacing and radius token validation', async () => {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'od-package-audit-split-tokens-'));
+    await writeFile(path.join(tmpDir, 'colors_and_type.css'), SPLIT_AUDIT_COLORS_AND_TYPE_CSS);
+    await writeFile(path.join(tmpDir, 'tokens.css'), SPLIT_AUDIT_LAYOUT_TOKENS_CSS);
+
+    const audit = await auditDesignSystemPackage(tmpDir);
+
+    expect(audit.errors).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'thin_token_css' }),
+    ]));
 
     await cleanupTempDir(tmpDir);
   });

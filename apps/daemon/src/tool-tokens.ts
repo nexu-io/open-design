@@ -1,6 +1,24 @@
 import { createHash, randomBytes } from 'node:crypto';
 
+import type { PinnedRunDesignSystemScope } from './design-systems/run-scope.js';
+
 export const DEFAULT_TOOL_TOKEN_TTL_MS = 15 * 60 * 1000;
+export const CHAT_TOOL_TOKEN_TTL_BUFFER_MS = 15 * 60 * 1000;
+
+export function resolveChatToolTokenTtlMs(inactivityTimeoutMs: number): number {
+  if (!Number.isFinite(inactivityTimeoutMs) || inactivityTimeoutMs < 0) {
+    throw new RangeError(`inactivityTimeoutMs must be a non-negative finite number, got ${String(inactivityTimeoutMs)}`);
+  }
+  return Math.max(
+    DEFAULT_TOOL_TOKEN_TTL_MS,
+    inactivityTimeoutMs + CHAT_TOOL_TOKEN_TTL_BUFFER_MS,
+  );
+}
+
+// Capability key for the parameterized media wait route. Token grants cannot
+// enumerate a task id that is created after the grant is minted.
+export const MEDIA_TASK_WAIT_TOOL_ENDPOINT = '/api/media/tasks/:id/wait';
+export const PROJECT_EXPORT_TOOL_ENDPOINT = '/api/projects/:id/export/:format';
 
 export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/live-artifacts/create',
@@ -10,7 +28,11 @@ export const CHAT_TOOL_ENDPOINTS = [
   '/api/tools/connectors/list',
   '/api/tools/connectors/execute',
   '/api/tools/design-systems/read',
+  '/api/tools/design-systems/resolve-intent',
+  '/api/tools/design-systems/validate-adherence',
   '/api/tools/media/generate',
+  MEDIA_TASK_WAIT_TOOL_ENDPOINT,
+  PROJECT_EXPORT_TOOL_ENDPOINT,
   '/api/tools/library/search',
   '/api/tools/library/apply',
 ] as const;
@@ -23,7 +45,10 @@ export const CHAT_TOOL_OPERATIONS = [
   'connectors:list',
   'connectors:execute',
   'design-systems:read',
+  'design-systems:resolve-intent',
+  'design-systems:validate-adherence',
   'media:generate',
+  'project:export',
   'library:search',
   'library:apply',
 ] as const;
@@ -42,6 +67,12 @@ export interface ToolTokenGrant {
   token: string;
   runId: string;
   projectId: string;
+  /** Workspace authority captured when the run token is minted. */
+  workspaceId?: string;
+  /** Member identity paired with workspaceId for personal-resource checks. */
+  workspaceMemberId?: string;
+  /** Exact Personal/Team DS binding captured when the run starts. */
+  designSystemScope?: PinnedRunDesignSystemScope;
   allowedEndpoints: readonly ToolEndpoint[];
   allowedOperations: readonly ToolOperation[];
   issuedAt: string;
@@ -60,6 +91,9 @@ export interface ToolTokenGrant {
 export interface MintToolTokenOptions {
   runId: string;
   projectId: string;
+  workspaceId?: string;
+  workspaceMemberId?: string;
+  designSystemScope?: PinnedRunDesignSystemScope;
   allowedEndpoints?: readonly ToolEndpoint[];
   allowedOperations?: readonly ToolOperation[];
   ttlMs?: number;
@@ -67,6 +101,11 @@ export interface MintToolTokenOptions {
   pluginSnapshotId?: string;
   pluginTrust?: 'trusted' | 'restricted' | 'bundled';
   pluginCapabilitiesGranted?: readonly string[];
+}
+
+export interface RefreshToolTokenOptions {
+  ttlMs?: number;
+  nowMs?: number;
 }
 
 export type ToolTokenValidationResult =
@@ -145,6 +184,17 @@ export class ToolTokenRegistry {
       tokenHash: hash,
       runId: options.runId,
       projectId: options.projectId,
+      ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
+      ...(options.workspaceMemberId
+        ? { workspaceMemberId: options.workspaceMemberId }
+        : {}),
+      ...(options.designSystemScope
+        ? {
+            designSystemScope: Object.freeze({
+              ...options.designSystemScope,
+            }) as PinnedRunDesignSystemScope,
+          }
+        : {}),
       allowedEndpoints: [...(options.allowedEndpoints ?? CHAT_TOOL_ENDPOINTS)],
       allowedOperations: [...(options.allowedOperations ?? CHAT_TOOL_OPERATIONS)],
       issuedAt: new Date(nowMs).toISOString(),
@@ -193,6 +243,33 @@ export class ToolTokenRegistry {
     }
 
     return { ok: true, grant: asPublicGrant(stored) };
+  }
+
+  refreshToken(
+    token: string | null | undefined,
+    options: RefreshToolTokenOptions = {},
+  ): ToolTokenGrant | null {
+    if (!token) return null;
+    const stored = this.#byTokenHash.get(tokenHash(token));
+    if (!stored) return null;
+
+    const nowMs = options.nowMs ?? Date.now();
+    if (nowMs >= stored.expiresAtMs) {
+      this.revokeToken(token, 'ttl_expired');
+      return null;
+    }
+
+    const ttlMs = options.ttlMs ?? DEFAULT_TOOL_TOKEN_TTL_MS;
+    if (!Number.isFinite(ttlMs) || ttlMs <= 0) throw new Error('ttlMs must be positive');
+
+    clearTimeout(stored.timer);
+    stored.expiresAtMs = nowMs + ttlMs;
+    stored.expiresAt = new Date(stored.expiresAtMs).toISOString();
+    stored.timer = setTimeout(() => {
+      this.revokeToken(token, 'ttl_expired');
+    }, ttlMs);
+    stored.timer.unref?.();
+    return asPublicGrant(stored);
   }
 
   revokeToken(token: string | null | undefined, _reason: ToolTokenRevocationReason = 'manual'): boolean {

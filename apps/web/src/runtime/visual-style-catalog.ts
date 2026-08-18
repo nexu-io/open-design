@@ -1,4 +1,4 @@
-export type VisualStyleContext = 'deck' | 'prototype';
+export type VisualStyleContext = 'deck' | 'prototype' | 'document' | 'image' | 'video';
 export type VisualStyleCategory = 'business' | 'editorial' | 'creative' | 'minimal';
 
 export type VisualStyleVariant =
@@ -192,6 +192,27 @@ const DECK_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
     variant: 'minimal',
     category: 'minimal',
   },
+  {
+    slug: 'academic-research',
+    title: 'Academic research',
+    description: 'Evidence-led slides, disciplined figures, and rigorous explanatory flow.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'sketchbook',
+    title: 'Sketchbook',
+    description: 'Hand-drawn notes, marker diagrams, and tactile workshop energy.',
+    variant: 'human',
+    category: 'creative',
+  },
+  {
+    slug: 'education-lesson',
+    title: 'Education lesson',
+    description: 'Friendly concept sequences that make learning easy to follow.',
+    variant: 'playful',
+    category: 'creative',
+  },
 ];
 
 const PROTOTYPE_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
@@ -350,10 +371,373 @@ const PROTOTYPE_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
     variant: 'editorial',
     category: 'editorial',
   },
+  {
+    slug: 'y2k-chrome',
+    title: 'Y2K chrome',
+    description: 'Glossy chrome, translucent layers, and electric early-web optimism.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'paper-craft',
+    title: 'Paper craft',
+    description: 'Tactile cut-paper layers, warm shadows, and calm navigation.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'isometric',
+    title: 'Isometric',
+    description: 'Spatial system maps and dimensional cards for complex product flows.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'aurora-dark',
+    title: 'Aurora dark',
+    description: 'Near-black surfaces with quiet luminous gradients and premium depth.',
+    variant: 'minimal',
+    category: 'minimal',
+  },
 ];
 
+const DOCUMENT_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
+  {
+    slug: 'docs-reference',
+    title: 'Docs reference',
+    description: 'Clear navigation, structured examples, and practical technical guidance.',
+    variant: 'utility',
+    category: 'business',
+    recommended: true,
+  },
+  {
+    slug: 'editorial-article',
+    title: 'Editorial article',
+    description: 'Magazine pacing, expressive imagery, and confident reading rhythm.',
+    variant: 'editorial',
+    category: 'editorial',
+  },
+  {
+    slug: 'creator-eguide',
+    title: 'Creator e-guide',
+    description: 'Warm, guided pages that make step-by-step learning approachable.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'formal-report',
+    title: 'Formal report',
+    description: 'Executive structure, credible analysis, and disciplined presentation.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'research-notebook',
+    title: 'Research notebook',
+    description: 'Evidence-led notes, annotations, and considered findings.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'data-briefing',
+    title: 'Data briefing',
+    description: 'Focused metrics, concise decisions, and clear visual evidence.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'swiss-minimal',
+    title: 'Swiss minimal',
+    description: 'Strict grid, sharp contrast, and deliberate whitespace.',
+    variant: 'minimal',
+    category: 'minimal',
+  },
+  {
+    slug: 'monochrome-manual',
+    title: 'Monochrome manual',
+    description: 'Technical diagrams, precise steps, and robust documentation craft.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'legal-policy',
+    title: 'Legal policy',
+    description: 'Formal sections, clauses, and trustworthy scan-first hierarchy.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'academic-paper',
+    title: 'Academic paper',
+    description: 'Journal rigor, research figures, and evidence-led reading flow.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'lesson-workbook',
+    title: 'Lesson workbook',
+    description: 'Exercises, visual guidance, and generous space to learn by doing.',
+    variant: 'human',
+    category: 'editorial',
+  },
+];
+
+const IMAGE_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
+  {
+    slug: 'poster-editorial-newsprint',
+    title: 'Editorial newsprint',
+    description: 'Tactile paper, urban imagery, and confident print contrast.',
+    variant: 'editorial',
+    category: 'editorial',
+  },
+  {
+    slug: 'poster-swiss-minimal',
+    title: 'Swiss minimal poster',
+    description: 'Gallery-like typography, modular grids, and one decisive accent.',
+    variant: 'minimal',
+    category: 'minimal',
+  },
+  {
+    slug: 'poster-bold-typography',
+    title: 'Bold typography poster',
+    description: 'High-contrast graphic forms with loud, kinetic visual energy.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'poster-cinematic-dark',
+    title: 'Cinematic dark poster',
+    description: 'Moody contrast, dramatic framing, and prestige-film atmosphere.',
+    variant: 'editorial',
+    category: 'editorial',
+  },
+  {
+    slug: 'poster-retro-pop',
+    title: 'Retro pop poster',
+    description: 'Playful color, printed texture, and upbeat cultural energy.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'poster-organic-natural',
+    title: 'Organic natural poster',
+    description: 'Botanical forms, earthy material cues, and a calmer rhythm.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'poster-neon-cyber',
+    title: 'Neon cyber poster',
+    description: 'Electric signal lines, controlled glitches, and dark-grid energy.',
+    variant: 'utility',
+    category: 'creative',
+  },
+  {
+    slug: 'poster-clay-3d',
+    title: 'Clay 3D poster',
+    description: 'Soft sculptural forms with playful depth and studio light.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'photo-editorial',
+    title: 'Editorial photo',
+    description: 'Art-directed photography, tactile still life, and quiet sophistication.',
+    variant: 'editorial',
+    category: 'editorial',
+    recommended: true,
+  },
+  {
+    slug: 'illustration-soft',
+    title: 'Soft illustration',
+    description: 'Gentle organic forms, friendly color, and reassuring warmth.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'image-cinematic',
+    title: 'Cinematic image',
+    description: 'Dramatic scale, luminous detail, and film-like atmosphere.',
+    variant: 'editorial',
+    category: 'editorial',
+  },
+  {
+    slug: 'image-surreal-collage',
+    title: 'Surreal collage',
+    description: 'Impossible spaces, cut-paper texture, and artful visual surprise.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'image-pixel-arcade',
+    title: 'Pixel arcade',
+    description: 'Intentional pixel craft, saturated glow, and playful game energy.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'image-organic-natural',
+    title: 'Organic natural image',
+    description: 'Botanical still life, natural material, and soft daylight.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'image-clay-3d',
+    title: 'Clay 3D image',
+    description: 'Tactile everyday forms, gentle shadows, and playful dimensionality.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'image-neo-brutalist',
+    title: 'Neo-brutalist image',
+    description: 'Raw texture, bold frames, and unapologetic graphic contrast.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'product-photography',
+    title: 'Product photography',
+    description: 'Studio still life that makes material, silhouette, and detail tangible.',
+    variant: 'luxury',
+    category: 'business',
+  },
+  {
+    slug: 'black-white-film',
+    title: 'Black & white film',
+    description: 'Grainy monochrome, timeless contrast, and observational texture.',
+    variant: 'editorial',
+    category: 'editorial',
+  },
+  {
+    slug: 'watercolor',
+    title: 'Watercolor',
+    description: 'Layered washes, paper fibers, and refined painterly softness.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'ink-line',
+    title: 'Ink line',
+    description: 'Confident black ink, sparse washes, and expressive editorial drawing.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'chrome-3d',
+    title: 'Chrome 3D',
+    description: 'Reflective liquid metal, controlled light, and futuristic studio polish.',
+    variant: 'luxury',
+    category: 'creative',
+  },
+  {
+    slug: 'risograph-print',
+    title: 'Risograph print',
+    description: 'Two-color overprint, halftone texture, and graphic imperfection.',
+    variant: 'playful',
+    category: 'creative',
+  },
+];
+
+const VIDEO_STYLE_CATALOG: VisualStyleCatalogEntry[] = [
+  {
+    slug: 'swiss-pulse',
+    title: 'Swiss Pulse',
+    description: 'Precise modernist motion, bold forms, and controlled momentum.',
+    variant: 'minimal',
+    category: 'minimal',
+    recommended: true,
+  },
+  {
+    slug: 'velvet-standard',
+    title: 'Velvet Standard',
+    description: 'Luxurious pace, rich material, and cinematic golden light.',
+    variant: 'luxury',
+    category: 'business',
+  },
+  {
+    slug: 'deconstructed',
+    title: 'Deconstructed',
+    description: 'Fragmented collage, exposed grids, and energetic editorial cuts.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'maximalist-type',
+    title: 'Maximalist Type',
+    description: 'Saturated layered forms and exuberant kinetic composition.',
+    variant: 'playful',
+    category: 'creative',
+  },
+  {
+    slug: 'data-drift',
+    title: 'Data Drift',
+    description: 'Fluid information graphics that turn data into movement.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'soft-signal',
+    title: 'Soft Signal',
+    description: 'Translucent gradients, slow ripples, and calm contemporary motion.',
+    variant: 'minimal',
+    category: 'minimal',
+  },
+  {
+    slug: 'folk-frequency',
+    title: 'Folk Frequency',
+    description: 'Handcrafted texture, rhythmic motifs, and warm visual storytelling.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'shadow-cut',
+    title: 'Shadow Cut',
+    description: 'Hard-edged silhouettes, theatrical contrast, and graphic depth.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'product-demo',
+    title: 'Product demo',
+    description: 'Crisp UI reveals and feature motion that explain value clearly.',
+    variant: 'utility',
+    category: 'business',
+  },
+  {
+    slug: 'kinetic-type',
+    title: 'Kinetic type',
+    description: 'Rhythmic type-like forms and bold transitions that carry the message.',
+    variant: 'brutalist',
+    category: 'creative',
+  },
+  {
+    slug: 'paper-stopmotion',
+    title: 'Paper stop motion',
+    description: 'Hand-cut layers and physical frame-by-frame charm.',
+    variant: 'human',
+    category: 'editorial',
+  },
+  {
+    slug: 'chrome-3d',
+    title: 'Chrome 3D',
+    description: 'Liquid metal, studio reflections, and slow dimensional motion.',
+    variant: 'luxury',
+    category: 'creative',
+  },
+];
+
+const STYLE_CATALOGS: Readonly<Record<VisualStyleContext, VisualStyleCatalogEntry[]>> = {
+  deck: DECK_STYLE_CATALOG,
+  prototype: PROTOTYPE_STYLE_CATALOG,
+  document: DOCUMENT_STYLE_CATALOG,
+  image: IMAGE_STYLE_CATALOG,
+  video: VIDEO_STYLE_CATALOG,
+};
+
 export function visualStyleCardsForContext(context: VisualStyleContext): VisualStyleCard[] {
-  const catalog = context === 'deck' ? DECK_STYLE_CATALOG : PROTOTYPE_STYLE_CATALOG;
+  const catalog = STYLE_CATALOGS[context];
   return catalog.map((style) => ({
     value: `${context}-${style.slug}`,
     title: style.title,

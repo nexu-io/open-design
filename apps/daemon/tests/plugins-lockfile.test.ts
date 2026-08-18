@@ -68,4 +68,32 @@ describe('plugin lockfile', () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+
+  it('drops no entry when concurrent installs race the same lockfile (#109)', async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'od-lock-race-'));
+    try {
+      const filePath = path.join(dir, '.od', 'od-plugin-lock.json');
+      const names = Array.from({ length: 12 }, (_, i) => `community/plugin-${i}`);
+      // All twelve read-modify-write cycles start from the same on-disk state
+      // and race to write back — the exact shape a burst of concurrent
+      // installs produces. Before the per-path write queue, whichever write
+      // landed last silently discarded every entry from the others.
+      await Promise.all(
+        names.map((name) =>
+          upsertPluginLockfileEntry(
+            filePath,
+            {
+              ...plugin,
+              sourceMarketplaceEntryName: name,
+            },
+            123,
+          ),
+        ),
+      );
+      const lockfile = await readPluginLockfile(filePath);
+      expect(Object.keys(lockfile.plugins).sort()).toEqual([...names].sort());
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });

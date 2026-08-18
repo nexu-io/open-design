@@ -3,16 +3,24 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { act } from 'react';
+import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  buildWorkspacePermissions,
+  buildWorkspaceSeatSummary,
+  type WorkspaceCollabContext,
+} from '@open-design/contracts';
 
 import {
   DESIGN_FILES_TAB,
   FileWorkspace,
+  settleManualEditFiles,
   scrollWorkspaceTabsWithWheel,
+  settleManualEditExit,
 } from '../../src/components/FileWorkspace';
+import { ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT } from '../../src/components/workspace/tab-launcher';
 import { I18nProvider } from '../../src/i18n';
 import { DesignFilesPanel } from '../../src/components/DesignFilesPanel';
 import { projectSplitClassName, projectSplitStyle } from '../../src/components/ProjectView';
@@ -22,7 +30,35 @@ import {
   writeProjectTextFile,
   fetchProjectFolders,
 } from '../../src/providers/registry';
-import type { ChatMessage, ProjectFile, ProjectFolder } from '../../src/types';
+import type { ChatMessage, OpenTabsState, ProjectFile, ProjectFolder } from '../../src/types';
+import {
+  CollabProvider,
+  type CollabContextValue,
+} from '../../src/collab/collab-context';
+import { IframeKeepAliveProvider } from '../../src/components/IframeKeepAlivePool';
+import { navigate } from '../../src/router';
+
+describe('settleManualEditExit', () => {
+  it.each([
+    ['asynchronously', () => Promise.reject(new Error('save failed'))],
+    ['synchronously', () => { throw new Error('save failed'); }],
+  ])('treats an exit handler that rejects %s as an unsafe exit', async (_label, exit) => {
+    await expect(settleManualEditExit(exit)).resolves.toBe(false);
+  });
+
+  it('settles every protected file instead of trusting only the active tab', async () => {
+    const settle = vi.fn(async (fileName: string) => fileName !== 'offscreen.html');
+
+    await expect(settleManualEditFiles(
+      ['active.html', 'offscreen.html', 'offscreen.html'],
+      settle,
+    )).resolves.toBe(false);
+    expect(settle.mock.calls.map(([fileName]) => fileName)).toEqual([
+      'active.html',
+      'offscreen.html',
+    ]);
+  });
+});
 
 vi.mock('../../src/providers/registry', async () => {
   const actual = await vi.importActual<typeof import('../../src/providers/registry')>(
@@ -227,6 +263,7 @@ afterEach(() => {
   composerCssStyle = null;
   host?.remove();
   host = null;
+  window.history.replaceState(null, '', '/');
   vi.clearAllMocks();
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -255,6 +292,50 @@ function workspaceFile(name: string): ProjectFile {
     mtime: 1700000000,
     kind: name.endsWith('.html') ? 'html' : 'text',
     mime: name.endsWith('.html') ? 'text/html' : 'text/plain',
+  };
+}
+
+function teamContext(
+  workspaceId: string,
+  workspaceMemberId: string,
+): WorkspaceCollabContext {
+  return {
+    workspaceId,
+    workspaceType: 'team',
+    workspaceMemberId,
+    role: 'owner',
+    memberStatus: 'active',
+    lifecycleState: 'active',
+    billingState: 'active',
+    planId: 'team_plus',
+    providerMode: 'platform_credits',
+    teamId: `team-${workspaceId}`,
+    seatSummary: buildWorkspaceSeatSummary({ seatLimit: 3, usedSeats: 1 }),
+    permissions: buildWorkspacePermissions({ role: 'owner', lifecycleState: 'active' }),
+  };
+}
+
+function collabValue(workspaceContext: WorkspaceCollabContext): CollabContextValue {
+  return {
+    workspaceContext,
+    workspaceContextLoading: false,
+    enabled: false,
+    member: null,
+    present: [],
+    publishedVersion: null,
+    syncState: null,
+    viewerOnly: false,
+    writerAuthority: 'allowed',
+    isOwner: true,
+    isEffectiveOwner: true,
+    isSharedNonOwner: false,
+    ownerDisplayName: null,
+    ownerRole: null,
+    downloadPending: false,
+    reportChange: () => {},
+    requestPublish: () => {},
+    refreshPresence: () => {},
+    checkStatusNow: () => {},
   };
 }
 
@@ -592,7 +673,11 @@ describe('FileWorkspace quick switcher visual isolation', () => {
     });
     expect(getComputedStyle(composerControl).pointerEvents).toBe('auto');
     expect(getComputedStyle(composerLayer).opacity).not.toBe('0.58');
-    expect(getComputedStyle(composerInputWrap).background).toBe('var(--bg-panel)');
+    // Once the quick switcher closes, the composer input returns to its resting
+    // background (no longer the dimmed --bg-fill-tertiary isolation wash). The
+    // #5517 restyle makes that resting fill a subtle color-mix tint of
+    // --bg-panel/--bg-subtle, which resolves to white in the test theme.
+    expect(getComputedStyle(composerInputWrap).background).toBe('rgb(255, 255, 255)');
   });
 });
 
@@ -680,7 +765,10 @@ describe('FileWorkspace upload input', () => {
     );
   });
 
-  it('creates slide template pages without default speaker notes', async () => {
+  // PageCreator flows are unreachable while the 新建空白页面 launcher entry
+  // is paused (see ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT); these suites
+  // revive automatically when the switch flips back.
+  it.skipIf(!ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT)('creates slide template pages without default speaker notes', async () => {
     const onRefreshFiles = vi.fn();
     const onTabsStateChange = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
@@ -736,8 +824,8 @@ describe('FileWorkspace upload input', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('workspace-pages-menu-trigger'));
-    fireEvent.click(screen.getByRole('menuitem', { name: /New blank page/i }));
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(screen.getByRole('button', { name: /New blank page/i }));
     const title = await screen.findByText('Clean Deck');
     const card = title.closest('article');
     expect(card).not.toBeNull();
@@ -756,7 +844,10 @@ describe('FileWorkspace upload input', () => {
     await waitFor(() => expect(onRefreshFiles).toHaveBeenCalledTimes(1));
   });
 
-  it('localizes page creator content and saves template query as the first version prompt', async () => {
+  // PageCreator flows are unreachable while the 新建空白页面 launcher entry
+  // is paused (see ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT); these suites
+  // revive automatically when the switch flips back.
+  it.skipIf(!ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT)('localizes page creator content and saves template query as the first version prompt', async () => {
     const onRefreshFiles = vi.fn();
     const onTabsStateChange = vi.fn();
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
@@ -822,8 +913,8 @@ describe('FileWorkspace upload input', () => {
       </I18nProvider>,
     );
 
-    fireEvent.click(screen.getByTestId('workspace-pages-menu-trigger'));
-    fireEvent.click(screen.getByRole('menuitem', { name: /新建空白页面/ }));
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(screen.getByRole('button', { name: /新建空白页面/ }));
 
     const dialog = await screen.findByRole('dialog', { name: '新建页面' });
     const dialogScope = within(dialog);
@@ -857,7 +948,10 @@ describe('FileWorkspace upload input', () => {
     await waitFor(() => expect(onRefreshFiles).toHaveBeenCalledTimes(1));
   });
 
-  it('hides blank cards and media category entries in the page creator dialog', async () => {
+  // PageCreator flows are unreachable while the 新建空白页面 launcher entry
+  // is paused (see ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT); these suites
+  // revive automatically when the switch flips back.
+  it.skipIf(!ENABLE_BLANK_PAGE_WORKSPACE_ENTRYPOINT)('hides blank cards and media category entries in the page creator dialog', async () => {
     render(
       <FileWorkspace
         projectId="project-1"
@@ -871,8 +965,8 @@ describe('FileWorkspace upload input', () => {
       />,
     );
 
-    fireEvent.click(screen.getByTestId('workspace-pages-menu-trigger'));
-    fireEvent.click(screen.getByRole('menuitem', { name: /New blank page/i }));
+    fireEvent.click(screen.getByTestId('workspace-add-tab'));
+    fireEvent.click(screen.getByRole('button', { name: /New blank page/i }));
 
     const dialog = await screen.findByRole('dialog', { name: 'Create page' });
     const dialogScope = within(dialog);
@@ -882,8 +976,9 @@ describe('FileWorkspace upload input', () => {
     expect(dialogScope.queryByRole('button', { name: /^Audio\b/i })).toBeNull();
   });
 
-  it('hides upload failure details during in-panel preview and restores them after closing preview', async () => {
+  it('reports an upload failure until dismissed, and opens a file on a single card click', async () => {
     mockedUploadProjectFiles.mockRejectedValueOnce(new Error('storage offline'));
+    const onTabsStateChange = vi.fn();
 
     render(
       <FileWorkspace
@@ -894,7 +989,7 @@ describe('FileWorkspace upload input', () => {
         onRefreshFiles={vi.fn()}
         isDeck={false}
         tabsState={{ tabs: [], active: null }}
-        onTabsStateChange={vi.fn()}
+        onTabsStateChange={onTabsStateChange}
       />,
     );
 
@@ -908,25 +1003,21 @@ describe('FileWorkspace upload input', () => {
       );
     });
 
-    const row = screen.getByTestId('design-file-row-mock.png');
-    const nameButton = row.querySelector<HTMLButtonElement>('.df-row-name-btn');
-    if (!nameButton) throw new Error('Could not find file name button');
-    fireEvent.click(nameButton);
-
-    expect(screen.getByTestId('design-file-preview')).toBeTruthy();
-    expect(screen.queryByTestId('upload-error-banner')).toBeNull();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close preview' }));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('upload-error-banner').textContent).toContain(
-        'storage offline',
-      );
-    });
-
     fireEvent.click(screen.getByTestId('upload-error-dismiss'));
-
     expect(screen.queryByTestId('upload-error-banner')).toBeNull();
+
+    // Images render as masonry cards; a single click on the thumb opens the
+    // file in a workspace tab (there is no in-panel preview pane to land in).
+    const row = screen.getByTestId('design-file-row-mock.png');
+    const thumbButton = row.querySelector<HTMLButtonElement>('.df-card-thumb');
+    if (!thumbButton) throw new Error('Could not find file thumb button');
+    fireEvent.click(thumbButton);
+
+    await waitFor(() =>
+      expect(onTabsStateChange).toHaveBeenCalledWith(
+        expect.objectContaining({ active: 'mock.png' }),
+      ),
+    );
   });
 
   it('keeps partial upload failures visible after a successful file opens', async () => {
@@ -989,6 +1080,9 @@ describe('FileWorkspace upload input', () => {
 
     const { container, rerender } = render(<FileWorkspace {...baseProps} />);
 
+    // Folder rows live behind the Folders category tab (the default tab is
+    // Pages whenever HTML files exist at the current level).
+    fireEvent.click(screen.getByTestId('design-files-tab-folders'));
     fireEvent.click(container.querySelector('.df-dir-row .df-row-name-btn')!);
     expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('assets');
 
@@ -1003,7 +1097,9 @@ describe('FileWorkspace upload input', () => {
       />,
     );
 
-    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('All project files');
+    // #5517: the breadcrumb root falls back to designFiles.crumbs ("Project")
+    // instead of the removed workspace.allProjectFiles label.
+    expect(container.querySelector('.df-breadcrumb-current')?.textContent).toBe('Project');
     expect(screen.getByTestId('design-file-row-home.html')).toBeTruthy();
   });
 
@@ -1223,9 +1319,11 @@ describe('FileWorkspace upload input', () => {
     expect(markup).toContain('class="ws-tabs-shell"');
     expect(markup).toContain('data-testid="workspace-focus-toggle"');
     // The expand control sits before the tabs bar (left side) so its
-    // direction matches where the chat pane re-emerges from.
+    // direction matches where the chat pane re-emerges from. In focus mode
+    // the project tab strip's dock host sits between them (the strip portals
+    // into it — see workspaceTabsDock.ts), so allow it in the order check.
     expect(markup).toMatch(
-      /<div class="ws-tabs-shell">\s*<button[^>]*data-testid="workspace-focus-toggle"[\s\S]*?<\/button>\s*<div class="ws-tabs-bar"/,
+      /<div class="ws-tabs-shell">\s*<button[^>]*data-testid="workspace-focus-toggle"[\s\S]*?<\/button>\s*(?:<div class="ws-tabs-project-dock"[^>]*><\/div>\s*)?<div class="ws-tabs-bar"/,
     );
   });
 
@@ -1245,7 +1343,7 @@ describe('FileWorkspace upload input', () => {
 
     expect(markup).toContain('class="ws-tabs-bar"');
     expect(markup).toMatch(
-      /role="tablist"[\s\S]*data-testid="workspace-pages-menu-trigger"[\s\S]*artifact\.html/,
+      /role="tablist"[\s\S]*data-testid="design-files-tab"[\s\S]*artifact\.html/,
     );
   });
 
@@ -1270,6 +1368,1066 @@ describe('FileWorkspace upload input', () => {
 });
 
 describe('FileWorkspace launcher tab creation', () => {
+  it('keeps the active HTML preview mounted across repeated Design Files round-trips', async () => {
+    const file = workspaceFile('artifact.html');
+    mockedFetchProjectFileText.mockResolvedValue('<html><body>artifact</body></html>');
+
+    function Harness() {
+      const [tabsState, setTabsState] = useState<OpenTabsState>({
+        tabs: [file.name],
+        active: file.name,
+      });
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={[file]}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={tabsState}
+              onTabsStateChange={setTabsState}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const { container } = render(<Harness />);
+    await waitFor(() => {
+      expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1);
+    });
+    const firstFrame = screen.getByTestId('artifact-preview-frame');
+    const retainedViewer = screen.getByTestId('retained-file-viewer');
+    expect(retainedViewer.style.display).toBe('flex');
+
+    for (let round = 0; round < 10; round += 1) {
+      fireEvent.click(screen.getByTestId('design-files-tab'));
+      expect(screen.getByTestId('retained-file-viewer')).toBe(retainedViewer);
+      expect(retainedViewer.getAttribute('aria-hidden')).toBe('true');
+      expect(retainedViewer.hasAttribute('inert')).toBe(true);
+      expect(retainedViewer.hasAttribute('hidden')).toBe(false);
+      expect(retainedViewer.style.display).toBe('flex');
+      expect(retainedViewer.style.position).toBe('absolute');
+      expect(retainedViewer.style.visibility).toBe('hidden');
+      expect(container.querySelector('.iframe-keep-alive-pool iframe')).toBeNull();
+
+      fireEvent.click(screen.getByRole('tab', { name: /artifact\.html/i }));
+      expect(screen.getByTestId('artifact-preview-frame')).toBe(firstFrame);
+      expect(screen.getByTestId('retained-file-viewer')).toBe(retainedViewer);
+      expect(retainedViewer.style.display).toBe('flex');
+      expect(retainedViewer.style.visibility).toBe('');
+      expect(retainedViewer.hasAttribute('inert')).toBe(false);
+    }
+
+    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps warmed HTML preview frames connected while switching between files', async () => {
+    const alpha = workspaceFile('alpha.html');
+    const beta = workspaceFile('beta.html');
+    mockedFetchProjectFileText.mockImplementation(async (_projectId, fileName) => (
+      `<html><body>${fileName}</body></html>`
+    ));
+
+    function Harness() {
+      const [tabsState, setTabsState] = useState<OpenTabsState>({
+        tabs: [alpha.name, beta.name],
+        active: alpha.name,
+      });
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={[alpha, beta]}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={tabsState}
+              onTabsStateChange={setTabsState}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const { container } = render(<Harness />);
+    await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1));
+    const alphaFrame = screen.getByTestId('artifact-preview-frame');
+
+    fireEvent.click(screen.getByRole('tab', { name: /beta\.html/i }));
+    await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2));
+    const betaFrame = screen.getByTestId('artifact-preview-frame');
+    expect(betaFrame).not.toBe(alphaFrame);
+    expect(container.querySelector('.iframe-keep-alive-pool iframe')).toBeNull();
+    expect(document.body.contains(alphaFrame)).toBe(true);
+    const retainedAfterBeta = screen.getAllByTestId('retained-file-viewer');
+    expect(retainedAfterBeta.map((viewer) => viewer.getAttribute('data-file-name'))).toEqual([
+      alpha.name,
+      beta.name,
+    ]);
+
+    fireEvent.click(screen.getByRole('tab', { name: /alpha\.html/i }));
+    expect(screen.getByTestId('artifact-preview-frame')).toBe(alphaFrame);
+    expect(container.querySelector('.iframe-keep-alive-pool iframe')).toBeNull();
+    expect(document.body.contains(betaFrame)).toBe(true);
+    expect(screen.getAllByTestId('retained-file-viewer')).toEqual(retainedAfterBeta);
+    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2);
+  });
+
+  it('evicts the fourth HTML tab without reattaching the three surviving preview frames', async () => {
+    const files = ['alpha.html', 'beta.html', 'gamma.html', 'delta.html'].map(workspaceFile);
+    mockedFetchProjectFileText.mockImplementation(async (_projectId, fileName) => (
+      `<html><body>${fileName}</body></html>`
+    ));
+
+    function Harness() {
+      const [tabsState, setTabsState] = useState<OpenTabsState>({
+        tabs: files.map((file) => file.name),
+        active: 'alpha.html',
+      });
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={files}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={tabsState}
+              onTabsStateChange={setTabsState}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('tab', { name: /beta\.html/i }));
+    await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('tab', { name: /gamma\.html/i }));
+    await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(3));
+    const survivingFrames = ['beta.html', 'gamma.html'].map((name) => (
+      document.querySelector(`iframe[title="${name}"][data-od-render-mode="url-load"]`)
+    ));
+    expect(survivingFrames.every(Boolean)).toBe(true);
+    const appendSpy = vi.spyOn(Node.prototype, 'appendChild');
+
+    fireEvent.click(screen.getByRole('tab', { name: /delta\.html/i }));
+    await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(document.querySelector('iframe[title="alpha.html"]')).toBeNull());
+
+    for (const [index, name] of ['beta.html', 'gamma.html'].entries()) {
+      const frame = survivingFrames[index];
+      expect(document.querySelector(
+        `iframe[title="${name}"][data-od-render-mode="url-load"]`,
+      )).toBe(frame);
+      expect(appendSpy.mock.calls.filter(([node]) => node === frame)).toHaveLength(0);
+    }
+  });
+
+  it('deletes the active HTML viewer without reattaching a surviving warm iframe', async () => {
+    const alpha = workspaceFile('alpha.html');
+    const beta = workspaceFile('beta.html');
+    mockedFetchProjectFileText.mockImplementation(async (_projectId, fileName) => (
+      `<html><body>${fileName}</body></html>`
+    ));
+
+    function Harness({ files, generation }: { files: ProjectFile[]; generation: number }) {
+      const [tabsState, setTabsState] = useState<OpenTabsState>({
+        tabs: [alpha.name, beta.name],
+        active: alpha.name,
+      });
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={files}
+              filesGeneration={generation}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={tabsState}
+              onTabsStateChange={setTabsState}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const { rerender } = render(<Harness files={[alpha, beta]} generation={1} />);
+    await waitFor(() => expect(document.querySelector(
+      'iframe[title="alpha.html"][data-od-render-mode="url-load"]',
+    )).not.toBeNull());
+    fireEvent.click(screen.getByRole('tab', { name: /beta\.html/i }));
+    await waitFor(() => expect(document.querySelector(
+      'iframe[title="alpha.html"][data-od-render-mode="url-load"]',
+    )).not.toBeNull());
+    const alphaFrame = document.querySelector(
+      'iframe[title="alpha.html"][data-od-render-mode="url-load"]',
+    );
+    expect(alphaFrame).not.toBeNull();
+    const readsBeforeDelete = mockedFetchProjectFileText.mock.calls.length;
+    const appendSpy = vi.spyOn(Node.prototype, 'appendChild');
+
+    rerender(<Harness files={[alpha]} generation={2} />);
+
+    await waitFor(() => expect(document.querySelector('iframe[title="beta.html"]')).toBeNull());
+    expect(document.querySelector(
+      'iframe[title="alpha.html"][data-od-render-mode="url-load"]',
+    )).toBe(alphaFrame);
+    expect(appendSpy.mock.calls.filter(([node]) => node === alphaFrame)).toHaveLength(0);
+    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(readsBeforeDelete);
+  });
+
+  it('keeps warmed HTML preview frames through equivalent context refreshes and transient empty file snapshots', async () => {
+    const alphaName = 'alpha.html';
+    const betaName = 'beta.html';
+    mockedFetchProjectFileText.mockImplementation(async (_projectId, fileName) => (
+      `<html><body>${fileName}</body></html>`
+    ));
+
+    function Harness({
+      active,
+      files,
+      tabs,
+      workspaceContext,
+      filesRefreshKey = 0,
+    }: {
+      active: string;
+      files: ProjectFile[];
+      tabs: string[];
+      workspaceContext: WorkspaceCollabContext;
+      filesRefreshKey?: number;
+    }) {
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(workspaceContext)}>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={files}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={{ tabs, active }}
+              onTabsStateChange={vi.fn()}
+              filesRefreshKey={filesRefreshKey}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const workspaceContext = teamContext('workspace-a', 'member-a');
+    const { rerender } = render(
+      <Harness
+        active={alphaName}
+        files={[workspaceFile(alphaName), workspaceFile(betaName)]}
+        tabs={[alphaName, betaName]}
+        workspaceContext={workspaceContext}
+      />,
+    );
+    await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(1));
+    const alphaFrame = screen.getByTestId('artifact-preview-frame');
+
+    rerender(
+      <Harness
+        active={betaName}
+        files={[workspaceFile(alphaName), workspaceFile(betaName)]}
+        tabs={[alphaName, betaName]}
+        workspaceContext={{ ...workspaceContext }}
+      />,
+    );
+    await waitFor(() => expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2));
+    const betaFrame = screen.getByTestId('artifact-preview-frame');
+
+    // Ambient workspace refreshes can briefly publish an empty file snapshot.
+    // Open tabs are the durable witness that these files were not closed or
+    // deleted, so both warmed iframe nodes must stay connected through it.
+    rerender(
+      <Harness
+        active={betaName}
+        files={[]}
+        tabs={[alphaName, betaName]}
+        workspaceContext={{ ...workspaceContext }}
+      />,
+    );
+    expect(document.body.contains(alphaFrame)).toBe(true);
+    expect(document.body.contains(betaFrame)).toBe(true);
+    expect(alphaFrame.closest('[data-testid="retained-file-viewer"]')).not.toBeNull();
+    expect(betaFrame.closest('[data-testid="retained-file-viewer"]')).not.toBeNull();
+    expect(document.querySelector('.iframe-keep-alive-pool iframe')).toBeNull();
+
+    rerender(
+      <Harness
+        active={alphaName}
+        files={[workspaceFile(alphaName), workspaceFile(betaName)]}
+        tabs={[alphaName, betaName]}
+        workspaceContext={{ ...workspaceContext }}
+      />,
+    );
+    expect(screen.getByTestId('artifact-preview-frame')).toBe(alphaFrame);
+    expect(document.body.contains(betaFrame)).toBe(true);
+    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(2);
+
+    // Removing a tab is an explicit permanent close/delete witness and must
+    // still evict that viewer rather than retaining it forever.
+    rerender(
+      <Harness
+        active={alphaName}
+        files={[workspaceFile(alphaName), workspaceFile(betaName)]}
+        tabs={[alphaName]}
+        workspaceContext={{ ...workspaceContext }}
+      />,
+    );
+    await waitFor(() => expect(document.querySelector('iframe[title="beta.html"]')).toBeNull());
+    expect(screen.getByTestId('artifact-preview-frame')).toBe(alphaFrame);
+  });
+
+  it('evicts a deleted HTML viewer after a committed file refresh even when its tab persists', async () => {
+    const alphaName = 'alpha.html';
+    const betaName = 'beta.html';
+    const workspaceContext = teamContext('workspace-a', 'member-a');
+    const tabs = [alphaName, betaName];
+
+    function Harness({ files, refreshKey }: { files: ProjectFile[]; refreshKey: number }) {
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(workspaceContext)}>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={files}
+              filesRefreshKey={refreshKey}
+              filesGeneration={refreshKey}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={{ tabs, active: alphaName }}
+              onTabsStateChange={vi.fn()}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const initialFiles = [workspaceFile(alphaName), workspaceFile(betaName)];
+    const { rerender } = render(
+      <Harness files={initialFiles} refreshKey={0} />,
+    );
+    fireEvent.click(screen.getByRole('tab', { name: /beta\.html/i }));
+    await waitFor(() => expect(document.querySelector('iframe[title="beta.html"]')).not.toBeNull());
+    const betaFrame = document.querySelector('iframe[title="beta.html"]');
+
+    // Authorization-scoped keep-alive keys append metadata after `beta.html:`.
+    // A committed refresh that still contains the file must retain that frame.
+    rerender(<Harness files={initialFiles} refreshKey={1} />);
+    await waitFor(() => expect(document.querySelector('iframe[title="beta.html"]')).toBe(betaFrame));
+    fireEvent.click(screen.getByRole('tab', { name: /alpha\.html/i }));
+
+    rerender(<Harness files={[workspaceFile(alphaName)]} refreshKey={2} />);
+
+    await waitFor(() => expect(document.querySelector('iframe[title="beta.html"]')).toBeNull());
+    expect(screen.getByTestId('artifact-preview-frame').getAttribute('title')).toBe(alphaName);
+  });
+
+  describe('protected viewer deletion revalidation', () => {
+    const fileName = 'page.html';
+    const initialFiles = [workspaceFile(fileName)];
+
+    function Harness({
+      revalidatedFiles,
+      onFresh,
+      freshFailure = null,
+      acceptedGeneration = 3,
+      committedGeneration = acceptedGeneration,
+    }: {
+      revalidatedFiles: ProjectFile[];
+      onFresh: (options?: { fresh?: boolean }) => void;
+      freshFailure?: 'throw' | 'null' | null;
+      acceptedGeneration?: number;
+      committedGeneration?: number;
+    }) {
+      const [snapshot, setSnapshot] = useState({ files: initialFiles, generation: 1 });
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+            <button
+              type="button"
+              data-testid="commit-r1-missing"
+              onClick={() => setSnapshot({ files: [], generation: 2 })}
+            >
+              delete witness
+            </button>
+            <button
+              type="button"
+              data-testid="commit-later-missing"
+              onClick={() => setSnapshot({ files: [], generation: 4 })}
+            >
+              later missing witness
+            </button>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={snapshot.files}
+              filesRefreshKey={7}
+              filesGeneration={snapshot.generation}
+              liveArtifacts={[]}
+              onRefreshFiles={async (options) => {
+                onFresh(options);
+                if (options?.fresh) {
+                  if (freshFailure === 'throw') throw new Error('fresh read failed');
+                  if (freshFailure === 'null') return { acceptedGeneration: null };
+                  setSnapshot({ files: revalidatedFiles, generation: committedGeneration });
+                  return { acceptedGeneration };
+                }
+                return { acceptedGeneration: null };
+              }}
+              isDeck={false}
+              tabsState={{ tabs: [fileName], active: fileName }}
+              onTabsStateChange={vi.fn()}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    async function enterManualEdit() {
+      const toggle = await screen.findByTestId('manual-edit-mode-toggle');
+      fireEvent.click(toggle);
+      await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('true'));
+      await waitFor(() => {
+        expect(screen.getByTestId('artifact-preview-frame').getAttribute('data-od-render-mode')).toBe('srcdoc');
+      });
+      return toggle;
+    }
+
+    it('purges a protected no-op editor only after the fresh R2 still reports it missing', async () => {
+      mockedFetchProjectFileText.mockResolvedValue('<html><body>Page</body></html>');
+      const onFresh = vi.fn();
+      render(<Harness revalidatedFiles={[]} onFresh={onFresh} />);
+      await enterManualEdit();
+      const frame = screen.getByTestId('artifact-preview-frame');
+
+      fireEvent.click(screen.getByTestId('commit-r1-missing'));
+
+      await waitFor(() => expect(onFresh).toHaveBeenCalledWith({ fresh: true }));
+      await waitFor(() => expect(document.body.contains(frame)).toBe(false));
+    });
+
+    it('keeps a successfully saved viewer when fresh R2 recreates it at the same refresh key', async () => {
+      const initialSource = '<html><body><p data-od-id="copy">Copy</p></body></html>';
+      mockedFetchProjectFileText.mockResolvedValue(initialSource);
+      let writes = 0;
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') {
+          writes += 1;
+          return new Response(JSON.stringify({ file: workspaceFile(fileName) }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/versions')) {
+          return new Response(JSON.stringify({ versions: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/raw/page.html')) return new Response(initialSource, { status: 200 });
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const onFresh = vi.fn();
+      render(<Harness revalidatedFiles={initialFiles} onFresh={onFresh} />);
+      await enterManualEdit();
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            type: 'od-edit-drag-commit',
+            id: 'copy',
+            transform: 'translate(12px, 8px)',
+            display: 'block',
+          },
+        }));
+      });
+
+      fireEvent.click(screen.getByTestId('commit-r1-missing'));
+
+      await waitFor(() => expect(writes).toBe(1));
+      await waitFor(() => expect(onFresh).toHaveBeenCalledWith({ fresh: true }));
+      expect(document.body.contains(frame)).toBe(true);
+    });
+
+    it('does not let the save-triggered ordinary refresh adjudicate deletion before fresh R2 completes', async () => {
+      const initialSource = '<html><body><p data-od-id="copy">Copy</p></body></html>';
+      mockedFetchProjectFileText.mockResolvedValue(initialSource);
+      let resolveFresh!: () => void;
+      const freshGate = new Promise<void>((resolve) => { resolveFresh = resolve; });
+      const refreshCalls = vi.fn();
+
+      function RacingHarness() {
+        const [snapshot, setSnapshot] = useState({ files: initialFiles, generation: 1 });
+        return (
+          <IframeKeepAliveProvider>
+            <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+              <button
+                type="button"
+                data-testid="commit-racing-r1-missing"
+                onClick={() => setSnapshot({ files: [], generation: 2 })}
+              >
+                delete witness
+              </button>
+              <FileWorkspace
+                projectId="project-1"
+                projectKind="prototype"
+                files={snapshot.files}
+                filesRefreshKey={7}
+                filesGeneration={snapshot.generation}
+                liveArtifacts={[]}
+                onRefreshFiles={async (options) => {
+                  refreshCalls(options);
+                  if (!options?.fresh) {
+                    // applyManualEdit -> onFileSaved performs this cached
+                    // refresh before safeExit resolves.
+                    setSnapshot({ files: [], generation: 3 });
+                    return { acceptedGeneration: 3 };
+                  }
+                  await freshGate;
+                  setSnapshot({ files: initialFiles, generation: 4 });
+                  return { acceptedGeneration: 4 };
+                }}
+                isDeck={false}
+                tabsState={{ tabs: [fileName], active: fileName }}
+                onTabsStateChange={vi.fn()}
+              />
+            </CollabProvider>
+          </IframeKeepAliveProvider>
+        );
+      }
+
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') {
+          return new Response(JSON.stringify({ file: workspaceFile(fileName) }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/versions')) {
+          return new Response(JSON.stringify({ versions: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/raw/page.html')) return new Response(initialSource, { status: 200 });
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(<RacingHarness />);
+      await enterManualEdit();
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            type: 'od-edit-drag-commit',
+            id: 'copy',
+            transform: 'translate(12px, 8px)',
+            display: 'block',
+          },
+        }));
+      });
+
+      fireEvent.click(screen.getByTestId('commit-racing-r1-missing'));
+
+      await waitFor(() => expect(refreshCalls).toHaveBeenCalledWith(undefined));
+      await waitFor(() => expect(refreshCalls).toHaveBeenCalledWith({ fresh: true }));
+      expect(document.body.contains(frame)).toBe(true);
+
+      await act(async () => { resolveFresh(); });
+      await waitFor(() => expect(document.body.contains(frame)).toBe(true));
+    });
+
+    function FailedR2Harness({
+      mode,
+      ordinaryGate,
+      freshGate,
+      onRefresh,
+    }: {
+      mode: 'throw' | 'null';
+      ordinaryGate: Promise<void>;
+      freshGate: Promise<void>;
+      onRefresh: (options?: { fresh?: boolean }) => void;
+    }) {
+      const [snapshot, setSnapshot] = useState({ files: initialFiles, generation: 1 });
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+            <output data-testid="failed-r2-generation">{snapshot.generation}</output>
+            <button
+              type="button"
+              data-testid="failed-r2-r1-missing"
+              onClick={() => setSnapshot({ files: [], generation: 2 })}
+            >
+              R1 missing
+            </button>
+            <button
+              type="button"
+              data-testid="failed-r2-later-missing"
+              onClick={() => setSnapshot({ files: [], generation: 4 })}
+            >
+              later missing
+            </button>
+            <button
+              type="button"
+              data-testid="failed-r2-later-present"
+              onClick={() => setSnapshot({ files: initialFiles, generation: 4 })}
+            >
+              later present
+            </button>
+            <button
+              type="button"
+              data-testid="failed-r2-after-present-missing"
+              onClick={() => setSnapshot({ files: [], generation: 5 })}
+            >
+              after present missing
+            </button>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={snapshot.files}
+              filesRefreshKey={7}
+              filesGeneration={snapshot.generation}
+              liveArtifacts={[]}
+              onRefreshFiles={async (options) => {
+                onRefresh(options);
+                if (!options?.fresh) {
+                  setSnapshot({ files: [], generation: 3 });
+                  await ordinaryGate;
+                  return { acceptedGeneration: 3 };
+                }
+                await freshGate;
+                if (mode === 'throw') throw new Error('fresh read failed');
+                return { acceptedGeneration: null };
+              }}
+              isDeck={false}
+              tabsState={{ tabs: [fileName], active: fileName }}
+              onTabsStateChange={vi.fn()}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    function stubManualEditSave(source: string) {
+      mockedFetchProjectFileText.mockResolvedValue(source);
+      vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') {
+          return new Response(JSON.stringify({ file: workspaceFile(fileName) }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/versions')) {
+          return new Response(JSON.stringify({ versions: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/raw/page.html')) return new Response(source, { status: 200 });
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }));
+    }
+
+    async function dirtyActiveViewer(frame: HTMLIFrameElement) {
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            type: 'od-edit-drag-commit',
+            id: 'copy',
+            transform: 'translate(12px, 8px)',
+            display: 'block',
+          },
+        }));
+      });
+    }
+
+    it('waits beyond the pre-R2 save generation before a failed R2 can purge', async () => {
+      const source = '<html><body><p data-od-id="copy">Copy</p></body></html>';
+      stubManualEditSave(source);
+      let resolveOrdinary!: () => void;
+      const ordinaryGate = new Promise<void>((resolve) => { resolveOrdinary = resolve; });
+      const onRefresh = vi.fn();
+      render(
+        <FailedR2Harness
+          mode="throw"
+          ordinaryGate={ordinaryGate}
+          freshGate={Promise.resolve()}
+          onRefresh={onRefresh}
+        />,
+      );
+      await enterManualEdit();
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      await dirtyActiveViewer(frame);
+      fireEvent.click(screen.getByTestId('failed-r2-r1-missing'));
+
+      await waitFor(() => expect(screen.getByTestId('failed-r2-generation').textContent).toBe('3'));
+      await act(async () => { resolveOrdinary(); });
+      await waitFor(() => expect(onRefresh).toHaveBeenCalledWith({ fresh: true }));
+      expect(document.body.contains(frame)).toBe(true);
+
+      fireEvent.click(screen.getByTestId('failed-r2-later-missing'));
+      await waitFor(() => expect(document.body.contains(frame)).toBe(false));
+    });
+
+    it('uses a later missing generation that overtakes an in-flight null R2', async () => {
+      const source = '<html><body><p data-od-id="copy">Copy</p></body></html>';
+      stubManualEditSave(source);
+      let resolveOrdinary!: () => void;
+      let resolveFresh!: () => void;
+      const ordinaryGate = new Promise<void>((resolve) => { resolveOrdinary = resolve; });
+      const freshGate = new Promise<void>((resolve) => { resolveFresh = resolve; });
+      const onRefresh = vi.fn();
+      render(
+        <FailedR2Harness
+          mode="null"
+          ordinaryGate={ordinaryGate}
+          freshGate={freshGate}
+          onRefresh={onRefresh}
+        />,
+      );
+      await enterManualEdit();
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      await dirtyActiveViewer(frame);
+      fireEvent.click(screen.getByTestId('failed-r2-r1-missing'));
+
+      await waitFor(() => expect(screen.getByTestId('failed-r2-generation').textContent).toBe('3'));
+      await act(async () => { resolveOrdinary(); });
+      await waitFor(() => expect(onRefresh).toHaveBeenCalledWith({ fresh: true }));
+      fireEvent.click(screen.getByTestId('failed-r2-later-missing'));
+      expect(document.body.contains(frame)).toBe(true);
+
+      await act(async () => { resolveFresh(); });
+      await waitFor(() => expect(document.body.contains(frame)).toBe(false));
+    });
+
+    it('clears a failed R2 decision when a later generation contains the file', async () => {
+      const source = '<html><body><p data-od-id="copy">Copy</p></body></html>';
+      stubManualEditSave(source);
+      let resolveOrdinary!: () => void;
+      let resolveFresh!: () => void;
+      const ordinaryGate = new Promise<void>((resolve) => { resolveOrdinary = resolve; });
+      const freshGate = new Promise<void>((resolve) => { resolveFresh = resolve; });
+      const onRefresh = vi.fn();
+      render(
+        <FailedR2Harness
+          mode="null"
+          ordinaryGate={ordinaryGate}
+          freshGate={freshGate}
+          onRefresh={onRefresh}
+        />,
+      );
+      await enterManualEdit();
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      await dirtyActiveViewer(frame);
+      fireEvent.click(screen.getByTestId('failed-r2-r1-missing'));
+
+      await waitFor(() => expect(screen.getByTestId('failed-r2-generation').textContent).toBe('3'));
+      await act(async () => { resolveOrdinary(); });
+      await waitFor(() => expect(onRefresh).toHaveBeenCalledWith({ fresh: true }));
+      fireEvent.click(screen.getByTestId('failed-r2-later-present'));
+      await act(async () => { resolveFresh(); });
+      await waitFor(() => expect(document.body.contains(frame)).toBe(true));
+
+      fireEvent.click(screen.getByTestId('failed-r2-after-present-missing'));
+      await waitFor(() => expect(document.body.contains(frame)).toBe(false));
+    });
+
+    it('purges when a later accepted missing snapshot overtakes the accepted fresh R2 generation', async () => {
+      mockedFetchProjectFileText.mockResolvedValue('<html><body>Page</body></html>');
+      const onFresh = vi.fn();
+      render(
+        <Harness
+          revalidatedFiles={[]}
+          onFresh={onFresh}
+          acceptedGeneration={3}
+          committedGeneration={4}
+        />,
+      );
+      await enterManualEdit();
+      const frame = screen.getByTestId('artifact-preview-frame');
+
+      fireEvent.click(screen.getByTestId('commit-r1-missing'));
+
+      await waitFor(() => expect(onFresh).toHaveBeenCalledWith({ fresh: true }));
+      await waitFor(() => expect(document.body.contains(frame)).toBe(false));
+    });
+
+    it('retains the protected viewer and skips R2 when its dirty flush fails', async () => {
+      const initialSource = '<html><body><p data-od-id="copy">Copy</p></body></html>';
+      mockedFetchProjectFileText.mockResolvedValue(initialSource);
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.endsWith('/api/projects/project-1/files') && init?.method === 'POST') {
+          return new Response(JSON.stringify({ error: { message: 'conflict' } }), {
+            status: 409,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/versions')) {
+          return new Response(JSON.stringify({ versions: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        if (url.includes('/raw/page.html')) return new Response(initialSource, { status: 200 });
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const onFresh = vi.fn();
+      render(<Harness revalidatedFiles={[]} onFresh={onFresh} />);
+      const toggle = await enterManualEdit();
+      const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+      act(() => {
+        window.dispatchEvent(new MessageEvent('message', {
+          source: frame.contentWindow,
+          data: {
+            type: 'od-edit-drag-commit',
+            id: 'copy',
+            transform: 'translate(12px, 8px)',
+            display: 'block',
+          },
+        }));
+      });
+
+      fireEvent.click(screen.getByTestId('commit-r1-missing'));
+
+      await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true));
+      expect(onFresh).not.toHaveBeenCalledWith({ fresh: true });
+      expect(document.body.contains(frame)).toBe(true);
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    });
+  });
+
+  it('keeps manual-edit viewers within the hard cap by flushing before each tab switch', async () => {
+    const files = ['alpha.html', 'beta.html', 'gamma.html', 'delta.html'].map(workspaceFile);
+    mockedFetchProjectFileText.mockImplementation(async (_projectId, fileName) => (
+      `<html><body><p data-od-id="copy">${fileName}</p></body></html>`
+    ));
+
+    function Harness() {
+      const [tabsState, setTabsState] = useState<OpenTabsState>({
+        tabs: files.map((file) => file.name),
+        active: files[0]!.name,
+      });
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={files}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={tabsState}
+              onTabsStateChange={setTabsState}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    render(<Harness />);
+    for (let index = 0; index < files.length; index += 1) {
+      const currentName = files[index]!.name;
+      await waitFor(() => {
+        expect(screen.getByTestId('artifact-preview-frame').getAttribute('title')).toBe(currentName);
+      });
+      const activeViewer = document.querySelector<HTMLElement>(
+        `[data-testid="retained-file-viewer"][data-file-name="${currentName}"]`,
+      );
+      expect(activeViewer).not.toBeNull();
+      const editToggle = within(activeViewer!).getByTestId('manual-edit-mode-toggle');
+      fireEvent.click(editToggle);
+      await waitFor(() => {
+        expect(editToggle.getAttribute('aria-pressed')).toBe('true');
+      });
+      if (index < files.length - 1) {
+        const nextName = files[index + 1]!.name;
+        fireEvent.click(screen.getByRole('tab', { name: new RegExp(nextName.replace('.', '\\.')) }));
+        await waitFor(() => {
+          expect(screen.getByTestId('artifact-preview-frame').getAttribute('title')).toBe(nextName);
+        });
+      }
+      expect(screen.getAllByTestId('retained-file-viewer').length).toBeLessThanOrEqual(3);
+    }
+
+    expect(document.querySelector('iframe[title="alpha.html"]')).toBeNull();
+    expect(screen.getAllByTestId('manual-edit-mode-toggle').length).toBeLessThanOrEqual(3);
+    expect(screen.getAllByTestId('manual-edit-mode-toggle').filter(
+      (toggle) => toggle.getAttribute('aria-pressed') === 'true',
+    )).toHaveLength(1);
+  });
+
+  it('waits for the active inline edit before navigating away from the project', async () => {
+    const alpha = workspaceFile('alpha.html');
+    mockedFetchProjectFileText.mockResolvedValue(
+      '<html><body><p data-od-id="copy">alpha.html</p></body></html>',
+    );
+    window.history.replaceState(null, '', '/projects/project-1');
+
+    render(
+      <IframeKeepAliveProvider>
+        <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+          <FileWorkspace
+            projectId="project-1"
+            projectKind="prototype"
+            files={[alpha]}
+            liveArtifacts={[]}
+            onRefreshFiles={vi.fn()}
+            isDeck={false}
+            tabsState={{ tabs: [alpha.name], active: alpha.name }}
+            onTabsStateChange={vi.fn()}
+          />
+        </CollabProvider>
+      </IframeKeepAliveProvider>,
+    );
+
+    const toggle = await screen.findByTestId('manual-edit-mode-toggle');
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('true'));
+    const frame = screen.getByTestId('artifact-preview-frame') as HTMLIFrameElement;
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: { type: 'od-edit-text-session', id: 'copy', active: true },
+      }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const beforeUnload = new Event('beforeunload', { cancelable: true });
+    expect(window.dispatchEvent(beforeUnload)).toBe(false);
+    expect(beforeUnload.defaultPrevented).toBe(true);
+
+    navigate({ kind: 'home', view: 'projects' });
+    expect(window.location.pathname).toBe('/projects/project-1');
+
+    act(() => {
+      window.dispatchEvent(new MessageEvent('message', {
+        source: frame.contentWindow,
+        data: {
+          type: 'od-edit-text-session',
+          id: 'copy',
+          active: false,
+          committed: true,
+          changed: false,
+        },
+      }));
+    });
+    await waitFor(() => expect(window.location.pathname).toBe('/projects'));
+    expect(toggle.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('evicts the previous project preview pool when the workspace changes', async () => {
+    const workspaceContext = teamContext('workspace-a', 'member-a');
+    function Harness({ projectId, fileName }: { projectId: string; fileName: string }) {
+      const file = workspaceFile(fileName);
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(workspaceContext)}>
+            <FileWorkspace
+              projectId={projectId}
+              projectKind="prototype"
+              files={[file]}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={{ tabs: [fileName], active: fileName }}
+              onTabsStateChange={vi.fn()}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    const { rerender } = render(<Harness projectId="project-1" fileName="old.html" />);
+    await waitFor(() => expect(document.querySelector('iframe[title="old.html"]')).not.toBeNull());
+    const oldFrame = document.querySelector('iframe[title="old.html"]');
+
+    rerender(<Harness projectId="project-2" fileName="new.html" />);
+
+    await waitFor(() => expect(document.querySelector('iframe[title="new.html"]')).not.toBeNull());
+    expect(document.body.contains(oldFrame)).toBe(false);
+    expect(document.querySelector('.iframe-keep-alive-pool iframe[title="old.html"]')).toBeNull();
+  });
+
+  it('evicts the least-recently-used HTML viewer after the fourth warm tab', async () => {
+    const files = ['alpha.html', 'beta.html', 'gamma.html', 'delta.html'].map(workspaceFile);
+    mockedFetchProjectFileText.mockImplementation(async (_projectId, fileName) => (
+      `<html><body>${fileName}</body></html>`
+    ));
+
+    function Harness() {
+      const [tabsState, setTabsState] = useState<OpenTabsState>({
+        tabs: files.map((file) => file.name),
+        active: files[0]!.name,
+      });
+      return (
+        <IframeKeepAliveProvider>
+          <CollabProvider value={collabValue(teamContext('workspace-a', 'member-a'))}>
+            <FileWorkspace
+              projectId="project-1"
+              projectKind="prototype"
+              files={files}
+              liveArtifacts={[]}
+              onRefreshFiles={vi.fn()}
+              isDeck={false}
+              tabsState={tabsState}
+              onTabsStateChange={setTabsState}
+            />
+          </CollabProvider>
+        </IframeKeepAliveProvider>
+      );
+    }
+
+    render(<Harness />);
+    for (const name of files.slice(1).map((file) => file.name)) {
+      fireEvent.click(screen.getByRole('tab', { name: new RegExp(name.replace('.', '\\.')) }));
+      await waitFor(() => expect(screen.getByTestId('artifact-preview-frame').getAttribute('title')).toBe(name));
+    }
+    await waitFor(() => {
+      expect(screen.getAllByTestId('retained-file-viewer').map((viewer) => viewer.getAttribute('data-file-name')))
+        .toEqual(['beta.html', 'gamma.html', 'delta.html']);
+    });
+    expect(document.querySelector('iframe[title="alpha.html"]')).toBeNull();
+    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(4);
+
+    fireEvent.click(screen.getByRole('tab', { name: /alpha\.html/i }));
+    await waitFor(() => expect(screen.getByTestId('artifact-preview-frame').getAttribute('title')).toBe('alpha.html'));
+    expect(mockedFetchProjectFileText).toHaveBeenCalledTimes(5);
+    await waitFor(() => {
+      expect(screen.getAllByTestId('retained-file-viewer').map((viewer) => viewer.getAttribute('data-file-name')))
+        .toEqual(['alpha.html', 'gamma.html', 'delta.html']);
+    });
+  });
+
   it('does not report a Design Files context for an empty project', async () => {
     // A brand-new project has no files, live artifacts, or folders. The
     // composer must not auto-stage a "Design files" chip that points at
@@ -1324,6 +2482,26 @@ describe('FileWorkspace launcher tab creation', () => {
     });
   });
 
+  it('shows Design Files when the persisted active file no longer exists', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        tabsState={{ tabs: ['missing.png'], active: 'missing.png' }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('design-files-tab')).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByTestId('design-files-empty')).toBeTruthy();
+    expect(screen.queryByText(/Open a file from/i)).toBeNull();
+    expect(renderedTabLabels()).toEqual(['Design Files']);
+  });
+
   it('hides terminal creation while keeping browser creation available', () => {
     render(
       <FileWorkspace
@@ -1340,11 +2518,10 @@ describe('FileWorkspace launcher tab creation', () => {
 
     fireEvent.click(screen.getByTestId('workspace-add-tab'));
 
-    expect(screen.queryByRole('button', { name: /New Terminal/i })).toBeNull();
-    expect(screen.getByRole('button', { name: /New Browser/i })).toBeTruthy();
-    expect(
-      screen.getByText('Sketch rough layouts and notes for the agent to use as design context'),
-    ).toBeTruthy();
+    const launcherMenu = within(screen.getByTestId('tab-launcher-menu'));
+    expect(launcherMenu.queryByRole('button', { name: /New Terminal/i })).toBeNull();
+    expect(launcherMenu.getByRole('button', { name: /New Browser/i })).toBeTruthy();
+    expect(launcherMenu.getByRole('button', { name: /New sketch/i })).toBeTruthy();
     expect(screen.getByText('Create new')).toBeTruthy();
   });
 
@@ -1381,8 +2558,39 @@ describe('FileWorkspace launcher tab creation', () => {
       />,
     );
 
-    expect(screen.getByTestId('workspace-pages-menu-trigger').textContent).toContain('Pages');
-    expect(renderedTabLabels()).toEqual(['Browser', 'New Terminal', 'Side chat']);
+    expect(screen.getByTestId('design-files-tab').textContent).toContain('Design Files');
+    // Design Files is a plain tab in the strip (role="tab"), so it is part of
+    // the rendered tab list rather than a dropdown trigger sitting outside it.
+    expect(renderedTabLabels()).toEqual([
+      'Design Files',
+      'Browser',
+      'New Terminal',
+      'Side chat',
+    ]);
+  });
+
+  it('shows project sync progress on the Design Files root tab without hiding materialized files', () => {
+    render(
+      <FileWorkspace
+        projectId="project-1"
+        projectKind="prototype"
+        files={[workspaceFile('notes.txt')]}
+        liveArtifacts={[]}
+        onRefreshFiles={vi.fn()}
+        isDeck={false}
+        viewerOnly
+        fileSyncBadge="downloading"
+        tabsState={{ tabs: [], active: DESIGN_FILES_TAB }}
+        onTabsStateChange={vi.fn()}
+      />,
+    );
+
+    const rootTab = screen.getByTestId('design-files-tab');
+    expect(rootTab.title).toContain('Downloading from the team');
+    expect(rootTab.getAttribute('aria-label')).toContain('Downloading from the team');
+    expect(rootTab.querySelector('svg')).toBeTruthy();
+    expect(screen.getByText('notes.txt')).toBeTruthy();
+    expect(screen.queryByTestId('design-files-syncing')).toBeNull();
   });
 
   it('opens Design Files from the browser snapshot toast action instead of the manifest file', async () => {
@@ -1832,6 +3040,61 @@ describe('FileWorkspace launcher tab creation', () => {
     });
   });
 
+  it('reloads design-system source files under the complete pinned Workspace identity', async () => {
+    const workspaceA = teamContext('workspace-a', 'member-a');
+    const workspaceB = teamContext('workspace-b', 'member-b');
+    const props = {
+      projectId: 'project-1',
+      projectKind: 'prototype' as const,
+      files: [workspaceFile('DESIGN.md'), workspaceFile('brand.json')],
+      liveArtifacts: [],
+      onRefreshFiles: vi.fn(),
+      isDeck: false,
+      tabsState: { tabs: [], active: '__design_system__' },
+      onTabsStateChange: vi.fn(),
+      designSystemProject: {
+        id: 'neutral-modern',
+        title: 'Neutral Modern',
+        category: 'Starter',
+        source: 'bundled',
+        updatedAt: 1,
+      } as never,
+    };
+
+    const { rerender } = render(
+      <CollabProvider value={collabValue(workspaceA)}>
+        <FileWorkspace {...props} />
+      </CollabProvider>,
+    );
+    await waitFor(() => {
+      expect(mockedFetchProjectFileText).toHaveBeenCalledWith(
+        'project-1',
+        'DESIGN.md',
+        { cache: 'no-store', workspaceContext: workspaceA },
+      );
+    });
+
+    mockedFetchProjectFileText.mockClear();
+    rerender(
+      <CollabProvider value={collabValue(workspaceB)}>
+        <FileWorkspace {...props} />
+      </CollabProvider>,
+    );
+
+    await waitFor(() => {
+      expect(mockedFetchProjectFileText).toHaveBeenCalledWith(
+        'project-1',
+        'DESIGN.md',
+        { cache: 'no-store', workspaceContext: workspaceB },
+      );
+      expect(mockedFetchProjectFileText).toHaveBeenCalledWith(
+        'project-1',
+        'brand.json',
+        { cache: 'no-store', workspaceContext: workspaceB },
+      );
+    });
+  });
+
   it('focuses an already-open file tab without adding a duplicate tab', async () => {
     const onTabsStateChange = vi.fn();
 
@@ -2075,10 +3338,14 @@ describe('projectSplitClassName', () => {
   });
 
   it('uses CSS variables for split widths so pointer resize can update layout without rerendering workspace content', () => {
+    // `.split`'s grid-template-columns is always
+    // `var(--project-chat-panel-width) var(--project-chat-handle-width) var(--project-workspace-panel-track)`
+    // (see shell.css), so the style object only needs to carry the three
+    // custom properties — no more concatenated `gridTemplateColumns` string.
     expect(projectSplitStyle(false, 512, 'minmax(420px, 1fr)')).toEqual({
       '--project-chat-panel-width': '512px',
+      '--project-chat-handle-width': '8px',
       '--project-workspace-panel-track': 'minmax(420px, 1fr)',
-      gridTemplateColumns: '512px 8px minmax(420px, 1fr)',
     });
     expect(projectSplitStyle(true, 512, 'minmax(420px, 1fr)')).toBeUndefined();
   });
@@ -3076,11 +4343,12 @@ describe('FileWorkspace empty-project generation contract', () => {
 
       expect(screen.queryByTestId('generating-tab')).toBeNull();
       expect(screen.queryByTestId('generation-preview-stage')).toBeNull();
+      expect(screen.queryByTestId('preview-run-status')).toBeNull();
       expect(screen.getByTestId('design-files-empty')).toBeTruthy();
     },
   );
 
-  it('keeps delivery recovery in Chat and leaves a passive failure hint over existing preview files', () => {
+  it('keeps delivery recovery in Chat without mounting status over existing preview files', () => {
     render(
       <FileWorkspace
         projectId="project-1"
@@ -3104,13 +4372,9 @@ describe('FileWorkspace empty-project generation contract', () => {
       />,
     );
 
-    const previewStatus = screen.getByTestId('preview-run-status');
-    expect(previewStatus).toHaveTextContent('Delivery needs attention · Retry in Chat');
-    expect(previewStatus.closest('.ws-preview-run-status-slot')).not.toBeNull();
-    expect(previewStatus.closest('[data-testid="design-files-empty"]')).toBeNull();
+    expect(screen.queryByTestId('preview-run-status')).toBeNull();
     expect(screen.queryByTestId('preview-run-status-retry')).toBeNull();
     expect(screen.queryByTestId('preview-run-status-view-details')).toBeNull();
-    expect(previewStatus).not.toHaveTextContent('Elapsed');
   });
 
   it('does not mount main-preview delivery feedback over a browser tab', () => {
@@ -3145,7 +4409,7 @@ describe('FileWorkspace empty-project generation contract', () => {
     expect(screen.queryByTestId('preview-run-status')).toBeNull();
   });
 
-  it('keeps a delivered confirmation on the preview canvas after files arrive', () => {
+  it('does not mount a delivered confirmation over the preview canvas', () => {
     const now = 1_700_000_012_500;
     vi.spyOn(Date, 'now').mockReturnValue(now);
     render(
@@ -3172,12 +4436,6 @@ describe('FileWorkspace empty-project generation contract', () => {
       />,
     );
 
-    const previewStatus = screen.getByTestId('preview-run-status');
-    expect(previewStatus).toHaveTextContent('Design ready');
-    expect(previewStatus.closest('.ws-preview-run-status-slot')).not.toBeNull();
-    expect(previewStatus.closest('[data-testid="design-files-empty"]')).toBeNull();
-    expect(previewStatus).not.toHaveAttribute('aria-live');
-    expect(within(previewStatus).getByRole('status')).toHaveTextContent('Design ready');
-    expect(previewStatus.querySelector('[aria-hidden="true"]')).toHaveTextContent('Elapsed 0:03');
+    expect(screen.queryByTestId('preview-run-status')).toBeNull();
   });
 });

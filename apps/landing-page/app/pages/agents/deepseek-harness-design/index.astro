@@ -1,0 +1,389 @@
+---
+/*
+ * /agents/deepseek-harness-design/ — agent detail page (industrial long-form).
+ *
+ * Captures "deepseek harness", "deepseek harness design", "dsh agent",
+ * and "deepseek harness setup" intent and drives to Open Design. When the
+ * agent guide carries a `rich` payload this renders the deep how-to
+ * layout (hero CTA + sectioned long-form + images); otherwise it falls
+ * back to the compact layout. Linked from the `/agents/` hub.
+ *
+ * All copy and resource links come from `copy.agentGuides['deepseek-harness']`;
+ * never fabricate URLs or facts here.
+ */
+import Layout from '../../../_components/sub-page-layout.astro';
+import { getInfoPageCopy } from '../../../info-page-i18n';
+import { localeFromPath, localizedHref } from '../../../i18n';
+import { deepseekHarnessHeroCtas, downloadFirstCtas } from '../../../cta-actions';
+import { deepseekHarnessTutorialCopy } from '../../../deepseek-harness-page';
+
+const SLUG = 'deepseek-harness';
+const SITE = Astro.site?.toString() ?? 'https://open-design.ai/';
+const REPO = 'https://github.com/nexu-io/open-design';
+const locale = localeFromPath(Astro.url.pathname);
+const href = (path: string) => localizedHref(path, locale);
+const copy = getInfoPageCopy(locale);
+const common = copy.common;
+// Compact locales fall back to the English guide rather than crash on undefined.
+const page = copy.agentGuides[SLUG] ?? getInfoPageCopy('en').agentGuides[SLUG]!;
+const rich = page.rich;
+const tutorial = deepseekHarnessTutorialCopy(page);
+
+// This is an Open Design acquisition page: the hero download is the primary
+// action in every locale, followed by the Discord and Feishu community rooms.
+// Match by stable href so translated labels are kept.
+const heroCtas = rich ? deepseekHarnessHeroCtas(rich.heroCtaActions) : [];
+const finalCtas = rich ? downloadFirstCtas(rich.ctaActions) : [];
+
+// Make the how-to journey the primary narrative in every locale while keeping
+// the existing section IDs stable for inbound links and SEO.
+const DESIGN_SECTION_ORDER = [
+  'why-design',
+  'setup',
+  'open-design',
+  'design-workflow',
+  'plugins',
+  'pitfalls',
+  'what-is-deepseek-harness',
+  'vs',
+];
+const sectionRank = (id: string) => {
+  const rank = DESIGN_SECTION_ORDER.indexOf(id);
+  return rank === -1 ? DESIGN_SECTION_ORDER.length : rank;
+};
+const orderedSections = rich
+  ? [...rich.sections].sort((a, b) => sectionRank(a.id) - sectionRank(b.id))
+  : [];
+const orderedToc = rich
+  ? [...rich.toc].sort((a, b) => sectionRank(a.id) - sectionRank(b.id))
+  : [];
+
+// Localize CTA action hrefs while leaving external links untouched.
+const ctaHref = (a: { href: string; external?: boolean }) =>
+  a.external ? a.href : href(a.href);
+
+const faqEntries = (rich?.faq ?? page.faq).map(({ name, text }) => ({ name, text }));
+
+// Parse lightweight [label](url) inline links so internal and external links
+// live naturally inside the prose instead of a list at the end. Returns a safe
+// HTML string; text without links passes through unchanged.
+const INLINE_LINK = /\[([^\]]+)\]\(([^)]+)\)/g;
+const esc = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function renderInline(text: string): string {
+  let out = '';
+  let last = 0;
+  for (const m of text.matchAll(INLINE_LINK)) {
+    const at = m.index ?? 0;
+    if (at > last) out += esc(text.slice(last, at));
+    const label = esc(m[1] ?? '');
+    const url = m[2] ?? '';
+    out += /^https?:/.test(url)
+      ? `<a href="${esc(url)}" target="_blank" rel="noreferrer noopener">${label}</a>`
+      : `<a href="${esc(href(url))}">${label}</a>`;
+    last = at + m[0].length;
+  }
+  if (last < text.length) out += esc(text.slice(last));
+  return out;
+}
+
+// JSON-LD URLs must match the locale-specific canonical the Layout emits, so
+// build them from the localized path rather than the hard-coded English route.
+const homeUrl = new URL(href('/'), SITE).toString();
+const agentsHubUrl = new URL(href('/agents/'), SITE).toString();
+const pageUrl = new URL(Astro.url.pathname, SITE).toString();
+
+const jsonLd = [
+  {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Open Design', item: homeUrl },
+      { '@type': 'ListItem', position: 2, name: copy.agents.breadcrumb, item: agentsHubUrl },
+      { '@type': 'ListItem', position: 3, name: page.breadcrumb, item: pageUrl },
+    ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: tutorial.title,
+    description: page.description,
+    url: pageUrl,
+    isPartOf: { '@id': `${SITE}#website` },
+  },
+  ...(rich ? [{
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: rich.tocLabel,
+    numberOfItems: orderedToc.length,
+    itemListElement: orderedToc.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.label,
+      url: `${pageUrl}#${item.id}`,
+    })),
+  }] : []),
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faqEntries.map(({ name, text }) => ({
+      '@type': 'Question',
+      name,
+      acceptedAnswer: { '@type': 'Answer', text },
+    })),
+  },
+];
+---
+
+<Layout title={tutorial.title} description={page.description} active="agent" jsonLd={jsonLd}>
+  <nav class="breadcrumb" aria-label={common.breadcrumbAria}>
+    <a href={href('/')}>Open Design</a>
+    <span>/</span>
+    <a href={href('/agents/')}>{copy.agents.breadcrumb}</a>
+    <span>/</span>
+    <span aria-current="page">{page.breadcrumb}</span>
+  </nav>
+
+  <article class={`info-page${rich ? ` solution-page agent-rich agent-rich-hub agent-rich--${SLUG}` : ''}`}>
+    {rich ? (
+      <>
+        {/* Single-column article header: full-measure heading + lead + CTA,
+            then a full-width hero banner. One measure / one left edge so the
+            heading never wraps mid-word and the body never feels offset. */}
+        <header class="catalog-head agent-rich-head">
+          <h1 class="display">{tutorial.heading}</h1>
+          <p class="lead">{tutorial.lead}</p>
+          <div class="solution-hero-cta">
+            {heroCtas.map((a) => (
+              <a
+                class={`btn ${a.variant === 'primary' ? 'btn-primary' : 'btn-ghost'}`}
+                href={ctaHref(a)}
+                {...(a.external ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
+              >{a.label}</a>
+            ))}
+          </div>
+        </header>
+
+        <div class="agent-rich-body">
+        <aside class="agent-toc-rail">
+        <nav class="info-toc" aria-label={rich.tocLabel}>
+          <span>{rich.tocLabel}</span>
+          {orderedToc.map((t) => (<a href={`#${t.id}`} data-toc-link>{t.label}</a>))}
+        </nav>
+        </aside>
+        <div class="agent-rich-main">
+
+        {rich.heroImage ? (
+          <figure class="agent-hero-banner">
+            <img src={rich.heroImage.src} alt={rich.heroImage.alt} loading="eager" decoding="async" width={1188} height={814} />
+          </figure>
+        ) : null}
+
+        <div class="agent-intro">
+          <p class="agent-hero-lead">{tutorial.heroCtaLead}</p>
+          {tutorial.intro.map((p) => (<p>{p}</p>))}
+        </div>
+
+        {orderedSections.map((section) => (
+          <section class={`info-section agent-section--${section.id}`} id={section.id}>
+            <h2>{section.heading}</h2>
+            {section.blocks.map((block) => {
+              if (block.kind === 'p') return <p><Fragment set:html={renderInline(block.text)} /></p>;
+              if (block.kind === 'ul') return <ul>{block.items.map((i) => (<li><Fragment set:html={renderInline(i)} /></li>))}</ul>;
+              if (block.kind === 'ol') return <ol>{block.items.map((i) => (<li><Fragment set:html={renderInline(i)} /></li>))}</ol>;
+              if (block.kind === 'steps')
+                return (
+                  <ul class="agent-steps">
+                    {block.items.map((i) => (<li><strong>{i.label}:</strong> <Fragment set:html={renderInline(i.body)} /></li>))}
+                  </ul>
+                );
+              if (block.kind === 'code')
+                return (
+                  <pre class="agent-code"><code>{block.code}</code></pre>
+                );
+              if (block.kind === 'image')
+                return (
+                  <figure class="agent-section-img">
+                    <img src={block.src} alt={block.alt} loading="lazy" decoding="async" width={1536} height={1024} />
+                    {block.caption ? <figcaption>{block.caption}</figcaption> : null}
+                  </figure>
+                );
+              if (block.kind === 'table')
+                return (
+                  <div class="compare-table-wrap">
+                    <table class="compare-table">
+                      <thead>
+                        <tr>{block.columns.map((c) => (<th>{c}</th>))}</tr>
+                      </thead>
+                      <tbody>
+                        {block.rows.map((row) => (
+                          <tr>
+                            {row.map((cell, ci) => (
+                              ci === 0 ? <th scope="row">{cell}</th> : <td>{cell}</td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              return null;
+            })}
+          </section>
+        ))}
+
+        <section class="info-section" id="faq">
+          <h2>{rich.faqTitle}</h2>
+          <ol class="faq-list">
+            {faqEntries.map(({ name, text }, idx) => (
+              <li class="faq-item">
+                <details>
+                  <summary>
+                    <span class="faq-index">{String(idx + 1).padStart(2, '0')}</span>
+                    <span class="faq-q">{name}</span>
+                    <span class="faq-toggle" aria-hidden="true">+</span>
+                  </summary>
+                  <p class="faq-a">{text}</p>
+                </details>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section class="info-cta" aria-label={rich.ctaTitle}>
+          <div>
+            <h2>{rich.ctaTitle}</h2>
+            <p>{rich.ctaBody}</p>
+          </div>
+          <div class="info-cta-actions">
+            {finalCtas.map((a) => (
+              <a
+                class={`btn ${a.variant === 'primary' ? 'btn-primary' : 'btn-ghost'}`}
+                href={ctaHref(a)}
+                {...(a.external ? { target: '_blank', rel: 'noreferrer noopener' } : {})}
+              >{a.label}</a>
+            ))}
+          </div>
+          <div class="info-cta-meta">
+            <span class="stamp">● {common.apache}</span>
+            <span>{common.localFirst} · {common.byok}</span>
+            <span><a class="inline-link" href={href('/agents/')}>{rich.hubLinkLabel}</a></span>
+          </div>
+        </section>
+        </div>{/* .agent-rich-main */}
+        </div>{/* .agent-rich-body */}
+
+        <script is:inline>
+          {`(() => {
+            const links = Array.from(document.querySelectorAll('.agent-rich-hub [data-toc-link]'));
+            if (!links.length || !('IntersectionObserver' in window)) return;
+            const byId = new Map(links.map((a) => [a.getAttribute('href').slice(1), a]));
+            const seen = new Set();
+            const spy = new IntersectionObserver((entries) => {
+              for (const e of entries) {
+                if (e.isIntersecting) seen.add(e.target.id); else seen.delete(e.target.id);
+              }
+              let active = null;
+              for (const id of byId.keys()) if (seen.has(id)) { active = id; break; }
+              links.forEach((a) => a.classList.remove('is-active'));
+              if (active && byId.get(active)) byId.get(active).classList.add('is-active');
+            }, { rootMargin: '-80px 0px -70% 0px', threshold: 0 });
+            document.querySelectorAll('.agent-rich-hub .info-section[id]').forEach((s) => spy.observe(s));
+          })();`}
+        </script>
+      </>
+    ) : (
+      <>
+        <header class="catalog-head">
+          <h1 class="display">{page.heading}</h1>
+          <p class="lead">{page.lead}</p>
+        </header>
+
+        <div class="tldr-card">
+          <h3>{page.tldrTitle}</h3>
+          <p>{page.tldrBody}</p>
+        </div>
+
+        <nav class="info-toc" aria-label={common.onThisPage}>
+          <span>{common.onThisPage}</span>
+          <a href="#about">{page.toc[0]}</a>
+          <a href="#design">{page.toc[1]}</a>
+          <a href="#resources">{page.toc[2]}</a>
+          <a href="#with-od">{page.toc[3]}</a>
+          <a href="#faq">{page.toc[4]}</a>
+        </nav>
+
+        <section class="info-section" id="about">
+          <h2>{page.aboutTitle}</h2>
+          {page.aboutBody.map((paragraph) => (<p>{paragraph}</p>))}
+          <ul>
+            <li><strong>{page.vendorLabel}:</strong> {page.vendor}</li>
+            <li><strong>{page.credentialLabel}:</strong> {page.credential}</li>
+          </ul>
+        </section>
+
+        <section class="info-section" id="design">
+          <h2>{page.designTitle}</h2>
+          <p>{page.designLead}</p>
+          <ol>
+            {page.designPoints.map((item) => (<li><strong>{item.label}</strong> {item.body}</li>))}
+          </ol>
+        </section>
+
+        <section class="info-section" id="resources">
+          <h2>{page.linksTitle}</h2>
+          <p>{page.linksLead}</p>
+          <ul class="resource-list">
+            {page.links.map((l) => (
+              <li>
+                <a href={l.href} target="_blank" rel="noreferrer noopener">{l.label}</a>
+                <span class="resource-source">{l.source}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section class="info-section" id="with-od">
+          <h2>{page.withOdTitle}</h2>
+          <p>{page.withOdLead}</p>
+          <ol>{page.withOdSteps.map((step) => (<li>{step}</li>))}</ol>
+          <p>{page.withOdClosing}</p>
+        </section>
+
+        <section class="info-section" id="faq">
+          <h2>{page.faqTitle}</h2>
+          <ol class="faq-list">
+            {page.faq.map(({ name, text }, idx) => (
+              <li class="faq-item">
+                <details>
+                  <summary>
+                    <span class="faq-index">{String(idx + 1).padStart(2, '0')}</span>
+                    <span class="faq-q">{name}</span>
+                    <span class="faq-toggle" aria-hidden="true">+</span>
+                  </summary>
+                  <p class="faq-a">{text}</p>
+                </details>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section class="info-cta" aria-label={page.ctaTitle}>
+          <div>
+            <h2>{page.ctaTitle}</h2>
+            <p>{page.ctaBody}</p>
+          </div>
+          <div class="info-cta-actions">
+            <a class="btn btn-primary" href={href('/download/')}>{common.downloadDesktop}</a>
+            <a class="btn btn-ghost" href={REPO} target="_blank" rel="noreferrer noopener">{common.starOnGithub}</a>
+          </div>
+          <div class="info-cta-meta">
+            <span class="stamp">● {common.apache}</span>
+            <span>{common.localFirst} · {common.byok}</span>
+            <span><a class="inline-link" href={href('/agents/')}>{copy.agents.breadcrumb}</a></span>
+          </div>
+        </section>
+      </>
+    )}
+  </article>
+</Layout>

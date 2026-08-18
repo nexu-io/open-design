@@ -144,11 +144,17 @@ path. The accepted v1 policy closes the cooperative in-run CLI path by routing
 `od media generate` through `/api/tools/media/generate` when `OD_TOOL_TOKEN` is
 present.
 
-A raw local HTTP call from inside a run can still reach the legacy project route
-without presenting the run token. That hardening question is tracked separately
-in issue #3199 because it has product decisions around UI compatibility,
-outside-run CLI behavior, and whether the legacy route should become
-policy-aware or be reserved for non-run callers.
+The legacy route is now policy-aware when a tool grant is present. In sandbox
+mode it rejects a missing tool token with `TOOL_TOKEN_MISSING`, rejects a token
+whose project does not match the route project, and applies the granted run's
+media policy. A raw in-run HTTP call can therefore no longer bypass run policy
+in sandbox mode.
+
+Outside sandbox mode, a same-origin local UI/CLI caller may still use the
+legacy route without a grant for compatibility; that path receives the default
+media policy because it is not associated with a run. In-run integrations
+should use `OD_TOOL_TOKEN` and `/api/tools/media/generate` instead of depending
+on the non-sandbox compatibility behavior.
 
 ## Non-goals
 

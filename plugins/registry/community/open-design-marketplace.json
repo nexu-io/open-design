@@ -2,14 +2,14 @@
   "$schema": "https://open-design.ai/schemas/marketplace.v1.json",
   "specVersion": "1.0.0",
   "name": "open-design-community",
-  "version": "0.2.0",
+  "version": "0.2.3",
   "owner": {
     "name": "Open Design Community",
     "url": "https://open-design.ai/marketplace/community"
   },
   "metadata": {
     "description": "Default community plugin registry seed. Entries here are discoverable by default but remain restricted until the user installs and trusts them.",
-    "version": "0.2.0"
+    "version": "0.2.3"
   },
   "plugins": [
     {
@@ -81,6 +81,36 @@
         "anti-ai-slop"
       ],
       "description": "Anti-AI-slop design skill for greenfield pages, audits, redesigns, and design extraction from URLs or screenshots."
+    },
+    {
+      "name": "community/humanize-ppt",
+      "title": "Humanize PPT",
+      "version": "1.1.2",
+      "source": "github:nexu-io/open-design@main/plugins/community/humanize-ppt",
+      "publisher": {
+        "id": "learnprompt",
+        "github": "LearnPrompt",
+        "url": "https://github.com/LearnPrompt"
+      },
+      "homepage": "https://github.com/LearnPrompt/humanize-ppt",
+      "license": "MIT",
+      "capabilitiesSummary": [
+        "prompt:inject",
+        "fs:read",
+        "fs:write",
+        "bash"
+      ],
+      "tags": [
+        "community",
+        "presentation",
+        "deck",
+        "pptx",
+        "outline",
+        "narrative",
+        "speaker-notes",
+        "qa"
+      ],
+      "description": "Presentation system for agent-made PPTs: AST (audience-state-transfer) outline with per-page media decisions, a production brief for downstream renderers, and a capped 3-round presentation checkup on the rendered deck."
     }
   ]
 }

@@ -41,7 +41,7 @@ Parse a structured design brief into a concrete DESIGN.md and optional visual pr
 
 ## Background
 
-The 8 dimensions in this skill are derived from analysis of the 71 design systems bundled with Open Design. Every DESIGN.md in `design-systems/` resolves at minimum: color palette, accent, typography, display font, layout model, and component style. We distilled these into 8 orthogonal dimensions that cover the decisions a designer makes before any pixel is placed. Mood and density were added because they are the two most common sources of ambiguity in natural language briefs ("make it clean" means different things to different people).
+The 8 dimensions in this skill were derived from Open Design's original 71-system catalog; 71 is the research sample, not the current bundled-system count. Every `DESIGN.md` in `design-systems/` still resolves at minimum: color palette, accent, typography, display font, layout model, and component style. We distilled these into 8 orthogonal dimensions that cover the decisions a designer makes before any pixel is placed. Mood and density were added because they are the two most common sources of ambiguity in natural language briefs ("make it clean" means different things to different people).
 
 Dimensions intentionally excluded from the brief level: animation timing, responsive strategy, and accessibility contrast. These are enforced at the template level by individual skills (e.g., `saas-landing` handles its own responsive logic), though the generated DESIGN.md includes sensible breakpoint defaults for downstream consumption.
 
@@ -166,7 +166,14 @@ If mood is also unspecified, all defaults fall back to the safe neutral set: `pa
 
 This skill generates a new DESIGN.md from scratch based on the resolved brief dimensions. If a DESIGN.md already exists in the working directory, the agent should ask the user whether to overwrite or skip.
 
-Produce a DESIGN.md following Open Design's 9-section convention. All color hex values, font stacks, and spacing values must come from the resolved tokens in Section 2.1 — do not invent values outside the resolution table.
+Produce a DESIGN.md using the nine-section outline below. This outline is the
+skill's portable standalone output, inherited from Open Design's original
+upstream baseline; it is not the current repository package schema. Current
+bundled packages also carry `manifest.json`, `tokens.css`, and optional rich
+resources, while legacy and user-installed `DESIGN.md`-only content remains
+readable. All color hex values, font stacks, and spacing values must come from
+the resolved tokens in Section 2.1 — do not invent values outside the
+resolution table.
 
 ```markdown
 # [Project Name] Design System

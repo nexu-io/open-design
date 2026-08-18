@@ -13,16 +13,33 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
+import type Database from 'better-sqlite3';
 
 import {
   type ComponentsManifest,
+  DesignSystemRuntimePathsSchema,
   extractComponentsManifest,
   summarizeComponentsManifestForPrompt,
+  type DesignSystemRuntimePaths,
 } from '@open-design/contracts';
 
 import { parseFrontmatter } from './frontmatter.js';
 import type { FrontmatterObject, FrontmatterValue } from './frontmatter.js';
 import { extractSwiftColors } from './swift-colors.js';
+import {
+  loadDesignSystemRuntimePackage,
+  summarizeDesignSystemIntentMapForPrompt,
+  type DesignSystemRuntimeLoadResult,
+} from './runtime.js';
+import { workspaceTeamDesignSystemBindingResourceId } from './workspace-team-binding.js';
+import {
+  ensureWorkspaceResource,
+  getWorkspaceResourceByResourceId,
+  updateWorkspaceResource,
+} from '../db.js';
+import { teamResourceWorkspaceRoot } from '../collab/team-resource-materialization.js';
+
+type SqliteDb = Database.Database;
 
 export type DesignSystemSurface = 'web' | 'image' | 'video' | 'audio';
 export type DesignSystemSource = 'built-in' | 'installed' | 'user';
@@ -45,6 +62,14 @@ export type DesignSystemSummary = {
   updatedAt?: string;
   provenance?: DesignSystemProvenance;
   projectId?: string;
+  teamSynced?: boolean;
+  /**
+   * The workspace this user design system belongs to, when one claimed it.
+   *
+   * Absent means UNCLAIMED, not "belongs to no workspace" — see
+   * `DesignSystemListOptions.workspaceId`.
+   */
+  workspaceId?: string;
 };
 
 export type DesignSystemFileKind =
@@ -176,6 +201,7 @@ type DesignSystemProjectManifest = {
     suggested?: string[];
     exemptions?: string[];
   };
+  runtime?: DesignSystemRuntimePaths;
 };
 
 export type DesignSystemProvenance = {
@@ -199,6 +225,9 @@ type UserDesignSystemMetadata = {
   updatedAt?: string;
   provenance?: DesignSystemProvenance;
   projectId?: string;
+  teamSynced?: boolean;
+  /** Workspace that claimed this system; absent on anything written before #145. */
+  workspaceId?: string;
 };
 
 type AtomicTextFileWrite = {
@@ -248,6 +277,17 @@ export type UserDesignSystemInput = {
   body?: string;
   sourceNotes?: string;
   provenance?: DesignSystemProvenance;
+  /**
+   * Workspace to claim the new system for (#145). Set by the daemon from the
+   * active workspace selection at creation time; omitted leaves the system
+   * unclaimed for local/unscoped use and quarantined from scoped catalogs.
+   *
+   * Only `createUserDesignSystem` reads it — an update must never re-home an
+   * existing system just because the caller happened to be elsewhere.
+   */
+  workspaceId?: string;
+  /** Internal write-fence: logical ids already claimed in workspace_resources. */
+  reservedResourceIds?: Iterable<string>;
 };
 
 export type UserDesignSystemRevisionInput = {
@@ -264,6 +304,24 @@ export type DesignSystemListOptions = {
   source?: DesignSystemSource;
   isEditable?: boolean;
   defaultStatus?: DesignSystemStatus;
+  /**
+   * Restrict the listing to design systems visible from this workspace (#145).
+   *
+   * User design systems all live in ONE flat directory under the daemon data
+   * root — there is no per-workspace store — so without this filter a system
+   * authored in workspace A also showed up in a brand-new workspace B.
+   *
+   * A positive scope is fail-closed: both systems claimed by another workspace
+   * and UNCLAIMED systems (no `workspaceId` in metadata) are hidden. Historical
+   * ownerless systems remain on disk and visible to truly unscoped/local
+   * callers; startup migration claims only those whose project has one exact
+   * persisted workspace binding.
+   *
+   * Omitted means a truly unscoped internal lookup and lists everything.
+   * Explicitly empty (`null`/`''`) is the signed-out/local catalog lane: it
+   * lists only ownerless local systems and hides every claimed system.
+   */
+  workspaceId?: string | null;
 };
 
 export async function listDesignSystems(
@@ -287,6 +345,7 @@ export async function listDesignSystems(
       if (!stats.isFile()) continue;
       const raw = await readFile(designPath, 'utf8');
       const metadata = await readUserMetadata(root, entry.name);
+      if (!designSystemVisibleFromWorkspace(metadata.workspaceId, options.workspaceId)) continue;
       const { data: frontmatter, body } = parseFrontmatter(raw);
       const titleMatch = /^#\s+(.+?)\s*$/m.exec(body);
       const markdownTitle =
@@ -330,12 +389,57 @@ export async function listDesignSystems(
         ...(metadata.updatedAt ? { updatedAt: metadata.updatedAt } : {}),
         ...(metadata.provenance ? { provenance: metadata.provenance } : {}),
         ...(metadata.projectId ? { projectId: metadata.projectId } : {}),
+        ...(metadata.teamSynced ? { teamSynced: true } : {}),
+        ...(metadata.workspaceId ? { workspaceId: metadata.workspaceId } : {}),
       });
     } catch {
       // Skip.
     }
   }
   return out;
+}
+
+/**
+ * Whether a design system claimed by `owner` should be listed while `scope` is
+ * the active workspace.
+ *
+ * `scope === undefined` (the `workspaceId` option key OMITTED, not merely
+ * empty) means the caller asked for the truly unscoped catalog — id
+ * resolution, install/import lookups, and (critically) `createUserDesignSystem`/
+ * `updateUserDesignSystem`/`linkUserDesignSystemProject` re-reading the system
+ * they just wrote by id — which must never hide anything, or writing a system
+ * claimed by a workspace would make `listDesignSystems(...).find(...)` fail to
+ * find what was just written (a real regression this fix must not introduce).
+ *
+ * `scope` present but empty (`null`/`''`) is a DIFFERENT case: a caller that
+ * DID ask to be scoped — `GET /api/design-systems` with no verified vela
+ * session — but has no workspace identity to offer. Spec 04 §10: that must
+ * hide a CLAIMED system, not show it, or "no scope" quietly becomes "trust
+ * everything". With a positive scope, no `owner` means QUARANTINED: absence of
+ * an ownership witness must not authorize a cross-workspace read. With an
+ * explicitly empty scope, ownerless local resources remain usable while all
+ * claimed workspace resources stay hidden.
+ */
+function designSystemVisibleFromWorkspace(
+  owner: string | undefined,
+  scope: string | null | undefined,
+): boolean {
+  if (scope === undefined) return true;
+  const scopeId = scope?.trim();
+  const ownerId = owner?.trim();
+  if (!scopeId) return !ownerId;
+  if (!ownerId) return false;
+  return ownerId === scopeId;
+}
+
+async function designSystemDirectoryVisibleFromWorkspace(
+  root: string,
+  dirId: string,
+  scope: string | null | undefined,
+): Promise<boolean> {
+  if (scope === undefined) return true;
+  const metadata = await readUserMetadata(root, dirId);
+  return designSystemVisibleFromWorkspace(metadata.workspaceId, scope);
 }
 
 function stringField(data: FrontmatterObject, key: string): string {
@@ -379,10 +483,13 @@ function pickFinalSwatchRow(
 export async function readDesignSystem(
   root: string,
   id: string,
-  options: { idPrefix?: string } = {},
+  options: { idPrefix?: string; workspaceId?: string | null } = {},
 ): Promise<string | null> {
   const dirId = stripPrefixAndValidateId(id, options.idPrefix);
   if (!dirId) return null;
+  if (!(await designSystemDirectoryVisibleFromWorkspace(root, dirId, options.workspaceId))) {
+    return null;
+  }
   const brandRoot = path.join(root, dirId);
   const manifest = await readProjectManifest(brandRoot, dirId);
   const file = path.join(brandRoot, manifest?.files.design ?? 'DESIGN.md');
@@ -396,10 +503,13 @@ export async function readDesignSystem(
 export async function readDesignSystemPackageInfo(
   root: string,
   id: string,
-  options: { idPrefix?: string } = {},
+  options: { idPrefix?: string; workspaceId?: string | null } = {},
 ): Promise<DesignSystemPackageInfo | null> {
   const dirId = stripPrefixAndValidateId(id, options.idPrefix);
   if (!dirId) return null;
+  if (!(await designSystemDirectoryVisibleFromWorkspace(root, dirId, options.workspaceId))) {
+    return null;
+  }
   const brandRoot = path.join(root, dirId);
   const manifest = await readProjectManifest(brandRoot, dirId);
   if (manifest === null) return null;
@@ -411,6 +521,94 @@ export async function readDesignSystemPackageInfo(
     ...(availableFiles.length > 0 ? { availableFiles } : {}),
     ...(sourceEvidence ? { sourceEvidence } : {}),
   };
+}
+
+export async function readDesignSystemRuntime(
+  root: string,
+  id: string,
+  options: { idPrefix?: string } = {},
+): Promise<DesignSystemRuntimeLoadResult> {
+  const dirId = stripPrefixAndValidateId(id, options.idPrefix);
+  if (!dirId) return { mode: 'legacy' };
+  const brandRoot = path.join(root, dirId);
+  const raw = await readFileOptional(path.join(brandRoot, 'manifest.json'));
+  if (raw === undefined) return { mode: 'legacy' };
+
+  let value: unknown;
+  try {
+    value = JSON.parse(raw) as unknown;
+  } catch (error) {
+    return {
+      mode: 'invalid',
+      errors: [`manifest.json: ${error instanceof Error ? error.message : String(error)}`],
+    };
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return { mode: 'invalid', errors: ['manifest.json must contain an object'] };
+  }
+  const record = value as Record<string, unknown>;
+  if (record.id !== dirId) {
+    return { mode: 'invalid', errors: [`manifest.json id must match ${dirId}`] };
+  }
+  if (record.runtime === undefined) return { mode: 'legacy' };
+  const parsedRuntime = DesignSystemRuntimePathsSchema.safeParse(record.runtime);
+  if (!parsedRuntime.success) {
+    return {
+      mode: 'invalid',
+      errors: parsedRuntime.error.issues.map((issue) => {
+        const suffix = issue.path.length === 0
+          ? ''
+          : issue.path.map((part) => typeof part === 'number' ? `[${part}]` : `.${part}`).join('');
+        return `manifest.json: $.runtime${suffix} ${issue.message}`;
+      }),
+    };
+  }
+  return loadDesignSystemRuntimePackage(brandRoot, parsedRuntime.data);
+}
+
+/** Resolve the active package with the same built-in → installed precedence used by prompt assets. */
+export async function resolveDesignSystemRuntime(
+  designSystemId: string,
+  builtInRoot: string,
+  userInstalledRoot: string,
+): Promise<DesignSystemRuntimeLoadResult> {
+  if (designSystemId.startsWith('user:')) {
+    return readDesignSystemRuntime(userInstalledRoot, designSystemId, { idPrefix: 'user:' });
+  }
+
+  const builtIn = await readDesignSystemRuntime(builtInRoot, designSystemId);
+  if (builtIn.mode !== 'legacy') return builtIn;
+  return readDesignSystemRuntime(userInstalledRoot, designSystemId);
+}
+
+export type DesignSystemRuntimePromptContext =
+  | { mode: 'legacy' }
+  | { mode: 'structured'; intentIndex: string }
+  | { mode: 'invalid'; issue: string };
+
+export async function resolveDesignSystemRuntimePromptContext(
+  designSystemId: string,
+  builtInRoot: string,
+  userInstalledRoot: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<DesignSystemRuntimePromptContext> {
+  if (!isDesignTokenChannelEnabled(env)) return { mode: 'legacy' };
+
+  const runtime = await resolveDesignSystemRuntime(
+    designSystemId,
+    builtInRoot,
+    userInstalledRoot,
+  );
+  if (runtime.mode === 'structured') {
+    return {
+      mode: 'structured',
+      intentIndex: summarizeDesignSystemIntentMapForPrompt(runtime.bundle),
+    };
+  }
+  if (runtime.mode === 'invalid') {
+    return { mode: 'invalid', issue: runtime.errors.join('\n') };
+  }
+  return { mode: 'legacy' };
 }
 
 async function listAvailableDesignSystemPackageFiles(
@@ -430,6 +628,10 @@ async function listAvailableDesignSystemPackageFiles(
   add(manifest.files.tailwind);
   add(manifest.usage);
   add(manifest.componentsManifest);
+  add(manifest.runtime?.components);
+  add(manifest.runtime?.intents);
+  add(manifest.runtime?.lint);
+  add(manifest.runtime?.fallback);
   for (const page of manifest.preview?.pages ?? []) add(page.path);
   for (const font of manifest.fonts ?? []) add(font.file);
 
@@ -560,11 +762,14 @@ export async function readDesignSystemStaticFile(
   root: string,
   id: string,
   relativePath: string,
-  options: { idPrefix?: string } = {},
+  options: { idPrefix?: string; workspaceId?: string | null } = {},
 ): Promise<DesignSystemStaticFileDetail | null> {
   const dirId = stripPrefixAndValidateId(id, options.idPrefix);
   const cleanPath = sanitizeRelativeFilePath(relativePath);
   if (!dirId || !cleanPath) return null;
+  if (!(await designSystemDirectoryVisibleFromWorkspace(root, dirId, options.workspaceId))) {
+    return null;
+  }
 
   const brandRoot = path.join(root, dirId);
   const manifest = await readProjectManifest(brandRoot, dirId);
@@ -610,6 +815,8 @@ export function digestDesignSystemContext(input: {
   componentsManifest?: string | null;
   fixtureHtml?: string | null;
   pullIndex?: string | null;
+  intentIndex?: string | null;
+  runtimeIssue?: string | null;
   importMode?: string | null;
 }): string | null {
   const hasContent = [
@@ -619,6 +826,8 @@ export function digestDesignSystemContext(input: {
     input.componentsManifest,
     input.fixtureHtml,
     input.pullIndex,
+    input.intentIndex,
+    input.runtimeIssue,
     input.importMode,
   ].some((value) => typeof value === 'string' && value.length > 0);
   if (!hasContent) return null;
@@ -632,6 +841,8 @@ export function digestDesignSystemContext(input: {
     componentsManifest: input.componentsManifest ?? null,
     fixtureHtml: input.fixtureHtml ?? null,
     pullIndex: input.pullIndex ?? null,
+    intentIndex: input.intentIndex ?? null,
+    runtimeIssue: input.runtimeIssue ?? null,
     importMode: input.importMode ?? null,
   };
   return createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex');
@@ -696,6 +907,10 @@ async function resolveDesignSystemAssetsUncached(
   builtInRoot: string,
   userInstalledRoot: string,
 ): Promise<DesignSystemAssets> {
+  if (designSystemId.startsWith('user:')) {
+    return readDesignSystemAssets(userInstalledRoot, designSystemId);
+  }
+
   const builtIn = await readDesignSystemAssets(builtInRoot, designSystemId);
   if (builtIn.tokensCss !== undefined && builtIn.fixtureHtml !== undefined) {
     return builtIn;
@@ -729,12 +944,15 @@ async function designSystemAssetsCacheFingerprint(
   userInstalledRoot: string,
   env: NodeJS.ProcessEnv,
 ): Promise<string> {
+  const roots = designSystemId.startsWith('user:')
+    ? [designSystemAssetsRootFingerprint(userInstalledRoot, designSystemId)]
+    : [
+        designSystemAssetsRootFingerprint(builtInRoot, designSystemId),
+        designSystemAssetsRootFingerprint(userInstalledRoot, designSystemId),
+      ];
   const payload = {
     tokenChannel: env.OD_DESIGN_TOKEN_CHANNEL ?? null,
-    roots: await Promise.all([
-      designSystemAssetsRootFingerprint(builtInRoot, designSystemId),
-      designSystemAssetsRootFingerprint(userInstalledRoot, designSystemId),
-    ]),
+    roots: await Promise.all(roots),
   };
   return createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex');
 }
@@ -1156,7 +1374,11 @@ export async function createUserDesignSystem(
   input: UserDesignSystemInput,
 ): Promise<DesignSystemSummary> {
   const title = normalizeTitle(input.title);
-  const { dirId, dir } = await reserveUniqueSlugDirectory(root, slugify(title));
+  const { dirId, dir } = await reserveUniqueSlugDirectory(
+    root,
+    slugify(title),
+    input.reservedResourceIds,
+  );
   const now = new Date().toISOString();
   const provenance = normalizeProvenance(input.provenance, {
     ...(input.summary ? { companyBlurb: input.summary } : {}),
@@ -1183,6 +1405,9 @@ export async function createUserDesignSystem(
       createdAt: now,
       updatedAt: now,
       ...(provenance ? { provenance } : {}),
+      // Claim the system for the workspace it was authored in, so switching to
+      // another workspace no longer shows it (#145).
+      ...(input.workspaceId?.trim() ? { workspaceId: input.workspaceId.trim() } : {}),
     });
     if (artifactMode !== 'agent-managed') {
       await writeGeneratedDesignSystemFiles(root, dirId, {
@@ -1298,6 +1523,24 @@ export function workspaceRenameDesignSystemId(project: {
 // Callers must not persist the project-row rename on 'failed' — doing so
 // recreates the silent revert this write-through exists to prevent.
 export type WorkspaceRenamePropagation = 'not-applicable' | 'propagated' | 'failed';
+
+/**
+ * A Team design-system workspace project edits the workspace-scoped
+ * materialization, never a same-id Personal canonical entry. The persisted
+ * project binding is the scope authority; shell/current Workspace state is
+ * deliberately irrelevant.
+ */
+export function resolveWorkspaceProjectDesignSystemRoot(
+  canonicalRoot: string,
+  binding: { workspaceId?: unknown; visibility?: unknown } | null | undefined,
+): string {
+  const workspaceId = typeof binding?.workspaceId === 'string'
+    ? binding.workspaceId.trim()
+    : '';
+  return binding?.visibility === 'team' && workspaceId
+    ? teamResourceWorkspaceRoot(canonicalRoot, workspaceId)
+    : canonicalRoot;
+}
 
 export async function propagateWorkspaceProjectRename(
   root: string,
@@ -1459,6 +1702,135 @@ export async function deleteUserDesignSystem(root: string, id: string): Promise<
   }
 }
 
+/**
+ * Whether `id` was materialized locally from a teammate's team share, rather
+ * than authored by the current caller. Mirrors the `teamSynced` flag
+ * `markTeamSynced` (server.ts `syncSharedTeamDesignSystem`) writes once a
+ * shared design system is pulled onto disk — false/absent for anything the
+ * caller authored themselves, including a system the caller has *shared* to
+ * the team (the sharer's own copy never gets this flag). Routes that mutate
+ * a `user:` design system (edit / publish toggle / delete) must treat a
+ * `true` result as "not necessarily mine" and check the caller's team-share
+ * management permission before proceeding (see `canManageSharedResource` in
+ * `collab/team-resource-share.ts`) — recvqb6mfyqXLD.
+ */
+export async function isTeamSyncedUserDesignSystem(root: string, id: string): Promise<boolean> {
+  const dirId = stripPrefixAndValidateId(id, 'user:');
+  if (!dirId) return false;
+  const meta = await readUserMetadata(root, dirId);
+  return meta.teamSynced === true;
+}
+
+/**
+ * One-time startup backfill (spec 9.2): design systems predate the generic
+ * `workspace_resources` envelope table entirely — `createWorkspaceOwnedDesignSystem`
+ * and `markTeamSynced` (server.ts) only started double-writing into it today,
+ * so every system claimed BEFORE that shipped has a `workspaceId` in its
+ * `metadata.json` but no corresponding row in the table. Left alone, that
+ * system stays permanently invisible to anything that reads the generic table
+ * (mirrors what `collapseWorkspaceProjectHomes` heals for project, applied to
+ * a filesystem-backed resource instead of a DB-only one). Older systems that
+ * lack `workspaceId` may be recovered only when their `projectId` maps to
+ * exactly one persisted project binding. The current/active workspace is never
+ * consulted; an absent or ambiguous binding leaves the resource quarantined.
+ *
+ * Idempotent by construction: a directory whose exact Personal or
+ * Workspace-qualified Team binding already exists is skipped, so re-running
+ * this on every daemon start costs one readdir plus a lookup per system and
+ * never writes a duplicate. Legacy raw Team rows are retained; the qualified
+ * binding is added alongside them so no historical data is deleted.
+ *
+ * `visibility` mirrors the claim `markTeamSynced` writes going forward —
+ * `teamSynced: true` backfills as `'team'`, everything else as `'personal'`.
+ * For a project-inferred claim, metadata.json is updated with that durable
+ * workspace witness before the envelope row is created. Other metadata is
+ * preserved. Unresolvable ownerless resources are never deleted or rewritten.
+ */
+export async function backfillDesignSystemWorkspaceResources(
+  db: SqliteDb,
+  root: string,
+): Promise<number> {
+  let entries = [];
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+  let backfilled = 0;
+  for (const entry of entries) {
+    if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+    const dirId = entry.name;
+    const id = `user:${dirId}`;
+    const metadata = await readUserMetadata(root, dirId);
+    let workspaceId = metadata.workspaceId;
+    let createdByWorkspaceMemberId: string | undefined;
+    let inferredWorkspaceId: string | undefined;
+    if (metadata.projectId) {
+      const bindings = db.prepare(
+        `SELECT workspace_id AS workspaceId,
+                created_by_workspace_member_id AS createdByWorkspaceMemberId
+           FROM workspace_projects
+          WHERE project_id = ?
+          LIMIT 2`,
+      ).all(metadata.projectId) as Array<{
+        workspaceId?: string;
+        createdByWorkspaceMemberId?: string | null;
+      }>;
+      if (bindings.length === 1) {
+        inferredWorkspaceId = cleanWorkspaceIdForMetadata(bindings[0]?.workspaceId) ?? undefined;
+        if (!workspaceId) workspaceId = inferredWorkspaceId ?? undefined;
+        if (inferredWorkspaceId === workspaceId) {
+          createdByWorkspaceMemberId = bindings[0]?.createdByWorkspaceMemberId?.trim() || undefined;
+        }
+      }
+    }
+    const bindingResourceId = metadata.teamSynced === true && workspaceId
+      ? workspaceTeamDesignSystemBindingResourceId(workspaceId, id)
+      : id;
+    const existing = getWorkspaceResourceByResourceId(
+      db,
+      'design_system',
+      bindingResourceId,
+    );
+    if (existing) {
+      const bindingMatchesInference = inferredWorkspaceId === existing.workspaceId;
+      if (!metadata.workspaceId && bindingMatchesInference) {
+        await writeUserDesignSystemWorkspaceClaim(root, dirId, existing.workspaceId);
+      }
+      if (
+        existing.visibility !== 'team'
+        && !existing.createdByWorkspaceMemberId
+        && bindingMatchesInference
+        && createdByWorkspaceMemberId
+      ) {
+        updateWorkspaceResource(db, 'design_system', existing.workspaceId, bindingResourceId, {
+          createdByWorkspaceMemberId,
+          updatedByWorkspaceMemberId: createdByWorkspaceMemberId,
+          updatedAt: existing.updatedAt,
+        });
+        backfilled += 1;
+      }
+      continue;
+    }
+    if (!workspaceId) continue;
+    if (!metadata.workspaceId && inferredWorkspaceId === workspaceId) {
+      await writeUserDesignSystemWorkspaceClaim(root, dirId, workspaceId);
+    }
+    ensureWorkspaceResource(db, 'design_system', workspaceId, bindingResourceId, {
+      visibility: metadata.teamSynced === true ? 'team' : 'personal',
+      resourceState: 'active',
+      ...(createdByWorkspaceMemberId
+        ? {
+            createdByWorkspaceMemberId,
+            updatedByWorkspaceMemberId: createdByWorkspaceMemberId,
+          }
+        : {}),
+    });
+    backfilled += 1;
+  }
+  return backfilled;
+}
+
 export async function listUserDesignSystemFiles(
   root: string,
   id: string,
@@ -1487,6 +1859,16 @@ export async function readUserDesignSystemFile(
   id: string,
   relativePath: string,
 ): Promise<DesignSystemFileDetail | null> {
+  const detail = await readUserDesignSystemFileBytes(root, id, relativePath);
+  if (!detail) return null;
+  return { ...detail, content: detail.bytes.toString('utf8') };
+}
+
+export async function readUserDesignSystemFileBytes(
+  root: string,
+  id: string,
+  relativePath: string,
+) {
   const dirId = stripPrefixAndValidateId(id, 'user:');
   const cleanPath = sanitizeRelativeFilePath(relativePath);
   if (!dirId || !cleanPath) return null;
@@ -1499,14 +1881,14 @@ export async function readUserDesignSystemFile(
   try {
     const stats = await stat(filePath);
     if (!stats.isFile()) return null;
-    const content = await readFile(filePath, 'utf8');
+    const bytes = await readFile(filePath);
     return {
       path: cleanPath,
       name: path.basename(cleanPath),
       kind: classifyDesignSystemFile(cleanPath, false),
       size: stats.size,
       updatedAt: stats.mtime.toISOString(),
-      content,
+      bytes,
     };
   } catch {
     return null;
@@ -2111,6 +2493,97 @@ async function writeGeneratedDesignSystemFiles(
   );
 }
 
+// A real asset file synced in from a workspace project's editing-time
+// mirror — arbitrary bytes the agent already produced there (e.g. a
+// regenerated logo.svg), not generator output.
+export type DesignSystemAssetSourceFile = {
+  /** POSIX-relative path under the design-system root, e.g. "assets/logo.svg". */
+  path: string;
+  content: Buffer;
+};
+
+export type DesignSystemAssetSyncResult = {
+  /** POSIX-relative paths that were actually written to the canonical dir. */
+  synced: string[];
+};
+
+/**
+ * Copies real asset bytes into a user design system's canonical `assets/`
+ * directory — the fix for the logo/asset desync (spec 04 §9.3,
+ * recvqb1t4FrckM): canonical is the only directory `team-resource-share`
+ * packages and downloads read from, but agent-produced assets only ever
+ * landed in the workspace-project editing mirror, so a regenerated logo
+ * never reached what got shared or downloaded.
+ *
+ * Every write here is caller-supplied bytes, never generator output, so it
+ * must survive the next `writeGeneratedDesignSystemFiles` call rather than
+ * being silently regenerated back to a placeholder. Two things make it
+ * stick, both applied here:
+ *  1. Any `.od-generated.json` fingerprint entry for an overwritten path is
+ *     dropped. `filterGeneratedWritesPreservingUserEdits` treats a path with
+ *     no recorded fingerprint exactly like a hand-edited file — preserved,
+ *     never refreshed.
+ *  2. `artifactMode` flips to `'agent-managed'` the first time any file
+ *     actually syncs, so `createUserDesignSystem`/`updateUserDesignSystem`
+ *     skip `writeGeneratedDesignSystemFiles` entirely on every future write
+ *     (the "fingerprint protection was spinning with nothing to protect"
+ *     root cause the investigation identified).
+ *
+ * Only paths under `assets/` are accepted; anything else is silently
+ * skipped — this function syncs real assets, not arbitrary canonical files.
+ */
+export async function syncUserDesignSystemAssetsFromFiles(
+  root: string,
+  id: string,
+  files: DesignSystemAssetSourceFile[],
+): Promise<DesignSystemAssetSyncResult> {
+  const dirId = stripPrefixAndValidateId(id, 'user:');
+  if (!dirId) return { synced: [] };
+  const dir = path.join(root, dirId);
+  try {
+    const stats = await stat(path.join(dir, 'DESIGN.md'));
+    if (!stats.isFile()) return { synced: [] };
+  } catch {
+    return { synced: [] };
+  }
+
+  const manifest = await readGeneratedManifest(dir);
+  let manifestChanged = false;
+  const synced: string[] = [];
+  for (const file of files) {
+    const sanitized = sanitizeRelativeFilePath(file.path);
+    if (!sanitized || !(sanitized === 'assets' || sanitized.startsWith('assets/'))) continue;
+    const targetPath = path.join(dir, ...sanitized.split('/'));
+    await mkdir(path.dirname(targetPath), { recursive: true });
+    await writeFile(targetPath, file.content);
+    const key = generatedManifestKey(dir, targetPath);
+    if (key in manifest) {
+      delete manifest[key];
+      manifestChanged = true;
+    }
+    synced.push(sanitized);
+  }
+  if (synced.length === 0) return { synced };
+
+  if (manifestChanged) {
+    await writeFile(
+      path.join(dir, GENERATED_MANIFEST_FILENAME),
+      serializeGeneratedManifest(manifest),
+      'utf8',
+    );
+  }
+
+  const existingMeta = await readUserMetadata(root, dirId);
+  if (existingMeta.artifactMode !== 'agent-managed') {
+    await writeUserMetadata(root, dirId, {
+      ...existingMeta,
+      artifactMode: 'agent-managed',
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  return { synced };
+}
+
 function generatedDesignSystemFileWrites(
   dir: string,
   input: {
@@ -2563,7 +3036,7 @@ window.Composer = Composer;
 `;
 }
 
-function stripPrefixAndValidateId(id: string, prefix = ''): string | null {
+export function stripPrefixAndValidateId(id: string, prefix = ''): string | null {
   if (typeof id !== 'string') return null;
   if (prefix && !id.startsWith(prefix)) return null;
   const dirId = prefix ? id.slice(prefix.length) : id;
@@ -2589,10 +3062,26 @@ async function readUserMetadata(root: string, id: string): Promise<UserDesignSys
       ...(typeof parsed.updatedAt === 'string' ? { updatedAt: parsed.updatedAt } : {}),
       ...(provenance ? { provenance } : {}),
       ...(projectId ? { projectId } : {}),
+      ...(parsed.teamSynced === true ? { teamSynced: true } : {}),
+      ...(cleanWorkspaceIdForMetadata(parsed.workspaceId)
+        ? { workspaceId: cleanWorkspaceIdForMetadata(parsed.workspaceId)! }
+        : {}),
     };
   } catch {
     return {};
   }
+}
+
+/**
+ * Accept a workspace id only in the opaque-token shape B issues. A malformed
+ * value is dropped rather than trusted, which lands the system in the UNCLAIMED
+ * quarantine for scoped catalogs instead of silently claiming it by garbage.
+ */
+function cleanWorkspaceIdForMetadata(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim();
+  if (!value) return null;
+  return /^[A-Za-z0-9._:-]{1,160}$/.test(value) ? value : null;
 }
 
 function cleanProjectIdForMetadata(raw: unknown): string | null {
@@ -2621,6 +3110,28 @@ async function writeUserMetadata(
     `${JSON.stringify(metadata, null, 2)}\n`,
     'utf8',
   );
+}
+
+export async function writeUserDesignSystemWorkspaceClaim(
+  root: string,
+  id: string,
+  workspaceId: string,
+): Promise<void> {
+  const metadataPath = path.join(root, id, 'metadata.json');
+  let parsed: unknown = {};
+  try {
+    parsed = JSON.parse(await readFile(metadataPath, 'utf8')) as unknown;
+  } catch (error: any) {
+    if (error?.code !== 'ENOENT') throw error;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+  const tempPath = `${metadataPath}.workspace-backfill-${randomUUID()}.tmp`;
+  try {
+    await writeFile(tempPath, `${JSON.stringify({ ...parsed, workspaceId }, null, 2)}\n`, 'utf8');
+    await rename(tempPath, metadataPath);
+  } finally {
+    await rm(tempPath, { force: true });
+  }
 }
 
 async function writeUserDesignSystemRevision(
@@ -2868,11 +3379,23 @@ async function uniqueSlug(root: string, base: string): Promise<string> {
   }
 }
 
-async function reserveUniqueSlugDirectory(root: string, base: string): Promise<{ dirId: string; dir: string }> {
+async function reserveUniqueSlugDirectory(
+  root: string,
+  base: string,
+  reservedResourceIds: Iterable<string> = [],
+): Promise<{ dirId: string; dir: string }> {
   await mkdir(root, { recursive: true });
+  const reservedDirIds = new Set(
+    [...reservedResourceIds].map((resourceId) =>
+      resourceId.startsWith('user:') ? resourceId.slice('user:'.length) : resourceId),
+  );
   let candidate = base || 'design-system';
   let index = 2;
   for (;;) {
+    if (reservedDirIds.has(candidate)) {
+      candidate = `${base || 'design-system'}-${index++}`;
+      continue;
+    }
     const dir = path.join(root, candidate);
     try {
       await mkdir(dir);
@@ -3692,13 +4215,15 @@ function isProjectManifest(value: unknown, expectedId: string): value is DesignS
   const files = record.files;
   if (typeof files !== 'object' || files === null || Array.isArray(files)) return false;
   const fileRecord = files as Record<string, unknown>;
-  return (
+  if (!(
     fileRecord.design === 'DESIGN.md' &&
     fileRecord.tokens === 'tokens.css' &&
     (fileRecord.designTokens === undefined || fileRecord.designTokens === 'design-tokens.json') &&
     (fileRecord.tailwind === undefined || fileRecord.tailwind === 'tailwind-v4.css') &&
     (fileRecord.components === undefined || fileRecord.components === 'components.html')
-  );
+  )) return false;
+
+  return record.runtime === undefined || DesignSystemRuntimePathsSchema.safeParse(record.runtime).success;
 }
 
 function summarize(raw: string): string {

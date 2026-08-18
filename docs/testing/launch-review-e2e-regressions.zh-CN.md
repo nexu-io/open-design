@@ -94,23 +94,7 @@
      - `web/latest.log`
      - `desktop/latest.log`
 
-### 6. Automations 页面顺序与摘要
-
-文件：
-- [e2e/ui/automations-page.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/e2e/ui/automations-page.test.ts)
-
-新增用例：
-
-1. `places a newly created automation at the top of the list and highlights it`
-   - 覆盖新建后置顶与聚焦态
-
-2. `keeps saved automations ordered by newest createdAt first`
-   - 覆盖多条 automation 混排时按 `createdAt` 倒序稳定排序
-
-3. `renders the routine target and last-run status in the row summary`
-   - 覆盖 row summary 的 target / status 信息
-
-### 7. Integrations：连接、恢复、退化状态
+### 6. Integrations：连接、恢复、退化状态
 
 文件：
 - [e2e/ui/settings-connectors-auth-happy-path.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/e2e/ui/settings-connectors-auth-happy-path.test.ts)
@@ -129,18 +113,7 @@
 4. `returns a pending authorization to Connect and clears session storage after a successful cancel`
 5. `surfaces a connector error state when credentials have degraded`
 
-### 8. Design systems：Settings 导入/重命名/坏导入
-
-文件：
-- [e2e/ui/settings-design-systems.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/e2e/ui/settings-design-systems.test.ts)
-
-新增用例：
-
-1. `imports a local design system and makes it visible immediately`
-2. `renames an editable design system and keeps the new title after reopening settings`
-3. `shows an inline error when importing a broken local design system package`
-
-### 9. Design systems manager：发布、过滤、删除 fallback
+### 7. Design systems manager：发布、过滤、删除 fallback
 
 文件：
 - [e2e/ui/design-systems-manager.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/e2e/ui/design-systems-manager.test.ts)
@@ -151,7 +124,7 @@
 2. `filters user design systems by draft and published status in the manager`
 3. `deleting the active design system falls back to another user system`
 
-### 10. main 最新功能回归补测
+### 8. main 最新功能回归补测
 
 文件：
 - [e2e/ui/project-management-flows.test.ts](/Users/mac/open-design/open-design-amr-runtime-acp/e2e/ui/project-management-flows.test.ts)
@@ -188,9 +161,8 @@
 - Plugin authoring 只说不做、没有产物
 - 评论模式下预览不再刷新
 - diagnostics 导出丢主日志
-- automations 新建后顺序/摘要不稳定
 - connector pending / degraded / reconnect 状态错乱
-- design systems 导入、重命名、发布和删除 fallback 回归
+- design systems 发布和删除 fallback 回归
 
 ## 运行命令
 
@@ -234,13 +206,6 @@ pnpm exec playwright test -c playwright.config.ts ui/app.test.ts --grep "sending
 pnpm exec playwright test -c playwright.config.ts ui/diagnostics-export.test.ts
 ```
 
-### Automations
-
-```bash
-pnpm exec playwright test -c playwright.config.ts ui/automations-page.test.ts --grep "places a newly created automation at the top of the list and highlights it|keeps saved automations ordered by newest createdAt first|renders the routine target and last-run status in the row summary"
-```
-
-
 ### main 最新功能回归补测
 
 ```bash
@@ -269,11 +234,7 @@ pnpm exec playwright test -c playwright.config.ts ui/settings-connectors-auth-ha
 pnpm exec playwright test -c playwright.config.ts ui/settings-connectors-auth-recovery.test.ts
 ```
 
-### Design systems：settings + manager
-
-```bash
-pnpm exec playwright test -c playwright.config.ts ui/settings-design-systems.test.ts
-```
+### Design systems manager
 
 ```bash
 pnpm exec playwright test -c playwright.config.ts ui/design-systems-manager.test.ts
@@ -292,11 +253,6 @@ pnpm exec playwright test -c playwright.config.ts ui/design-systems-manager.test
   - error pill
   - 无 `Disconnect`
 - 当前 UI 不保证 degraded 卡片一定有 `is-locked`
-
-### Automations
-
-- 保存后的排序规则当前是 `createdAt` 倒序
-- row summary 稳定展示的是 `target` 与 `last-run status`
 
 ### Design systems
 

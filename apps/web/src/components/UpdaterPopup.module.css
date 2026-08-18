@@ -1,0 +1,46 @@
+/* Update-ready indicator: a round brand-green rocket button pinned to the
+   bottom-left rail footer. Visual carried over from the accepted #6156 design;
+   the state behind it is the real updater's `shouldShowControl`.
+
+   There is deliberately no progress ring here: the indicator only exists once
+   the installer has finished downloading, so any percentage it drew would be
+   invented. Download progress belongs to the updater panel and Settings. */
+.rocketButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Same 32px circle as the account avatar chip it rides next to — the two
+     must read as one row of equal-height controls. */
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--brand);
+  /* Fixed dark in both themes: the icon sits on brand green either way. */
+  color: #202020;
+  cursor: pointer;
+  transition: background-color var(--duration-ultra-fast, 50ms) var(--curve-easy-ease, ease);
+}
+
+.rocketButton:hover:not(.disabled) {
+  background: color-mix(in srgb, var(--brand) 86%, #202020);
+}
+
+.rocketButton:focus-visible {
+  outline: var(--stroke-thin, 1px) solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Install handoff in flight: the button stops responding but must not vanish,
+   so the panel behind it keeps carrying the state. */
+.rocketButton.disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.rocketIcon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}

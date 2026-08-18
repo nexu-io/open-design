@@ -47,7 +47,7 @@ To start a fresh project:
 ## Files
 
 ```text
-skills/kami-landing/
+design-templates/kami-landing/
 ├── SKILL.md      # ← agent contract (read this first)
 ├── README.md     # ← you are here
 └── example.html  # canonical Open Design rendering
@@ -63,7 +63,7 @@ skills/kami-landing/
 ## See also
 
 - [`design-systems/kami/DESIGN.md`](../../design-systems/kami/DESIGN.md) — the full token spec.
-- [`skills/kami-deck/`](../kami-deck/) — sibling skill that produces a
+- [`design-templates/kami-deck/`](../kami-deck/) — sibling skill that produces a
   slide deck in the same kami language.
 - Upstream: [`tw93/kami`](https://github.com/tw93/kami) — original
   Claude skill (MIT) that the design system adapts.

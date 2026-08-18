@@ -7,6 +7,7 @@ import {
 } from '../analytics/events';
 import type { TrackingProjectKind } from '@open-design/contracts/analytics';
 import { recordAmrEntry, type TrackingAmrEntrySource } from '../analytics/amr-attribution';
+import { UserActionCard } from './UserActionCard';
 
 export interface AmrGuidanceProps {
   errorCode: string;
@@ -67,20 +68,18 @@ export function AmrGuidance({
   ]);
 
   return (
-    <div className="amr-card amr-card--switch" data-testid="amr-guidance">
-      <div className="amr-card__head">
-        <span className="amr-card__icon" aria-hidden="true">
-          !
-        </span>
-        <strong className="amr-card__title">{t('chat.amrCard.switchTitle')}</strong>
-      </div>
-      <p className="amr-card__body">{t('chat.amrCard.switchBody')}</p>
-      <div className="amr-card__chips" aria-hidden="true">
-        <span className="amr-card__chip">{t('chat.amrCard.chipOfficial')}</span>
-        <span className="amr-card__chip">{t('chat.amrCard.chipNoKey')}</span>
-        <span className="amr-card__chip">{t('chat.amrCard.chipAutoRetry')}</span>
-      </div>
-      <div className="amr-card__actions">
+    <UserActionCard
+      dataKind="hosted-agent-suggestion"
+      testId="amr-guidance"
+      icon="sparkles"
+      tone="brand"
+      title={t('chat.amrCard.switchTitle')}
+      detailsLabel={t('brand.viewDetails')}
+      // Long localized CTA belongs in the footer row (same shell as run-
+      // recovery). Head `actions` share a 3-column grid with the title; a
+      // narrow ChatPane leaves the title a single CJK character wide and
+      // `overflow-wrap: anywhere` turns "模型调用失败…" into a vertical stack.
+      footerActions={
         <button
           type="button"
           className="amr-card__cta"
@@ -98,7 +97,17 @@ export function AmrGuidance({
         >
           {t('chat.amrCard.switchCta')}
         </button>
-      </div>
-    </div>
+      }
+      details={
+        <>
+          <p className="amr-card__body">{t('chat.amrCard.switchBody')}</p>
+          <div className="amr-card__chips" aria-hidden="true">
+            <span className="amr-card__chip">{t('chat.amrCard.chipOfficial')}</span>
+            <span className="amr-card__chip">{t('chat.amrCard.chipNoKey')}</span>
+            <span className="amr-card__chip">{t('chat.amrCard.chipAutoRetry')}</span>
+          </div>
+        </>
+      }
+    />
   );
 }

@@ -1,8 +1,10 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 
 import {
+  validateLauncherDesktopHandoffDescriptor,
   validateLauncherRuntimeDescriptor,
   type LauncherAttemptDescriptor,
+  type LauncherDesktopHandoffDescriptor,
   type LauncherRuntimeDescriptor,
   type LauncherVersionPointer,
 } from "@open-design/launcher-proto";
@@ -16,6 +18,8 @@ export type ToolPackLauncherRuntimeSnapshot = {
   channel: string;
   error?: string;
   exists: boolean;
+  handoff: LauncherDesktopHandoffDescriptor | null;
+  handoffPath: string;
   lastSuccessful: LauncherVersionPointer | null;
   active: LauncherVersionPointer | null;
   namespace: string;
@@ -34,6 +38,7 @@ export async function readToolPackLauncherRuntimeSnapshot(
   const base = {
     attemptsPath: paths.attemptsPath,
     channel: launcher.channel,
+    handoffPath: paths.handoffPath,
     namespace: config.namespace,
     root: launcher.root,
     runtimePath: paths.runtimePath,
@@ -44,12 +49,26 @@ export async function readToolPackLauncherRuntimeSnapshot(
 
   const runtimeRaw = await readOptionalJson<LauncherRuntimeDescriptor>(paths.runtimePath);
   const attempt = await readOptionalJson<LauncherAttemptDescriptor>(paths.attemptsPath);
+  const handoffRaw = await readOptionalJson<LauncherDesktopHandoffDescriptor>(paths.handoffPath);
+  const handoff = handoffRaw == null
+    ? null
+    : (() => {
+        try {
+          return validateLauncherDesktopHandoffDescriptor(handoffRaw, {
+            channel: launcher.channel,
+            namespace: config.namespace,
+          });
+        } catch {
+          return null;
+        }
+      })();
   if (runtimeRaw == null) {
     return {
       ...base,
       active: null,
       attempt,
       exists: false,
+      handoff,
       lastSuccessful: null,
     };
   }
@@ -64,6 +83,7 @@ export async function readToolPackLauncherRuntimeSnapshot(
       active: runtime.active,
       attempt,
       exists: true,
+      handoff,
       lastSuccessful: runtime.lastSuccessful,
     };
   } catch (error) {
@@ -73,6 +93,7 @@ export async function readToolPackLauncherRuntimeSnapshot(
       attempt,
       error: error instanceof Error ? error.message : String(error),
       exists: true,
+      handoff,
       lastSuccessful: null,
     };
   }

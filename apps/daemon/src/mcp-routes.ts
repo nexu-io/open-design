@@ -20,10 +20,16 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
   // CLI entry so the Settings → MCP server panel can render snippets that work
   // even when `od` isn't on the user's PATH (the common case for source clones
   // - and macOS/Linux ship a /usr/bin/od octal-dump tool that shadows ours
-  // anyway). Cached for 5s because the panel pings on every open and these
-  // paths cannot change without a daemon restart.
+  // anyway). Cached for 5s because the panel pings on every open. The
+  // executable paths remain stable for the daemon lifetime, while the
+  // packaged web port is part of the cache key because it is registered
+  // after the web sidecar binds and may change after a runtime restart.
   const INSTALL_INFO_TTL_MS = 5000;
-  let installInfoCache: { t: number; payload: object } | null = null;
+  let installInfoCache: {
+    t: number;
+    payload: object;
+    webPort: string | null;
+  } | null = null;
 
   // Resolve the install snippet for the current daemon. Shared by the
   // public GET /api/mcp/install-info endpoint (renders TOML/JSON for
@@ -49,12 +55,23 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
     if (isSidecarMode) {
       sidecarEnv[SIDECAR_ENV.IPC_PATH] = sidecarIpcPath;
     }
+    const mcpBootstrapCommand = process.env.OD_MCP_BOOTSTRAP_COMMAND;
+    if (
+      mcpBootstrapCommand != null
+      && mcpBootstrapCommand.length > 0
+    ) {
+      sidecarEnv.OD_MCP_BOOTSTRAP_COMMAND = mcpBootstrapCommand;
+    }
+    const mcpBootstrapArgs = process.env.OD_MCP_BOOTSTRAP_ARGS;
+    if (mcpBootstrapArgs != null && mcpBootstrapArgs.length > 0) {
+      sidecarEnv.OD_MCP_BOOTSTRAP_ARGS = mcpBootstrapArgs;
+    }
     // tools-dev / packaged launchers export OD_WEB_PORT so the daemon
     // knows where the browser-facing Open Design studio is running.
     // CLI-only / headless launches set neither and webBaseUrl falls
     // through as null — MCP clients then just omit the studio deep
     // link from their responses.
-    const webPortRaw = process.env.OD_WEB_PORT;
+    const webPortRaw = process.env[SIDECAR_ENV.WEB_PORT];
     const webPortNum = webPortRaw ? Number(webPortRaw) : Number.NaN;
     const webBaseUrl = Number.isFinite(webPortNum) && webPortNum > 0
       ? `http://127.0.0.1:${webPortNum}`
@@ -85,11 +102,16 @@ export function registerMcpRoutes(app: Express, ctx: RegisterMcpRoutesDeps) {
       return res.status(403).json({ error: 'cross-origin request rejected' });
     }
     const now = Date.now();
-    if (installInfoCache && now - installInfoCache.t < INSTALL_INFO_TTL_MS) {
+    const webPort = process.env[SIDECAR_ENV.WEB_PORT] ?? null;
+    if (
+      installInfoCache
+      && installInfoCache.webPort === webPort
+      && now - installInfoCache.t < INSTALL_INFO_TTL_MS
+    ) {
       return res.json(installInfoCache.payload);
     }
     const payload = computeInstallPayload();
-    installInfoCache = { t: now, payload };
+    installInfoCache = { t: now, payload, webPort };
     res.json(payload);
   });
 

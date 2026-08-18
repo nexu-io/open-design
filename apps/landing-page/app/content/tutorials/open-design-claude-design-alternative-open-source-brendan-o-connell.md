@@ -16,7 +16,7 @@ This guide focuses on a standout Open Design trick: **point it at your existing 
 
 ## What is Open Design?
 
-Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use** — Claude Code, Codex, Cursor, Gemini, OpenCode, and more — or your own API key. It's essentially a Claude-Design-style workspace you run on your own machine, without being locked into one vendor's cloud and without that tool's usage caps. It's Apache-2.0, ships with a deep library of skills and design systems, and adds media generation (image, video, audio) on top.
+Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use** — Claude Code, Codex, Cursor, OpenCode, Qwen, and more — or your own API key. It's essentially a Claude-Design-style workspace you run on your own machine, without being locked into one vendor's cloud and without that tool's usage caps. It's Apache-2.0, ships with a deep library of skills and design systems, and adds media generation (image, video, audio) on top.
 
 ## Why reach for an open alternative
 
@@ -75,7 +75,7 @@ Browse the **examples** and **design systems** tabs for starting points (each de
 Yes — the agent has a web-fetch tool. Tell it to design for your site and it scrapes your fonts, colours, layout choices, and tone into a `brand-spec.md`, then designs in that voice.
 
 **Do I have to configure my agent?**
-Usually not. The desktop app auto-detects the agent CLIs already installed (Claude Code, Codex, Gemini, and more). You can also bring your own key.
+Usually not. The desktop app auto-detects the supported agent CLIs already installed (Claude Code, Codex, OpenCode, and more). You can also bring your own key.
 
 **Does it have the usage limits of the closed tool?**
 No separate design cap — generation rides on whatever agent/subscription you connect, so you're not blocked after one design.

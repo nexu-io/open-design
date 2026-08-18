@@ -96,16 +96,22 @@ export async function packWin(config: ToolPackConfig): Promise<WinPackResult> {
       await rm(paths.setupZipPath, { force: true });
     }
   });
-  await runPhase("workspace-build", async () => {
-    await ensureWinWorkspaceBuild(config, cache);
-  });
+  const workspaceBuildKey = await runPhase("workspace-build", async () => ensureWinWorkspaceBuild(config, cache));
   const resourceTree = await runPhase("resource-tree", async () =>
-    prepareResourceTree(config, paths, cache, { materialize: config.to !== "dir" })
+    prepareResourceTree(
+      config,
+      paths,
+      cache,
+      { bundleAgentRuntimes: true, materialize: config.to !== "dir" },
+      workspaceBuildKey,
+    )
   );
   await runPhase("win-icon", async () => {
     await copyWinIcon(paths);
   });
-  const tarballs = await runPhase("workspace-tarballs", async () => collectWorkspaceTarballs(config, paths, cache));
+  const tarballs = await runPhase("workspace-tarballs", async () =>
+    collectWorkspaceTarballs(config, paths, cache, workspaceBuildKey)
+  );
   const packagedAppKey = await createWinPackagedAppCacheKey(config, tarballs.key, tarballs.tarballs);
   let packagedAppRoot: string | null = null;
   await runPhase("electron-builder", async () => {

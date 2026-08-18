@@ -39,6 +39,29 @@ const ctaHref = (a: { href: string; external?: boolean }) =>
 
 const faqEntries = (rich?.faq ?? page.faq).map(({ name, text }) => ({ name, text }));
 
+// Parse lightweight [label](url) inline links so internal and external links
+// live naturally inside the prose instead of a list at the end. Returns a safe
+// HTML string; text without links passes through unchanged.
+const INLINE_LINK = /\[([^\]]+)\]\(([^)]+)\)/g;
+const esc = (s: string) =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function renderInline(text: string): string {
+  let out = '';
+  let last = 0;
+  for (const m of text.matchAll(INLINE_LINK)) {
+    const at = m.index ?? 0;
+    if (at > last) out += esc(text.slice(last, at));
+    const label = esc(m[1] ?? '');
+    const url = m[2] ?? '';
+    out += /^https?:/.test(url)
+      ? `<a href="${esc(url)}" target="_blank" rel="noreferrer noopener">${label}</a>`
+      : `<a href="${esc(href(url))}">${label}</a>`;
+    last = at + m[0].length;
+  }
+  if (last < text.length) out += esc(text.slice(last));
+  return out;
+}
+
 // JSON-LD URLs must match the locale-specific canonical the Layout emits, so
 // build them from the localized path rather than the hard-coded English route.
 const homeUrl = new URL(href('/'), SITE).toString();
@@ -84,7 +107,7 @@ const jsonLd = [
     <span aria-current="page">{page.breadcrumb}</span>
   </nav>
 
-  <article class={`info-page${rich ? ' solution-page agent-rich' : ''}`}>
+  <article class={`info-page${rich ? ' solution-page agent-rich agent-rich-hub' : ''}`}>
     {rich ? (
       <>
         {/* Single-column article header: full-measure heading + lead + CTA,
@@ -104,6 +127,15 @@ const jsonLd = [
           </div>
         </header>
 
+        <div class="agent-rich-body">
+        <aside class="agent-toc-rail">
+        <nav class="info-toc" aria-label={rich.tocLabel}>
+          <span>{rich.tocLabel}</span>
+          {rich.toc.map((t) => (<a href={`#${t.id}`} data-toc-link>{t.label}</a>))}
+        </nav>
+        </aside>
+        <div class="agent-rich-main">
+
         {rich.heroImage ? (
           <figure class="agent-hero-banner">
             <img src={rich.heroImage.src} alt={rich.heroImage.alt} loading="eager" decoding="async" width={1280} height={720} />
@@ -115,22 +147,17 @@ const jsonLd = [
           {rich.intro.map((p) => (<p>{p}</p>))}
         </div>
 
-        <nav class="info-toc" aria-label={rich.tocLabel}>
-          <span>{rich.tocLabel}</span>
-          {rich.toc.map((t) => (<a href={`#${t.id}`}>{t.label}</a>))}
-        </nav>
-
         {rich.sections.map((section) => (
           <section class="info-section" id={section.id}>
             <h2>{section.heading}</h2>
             {section.blocks.map((block) => {
-              if (block.kind === 'p') return <p>{block.text}</p>;
-              if (block.kind === 'ul') return <ul>{block.items.map((i) => (<li>{i}</li>))}</ul>;
-              if (block.kind === 'ol') return <ol>{block.items.map((i) => (<li>{i}</li>))}</ol>;
+              if (block.kind === 'p') return <p><Fragment set:html={renderInline(block.text)} /></p>;
+              if (block.kind === 'ul') return <ul>{block.items.map((i) => (<li><Fragment set:html={renderInline(i)} /></li>))}</ul>;
+              if (block.kind === 'ol') return <ol>{block.items.map((i) => (<li><Fragment set:html={renderInline(i)} /></li>))}</ol>;
               if (block.kind === 'steps')
                 return (
                   <ul class="agent-steps">
-                    {block.items.map((i) => (<li><strong>{i.label}:</strong> {i.body}</li>))}
+                    {block.items.map((i) => (<li><strong>{i.label}:</strong> <Fragment set:html={renderInline(i.body)} /></li>))}
                   </ul>
                 );
               if (block.kind === 'code')
@@ -206,6 +233,27 @@ const jsonLd = [
             <span><a class="inline-link" href={href('/agents/')}>{rich.hubLinkLabel}</a></span>
           </div>
         </section>
+        </div>{/* .agent-rich-main */}
+        </div>{/* .agent-rich-body */}
+
+        <script is:inline>
+          {`(() => {
+            const links = Array.from(document.querySelectorAll('.agent-rich-hub [data-toc-link]'));
+            if (!links.length || !('IntersectionObserver' in window)) return;
+            const byId = new Map(links.map((a) => [a.getAttribute('href').slice(1), a]));
+            const seen = new Set();
+            const spy = new IntersectionObserver((entries) => {
+              for (const e of entries) {
+                if (e.isIntersecting) seen.add(e.target.id); else seen.delete(e.target.id);
+              }
+              let active = null;
+              for (const id of byId.keys()) if (seen.has(id)) { active = id; break; }
+              links.forEach((a) => a.classList.remove('is-active'));
+              if (active && byId.get(active)) byId.get(active).classList.add('is-active');
+            }, { rootMargin: '-80px 0px -70% 0px', threshold: 0 });
+            document.querySelectorAll('.agent-rich-hub .info-section[id]').forEach((s) => spy.observe(s));
+          })();`}
+        </script>
       </>
     ) : (
       <>

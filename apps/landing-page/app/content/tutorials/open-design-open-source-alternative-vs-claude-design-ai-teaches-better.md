@@ -16,7 +16,7 @@ Most AI design tools spit back a generic, weirdly-purple-gradient mess. This gui
 
 ## What is Open Design?
 
-Open Design is an Apache-2.0, local-first framework — the open-source answer to closed, cloud-only design tools locked to one model. The key distinction: **it doesn't ship its own AI agent.** It's a masterful *orchestrator* that delegates the design work to the coding-agent CLIs you already have. Boot it up and its local daemon scans your machine, auto-detecting CLIs — Claude Code, Codex, Cursor, Gemini, Copilot, and more — and turns whichever it finds into your candidate design engines, hooking in over stdio. No vendor lock-in; swap engines with one click. No CLI installed? There's an OpenAI-compatible proxy fallback — drop in any base URL and key.
+Open Design is an Apache-2.0, local-first framework — the open-source answer to closed, cloud-only design tools locked to one model. The key distinction: **it doesn't ship its own AI agent.** It's a masterful *orchestrator* that delegates the design work to the coding-agent CLIs you already have. Boot it up and its local daemon scans your machine, auto-detecting CLIs — Claude Code, Codex, Cursor, OpenCode, Copilot, and more — and turns whichever it finds into your candidate design engines, hooking in over stdio. No vendor lock-in; swap engines with one click. No CLI installed? Configure a BYOK provider; the daemon runs it through the isolated OpenCode adapter.
 
 ## Skills × design systems = intentional output
 

@@ -24,7 +24,7 @@ const REPO_DISCUSSIONS = `${REPO}/discussions`;
 const DISCORD = 'https://discord.gg/mHAjSMV6gz';
 const X_PROFILE = 'https://x.com/OpenDesignHQ';
 
-// Open Design Cloud endpoints for the header sign-in module.
+// Open Design Cloud endpoints for the header account module.
 // Production defaults; overridable at build time via PUBLIC_* env so a
 // preview/staging build can point at a non-prod cloud. These are surfaced to
 // the runtime via `data-*` on `.nav-account` because the auth logic lives in
@@ -33,12 +33,10 @@ const X_PROFILE = 'https://x.com/OpenDesignHQ';
 const env = import.meta.env as Record<string, string | undefined>;
 const CLOUD_API_BASE =
   env.PUBLIC_CLOUD_API_BASE ?? env.PUBLIC_AMR_API_BASE ?? 'https://amr-api.open-design.ai';
-const CLOUD_LOGIN_URL =
-  env.PUBLIC_CLOUD_LOGIN_URL ?? env.PUBLIC_AMR_LOGIN_URL ?? 'https://open-design.ai/cloud/login';
 const CLOUD_CONSOLE_URL =
   env.PUBLIC_CLOUD_CONSOLE_URL ??
   env.PUBLIC_AMR_CONSOLE_URL ??
-  'https://open-design.ai/cloud/wallet?source=open_design';
+  'https://open-design.ai/cloud/dashboard?source=open_design';
 
 // Solution → Use cases / Roles. Hrefs mirror upstream main's header 1:1 and
 // pair positionally with the localized `useCaseItems` / `roleItems` tuples.
@@ -86,6 +84,7 @@ const AGENTS: ReadonlyArray<{ name: string; route: string }> = [
   { name: 'Grok Build', route: 'grok-design' },
   { name: 'Kimi CLI', route: 'kimi-design' },
   { name: 'DeepSeek TUI', route: 'deepseek-design' },
+  { name: 'DeepSeek Harness', route: 'deepseek-harness-design' },
   { name: 'Trae CLI', route: 'trae-cli-design' },
   { name: 'Aider', route: 'aider-design' },
   { name: 'Antigravity', route: 'antigravity-design' },
@@ -111,6 +110,8 @@ export interface HeaderProps {
     | 'product'
     | 'html-anything'
     | 'html-video'
+    | 'codex-slides'
+    | 'open-design-plugin'
     | 'solution'
     | 'agent'
     | 'plugins'
@@ -227,6 +228,8 @@ export function Header({
                   active === 'home' ||
                   active === 'html-anything' ||
                   active === 'html-video' ||
+                  active === 'codex-slides' ||
+                  active === 'open-design-plugin' ||
                   active === 'agent'
                     ? ' is-active'
                     : '')
@@ -262,6 +265,26 @@ export function Header({
                     <li>
                       <a href={href('/html-video/')}>
                         <span className='dropdown-name'>{productMenuCopy.htmlVideoName}</span>
+                      </a>
+                    </li>
+                    {/* Product name, not a translatable phrase — same treatment
+                        as the hardcoded "Open Design" in the footer's product
+                        column, so it does not add an identical string to every
+                        locale block. */}
+                    <li>
+                      <a
+                        href={href('/codex-slides/')}
+                        className={active === 'codex-slides' ? 'is-active' : undefined}
+                      >
+                        <span className='dropdown-name'>Codex Slides</span>
+                      </a>
+                    </li>
+                    <li>
+                      <a
+                        href={href('/codex-plugin/')}
+                        className={active === 'open-design-plugin' ? 'is-active' : undefined}
+                      >
+                        <span className='dropdown-name'>Open Design Plugin</span>
                       </a>
                     </li>
                   </ul>
@@ -578,17 +601,15 @@ export function Header({
             aria-label={headerCopy.downloadAria}
             title={headerCopy.downloadTitle}
             data-download-cta
-            data-download-page
+            data-direct-download
             data-download-placement='nav'
           >
             {headerCopy.download}
           </a>
           {/*
-            Open Design Cloud account entry. Renders BOTH states up front
-            and lets `header-enhancer.astro` toggle them at runtime: the
-            signed-out "Sign in" link is visible by default (so no-JS / pre-hydration
-            shows a working login link), and the signed-in avatar menu stays
-            `hidden` until the enhancer confirms a live cloud session via
+            Open Design Cloud account entry. Signed-out visitors only see the
+            download CTA above; the avatar menu stays `hidden` until the
+            enhancer confirms a live cloud session via
             `GET {api}/api/auth/get-session`. Config flows through `data-*`
             because the enhancer script cannot read `import.meta.env`.
           */}
@@ -596,13 +617,8 @@ export function Header({
             className='nav-account'
             data-amr-account
             data-amr-api={CLOUD_API_BASE}
-            data-amr-login={CLOUD_LOGIN_URL}
             data-amr-console={CLOUD_CONSOLE_URL}
-            data-amr-home={href('/')}
           >
-            <a className='nav-signin' href={CLOUD_LOGIN_URL} data-amr-signin>
-              {headerCopy.signIn}
-            </a>
             <details className='nav-account-menu' data-amr-menu hidden>
               <summary
                 className='nav-account-trigger'

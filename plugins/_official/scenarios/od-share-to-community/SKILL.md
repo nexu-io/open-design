@@ -32,7 +32,7 @@ What to read, in this order, and what to take from each:
 
 Pick a stable plugin id from what you derived: lowercase letters, numbers, dashes, underscores, dots. Prefer something the brand-spec or artifact metadata suggests over inventing one.
 
-If a field truly cannot be derived (e.g. no artifact.json exists, no brand-spec, the project is too sparse), only then ask the user — and ask in **one** consolidated `AskUserQuestion`, not field-by-field. Default the answers from whatever you did manage to derive so the user can accept by clicking through.
+If a field truly cannot be derived (e.g. no artifact.json exists, no brand-spec, the project is too sparse), only then ask the user — and emit **one** consolidated `<question-form>` block, not field-by-field prose questions. Default the answers from whatever you did manage to derive so the user can accept the proposed values directly in the rendered form. `<question-form>` is assistant-text markup rendered by Open Design, not a native tool call.
 
 ## Validate the plugin locally before reporting
 
@@ -58,7 +58,7 @@ Do NOT assume the standalone `jq` binary is installed (it is not part of the OD 
 
 ## Language
 
-Mirror the user's chat language in any `AskUserQuestion` labels, status updates, and error explanations. Generated artifacts (manifest fields, SKILL.md body, PR / commit messages, branch names) MUST stay English regardless of the chat language — that's the OD plugins-spec convention and matches the existing scenarios under `plugins/_official/scenarios/`.
+Mirror the user's chat language in any `<question-form>` titles, labels, descriptions, options, and helper text, as well as status updates and error explanations. Generated artifacts (manifest fields, SKILL.md body, PR / commit messages, branch names) MUST stay English regardless of the chat language — that's the OD plugins-spec convention and matches the existing scenarios under `plugins/_official/scenarios/`.
 
 ## Suggested folder shape
 

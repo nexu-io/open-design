@@ -16,7 +16,7 @@ This guide is a structured first-look at Open Design: install it, run a quick de
 
 ## What is Open Design?
 
-Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. Instead of locking you into one model provider, it detects the CLIs already on your machine — Claude Code, Codex, Cursor, Gemini, Copilot, OpenCode, and a couple dozen more — and lets that agent drive generation. Chase calls it "bring your own agent," and that is exactly the point: you are not paying separate API fees on top of a subscription you already have, because generation runs through your own CLI.
+Open Design is an open-source, local-first design platform that runs **on top of the coding agent you already use**. Instead of locking you into one model provider, it detects the supported CLIs already on your machine — Claude Code, Codex, Cursor, Copilot, OpenCode, Qwen, and a couple dozen more — and lets that agent drive generation. Chase calls it "bring your own agent," and that is exactly the point: you are not paying separate API fees on top of a subscription you already have, because generation runs through your own CLI.
 
 A few things that make it worth a look:
 
@@ -65,7 +65,7 @@ To use Open Design without ever opening the GUI — calling it as a skill inside
 
 ```bash
 od mcp install <agent>
-# od ships with Open Design; <agent> = claude | codex | cursor | copilot | gemini | opencode | …
+# od ships with Open Design; <agent> = claude | codex | cursor | copilot | opencode | kiro | …
 ```
 
 Then, inside the agent, just ask: `Use open-design to generate a landing page with the Airbnb design system`.
@@ -122,7 +122,7 @@ The output is a real, interactive artifact built from the design system you chos
 Yes — it is open source under the Apache-2.0 license. You run it locally for free; you only pay for the model and media usage of whichever agent and API providers you connect. Pointing it at a local CLI means generation rides on the subscription you already have.
 
 **Which coding agents does it support?**
-21+ agents, including Claude Code, Codex, Cursor, Gemini, GitHub Copilot, and OpenCode. Open Design auto-detects the CLIs already installed on your machine, so you usually don't have to configure anything.
+21+ agents, including Claude Code, Codex, Cursor, GitHub Copilot, OpenCode, and Qwen. Open Design auto-detects the supported CLIs already installed on your machine, so you usually don't have to configure anything.
 
 **Can I use my own design system?**
 Yes. The smoothest path today is to build the system in Claude Design, download the project as a ZIP, and import that ZIP into Open Design — your tokens and components carry straight over. There isn't a dedicated "create a design system" button in the GUI yet, so the ZIP import is the recommended route.

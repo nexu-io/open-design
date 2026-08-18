@@ -1,328 +1,333 @@
-# Design System Authoring Guide
+# Design system authoring guide
 
 **Parent:** [`spec.md`](spec.md) · **Siblings:** [`architecture.md`](architecture.md) · [`skills-protocol.md`](skills-protocol.md) · [`agent-adapters.md`](agent-adapters.md)
 
-This guide covers everything a contributor needs to submit a design system that passes review the first time. If you are adding a design system to `design-systems/<slug>/DESIGN.md`, read this document before opening a PR.
+This guide describes the current design-system package consumed by the daemon,
+picker, prompt composer, importers, and repository guards. Read it together with
+[`design-systems/README.md`](../design-systems/README.md) and the contract notes
+in [`design-systems/_schema/AGENTS.md`](../design-systems/_schema/AGENTS.md).
 
----
+## 1. Package contract
 
-## 1. The 9-Section Schema
+A new design system is a package, not a standalone Markdown file. Its minimum
+machine-readable shape is:
 
-Every `DESIGN.md` must have these nine section headings:
-
-```
-## 1. Visual Theme & Atmosphere
-## 2. Color
-## 3. Typography
-## 4. Spacing
-## 5. Layout & Composition
-## 6. Components
-## 7. Motion & Interaction
-## 8. Voice & Brand
-## 9. Anti-patterns
+```text
+design-systems/<slug>/
+├── manifest.json  ← discovery metadata and declared package files
+├── DESIGN.md      ← canonical design prose for agents
+└── tokens.css     ← canonical compiled CSS custom properties
 ```
 
-The schema parser extracts headings with `## [0-9].*` — it matches the section number prefix, not the full text. You can add context after the number (e.g., `## 4. Spacing & Grid` or `## 4. Spacing and layout`). Only the `## [digit].` prefix is required. Empty section bodies are acceptable (for rarely-used tokens like motion), but the nine numbered headings must be present.
+All three files are present in the bundled catalog. The daemon retains a
+`DESIGN.md`-only discovery path for legacy or user-installed folders, but that is
+a compatibility fallback, not the authoring target for new repository content.
 
-### Header format
+The v1 manifest uses fixed canonical file names:
 
-The first H1 becomes the label shown in the design-system picker dropdown. The `> Category:` line immediately after the H1 determines grouping:
-
-```markdown
-# Design System Inspired by YourBrand
-
-> Category: Developer Tools
-> One-line summary for the picker preview.
+```json
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "acme",
+  "name": "Acme",
+  "category": "Productivity & SaaS",
+  "description": "A concise English catalog summary.",
+  "source": {
+    "type": "bundled",
+    "origin": "Open Design curated bundled fixture"
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css"
+  }
+}
 ```
 
-Available categories: AI & LLM, Developer Tools, Productivity & SaaS, Backend & Data, Design & Creative, Fintech & Crypto, E-Commerce & Retail, Media & Consumer, Automotive, Editorial & Print, Retro & Nostalgic, Bold & Expressive, Modern & Minimal, Professional & Corporate. If none fit, introduce a new one with a PR comment explaining why.
+- The folder and `manifest.id` must use the same normalized ASCII slug.
+- `files.design` is `DESIGN.md`; `files.tokens` is `tokens.css`.
+- `name`, `category`, and `description` are the primary catalog copy for a
+  packaged system.
+- `source` records whether the package is bundled, local, GitHub, or shadcn and
+  carries the source-specific provenance fields.
+- Every declared path must be safe, relative, and present. The schema in
+  [`manifest.schema.ts`](../design-systems/_schema/manifest.schema.ts) is the
+  source of truth for allowed keys and values.
 
----
+### Rich package files
 
-## 2. The Review Framework: Lens A and Lens B
+The migrated package profile can also declare:
 
-All design system PRs are reviewed against two lenses. Understanding these before you submit eliminates most round-trips.
+```text
+USAGE.md                     agent-facing read-order and usage guide
+components.html              standalone component fixture
+components.manifest.json     derived component/token index
+design-tokens.json           derived Design Tokens JSON
+tailwind-v4.css               derived Tailwind v4 mapping
+assets/                       optional static assets
+fonts/                        optional webfonts
+preview/                      indexed preview pages
+source/                       importer evidence and token reports
+```
 
-### Lens A — Code Correctness (P1/P2)
+Declare these through the corresponding manifest fields (`usage`,
+`files.components`, `componentsManifest`, `files.designTokens`,
+`files.tailwind`, `assetsDir`, `fonts`, `preview`, and `sourceFiles`). Do not add
+undeclared alternate canonical files.
 
-Is the file structurally valid and machine-processable? Failing Lens A is blocking.
+Once a package opts into the rich profile, the package-quality guard expects a
+complete profile: `USAGE.md`; `components.html` plus its derived manifest; and
+at least three preview pages covering colors, typography, and spacing. Imported
+`hybrid` and `verbatim` packages also have source-evidence requirements enforced
+by the manifest guard.
 
-**Checks:**
-- All 9 section headings present and in order
-- Color tokens are real hex codes (`#RRGGBB` or `#RGB`), not `#REPLACE_ME`, `currentColor`, or CSS variable names
-- No duplicate folder names in `design-systems/`
-- CSS variables wrapped in `:root {}` blocks (not bare in the document)
-- Font labels for catalog extraction present (see Section 3 below)
-- `prefers-reduced-motion` targets specific elements, not a global `*` selector
-- Dark mode tokens use `[data-theme="dark"]` override pattern, not duplicate token blocks
+Derived files are caches, not competing sources of truth:
 
-### Lens B — Reasoning Completeness (P3)
+- `components.manifest.json` is regenerated from `components.html` and
+  `tokens.css`.
+- `design-tokens.json` is regenerated from the token-contract report and must
+  agree with `tokens.css`.
+- `tailwind-v4.css` is regenerated from `tokens.css`.
 
-Is the content substantive and useful, not just syntactically valid? Failing Lens B generates a P3 comment, not a hard block.
+### Structured runtime files
 
-**Checks:**
-- Color palette lists all roles used in the design system, not just primary/secondary
-- Type scale includes Display, H1, Body, Caption (minimum 4 tiers)
-- Components section has real CSS, not Lorem Ipsum or placeholder `/* TODO */` blocks
-- Anti-patterns are specific (e.g., "Do not use rounded corners > 4px" rather than "Avoid bad design")
-- Dark mode is a genuine override with different token values, not a copy of the light block
-- Prior art section names real, specific products or design systems (not "inspired by good design")
+Packages that need deterministic component selection may add a complete
+machine-readable runtime graph:
 
----
+```text
+manifests/components.json       component index
+manifests/intent-map.json       intent-to-component mappings
+components/<id>/component.json  implementation, variants, properties, and states
+rules/lint.json                 checks for generated output
+rules/fallback.json             no-match and multiple-match behavior
+```
 
-## 3. CSS Variable Structure
+Declare all four entry paths together in `manifest.json`:
 
-### `:root` block (required)
+```json
+{
+  "runtime": {
+    "components": "manifests/components.json",
+    "intents": "manifests/intent-map.json",
+    "lint": "rules/lint.json",
+    "fallback": "rules/fallback.json"
+  }
+}
+```
 
-All CSS variables must be inside a `:root {}` block. Bare CSS variable declarations at the top level of a section are invalid.
+`intent-map.json` references component ids and selects only declared variants,
+properties, and states; it does not repeat selectors or implementation details.
+The prompt receives only a compact list of canonical intent ids. For a listed
+intent, a filesystem agent resolves the full selection on demand:
+
+```bash
+"$OD_NODE_BIN" "$OD_BIN" tools design-systems resolve \
+  --intent account.settings.save
+```
+
+The daemon derives the active design system from the token's run (falling back
+to its project binding), then returns the reusable implementation, selectors,
+variant, properties, required states, and lint policy. It also applies
+`rules/fallback.json`: a unique highest-priority mapping may be selected, while
+ambiguous or missing mappings can require human confirmation instead of letting
+the agent invent a near-copy.
+
+A package has one component-selection authority. When `runtime` is declared,
+the prompt does not also inject `components.manifest.json` or `components.html`
+as an alternate inventory: selection goes through the intent index and resolver.
+The fixture and its derived manifest remain package evidence, preview inputs,
+and authoring checks, but they do not compete with the runtime mapping.
+
+After generation, the filesystem agent validates the files that implement the
+intent. Pass every related source file when markup and styles are split:
+
+```bash
+"$OD_NODE_BIN" "$OD_BIN" tools design-systems validate \
+  --intent account.settings.save \
+  --artifact account-settings.html \
+  --artifact styles/account-settings.css
+```
+
+The adherence report checks mapped component and variant reuse, required state
+coverage, declared token references, and color literals outside token
+definitions. `passed` allows the task to complete; `failed` returns concrete
+remediation and must be fixed and re-run; `confirmation-required` preserves the
+package fallback gate and must be surfaced to the user. Validation is scoped to
+the active run and reads only safe project-relative text files.
+
+The first bundled runtime packages are `hud`, `webflow`, and `uber`. They carry
+the component and intent coverage used by the three-task DS 3.0 regression
+(account settings, delete-workspace confirmation, and team directory). The
+destructive confirmation intent intentionally has no component mapping so its
+human-confirmation fallback remains part of the release signal.
+
+Omitting `runtime` preserves the legacy prompt-based component manifest / fixture
+path.
+Declaring only part of the graph, using unsafe paths, or leaving dangling
+references fails validation and is surfaced to the agent rather than silently
+downgraded to the legacy component path. Text-artifact runtimes that cannot call
+the resolver may use the visible intent-to-component index, but are explicitly
+forbidden from inventing hidden variants, properties, states, or implementation
+details.
+
+## 2. Catalog metadata precedence
+
+Packaged systems should put stable display metadata in `manifest.json`. The
+daemon resolves catalog fields in this order:
+
+| Field | Precedence |
+| --- | --- |
+| Title | user `metadata.json` override → `manifest.name` → Markdown H1 → frontmatter `name` → folder id |
+| Category | user `metadata.json` override → `manifest.category` → Markdown `> Category:` → frontmatter `category` → `Uncategorized` |
+| Summary | non-empty `manifest.description` → first Markdown summary paragraph → frontmatter `description` |
+| Surface | user `metadata.json` override → Markdown surface metadata → frontmatter `surface` → `web` |
+
+The H1 and `> Category:` convention therefore remains useful for readable prose
+and legacy fallback, but it does not override manifest metadata in a packaged
+system. Complete frontmatter color metadata wins over Markdown-derived swatches;
+otherwise the daemon uses Markdown swatches and finally any partial frontmatter
+row.
+
+## 3. Writing `DESIGN.md`
+
+`DESIGN.md` explains intent, decisions, and usage to an agent. It is not a
+fixed nine-section numbered schema. For a migrated package, the quality guard
+requires at least seven H2 headings (`## ...`); it does not require
+specific numbers, titles, or ordering.
+
+A useful document normally covers at least:
+
+- visual theme and atmosphere;
+- color roles and contrast intent;
+- typography families, scale, leading, and tracking;
+- spacing, layout, and composition;
+- components and interaction states;
+- motion behavior and reduced-motion handling;
+- accessibility expectations;
+- concrete anti-patterns.
+
+Use headings that describe the actual system. A source-derived brand may add
+sections for provenance, imagery, data visualization, editorial voice, or
+platform-specific behavior. Avoid empty headings added only to meet the count.
+
+Keep prose and compiled values synchronized. If `DESIGN.md` names an accent,
+type scale, spacing rhythm, or motion duration, the corresponding binding in
+`tokens.css` must express the same decision.
+
+## 4. Authoring `tokens.css`
+
+`tokens.css` is the canonical compiled token stylesheet that agents can consume
+without translating prose into ad hoc values. Put shared declarations in a
+`:root { ... }` block:
 
 ```css
-/* Correct */
 :root {
-  --color-primary: #625DF5;
-  --color-bg: #FFFFFF;
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --bg: #ffffff;
+  --fg: #18181b;
+  --accent: #625df5;
+  --font-display: "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, sans-serif;
 }
-
-/* Incorrect — not valid standalone CSS outside :root */
---color-primary: #625DF5;
 ```
 
-Every color, spacing, typography, and shadow token belongs in `:root`. The exception is component-scoped overrides (e.g., `.card { --card-padding: 16px; }`) which belong under Components.
+The current token contract lives in
+[`packages/contracts/src/design-systems/token-schema.ts`](../packages/contracts/src/design-systems/token-schema.ts)
+and is re-exported through `design-systems/_schema/`. The repository guard
+checks required A1, A2, and B-slot tokens, default parity, fixture synchronization,
+and unknown-token allowlists. A final `tokens.css` must contain every required
+shared slot; brand-specific extensions must use the documented extension
+allowlist rather than silently inventing cross-brand tokens.
 
-### Dark mode pattern
-
-Use `[data-theme="dark"]` to override tokens for dark mode:
+Use semantic variables in component CSS instead of repeating raw colors:
 
 ```css
-:root {
-  --color-primary: #625DF5;
-  --color-bg: #FFFFFF;
+.button-primary {
+  background: var(--accent);
+  color: var(--accent-on);
 }
+```
 
+When the system supports a dark variant, override semantic tokens under a
+theme selector rather than copying unrelated component rules:
+
+```css
 [data-theme="dark"] {
-  --color-primary: #7B75FF;
-  --color-bg: #0D0D0D;
+  --bg: #111113;
+  --fg: #fafafa;
 }
 ```
 
-Do not create separate CSS blocks for light and dark without using the `[data-theme="dark"]` selector — it breaks the semantic token system.
+## 5. Component fixtures and usage guides
 
-### Font labels for catalog extraction
+For a rich package, `components.html` is the executable proof that the tokens
+compose into real controls and layouts. It should cover at least four component
+groups and use declared tokens. The quality guard currently requires at least
+10 fixture selectors and 8 referenced tokens. The derived component manifest
+must not contain undeclared token references.
 
-Include this block in the Typography section for the daemon's parser regexes:
+`USAGE.md` is the agent-facing router. It must contain the H2 sections `Read
+Order`, `Design Highlights`, `Do`, and `Avoid`. Keep it concise: direct the agent
+to the relevant package files and call out decisions that would otherwise be
+easy to miss.
 
-```
-Font labels for catalog extraction:
+## 6. Accessibility
 
-Display: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif
-Body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif
-Mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace
-```
+- Verify normal text at 4.5:1 contrast and large text at 3:1 against the actual
+  paired background.
+- Give every interactive control a visible `:focus-visible` treatment.
+- Preserve native semantics and keyboard behavior in component fixtures.
+- Do not claim conformance without checking every foreground/background pair
+  used by the fixture.
+- Scope reduced-motion overrides to the elements and properties that animate.
 
-Labels must be `Display:`, `Body:`, `Mono:` with a colon, followed by the full font stack. The daemon reads these to populate the design-system catalog.
+## 7. Motion and interaction
 
----
-
-## 4. Accessibility Requirements
-
-### WCAG AA contrast ratios
-
-All text and data colors must pass **4.5:1 minimum** contrast ratio against their background (4.5:1 for normal text, 3:1 for large text at 18px+ or 14px+ bold).
-
-**How to verify:**
-- Use a contrast checker tool (e.g., WebAIM Contrast Checker, or `#B37A00` on `#FFFFFF`)
-- Test each foreground token against its paired background token — not against white by default
-
-**Common mistakes:**
-- Claiming WCAG compliance without testing — the review will catch this
-- Using a color that "looks fine" on white but fails on the actual dark surface
-- Warning/caution colors like `#B37A00` (3.05:1 on white, 5.35:1 on `#FFF3CD`) — verify against the correct background context
-
-**Tertiary text tokens** (timestamps, metadata, grid labels) on dark surfaces must still pass 4.5:1. Do not use `#4A6080` on `#0A0A0A` — that is 2.1:1. Use `#808086` on `#0A0A0A` instead (4.54:1).
-
-### Focus states
-
-Every interactive component (buttons, links, input fields, cards with click handlers) must have a `:focus-visible` style:
+The repository UI motion convention is a strong ease-out:
 
 ```css
-.button-primary:focus-visible {
-  outline: 2px solid var(--color-primary);
-  outline-offset: 2px;
+:root {
+  --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-enter: 200ms;
+  --motion-exit: 140ms;
 }
 ```
 
-This is a Lens A accessibility requirement. Keyboard-only users get no visual feedback without it.
+Use about 200ms for entry and 140ms for exit. Do not use `ease-in` for UI
+elements, and do not animate from `scale(0)`; start at `scale(0.9)` or higher
+with opacity when scale is appropriate. Continuous data or progress motion may
+remain linear. A brand may bind different token values when motion is genuinely
+part of its identity, but the behavior must still be accessible and documented.
 
----
+## 8. Localized catalog copy
 
-## 5. Component Section Best Practices
+English fallback metadata comes from the package. Built-in localized catalog
+copy is keyed by design-system id in `apps/web/src/i18n/content.ts` and its
+language modules.
 
-The Components section is the most commonly rejected part of a design system. Common failures:
+There are currently 17 direct non-English content bundles:
 
-**Do not use hardcoded colors in component CSS.** Every color must reference a semantic token:
+`de`, `fr`, `ru`, `zh-CN`, `ja`, `id`, `es-ES`, `pt-BR`, `ar`, `fa`, `ko`,
+`pl`, `hu`, `uk`, `tr`, `th`, and `it`.
 
-```css
-/* Correct */
-.button-primary {
-  background: var(--color-primary);
-  color: var(--color-text);
-}
+`zh-TW` intentionally reuses the `zh-CN` built-in-content bundle when a
+dedicated entry is unavailable. When adding or renaming bundled catalog copy,
+update the same id in all 17 direct `*_DESIGN_SYSTEM_SUMMARIES` maps and keep
+category mappings aligned. The runtime still falls back to the package summary
+or category, but that fallback is not a substitute for the repository's full
+localized-content coverage.
 
-/* Incorrect — hardcoded white breaks dark mode */
-.button-primary {
-  background: var(--color-primary);
-  color: #ffffff;
-}
-```
+## 9. Review checklist
 
-**Use semantic names for states.** Prefer `--color-state-success` over `#00D26A` directly in component CSS.
+- [ ] Folder slug and `manifest.id` match and are normalized.
+- [ ] `manifest.json`, `DESIGN.md`, and `tokens.css` are present and consistent.
+- [ ] Every declared manifest path exists; source and license provenance are clear.
+- [ ] `DESIGN.md` has at least seven substantive H2 sections without relying on a fixed numbered template.
+- [ ] `tokens.css` satisfies the shared token schema and agrees with the prose.
+- [ ] Rich-package usage, component, preview, and source-evidence files are complete.
+- [ ] If `runtime` is declared, all runtime files parse and every intent reference resolves.
+- [ ] Derived component, Design Tokens, and Tailwind outputs are regenerated rather than hand-edited.
+- [ ] Component fixtures use declared semantic tokens and include keyboard, focus, contrast, and reduced-motion behavior.
+- [ ] All 17 direct non-English catalog maps are updated for bundled copy changes.
+- [ ] `pnpm guard` and `pnpm typecheck` pass.
 
-**Example component structure:**
-
-```css
-/* Status Badge */
-.badge {
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 2px 8px;
-  border-radius: 2px;
-}
-
-.badge-success {
-  background: rgba(38, 222, 129, 0.15);
-  color: var(--color-success);
-  border: 1px solid rgba(38, 222, 129, 0.3);
-}
-
-.badge-warning {
-  background: rgba(255, 159, 67, 0.15);
-  color: var(--color-warning);
-  border: 1px solid rgba(255, 159, 67, 0.3);
-}
-
-.badge-critical {
-  background: rgba(255, 71, 87, 0.15);
-  color: var(--color-critical);
-  border: 1px solid rgba(255, 71, 87, 0.3);
-}
-```
-
----
-
-## 6. Motion & Interaction
-
-### `prefers-reduced-motion`
-
-Target specific properties, not all elements globally:
-
-```css
-/* Correct — targets only the elements that animate */
-@keyframes pulse-glow {
-  0%, 100% { text-shadow: 0 0 8px currentColor; }
-  50% { text-shadow: 0 0 20px currentColor; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .alert-banner { animation-duration: 0.01ms !important; }
-  .countdown { animation: none; }
-}
-
-/* Incorrect — global * selector disables transitions everywhere */
-@media (prefers-reduced-motion: reduce) {
-  * { animation-duration: 0.01ms !important; }
-}
-```
-
-### Timing conventions
-
-```css
---transition-fast:   100ms ease-in;
---transition-base:   150ms ease-out;
---transition-slow:   300ms ease-out;
-```
-
-Match easing to purpose: `ease-in` for entering, `ease-out` for leaving, `linear` for continuous motion (scrolling, data updates).
-
----
-
-## 7. Locale Coverage Requirements
-
-When adding a new design system, include complete English catalog metadata in `design-systems/<id>/DESIGN.md`. Locales use translated summaries when present and otherwise derive the runtime fallback from the English source fields.
-
-### Which localized dictionaries need updating?
-
-Use this decision tree to decide whether to add dictionary copy:
-
-**Does a localized summary already exist for this design system?**
-- **Yes** → Add it to the matching `*_DESIGN_SYSTEM_SUMMARIES` dictionary.
-- **No** (no translation yet) → Keep the English `summary` and `category` metadata complete in `DESIGN.md`; the localized runtime renders those fields through the default fallback path.
-
-| Locale | File to update | Array |
-|--------|---------------|-------|
-| German | `apps/web/src/i18n/content.ts` | `DE_DESIGN_SYSTEM_SUMMARIES` when localized copy exists |
-| French | `apps/web/src/i18n/content.fr.ts` | `FR_DESIGN_SYSTEM_SUMMARIES` when localized copy exists |
-| Russian | `apps/web/src/i18n/content.ru.ts` | `RU_DESIGN_SYSTEM_SUMMARIES` when localized copy exists |
-
-The default English fallback path is automatic. Add localized summary dictionaries only when translated copy exists.
-
-### Test behavior
-
-The `e2e/tests/localized-content.test.ts` test verifies that every `design-systems/*/DESIGN.md` on disk is discoverable and renders a non-empty localized summary through either translated dictionary copy or the English fallback fields.
-
----
-
-## 8. Anti-patterns Section
-
-The anti-patterns section is where reviewers check if you understand what your design system is **not**. Good anti-patterns are specific and bounded:
-
-```markdown
-## 9. Anti-patterns
-
-- Do not use decorative colors in data displays — every hue must convey operational meaning
-- Do not use rounded corners greater than 4px — this aesthetic is functional, not friendly
-- Do not use proportional fonts for telemetry values — monospace exclusively for data
-- Do not animate non-alert elements — motion is reserved for signals that matter
-- Do not use light mode — low-light environments are the only context
-```
-
-Bad anti-patterns are vague:
-- ❌ "Avoid bad design"
-- ❌ "Don't overcomplicate things"
-- ❌ "Use good colors"
-
----
-
-## 9. Pre-submission Checklist
-
-Before opening a PR, verify:
-
-- [ ] All 9 section headings present in order
-- [ ] No `#REPLACE_ME` or placeholder hex codes
-- [ ] All CSS variables wrapped in `:root {}`
-- [ ] Font labels block present (Display / Body / Mono)
-- [ ] `[data-theme="dark"]` block overrides light tokens, not copies them
-- [ ] Interactive components have `:focus-visible` styles
-- [ ] All color tokens verified at 4.5:1+ contrast against their paired background
-- [ ] No hardcoded colors (like `#ffffff`) in component CSS — use semantic tokens
-- [ ] `prefers-reduced-motion` targets specific elements, not `*`
-- [ ] Anti-patterns are specific and bounded, not vague prose
-- [ ] Dark mode section explicitly states the design intent if dark-only
-- [ ] No duplicate CSS block definitions (check for `.panel` appearing twice)
-- [ ] Category choice confirmed against existing category list
-
----
-
-## 10. Design System Size Guide
-
-A well-documented design system is typically 300–600 lines. Being too brief (under 100 lines) triggers a Lens B review asking for more substance. Being verbose does not help if the content is generic.
-
-**Focus areas:**
-- Color: 30–50 lines (palette tables + CSS blocks)
-- Components: 100–200 lines (3–6 components, fully specified)
-- Visual Theme: 30–40 lines (atmosphere + use cases + prior art)
-- Anti-patterns: 8–15 lines (one per key mistake to avoid)
-
-The mission-control design system (`design-systems/mission-control/DESIGN.md`) is a good reference — tight scope (3 primary colors, dark only, 6 components).
+The executable guard inventory is owned by [`scripts/guard.ts`](../scripts/guard.ts).
+Read it and the scripts it invokes instead of relying on a copied list of checks.
