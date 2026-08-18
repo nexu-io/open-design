@@ -205,6 +205,7 @@ describe('plugin project duplication', () => {
     const root = await makeTempRoot('od-plugin-duplicate-workspace-');
     const projectsRoot = path.join(root, 'projects');
     const plugin = await makePreviewPlugin(root, 'workspace-plugin-fixture');
+    (plugin.manifest.od as { mode?: string }).mode = 'deck';
     const projectId = 'workspace-plugin-project';
     const project = {
       id: projectId,
@@ -234,6 +235,10 @@ describe('plugin project duplication', () => {
       transactionSteps.push('workspace:bind');
       return input;
     });
+    const insertProjectMock = vi.fn(() => {
+      transactionSteps.push('project:insert');
+      return project;
+    });
     const app = express();
     app.use(express.json());
     registerPluginRoutes(app, {
@@ -249,10 +254,7 @@ describe('plugin project duplication', () => {
           .mockReturnValueOnce('workspace-plugin-conversation'),
       },
       projectStore: {
-        insertProject: vi.fn(() => {
-          transactionSteps.push('project:insert');
-          return project;
-        }),
+        insertProject: insertProjectMock,
         getProject: vi.fn(() => project),
         ensureWorkspaceProject,
         dbDeleteProject: vi.fn(),
@@ -298,6 +300,12 @@ describe('plugin project duplication', () => {
         },
       );
       expect(resp.status).toBe(201);
+      expect(insertProjectMock).toHaveBeenCalledWith(
+        db,
+        expect.objectContaining({
+          metadata: expect.objectContaining({ kind: 'deck' }),
+        }),
+      );
       expect(ensureWorkspaceProject).toHaveBeenCalledWith(
         db,
         expect.objectContaining({

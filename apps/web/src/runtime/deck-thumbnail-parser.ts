@@ -44,7 +44,7 @@ export interface ParsedDeckThumbnails {
   reason?: DeckThumbnailFallbackReason;
   /** `outerHTML` of each slide, in document order. */
   slides: string[];
-  /** Concatenated deck stylesheets, `:root`/`html`/`body` rewritten to `:host`,
+  /** Concatenated deck stylesheets, root selectors rewritten for shadow DOM,
    *  `@font-face` stripped (see `fontFaces`), relative `url()` absolutized. */
   styleText: string;
   /** `@font-face` blocks lifted out of `styleText` — must live in the host
@@ -240,8 +240,23 @@ interface DesignSize {
 // Design canvas size (viewport-unit decks are already excluded upstream):
 // explicit `<deck-stage width height>`, then an explicit px `width`+`height` on
 // a stage/slide rule, else the 1920×1080 default.
-const STAGE_SIZE_SELECTOR_RE =
-  /(?:\bdeck-stage\b|\.deck-stage\b|\.canvas\b|#deck\b|\.deck\b|\.slide\b|\.ppt-slide\b|\.deck-slide\b|\[data-screen-label\])/i;
+const STAGE_SIZE_TARGET_RE =
+  /(?:^|[^\w-])deck-stage(?![\w-])|(?:\.deck-stage|\.canvas|#deck|\.deck|\.slide|\.slide-frame|\.ppt-slide|\.deck-slide|\[data-screen-label(?:[\s~|^$*]?=[^\]]+)?\])(?![\w-])/i;
+
+// A size declaration only describes the design canvas when the rule's TARGET
+// is a stage/slide. Merely mentioning `.slide` in an ancestor is insufficient:
+// real decks commonly contain rules such as `.slide .kicker-line { width:72px;
+// height:6px }`. Treating that decoration as the canvas collapses the whole
+// thumbnail into a 72x6 strip.
+function selectorTargetsStageOrSlide(selectorList: string): boolean {
+  return selectorList.split(',').some((selector) => {
+    const trimmed = selector.trim();
+    if (!trimmed || /::(?:before|after)\b/i.test(trimmed)) return false;
+    const compounds = trimmed.split(/\s+|[>+~]/).filter(Boolean);
+    const target = compounds.at(-1) ?? '';
+    return STAGE_SIZE_TARGET_RE.test(target);
+  });
+}
 
 function resolveDesignSize(doc: Document, css: string): DesignSize {
   const stage = doc.querySelector('deck-stage[width][height]');
@@ -254,7 +269,7 @@ function resolveDesignSize(doc: Document, css: string): DesignSize {
   }
 
   for (const block of iterateRuleBlocks(css)) {
-    if (!STAGE_SIZE_SELECTOR_RE.test(block.selector)) continue;
+    if (!selectorTargetsStageOrSlide(block.selector)) continue;
     const width = matchPxLength(block.body, 'width');
     const height = matchPxLength(block.body, 'height');
     if (width && height) return { width, height };
@@ -296,13 +311,19 @@ function stripCssComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, '');
 }
 
-// Rewrite `:root`, `html`, and `body` (as standalone selectors in a selector
-// list) to `:host`, so the deck's custom properties, base font, and base color
-// land on the shadow host and inherit into the re-parented slide. Compound
-// selectors like `body.dark` are left untouched (they'd match nothing, but
-// forcing them onto `:host` risks unwanted rules).
+// Rewrite `:root`/`html` to `:host`, so document-level variables inherit into
+// the reconstructed slide. Body rules belong on the design canvas itself: host
+// page styles intentionally own the shadow host's dark thumbnail frame and win
+// over ordinary `:host` declarations, which used to hide transparent slides on
+// that dark frame. Applying body paint/layout to `.od-thumb-canvas` preserves
+// the source deck's paper/background inside the frame. Compound selectors like
+// `body.dark` are left untouched.
 function rewriteRootSelectors(css: string): string {
-  return css.replace(/(^|[{};,])(\s*)(:root|html|body)(\s*)(?=[,{])/g, '$1$2:host$4');
+  return css.replace(
+    /(^|[{};,])(\s*)(:root|html|body)(\s*)(?=[,{])/g,
+    (_whole, prefix: string, whitespace: string, selector: string, trailing: string) =>
+      `${prefix}${whitespace}${selector.toLowerCase() === 'body' ? '.od-thumb-canvas' : ':host'}${trailing}`,
+  );
 }
 
 // Lift `@font-face` blocks out; they're ignored inside a shadow root and must be

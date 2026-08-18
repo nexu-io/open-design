@@ -12,11 +12,13 @@ const DECK_SLIDE_MARKERS = [
   '[data-screen-label]',
   '.deck-slide',
   '.ppt-slide',
+  '.slide-frame',
 ] as const;
 const DECK_EXPLICIT_SLIDE_MARKERS = [
   '.slide',
   '.deck-slide',
   '.ppt-slide',
+  '.slide-frame',
 ] as const;
 const DECK_SLIDE_CONTAINERS = [
   'deck-stage',

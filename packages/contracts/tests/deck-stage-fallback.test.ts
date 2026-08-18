@@ -14,13 +14,13 @@ import {
 
 describe('deck-stage fallback runtime injection', () => {
   it('publishes one selector contract for legacy, modern, and imported slide markers', () => {
-    expect(DECK_SLIDE_SELECTOR).toBe('.slide, [data-screen-label], .deck-slide, .ppt-slide');
-    expect(DECK_EXPLICIT_SLIDE_SELECTOR).toBe('.slide, .deck-slide, .ppt-slide');
+    expect(DECK_SLIDE_SELECTOR).toBe('.slide, [data-screen-label], .deck-slide, .ppt-slide, .slide-frame');
+    expect(DECK_EXPLICIT_SLIDE_SELECTOR).toBe('.slide, .deck-slide, .ppt-slide, .slide-frame');
     expect(DECK_SCREEN_SLIDE_SELECTOR).toBe('[data-screen-label]');
     expect(DECK_LEGACY_SCREEN_SLIDE_SELECTOR).toBe('section[data-screen-label]');
     expect(new RegExp(DECK_LEGACY_SCREEN_LABEL_RE_SOURCE).test('01 Cover')).toBe(true);
     for (const container of ['deck-stage', '.deck', '.deck-stage', '.deck-shell', '#deck']) {
-      for (const marker of ['.slide', '[data-screen-label]', '.deck-slide', '.ppt-slide']) {
+      for (const marker of ['.slide', '[data-screen-label]', '.deck-slide', '.ppt-slide', '.slide-frame']) {
         expect(DECK_STRUCTURED_SLIDE_SELECTOR).toContain(`${container} > ${marker}`);
       }
     }
