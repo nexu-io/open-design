@@ -78,6 +78,29 @@
   line-height: 1.45;
 }
 
+.close.close {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  color: var(--text);
+  transition:
+    background 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 140ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 140ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.close.close:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--bg-muted);
+  color: var(--text-strong);
+}
+
+.close.close:focus-visible,
 .filter:focus-visible,
 .markAll:focus-visible,
 .syncStatus button:focus-visible,

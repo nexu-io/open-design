@@ -494,4 +494,15 @@ describe('MessageCenter', () => {
     expect(screen.queryByTestId('message-center-dialog')).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
+
+  it('shows a close button and restores trigger focus when it is clicked', async () => {
+    renderMessageCenter();
+    const trigger = screen.getByTestId('message-center-trigger');
+    const dialog = await openCenter();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close message center' }));
+
+    expect(screen.queryByTestId('message-center-dialog')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 });
