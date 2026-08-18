@@ -40,6 +40,7 @@ import {
 import {
   canAccessWorkspaceInviteFlow,
   resolveWorkspaceInviteTarget,
+  workspaceInviteAvailableSeats,
   workspaceUpgradeUrl,
 } from './EntryNavRail';
 import { moveWorkspaceProject, workspaceProjectMoveErrorCode } from '../state/projects';
@@ -2226,7 +2227,7 @@ export function RecentProjectsStrip({
         canAssignRoles={
           canAssignInviteRoles ?? workspaceContext?.permissions.canInviteMembers === true
         }
-        availableSeats={workspaceContext?.seatSummary?.availableSeats}
+        availableSeats={workspaceInviteAvailableSeats(workspaceContext)}
         entryFrom="all_projects"
         onUpgrade={
           inviteUpgradeUrl

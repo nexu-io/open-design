@@ -307,7 +307,9 @@ export function createCollabPresenceCloudClient(
     const workspaceId =
       context?.workspaceId?.trim() || workspaceScopeFor(projectId)?.trim() || '';
     if (!workspaceId) {
-      throw new Error('explicit workspace scope is required');
+      throw Object.assign(new Error('workspace scope is unavailable'), {
+        code: 'workspace_scope_unavailable',
+      });
     }
     return workspaceId;
   };

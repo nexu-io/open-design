@@ -100,8 +100,8 @@ const TEAM_FULL: WorkspaceFixture = {
 const TEAM_UNKNOWN_SEATS: WorkspaceFixture = {
   ...TEAM_OWNER,
   workspaceName: 'Seat state loading',
-  // Deliberately model the pre-authority window. The production resolver must
-  // not infer spare capacity from permissions alone.
+  // Deliberately model the directory-only context, where invite permission is
+  // known but seat capacity remains authoritative at invite submission time.
   seatSummary: undefined as never,
 };
 
@@ -808,7 +808,7 @@ test('[P1] an already-open full team restores the local invite flow when a seat 
   await expect.poll(() => inviteUrls(page)).toHaveLength(1);
 });
 
-test('[P0] unknown team seat state fails closed across rail and project surfaces', async ({
+test('[P0] unknown team seat state keeps local invite available across rail and project surfaces', async ({
   page,
 }) => {
   await wireWorkspaceMocks(page, TEAM_UNKNOWN_SEATS, [TEAM_UNKNOWN_SEATS]);
@@ -823,12 +823,14 @@ test('[P0] unknown team seat state fails closed across rail and project surfaces
   await ensureRailOpen(page);
 
   await page.getByTestId('workspace-switcher').click();
-  await expect(
-    page.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }),
-  ).toHaveCount(0);
-  await page.locator('.entry-nav-rail__menu-backdrop').click({ position: { x: 2, y: 2 } });
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Invite colleague' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Invite members' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close' }).click();
+
   await page.getByTestId('entry-nav-all-projects').click();
-  await expect(page.getByRole('button', { name: 'Invite teammates' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Invite teammates' }).click();
+  await expect(dialog).toBeVisible();
 });
 
 test('[P0] ordinary team member sees team projects but no invite or workspace-admin actions', async ({

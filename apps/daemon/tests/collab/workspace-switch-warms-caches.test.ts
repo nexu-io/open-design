@@ -69,11 +69,7 @@ function contextFor(workspaceId: string): WorkspaceCollabContext {
   };
 }
 
-/**
- * A switch harness with a legacy active-workspace pin. The compatibility route
- * must leave it untouched; only the response and exact-scope warm announcement
- * describe the tab-local selection.
- */
+/** A switch harness with the client-local restart-default store. */
 async function startSwitchServer(options: {
   /** What the follow-up context read answers. Default: agrees with the pin. */
   currentContext?: (pinned: string | null) => WorkspaceCollabContext | null;
@@ -92,6 +88,11 @@ async function startSwitchServer(options: {
     },
     clear: async () => {
       pinned = null;
+    },
+    clearIf: async (workspaceId: string) => {
+      if (pinned !== workspaceId) return false;
+      pinned = null;
+      return true;
     },
   };
 
@@ -137,6 +138,10 @@ async function startSwitchServer(options: {
       });
       return { status: response.status, body: (await response.json()) as Record<string, unknown> };
     },
+    async directory() {
+      const response = await fetch(`${base}/api/workspace/directory`);
+      return (await response.json()) as { activeWorkspaceId: string | null };
+    },
   };
 }
 
@@ -147,7 +152,7 @@ describe('PUT /api/workspace/active announces a confirmed switch for cache warmi
     const result = await api.switchTo(TEAM);
 
     expect(result.status).toBe(200);
-    expect(api.pinnedWorkspace()).toBe(PERSONAL);
+    expect(api.pinnedWorkspace()).toBe(TEAM);
     // The announcement is what lets the daemon refill the `catalog` and
     // `members` digest faces during the idle beat after the switch, instead of
     // making the first project load or agent run in the new workspace pay for
@@ -179,7 +184,7 @@ describe('PUT /api/workspace/active announces a confirmed switch for cache warmi
     const result = await api.switchTo(TEAM);
 
     expect(result.status).toBe(200);
-    expect(api.pinnedWorkspace()).toBe(PERSONAL);
+    expect(api.pinnedWorkspace()).toBe(TEAM);
     expect(result.body.activeWorkspaceId).toBe(TEAM);
     // Synthesized from the directory entry the route already validated, so the
     // response still describes the workspace the user picked.
@@ -214,9 +219,17 @@ describe('PUT /api/workspace/active announces a confirmed switch for cache warmi
     const result = await api.switchTo(TEAM);
 
     expect(result.status).toBe(200);
-    expect(api.pinnedWorkspace()).toBe(PERSONAL);
+    expect(api.pinnedWorkspace()).toBe(TEAM);
     expect((result.body.context as { workspaceId?: string }).workspaceId).toBe(TEAM);
     expect(api.onWorkspaceSwitched).toHaveBeenCalledWith(TEAM);
+  });
+
+  it('returns the saved workspace as the next headerless startup default', async () => {
+    const api = await startSwitchServer({});
+
+    await api.switchTo(TEAM);
+
+    expect((await api.directory()).activeWorkspaceId).toBe(TEAM);
   });
 
   it('stays silent for a workspace the directory does not show', async () => {
@@ -231,31 +244,15 @@ describe('PUT /api/workspace/active announces a confirmed switch for cache warmi
 
 // The compatibility route authorizes the tab-local choice from its directory
 // read and may ask `resolveExact()` for richer context. `resolveExact()` is
-// deliberately read-only: unlike the legacy `current()` path, it cannot clear
-// or re-pin daemon-global selection state. The route's directory read can be a
-// 5-second cached success while the exact enrichment performs a fresh read and
-// returns null; that disagreement must not resurrect active/current authority.
+// deliberately read-only: only the verified route persists the restart
+// default. The route's directory read can be a cached success while the exact
+// enrichment performs a fresh read and returns null; that disagreement must not
+// change which exact workspace the route verified.
 //
 // These cases wire the production provider against the production cached
 // directory fetcher so the two reads genuinely disagree instead of a stub
 // pretending they do.
 describe('PUT /api/workspace/active keeps exact enrichment tab-local', () => {
-  const B_PERSONAL_CONTEXT = {
-    userId: 'auth-user-1',
-    appUserId: 'app-user-1',
-    workspaceId: PERSONAL,
-    workspaceName: "Ma Shu's workspace",
-    workspaceType: 'personal',
-    workspaceMemberId: `wm-${PERSONAL}`,
-    role: 'owner',
-    memberStatus: 'active',
-    lifecycleState: 'active',
-    billingState: 'active',
-    planId: 'personal-pro',
-    providerMode: 'platform_credits',
-    seatSummary: { seatLimit: 1, usedSeats: 1, availableSeats: 0, isSeatFull: true },
-  };
-
   function velaDirectoryBody(items: WorkspaceDirectoryItem[]) {
     return { items };
   }
@@ -265,7 +262,8 @@ describe('PUT /api/workspace/active keeps exact enrichment tab-local', () => {
     let directoryCalls = 0;
     const onWorkspaceSwitched = vi.fn<(workspaceId: string) => void>();
 
-    // Legacy pin store: neither the route nor resolveExact may write it.
+    // Restart-default store: the route writes it only after membership checks;
+    // resolveExact remains read-only.
     const activeWorkspace: NonNullable<RegisterCollabContextRoutesDeps['activeWorkspace']> = {
       get: () => pinned,
       set: async (workspaceId: string) => {
@@ -273,6 +271,11 @@ describe('PUT /api/workspace/active keeps exact enrichment tab-local', () => {
       },
       clear: async () => {
         pinned = null;
+      },
+      clearIf: async (workspaceId: string) => {
+        if (pinned !== workspaceId) return false;
+        pinned = null;
+        return true;
       },
     };
 
@@ -296,15 +299,6 @@ describe('PUT /api/workspace/active keeps exact enrichment tab-local', () => {
           ),
         );
       }
-      if (u.includes('/workspaces/current') && method === 'GET') {
-        // TEAM is gone, so B refuses the explicitly scoped read. resolveExact
-        // then performs the fresh directory lookup above and returns null.
-        const requested = (init?.headers as Record<string, string> | undefined)?.[
-          'x-vela-workspace-id'
-        ];
-        if (requested === TEAM) return jsonResponse(404, { error: 'workspace_member_required' });
-        return jsonResponse(200, B_PERSONAL_CONTEXT);
-      }
       throw new Error(`unexpected fetch ${method} ${u}`);
     }) as unknown as typeof fetch;
 
@@ -320,8 +314,11 @@ describe('PUT /api/workspace/active keeps exact enrichment tab-local', () => {
       fetch: fetchImpl,
       readSession: () => session as never,
       getActiveWorkspaceId: () => activeWorkspace.get(),
-      setLocalSelection: (workspaceId: string) => activeWorkspace.set(workspaceId),
-      clearLocalSelection: () => activeWorkspace.clear(),
+      replaceLocalSelection: async (expectedWorkspaceId, workspaceId) => {
+        if (activeWorkspace.get() !== expectedWorkspaceId) return activeWorkspace.get();
+        await activeWorkspace.set(workspaceId);
+        return activeWorkspace.get();
+      },
     });
 
     // The production cached fetcher: the route's read is served from cache for
@@ -366,14 +363,12 @@ describe('PUT /api/workspace/active keeps exact enrichment tab-local', () => {
     };
   }
 
-  it('uses cached directory authorization without mutating the legacy pin', async () => {
+  it('uses cached directory authorization and persists the restart default', async () => {
     const api = await startRealProviderServer();
 
     const result = await api.switchTo(TEAM);
 
-    // The compatibility route describes this tab's exact selection. The old
-    // daemon pin remains unrelated and unchanged.
-    expect(api.pinnedWorkspace()).toBe(PERSONAL);
+    expect(api.pinnedWorkspace()).toBe(TEAM);
     expect(result.status).toBe(200);
     expect(result.body.activeWorkspaceId).toBe(TEAM);
     expect((result.body.context as { workspaceId?: string }).workspaceId).toBe(TEAM);
@@ -381,13 +376,12 @@ describe('PUT /api/workspace/active keeps exact enrichment tab-local', () => {
     expect(api.onWorkspaceSwitched).toHaveBeenCalledWith(TEAM);
   });
 
-  it('does not restore active/current authority through exact enrichment', async () => {
+  it('does not let exact enrichment overwrite the verified restart default', async () => {
     const api = await startRealProviderServer();
 
     await api.switchTo(TEAM);
 
-    // The pin is merely legacy compatibility state and remains untouched.
-    expect(api.pinnedWorkspace()).toBe(PERSONAL);
+    expect(api.pinnedWorkspace()).toBe(TEAM);
   });
 });
 

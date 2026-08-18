@@ -15,11 +15,11 @@ import { resolveEffectiveVelaConsoleOrigin } from '../integrations/vela-console-
 
 // The daemon's single B-integration point . Presence + sync need the
 // caller's workspace identity (workspaceMemberId + role + lifecycle). In
-// production this provider verifies the request's auth against the B service and
-// returns B's CurrentWorkspaceContext for that user; until B is reachable, the
-// dev provider below holds an in-memory context that a demo/tools-dev run can
-// set. Swapping the provider is the only change when B ships — routes and the
-// web client stay put.
+// production this provider verifies the signed-in identity against B's
+// workspace membership directory, then resolves the daemon's locally persisted
+// workspace selection; until B is reachable, the dev provider below holds an
+// in-memory context that a demo/tools-dev run can set. Swapping the provider is
+// the only change when B ships — routes and the web client stay put.
 
 export interface WorkspaceContextRequest {
   /** The caller's bearer token (a real provider verifies this against B). */
@@ -163,8 +163,8 @@ const BILLING_STATES: ReadonlySet<WorkspaceBillingState> = new Set([
   'locked',
 ]);
 
-/** Fallback billing state derived from lifecycle, used when a dev payload omits
- *  it. Production always carries B's authoritative `billingState`. */
+/** Fallback billing state derived from lifecycle, used when a dev payload or
+ *  membership-directory context does not carry a billing projection. */
 function billingStateForLifecycle(lifecycle: WorkspaceLifecycleState): WorkspaceBillingState {
   switch (lifecycle) {
     case 'active':

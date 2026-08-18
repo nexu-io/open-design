@@ -48,7 +48,7 @@ interface Entry {
 
 const DEFAULT_REALTIME_TTL_MS = 5 * 60_000;
 
-/** Exact-workspace cache for Vela's authenticated `/workspaces/current` read. */
+/** Exact-workspace cache for an authenticated membership-directory projection. */
 export function createWorkspaceExactContextCache(
   options: WorkspaceExactContextCacheOptions,
 ): WorkspaceExactContextCache {

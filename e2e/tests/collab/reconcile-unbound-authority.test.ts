@@ -73,23 +73,16 @@ const FOREIGN = {
 /** `/api/v1/workspaces` is the only authority used by these data-plane tests. */
 function startDirectoryMock(options: {
   directoryStatus?: number;
-  currentStatus: 401 | 403;
 }): Promise<{
   url: string;
   close: () => Promise<void>;
-  /** Retained to model an older backend response; data-plane routes ignore it. */
-  setCurrentStatus: (status: 401 | 403) => void;
+  setDirectoryStatus: (status: number) => void;
 }> {
-  let currentStatus = options.currentStatus;
+  let directoryStatus = options.directoryStatus ?? 200;
   const server: Server = createServer((req, res) => {
     const url = req.url ?? '';
-    if (url.startsWith('/api/v1/workspaces/current')) {
-      res.writeHead(currentStatus, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(currentStatus === 403 ? { error: 'missing_principal' } : { error: 'unauthorized' }));
-      return;
-    }
     if (url.startsWith('/api/v1/workspaces')) {
-      const status = options.directoryStatus ?? 200;
+      const status = directoryStatus;
       res.writeHead(status, { 'content-type': 'application/json' });
       res.end(JSON.stringify(status === 200 ? { items: [MEMBER] } : { error: 'authority down' }));
       return;
@@ -104,8 +97,8 @@ function startDirectoryMock(options: {
       resolve({
         url: `http://127.0.0.1:${address.port}`,
         close: () => new Promise<void>((done) => server.close(() => done())),
-        setCurrentStatus: (status) => {
-          currentStatus = status;
+        setDirectoryStatus: (status) => {
+          directoryStatus = status;
         },
       });
     });
@@ -184,13 +177,12 @@ type DirectoryMock = Awaited<ReturnType<typeof startDirectoryMock>>;
 
 let readableAuthority: DirectoryMock;
 let unreadableAuthority: DirectoryMock;
-/** Directory readable; `/current` is deliberately irrelevant to data-plane scope. */
 let selectionAuthority: DirectoryMock;
 
 beforeAll(async () => {
-  readableAuthority = await startDirectoryMock({ currentStatus: 401 });
-  unreadableAuthority = await startDirectoryMock({ currentStatus: 401, directoryStatus: 500 });
-  selectionAuthority = await startDirectoryMock({ currentStatus: 403 });
+  readableAuthority = await startDirectoryMock({});
+  unreadableAuthority = await startDirectoryMock({ directoryStatus: 500 });
+  selectionAuthority = await startDirectoryMock({});
 });
 
 afterAll(async () => {

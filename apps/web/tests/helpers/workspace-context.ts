@@ -74,8 +74,7 @@ export function workspaceDirectoryFixture(
 ): WorkspaceDirectoryResponse {
   return {
     items: contexts.map(workspaceDirectoryItemFixture),
-    // The web selection is tab-local and must not consume a daemon-global
-    // current Workspace. Tests deliberately keep this compatibility echo null.
+    // Most tests do not model a saved next-start default.
     activeWorkspaceId: null,
   };
 }

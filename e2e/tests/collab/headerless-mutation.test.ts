@@ -49,14 +49,6 @@ let authorityUrl: string;
 beforeAll(async () => {
   authority = createServer((req, res) => {
     const url = req.url ?? '';
-    // 403 `missing_principal` makes the provider bootstrap a default workspace
-    // from the directory, so the daemon ends up with an ambient workspace —
-    // which is the state every signed-in install is in.
-    if (url.startsWith('/api/v1/workspaces/current')) {
-      res.writeHead(403, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ error: 'missing_principal' }));
-      return;
-    }
     if (url.startsWith('/api/v1/workspaces')) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ items: [OWN, OTHER] }));

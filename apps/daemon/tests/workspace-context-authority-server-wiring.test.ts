@@ -66,19 +66,10 @@ describe('server workspace context authority wiring', () => {
   it('keeps directory Team authority and fences an unread A -> B -> A Settings transition', async () => {
     scratch = await mkdtemp(join(tmpdir(), 'od-context-authority-wiring-'));
     let directoryReads = 0;
-    let currentReads = 0;
     let allowHubReady = true;
-    let observeCatchUpCurrent!: () => void;
-    const catchUpCurrentObserved = new Promise<void>((resolve) => {
-      observeCatchUpCurrent = resolve;
-    });
     const authorityUrl = await startAuthority({
       onDirectory: () => {
         directoryReads += 1;
-      },
-      onCurrent: () => {
-        currentReads += 1;
-        if (currentReads >= 2) observeCatchUpCurrent();
       },
       isHubReady: () => allowHubReady,
     });
@@ -104,7 +95,8 @@ describe('server workspace context authority wiring', () => {
 
     const initial = await getWorkspaceContext();
     expect(initial).toMatchObject({ workspaceType: 'team', role: 'admin' });
-    expect(currentReads).toBe(1);
+    const directoryReadsAfterInitial = directoryReads;
+    expect(directoryReadsAfterInitial).toBeGreaterThan(0);
 
     const interest = await fetch(`${daemon.url}/api/workspace/billing/interests/context-test`, {
       method: 'PUT',
@@ -115,13 +107,16 @@ describe('server workspace context authority wiring', () => {
       }),
     });
     expect(interest.status).toBe(200);
-    await catchUpCurrentObserved;
+    await vi.waitFor(
+      () => expect(directoryReads).toBeGreaterThan(directoryReadsAfterInitial),
+      { timeout: 10_000, interval: 50 },
+    );
 
     let warmContext: Record<string, unknown> | null = null;
     await vi.waitFor(async () => {
-      const readsBefore = currentReads;
+      const readsBefore = directoryReads;
       const context = await getWorkspaceContext();
-      expect(currentReads).toBe(readsBefore);
+      expect(directoryReads).toBe(readsBefore);
       warmContext = context;
     }, { timeout: 10_000, interval: 50 });
 
@@ -132,14 +127,12 @@ describe('server workspace context authority wiring', () => {
       workspaceType: 'team',
       role: 'admin',
       teamId: WORKSPACE_ID,
-      planId: 'team_pro',
+      planId: null,
     });
     const directoryReadsAfterCatchUp = directoryReads;
-    const currentReadsAfterCatchUp = currentReads;
     await getWorkspaceContext();
     await getWorkspaceContext();
     expect(directoryReads).toBe(directoryReadsAfterCatchUp);
-    expect(currentReads).toBe(currentReadsAfterCatchUp);
 
     // Red spec for the account-identity fence: both Settings writes complete
     // without any directory/status read. The final credential identity is
@@ -147,7 +140,6 @@ describe('server workspace context authority wiring', () => {
     // would otherwise revive the old five-minute authority lease.
     allowHubReady = false;
     const directoryReadsBeforeCredentialRoundTrip = directoryReads;
-    const currentReadsBeforeCredentialRoundTrip = currentReads;
     await putAmrApiUrl('https://account-b.example');
     await putAmrApiUrl(authorityUrl);
     expect(directoryReads).toBe(directoryReadsBeforeCredentialRoundTrip);
@@ -158,8 +150,7 @@ describe('server workspace context authority wiring', () => {
       workspaceMemberId: MEMBER_ID,
       role: 'admin',
     });
-    expect(directoryReads).toBe(directoryReadsBeforeCredentialRoundTrip + 1);
-    expect(currentReads).toBe(currentReadsBeforeCredentialRoundTrip + 1);
+    expect(directoryReads).toBeGreaterThan(directoryReadsBeforeCredentialRoundTrip);
   }, 60_000);
 });
 
@@ -208,7 +199,6 @@ async function putAmrApiUrl(apiUrl: string): Promise<void> {
 
 async function startAuthority(callbacks: {
   onDirectory: () => void;
-  onCurrent: () => void;
   isHubReady?: () => boolean;
 }): Promise<string> {
   authority = createServer((req, res) => {
@@ -225,23 +215,6 @@ async function startAuthority(callbacks: {
           memberStatus: 'active',
           lifecycleState: 'active',
         }],
-      }));
-      return;
-    }
-    if (req.url?.startsWith('/api/v1/workspaces/current') && req.method === 'GET') {
-      callbacks.onCurrent();
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({
-        workspaceId: WORKSPACE_ID,
-        workspaceName: 'Conflicting current context',
-        workspaceType: 'personal',
-        workspaceMemberId: MEMBER_ID,
-        role: 'member',
-        memberStatus: 'active',
-        lifecycleState: 'active',
-        billingState: 'active',
-        planId: 'team_pro',
-        providerMode: 'platform_credits',
       }));
       return;
     }
