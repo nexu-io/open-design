@@ -150,6 +150,9 @@ const HOME_PLUGINS = [
       od: {
         kind: 'scenario',
         taskKind: 'new-generation',
+        mode: 'deck',
+        surface: 'web',
+        preview: { type: 'html', entry: './example.html' },
         useCase: {
           query:
             'Create a {{deckType}} for {{audience}} about {{topic}} with {{slideCount}}. Speaker notes: {{speakerNotes}}. Use {{designSystem}}.',
@@ -1873,6 +1876,53 @@ test('[P1] home hero deck example preset updates the composer input', async ({ p
   await expect(input).toHaveText(
     'Create a pitch deck for decision makers about quarterly review with 10-15 pages. Speaker notes: include speaker notes. Use the active project design system.',
   );
+});
+
+test('[P1] home hero deck preview iframe stays anchored inside its preview frame', async ({ page }) => {
+  await page.route('**/api/plugins/example-simple-deck/preview*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><body style="margin:0"><main style="width:1280px;height:720px">Deck preview</main></body></html>',
+    });
+  });
+
+  await gotoEntryHome(page);
+  await pickHomeTemplate(page, 'deck');
+  await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
+
+  const card = page.locator(
+    '[data-testid="home-hero-plugin-preset"][data-plugin-id="example-simple-deck"]',
+  );
+  await expect(card).toBeVisible();
+
+  const iframe = card.locator('.plugins-home__html-iframe');
+  await expect(iframe).toBeVisible();
+
+  const metrics = await iframe.evaluate((element) => {
+    const frame = element.closest('.plugins-home__html-frame');
+    if (!(frame instanceof HTMLElement)) {
+      throw new Error('Deck preview frame not found');
+    }
+
+    const iframeRect = element.getBoundingClientRect();
+    const frameRect = frame.getBoundingClientRect();
+    const style = getComputedStyle(element);
+
+    return {
+      left: style.left,
+      top: style.top,
+      transformOrigin: style.transformOrigin,
+      deltaX: iframeRect.left - frameRect.left,
+      deltaY: iframeRect.top - frameRect.top,
+    };
+  });
+
+  expect(metrics.left).toBe('0px');
+  expect(metrics.top).toBe('0px');
+  expect(metrics.transformOrigin).toMatch(/^0px 0px/);
+  expect(Math.abs(metrics.deltaX)).toBeLessThanOrEqual(1);
+  expect(Math.abs(metrics.deltaY)).toBeLessThanOrEqual(1);
 });
 
 test('[P1] home hero prompt example cards fill the composer for fallback modes', async ({ page }) => {
