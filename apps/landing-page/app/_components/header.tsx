@@ -217,11 +217,13 @@ export function Header({
                 revealed by the SAME pure-CSS :hover / :focus-within rule as
                 the hub menus, so it works with no JS (first paint / script
                 failure) and on touch (tapping focuses the button →
-                :focus-within). It lights up for the whole product family AND
-                for /agents/ pages now that Agent lives inside it. */}
+                :focus-within). It lights ONLY for destinations inside the
+                mega panel (Codex Plugin, Solutions, /agents/) — footer-only
+                product siblings (HTML Anything / HTML Video / Codex Slides)
+                intentionally do not light this tab. */}
             {/* `nav-item-mega`: on desktop this li goes position:static so
-                the five-column mega panel positions against the fixed
-                .site-chrome and centers on the viewport (anchored to the li
+                the five-column mega panel positions against `.container`
+                and centers on it (anchored to the li
                 it overflowed narrow desktop widths). */}
             <li className='has-dropdown nav-item-mega'>
               <button
