@@ -1240,37 +1240,6 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       return sendApiError(res, 503, 'UPSTREAM_UNAVAILABLE', 'daemon is shutting down');
     }
     const requestBody = toJsonRecord(req.body);
-    // #7040 — reject requests with no usable prompt before a run row is
-    // minted. Attachments-only sends and plugin-brief runs stay valid: those
-    // flows synthesize the user message server-side.
-    const hasPrompt =
-      (typeof requestBody.message === 'string' && requestBody.message.trim().length > 0)
-      || (typeof requestBody.currentPrompt === 'string' && requestBody.currentPrompt.trim().length > 0);
-    // Attachments mirror the seed predicate: attachments is a list of
-    // non-empty file-path strings and commentAttachments is a list of
-    // objects. Either list, when well-formed and non-empty, legitimizes an
-    // empty-message turn (attachments-only sends seed the user message).
-    const hasAttachments =
-      (Array.isArray(requestBody.attachments)
-        && requestBody.attachments.length > 0
-        && requestBody.attachments.every((entry) => typeof entry === 'string' && entry.trim().length > 0))
-      || (Array.isArray(requestBody.commentAttachments)
-        && requestBody.commentAttachments.length > 0
-        && requestBody.commentAttachments.every((entry) => entry !== null && typeof entry === 'object'));
-    const hasPluginBriefSource =
-      (typeof requestBody.pluginId === 'string'
-        && requestBody.pluginId.length > 0
-        && Boolean(getInstalledPlugin(db, requestBody.pluginId)))
-      || (typeof requestBody.appliedPluginSnapshotId === 'string'
-        && requestBody.appliedPluginSnapshotId.length > 0);
-    if (!hasPrompt && !hasAttachments && !hasPluginBriefSource) {
-      return sendApiError(
-        res,
-        400,
-        'VALIDATION_FAILED',
-        'run requires a non-empty message, attachments, or a plugin',
-      );
-    }
     const requestAnalyticsContext = readAnalyticsContext(req);
     const mediaExecution = parseMediaExecutionPolicyInput(requestBody.mediaExecution);
     if (!mediaExecution.ok) {
@@ -1736,6 +1705,13 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       attachments: ReturnType<typeof seededUserMessageAttachmentFields>;
       turnMetadata: ReturnType<typeof seededUserMessageTurnMetadataFields>;
     } | null = null;
+    // Normalized attachment fields — the same seed source the user-message
+    // seeding below uses, so the promptless-run gate judges exactly the
+    // values that survive normalization (not raw request fields).
+    const normalizedAttachments = seededUserMessageAttachmentFields(meta);
+    const hasSeedableAttachmentMetadata =
+      (normalizedAttachments.attachments?.length ?? 0) > 0 ||
+      (normalizedAttachments.commentAttachments?.length ?? 0) > 0;
     if (
       typeof meta.conversationId === 'string' &&
       meta.conversationId &&
@@ -1754,10 +1730,7 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
       // message is still seedable when attachment metadata is present so
       // chips/annotations survive reload for omit-pin clients that leave
       // currentPrompt unset.
-      const seededAttachments = seededUserMessageAttachmentFields(meta);
-      const hasSeedableAttachmentMetadata =
-        (seededAttachments.attachments?.length ?? 0) > 0 ||
-        (seededAttachments.commentAttachments?.length ?? 0) > 0;
+      const seededAttachments = normalizedAttachments;
       const originalCurrentPrompt = requestBody.currentPrompt;
       const originalMessage = requestBody.message;
       const promptForUserMessage =
@@ -1779,6 +1752,22 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
           ),
         };
       }
+    }
+    // #7040 — reject promptless runs before a run row is minted. The gate
+    // judges the values that actually survive normalization and resolution:
+    // the effective prompt (plugin runs get meta.message replaced by the
+    // rendered brief), the normalized attachment seed, and the resolved
+    // plugin snapshot. Raw request fields alone never pass this gate.
+    const hasPrompt =
+      (typeof meta.message === 'string' && meta.message.trim().length > 0)
+      || (typeof requestBody.currentPrompt === 'string' && requestBody.currentPrompt.trim().length > 0);
+    if (!hasPrompt && !hasSeedableAttachmentMetadata && !resolvedSnapshot?.ok) {
+      return sendApiError(
+        res,
+        400,
+        'VALIDATION_FAILED',
+        'run requires a non-empty message, attachments, or a plugin',
+      );
     }
     const seedRunUserMessage = () => {
       if (!runUserSeed) return;
