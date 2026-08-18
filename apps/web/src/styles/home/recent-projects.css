@@ -491,10 +491,14 @@
   color: var(--text-strong);
 }
 .recent-projects__card-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 5;
+  /* Portaled to <body> and positioned with position: fixed at a viewport
+     anchor captured from the trigger, so it escapes any overflow:hidden
+     ancestor (card / grid / scroll container) and can flip above the trigger
+     when the viewport bottom cannot fit it. The JS layer owns top/left (or
+     bottom for the flipped case); the static fallback below keeps it usable
+     if no inline style is applied. */
+  position: fixed;
+  z-index: 1900;
   display: grid;
   gap: 2px;
   min-width: 144px;

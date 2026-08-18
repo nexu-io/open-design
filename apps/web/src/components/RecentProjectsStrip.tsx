@@ -8,6 +8,7 @@
 
 import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Dialog, DialogDescription, DialogFooter, DialogTitle } from '@open-design/components';
 
 const MOVE_CONFIRM_SKIP_KEY = 'od.projects.moveConfirmSkip';
@@ -549,6 +550,19 @@ export function RecentProjectsStrip({
     ],
   );
   const menuContainerRef = useRef<HTMLDivElement | null>(null);
+  // Trigger button for the currently-open per-card menu. Used to recompute
+  // the portal anchor on scroll/resize and to capture the initial position.
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
+  // Portal anchor for the per-card menu: captured from the trigger at open
+  // time and applied via fixed positioning to a <body> portal so the menu
+  // escapes any overflow:hidden container (card, grid, scroller). Flips
+  // above when the viewport bottom cannot fit the menu.
+  const [menuAnchor, setMenuAnchor] = useState<{
+    left: number;
+    top: number;
+    maxHeight?: number;
+    placement: 'below' | 'above';
+  } | null>(null);
   const renameTitleId = useId();
   const confirmTitleId = useId();
   const moveTitleId = useId();
@@ -592,6 +606,30 @@ export function RecentProjectsStrip({
   }
   const actionsAvailable = Boolean(onDelete || onDuplicate || onRename || collaborationAvailable);
 
+  // Compute the viewport-fixed anchor for the per-card menu given the
+  // trigger button's rect. Flips above when the lower viewport is too
+  // tight to fit a usable portion of the menu.
+  function computeMenuAnchor(rect: DOMRect): {
+    left: number;
+    top: number;
+    maxHeight?: number;
+    placement: 'below' | 'above';
+  } {
+    // Reasonable upper bound for a 5-item menu; caller can clamp at render.
+    const MAX_HEIGHT = 220;
+    const MARGIN = 8;
+    const viewportH = window.innerHeight;
+    const below = viewportH - rect.bottom - MARGIN;
+    const above = rect.top - MARGIN;
+    const placement = above > below ? ('above' as const) : ('below' as const);
+    return {
+      left: rect.left,
+      top: placement === 'below' ? rect.bottom + MARGIN : rect.top - MAX_HEIGHT - MARGIN,
+      maxHeight: Math.min(MAX_HEIGHT, placement === 'below' ? below : above),
+      placement,
+    };
+  }
+
   // Bulk-action state for the 多选 bar. Every action below is the batch form of
   // an action the per-card ⋯ menu already offers (move in/out of the team
   // space, delete); nothing new is exposed here that a single card cannot do.
@@ -623,9 +661,29 @@ export function RecentProjectsStrip({
       const target = event.target;
       if (target instanceof Node && menuContainerRef.current?.contains(target)) return;
       setMenuOpenId(null);
+      setMenuAnchor(null);
     }
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [menuOpenId]);
+
+  // Recompute menu anchor on viewport resize / scroll while open so the
+  // menu stays aligned to its trigger as the page moves. Closes the menu
+  // if the trigger leaves the viewport (no anchor to clamp to).
+  useEffect(() => {
+    if (!menuOpenId) return;
+    function reposition() {
+      const trigger = menuTriggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      setMenuAnchor(computeMenuAnchor(rect));
+    }
+    window.addEventListener('resize', reposition);
+    window.addEventListener('scroll', reposition, true);
+    return () => {
+      window.removeEventListener('resize', reposition);
+      window.removeEventListener('scroll', reposition, true);
+    };
   }, [menuOpenId]);
 
   // Cover fetching must key off the *set of project ids and their readiness*, not the
@@ -1865,17 +1923,37 @@ export function RecentProjectsStrip({
                         project_relation: creator.ownedBySelf ? 'self' : 'other',
                       });
                       setShareErrorProjectId(null);
+                      const isOpening = menuOpenId !== project.id;
                       setMenuOpenId((current) => current === project.id ? null : project.id);
+                      if (isOpening) {
+                        const trigger = event.currentTarget as HTMLButtonElement | null;
+                        if (trigger) {
+                          menuTriggerRef.current = trigger;
+                          setMenuAnchor(computeMenuAnchor(trigger.getBoundingClientRect()));
+                        }
+                      } else {
+                        menuTriggerRef.current = null;
+                        setMenuAnchor(null);
+                      }
                     }}
                   >
                     <Icon name="more-horizontal" size={14} />
                   </button>
                   {menuOpenId === project.id ? (
-                    <div
-                      className="recent-projects__card-menu"
-                      role="menu"
-                      onClick={(event) => event.stopPropagation()}
-                    >
+                    createPortal(
+                      <div
+                        className="recent-projects__card-menu"
+                        role="menu"
+                        style={menuAnchor ? {
+                          left: menuAnchor.left,
+                          ...(menuAnchor.placement === 'above'
+                            ? { bottom: window.innerHeight - menuAnchor.top + 4 }
+                            : { top: menuAnchor.top }),
+                          maxHeight: menuAnchor.maxHeight,
+                          transformOrigin: menuAnchor.placement === 'above' ? 'bottom left' : 'top left',
+                        } : undefined}
+                        onClick={(event) => event.stopPropagation()}
+                      >
                       {onRename ? (
                         <button
                           type="button"
@@ -1973,7 +2051,8 @@ export function RecentProjectsStrip({
                         </button>
                       ) : null}
                     </div>
-                  ) : null}
+                  , document.body)
+                ) : null}
                 </div>
               ) : null}
             </div>
