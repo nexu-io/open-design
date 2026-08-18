@@ -1616,12 +1616,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     }
 
     async function insertSkillMention(skill: SkillSummary) {
-      const applied = await applyProjectSkill(skill);
-      if (!applied) return;
       // Stage the skill so it rides this turn's skillIds, then insert an
       // atomic `@<name>` pill carrying the skill's real id. The onChange
       // prune keys on `skill:<id>` being present in the editor text, so the
-      // chip survives until the user deletes the pill.
+      // chip survives until the user deletes the pill. Do this before the
+      // project PATCH so a slow persistence request cannot make the picker
+      // look like it ignored the user's selection.
       setStagedSkills((prev) =>
         prev.some((s) => s.id === skill.id) ? prev : [...prev, skill],
       );
@@ -1630,6 +1630,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
         entity: { id: skill.id, kind: 'skill', label: skill.name },
       });
       setMention(null);
+      await applyProjectSkill(skill);
     }
 
     function stageSkillForCurrentTurn(skill: SkillSummary) {
