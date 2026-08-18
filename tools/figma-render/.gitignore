@@ -1,0 +1,7 @@
+node_modules/
+dist/
+test-output/
+test-v2/
+test-*.fig
+test-*.html
+test-*.json
