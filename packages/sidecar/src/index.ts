@@ -48,3 +48,43 @@ export { bootstrapSidecarRuntime, createSidecarLaunchEnv } from "./bootstrap.js"
 export { allocatePort } from "./port.js";
 export { readJsonFile, removeFile, removePointerIfCurrent, writeJsonFile } from "./json-file.js";
 export { createJsonIpcServer, requestJsonIpc } from "./json-ipc.js";
+export { SidecarControlError, attachSidecar, bootstrapControlPlane } from "./control/index.js";
+export type {
+  AttachedSidecar,
+  AttachSidecarOptions,
+  BootstrapControlPlaneOptions,
+  SidecarControlClient,
+  SidecarControlContext,
+  SidecarControlIdentity,
+  SidecarControlJsonValue,
+  SidecarControlPlane,
+  SidecarControlProjection,
+  SidecarControlRoots,
+  SidecarControlScope,
+  SidecarExit,
+  SidecarLaunch,
+  SidecarLaunchOptions,
+  SidecarMethod,
+  SidecarMethodHandlers,
+  SidecarProbeResult,
+  SidecarStopResult,
+} from "./control/index.js";
+export { SidecarLifecycleError, bootstrapSidecarLifecycle } from "./lifecycle/index.js";
+export type {
+  BootstrapSidecarLifecycleOptions,
+  SidecarAbortTransitionResult,
+  SidecarAttachResult,
+  SidecarBeginTransitionResult,
+  SidecarCompleteTransitionResult,
+  SidecarLeaseCredential,
+  SidecarLeaseView,
+  SidecarLifecycleOwner,
+  SidecarLifecyclePlane,
+  SidecarLifecycleScope,
+  SidecarLifecycleSnapshot,
+  SidecarRenewLeaseResult,
+  SidecarRenewTransitionResult,
+  SidecarTakeoverTransitionResult,
+  SidecarTransitionCredential,
+  SidecarTransitionView,
+} from "./lifecycle/index.js";
