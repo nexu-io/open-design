@@ -1,6 +1,7 @@
 packages:
   - packages/*
   - apps/*
+  - shells/*
   - tools/*
   - e2e
 

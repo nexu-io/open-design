@@ -1,0 +1,10 @@
+{
+  "name": "@open-design/shell-electron",
+  "version": "0.19.2",
+  "private": true,
+  "type": "module",
+  "description": "Electron Shell boundary for the Open Design standalone runtime.",
+  "engines": {
+    "node": "~24"
+  }
+}

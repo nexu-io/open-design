@@ -1,0 +1,39 @@
+{
+  "name": "@open-design/shell",
+  "version": "0.19.2",
+  "private": true,
+  "type": "module",
+  "description": "Shared Open Design Shell update persistence contract and deterministic layout.",
+  "exports": {
+    "./launch-context": {
+      "types": "./dist/launch-context/index.d.ts",
+      "default": "./dist/launch-context/index.mjs"
+    },
+    "./update": {
+      "types": "./dist/update/index.d.ts",
+      "default": "./dist/update/index.mjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/release": "workspace:*",
+    "@open-design/sidecar": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.28.0",
+    "tsx": "4.22.3",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}
