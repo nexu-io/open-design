@@ -471,6 +471,46 @@ async function gotoEntryHome(page: Page) {
   await expect(page.getByTestId('home-hero')).toBeVisible();
 }
 
+interface HomeExampleGeometry {
+  rootTop: number;
+  rootHeight: number;
+  cardWidth: number;
+  cardHeight: number;
+  previewHeight: number;
+}
+
+async function readHomeExampleGeometry(
+  page: Page,
+  state: 'loading' | 'settled',
+): Promise<HomeExampleGeometry> {
+  const root = page.getByTestId(
+    state === 'loading' ? 'home-hero-examples-loading' : 'home-hero-plugin-presets',
+  );
+  return root.evaluate((element, currentState) => {
+    const cardSelector = currentState === 'loading'
+      ? '.home-hero__plugin-preset-loading'
+      : '.home-hero__plugin-preset';
+    const previewSelector = currentState === 'loading'
+      ? '.home-hero__plugin-preset-loading-preview'
+      : '.home-hero__plugin-preset-preview';
+    const card = element.querySelector<HTMLElement>(cardSelector);
+    const preview = element.querySelector<HTMLElement>(previewSelector);
+    if (!card || !preview) {
+      throw new Error(`Missing ${currentState} Home example geometry fixture`);
+    }
+    const rootRect = element.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    const previewRect = preview.getBoundingClientRect();
+    return {
+      rootTop: rootRect.top,
+      rootHeight: rootRect.height,
+      cardWidth: cardRect.width,
+      cardHeight: cardRect.height,
+      previewHeight: previewRect.height,
+    };
+  }, state);
+}
+
 test.beforeEach(async ({ page }) => {
   await suppressWhatsNew(page);
   await page.addInitScript(({ key, value, campaigns }) => {
@@ -587,6 +627,47 @@ test.beforeEach(async ({ page }) => {
       body: JSON.stringify(body ?? { error: 'Unknown plugin apply route' }),
     });
   });
+});
+
+test('[P1] cold-start Home examples keep their geometry while plugins settle at every breakpoint', async ({ page }) => {
+  for (const viewport of [
+    { width: 1280, height: 900 },
+    { width: 800, height: 900 },
+    { width: 540, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.unroute('**/api/plugins');
+
+    let releasePlugins!: () => void;
+    const pluginsReady = new Promise<void>((resolve) => {
+      releasePlugins = resolve;
+    });
+    await page.route('**/api/plugins', async (route) => {
+      await pluginsReady;
+      await route.fulfill({ json: { plugins: HOME_PLUGINS } });
+    });
+
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    const loadingRoot = page.getByTestId('home-hero-examples-loading');
+    let loadingGeometry: HomeExampleGeometry;
+    try {
+      await expect(loadingRoot).toBeVisible();
+      loadingGeometry = await readHomeExampleGeometry(page, 'loading');
+    } finally {
+      releasePlugins();
+    }
+
+    await expect(page.getByTestId('home-hero-plugin-presets')).toBeVisible();
+    await waitForLoadingToClear(page);
+    const settledGeometry = await readHomeExampleGeometry(page, 'settled');
+
+    for (const key of Object.keys(loadingGeometry) as Array<keyof HomeExampleGeometry>) {
+      expect(
+        Math.abs(loadingGeometry[key] - settledGeometry[key]),
+        `${key} shifted at ${viewport.width}px: loading=${loadingGeometry[key]}, settled=${settledGeometry[key]}`,
+      ).toBeLessThanOrEqual(1);
+    }
+  }
 });
 
 test('[P1] last project list row keeps its overflow menu inside the viewport', async ({ page }) => {

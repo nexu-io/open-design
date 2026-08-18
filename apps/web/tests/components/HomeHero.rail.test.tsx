@@ -285,6 +285,15 @@ describe('HomeHero intent rail', () => {
     expect(screen.queryByTestId('home-hero-active-example')).toBeNull();
   });
 
+  it('reserves the example rail while the plugin catalog is still loading', () => {
+    renderHero({ activeChipId: null, pluginsLoading: true });
+
+    const loading = screen.getByTestId('home-hero-examples-loading');
+    expect(loading.getAttribute('aria-busy')).toBe('true');
+    expect(screen.queryByTestId('home-hero-prompt-examples')).toBeNull();
+    expect(screen.queryByTestId('home-hero-plugin-presets')).toBeNull();
+  });
+
   it('shows matching plugin presets in the example prompt area for the selected tab', () => {
     const deckPlugin = makePlugin('example-deck-a', 'deck', 'Investor deck');
     const imagePlugin = makePlugin('example-image-a', 'image', 'Product image');

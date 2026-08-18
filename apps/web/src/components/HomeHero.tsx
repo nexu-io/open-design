@@ -18,6 +18,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { VisuallyHidden } from '@open-design/components';
 import type {
   CSSProperties,
   DragEvent as ReactDragEvent,
@@ -2152,7 +2153,9 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
         />
       ) : null}
 
-      {filteredExamplePlugins.length > 0 && activeChipId ? (
+      {pluginsLoading ? (
+        <PluginPromptPresetsLoading />
+      ) : filteredExamplePlugins.length > 0 && activeChipId ? (
         <PluginPromptPresets
           chipId={activeChipId}
           plugins={filteredExamplePlugins}
@@ -2235,6 +2238,32 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
     </section>
   );
 });
+
+function PluginPromptPresetsLoading() {
+  const { t } = useI18n();
+  return (
+    <div
+      className="home-hero__prompt-examples home-hero__plugin-presets-wrap"
+      data-testid="home-hero-examples-loading"
+      aria-busy="true"
+    >
+      <div className="home-hero__prompt-examples-title">
+        {t('homeHero.promptExamples')}
+      </div>
+      <div className="home-hero__rail-scroller">
+        <div className="home-hero__plugin-presets-loading" aria-hidden="true">
+          {Array.from({ length: 4 }, (_, index) => (
+            <span className="home-hero__plugin-preset-loading" key={index}>
+              <span className="home-hero__plugin-preset-loading-preview" />
+              <span className="home-hero__plugin-preset-loading-title" />
+            </span>
+          ))}
+        </div>
+      </div>
+      <VisuallyHidden>{t('common.loading')}</VisuallyHidden>
+    </div>
+  );
+}
 
 function PluginPromptPresets({
   activePluginId,

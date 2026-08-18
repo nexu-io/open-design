@@ -110,6 +110,7 @@ import {
   currentWorkspaceAccountGeneration,
   useTeamProjects,
   useWorkspaceContext,
+  workspaceResourceReadContext,
 } from '../collab/useWorkspaceContext';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { useWorkspaceSnapshotActivation } from '../collab/workspace-snapshot-activation';
@@ -500,6 +501,7 @@ export function HomeView({
   const analytics = useAnalytics();
   const workspaceContextState = useWorkspaceContext();
   const { context: workspaceContext } = workspaceContextState;
+  const pluginCatalogWorkspaceContext = workspaceResourceReadContext(workspaceContextState);
   const lastSettledLocalCatalogScopeRef = useRef<LocalCatalogScope | null>(
     localCatalogScopeFromWorkspaceContext(workspaceContext),
   );
@@ -509,9 +511,14 @@ export function HomeView({
   }
   const pluginAccountGeneration = currentWorkspaceAccountGeneration();
   const pluginCatalogOptions = {
-    workspaceContext,
+    workspaceContext: pluginCatalogWorkspaceContext,
     accountGeneration: pluginAccountGeneration,
   };
+  // Keep the provisional local catalogue available for default-template
+  // routing while Workspace discovery runs, but never expose that provisional
+  // projection in HomeHero. The prop below keeps the Examples rail in its
+  // stable loading shell until the Workspace identity and its exact cache
+  // partition have both settled.
   const desiredPluginCatalogKey = workspaceContextState.identityChangePending
     ? null
     : pluginCatalogCacheKey(pluginCatalogOptions);
@@ -896,7 +903,7 @@ export function HomeView({
       return promise;
     };
     pluginCatalogReloadRef.current = load;
-    if (homeActiveRef.current && workspaceContext?.workspaceType !== 'team') load();
+    if (homeActiveRef.current && pluginCatalogWorkspaceContext?.workspaceType !== 'team') load();
     else pluginCatalogStaleRef.current = true;
     const onChanged = () => {
       // A mutation event is newer than any pending snapshot and must supersede
@@ -922,27 +929,27 @@ export function HomeView({
       }
       window.removeEventListener('open-design:plugins-changed', onChanged);
     };
-  }, [desiredPluginCatalogKey, workspaceContext?.workspaceType]);
+  }, [desiredPluginCatalogKey, pluginCatalogWorkspaceContext?.workspaceType]);
 
   useEffect(() => {
     if (!isActive || !desiredPluginCatalogKey || !pluginCatalogStaleRef.current) return;
-    if (workspaceContext?.workspaceType === 'team') return;
+    if (pluginCatalogWorkspaceContext?.workspaceType === 'team') return;
     pluginCatalogStaleRef.current = false;
     pluginCatalogReloadRef.current(true);
-  }, [desiredPluginCatalogKey, isActive, workspaceContext?.workspaceType]);
+  }, [desiredPluginCatalogKey, isActive, pluginCatalogWorkspaceContext?.workspaceType]);
 
   const handlePluginStreamActive = useWorkspaceSnapshotActivation({
-    enabled: isActive && workspaceContext?.workspaceType === 'team',
+    enabled: isActive && pluginCatalogWorkspaceContext?.workspaceType === 'team',
     identity: desiredPluginCatalogKey ?? 'no-plugin-catalog',
     refresh: () => { void pluginCatalogReloadRef.current(true, true); },
   });
 
   useWorkspaceInvalidation({}, {
     workspaceContext:
-      isActive && workspaceContext?.workspaceType === 'team'
-        ? workspaceContext
+      isActive && pluginCatalogWorkspaceContext?.workspaceType === 'team'
+        ? pluginCatalogWorkspaceContext
         : null,
-    enabled: isActive && workspaceContext?.workspaceType === 'team',
+    enabled: isActive && pluginCatalogWorkspaceContext?.workspaceType === 'team',
     // App owns the global Skill/Design System catch-up. Home only refreshes
     // its plugin projection.
     onActive: () => {
@@ -2978,7 +2985,11 @@ export function HomeView({
         onRemoveFile={removeStagedFile}
         onImportFigma={() => setFigmaModalOpen(true)}
         pluginOptions={plugins}
-        pluginsLoading={pluginsLoading}
+        pluginsLoading={
+          pluginsLoading
+          || workspaceContextState.loading
+          || workspaceContextState.identityChangePending === true
+        }
         skillOptions={selectableSkills}
         skillsLoading={skillsLoading}
         mcpOptions={enabledMcpServers}
