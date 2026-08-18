@@ -148,6 +148,7 @@ import { goBack, navigate, useRoute, type Route } from './router';
 import {
   fetchDaemonConfig,
   DEFAULT_CONFIG,
+  DEFAULT_NOTIFICATIONS,
   DEFAULT_PET,
   fetchMediaProvidersFromDaemon,
   hasAnyConfiguredProvider,
@@ -166,6 +167,7 @@ import { applyAppearanceToDocument } from './state/appearance';
 import { isMacPlatform } from './utils/platform';
 import { randomUUID } from './utils/uuid';
 import { summarizeProjectNameFromPrompt } from './utils/projectName';
+import { armCompletionFeedbackOnFirstGesture } from './utils/notifications';
 import {
   amrArtifactUpgradeHomeMockOffer,
   type AmrArtifactUpgradeHomeOffer,
@@ -951,6 +953,34 @@ function AppInner() {
   const latestPersistedConfigRef = useRef(config);
   latestPersistedConfigRef.current = config;
   const settingsDraftConfigRef = useRef<AppConfig | null>(null);
+  const completionFeedbackGestureConsumedRef = useRef(false);
+  useEffect(() => {
+    if (completionFeedbackGestureConsumedRef.current) return undefined;
+    const notifications = config.notifications ?? DEFAULT_NOTIFICATIONS;
+    if (!notifications.soundEnabled && !notifications.desktopEnabled) return undefined;
+    return armCompletionFeedbackOnFirstGesture(notifications, ({ desktopPermission }) => {
+      completionFeedbackGestureConsumedRef.current = true;
+      if (
+        !notifications.desktopEnabled
+        || desktopPermission === null
+        || desktopPermission === 'granted'
+      ) return;
+      // The product default expresses intent, but an unsupported/denied browser
+      // permission cannot honestly remain Active. Reconcile only the desktop
+      // switch; the independent completion-sound preference stays enabled.
+      setConfig((previous) => {
+        const previousNotifications = previous.notifications ?? DEFAULT_NOTIFICATIONS;
+        if (!previousNotifications.desktopEnabled) return previous;
+        const next: AppConfig = {
+          ...previous,
+          notifications: { ...previousNotifications, desktopEnabled: false },
+        };
+        latestPersistedConfigRef.current = next;
+        saveConfig(next);
+        return next;
+      });
+    });
+  }, [config.notifications?.desktopEnabled, config.notifications?.soundEnabled]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [amrArtifactUpgradeHomeMockConfig] = useState<AmrArtifactUpgradeHomeOffer | null>(
     () => process.env.NODE_ENV === 'development' && typeof window !== 'undefined'

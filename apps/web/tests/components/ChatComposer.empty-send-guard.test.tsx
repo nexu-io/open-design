@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatComposer } from '../../src/components/ChatComposer';
+import { armCompletionFeedbackOnFirstGesture } from '../../src/utils/notifications';
 import { flushMounts, pressEnter, typeAndSettle } from '../helpers/lexical-composer';
 
 afterEach(() => {
@@ -89,6 +90,16 @@ describe('ChatComposer empty-send guard (recvqaj7eKpxH6)', () => {
 
   it('still sends real typed text even while the placeholder carousel is mounted', async () => {
     const onSend = vi.fn();
+    const onFeedbackActivation = vi.fn();
+    const disposeFeedbackActivation = armCompletionFeedbackOnFirstGesture(
+      {
+        soundEnabled: false,
+        successSoundId: 'ding',
+        failureSoundId: 'buzz',
+        desktopEnabled: false,
+      },
+      onFeedbackActivation,
+    );
     render(
       <ChatComposer
         projectId="project-1"
@@ -109,6 +120,8 @@ describe('ChatComposer empty-send guard (recvqaj7eKpxH6)', () => {
 
     expect(onSend).toHaveBeenCalledTimes(1);
     expect(onSend).toHaveBeenCalledWith('Ship the onboarding tweak', [], [], undefined);
+    expect(onFeedbackActivation).toHaveBeenCalledWith({ desktopPermission: null });
+    disposeFeedbackActivation();
   });
 
   it('pauses the typewriter while the empty composer owns the real caret', async () => {

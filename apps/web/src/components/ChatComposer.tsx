@@ -37,6 +37,7 @@ import type {
 } from '@open-design/contracts/analytics';
 import { sessionModeToTracking } from '@open-design/contracts/analytics';
 import { deriveUploadCohort } from '../analytics/upload-tracking';
+import { notifyCompletionFeedbackGesture } from '../utils/notifications';
 import { projectRawUrl, uploadProjectFiles, openFolderDialog, fetchRecentLinkedDirs, pushRecentLinkedDir, dirExists, applyLibraryAsset, fetchLibraryAssetElementHtml } from "../providers/registry";
 import {
   duplicatePluginAsProject,
@@ -2652,6 +2653,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (hatched) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
+        notifyCompletionFeedbackGesture();
         beginComposedSend(() => onSend(hatched, staged, nextCommentAttachments, contextMeta));
         return;
       }
@@ -2659,6 +2661,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       if (search) {
         if (streaming) return;
         setStreamingAnnotationSendPending(false);
+        notifyCompletionFeedbackGesture();
         beginComposedSend(
           () => onSend(search.prompt, staged, nextCommentAttachments, {
             ...contextMeta,
@@ -2677,6 +2680,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       // suggested prompt — those explicitly type it into the composer via
       // applyDesignToolboxAction before the user ever hits Send.
       if (!prompt && staged.length === 0 && nextCommentAttachments.length === 0) return;
+      notifyCompletionFeedbackGesture();
       sendComposedTurn(prompt, staged, nextCommentAttachments, contextMeta);
     }
 

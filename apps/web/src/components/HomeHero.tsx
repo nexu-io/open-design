@@ -88,6 +88,7 @@ import { curatedPluginPriorityForChip } from './plugins-home/curatedPriority';
 import { comparePluginGalleryOrder } from './plugins-home/pluginPopularity';
 import { sortByVisualAppeal } from './plugins-home/visualScore';
 import { applyFacetSelection } from './plugins-home/facets';
+import { notifyCompletionFeedbackGesture } from '../utils/notifications';
 import { inferPluginPreview } from './plugins-home/preview';
 import { pluginSubfacetLabel } from './plugins-home/subfacetLabel';
 import { useDeckPreviewScale } from '../lib/use-deck-preview-scale';
@@ -517,10 +518,14 @@ export const HomeHero = forwardRef<HomeHeroHandle, Props>(function HomeHero(
   function handleSend() {
     if (submitting || submitDisabled) return;
     if (canSubmit) {
+      notifyCompletionFeedbackGesture();
       onSubmit();
       return;
     }
-    if (carouselSubmittable && carouselScenario) onSubmitScenario(carouselScenario);
+    if (carouselSubmittable && carouselScenario) {
+      notifyCompletionFeedbackGesture();
+      onSubmitScenario(carouselScenario);
+    }
   }
   const fileMatches = useMemo(
     () =>
