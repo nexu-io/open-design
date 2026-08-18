@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { createElement, type ComponentProps } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkspaceCollabContext } from '@open-design/contracts';
 
 import { DesignSystemPreviewModal } from '../../src/components/DesignSystemPreviewModal';
 import { I18nProvider } from '../../src/i18n';
-import type { DesignSystemSummary } from '../../src/types';
+import type { DesignSystemDetail, DesignSystemSummary } from '../../src/types';
 
 const {
   fetchDesignSystemMock,
@@ -91,6 +91,14 @@ const PROJECT_WORKSPACE_CONTEXT: WorkspaceCollabContext = {
   },
 };
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
 function renderInsideStackingContext() {
   const host = document.createElement('div');
   host.className = 'composer';
@@ -139,7 +147,11 @@ describe('DesignSystemPreviewModal layering', () => {
     );
 
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('claymorphism', PROJECT_WORKSPACE_CONTEXT);
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith(
+        'claymorphism',
+        PROJECT_WORKSPACE_CONTEXT,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
       expect(projectRawUrlMock).toHaveBeenCalledWith(
         'project-clay',
         'logos/mark.svg',
@@ -165,7 +177,11 @@ describe('DesignSystemPreviewModal layering', () => {
     );
 
     await waitFor(() => {
-      expect(fetchDesignSystemMock).toHaveBeenCalledWith('claymorphism', PROJECT_WORKSPACE_CONTEXT);
+      expect(fetchDesignSystemMock).toHaveBeenCalledWith(
+        'claymorphism',
+        PROJECT_WORKSPACE_CONTEXT,
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
     });
   });
 
@@ -176,6 +192,51 @@ describe('DesignSystemPreviewModal layering', () => {
     expect(backdrop).toBeTruthy();
     expect(backdrop?.parentElement).toBe(document.body);
     expect(host.querySelector('.ds-modal-backdrop')).toBeNull();
+  });
+
+  it('uses one detail read for the kit and the default-open DESIGN.md sidebar', async () => {
+    const detail = deferred<{
+      id: string;
+      title: string;
+      summary: string;
+      category: string;
+      body: string;
+    }>();
+    fetchDesignSystemMock.mockImplementationOnce(() => detail.promise);
+
+    render(
+      <I18nProvider>
+        <DesignSystemPreviewModal system={SYSTEM} onClose={() => {}} />
+      </I18nProvider>,
+    );
+
+    await waitFor(() => expect(fetchDesignSystemMock).toHaveBeenCalledTimes(1));
+    detail.resolve({ ...SYSTEM, body: '# One shared detail' });
+    expect(await screen.findByText('# One shared detail')).toBeTruthy();
+    expect(fetchDesignSystemMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a supplied detail when the background refresh fails', async () => {
+    const refresh = deferred<null>();
+    fetchDesignSystemMock.mockImplementationOnce(
+      () => refresh.promise as unknown as ReturnType<typeof fetchDesignSystemMock>,
+    );
+
+    render(
+      <I18nProvider>
+        <DesignSystemPreviewModal
+          system={{ ...SYSTEM, body: '# Existing detail' } as DesignSystemDetail}
+          onClose={() => {}}
+        />
+      </I18nProvider>,
+    );
+
+    expect(document.querySelector('.design-spec-pre')?.textContent).toContain('# Existing detail');
+    await act(async () => {
+      refresh.resolve(null);
+      await refresh.promise;
+    });
+    expect(document.querySelector('.design-spec-pre')?.textContent).toContain('# Existing detail');
   });
 
   it('opens chip previews on the rich kit tab while keeping Showcase HTML-backed', async () => {

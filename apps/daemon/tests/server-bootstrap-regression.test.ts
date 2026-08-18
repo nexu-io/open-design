@@ -3,7 +3,7 @@ import express from 'express';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import {
   isStaticSpaFallbackRequest,
@@ -423,6 +423,11 @@ describe('bootstrap route regressions', () => {
       status: 'published' as const,
       isEditable: false,
     };
+    const listAllDesignSystems = vi.fn(async () => [designSystemSummary]);
+    const readAvailableDesignSystemSummary = vi.fn(async (id: string) =>
+      id === designSystemId ? designSystemSummary : null);
+    const readAvailableDesignSystem = vi.fn(async (id: string) =>
+      id === designSystemId ? designSystemBody : null);
     const templateEntry = {
       id: templateId,
       name: templateId,
@@ -468,11 +473,12 @@ describe('bootstrap route regressions', () => {
         createUserDesignSystem: async () => designSystemSummary as never,
         deleteUserDesignSystem: async () => false,
         ensureUserDesignSystemWorkspaceProject: async () => null,
-        listAllDesignSystems: async () => [designSystemSummary],
+        listAllDesignSystems,
         listUserDesignSystemFiles: async () => null,
         listUserDesignSystemRevisions: async () => null,
         prepareDesignTokenContractRebuild: async () => ({ decision: { available: false } }) as never,
-        readAvailableDesignSystem: async (id: string) => id === designSystemId ? designSystemBody : null,
+        readAvailableDesignSystem,
+        readAvailableDesignSystemSummary,
         readAvailableDesignSystemPackageInfo: async () => null,
         readAvailableDesignSystemStaticFile: async () => null,
         readDesignSystemWorkspaceTextFile: async () => null,
@@ -551,6 +557,18 @@ describe('bootstrap route regressions', () => {
       expect(asset.headers.get('content-type')).toContain('text/css');
       expect(asset.headers.get('access-control-allow-origin')).toBe('*');
       await expect(asset.text()).resolves.toBe('main { color: rgb(1 2 3); }');
+
+      const missingDetail = await fetch(`${smokeBaseUrl}/api/design-systems/missing-system`);
+      expect(missingDetail.status).toBe(404);
+      expect(listAllDesignSystems).not.toHaveBeenCalled();
+      expect(readAvailableDesignSystemSummary).toHaveBeenCalledWith('missing-system', {
+        workspaceId: null,
+        workspaceMemberId: null,
+        exactTeam: false,
+      });
+      // Preview and showcase need the raw body. A missing detail must stop after
+      // the summary miss instead of performing another two-root body lookup.
+      expect(readAvailableDesignSystem).toHaveBeenCalledTimes(2);
     } finally {
       await new Promise<void>((resolve) => smokeServer?.close(() => resolve()));
       fs.rmSync(tempRoot, { recursive: true, force: true });

@@ -109,6 +109,10 @@ export interface RegisterDesignSystemRoutesDeps extends RouteDeps<'db' | 'paths'
       id: string,
       options?: { workspaceId?: string | null; workspaceMemberId?: string | null; exactTeam?: boolean },
     ) => Promise<string | null>;
+    readAvailableDesignSystemSummary: (
+      id: string,
+      options?: { workspaceId?: string | null; workspaceMemberId?: string | null; exactTeam?: boolean },
+    ) => Promise<AvailableDesignSystemSummary | null>;
     readAvailableDesignSystemPackageInfo: (
       id: string,
       options?: { workspaceId?: string | null; workspaceMemberId?: string | null; exactTeam?: boolean },
@@ -216,6 +220,7 @@ export function registerDesignSystemRoutes(
     listUserDesignSystemRevisions,
     prepareDesignTokenContractRebuild,
     readAvailableDesignSystem,
+    readAvailableDesignSystemSummary,
     readAvailableDesignSystemPackageInfo,
     readAvailableDesignSystemStaticFile,
     readDesignSystemWorkspaceTextFile,
@@ -232,6 +237,17 @@ export function registerDesignSystemRoutes(
     string,
     { workspaceId: string; workspaceMemberId: string } | null
   >();
+
+  const resolveAvailableDesignSystemSummary = async (
+    id: string,
+    options: {
+      workspaceId?: string | null;
+      workspaceMemberId?: string | null;
+      exactTeam?: boolean;
+    } = {},
+  ): Promise<AvailableDesignSystemSummary | undefined> => {
+    return (await readAvailableDesignSystemSummary(id, options)) ?? undefined;
+  };
 
   const getBoundDesignSystem = (
     dbHandle: unknown,
@@ -333,11 +349,13 @@ export function registerDesignSystemRoutes(
         binding = personalBinding;
       }
     }
-    const isPublicBuiltIn = resolution.context && !binding
-      ? (await listAllDesignSystems({
+    const publicSummary = resolution.context && !binding
+      ? await resolveAvailableDesignSystemSummary(id, {
           workspaceId: resolution.context.workspaceId,
-        })).some((system) => system.id === id && system.source === 'built-in')
-      : false;
+          workspaceMemberId: resolution.context.workspaceMemberId,
+        })
+      : undefined;
+    const isPublicBuiltIn = publicSummary?.source === 'built-in';
     // Explicit Workspace requests never inherit ownerless legacy resources.
     // A Personal design system is private to its exact persisted creator even
     // when the caller is an owner/admin in the same Workspace. Team resources
@@ -693,21 +711,16 @@ export function registerDesignSystemRoutes(
       const workspaceId = headerValue(req, 'x-od-workspace-id');
       const workspaceMemberId = headerValue(req, 'x-od-workspace-member-id');
       const storage = resolveDesignSystemStorage(req, req.params.id);
-      const systems = await listAllDesignSystems({
+      const summary = await resolveAvailableDesignSystemSummary(req.params.id, {
         workspaceId,
         workspaceMemberId,
         exactTeam: storage.exactTeam,
       });
-      const summary = systems.find((s) => s.id === req.params.id);
-      const projectBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
-      const body = projectBody ?? await readAvailableDesignSystem(req.params.id, {
-        workspaceId,
-        workspaceMemberId,
-        exactTeam: storage.exactTeam,
-      });
-      if (body === null || !summary) {
+      if (!summary) {
         return res.status(404).json({ error: 'design system not found' });
       }
+      const projectBody = await readDesignSystemWorkspaceTextFile(db, summary, 'DESIGN.md');
+      const body = projectBody ?? summary.body;
       const packageInfo = await readAvailableDesignSystemPackageInfo(req.params.id, {
         workspaceId,
         workspaceMemberId,

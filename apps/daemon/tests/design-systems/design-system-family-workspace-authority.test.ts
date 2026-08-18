@@ -211,6 +211,7 @@ async function startAuthorityServer(options: {
         decision: { available: false },
       }) as never,
       readAvailableDesignSystem: async () => summary.body,
+      readAvailableDesignSystemSummary: async () => summary,
       readAvailableDesignSystemPackageInfo: async () => null,
       readAvailableDesignSystemStaticFile: calls.static,
       readDesignSystemWorkspaceTextFile: async () => null,

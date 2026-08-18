@@ -211,6 +211,7 @@ async function createRouteFixture() {
       listUserDesignSystemRevisions: async () => null,
       prepareDesignTokenContractRebuild: async () => ({ decision: { available: false } }) as never,
       readAvailableDesignSystem: fixture.services.readAvailableDesignSystem as never,
+      readAvailableDesignSystemSummary: fixture.services.readAvailableDesignSystemSummary as never,
       readAvailableDesignSystemPackageInfo: fixture.services.readAvailableDesignSystemPackageInfo as never,
       readAvailableDesignSystemStaticFile: fixture.services.readAvailableDesignSystemStaticFile as never,
       readDesignSystemWorkspaceTextFile: fixture.services.readDesignSystemWorkspaceTextFile as never,

@@ -12,6 +12,7 @@ import {
   listDesignSystems,
   listUserDesignSystemFiles,
   readDesignSystem,
+  readDesignSystemSummary,
   readDesignSystemStaticFile,
   readUserDesignSystemFile,
   readUserDesignSystemRevision,
@@ -49,6 +50,28 @@ describe('design systems registry', () => {
         isEditable: false,
       },
     ]);
+  });
+
+  it('reads one design-system summary directly by id', async () => {
+    await mkdir(path.join(root, 'acme'), { recursive: true });
+    await writeFile(
+      path.join(root, 'acme', 'DESIGN.md'),
+      '# Acme\n\n> Category: Custom\n> Surface: web\n\nAcme brand.\n',
+    );
+    await mkdir(path.join(root, 'other'), { recursive: true });
+    await writeFile(path.join(root, 'other', 'DESIGN.md'), '# Other\n');
+
+    await expect(readDesignSystemSummary(root, 'acme')).resolves.toMatchObject({
+      id: 'acme',
+      title: 'Acme',
+      category: 'Custom',
+      body: expect.stringContaining('Acme brand.'),
+      source: 'built-in',
+      status: 'published',
+      isEditable: false,
+    });
+    await expect(readDesignSystemSummary(root, '../acme')).resolves.toBeNull();
+    await expect(readDesignSystemSummary(root, 'ACME')).resolves.toBeNull();
   });
 
   it('parses a DESIGN.md with a pathological marker run without catastrophic backtracking', async () => {

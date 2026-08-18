@@ -122,6 +122,7 @@ function registerRoutes(app: express.Express, canMutate: (root: string, id: stri
       listUserDesignSystemRevisions: async () => null,
       prepareDesignTokenContractRebuild: async () => ({ decision: { available: false } }) as never,
       readAvailableDesignSystem: async () => designSystemSummary.body,
+      readAvailableDesignSystemSummary: async () => designSystemSummary,
       readAvailableDesignSystemPackageInfo: async () => null,
       readAvailableDesignSystemStaticFile: async () => null,
       readDesignSystemWorkspaceTextFile: async () => null,

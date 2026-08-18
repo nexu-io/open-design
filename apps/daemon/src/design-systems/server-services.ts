@@ -73,6 +73,17 @@ type DesignSystemWorkspaceOptions = {
   exactTeam?: boolean;
 };
 
+function canonicalizeBuiltInDesignSystem(
+  summary: DesignSystemSummary,
+): DesignSystemSummary {
+  return {
+    ...summary,
+    source: 'built-in',
+    isEditable: false,
+    status: 'published',
+  };
+}
+
 export type DesignSystemAssetSyncOutcome =
   | { ok: true; synced: string[] }
   | { ok: false; reason: 'not-found' | 'no-workspace-project' };
@@ -180,6 +191,7 @@ export function createDesignSystemServerServices({
   };
   designSystems: {
     listDesignSystems: (root: string, options?: DesignSystemListOptions) => Promise<DesignSystemSummary[]>;
+    readDesignSystemSummary: (root: string, id: string, options?: DesignSystemListOptions) => Promise<DesignSystemSummary | null>;
     readDesignSystem: (root: string, id: string, options?: Pick<DesignSystemListOptions, 'idPrefix' | 'workspaceId'>) => Promise<string | null | undefined>;
     readDesignSystemPackageInfo: (root: string, id: string, options?: Pick<DesignSystemListOptions, 'idPrefix' | 'workspaceId'>) => Promise<unknown>;
     readDesignSystemStaticFile: (root: string, id: string, filePath: string, options?: Pick<DesignSystemListOptions, 'idPrefix' | 'workspaceId'>) => Promise<DesignSystemStaticFile | null | undefined>;
@@ -363,12 +375,8 @@ export function createDesignSystemServerServices({
     exactTeam?: boolean;
     exactPersonal?: boolean;
   } = {}) {
-    const builtIn = (await designSystems.listDesignSystems(paths.DESIGN_SYSTEMS_DIR)).map((s) => ({
-      ...s,
-      source: 'built-in',
-      isEditable: false,
-      status: 'published',
-    }));
+    const builtIn = (await designSystems.listDesignSystems(paths.DESIGN_SYSTEMS_DIR))
+      .map(canonicalizeBuiltInDesignSystem);
     let installed: DesignSystemSummary[] = [];
     try {
       installed = await designSystems.listDesignSystems(paths.USER_DESIGN_SYSTEMS_DIR, {
@@ -456,6 +464,25 @@ export function createDesignSystemServerServices({
         exactMemberId,
       );
     });
+  }
+
+  async function readAvailableDesignSystemSummary(
+    id: string,
+    options: {
+      workspaceId?: string | null;
+      workspaceMemberId?: string | null;
+      exactTeam?: boolean;
+      exactPersonal?: boolean;
+    } = {},
+  ): Promise<DesignSystemSummary | null> {
+    if (!id.startsWith('user:')) {
+      const summary = await designSystems.readDesignSystemSummary(paths.DESIGN_SYSTEMS_DIR, id);
+      return summary ? canonicalizeBuiltInDesignSystem(summary) : null;
+    }
+    // User and Team systems still go through the catalog's persisted binding
+    // filters. The direct path is intentionally limited to public bundled
+    // presets, whose id maps to one immutable repository directory.
+    return (await listAllDesignSystems(options)).find((system) => system.id === id) ?? null;
   }
 
   async function readAvailableDesignSystem(
@@ -957,6 +984,7 @@ export function createDesignSystemServerServices({
     listAllSkillLikeEntries,
     listAllSkills,
     readAvailableDesignSystem,
+    readAvailableDesignSystemSummary,
     readAvailableDesignSystemPackageInfo,
     readAvailableDesignSystemStaticFile,
     readDesignSystemWorkspaceTextFile,

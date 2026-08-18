@@ -657,19 +657,90 @@ export async function fetchDesignSystemsResult(
   }
 }
 
+type DesignSystemReadKind = 'detail' | 'preview' | 'showcase';
+
+function designSystemReadCacheKey(
+  kind: DesignSystemReadKind,
+  id: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): string {
+  return `design-system-${kind}:${workspaceIdentityCacheKey(workspaceContext)}:${id}`;
+}
+
+const designSystemReadCacheGenerations = new Map<string, number>();
+const DESIGN_SYSTEM_FRESH_BURST_MS = 250;
+const designSystemFreshReadAt = new Map<string, number>();
+
+function invalidateDesignSystemReadKey(cacheKey: string): void {
+  designSystemReadCacheGenerations.set(
+    cacheKey,
+    (designSystemReadCacheGenerations.get(cacheKey) ?? 0) + 1,
+  );
+  evictSharedCancellableGet(cacheKey);
+}
+
+function forceDesignSystemReadKey(cacheKey: string): void {
+  const now = Date.now();
+  const last = designSystemFreshReadAt.get(cacheKey);
+  if (last !== undefined && now - last < DESIGN_SYSTEM_FRESH_BURST_MS) return;
+  designSystemFreshReadAt.set(cacheKey, now);
+  invalidateDesignSystemReadKey(cacheKey);
+  globalThis.setTimeout(() => {
+    if (designSystemFreshReadAt.get(cacheKey) === now) {
+      designSystemFreshReadAt.delete(cacheKey);
+    }
+  }, DESIGN_SYSTEM_FRESH_BURST_MS);
+}
+
+function invalidateDesignSystemReadCache(
+  id: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+): void {
+  for (const kind of ['detail', 'preview', 'showcase'] as const) {
+    invalidateDesignSystemReadKey(designSystemReadCacheKey(kind, id, workspaceContext));
+  }
+}
+
 export async function fetchDesignSystem(
   id: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  options?: { signal?: AbortSignal; fresh?: boolean },
 ): Promise<DesignSystemDetail | null> {
   try {
-    // no-store so edits made elsewhere (the in-project Design System tab) are
-    // reflected the next time the manager / a consumer re-reads the system.
-    const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, {
-      cache: 'no-store',
-      ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
-    });
-    if (!resp.ok) return null;
-    return parseDesignSystemDetail(await resp.json());
+    const cacheKey = designSystemReadCacheKey('detail', id, workspaceContext);
+    if (options?.fresh) forceDesignSystemReadKey(cacheKey);
+    const cacheGeneration = designSystemReadCacheGenerations.get(cacheKey) ?? 0;
+    return await sharedCancellableGet(
+      cacheKey,
+      async (signal) => {
+        // The explicit cache owns freshness. Keep the browser/proxy out of the
+        // equation so editable systems still re-read immediately after the
+        // in-flight sharing window expires.
+        const resp = await fetch(`/api/design-systems/${encodeURIComponent(id)}`, {
+          signal,
+          cache: 'no-store',
+          ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+        });
+        if (!resp.ok) {
+          throw new Error(`Design system request failed (${resp.status})`);
+        }
+        const detail = parseDesignSystemDetail(await resp.json());
+        if (!detail) throw new Error('Design system response was malformed');
+        if ((designSystemReadCacheGenerations.get(cacheKey) ?? 0) !== cacheGeneration) {
+          const current = await fetchDesignSystem(id, workspaceContext, { signal });
+          if (!current) throw new Error('Fresh design system request failed');
+          return current;
+        }
+        return detail;
+      },
+      {
+        signal: options?.signal,
+        // Bundled presets are immutable from the UI, so revisiting one can use
+        // the parsed detail for the rest of the browsing burst. User systems
+        // only share an overlapping request and never retain a settled value.
+        ttlMs: id.startsWith('user:') ? 0 : 30_000,
+      },
+    );
   } catch {
     return null;
   }
@@ -720,6 +791,7 @@ export async function ensureDesignSystemWorkspace(
       ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
     });
     if (!resp.ok) return null;
+    invalidateDesignSystemReadCache(id, workspaceContext);
     return (await resp.json()) as { project: Project; files: ProjectFile[] };
   } catch {
     return null;
@@ -858,6 +930,7 @@ export async function updateDesignSystemRevisionStatus(
       },
     );
     if (!resp.ok) return null;
+    if (status === 'accepted') invalidateDesignSystemReadCache(id, workspaceContext);
     const json = (await resp.json()) as { revision?: DesignSystemRevision };
     return json.revision ?? null;
   } catch {
@@ -923,6 +996,7 @@ export async function updateDesignSystemDraft(
       body: JSON.stringify(input),
     });
     if (!resp.ok) return null;
+    invalidateDesignSystemReadCache(id, workspaceContext);
     return parseDesignSystemDetail(await resp.json());
   } catch {
     return null;
@@ -952,6 +1026,7 @@ export async function syncDesignSystemAssetsFromWorkspace(
       },
     });
     if (!resp.ok) return null;
+    invalidateDesignSystemReadCache(id, workspaceContext);
     return (await resp.json()) as { synced: string[] };
   } catch {
     return null;
@@ -989,7 +1064,9 @@ export async function deleteDesignSystemDraft(
         ?? (/^[A-Z][A-Z0-9_]+$/.test(errorBody.message) ? errorBody.message : undefined);
       throw new DesignSystemDeleteError(errorBody.message, resp.status, code);
     }
-    return resp.ok;
+    if (!resp.ok) return false;
+    invalidateDesignSystemReadCache(id, workspaceContext);
+    return true;
   } catch (error) {
     if (error instanceof DesignSystemDeleteError) throw error;
     return false;
@@ -3169,42 +3246,69 @@ export async function openProjectInEditor(
   return (await resp.json()) as import('@open-design/contracts').OpenProjectInEditorResponse;
 }
 
-export async function fetchDesignSystemPreview(
+async function fetchDesignSystemHtmlResource(
+  kind: Extract<DesignSystemReadKind, 'preview' | 'showcase'>,
   id: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  options?: { signal?: AbortSignal },
 ): Promise<string | null> {
   try {
-    const resp = await fetch(
-      workspaceResourceUrl(
-        `/api/design-systems/${encodeURIComponent(id)}/preview`,
-        workspaceContext,
-      ),
-      workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
+    const cacheKey = designSystemReadCacheKey(kind, id, workspaceContext);
+    const cacheGeneration = designSystemReadCacheGenerations.get(cacheKey) ?? 0;
+    return await sharedCancellableGet(
+      cacheKey,
+      async (signal) => {
+        const resp = await fetch(
+          workspaceResourceUrl(
+            `/api/design-systems/${encodeURIComponent(id)}/${kind}`,
+            workspaceContext,
+          ),
+          {
+            signal,
+            cache: 'no-store',
+            ...(workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : {}),
+          },
+        );
+        if (!resp.ok) throw new Error(`Design system ${kind} request failed (${resp.status})`);
+        const html = await resp.text();
+        if ((designSystemReadCacheGenerations.get(cacheKey) ?? 0) !== cacheGeneration) {
+          const current = await fetchDesignSystemHtmlResource(
+            kind,
+            id,
+            workspaceContext,
+            { signal },
+          );
+          if (current === null) throw new Error(`Fresh design system ${kind} request failed`);
+          return current;
+        }
+        return html;
+      },
+      {
+        signal: options?.signal,
+        // HTML can change when a user system is edited. Share only callers
+        // that overlap in the same render burst; never retain a settled page.
+        ttlMs: 0,
+      },
     );
-    if (!resp.ok) return null;
-    return await resp.text();
   } catch {
     return null;
   }
 }
 
+export async function fetchDesignSystemPreview(
+  id: string,
+  workspaceContext?: WorkspaceCollabContext | null,
+  options?: { signal?: AbortSignal },
+): Promise<string | null> {
+  return fetchDesignSystemHtmlResource('preview', id, workspaceContext, options);
+}
+
 export async function fetchDesignSystemShowcase(
   id: string,
   workspaceContext?: WorkspaceCollabContext | null,
+  options?: { signal?: AbortSignal },
 ): Promise<string | null> {
-  try {
-    const resp = await fetch(
-      workspaceResourceUrl(
-        `/api/design-systems/${encodeURIComponent(id)}/showcase`,
-        workspaceContext,
-      ),
-      workspaceContext ? { headers: workspaceProjectHeaders(workspaceContext) } : undefined,
-    );
-    if (!resp.ok) return null;
-    return await resp.text();
-  } catch {
-    return null;
-  }
+  return fetchDesignSystemHtmlResource('showcase', id, workspaceContext, options);
 }
 
 // Fetch the sandboxed HTML preview the daemon serves for a plugin.
