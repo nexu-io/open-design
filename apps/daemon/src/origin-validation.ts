@@ -225,21 +225,16 @@ export function isLocalSameOrigin(
 
   const localHostAllowed = isAllowedBrowserHost(host, ports, bindHost, ipOnlyExtraOrigins);
   if (origin == null || origin === '') {
-    if (localHostAllowed) return true;
-    // Browsers (Firefox, Chrome) omit Origin on same-origin GET subresource
-    // requests per the Fetch spec, which made hostname entries in
-    // OD_ALLOWED_ORIGINS unreachable for legitimate same-origin GETs
-    // through a reverse proxy. Sec-Fetch-Site is set by the user agent and
-    // cannot be modified by JavaScript, so a value of "same-origin"
-    // attests that the request originated from the same origin as the
-    // target — a cross-site `<img>`/`<script>` exploit would carry
-    // "cross-site" instead. Only consult the broader allow-list once that
-    // signal is present.
-    const fetchSite = headerValue(req.headers?.['sec-fetch-site']);
-    if (fetchSite === 'same-origin') {
-      return isAllowedBrowserHost(host, ports, bindHost, extraAllowedOrigins);
-    }
-    return false;
+    // Only a loopback / private-LAN host (or an explicitly configured
+    // IP-literal origin) may omit the Origin header. Sec-Fetch-Site is
+    // intentionally NOT consulted here (issue #7041): browsers set it and
+    // JavaScript cannot modify it, but any non-browser HTTP client (curl,
+    // scripts) can forge it, so treating `Sec-Fetch-Site: same-origin` as
+    // an authorization signal would let a forged header reach the full
+    // OD_ALLOWED_ORIGINS allow-list on the non-loopback path. Reverse-proxy
+    // deployments whose public hostname is listed in OD_ALLOWED_ORIGINS
+    // must send an Origin header (or use bearer auth) instead.
+    return localHostAllowed;
   }
   // Reverse-proxy deployments (e.g. Nginx in front of the daemon) terminate
   // the browser connection at the proxy and open a fresh upstream
