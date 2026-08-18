@@ -888,7 +888,14 @@
 }
 
 .plugin-suite-detail {
-  padding-top: 18px;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  padding: 18px 0 72px;
 }
 
 .plugin-suite-detail__topbar {
