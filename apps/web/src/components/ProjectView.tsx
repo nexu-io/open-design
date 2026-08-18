@@ -7087,8 +7087,19 @@ export function ProjectView({
       // that file is just as much this run's own activation as the completion
       // path's own opens.
       const runAutoOpenedFileNames = new Set<string>();
+      // The generation token alone fences a NEWER SEND, because only a send
+      // advances it. A conversation switch advances nothing, so a run parked in
+      // a per-write refresh, the completion continuation, or `persistArtifact`
+      // still passes the token check when it resumes — and then opens its own
+      // artifact in a workspace the user has since pointed at another chat. The
+      // settle watcher already refuses that (it compares its request's
+      // conversation before acting); these direct openers were the way around
+      // it. Checked here, at the moment the request actually goes out, rather
+      // than at arming: the whole point is that an unbounded amount of time can
+      // pass in between.
       const requestRunOpenFile = (fileName: string) => {
         if (autoOpenSettleGenerationRef.current !== autoOpenSettleGeneration) return false;
+        if (activeConversationIdRef.current !== runConversationId) return false;
         requestOpenFile(fileName, 'internal');
         runAutoOpenedFileNames.add(fileName);
         return true;
@@ -7152,8 +7163,14 @@ export function ProjectView({
         updateAssistant((prev) => ({ ...prev, events: [...(prev.events ?? []), ev] }));
         if (ev.kind === 'live_artifact') {
           setLiveArtifactEvents((prev) => appendLiveArtifactEventItem(prev, ev));
+          // Through the run's opener, not a raw request: `refreshLiveArtifacts()`
+          // is fire-and-forget, so this open can land after a newer send or a
+          // conversation switch has taken over. It also has to be recorded as
+          // this run's own activation — otherwise, when it lands after terminal
+          // handoff, the settle watcher reads the focus it just moved as the
+          // user choosing something else and retires instead of upgrading.
           void refreshLiveArtifacts().then(() => {
-            if (ev.action !== 'deleted') requestOpenFile(liveArtifactTabId(ev.artifactId), 'internal');
+            if (ev.action !== 'deleted') requestRunOpenFile(liveArtifactTabId(ev.artifactId));
           });
           onProjectsRefresh();
           return;

@@ -696,6 +696,47 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
   });
 
+  it('does not let a delayed per-write refresh focus a run whose conversation the user left', async () => {
+    // Reviewer #6842 (nettee, 2026-08-18, round 6): the owner token fences a
+    // newer SEND, because only a send advances it. Leaving the conversation
+    // advances nothing, so run A parked in a per-write refresh still passed the
+    // token check on resume and opened its artifact into the workspace while
+    // chat B was on screen. The watcher already refused to do that; this direct
+    // opener was the way around it. Positive control is
+    // "opens from a delayed per-write refresh while the run still owns
+    // auto-open" above — without it, "did not open" proves nothing here.
+    listConversations.mockResolvedValue([
+      { id: 'conv-1', title: 'Conversation' },
+      { id: 'conv-2', title: 'Second conversation' },
+    ]);
+
+    const turn = await runTurnHoldingPerWriteRead({
+      projectId: 'project-per-write-conversation',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, RUN_LOG],
+      perWriteSettled: [NOTES, OTHER, RUN_LOG, TURN_A_HTML],
+    });
+
+    const chatProps = chatPaneSpy.mock.calls.at(-1)?.[0] as {
+      onSelectConversation?: (id: string) => void;
+    };
+    await act(async () => {
+      chatProps.onSelectConversation?.('conv-2');
+    });
+    await waitFor(() => {
+      expect(
+        (chatPaneSpy.mock.calls.at(-1)?.[0] as { activeConversationId?: string | null })
+          .activeConversationId,
+      ).toBe('conv-2');
+    });
+    const openedBeforeRelease = openRequestKeys().length;
+
+    await turn.releasePerWriteRead();
+
+    expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
+  });
+
   // The conversation guard above is evaluated in two places, and only one of
   // them re-renders first. Every LATER list runs the guard through an effect,
   // so it reads a fresh evaluator; the finalizer arms and evaluates in one go,
