@@ -1,0 +1,19 @@
+{
+  "candidateId": "fbfa39e2-8d4c-467b-be03-9fdea6906286",
+  "projectId": "brand-govsc-santa-catarina-em-movimento-dd7733",
+  "runId": "b6ae00dc-60c2-4997-aa85-1a73b23462d2",
+  "conversationId": "0d8cd2ec-a7c4-4be0-972c-c50f7cd93412",
+  "provenance": {
+    "summary": "Detected from SKILL.md after a successful run.",
+    "detectedAt": 1787024728534
+  },
+  "sourceRefs": [
+    {
+      "kind": "file",
+      "value": "SKILL.md",
+      "label": "SKILL.md",
+      "size": 3182,
+      "copied": true
+    }
+  ]
+}

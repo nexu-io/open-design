@@ -1,0 +1,22 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "govsc---santa-catarina-em-movimento-msy4pz23",
+  "title": "GOVSC - Santa Catarina em Movimento",
+  "version": "0.1.0",
+  "description": "--- name: govsc-santa-catarina-em-movimento description: Use the GOVSC - Santa Catarina em Movimento design system for institutional presentations, public-policy decks, executive pages, data-led reports, and decision sur",
+  "od": {
+    "kind": "skill",
+    "taskKind": "new-generation",
+    "context": {
+      "skills": [
+        {
+          "path": "./SKILL.md"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject"
+    ]
+  }
+}
