@@ -1,4 +1,9 @@
-import { workspaceContextHasTeamIdentity } from '@open-design/contracts';
+import {
+  PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
+  workspaceContextHasTeamIdentity,
+  type PublicFileManualRevokeRequiredData,
+  type PublicProjectFilePublication,
+} from '@open-design/contracts';
 import { boundedRequestErrorCode } from '../analytics/workspace';
 import type {
   ConnectorAuthConfigPrepareResponse,
@@ -97,6 +102,7 @@ import {
   workspaceIdentityCacheKey,
   workspaceResourceUrl,
 } from '../collab/workspace-identity';
+import { PublicFilePublishError } from '../collab/public-file-publish';
 
 export const DEFAULT_DEPLOY_PROVIDER_ID = 'vercel-self';
 export const CLOUDFLARE_PAGES_PROVIDER_ID = 'cloudflare-pages';
@@ -114,11 +120,7 @@ export type WebDeployProjectFileResponse = DeployProjectFileResponse;
 export type WebCloudflarePagesDeploySelection = CloudflarePagesDeploySelection;
 export type WebCloudflarePagesZonesResponse = CloudflarePagesZonesResponse;
 
-export interface WebPublicProjectFileResponse {
-  url: string;
-  slug: string;
-  fileName: string;
-}
+export type WebPublicProjectFileResponse = PublicProjectFilePublication;
 
 export function isDeployProviderId(value: unknown): value is WebDeployProviderId {
   return typeof value === 'string' && (DEPLOY_PROVIDER_IDS as readonly string[]).includes(value);
@@ -1707,6 +1709,31 @@ export async function deployProjectFile(
   return (await resp.json()) as WebDeployProjectFileResponse;
 }
 
+function parsePublicFileManualRevokeData(
+  value: unknown,
+): PublicFileManualRevokeRequiredData | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const data = value as Partial<Record<keyof PublicFileManualRevokeRequiredData, unknown>>;
+  if (
+    typeof data.projectId !== 'string'
+    || typeof data.url !== 'string'
+    || typeof data.slug !== 'string'
+    || typeof data.fileName !== 'string'
+    || !data.projectId
+    || !data.url
+    || !data.slug
+    || !data.fileName
+  ) {
+    return undefined;
+  }
+  return {
+    projectId: data.projectId,
+    url: data.url,
+    slug: data.slug,
+    fileName: data.fileName,
+  };
+}
+
 export async function publishProjectFilePublic(
   projectId: string,
   fileName: string,
@@ -1725,15 +1752,38 @@ export async function publishProjectFilePublic(
   );
   if (!resp.ok) {
     const payload = (await resp.json().catch(() => null)) as
-      | { error?: { message?: string } | string; message?: string }
+      | {
+          error?: { code?: unknown; message?: unknown; data?: unknown } | string;
+          message?: unknown;
+        }
       | null;
+    const structuredError = payload?.error && typeof payload.error === 'object'
+      ? payload.error
+      : null;
+    const code = typeof structuredError?.code === 'string'
+      ? structuredError.code
+      : typeof payload?.error === 'string'
+        ? payload.error
+        : undefined;
     const errorMessage =
-      typeof payload?.error === 'object'
-        ? payload.error.message
-        : typeof payload?.error === 'string'
+      typeof structuredError?.message === 'string'
+        ? structuredError.message
+      : typeof payload?.error === 'string'
           ? payload.error
-          : payload?.message;
-    throw new Error(errorMessage || `Publish failed (${resp.status})`);
+          : typeof payload?.message === 'string'
+            ? payload.message
+            : undefined;
+    const recoveryData = code === PUBLIC_FILE_MANUAL_REVOKE_REQUIRED
+      ? parsePublicFileManualRevokeData(structuredError?.data)
+      : undefined;
+    throw new PublicFilePublishError(
+      errorMessage || `Publish failed (${resp.status})`,
+      resp.status,
+      code,
+      recoveryData?.projectId === projectId && recoveryData.fileName === fileName
+        ? recoveryData
+        : undefined,
+    );
   }
   return (await resp.json()) as WebPublicProjectFileResponse;
 }

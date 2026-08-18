@@ -3,7 +3,10 @@ import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node
 import os from 'node:os';
 import path from 'node:path';
 import {
+  PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
   workspaceContextHasWorkspaceIdentity,
+  type PublicFileManualRevokeRequiredResponse,
+  type PublicProjectFilePublication,
   type ProjectContentTransferState,
   type ProjectMetadata,
   type ProjectSyncIntentEvent,
@@ -47,6 +50,11 @@ import {
   parseVelaResourceSnapshot,
   runVelaResourceCommand,
 } from '../collab/vela-cli-resource-adapter.js';
+import {
+  createInMemoryPublicFilePublicationStore,
+  type PublicFilePublicationScope,
+  type PublicFilePublicationStore,
+} from '../collab/public-file-publication-store.js';
 import { readVelaControlApiContext } from '../integrations/vela.js';
 import { readProjectManifest } from '../project-locations.js';
 import { redactSecrets } from '../redact.js';
@@ -208,6 +216,8 @@ export interface RegisterCollabSyncRoutesDeps {
   ) => Promise<{ displayName: string; role: 'owner' | 'admin' | 'member' } | null>;
   projectStore?: PulledProjectStore;
   resolveProjectDir?: (projectId: string) => string | Promise<string>;
+  /** Durable publication metadata used to restore public links after restart. */
+  publicFilePublicationStore?: PublicFilePublicationStore;
   resolvePullDir?: (projectId: string) => string;
   /** Read the durable local materialization cursor for this exact team mirror. */
   readMaterializedVersion?: (
@@ -372,13 +382,6 @@ const PULLED_PROJECT_PLACEHOLDER_NAME = '共享项目';
 const PUBLIC_FILE_RESOURCE_KIND = 'project';
 const PUBLIC_FILE_REF = 'published';
 
-interface PublicFilePublication {
-  url: string;
-  slug: string;
-  fileName: string;
-}
-
-const publicFilePublications = new Map<string, PublicFilePublication>();
 const MAX_ERROR_LOG_FIELD_LENGTH = 2_048;
 
 function redactedErrorLogText(value: unknown): string {
@@ -535,8 +538,17 @@ function publicFileResourceIdFor(
   return `project-file-${scoped}`;
 }
 
-function publicFilePublicationKey(projectId: string, filePath: string, principal: ResourceHubPrincipal): string {
-  return JSON.stringify([principal.teamId, principal.memberId, projectId, filePath]);
+function publicFilePublicationScope(
+  projectId: string,
+  filePath: string,
+  principal: ResourceHubPrincipal,
+): PublicFilePublicationScope {
+  return {
+    resourceTeamId: principal.teamId,
+    ownerMemberId: principal.memberId,
+    projectId,
+    filePath,
+  };
 }
 
 function encodePublicFileUrlPath(filePath: string): string {
@@ -691,6 +703,9 @@ export function registerCollabSyncRoutes(
     notifyProjectMetadataChanged,
   } = deps;
   const readManifest = deps.readManifest ?? readProjectManifest;
+  const publicFilePublicationStore =
+    deps.publicFilePublicationStore
+    ?? createInMemoryPublicFilePublicationStore();
   const ownerEnrichmentCache = new Map<
     string,
     {
@@ -1277,12 +1292,45 @@ export function registerCollabSyncRoutes(
       if (!snapshot) {
         return res.status(502).json({ error: 'PUBLIC_SNAPSHOT_UNAVAILABLE' });
       }
-      const publication = {
+      const publication: PublicProjectFilePublication = {
         url: publicSnapshotFileUrl(baseUrl, snapshot.slug, filePath),
         slug: snapshot.slug,
         fileName: filePath,
       };
-      publicFilePublications.set(publicFilePublicationKey(projectId, filePath, principal), publication);
+      try {
+        publicFilePublicationStore.set(
+          publicFilePublicationScope(projectId, filePath, principal),
+          publication,
+        );
+      } catch (persistenceError) {
+        try {
+          await runVelaResourceCommand([
+            'snapshot-redact',
+            resourceId,
+            snapshot.slug,
+            '--json',
+          ], principal.teamId);
+        } catch (redactionError) {
+          console.warn(
+            '[od] failed to persist public project file publication; snapshot compensation also failed:',
+            { persistenceError, redactionError },
+          );
+          const recoveryResponse = {
+            error: {
+              code: PUBLIC_FILE_MANUAL_REVOKE_REQUIRED,
+              message:
+                `The public link remains active at ${publication.url}. `
+                + 'Run od project revoke-public-link with this project, file path, and URL.',
+              data: {
+                projectId,
+                ...publication,
+              },
+            },
+          } satisfies PublicFileManualRevokeRequiredResponse;
+          return res.status(502).json(recoveryResponse);
+        }
+        throw persistenceError;
+      }
       return res.json(publication);
     } catch (error) {
       console.warn('[od] failed to publish public project file:', error);
@@ -1335,7 +1383,9 @@ export function registerCollabSyncRoutes(
         slug,
         '--json',
       ], principal.teamId);
-      publicFilePublications.delete(publicFilePublicationKey(projectId, filePath, principal));
+      publicFilePublicationStore.delete(
+        publicFilePublicationScope(projectId, filePath, principal),
+      );
       return res.json({ ok: true, slug, fileName: filePath });
     } catch (error) {
       console.warn('[od] failed to unpublish public project file:', error);
@@ -1376,7 +1426,9 @@ export function registerCollabSyncRoutes(
       return res.status(403).json({ error: 'WORKSPACE_PROJECT_PUBLISH_DENIED' });
     }
     return res.json({
-      publication: publicFilePublications.get(publicFilePublicationKey(projectId, filePath, principal)) ?? null,
+      publication: publicFilePublicationStore.get(
+        publicFilePublicationScope(projectId, filePath, principal),
+      ),
     });
   });
 

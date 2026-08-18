@@ -17,6 +17,29 @@ import type {
 
 export type CollabMemberRole = 'owner' | 'admin' | 'member';
 
+/** Public single-file snapshot returned by the daemon publish routes. */
+export interface PublicProjectFilePublication {
+  url: string;
+  slug: string;
+  fileName: string;
+}
+
+export const PUBLIC_FILE_MANUAL_REVOKE_REQUIRED =
+  'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED' as const;
+
+/** Recovery data returned when a new public snapshot could not be persisted or redacted. */
+export interface PublicFileManualRevokeRequiredData extends PublicProjectFilePublication {
+  projectId: string;
+}
+
+export interface PublicFileManualRevokeRequiredResponse {
+  error: {
+    code: typeof PUBLIC_FILE_MANUAL_REVOKE_REQUIRED;
+    message: string;
+    data: PublicFileManualRevokeRequiredData;
+  };
+}
+
 /** A member present in a shared project (heartbeat identity). */
 export interface CollabPresenceMember {
   memberId: string;

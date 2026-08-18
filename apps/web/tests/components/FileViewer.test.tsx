@@ -5520,6 +5520,68 @@ describe('FileViewer SVG artifacts', () => {
     );
   });
 
+  it('exposes Stop sharing when publication persistence and compensation both fail', async () => {
+    const context = teamWorkspaceContext();
+    const publicUrl =
+      'https://hub.example.test/api/v1/public/snapshots/manual-revoke-slug/files/index.html';
+    const unpublishBodies: unknown[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        if (url.includes('/api/workspace/context')) {
+          return new Response(JSON.stringify({ context }), { status: 200 });
+        }
+        if (url.includes('publish-public')) {
+          const method = (init?.method ?? 'GET').toUpperCase();
+          if (method === 'GET') {
+            return new Response(JSON.stringify({ publication: null }), { status: 200 });
+          }
+          if (method === 'DELETE') {
+            unpublishBodies.push(JSON.parse(String(init?.body)));
+            return new Response(
+              JSON.stringify({ ok: true, slug: 'manual-revoke-slug', fileName: 'index.html' }),
+              { status: 200 },
+            );
+          }
+          return new Response(
+            JSON.stringify({
+              error: {
+                code: 'PUBLIC_FILE_MANUAL_REVOKE_REQUIRED',
+                message: `The public link remains active at ${publicUrl}.`,
+                data: {
+                  projectId: 'project-1',
+                  url: publicUrl,
+                  slug: 'manual-revoke-slug',
+                  fileName: 'index.html',
+                },
+              },
+            }),
+            { status: 502 },
+          );
+        }
+        return new Response(JSON.stringify({ deployments: [] }), { status: 200 });
+      }),
+    );
+
+    renderWithProjectWorkspace(
+      <FileViewer projectId="project-1" projectKind="prototype" file={publicPublishFile()}
+        liveHtml="<html><body><h1>Hello</h1></body></html>"
+      />,
+      context,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /share/i }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Get a share link/i }));
+
+    expect(await screen.findByText(publicUrl)).toBeTruthy();
+    const stopSharing = screen.getByRole('button', { name: /Stop sharing/i });
+    fireEvent.click(stopSharing);
+
+    await waitFor(() => expect(unpublishBodies).toEqual([{ slug: 'manual-revoke-slug' }]));
+    expect(await screen.findByRole('menuitem', { name: /Get a share link/i })).toBeTruthy();
+  });
+
   // Reading the help must never publish. The publish row's trailing "?" carries
   // the reach + single-file limitation copy, i.e. exactly what a user wants to
   // read BEFORE committing — but it used to be nested inside the same

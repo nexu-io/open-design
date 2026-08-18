@@ -765,6 +765,7 @@ import {
 import { registerTeamResourceRoutes } from './routes/team-resources.js';
 import { registerTeamResourceShareRoutes } from './routes/team-resource-share.js';
 import { createCollabRuntime } from './collab/runtime.js';
+import { createSqlitePublicFilePublicationStore } from './collab/public-file-publication-store.js';
 import {
   createActiveWorkspaceSelectionStore,
 } from './collab/active-workspace-selection.js';
@@ -4547,6 +4548,7 @@ export async function startServer({
   ): Promise<void> => {};
   const collabSyncRoutes = registerCollabSyncRoutes(app, {
     collab,
+    publicFilePublicationStore: createSqlitePublicFilePublicationStore(db),
     verifyWorkspaceRequest: verifiedWorkspaceContextForRequest,
     verifyWorkspaceReadRequest: verifiedWorkspaceReadContextForRequest,
     verifyWorkspaceScope: verifiedTeamMirrorScope,
