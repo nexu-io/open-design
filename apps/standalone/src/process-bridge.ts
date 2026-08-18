@@ -1,0 +1,770 @@
+import { createHash } from "node:crypto";
+import {
+  cleanupClosureChannelGarbage,
+  confirmClosureBindingAttempt,
+  discardObsoleteClosureNamespaceEpochs,
+  resolveClosureStorePaths,
+  rollbackClosureBindingAttempt,
+} from "@open-design/closure/store";
+
+import {
+  SidecarControlError,
+  attachSidecar,
+  bootstrapControlPlane,
+  type AttachSidecarOptions,
+  type AttachedSidecar,
+  type SidecarControlClient,
+  type SidecarControlContext,
+  type SidecarControlPlane,
+  type SidecarMethod,
+} from "@open-design/sidecar/control";
+import {
+  bootstrapSidecarLifecycle,
+  type SidecarLifecyclePlane,
+  type SidecarTransitionCredential,
+} from "@open-design/sidecar/lifecycle";
+import {
+  validateStandaloneHandoffDescriptor,
+  validateStandaloneRuntimeCommandRequest,
+  validateStandaloneRuntimeCommandResult,
+  validateStandaloneRuntimeStatus,
+  validateStandaloneShellCapabilityRequest,
+  validateStandaloneShellCapabilityResult,
+  STANDALONE_BODY_BRIDGE_SERVICE,
+  type StandaloneHandle,
+  type StandaloneHandoff,
+  type StandaloneHandoffDescriptor,
+  type StandaloneLifecycleOccupant,
+  type StandaloneLifecyclePort,
+  type StandaloneLifecycleTransition,
+  type StandaloneProtocolJsonValue,
+  type StandalonePreparedResource,
+  type StandaloneResourceEnsureRequest,
+  type StandaloneRuntimeCommandRequest,
+  type StandaloneRuntimeCommandResult,
+  type StandaloneRuntimeStatus,
+  type StandaloneRuntimeTerminalStatus,
+  type StandaloneShellCapabilityPort,
+  type StandaloneShellCapabilityRequest,
+  type StandaloneShellCapabilityResult,
+  type StandaloneShellHandle,
+} from "./protocol/index.js";
+
+import { createStandaloneLauncherBootstrapEnv } from "./launcher-bootstrap.js";
+export { STANDALONE_BODY_BRIDGE_SERVICE } from "./protocol/index.js";
+
+type StandaloneShellBridgeMethods = {
+  invoke: SidecarMethod<StandaloneShellCapabilityRequest, StandaloneShellCapabilityResult>;
+};
+
+type StandaloneBodyAttachmentInput = Readonly<{
+  attachmentId: string;
+}>;
+
+type StandaloneBodyAttachInput = Readonly<{
+  descriptor: StandaloneHandoffDescriptor;
+  shellService: string;
+}>;
+
+export type StandaloneBodyBridgeMethods = {
+  attach: SidecarMethod<StandaloneBodyAttachInput, StandaloneRuntimeStatus>;
+  close: SidecarMethod<StandaloneBodyAttachmentInput, StandaloneRuntimeTerminalStatus>;
+  ensureResource: SidecarMethod<StandaloneResourceEnsureRequest, StandalonePreparedResource>;
+  invoke: SidecarMethod<StandaloneRuntimeCommandRequest, StandaloneRuntimeCommandResult>;
+  readStatus: SidecarMethod<StandaloneBodyAttachmentInput, StandaloneRuntimeStatus>;
+  waitForTerminal: SidecarMethod<StandaloneBodyAttachmentInput, StandaloneRuntimeTerminalStatus>;
+};
+
+type BodyAttachment = Readonly<{
+  descriptor: StandaloneHandoffDescriptor;
+  descriptorKey: string;
+  task: Promise<StandaloneHandle>;
+}>;
+
+type StandaloneShellBridgeExposure = Readonly<{
+  abortTransition(): Promise<void>;
+  completeTransition(): Promise<void>;
+  lifecycle: StandaloneLifecyclePort;
+  service: string;
+  sidecar: AttachedSidecar;
+}>;
+
+export type StandaloneBodyProcessLaunchSpec = Readonly<{
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  executable: string;
+  launcherPath: string;
+  output?: "ignore" | "inherit";
+  readyTimeoutMs?: number;
+  stopTimeoutMs?: number;
+}>;
+
+function descriptorControl(descriptorInput: StandaloneHandoffDescriptor): Readonly<{
+  control: SidecarControlPlane;
+  descriptor: StandaloneHandoffDescriptor;
+}> {
+  const descriptor = validateStandaloneHandoffDescriptor(descriptorInput);
+  const scope = descriptor.handoff.scope;
+  return {
+    control: bootstrapControlPlane({
+      projection: {
+        digest: descriptor.handoff.descriptorDigest,
+        value: descriptor.handoff.descriptor,
+      },
+      roots: {
+        dataRoot: descriptor.paths.dataRoot,
+        resourceRoot: descriptor.paths.resourceRoot,
+        runtimeRoot: descriptor.paths.runtimeRoot,
+      },
+      scope: {
+        channel: scope.channel,
+        generation: scope.generation,
+        namespace: scope.namespace,
+      },
+    }),
+    descriptor,
+  };
+}
+
+function descriptorKey(descriptor: StandaloneHandoffDescriptor): string {
+  return JSON.stringify({ closure: descriptor.closure, handoff: descriptor.handoff, paths: descriptor.paths });
+}
+
+function attachmentKey(descriptor: StandaloneHandoffDescriptor): string {
+  return JSON.stringify(descriptor.attachment);
+}
+
+export function resolveStandaloneShellBridgeService(
+  descriptorInput: StandaloneHandoffDescriptor,
+): string {
+  const descriptor = validateStandaloneHandoffDescriptor(descriptorInput);
+  const digest = createHash("sha256").update(attachmentKey(descriptor)).digest("hex").slice(0, 24);
+  return `standalone-shell-${digest}`;
+}
+
+export async function exposeStandaloneShellBridge(options: Readonly<{
+  capabilities: StandaloneShellCapabilityPort;
+  descriptor: StandaloneHandoffDescriptor;
+}>): Promise<StandaloneShellBridgeExposure> {
+  const { control, descriptor } = descriptorControl(options.descriptor);
+  const service = resolveStandaloneShellBridgeService(descriptor);
+  const lifecycle: SidecarLifecyclePlane = bootstrapSidecarLifecycle({
+    controlRoot: descriptor.paths.dataRoot,
+    scope: {
+      channel: descriptor.handoff.scope.channel,
+      namespace: descriptor.handoff.scope.namespace,
+    },
+  });
+  const owner = {
+    generation: descriptor.handoff.scope.generation,
+    incarnation: descriptor.attachment.id,
+    key: `${descriptor.attachment.shell.type}:${descriptor.attachment.id}`,
+    projection: {
+      shellDigest: descriptor.attachment.shell.digest,
+      shellVersion: descriptor.attachment.shell.version,
+    },
+  } as const;
+  const attached = await lifecycle.attach({
+    leaseMs: 60_000,
+    owner,
+    ...(descriptor.transition == null ? {} : { transition: descriptor.transition }),
+  });
+  if (attached.state === "blocked") {
+    throw new Error(`Standalone Shell attachment is blocked by transition ${attached.transition.kind}`);
+  }
+
+  let rawSidecar: AttachedSidecar;
+  try {
+    rawSidecar = await control.expose<StandaloneShellBridgeMethods>({
+      handlers: {
+        async invoke(value) {
+          const request = validateStandaloneShellCapabilityRequest(value, {
+            attachmentId: descriptor.attachment.id,
+            handoff: descriptor.handoff,
+          });
+          return validateStandaloneShellCapabilityResult(
+            await options.capabilities.invoke(request),
+            {
+              attachmentId: descriptor.attachment.id,
+              handoff: descriptor.handoff,
+              requestId: request.requestId,
+            },
+          );
+        },
+      },
+      service,
+    });
+  } catch (error) {
+    await lifecycle.detach(attached.credential).catch(() => undefined);
+    throw error;
+  }
+
+  let closed = false;
+  let transitionCompleted = descriptor.transition == null;
+  let activeTransition: SidecarTransitionCredential | null = null;
+  let activeTransitionHandle: StandaloneLifecycleTransition | null = null;
+  let heartbeat: NodeJS.Timeout;
+  const closurePaths = descriptor.closure == null
+    ? null
+    : resolveClosureStorePaths({
+        channel: descriptor.handoff.scope.channel,
+        namespace: descriptor.handoff.scope.namespace,
+        root: descriptor.closure.storeRoot,
+      });
+  const closurePointer = {
+    channel: descriptor.handoff.scope.channel,
+    digest: descriptor.handoff.descriptor.standalone.digest,
+    generation: descriptor.handoff.scope.generation,
+    namespace: descriptor.handoff.scope.namespace,
+    protocolVersion: descriptor.handoff.descriptor.standalone.protocolVersion,
+    target: descriptor.closure?.target ?? "unknown-unknown",
+    version: descriptor.handoff.descriptor.standalone.version,
+  } as const;
+  const releaseActiveTransition = async (): Promise<void> => {
+    const credential = activeTransition;
+    activeTransition = null;
+    activeTransitionHandle = null;
+    if (credential != null) await lifecycle.abortTransition(credential).catch(() => undefined);
+  };
+  const close = async (): Promise<void> => {
+    if (closed) return;
+    closed = true;
+    clearInterval(heartbeat);
+    await releaseActiveTransition();
+    await lifecycle.detach(attached.credential).catch(() => undefined);
+    await rawSidecar.close();
+  };
+  heartbeat = setInterval(() => {
+    void (async () => {
+      const transition = activeTransition
+        ?? (transitionCompleted || descriptor.transition == null ? null : descriptor.transition);
+      if (activeTransition != null) {
+        const renewed = await lifecycle.renewTransition({
+          credential: activeTransition,
+          leaseMs: 60_000,
+        });
+        if (renewed.state === "rejected") return await close();
+      }
+      const result = await lifecycle.renewLease({
+        credential: attached.credential,
+        leaseMs: 60_000,
+        ...(transition == null ? {} : { transition }),
+      });
+      if (result.state === "rejected") await close();
+    })().catch(async () => await close());
+  }, 20_000);
+  heartbeat.unref();
+  const sidecar: AttachedSidecar = Object.freeze({ close, context: rawSidecar.context });
+
+  return {
+    async abortTransition() {
+      if (transitionCompleted || descriptor.transition == null) return;
+      await lifecycle.abortTransition(descriptor.transition).catch(() => undefined);
+      if (closurePaths != null) {
+        await rollbackClosureBindingAttempt(closurePaths, closurePointer).catch(() => undefined);
+      }
+    },
+    async completeTransition() {
+      if (transitionCompleted || descriptor.transition == null) return;
+      const result = await lifecycle.completeTransition({
+        lease: attached.credential,
+        transition: descriptor.transition,
+      });
+      if (result.state === "rejected") {
+        throw new Error(`Standalone transition completion was rejected: ${result.reason}`);
+      }
+      if (closurePaths != null) {
+        await confirmClosureBindingAttempt(closurePaths, closurePointer);
+        void discardObsoleteClosureNamespaceEpochs(closurePaths)
+          .then(async (result) => {
+            if (result.discarded > 0) await cleanupClosureChannelGarbage({ paths: closurePaths });
+          })
+          .catch(() => undefined);
+      }
+      transitionCompleted = true;
+    },
+    lifecycle: Object.freeze({
+      async beginTransition(kind: string) {
+        if (closed) return { occupants: [], reason: "unavailable", state: "blocked" } as const;
+        if (!transitionCompleted) {
+          return { occupants: [], reason: "transition-active", state: "blocked" } as const;
+        }
+        if (activeTransitionHandle != null) {
+          return { state: "acquired", transition: activeTransitionHandle } as const;
+        }
+        let acquired;
+        try {
+          acquired = await lifecycle.beginTransition({
+            kind,
+            leaseMs: 60_000,
+            owner,
+            requester: attached.credential,
+          });
+        } catch {
+          return { occupants: [], reason: "unavailable", state: "blocked" } as const;
+        }
+        if (acquired.state === "blocked") {
+          const occupants: StandaloneLifecycleOccupant[] = (acquired.occupants ?? []).map((entry) => ({
+            generation: entry.owner.generation,
+            incarnation: entry.owner.incarnation,
+            key: entry.owner.key,
+            ...(entry.owner.projection == null
+              ? {}
+              : { projection: entry.owner.projection as StandaloneProtocolJsonValue }),
+          }));
+          return {
+            occupants,
+            reason: acquired.reason === "occupied" ? "occupied" : "transition-active",
+            state: "blocked",
+          } as const;
+        }
+        activeTransition = acquired.credential;
+        const credential = acquired.credential;
+        activeTransitionHandle = Object.freeze({
+          async release() {
+            if (activeTransition?.id !== credential.id || activeTransition.fence !== credential.fence) return;
+            await releaseActiveTransition();
+          },
+        });
+        return { state: "acquired", transition: activeTransitionHandle } as const;
+      },
+    }),
+    service,
+    sidecar,
+  };
+}
+
+async function remoteCapabilityPort(
+  control: SidecarControlPlane,
+  descriptor: StandaloneHandoffDescriptor,
+  service: string,
+): Promise<StandaloneShellCapabilityPort> {
+  if (service !== resolveStandaloneShellBridgeService(descriptor)) {
+    throw new Error("Standalone body attach references the wrong Shell capability service");
+  }
+  const client = await control.connect<StandaloneShellBridgeMethods>(service);
+  return {
+    async invoke(value) {
+      const request = validateStandaloneShellCapabilityRequest(value, {
+        attachmentId: descriptor.attachment.id,
+        handoff: descriptor.handoff,
+      });
+      return validateStandaloneShellCapabilityResult(await client.call("invoke", request), {
+        attachmentId: descriptor.attachment.id,
+        handoff: descriptor.handoff,
+        requestId: request.requestId,
+      });
+    },
+  };
+}
+
+function attachment(
+  attachments: Map<string, BodyAttachment>,
+  attachmentId: string,
+): BodyAttachment {
+  const entry = attachments.get(attachmentId);
+  if (entry == null) throw new Error(`Standalone body attachment is unavailable: ${attachmentId}`);
+  return entry;
+}
+
+function validateTerminalStatus(
+  value: unknown,
+  descriptor: StandaloneHandoffDescriptor,
+): StandaloneRuntimeTerminalStatus {
+  const status = validateStandaloneRuntimeStatus(value, { handoff: descriptor.handoff });
+  if (status.state === "running") {
+    throw new Error("Standalone body returned a non-terminal status from a terminal operation");
+  }
+  return status;
+}
+
+export type StandaloneBodyBridgeHostOptions = Readonly<{
+  descriptor: StandaloneHandoffDescriptor;
+  ensureResource?: (id: string) => Promise<StandalonePreparedResource>;
+  handoff: StandaloneHandoff;
+  onExitRequested?: () => void;
+}>;
+
+function createStandaloneBodyBridgeHost(options: StandaloneBodyBridgeHostOptions): Readonly<{
+  attachOptions: AttachSidecarOptions<StandaloneBodyBridgeMethods>;
+  closeAttachments(): Promise<void>;
+}> {
+  const { control, descriptor: baseline } = descriptorControl(options.descriptor);
+  const lifecycle = bootstrapSidecarLifecycle({
+    controlRoot: baseline.paths.dataRoot,
+    scope: {
+      channel: baseline.handoff.scope.channel,
+      namespace: baseline.handoff.scope.namespace,
+    },
+  });
+  const baselineKey = descriptorKey(baseline);
+  const attachments = new Map<string, BodyAttachment>();
+  let exitScheduled = false;
+  let stopping = false;
+  const scheduleExitIfIdle = (): void => {
+    if (stopping || attachments.size > 0 || exitScheduled) return;
+    exitScheduled = true;
+    setImmediate(() => {
+      exitScheduled = false;
+      if (!stopping && attachments.size === 0) options.onExitRequested?.();
+    });
+  };
+  const removeAttachment = async (attachmentId: string, entry: BodyAttachment): Promise<void> => {
+    if (attachments.get(attachmentId) !== entry) return;
+    attachments.delete(attachmentId);
+    scheduleExitIfIdle();
+  };
+  const hasLiveShellLease = (
+    descriptor: StandaloneHandoffDescriptor,
+    leases: Awaited<ReturnType<SidecarLifecyclePlane["snapshot"]>>["leases"],
+  ): boolean => leases.some((lease) => {
+    const projection = lease.owner.projection;
+    if (projection == null || typeof projection !== "object" || Array.isArray(projection)) return false;
+    const shellProjection = projection as Readonly<Record<string, unknown>>;
+    return lease.owner.generation === descriptor.handoff.scope.generation
+      && lease.owner.incarnation === descriptor.attachment.id
+      && lease.owner.key === `${descriptor.attachment.shell.type}:${descriptor.attachment.id}`
+      && shellProjection.shellDigest === descriptor.attachment.shell.digest
+      && shellProjection.shellVersion === descriptor.attachment.shell.version;
+  });
+  let observing = false;
+  const reapExpiredShells = async (): Promise<void> => {
+    if (observing || stopping || attachments.size === 0) return;
+    observing = true;
+    try {
+      const snapshot = await lifecycle.snapshot();
+      await Promise.all([...attachments.entries()].map(async ([attachmentId, entry]) => {
+        if (hasLiveShellLease(entry.descriptor, snapshot.leases)) return;
+        await entry.task.then(async (handle) => await handle.close()).catch(() => undefined);
+        await removeAttachment(attachmentId, entry);
+      }));
+    } catch {
+      // Lifecycle truth becoming unreadable is not evidence of a live Shell.
+      // Fail closed so an unowned product body cannot consume data/resources.
+      await Promise.all([...attachments.entries()].map(async ([attachmentId, entry]) => {
+        await entry.task.then(async (handle) => await handle.close()).catch(() => undefined);
+        await removeAttachment(attachmentId, entry);
+      }));
+    } finally {
+      observing = false;
+    }
+  };
+  const observer = setInterval(() => void reapExpiredShells(), 1_000);
+  observer.unref();
+  const closeAttachments = async (): Promise<void> => {
+    if (stopping) return;
+    stopping = true;
+    clearInterval(observer);
+    await Promise.all(
+      [...attachments.values()].map(async (entry) => {
+        await entry.task.then(async (handle) => await handle.close()).catch(() => undefined);
+      }),
+    );
+    attachments.clear();
+  };
+  const clientDescriptor = (value: StandaloneHandoffDescriptor): StandaloneHandoffDescriptor => {
+    const descriptor = validateStandaloneHandoffDescriptor(value);
+    if (descriptorKey(descriptor) !== baselineKey) {
+      throw new Error("Standalone body attach does not match its generation paths and handoff");
+    }
+    return descriptor;
+  };
+  return {
+    attachOptions: {
+      handlers: {
+        async attach(value) {
+          const descriptor = clientDescriptor(value.descriptor);
+          const key = attachmentKey(descriptor);
+          const existing = attachments.get(descriptor.attachment.id);
+          if (existing != null) {
+            if (existing.descriptorKey !== key) {
+              throw new Error("Standalone body attachment changed Shell identity");
+            }
+            return validateStandaloneRuntimeStatus(await (await existing.task).readStatus(), {
+              handoff: descriptor.handoff,
+            });
+          }
+          const snapshot = await lifecycle.snapshot();
+          if (!hasLiveShellLease(descriptor, snapshot.leases)) {
+            throw new Error("Standalone body attachment has no live Shell lifecycle lease");
+          }
+          const task = (async () => {
+            const capabilities = await remoteCapabilityPort(control, descriptor, value.shellService);
+            return await options.handoff({ ...descriptor, capabilities });
+          })();
+          const entry = { descriptor, descriptorKey: key, task };
+          attachments.set(descriptor.attachment.id, entry);
+          task.catch(() => {
+            void removeAttachment(descriptor.attachment.id, entry);
+          });
+          void task.then(async (handle) => await handle.waitForTerminal())
+            .then(async () => await removeAttachment(descriptor.attachment.id, entry))
+            .catch(async () => await removeAttachment(descriptor.attachment.id, entry));
+          return validateStandaloneRuntimeStatus(await (await task).readStatus(), {
+            handoff: descriptor.handoff,
+            state: "running",
+          });
+        },
+        async close({ attachmentId }) {
+          const entry = attachment(attachments, attachmentId);
+          const handle = await entry.task;
+          const terminal = validateTerminalStatus(await handle.close(), baseline);
+          await removeAttachment(attachmentId, entry);
+          return terminal;
+        },
+        async ensureResource({ id }) {
+          if (options.ensureResource == null) {
+            throw new Error("Standalone body does not expose Closure resource materialization");
+          }
+          return await options.ensureResource(id);
+        },
+        async invoke(value) {
+          const command = validateStandaloneRuntimeCommandRequest(value, {
+            attachmentId: value.attachmentId,
+            handoff: baseline.handoff,
+          });
+          return validateStandaloneRuntimeCommandResult(
+            await (await attachment(attachments, command.attachmentId).task).invoke(command),
+            {
+              attachmentId: command.attachmentId,
+              handoff: baseline.handoff,
+              requestId: command.requestId,
+            },
+          );
+        },
+        async readStatus({ attachmentId }) {
+          return validateStandaloneRuntimeStatus(
+            await (await attachment(attachments, attachmentId).task).readStatus(),
+            { handoff: baseline.handoff },
+          );
+        },
+        async waitForTerminal({ attachmentId }) {
+          const entry = attachment(attachments, attachmentId);
+          const terminal = validateTerminalStatus(
+            await (await entry.task).waitForTerminal(),
+            baseline,
+          );
+          await removeAttachment(attachmentId, entry);
+          return terminal;
+        },
+      },
+      async onStopRequested() {
+        await closeAttachments();
+        options.onExitRequested?.();
+      },
+    },
+    closeAttachments,
+  };
+}
+
+function wrapStandaloneBodySidecar(
+  sidecar: AttachedSidecar,
+  closeAttachments: () => Promise<void>,
+): AttachedSidecar {
+  return Object.freeze({
+    async close() {
+      await closeAttachments();
+      await sidecar.close();
+    },
+    context: sidecar.context,
+  });
+}
+
+function assertStandaloneBodyContext(
+  context: SidecarControlContext,
+  control: SidecarControlPlane,
+): void {
+  if (
+    context.identity.service !== STANDALONE_BODY_BRIDGE_SERVICE
+    || context.identity.channel !== control.scope.channel
+    || context.identity.namespace !== control.scope.namespace
+    || context.identity.generation !== control.scope.generation
+    || context.projection.digest !== control.projection.digest
+    || context.roots.dataRoot !== control.roots.dataRoot
+    || context.roots.resourceRoot !== control.roots.resourceRoot
+    || context.roots.runtimeRoot !== control.roots.runtimeRoot
+  ) {
+    throw new Error("Standalone launcher control metadata does not match its handoff descriptor");
+  }
+}
+
+/** Host a body bridge in the caller process for focused tests and embedders. */
+export async function exposeStandaloneBodyBridge(
+  options: StandaloneBodyBridgeHostOptions,
+): Promise<AttachedSidecar> {
+  const { control } = descriptorControl(options.descriptor);
+  const host = createStandaloneBodyBridgeHost(options);
+  return wrapStandaloneBodySidecar(
+    await control.expose<StandaloneBodyBridgeMethods>({
+      ...host.attachOptions,
+      service: STANDALONE_BODY_BRIDGE_SERVICE,
+    }),
+    host.closeAttachments,
+  );
+}
+
+/** Attach launcher.mjs to caller-supplied Sidecar launch metadata. */
+export async function attachStandaloneBodyBridge(
+  options: StandaloneBodyBridgeHostOptions,
+): Promise<AttachedSidecar> {
+  const { control } = descriptorControl(options.descriptor);
+  const host = createStandaloneBodyBridgeHost(options);
+  return wrapStandaloneBodySidecar(
+    await attachSidecar<StandaloneBodyBridgeMethods>({
+      ...host.attachOptions,
+      initialize(context) {
+        assertStandaloneBodyContext(context, control);
+      },
+    }),
+    host.closeAttachments,
+  );
+}
+
+function bodyClientHandle(
+  client: SidecarControlClient<StandaloneBodyBridgeMethods>,
+  descriptor: StandaloneHandoffDescriptor,
+  shell: StandaloneShellBridgeExposure,
+): StandaloneShellHandle {
+  const attachmentId = descriptor.attachment.id;
+  let closeTask: Promise<StandaloneRuntimeTerminalStatus> | null = null;
+  const closeShell = async (): Promise<void> => await shell.sidecar.close().catch(() => undefined);
+  return {
+    async close() {
+      if (closeTask == null) {
+        closeTask = client.call("close", { attachmentId }, { timeoutMs: null })
+          .then((status) => validateTerminalStatus(status, descriptor))
+          .finally(closeShell);
+      }
+      return await closeTask;
+    },
+    async invoke(value) {
+      const command = validateStandaloneRuntimeCommandRequest(value, {
+        attachmentId,
+        handoff: descriptor.handoff,
+      });
+      return validateStandaloneRuntimeCommandResult(await client.call("invoke", command, { timeoutMs: null }), {
+        attachmentId,
+        handoff: descriptor.handoff,
+        requestId: command.requestId,
+      });
+    },
+    lifecycle: shell.lifecycle,
+    async readStatus() {
+      return validateStandaloneRuntimeStatus(await client.call("readStatus", { attachmentId }), {
+        handoff: descriptor.handoff,
+      });
+    },
+    async waitForTerminal() {
+      try {
+        return validateTerminalStatus(
+          await client.call("waitForTerminal", { attachmentId }, { timeoutMs: null }),
+          descriptor,
+        );
+      } finally {
+        await closeShell();
+      }
+    },
+  };
+}
+
+async function attachShellToStandaloneBody(
+  client: SidecarControlClient<StandaloneBodyBridgeMethods>,
+  descriptor: StandaloneHandoffDescriptor,
+  shell: StandaloneShellBridgeExposure,
+): Promise<StandaloneShellHandle> {
+  try {
+    validateStandaloneRuntimeStatus(
+      // A cold attachment owns full Standalone acquisition (daemon + Web), so
+      // its lifecycle deadline belongs to the Shell/product policy rather than
+      // the sidecar transport's short request default. The body remains fenced
+      // by the exact generation descriptor and the caller can still terminate
+      // the owned launch if this operation rejects.
+      await client.call("attach", { descriptor, shellService: shell.service }, { timeoutMs: null }),
+      { handoff: descriptor.handoff, state: "running" },
+    );
+    await shell.completeTransition();
+    return bodyClientHandle(client, descriptor, shell);
+  } catch (error) {
+    await client.call("close", { attachmentId: descriptor.attachment.id }, { timeoutMs: null })
+      .catch(() => undefined);
+    await shell.abortTransition();
+    throw error;
+  }
+}
+
+function isUnavailableSidecar(error: unknown): boolean {
+  return error instanceof SidecarControlError && error.code === "peer-unavailable";
+}
+
+export async function connectStandaloneBodyBridge(options: Readonly<{
+  capabilities: StandaloneShellCapabilityPort;
+  descriptor: StandaloneHandoffDescriptor;
+}>): Promise<StandaloneShellHandle> {
+  const { control, descriptor } = descriptorControl(options.descriptor);
+  const shell = await exposeStandaloneShellBridge(options);
+  try {
+    const client = await control.connect<StandaloneBodyBridgeMethods>(STANDALONE_BODY_BRIDGE_SERVICE);
+    return await attachShellToStandaloneBody(client, descriptor, shell);
+  } catch (error) {
+    await shell.abortTransition();
+    await shell.sidecar.close().catch(() => undefined);
+    throw error;
+  }
+}
+
+/**
+ * Shell-side cold/hot path. Reuse an existing generation body when present;
+ * otherwise launch official Node with the immutable launcher.mjs entry. A
+ * duplicate cold-start loser reconnects to the winner instead of replacing it.
+ */
+export async function launchStandaloneBodyBridge(options: Readonly<{
+  capabilities: StandaloneShellCapabilityPort;
+  descriptor: StandaloneHandoffDescriptor;
+  launch: StandaloneBodyProcessLaunchSpec;
+}>): Promise<StandaloneShellHandle> {
+  const { control, descriptor } = descriptorControl(options.descriptor);
+  const shell = await exposeStandaloneShellBridge(options);
+  const ownedLaunch: { stop: (() => Promise<unknown>) | null } = { stop: null };
+  try {
+    let client: SidecarControlClient<StandaloneBodyBridgeMethods>;
+    try {
+      client = await control.connect<StandaloneBodyBridgeMethods>(STANDALONE_BODY_BRIDGE_SERVICE);
+    } catch (connectError) {
+      if (!isUnavailableSidecar(connectError)) throw connectError;
+      try {
+        const launched = await control.launch<StandaloneBodyBridgeMethods>({
+          args: [options.launch.launcherPath],
+          ...(options.launch.cwd == null ? {} : { cwd: options.launch.cwd }),
+          env: createStandaloneLauncherBootstrapEnv({
+            descriptor,
+          }, options.launch.env),
+          executable: options.launch.executable,
+          ...(options.launch.output == null ? {} : { output: options.launch.output }),
+          ...(options.launch.readyTimeoutMs == null
+            ? {}
+            : { readyTimeoutMs: options.launch.readyTimeoutMs }),
+          service: STANDALONE_BODY_BRIDGE_SERVICE,
+          ...(options.launch.stopTimeoutMs == null
+            ? {}
+            : { stopTimeoutMs: options.launch.stopTimeoutMs }),
+        });
+        ownedLaunch.stop = async () => await launched.stop();
+        client = launched.client;
+      } catch (launchError) {
+        try {
+          client = await control.connect<StandaloneBodyBridgeMethods>(
+            STANDALONE_BODY_BRIDGE_SERVICE,
+          );
+        } catch {
+          throw launchError;
+        }
+      }
+    }
+    return await attachShellToStandaloneBody(client, descriptor, shell);
+  } catch (error) {
+    await shell.abortTransition();
+    await shell.sidecar.close().catch(() => undefined);
+    await ownedLaunch.stop?.().catch(() => undefined);
+    throw error;
+  }
+}

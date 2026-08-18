@@ -1,0 +1,67 @@
+{
+  "name": "@open-design/standalone",
+  "version": "0.19.2",
+  "private": true,
+  "type": "module",
+  "description": "Shell-neutral Open Design Web and daemon product lifecycle.",
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./protocol": {
+      "types": "./dist/protocol/index.d.ts",
+      "default": "./dist/protocol/index.mjs"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.mjs"
+    },
+    "./bootloader": {
+      "types": "./dist/bootloader.d.ts",
+      "default": "./dist/bootloader.mjs"
+    },
+    "./bootstrap": {
+      "types": "./dist/bootstrap.d.ts",
+      "default": "./dist/bootstrap.mjs"
+    },
+    "./process-bridge": {
+      "types": "./dist/process-bridge.d.ts",
+      "default": "./dist/process-bridge.mjs"
+    },
+    "./resource-runtime": {
+      "types": "./dist/resource-runtime.d.ts",
+      "default": "./dist/resource-runtime.mjs"
+    },
+    "./sidecars": {
+      "types": "./dist/sidecars.d.ts",
+      "default": "./dist/sidecars.mjs"
+    }
+  },
+  "scripts": {
+    "build": "pnpm --filter @open-design/closure build && tsx ./esbuild.config.ts && tsc -p tsconfig.json --emitDeclarationOnly",
+    "test": "pnpm build && vitest run",
+    "typecheck": "pnpm --filter @open-design/closure build && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit"
+  },
+  "dependencies": {
+    "@open-design/closure": "workspace:*",
+    "@open-design/release": "workspace:*",
+    "@open-design/sidecar": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.12.2",
+    "esbuild": "0.28.0",
+    "jszip": "3.10.1",
+    "tsx": "4.22.3",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
+  },
+  "engines": {
+    "node": "~24"
+  }
+}

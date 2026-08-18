@@ -1,0 +1,88 @@
+import { build } from "esbuild";
+
+await build({
+  bundle: true,
+  entryPoints: [
+    "./src/index.ts",
+    "./src/bootloader.ts",
+    "./src/bootstrap.ts",
+    "./src/bootstrap-entry.ts",
+    "./src/fossil-bootloader.ts",
+    "./src/launcher-bootstrap.ts",
+    "./src/process-bridge.ts",
+    "./src/protocol/index.ts",
+    "./src/resource-handoff.ts",
+    "./src/resource-runtime.ts",
+    "./src/runtime/index.ts",
+    "./src/sidecars.ts",
+  ],
+  format: "esm",
+  outbase: "./src",
+  outdir: "./dist",
+  outExtension: { ".js": ".mjs" },
+  packages: "external",
+  platform: "node",
+  target: "node24",
+});
+
+// Loaded only by an explicit ensureResource bridge call. Keeping the update
+// stack in a sibling bundle preserves the fossil launcher's cold-start floor.
+await build({
+  banner: {
+    js: 'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);',
+  },
+  bundle: true,
+  entryPoints: { "resource-provider": "./src/resource-provider.ts" },
+  format: "esm",
+  outdir: "./dist",
+  outExtension: { ".js": ".mjs" },
+  packages: "bundle",
+  platform: "node",
+  target: "node24",
+});
+
+// launcher.mjs is the fossil-thin official-Node entry. Bundle every workspace
+// dependency so it does not depend on the body package graph it is about to
+// select and enter.
+await build({
+  bundle: true,
+  entryPoints: {
+    "generation-bootloader": "./src/generation-bootloader.ts",
+    launcher: "./src/launcher.ts",
+    "native-loader": "./src/native-loader.ts",
+  },
+  format: "esm",
+  outdir: "./dist",
+  outExtension: { ".js": ".mjs" },
+  packages: "bundle",
+  platform: "node",
+  target: "node24",
+});
+
+// The Shell executes this fossil using its official Node. It must carry every
+// Standalone selection/Store dependency and never resolve modules from Shell.
+await build({
+  banner: {
+    js: 'import { createRequire as __odCreateRequire } from "node:module"; const require = __odCreateRequire(import.meta.url);',
+  },
+  bundle: true,
+  entryPoints: { launcher: "./src/bootstrap-entry.ts" },
+  format: "esm",
+  outdir: "./dist/bootstrap/baseline",
+  outExtension: { ".js": ".mjs" },
+  packages: "bundle",
+  platform: "node",
+  target: "node24",
+});
+
+await build({
+  bundle: true,
+  entryPoints: { bootloader: "./src/fossil-bootloader.ts" },
+  external: ["./baseline/launcher.mjs"],
+  format: "esm",
+  outdir: "./dist/bootstrap",
+  outExtension: { ".js": ".mjs" },
+  packages: "bundle",
+  platform: "node",
+  target: "node24",
+});
