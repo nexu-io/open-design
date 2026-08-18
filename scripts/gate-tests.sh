@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# scripts/gate-tests.sh — gate entry for the zenprocess/open-design fork
+# (dagger/qa-fast lane on macgate). Bootstraps Node 24 + pnpm into the
+# worker, then runs the repo's own pre-PR checks for this branch's
+# changed area. Kept minimal so the fast lane stays fast.
+set -euo pipefail
+
+# Force Node 24: the worker ships node 22, but the repo targets node ~24
+# (AGENTS.md: Node 22 is unsupported).
+if ! command -v node >/dev/null 2>&1 || ! node -v | grep -q '^v24'; then
+  case "$(uname -m)" in
+    arm64|aarch64) NODE_ARCH=arm64 ;;
+    x86_64) NODE_ARCH=x64 ;;
+    *) echo "unsupported arch" >&2; exit 2 ;;
+  esac
+  NODE_VERSION=v24.19.0
+  NODE_DIR="$HOME/.node-$NODE_VERSION"
+  if [ ! -x "$NODE_DIR/bin/node" ]; then
+    mkdir -p /tmp/node-dl
+    curl -fsSL "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-$NODE_ARCH.tar.gz" -o /tmp/node-dl/node.tgz
+    tar xzf /tmp/node-dl/node.tgz -C /tmp/node-dl
+    mv "/tmp/node-dl/node-$NODE_VERSION-darwin-$NODE_ARCH" "$NODE_DIR"
+  fi
+  export PATH="$NODE_DIR/bin:$PATH"
+fi
+node -v
+
+export CI=true
+export COREPACK_HOME=/tmp/corepack-home
+export npm_config_cache=/tmp/npm-cache
+npm install -g pnpm@10.33.2 >/dev/null 2>&1 || true
+pnpm install --frozen-lockfile --ignore-scripts >/tmp/pnpm-install.log 2>&1
+pnpm rebuild better-sqlite3 >/tmp/sqlite-rebuild.log 2>&1
+pnpm --filter @open-design/daemon build >/tmp/daemon-build.log 2>&1
+
+# Branch-specific hardening suite + shared regression files.
+pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts \
+  tests/run-create-validation.test.ts tests/project-file-rename.test.ts tests/mcp-write-tools.test.ts
+echo GATE_OK
+
