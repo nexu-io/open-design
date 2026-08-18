@@ -3106,7 +3106,7 @@ describe("desktop updater", () => {
 
       const checked = await updater.checkForUpdates();
       expect(checked.state).toBe(DESKTOP_UPDATE_STATES.DOWNLOADED);
-      expect(checked.channel).toBe(DESKTOP_UPDATE_CHANNELS.PREVIEW);
+      expect(checked.channel).toBe("preview");
       expect(checked.availableVersion).toBe("1.0.1-preview.2");
     } finally {
       await fixture.close();
