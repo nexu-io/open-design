@@ -40,16 +40,28 @@ body.sub-page {
 .nav-links .nav-trigger.is-active {
   color: var(--ink);
 }
-/* The Product / Resources triggers are <button>s since the 2026-08 nav
-   consolidation, so the persistent "you are here" underline must target
-   .nav-trigger too, not just anchors. */
-.nav-links a.is-active::after,
-.nav-links .nav-trigger.is-active::after {
+.nav-links a.is-active::after {
   content: '';
   display: block;
   height: 1.5px;
   background: var(--coral);
   margin-top: 4px;
+  border-radius: 2px;
+}
+/* The Product / Resources triggers are <button>s since the 2026-08 nav
+   consolidation and lay out as inline-flex, where a block ::after becomes
+   a collapsed flex item and the bar never paints. The trigger already has
+   position: relative (globals.css), so anchor the bar to its own box —
+   anchors keep the block-flow rule above because .nav-links a is NOT
+   positioned and an absolute bar would escape it. */
+.nav-links .nav-trigger.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -5.5px; /* mirrors the anchors' 4px gap + 1.5px bar height */
+  height: 1.5px;
+  background: var(--coral);
   border-radius: 2px;
 }
 
