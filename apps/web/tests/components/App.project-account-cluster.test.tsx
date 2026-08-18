@@ -342,10 +342,13 @@ describe('project route — floating account cluster', () => {
     expect(open.mock.calls[0]?.[0]).toContain('/dashboard?workspaceId=ws-project');
   });
 
-  it('renders no cluster while signed out (context resolves to null)', async () => {
+  it.each([
+    ['signed out', false],
+    ['workspace identity is still loading', true],
+  ])('renders no cluster when %s', async (_state, loading) => {
     useProjectRouteWorkspaceContextMock.mockReturnValue({
       context: null,
-      loading: false,
+      loading,
       retry: vi.fn(),
     });
     vi.stubGlobal(
@@ -354,9 +357,12 @@ describe('project route — floating account cluster', () => {
     );
     render(<App />);
 
-    await screen.findByText('Project view');
+    await screen.findByText(loading ? 'Loading workspace…' : 'Project view');
     await waitFor(() => {
+      expect(document.querySelector('.entry-top-right-cluster')).toBeNull();
+      expect(screen.queryByTestId('entry-top-right-github')).toBeNull();
       expect(screen.queryByTestId('entry-nav-account')).toBeNull();
+      expect(screen.queryByTestId('entry-nav-account-updater')).toBeNull();
     });
   });
 });

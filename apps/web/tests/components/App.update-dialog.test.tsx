@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { ReactNode } from 'react';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -23,9 +24,21 @@ import { fetchDaemonConfig, loadConfig, mergeDaemonConfig } from '../../src/stat
 import { listProjects, listTemplates } from '../../src/state/projects';
 import type { AppConfig } from '../../src/types';
 
+const routeState = vi.hoisted(() => ({
+  current: { kind: 'home' as const, view: 'home' as const } as
+    | { kind: 'home'; view: 'home' }
+    | { kind: 'project'; projectId: string },
+}));
+
 vi.mock('../../src/router', () => ({
   navigate: vi.fn(),
-  useRoute: () => ({ kind: 'home' as const, view: 'home' as const }),
+  useRoute: () => routeState.current,
+}));
+
+vi.mock('../../src/components/EntryNavRail', () => ({
+  WorkspaceTopRightAccountCluster: ({ updaterSlot }: { updaterSlot?: ReactNode }) => (
+    <div data-testid="project-top-right-account-cluster">{updaterSlot}</div>
+  ),
 }));
 
 vi.mock('../../src/components/EntryView', () => ({
@@ -174,6 +187,7 @@ describe('App updater dialog integration', () => {
   let restoreHost: (() => void) | null = null;
 
   beforeEach(() => {
+    routeState.current = { kind: 'home', view: 'home' };
     mockedDaemonIsLive.mockResolvedValue(true);
     mockedFetchAgentsStream.mockResolvedValue([]);
     mockedFetchSkills.mockResolvedValue([]);
@@ -255,5 +269,26 @@ describe('App updater dialog integration', () => {
 
     unmount();
     expect(unsubscribeOpenDialog).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the update-ready rocket in the project-detail account cluster', async () => {
+    routeState.current = { kind: 'project', projectId: 'project-1' };
+    restoreHost = installMockOpenDesignHost({
+      host: {
+        updater: {
+          status: vi.fn(async () => idleStatus({
+            availableVersion: '1.2.4',
+            downloadPath: '/tmp/open-design-updater/Open Design Beta.dmg',
+            state: 'downloaded',
+          })),
+        },
+      },
+    });
+
+    render(<App />);
+
+    expect(await screen.findByTestId('project-top-right-account-cluster')).toBeTruthy();
+    expect(await screen.findByTestId('entry-nav-updater')).toBeTruthy();
+    expect(screen.getByTestId('updater-rocket-glyph')).toBeTruthy();
   });
 });

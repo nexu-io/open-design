@@ -1127,11 +1127,14 @@ export function EntryTopRightCluster({
 export function WorkspaceTopRightAccountCluster({
   onOpenSettings,
   onSignedOut,
+  updaterSlot,
   workspaceContextOverride,
   workspaceContextLoading,
 }: {
   onOpenSettings?: (section?: EntrySettingsSection) => void;
   onSignedOut?: () => void | Promise<void>;
+  /** Keep the project-detail account cluster on the same updater surface as Home. */
+  updaterSlot?: ReactNode;
   workspaceContextOverride?: WorkspaceCollabContext | null;
   workspaceContextLoading?: boolean;
 }) {
@@ -1157,6 +1160,7 @@ export function WorkspaceTopRightAccountCluster({
       context={context}
       billing={billing}
       balanceUsd={balanceUsd}
+      updaterSlot={updaterSlot}
       onOpenSettings={onOpenSettings}
       onSignedOut={onSignedOut}
     />
