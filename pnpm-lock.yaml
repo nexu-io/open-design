@@ -492,6 +492,43 @@ importers:
         specifier: 4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@20.19.39)(jsdom@29.1.1)(vite@7.3.3(@types/node@20.19.39)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
 
+  packages/closure:
+    dependencies:
+      '@open-design/download':
+        specifier: workspace:*
+        version: link:../download
+      '@open-design/platform':
+        specifier: workspace:*
+        version: link:../platform
+      '@open-design/release':
+        specifier: workspace:*
+        version: link:../release
+      '@open-design/sidecar':
+        specifier: workspace:*
+        version: link:../sidecar
+      extract-zip:
+        specifier: 2.0.1
+        version: 2.0.1
+    devDependencies:
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      esbuild:
+        specifier: 0.28.0
+        version: 0.28.0
+      jszip:
+        specifier: 3.10.1
+        version: 3.10.1
+      tsx:
+        specifier: 4.22.3
+        version: 4.22.3
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 4.1.6
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
+
   packages/components:
     devDependencies:
       '@testing-library/react':
@@ -757,6 +794,10 @@ importers:
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(jsdom@29.1.1)(vite@7.3.3(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.22.3)(yaml@2.9.0))
 
   packages/sidecar:
+    dependencies:
+      '@open-design/release':
+        specifier: workspace:*
+        version: link:../release
     devDependencies:
       '@types/node':
         specifier: 24.12.2
@@ -764,6 +805,9 @@ importers:
       esbuild:
         specifier: 0.28.0
         version: 0.28.0
+      tsx:
+        specifier: 4.22.3
+        version: 4.22.3
       typescript:
         specifier: 6.0.3
         version: 6.0.3
