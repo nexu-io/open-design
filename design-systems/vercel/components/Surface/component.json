@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Surface",
+  "name": "Surface",
+  "description": "Vercel grouped content surface.",
+  "selectors": [
+    ".card"
+  ],
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "ariaLabel": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "implementation": "<article class=\"card\" aria-label=\"{{ariaLabel}}\"><h3>{{title}}</h3><p>{{description}}</p></article>",
+  "source": "components.html"
+}

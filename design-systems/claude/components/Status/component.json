@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Status",
+  "name": "Status",
+  "description": "Claude compact status and warning label.",
+  "selectors": [
+    ".badge"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "states": {
+    "indicator": {
+      "selectors": [
+        ".badge-dot"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<span class=\"badge\"><span class=\"badge-dot\" aria-hidden=\"true\"></span>{{label}}</span>",
+  "source": "components.html"
+}

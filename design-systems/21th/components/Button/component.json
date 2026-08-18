@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "21th primary and secondary action control.",
+  "selectors": [
+    ".ds-21th-button"
+  ],
+  "variants": {
+    "primary": {
+      "selectors": [
+        ".ds-21th-button--primary"
+      ]
+    },
+    "secondary": {
+      "selectors": [
+        ".ds-21th-button--secondary"
+      ]
+    }
+  },
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "states": {
+    "hoverPrimary": {
+      "selectors": [
+        ".ds-21th-button--primary:hover"
+      ]
+    },
+    "hoverSecondary": {
+      "selectors": [
+        ".ds-21th-button--secondary:hover"
+      ]
+    },
+    "focus": {
+      "selectors": [
+        ".ds-21th-button:focus-visible"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<button class=\"ds-21th-button ds-21th-button--primary\" type=\"button\">{{label}}</button>"
+}

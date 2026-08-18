@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "TRAE Work primary and secondary action control.",
+  "selectors": [
+    ".ds-trae-work-button"
+  ],
+  "variants": {
+    "primary": {
+      "selectors": [
+        ".ds-trae-work-button--primary"
+      ]
+    },
+    "secondary": {
+      "selectors": [
+        ".ds-trae-work-button--secondary"
+      ]
+    }
+  },
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "states": {
+    "hoverPrimary": {
+      "selectors": [
+        ".ds-trae-work-button--primary:hover"
+      ]
+    },
+    "hoverSecondary": {
+      "selectors": [
+        ".ds-trae-work-button--secondary:hover"
+      ]
+    },
+    "focus": {
+      "selectors": [
+        ".ds-trae-work-button:focus-visible"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<button class=\"ds-trae-work-button ds-trae-work-button--primary\" type=\"button\">{{label}}</button>"
+}

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "Volcengine primary and secondary action control.",
+  "selectors": [
+    ".ds-volcengine-button"
+  ],
+  "variants": {
+    "primary": {
+      "selectors": [
+        ".ds-volcengine-button--primary"
+      ]
+    },
+    "secondary": {
+      "selectors": [
+        ".ds-volcengine-button--secondary"
+      ]
+    }
+  },
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "states": {
+    "hoverPrimary": {
+      "selectors": [
+        ".ds-volcengine-button--primary:hover"
+      ]
+    },
+    "hoverSecondary": {
+      "selectors": [
+        ".ds-volcengine-button--secondary:hover"
+      ]
+    },
+    "focus": {
+      "selectors": [
+        ".ds-volcengine-button:focus-visible"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<button class=\"ds-volcengine-button ds-volcengine-button--primary\" type=\"button\">{{label}}</button>"
+}

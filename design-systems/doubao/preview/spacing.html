@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Doubao — Spacing and radius</title><link rel="stylesheet" href="../tokens.css" /><style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--section-y-tablet) var(--container-gutter-desktop); }
+      h1 { margin: 0 0 var(--space-6); font-family: var(--font-display); font-size: var(--text-2xl); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+
+      .stack { display: grid; gap: var(--space-4); }
+      .space { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--fg-2); }
+      .s1 { padding: var(--space-1); } .s2 { padding: var(--space-2); } .s4 { padding: var(--space-4); } .s8 { padding: var(--space-8); }
+
+    </style></head><body><main><h1>Spacing and radius</h1>
+      <section class="stack"><div class="space s1">--space-1</div><div class="space s2">--space-2</div><div class="space s4">--space-4</div><div class="space s8">--space-8</div></section></main></body></html>

@@ -127,7 +127,7 @@ od:
 
 ## 加一套 Design System
 
-仓库里的新 design system 是 [`design-systems/<slug>/`](../../design-systems/) 下的一个 package，不再是单独的 Markdown 文件。当前内置的 151 套系统已经全部迁移到下面的 package contract。为了兼容旧内容或用户安装内容，daemon 仍能发现只有 `DESIGN.md` 的 legacy 文件夹，但新内置系统不应再采用这种形态。Catalog 会在每次 `/api/design-systems` 请求时重新扫描；编辑后刷新 Design System 界面即可，不需要重启 daemon。
+仓库里的新 design system 是 [`design-systems/<slug>/`](../../design-systems/) 下的一个 package，不再是单独的 Markdown 文件。当前内置的 164 套系统已经全部迁移到下面的 package contract。为了兼容旧内容或用户安装内容，daemon 仍能发现只有 `DESIGN.md` 的 legacy 文件夹，但新内置系统不应再采用这种形态。Catalog 会在每次 `/api/design-systems` 请求时重新扫描；编辑后刷新 Design System 界面即可，不需要重启 daemon。
 
 ### 最小 package 结构
 

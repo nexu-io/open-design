@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Status",
+  "name": "Status",
+  "description": "Minimal compact status and warning label.",
+  "selectors": [
+    ".status"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "states": {
+    "indicator": {
+      "selectors": [
+        ".status::before"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<span class=\"status\">{{label}}</span>",
+  "source": "components.html"
+}

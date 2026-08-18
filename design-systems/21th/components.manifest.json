@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 1,
+  "brandId": "21th",
+  "source": {
+    "componentsHtml": "components.html",
+    "tokensCss": "tokens.css"
+  },
+  "fixture": {
+    "title": "21th — reference components",
+    "description": "21th reusable DS 3.0 component fixture.",
+    "styleBlockCount": 1,
+    "selectorCount": 27,
+    "classCount": 15,
+    "elementCount": 20
+  },
+  "tokens": {
+    "declared": [
+      "--accent",
+      "--accent-active",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--border-soft",
+      "--container-gutter-desktop",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--container-max",
+      "--danger",
+      "--ease-standard",
+      "--elev-flat",
+      "--elev-raised",
+      "--elev-ring",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--meta",
+      "--motion-base",
+      "--motion-fast",
+      "--muted",
+      "--radius-lg",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--section-y-tablet",
+      "--space-1",
+      "--space-12",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-5",
+      "--space-6",
+      "--space-8",
+      "--success",
+      "--surface",
+      "--surface-warm",
+      "--text-2xl",
+      "--text-3xl",
+      "--text-4xl",
+      "--text-base",
+      "--text-lg",
+      "--text-sm",
+      "--text-xl",
+      "--text-xs",
+      "--tracking-display",
+      "--warn"
+    ],
+    "referenced": [
+      "--accent",
+      "--accent-hover",
+      "--accent-on",
+      "--bg",
+      "--border",
+      "--container-gutter-desktop",
+      "--container-max",
+      "--ease-standard",
+      "--elev-ring",
+      "--fg",
+      "--fg-2",
+      "--focus-ring",
+      "--font-body",
+      "--font-display",
+      "--font-mono",
+      "--leading-body",
+      "--leading-tight",
+      "--meta",
+      "--motion-fast",
+      "--muted",
+      "--radius-md",
+      "--radius-pill",
+      "--radius-sm",
+      "--section-y-tablet",
+      "--space-1",
+      "--space-2",
+      "--space-3",
+      "--space-4",
+      "--space-6",
+      "--success",
+      "--surface",
+      "--surface-warm",
+      "--text-3xl",
+      "--text-base",
+      "--text-sm",
+      "--text-xl",
+      "--tracking-display"
+    ],
+    "unusedDeclared": [
+      "--accent-active",
+      "--border-soft",
+      "--container-gutter-phone",
+      "--container-gutter-tablet",
+      "--danger",
+      "--elev-flat",
+      "--elev-raised",
+      "--motion-base",
+      "--radius-lg",
+      "--section-y-desktop",
+      "--section-y-phone",
+      "--space-12",
+      "--space-5",
+      "--space-8",
+      "--text-2xl",
+      "--text-4xl",
+      "--text-lg",
+      "--text-xs",
+      "--warn"
+    ],
+    "undeclaredReferenced": []
+  },
+  "selectors": [
+    ".btn",
+    ".card",
+    ".ds-21th-button",
+    ".ds-21th-button--primary",
+    ".ds-21th-button--primary:hover",
+    ".ds-21th-button--secondary",
+    ".ds-21th-button--secondary:hover",
+    ".ds-21th-button:focus-visible",
+    ".ds-21th-field",
+    ".ds-21th-field input",
+    ".ds-21th-field:focus-within",
+    ".ds-21th-status",
+    ".ds-21th-status__indicator",
+    ".ds-21th-surface",
+    ".ds-21th-surface p",
+    ".field",
+    ".row-between",
+    ".stack-6",
+    ".status",
+    "*",
+    "a.link",
+    "body",
+    "h1",
+    "h2",
+    "h3",
+    "kbd",
+    "main.container"
+  ],
+  "classes": [
+    "btn",
+    "card",
+    "container",
+    "ds-21th-button",
+    "ds-21th-button--primary",
+    "ds-21th-button--secondary",
+    "ds-21th-field",
+    "ds-21th-status",
+    "ds-21th-status__indicator",
+    "ds-21th-surface",
+    "field",
+    "link",
+    "row-between",
+    "stack-6",
+    "status"
+  ],
+  "elements": [
+    "a",
+    "body",
+    "button",
+    "div",
+    "form",
+    "h1",
+    "h2",
+    "head",
+    "header",
+    "html",
+    "input",
+    "kbd",
+    "label",
+    "main",
+    "meta",
+    "p",
+    "section",
+    "span",
+    "style",
+    "title"
+  ],
+  "groups": [
+    {
+      "id": "buttons",
+      "label": "Buttons and calls to action",
+      "present": true,
+      "selectors": [
+        ".btn",
+        ".ds-21th-button",
+        ".ds-21th-button--primary",
+        ".ds-21th-button--primary:hover",
+        ".ds-21th-button--secondary",
+        ".ds-21th-button--secondary:hover",
+        ".ds-21th-button:focus-visible"
+      ],
+      "classes": [
+        "btn",
+        "ds-21th-button",
+        "ds-21th-button--primary",
+        "ds-21th-button--secondary"
+      ],
+      "elements": [
+        "button"
+      ],
+      "tokenReferences": [
+        "--accent",
+        "--accent-on",
+        "--border",
+        "--fg",
+        "--focus-ring",
+        "--surface"
+      ]
+    },
+    {
+      "id": "inputs",
+      "label": "Form fields and controls",
+      "present": true,
+      "selectors": [
+        ".ds-21th-field input",
+        ".field"
+      ],
+      "classes": [
+        "field"
+      ],
+      "elements": [
+        "form",
+        "input",
+        "label"
+      ],
+      "tokenReferences": [
+        "--border",
+        "--fg",
+        "--radius-sm",
+        "--space-3",
+        "--surface"
+      ]
+    },
+    {
+      "id": "cards",
+      "label": "Cards and panels",
+      "present": true,
+      "selectors": [
+        ".card"
+      ],
+      "classes": [
+        "card"
+      ],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "badges",
+      "label": "Badges, chips, and status labels",
+      "present": true,
+      "selectors": [],
+      "classes": [
+        "ds-21th-status",
+        "ds-21th-status__indicator",
+        "status"
+      ],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "links",
+      "label": "Links and inline actions",
+      "present": true,
+      "selectors": [
+        "a.link"
+      ],
+      "classes": [
+        "link"
+      ],
+      "elements": [
+        "a"
+      ],
+      "tokenReferences": [
+        "--accent"
+      ]
+    },
+    {
+      "id": "keyboard",
+      "label": "Keyboard hints",
+      "present": true,
+      "selectors": [
+        "kbd"
+      ],
+      "classes": [],
+      "elements": [
+        "kbd"
+      ],
+      "tokenReferences": []
+    },
+    {
+      "id": "icons",
+      "label": "Icon slots",
+      "present": false,
+      "selectors": [],
+      "classes": [],
+      "elements": [],
+      "tokenReferences": []
+    },
+    {
+      "id": "typography",
+      "label": "Typography scale and text utilities",
+      "present": true,
+      "selectors": [
+        "h1",
+        "h2",
+        "h3"
+      ],
+      "classes": [],
+      "elements": [
+        "h1",
+        "h2",
+        "p"
+      ],
+      "tokenReferences": [
+        "--font-display",
+        "--leading-tight",
+        "--text-xl",
+        "--tracking-display"
+      ]
+    },
+    {
+      "id": "layout",
+      "label": "Layout primitives",
+      "present": true,
+      "selectors": [
+        ".row-between",
+        ".stack-6",
+        "main.container"
+      ],
+      "classes": [
+        "container",
+        "row-between",
+        "stack-6"
+      ],
+      "elements": [
+        "header",
+        "main",
+        "section"
+      ],
+      "tokenReferences": [
+        "--space-4"
+      ]
+    }
+  ],
+  "literals": {
+    "colorExpressions": 0,
+    "pixelValues": 8,
+    "hardcodedFontFamilies": 3
+  }
+}

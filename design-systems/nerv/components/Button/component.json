@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "NERV primary and secondary action control.",
+  "selectors": [
+    ".ds-nerv-button"
+  ],
+  "variants": {
+    "primary": {
+      "selectors": [
+        ".ds-nerv-button--primary"
+      ]
+    },
+    "secondary": {
+      "selectors": [
+        ".ds-nerv-button--secondary"
+      ]
+    }
+  },
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "states": {
+    "hoverPrimary": {
+      "selectors": [
+        ".ds-nerv-button--primary:hover"
+      ]
+    },
+    "hoverSecondary": {
+      "selectors": [
+        ".ds-nerv-button--secondary:hover"
+      ]
+    },
+    "focus": {
+      "selectors": [
+        ".ds-nerv-button:focus-visible"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<button class=\"ds-nerv-button ds-nerv-button--primary\" type=\"button\">{{label}}</button>"
+}

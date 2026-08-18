@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "Motion Fit primary and secondary action control.",
+  "selectors": [
+    ".ds-motion-fit-button"
+  ],
+  "variants": {
+    "primary": {
+      "selectors": [
+        ".ds-motion-fit-button--primary"
+      ]
+    },
+    "secondary": {
+      "selectors": [
+        ".ds-motion-fit-button--secondary"
+      ]
+    }
+  },
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "states": {
+    "hoverPrimary": {
+      "selectors": [
+        ".ds-motion-fit-button--primary:hover"
+      ]
+    },
+    "hoverSecondary": {
+      "selectors": [
+        ".ds-motion-fit-button--secondary:hover"
+      ]
+    },
+    "focus": {
+      "selectors": [
+        ".ds-motion-fit-button:focus-visible"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<button class=\"ds-motion-fit-button ds-motion-fit-button--primary\" type=\"button\">{{label}}</button>"
+}

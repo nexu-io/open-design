@@ -31,7 +31,7 @@
 
 ## 什麼是 Open Design
 
-🎨 **本地優先、開源的 Claude Design 替代方案。** &nbsp;🖥️ **macOS 與 Windows 的原生桌面應用程式。** &nbsp;⚡ **100+ 個功能 skills + 獨立渲染範本型錄** · ✨ **151 套品牌級設計系統套件** · 📦 **277 個開箱即用的外掛。** &nbsp;🖼️ 可生成 **網頁 · 桌面 · 行動裝置原型**、**即時儀表板／artifacts**、**簡報**、**圖片**、**影片**，外加 **HyperFrames** 動態圖像。🔒 沙箱化 iframe 預覽 · 支援 HTML / PDF / PPTX / MP4 匯出。 &nbsp;🤖 **可在 Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 25 個不同的本地 CLI 可執行檔上執行**，或透過 BYOK 接上任何相容 OpenAI 的端點。
+🎨 **本地優先、開源的 Claude Design 替代方案。** &nbsp;🖥️ **macOS 與 Windows 的原生桌面應用程式。** &nbsp;⚡ **100+ 個功能 skills + 獨立渲染範本型錄** · ✨ **164 套品牌級設計系統套件** · 📦 **277 個開箱即用的外掛。** &nbsp;🖼️ 可生成 **網頁 · 桌面 · 行動裝置原型**、**即時儀表板／artifacts**、**簡報**、**圖片**、**影片**，外加 **HyperFrames** 動態圖像。🔒 沙箱化 iframe 預覽 · 支援 HTML / PDF / PPTX / MP4 匯出。 &nbsp;🤖 **可在 Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity 等 25 個不同的本地 CLI 可執行檔上執行**，或透過 BYOK 接上任何相容 OpenAI 的端點。
 
 Open Design 是這樣誕生的：當 Anthropic 隨 Claude Design 推出的那套 **agent 原生** 迴圈——釐清需求、鎖定方向、串流產出 artifact、評析、交付——不再封閉，而是化為一個由 **功能 skills、渲染設計範本、設計系統與外掛組成的檔案系統**，讓你筆電上既有的編碼 agent 都能讀取、寫入、再混搭。你的 CLI 成為設計引擎，你的筆電成為工作室，而你團隊的 `DESIGN.md` 則成為品牌契約。
 
@@ -253,7 +253,7 @@ Runtime 定義位於 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/ru
 Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣以 artifact 為先的思維模式，卻沒有任何鎖定：
 
 - 🤖 **agent 原生、模型無關。** 我們不附帶 agent。你 `PATH` 上既有的 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` 就是設計引擎。一鍵即可切換。
-- 🧠 **預設即品牌級。** 每次渲染都把目前套件的 `DESIGN.md` 當作核心品牌契約讀取。儲存庫隨附 151 套設計系統套件；舊套件可以只含 `DESIGN.md`，新套件還可加入 `manifest.json`、`tokens.css`、元件、資產與來源資訊。放進資料夾，選擇器就會找到它。
+- 🧠 **預設即品牌級。** 每次渲染都把目前套件的 `DESIGN.md` 當作核心品牌契約讀取。儲存庫隨附 164 套設計系統套件；舊套件可以只含 `DESIGN.md`，新套件還可加入 `manifest.json`、`tokens.css`、元件、資產與來源資訊。放進資料夾，選擇器就會找到它。
 - 🖥️ **本地優先、每一層都可 BYOK。** 原生桌面應用程式保持本地優先，不會雲端往返。在描述 daemon 資料路徑之前，必須閱讀儲存庫根目錄 `AGENTS.md` 中的 **Daemon data directory contract**。
 - 🌍 **在四個平面上可組合。** **外掛**承載可執行的工作流程 · 功能 **skills** 承載 agent 行為 · **設計範本**承載渲染藍圖 · **設計系統**承載品牌。四者都採用可攜、可版控的目錄，任何人都能撰寫與發布。
 - 🔁 **翻新既有的程式碼庫。** 把一個 `git` 儲存庫 + `DESIGN.md` 交給 agent，它就會把你真實的元件重構至品牌規格。專屬外掛能把 Figma / Pencil 工作流程遷移成 React / Next.js / Vue 程式碼。
@@ -266,7 +266,7 @@ Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 | 開源 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | 自架／桌面 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
 | agent 原生（在你的 CLI 中執行） | 僅限 Anthropic | ❌ | 僅限雲端 agent | **✅ 25 個 CLI + BYOK** |
-| 品牌級 `DESIGN.md` | 專有 | Theme JSON | 有限的 token | **✅ 隨附 151 套系統** |
+| 品牌級 `DESIGN.md` | 專有 | Theme JSON | 有限的 token | **✅ 隨附 164 套系統** |
 | skills／外掛／範本 | 封閉 | 外掛商店 | 封閉 | **✅ 100+ 個功能 skills · 獨立渲染範本型錄 · 277 個外掛** |
 | HyperFrames（HTML→MP4） | ❌ | ❌ | ❌ | **✅ 一等公民** |
 | 把既有儲存庫翻新至品牌 | ❌ | ❌ | ❌ | **✅ 透過 agent + `DESIGN.md`** |
@@ -284,7 +284,7 @@ Open Design（OD）就是那個開源的替代方案。同樣的迴圈、同樣�
 - **Windows**（x64）→ [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_windows) 或 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux**（AppImage，選用通道）→ [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-安裝後：應用程式會自動偵測你 `PATH` 上的每一個編碼 agent CLI、載入 100+ 個功能 skills、獨立渲染範本型錄與 151 套設計系統套件，並讓你在入口視圖中輸入需求。
+安裝後：應用程式會自動偵測你 `PATH` 上的每一個編碼 agent CLI、載入 100+ 個功能 skills、獨立渲染範本型錄與 164 套設計系統套件，並讓你在入口視圖中輸入需求。
 
 ### 🤖 安裝進你的編碼 agent（無 UI）
 
@@ -417,7 +417,7 @@ od skills list --json
 
 ## 設計系統
 
-**151 套以 `DESIGN.md` 為核心的品牌級設計系統套件**隨儲存庫一同附帶。舊套件可只有這份 Markdown 契約；新套件還可包含 `manifest.json`、編譯後的 `tokens.css`、元件範例、資產與來源證據。型錄同時包含由上游整理而來的系統與專案自有補充；[`design-systems/README.md`](../../design-systems/README.md) 記錄套件結構與來源。切換一套系統 → 下一次渲染就會使用新的 token。
+**164 套以 `DESIGN.md` 為核心的品牌級設計系統套件**隨儲存庫一同附帶。舊套件可只有這份 Markdown 契約；新套件還可包含 `manifest.json`、編譯後的 `tokens.css`、元件範例、資產與來源證據。型錄同時包含由上游整理而來的系統與專案自有補充；[`design-systems/README.md`](../../design-systems/README.md) 記錄套件結構與來源。切換一套系統 → 下一次渲染就會使用新的 token。
 
 <details>
 <summary><b>完整型錄（點擊展開）</b></summary>
@@ -574,7 +574,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 - [x] Daemon + 25 個不同 CLI 可執行檔上的 26 個 runtime 定義 + skill／設計範本 registry + 設計系統型錄
 - [x] Web 應用程式 + chat + 提問表單 + 5 方向選擇器 + todo 進度 + 沙箱化預覽
-- [x] 100+ 個功能 skills · 獨立渲染範本型錄 · 151 套設計系統套件 · 5 種視覺方向 · 5 種裝置外框
+- [x] 100+ 個功能 skills · 獨立渲染範本型錄 · 164 套設計系統套件 · 5 種視覺方向 · 5 種裝置外框
 - [x] 以 SQLite 為後援的專案 · 對話 · 訊息 · 分頁 · 範本
 - [x] 多供應商 BYOK 代理（`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`）+ SSRF 防護
 - [x] Claude Design ZIP 匯入（`/api/import/claude-design`）

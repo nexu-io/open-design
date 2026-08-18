@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Vibe Camp reusable DS 3.0 component fixture." />
+    <title>Vibe Camp — reference components</title>
+    <style>
+      /* Normalized from the Vibe Camp design-library export supplied by TRAE Work. */
+:root {
+  --bg: #e3dfd9;
+  --surface: #f3f0eb;
+  --surface-warm: #f7f4ef;
+  --fg: #211d1a;
+  --fg-2: #211d1a;
+  --muted: #5c5650;
+  --meta: #5c5650;
+  --border: #cbc3ba;
+  --border-soft: #d7d1c9;
+  --accent: #f1481e;
+  --accent-on: #fff7f3;
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: #ef4444;
+  --font-display: ui-sans-serif, system-ui, sans-serif;
+  --font-body: Geist, ui-sans-serif, sans-serif, system-ui;
+  --font-mono: Roboto Mono, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 48px;
+  --text-4xl: 64px;
+  --leading-body: 1.5;
+  --leading-tight: 1.2;
+  --tracking-display: 0em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+  --radius-sm: 18px;
+  --radius-md: 18px;
+  --radius-lg: 18px;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 2px 2px 10px 4px transparent;
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}
+
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: var(--text-base); line-height: var(--leading-body); }
+      main.container { max-width: var(--container-max); margin: 0 auto; padding: var(--section-y-tablet) var(--container-gutter-desktop); }
+      h1, h2, h3 { margin: 0; font-family: var(--font-display); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+      h1 { font-size: var(--text-3xl); }
+      h2 { font-size: var(--text-xl); }
+      .stack-6 { display: grid; gap: var(--space-6); }
+      .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+      .card, .ds-vibe-camp-surface { padding: var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--elev-ring); }
+      .ds-vibe-camp-surface p { margin: var(--space-2) 0 0; color: var(--muted); }
+      .btn, .ds-vibe-camp-button { min-height: 44px; padding: 0 var(--space-4); border: 1px solid transparent; border-radius: var(--radius-sm); font: inherit; cursor: pointer; transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard); }
+      .ds-vibe-camp-button--primary { background: var(--accent); color: var(--accent-on); }
+      .ds-vibe-camp-button--primary:hover { background: var(--accent-hover); }
+      .ds-vibe-camp-button--secondary { border-color: var(--border); background: var(--surface); color: var(--fg); }
+      .ds-vibe-camp-button--secondary:hover { background: var(--surface-warm); }
+      .ds-vibe-camp-button:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
+      .field, .ds-vibe-camp-field { display: grid; gap: var(--space-2); color: var(--fg-2); }
+      .ds-vibe-camp-field input { min-height: 44px; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font: inherit; }
+      .ds-vibe-camp-field:focus-within { outline: 0; box-shadow: var(--focus-ring); }
+      .status, .ds-vibe-camp-status { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
+      .ds-vibe-camp-status__indicator { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--success); }
+      a.link { color: var(--accent); text-underline-offset: 3px; }
+      kbd { padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--surface-warm); color: var(--meta); font-family: var(--font-mono); }
+    </style>
+  </head>
+  <body>
+    <main class="container stack-6">
+      <header class="row-between"><div><h1>Vibe Camp</h1><p>Reusable component fixture</p></div><kbd>DS 3.0</kbd></header>
+      <section class="card ds-vibe-camp-surface" aria-label="Account settings"><h2>Account settings</h2><p>Mapped content surface using the active tokens.</p></section>
+      <form class="card stack-6">
+        <label class="field ds-vibe-camp-field"><span>Email</span><input type="email" placeholder="name@example.com" /></label>
+        <div class="row-between">
+          <span class="status ds-vibe-camp-status"><span class="ds-vibe-camp-status__indicator" aria-hidden="true"></span>Ready</span>
+          <div><button class="btn ds-vibe-camp-button ds-vibe-camp-button--secondary" type="button">Cancel</button> <button class="btn ds-vibe-camp-button ds-vibe-camp-button--primary" type="submit">Save changes</button></div>
+        </div>
+      </form>
+      <a class="link" href="#components">Inspect component guidance</a>
+    </main>
+  </body>
+</html>

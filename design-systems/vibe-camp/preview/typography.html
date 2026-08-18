@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>Vibe Camp — Typography</title><link rel="stylesheet" href="../tokens.css" /><style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--section-y-tablet) var(--container-gutter-desktop); }
+      h1 { margin: 0 0 var(--space-6); font-family: var(--font-display); font-size: var(--text-2xl); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+
+      .type { display: grid; gap: var(--space-4); }
+      .display { margin: 0; font-family: var(--font-display); font-size: var(--text-4xl); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+      h2 { font-size: var(--text-2xl); }
+      .body { max-width: 64ch; color: var(--fg-2); font-size: var(--text-base); }
+      code { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-sm); }
+
+    </style></head><body><main><h1>Typography</h1>
+      <section class="type"><p class="display">Display heading</p><h2>Section heading</h2><p class="body">Body copy demonstrates the reading rhythm and active font stack.</p><code>const token = 'declared';</code></section></main></body></html>

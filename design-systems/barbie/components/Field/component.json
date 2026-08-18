@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Field",
+  "name": "Field",
+  "description": "Barbie labeled text field.",
+  "selectors": [
+    ".ds-barbie-field"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "value": {
+      "type": "string"
+    },
+    "placeholder": {
+      "type": "string"
+    }
+  },
+  "states": {
+    "focus": {
+      "selectors": [
+        ".ds-barbie-field:focus-within"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<label class=\"ds-barbie-field\"><span>{{label}}</span><input value=\"{{value}}\" placeholder=\"{{placeholder}}\" /></label>"
+}

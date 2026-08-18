@@ -31,7 +31,7 @@
 
 ## Qué es Open Design
 
-🎨 **La alternativa de código abierto y local-first a Claude Design.** &nbsp;🖥️ **App de escritorio nativa para macOS y Windows.** &nbsp;⚡ **Más de 100 skills funcionales + catálogo independiente de plantillas de renderizado** · ✨ **151 paquetes de sistemas de diseño** · 📦 **277 plugins listos para usar.** &nbsp;🖼️ Genera **prototipos web · escritorio · móvil**, **dashboards / artefactos en vivo**, **presentaciones**, **imágenes**, **video**, además de gráficos en movimiento con **HyperFrames**. 🔒 Vista previa en iframe en entorno aislado · exportación a HTML / PDF / PPTX / MP4. &nbsp;🤖 **Funciona sobre Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity y 25 ejecutables CLI locales distintos**, o cualquier endpoint compatible con OpenAI mediante BYOK.
+🎨 **La alternativa de código abierto y local-first a Claude Design.** &nbsp;🖥️ **App de escritorio nativa para macOS y Windows.** &nbsp;⚡ **Más de 100 skills funcionales + catálogo independiente de plantillas de renderizado** · ✨ **164 paquetes de sistemas de diseño** · 📦 **277 plugins listos para usar.** &nbsp;🖼️ Genera **prototipos web · escritorio · móvil**, **dashboards / artefactos en vivo**, **presentaciones**, **imágenes**, **video**, además de gráficos en movimiento con **HyperFrames**. 🔒 Vista previa en iframe en entorno aislado · exportación a HTML / PDF / PPTX / MP4. &nbsp;🤖 **Funciona sobre Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity y 25 ejecutables CLI locales distintos**, o cualquier endpoint compatible con OpenAI mediante BYOK.
 
 Open Design es lo que obtienes cuando ese bucle deja de estar cerrado y se convierte en un **sistema de archivos de skills funcionales, plantillas de renderizado, sistemas de diseño y plugins** que tus agentes pueden leer, escribir y remezclar.
 
@@ -253,7 +253,7 @@ Cada presentación se exporta a **HTML** (un solo archivo, recursos incorporados
 Open Design (OD) es la alternativa de código abierto. El mismo bucle, el mismo modelo mental centrado en el artefacto, sin nada del lock-in:
 
 - 🤖 **Agent-native, agnóstico al modelo.** No distribuimos un agente. Los `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` que ya están en tu `PATH` son el motor de diseño. Cámbialos con un clic.
-- 🧠 **Calidad de marca por defecto.** Cada render lee el `DESIGN.md` del paquete activo como contrato central de marca. El repo incluye 151 paquetes de sistemas de diseño; los paquetes heredados pueden contener solo `DESIGN.md`, mientras los nuevos pueden añadir `manifest.json`, `tokens.css`, componentes, assets y procedencia. Suelta una carpeta y el selector la encuentra.
+- 🧠 **Calidad de marca por defecto.** Cada render lee el `DESIGN.md` del paquete activo como contrato central de marca. El repo incluye 164 paquetes de sistemas de diseño; los paquetes heredados pueden contener solo `DESIGN.md`, mientras los nuevos pueden añadir `manifest.json`, `tokens.css`, componentes, assets y procedencia. Suelta una carpeta y el selector la encuentra.
 - 🖥️ **Local-first, BYOK en cada capa.** Las apps de escritorio nativas siguen siendo local-first, sin ida y vuelta a la nube. Antes de describir rutas de datos del daemon, DEBES leer `AGENTS.md` en la raíz, sección **Daemon data directory contract**.
 - 🌍 **Componible en cuatro planos.** Los **plugins** llevan workflows · los **skills funcionales** llevan comportamiento del agente · las **plantillas de diseño** llevan planos de renderizado · los **sistemas de diseño** llevan la marca.
 - 🔁 **Renueva una base de código existente.** Entrégale un repo `git` + `DESIGN.md` al agente y refactoriza tus componentes reales según la especificación de marca. Plugins dedicados migran flujos de Figma / Pencil a código React / Next.js / Vue.
@@ -266,7 +266,7 @@ Open Design (OD) es la alternativa de código abierto. El mismo bucle, el mismo 
 | Código abierto | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Self-host / escritorio | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
 | Agent-native (se ejecuta en tu CLI) | Solo Anthropic | ❌ | Solo agente en la nube | **✅ 25 CLIs + BYOK** |
-| `DESIGN.md` de calidad de marca | Propietario | JSON de tema | Tokens limitados | **✅ 151 sistemas incluidos** |
+| `DESIGN.md` de calidad de marca | Propietario | JSON de tema | Tokens limitados | **✅ 164 sistemas incluidos** |
 | Skills / plugins / plantillas | Cerrado | Tienda de plugins | Cerrado | **✅ Más de 100 skills funcionales · catálogo separado de plantillas de renderizado · 277 plugins** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ De primera clase** |
 | Renovar un repo existente a la marca | ❌ | ❌ | ❌ | **✅ vía agente + `DESIGN.md`** |
@@ -284,7 +284,7 @@ La forma más rápida de usar Open Design. Sin Node, sin pnpm, sin clonar.
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) o [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux** (AppImage, vía opcional) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-Tras la instalación: la app detecta automáticamente cada CLI de agente de codificación en tu `PATH`, carga más de 100 skills funcionales, el catálogo separado de plantillas de renderizado y 151 paquetes de sistemas de diseño, y te deja escribir un brief en la vista de entrada.
+Tras la instalación: la app detecta automáticamente cada CLI de agente de codificación en tu `PATH`, carga más de 100 skills funcionales, el catálogo separado de plantillas de renderizado y 164 paquetes de sistemas de diseño, y te deja escribir un brief en la vista de entrada.
 
 ### 🤖 Instálalo en tu agente de codificación (sin UI)
 
@@ -406,7 +406,7 @@ Protocolo y división de directorios → [`docs/skills-protocol.md`](../../docs/
 
 ## Sistemas de diseño
 
-**151 paquetes de sistemas de diseño centrados en `DESIGN.md`** vienen con el repo. Los paquetes heredados pueden contener solo ese contrato Markdown; los nuevos también pueden incluir `manifest.json`, `tokens.css` compilado, fixtures, assets y evidencia de procedencia. El catálogo combina sistemas derivados de upstream con aportes propios; [`design-systems/README.md`](../../design-systems/README.md) documenta la forma y procedencia.
+**164 paquetes de sistemas de diseño centrados en `DESIGN.md`** vienen con el repo. Los paquetes heredados pueden contener solo ese contrato Markdown; los nuevos también pueden incluir `manifest.json`, `tokens.css` compilado, fixtures, assets y evidencia de procedencia. El catálogo combina sistemas derivados de upstream con aportes propios; [`design-systems/README.md`](../../design-systems/README.md) documenta la forma y procedencia.
 
 <details>
 <summary><b>Catálogo completo (haz clic para expandir)</b></summary>
@@ -562,7 +562,7 @@ Arquitectura completa → [`docs/architecture.md`](../../docs/architecture.md). 
 
 - [x] Daemon + 26 definiciones runtime sobre 25 ejecutables CLI distintos + registros de skills/plantillas + catálogo de sistemas
 - [x] App web + chat + formulario de preguntas + selector de 5 direcciones + progreso de tareas + vista previa en entorno aislado
-- [x] Más de 100 skills funcionales · catálogo separado de plantillas · 151 paquetes de sistemas de diseño · 5 direcciones visuales · 5 marcos de dispositivo
+- [x] Más de 100 skills funcionales · catálogo separado de plantillas · 164 paquetes de sistemas de diseño · 5 direcciones visuales · 5 marcos de dispositivo
 - [x] Proyectos · conversaciones · mensajes · pestañas · plantillas respaldados por SQLite
 - [x] Proxy BYOK multiproveedor (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + protección SSRF
 - [x] Importación de ZIP de Claude Design (`/api/import/claude-design`)

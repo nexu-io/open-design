@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>TRAE — Color roles</title><link rel="stylesheet" href="../tokens.css" /><style>
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); }
+      main { max-width: var(--container-max); margin: 0 auto; padding: var(--section-y-tablet) var(--container-gutter-desktop); }
+      h1 { margin: 0 0 var(--space-6); font-family: var(--font-display); font-size: var(--text-2xl); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--space-4); }
+      .swatch { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+      .color { height: 80px; background: var(--value); }
+      strong, code { display: block; margin: var(--space-2) var(--space-3); }
+      code { color: var(--muted); font-family: var(--font-mono); font-size: var(--text-xs); }
+
+    </style></head><body><main><h1>Color roles</h1>
+      <section class="grid">
+        <article class="swatch"><div class="color" style="--value:var(--bg)"></div><strong>Background</strong><code>--bg</code></article>
+        <article class="swatch"><div class="color" style="--value:var(--surface)"></div><strong>Surface</strong><code>--surface</code></article>
+        <article class="swatch"><div class="color" style="--value:var(--fg)"></div><strong>Foreground</strong><code>--fg</code></article>
+        <article class="swatch"><div class="color" style="--value:var(--muted)"></div><strong>Muted</strong><code>--muted</code></article>
+        <article class="swatch"><div class="color" style="--value:var(--border)"></div><strong>Border</strong><code>--border</code></article>
+        <article class="swatch"><div class="color" style="--value:var(--accent)"></div><strong>Accent</strong><code>--accent</code></article>
+        <article class="swatch"><div class="color" style="--value:var(--success)"></div><strong>Success</strong><code>--success</code></article>
+        <article class="swatch"><div class="color" style="--value:var(--warn)"></div><strong>Warning</strong><code>--warn</code></article>
+        <article class="swatch"><div class="color" style="--value:var(--danger)"></div><strong>Danger</strong><code>--danger</code></article>
+      </section></main></body></html>

@@ -354,7 +354,7 @@ test("design-system runtime guard validates cross-file component references", as
   }
 });
 
-test("bundled DS 3.0 regression packages cover the three-task intent set and no-match gate", () => {
+test("bundled DS 3.0 packages cover the three-task intent set and no-match gate", () => {
   const requiredMappedIntents = [
     "account.settings.section",
     "account.settings.field",
@@ -372,7 +372,29 @@ test("bundled DS 3.0 regression packages cover the three-task intent set and no-
     "team.member.action",
   ];
 
-  for (const designSystemId of ["hud", "webflow", "uber"]) {
+  const designSystemIds = [
+    "hud",
+    "webflow",
+    "uber",
+    "trae-work",
+    "trae",
+    "volcengine",
+    "tiktok",
+    "doubao",
+    "apple",
+    "claude",
+    "google",
+    "vercel",
+    "minimal",
+    "21th",
+    "motion-fit",
+    "golden-time",
+    "nerv",
+    "barbie",
+    "vibe-camp",
+  ];
+
+  for (const designSystemId of designSystemIds) {
     const root = path.resolve(import.meta.dirname, "../../../design-systems", designSystemId);
     const manifestResult = validateDesignSystemProjectManifest(
       JSON.parse(readFileSync(path.join(root, "manifest.json"), "utf8")),

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Status",
+  "name": "Status",
+  "description": "TRAE compact status and warning label.",
+  "selectors": [
+    ".ds-trae-status"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "states": {
+    "indicator": {
+      "selectors": [
+        ".ds-trae-status__indicator"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<span class=\"ds-trae-status\"><span class=\"ds-trae-status__indicator\" aria-hidden=\"true\"></span>{{label}}</span>"
+}

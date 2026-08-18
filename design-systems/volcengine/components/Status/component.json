@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Status",
+  "name": "Status",
+  "description": "Volcengine compact status and warning label.",
+  "selectors": [
+    ".ds-volcengine-status"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "states": {
+    "indicator": {
+      "selectors": [
+        ".ds-volcengine-status__indicator"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<span class=\"ds-volcengine-status\"><span class=\"ds-volcengine-status__indicator\" aria-hidden=\"true\"></span>{{label}}</span>"
+}

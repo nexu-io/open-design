@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="NERV reusable DS 3.0 component fixture." />
+    <title>NERV — reference components</title>
+    <style>
+      /* Normalized from the NERV design-library export supplied by TRAE Work. */
+:root {
+  --bg: rgb(15, 15, 16);
+  --surface: rgb(17, 17, 18);
+  --surface-warm: rgb(25, 27, 30);
+  --fg: rgb(244, 249, 255);
+  --fg-2: rgb(244, 249, 255);
+  --muted: rgb(244, 249, 255);
+  --meta: rgb(244, 249, 255);
+  --border: rgb(48, 49, 54);
+  --border-soft: rgb(68, 70, 80);
+  --accent: rgb(234, 52, 58);
+  --accent-on: rgb(255, 255, 255);
+  --accent-hover: color-mix(in oklab, var(--accent), black 8%);
+  --accent-active: color-mix(in oklab, var(--accent), black 14%);
+  --success: #16a34a;
+  --warn: #eab308;
+  --danger: rgb(255, 52, 52);
+  --font-display: ui-sans-serif, system-ui, sans-serif;
+  --font-body: Geist, ui-sans-serif, sans-serif, system-ui;
+  --font-mono: Roboto Mono, monospace;
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-base: 16px;
+  --text-lg: 20px;
+  --text-xl: 24px;
+  --text-2xl: 32px;
+  --text-3xl: 48px;
+  --text-4xl: 64px;
+  --leading-body: 1.5;
+  --leading-tight: 1.2;
+  --tracking-display: 0em;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --section-y-desktop: 80px;
+  --section-y-tablet: 48px;
+  --section-y-phone: 32px;
+  --radius-sm: 1.65rem;
+  --radius-md: 1.65rem;
+  --radius-lg: 1.65rem;
+  --radius-pill: 9999px;
+  --elev-flat: none;
+  --elev-ring: 0 0 0 1px var(--border);
+  --elev-raised: 0px 2px 6px 0px hsl(90.0000 2.7778% 14.1176% / 0.10), 0px 2px 4px -1px hsl(90.0000 2.7778% 14.1176% / 0.10);
+  --focus-ring: 0 0 0 3px color-mix(in oklab, var(--accent), transparent 70%);
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --ease-standard: cubic-bezier(0.23, 1, 0.32, 1);
+  --container-max: 1200px;
+  --container-gutter-desktop: 24px;
+  --container-gutter-tablet: 16px;
+  --container-gutter-phone: 12px;
+}
+
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: var(--text-base); line-height: var(--leading-body); }
+      main.container { max-width: var(--container-max); margin: 0 auto; padding: var(--section-y-tablet) var(--container-gutter-desktop); }
+      h1, h2, h3 { margin: 0; font-family: var(--font-display); line-height: var(--leading-tight); letter-spacing: var(--tracking-display); }
+      h1 { font-size: var(--text-3xl); }
+      h2 { font-size: var(--text-xl); }
+      .stack-6 { display: grid; gap: var(--space-6); }
+      .row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; }
+      .card, .ds-nerv-surface { padding: var(--space-6); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); box-shadow: var(--elev-ring); }
+      .ds-nerv-surface p { margin: var(--space-2) 0 0; color: var(--muted); }
+      .btn, .ds-nerv-button { min-height: 44px; padding: 0 var(--space-4); border: 1px solid transparent; border-radius: var(--radius-sm); font: inherit; cursor: pointer; transition: background var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard); }
+      .ds-nerv-button--primary { background: var(--accent); color: var(--accent-on); }
+      .ds-nerv-button--primary:hover { background: var(--accent-hover); }
+      .ds-nerv-button--secondary { border-color: var(--border); background: var(--surface); color: var(--fg); }
+      .ds-nerv-button--secondary:hover { background: var(--surface-warm); }
+      .ds-nerv-button:focus-visible { outline: 0; box-shadow: var(--focus-ring); }
+      .field, .ds-nerv-field { display: grid; gap: var(--space-2); color: var(--fg-2); }
+      .ds-nerv-field input { min-height: 44px; padding: 0 var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--fg); font: inherit; }
+      .ds-nerv-field:focus-within { outline: 0; box-shadow: var(--focus-ring); }
+      .status, .ds-nerv-status { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
+      .ds-nerv-status__indicator { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--success); }
+      a.link { color: var(--accent); text-underline-offset: 3px; }
+      kbd { padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--surface-warm); color: var(--meta); font-family: var(--font-mono); }
+    </style>
+  </head>
+  <body>
+    <main class="container stack-6">
+      <header class="row-between"><div><h1>NERV</h1><p>Reusable component fixture</p></div><kbd>DS 3.0</kbd></header>
+      <section class="card ds-nerv-surface" aria-label="Account settings"><h2>Account settings</h2><p>Mapped content surface using the active tokens.</p></section>
+      <form class="card stack-6">
+        <label class="field ds-nerv-field"><span>Email</span><input type="email" placeholder="name@example.com" /></label>
+        <div class="row-between">
+          <span class="status ds-nerv-status"><span class="ds-nerv-status__indicator" aria-hidden="true"></span>Ready</span>
+          <div><button class="btn ds-nerv-button ds-nerv-button--secondary" type="button">Cancel</button> <button class="btn ds-nerv-button ds-nerv-button--primary" type="submit">Save changes</button></div>
+        </div>
+      </form>
+      <a class="link" href="#components">Inspect component guidance</a>
+    </main>
+  </body>
+</html>

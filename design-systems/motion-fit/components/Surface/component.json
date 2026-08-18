@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Surface",
+  "name": "Surface",
+  "description": "Motion Fit grouped content surface.",
+  "selectors": [
+    ".ds-motion-fit-surface"
+  ],
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "ariaLabel": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "implementation": "<article class=\"ds-motion-fit-surface\" aria-label=\"{{ariaLabel}}\"><h3>{{title}}</h3><p>{{description}}</p></article>"
+}

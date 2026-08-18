@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Status",
+  "name": "Status",
+  "description": "Doubao compact status and warning label.",
+  "selectors": [
+    ".ds-doubao-status"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "states": {
+    "indicator": {
+      "selectors": [
+        ".ds-doubao-status__indicator"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<span class=\"ds-doubao-status\"><span class=\"ds-doubao-status__indicator\" aria-hidden=\"true\"></span>{{label}}</span>"
+}

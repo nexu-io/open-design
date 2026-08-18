@@ -126,7 +126,7 @@ Ein funktionaler Skill ist eine Fähigkeit, die der Agent während einer Aufgabe
 
 ## Ein neues Design System hinzufügen
 
-Ein neues Designsystem im Repository ist ein Paket unter [`design-systems/<slug>/`](../../design-systems/), keine einzelne Markdown-Datei. Alle 151 gebündelten Systeme verwenden inzwischen den Paketvertrag unten. Der Daemon akzeptiert für ältere oder benutzerinstallierte Inhalte weiterhin `DESIGN.md`-only-Ordner als Kompatibilitätspfad; neue gebündelte Systeme dürfen diese Legacy-Form nicht verwenden. Der Katalog wird bei jeder Anfrage an `/api/design-systems` neu gescannt: Aktualisieren Sie nach einer Änderung die Design-System-Oberfläche, ein Daemon-Neustart ist nicht nötig.
+Ein neues Designsystem im Repository ist ein Paket unter [`design-systems/<slug>/`](../../design-systems/), keine einzelne Markdown-Datei. Alle 164 gebündelten Systeme verwenden inzwischen den Paketvertrag unten. Der Daemon akzeptiert für ältere oder benutzerinstallierte Inhalte weiterhin `DESIGN.md`-only-Ordner als Kompatibilitätspfad; neue gebündelte Systeme dürfen diese Legacy-Form nicht verwenden. Der Katalog wird bei jeder Anfrage an `/api/design-systems` neu gescannt: Aktualisieren Sie nach einer Änderung die Design-System-Oberfläche, ein Daemon-Neustart ist nicht nötig.
 
 ### Minimales Paketlayout
 

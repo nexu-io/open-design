@@ -31,7 +31,7 @@
 
 ## Qu'est-ce qu'Open Design
 
-🎨 **L'alternative open source et local-first à Claude Design.** &nbsp;🖥️ **Application de bureau native pour macOS et Windows.** &nbsp;⚡ **Plus de 100 skills fonctionnels + catalogue séparé de modèles de rendu** · ✨ **151 packages de systèmes de design** · 📦 **277 plugins prêts à l'emploi.** &nbsp;🖼️ Génère des **prototypes web · bureau · mobile**, des **tableaux de bord / artefacts en direct**, des **présentations**, des **images**, de la **vidéo**, ainsi que des motion graphics **HyperFrames**. 🔒 Aperçu en iframe sandboxée · export HTML / PDF / PPTX / MP4. &nbsp;🤖 **Fonctionne avec Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity et 25 exécutables CLI locaux distincts**, ou tout point de terminaison compatible OpenAI via BYOK.
+🎨 **L'alternative open source et local-first à Claude Design.** &nbsp;🖥️ **Application de bureau native pour macOS et Windows.** &nbsp;⚡ **Plus de 100 skills fonctionnels + catalogue séparé de modèles de rendu** · ✨ **164 packages de systèmes de design** · 📦 **277 plugins prêts à l'emploi.** &nbsp;🖼️ Génère des **prototypes web · bureau · mobile**, des **tableaux de bord / artefacts en direct**, des **présentations**, des **images**, de la **vidéo**, ainsi que des motion graphics **HyperFrames**. 🔒 Aperçu en iframe sandboxée · export HTML / PDF / PPTX / MP4. &nbsp;🤖 **Fonctionne avec Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity et 25 exécutables CLI locaux distincts**, ou tout point de terminaison compatible OpenAI via BYOK.
 
 Open Design transforme cette boucle en un **système de fichiers de skills fonctionnels, de modèles de rendu, de systèmes de design et de plugins** que vos agents peuvent lire, écrire et remixer.
 
@@ -253,7 +253,7 @@ Chaque présentation s'exporte en **HTML** (fichier unique, ressources intégré
 Open Design (OD) est l'alternative open source. La même boucle, le même modèle mental orienté artefact, sans aucun verrouillage :
 
 - 🤖 **Agent-native, agnostique au modèle.** Nous ne livrons pas d'agent. Les `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` déjà présents dans votre `PATH` sont le moteur de design. Changez-en d'un seul clic.
-- 🧠 **Qualité professionnelle par défaut.** Chaque rendu lit le `DESIGN.md` du package actif comme contrat de marque central. Le dépôt fournit 151 packages de systèmes de design ; les packages historiques peuvent ne contenir que `DESIGN.md`, tandis que les plus récents peuvent ajouter `manifest.json`, `tokens.css`, des composants, des assets et leur provenance. Déposez un dossier, le sélecteur le trouve.
+- 🧠 **Qualité professionnelle par défaut.** Chaque rendu lit le `DESIGN.md` du package actif comme contrat de marque central. Le dépôt fournit 164 packages de systèmes de design ; les packages historiques peuvent ne contenir que `DESIGN.md`, tandis que les plus récents peuvent ajouter `manifest.json`, `tokens.css`, des composants, des assets et leur provenance. Déposez un dossier, le sélecteur le trouve.
 - 🖥️ **Local-first, BYOK à chaque couche.** Les applications de bureau natives restent local-first, sans aller-retour vers le cloud. Avant de décrire des chemins de données du daemon, vous DEVEZ lire `AGENTS.md` à la racine, section **Daemon data directory contract**.
 - 🌍 **Composable sur quatre plans.** Les **plugins** portent les workflows · les **skills fonctionnels** le comportement de l'agent · les **modèles de design** les plans de rendu · les **systèmes de design** la marque.
 - 🔁 **Rafraîchissez une base de code existante.** Confiez un dépôt `git` + un `DESIGN.md` à l'agent et il refactorise vos vrais composants selon les spécifications de la marque. Des plugins dédiés migrent les workflows Figma / Pencil vers du code React / Next.js / Vue.
@@ -266,7 +266,7 @@ Open Design (OD) est l'alternative open source. La même boucle, le même modèl
 | Open source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Auto-hébergement / bureau | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
 | Agent-native (s'exécute dans votre CLI) | Anthropic uniquement | ❌ | Agent cloud uniquement | **✅ 25 CLI + BYOK** |
-| `DESIGN.md` de qualité professionnelle | Propriétaire | Theme JSON | Tokens limités | **✅ 151 systèmes fournis** |
+| `DESIGN.md` de qualité professionnelle | Propriétaire | Theme JSON | Tokens limités | **✅ 164 systèmes fournis** |
 | Skills / plugins / modèles | Fermé | Boutique de plugins | Fermé | **✅ Plus de 100 skills fonctionnels · catalogue séparé de modèles de rendu · 277 plugins** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ Première classe** |
 | Rafraîchir un dépôt existant à la marque | ❌ | ❌ | ❌ | **✅ via agent + `DESIGN.md`** |
@@ -284,7 +284,7 @@ Le moyen le plus rapide d'utiliser Open Design. Pas de Node, pas de pnpm, pas de
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) ou [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux** (AppImage, voie optionnelle) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-Après l'installation : l'application détecte automatiquement chaque CLI d'agent de code présent dans votre `PATH`, charge plus de 100 skills fonctionnels, le catalogue séparé de modèles de rendu et 151 packages de systèmes de design, et vous permet de saisir un brief dans la vue d'entrée.
+Après l'installation : l'application détecte automatiquement chaque CLI d'agent de code présent dans votre `PATH`, charge plus de 100 skills fonctionnels, le catalogue séparé de modèles de rendu et 164 packages de systèmes de design, et vous permet de saisir un brief dans la vue d'entrée.
 
 ### 🤖 Installez-le dans votre agent de code (sans interface)
 
@@ -406,7 +406,7 @@ Protocole et séparation des répertoires → [`docs/skills-protocol.md`](../../
 
 ## Systèmes de design
 
-**151 packages de systèmes de design centrés sur `DESIGN.md`** sont fournis. Les packages historiques peuvent ne contenir que ce contrat Markdown ; les plus récents peuvent aussi inclure `manifest.json`, `tokens.css` compilé, fixtures, assets et preuves de provenance. Le catalogue mêle sources upstream et ajouts propres au projet ; [`design-systems/README.md`](../../design-systems/README.md) documente forme et provenance.
+**164 packages de systèmes de design centrés sur `DESIGN.md`** sont fournis. Les packages historiques peuvent ne contenir que ce contrat Markdown ; les plus récents peuvent aussi inclure `manifest.json`, `tokens.css` compilé, fixtures, assets et preuves de provenance. Le catalogue mêle sources upstream et ajouts propres au projet ; [`design-systems/README.md`](../../design-systems/README.md) documente forme et provenance.
 
 <details>
 <summary><b>Catalogue complet (cliquez pour déplier)</b></summary>
@@ -562,7 +562,7 @@ Architecture complète → [`docs/architecture.md`](../../docs/architecture.md).
 
 - [x] Daemon + 26 définitions runtime sur 25 exécutables CLI distincts + registres skills/modèles + catalogue de systèmes
 - [x] Application web + chat + formulaire de questions + sélecteur à 5 directions + progression todo + aperçu sandboxé
-- [x] Plus de 100 skills fonctionnels · catalogue séparé de modèles · 151 packages de systèmes · 5 directions visuelles · 5 cadres d'appareils
+- [x] Plus de 100 skills fonctionnels · catalogue séparé de modèles · 164 packages de systèmes · 5 directions visuelles · 5 cadres d'appareils
 - [x] Projets · conversations · messages · onglets · modèles adossés à SQLite
 - [x] Proxy BYOK multi-fournisseurs (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + protection SSRF
 - [x] Import de ZIP Claude Design (`/api/import/claude-design`)

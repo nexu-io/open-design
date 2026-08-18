@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "od-design-system-project/v1",
+  "id": "motion-fit",
+  "name": "Motion Fit",
+  "category": "Health & Fitness",
+  "description": "Motion Fit design rules and reusable component routing, normalized as an Open Design DS 3.0 package.",
+  "source": {
+    "type": "bundled",
+    "origin": "TRAE Work built-in design library export, normalized for Open Design"
+  },
+  "files": {
+    "design": "DESIGN.md",
+    "tokens": "tokens.css",
+    "components": "components.html"
+  },
+  "usage": "USAGE.md",
+  "componentsManifest": "components.manifest.json",
+  "importMode": "normalized",
+  "craft": {
+    "applies": [],
+    "suggested": [
+      "color",
+      "accessibility-baseline"
+    ],
+    "exemptions": []
+  },
+  "preview": {
+    "dir": "preview",
+    "pages": [
+      {
+        "path": "preview/colors.html",
+        "role": "colors",
+        "title": "Colors"
+      },
+      {
+        "path": "preview/typography.html",
+        "role": "typography",
+        "title": "Typography"
+      },
+      {
+        "path": "preview/spacing.html",
+        "role": "spacing",
+        "title": "Spacing"
+      }
+    ]
+  },
+  "runtime": {
+    "components": "manifests/components.json",
+    "intents": "manifests/intent-map.json",
+    "lint": "rules/lint.json",
+    "fallback": "rules/fallback.json"
+  }
+}

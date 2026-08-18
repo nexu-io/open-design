@@ -128,7 +128,7 @@ Functional Skill은 작업 중 agent가 사용자 입력을 다루기 위해 호
 
 ## 새 Design System 추가하기
 
-저장소에 추가하는 새 design system은 [`design-systems/<slug>/`](../../design-systems/) 아래의 package이며, Markdown 파일 하나가 아닙니다. 현재 번들된 151개 system은 모두 아래 package contract로 마이그레이션되었습니다. Daemon은 예전 콘텐츠나 사용자가 설치한 콘텐츠와의 호환성을 위해 `DESIGN.md`만 있는 폴더도 계속 허용하지만, 새 번들 system은 이 legacy 형태로 작성하면 안 됩니다. Catalog는 `/api/design-systems` 요청마다 다시 스캔되므로 편집 후 Design System surface를 새로 고치면 되며 daemon 재시작은 필요하지 않습니다.
+저장소에 추가하는 새 design system은 [`design-systems/<slug>/`](../../design-systems/) 아래의 package이며, Markdown 파일 하나가 아닙니다. 현재 번들된 164개 system은 모두 아래 package contract로 마이그레이션되었습니다. Daemon은 예전 콘텐츠나 사용자가 설치한 콘텐츠와의 호환성을 위해 `DESIGN.md`만 있는 폴더도 계속 허용하지만, 새 번들 system은 이 legacy 형태로 작성하면 안 됩니다. Catalog는 `/api/design-systems` 요청마다 다시 스캔되므로 편집 후 Design System surface를 새로 고치면 되며 daemon 재시작은 필요하지 않습니다.
 
 ### 최소 package 구성
 

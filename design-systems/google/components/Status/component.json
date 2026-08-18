@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Status",
+  "name": "Status",
+  "description": "Google compact status and warning label.",
+  "selectors": [
+    ".ds-google-status"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "states": {
+    "indicator": {
+      "selectors": [
+        ".ds-google-status__indicator"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<span class=\"ds-google-status\"><span class=\"ds-google-status__indicator\" aria-hidden=\"true\"></span>{{label}}</span>"
+}

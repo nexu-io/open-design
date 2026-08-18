@@ -259,7 +259,7 @@ Every deck exports to **HTML** (single file, inlined assets), **PDF** (browser p
 Open Design (OD) is the open-source alternative. Same loop, same artifact-first mental model, none of the lock-in:
 
 - 🤖 **Agent-native, model-agnostic.** We don't ship an agent. The `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` already on your `PATH` are the design engine. Swap with one click.
-- 🧠 **Brand-grade by default.** Every render reads the active package's `DESIGN.md` as the core brand contract. 151 design-system packages ship with the repo; legacy packages may be `DESIGN.md`-only, while newer packages can add `manifest.json`, `tokens.css`, components, assets, and provenance. Drop a folder in, the picker finds it.
+- 🧠 **Brand-grade by default.** Every render reads the active package's `DESIGN.md` as the core brand contract. 164 design-system packages ship with the repo; legacy packages may be `DESIGN.md`-only, while newer packages can add `manifest.json`, `tokens.css`, components, assets, and provenance. Drop a folder in, the picker finds it.
 - 🖥️ **Local-first, BYOK at every layer.** Native desktop apps for macOS (Apple Silicon + Intel) and Windows (x64). Linux AppImage on the optional release lane. Product analytics and session replay are consent-gated; scrubbed safety and reliability telemetry is always on. Before describing daemon data paths, contributors and operators MUST read `AGENTS.md` → **Daemon data directory contract**. This README MUST NOT restate it.
 - 🌍 **Composable on four planes.** **Plugins** carry runnable workflows · functional **skills** carry agent behavior · **design templates** carry rendering blueprints · **design systems** carry the brand. All four use portable, versionable directories that anyone can author and publish.
 - 🔁 **Refresh an existing codebase.** Hand a `git` repo + `DESIGN.md` to the agent and it refactors your real components to the brand spec. Dedicated plugins migrate Figma / Pencil workflows into React / Next.js / Vue code.
@@ -272,7 +272,7 @@ Open Design (OD) is the open-source alternative. Same loop, same artifact-first 
 | Open source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Self-host / desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker + Vercel web** |
 | Agent-native (runs in your CLI) | Anthropic only | ❌ | Cloud agent only | **✅ 25 CLIs + BYOK** |
-| Brand-grade `DESIGN.md` | Proprietary | Theme JSON | Limited tokens | **✅ 151 systems shipped** |
+| Brand-grade `DESIGN.md` | Proprietary | Theme JSON | Limited tokens | **✅ 164 systems shipped** |
 | Skills / plugins / templates | Closed | Plugin store | Closed | **✅ 100+ functional skills · rendering templates · 277 plugins** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ First-class** |
 | Refresh an existing repo to brand | ❌ | ❌ | ❌ | **✅ via agent + `DESIGN.md`** |
@@ -290,7 +290,7 @@ The fastest way to use Open Design. No Node, no pnpm, no clone.
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/?utm_source=github&utm_medium=referral&utm_content=readme_download_windows) or [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux** (AppImage, optional lane) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-After install: the app auto-detects every coding-agent CLI on your `PATH`, loads 100+ functional skills, the separate rendering-template catalog, and 151 design systems, and lets you type a brief in the entry view.
+After install: the app auto-detects every coding-agent CLI on your `PATH`, loads 100+ functional skills, the separate rendering-template catalog, and 164 design systems, and lets you type a brief in the entry view.
 
 ### 🤖 Install into your coding agent (no UI)
 
@@ -438,7 +438,7 @@ Full protocol and directory split → [`docs/skills-protocol.md`](docs/skills-pr
 
 ## Design Systems
 
-**151 brand-grade design-system packages centered on `DESIGN.md`** ship with the repo. Legacy packages may contain only that Markdown contract; newer packages can also carry `manifest.json`, compiled `tokens.css`, component fixtures, assets, and provenance evidence. The catalog mixes upstream-derived systems with project-owned additions; [`design-systems/README.md`](design-systems/README.md) records the package shape and provenance. Switch a system → the next render uses the new tokens.
+**164 brand-grade design-system packages centered on `DESIGN.md`** ship with the repo. Legacy packages may contain only that Markdown contract; newer packages can also carry `manifest.json`, compiled `tokens.css`, component fixtures, assets, and provenance evidence. The catalog mixes upstream-derived systems with project-owned additions; [`design-systems/README.md`](design-systems/README.md) records the package shape and provenance. Switch a system → the next render uses the new tokens.
 
 <details>
 <summary><b>Full catalog (click to expand)</b></summary>
@@ -595,7 +595,7 @@ Full architecture → [`docs/architecture.md`](docs/architecture.md). Skill prot
 
 - [x] Daemon + 27 runtime definitions across 26 distinct coding-agent CLI executables + skill/design-template registries + design-system catalog
 - [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
-- [x] 100+ functional skills · separate rendering-template catalog · 151 design-system packages · 5 visual directions · 5 device frames
+- [x] 100+ functional skills · separate rendering-template catalog · 164 design-system packages · 5 visual directions · 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates
 - [x] Multi-provider BYOK proxy (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) with OpenAI-compatible presets including Atlas Cloud + SSRF guard
 - [x] Claude Design ZIP import (`/api/import/claude-design`)

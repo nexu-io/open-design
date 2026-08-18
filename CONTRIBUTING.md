@@ -128,7 +128,7 @@ A functional skill is a capability the agent invokes during a task to work on us
 
 ## Adding a new Design System
 
-A new repository design system is a package under [`design-systems/<slug>/`](design-systems/), not a standalone Markdown file. All 151 bundled systems now use the package contract below. The daemon still accepts legacy `DESIGN.md`-only folders as a compatibility path for older or user-installed content, but do not author new bundled systems in that shape. The catalog is scanned on each `/api/design-systems` request, so refresh the Design System surface after editing; no daemon restart is required.
+A new repository design system is a package under [`design-systems/<slug>/`](design-systems/), not a standalone Markdown file. All 164 bundled systems now use the package contract below. The daemon still accepts legacy `DESIGN.md`-only folders as a compatibility path for older or user-installed content, but do not author new bundled systems in that shape. The catalog is scanned on each `/api/design-systems` request, so refresh the Design System surface after editing; no daemon restart is required.
 
 ### Minimum package layout
 

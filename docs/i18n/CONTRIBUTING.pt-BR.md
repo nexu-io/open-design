@@ -128,7 +128,7 @@ Uma Skill funcional é uma capacidade que o agente invoca durante uma tarefa par
 
 ## Adicionando um novo Design System
 
-Um novo design system do repositório é um pacote sob [`design-systems/<slug>/`](../../design-systems/), não um arquivo Markdown isolado. Os 151 sistemas incluídos já usam o contrato de pacote abaixo. O daemon ainda aceita pastas apenas com `DESIGN.md` para compatibilidade com conteúdo antigo ou instalado pelo usuário, mas esse não é o formato para novos sistemas incluídos. O catálogo é reescaneado a cada requisição `/api/design-systems`: atualize a superfície Design System depois de editar, sem reiniciar o daemon.
+Um novo design system do repositório é um pacote sob [`design-systems/<slug>/`](../../design-systems/), não um arquivo Markdown isolado. Os 164 sistemas incluídos já usam o contrato de pacote abaixo. O daemon ainda aceita pastas apenas com `DESIGN.md` para compatibilidade com conteúdo antigo ou instalado pelo usuário, mas esse não é o formato para novos sistemas incluídos. O catálogo é reescaneado a cada requisição `/api/design-systems`: atualize a superfície Design System depois de editar, sem reiniciar o daemon.
 
 ### Layout mínimo do pacote
 

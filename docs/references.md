@@ -129,7 +129,7 @@ Every external project this spec leans on. Three questions per entry: what is it
     heading names or order.
 - **What we don't:**
   - Treating one upstream list as the current catalogue boundary. The bundled
-    catalogue now contains 151 packages drawn from multiple attributed sources
+    catalogue now contains 164 packages drawn from multiple attributed sources
     and Open Design-authored systems.
   - Their Discord / community layer — not our product.
 

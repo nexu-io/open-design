@@ -154,10 +154,13 @@ remediation and must be fixed and re-run; `confirmation-required` preserves the
 package fallback gate and must be surfaced to the user. Validation is scoped to
 the active run and reads only safe project-relative text files.
 
-The first bundled runtime packages are `hud`, `webflow`, and `uber`. They carry
-the component and intent coverage used by the three-task DS 3.0 regression
-(account settings, delete-workspace confirmation, and team directory). The
-destructive confirmation intent intentionally has no component mapping so its
+The first bundled runtime packages were `hud`, `webflow`, and `uber`. The same
+component and intent contract now covers 16 additional curated built-ins:
+TRAE Work, TRAE, Volcengine, TikTok, Doubao, Apple, Claude, Google, Vercel,
+Minimal, 21th, Motion Fit, Golden Time, NERV, Barbie, and Vibe Camp. All 19
+packages cover the three-task DS 3.0 regression set (account settings,
+delete-workspace confirmation, and team directory). The destructive
+confirmation intent intentionally has no component mapping so its
 human-confirmation fallback remains part of the release signal.
 
 Omitting `runtime` preserves the legacy prompt-based component manifest / fixture

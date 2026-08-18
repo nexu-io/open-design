@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "TikTok primary and secondary action control.",
+  "selectors": [
+    ".ds-tiktok-button"
+  ],
+  "variants": {
+    "primary": {
+      "selectors": [
+        ".ds-tiktok-button--primary"
+      ]
+    },
+    "secondary": {
+      "selectors": [
+        ".ds-tiktok-button--secondary"
+      ]
+    }
+  },
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "states": {
+    "hoverPrimary": {
+      "selectors": [
+        ".ds-tiktok-button--primary:hover"
+      ]
+    },
+    "hoverSecondary": {
+      "selectors": [
+        ".ds-tiktok-button--secondary:hover"
+      ]
+    },
+    "focus": {
+      "selectors": [
+        ".ds-tiktok-button:focus-visible"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<button class=\"ds-tiktok-button ds-tiktok-button--primary\" type=\"button\">{{label}}</button>"
+}

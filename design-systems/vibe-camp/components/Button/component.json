@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "Vibe Camp primary and secondary action control.",
+  "selectors": [
+    ".ds-vibe-camp-button"
+  ],
+  "variants": {
+    "primary": {
+      "selectors": [
+        ".ds-vibe-camp-button--primary"
+      ]
+    },
+    "secondary": {
+      "selectors": [
+        ".ds-vibe-camp-button--secondary"
+      ]
+    }
+  },
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "states": {
+    "hoverPrimary": {
+      "selectors": [
+        ".ds-vibe-camp-button--primary:hover"
+      ]
+    },
+    "hoverSecondary": {
+      "selectors": [
+        ".ds-vibe-camp-button--secondary:hover"
+      ]
+    },
+    "focus": {
+      "selectors": [
+        ".ds-vibe-camp-button:focus-visible"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<button class=\"ds-vibe-camp-button ds-vibe-camp-button--primary\" type=\"button\">{{label}}</button>"
+}

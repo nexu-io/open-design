@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Field",
+  "name": "Field",
+  "description": "TikTok labeled text field.",
+  "selectors": [
+    ".ds-tiktok-field"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "value": {
+      "type": "string"
+    },
+    "placeholder": {
+      "type": "string"
+    }
+  },
+  "states": {
+    "focus": {
+      "selectors": [
+        ".ds-tiktok-field:focus-within"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<label class=\"ds-tiktok-field\"><span>{{label}}</span><input value=\"{{value}}\" placeholder=\"{{placeholder}}\" /></label>"
+}

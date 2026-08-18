@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Surface",
+  "name": "Surface",
+  "description": "Doubao grouped content surface.",
+  "selectors": [
+    ".ds-doubao-surface"
+  ],
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "ariaLabel": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "implementation": "<article class=\"ds-doubao-surface\" aria-label=\"{{ariaLabel}}\"><h3>{{title}}</h3><p>{{description}}</p></article>"
+}

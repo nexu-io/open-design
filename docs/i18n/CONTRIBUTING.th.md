@@ -128,7 +128,7 @@ Functional Skill คือ capability ที่ agent เรียกใช้�
 
 ## เพิ่ม Design System ใหม่
 
-Design system ใหม่ใน repository คือ package ใต้ [`design-systems/<slug>/`](../../design-systems/) ไม่ใช่ Markdown file เดี่ยว. Systems ที่ bundle อยู่ทั้ง 151 ชุด migrate มาใช้ package contract ด้านล่างแล้ว. Daemon ยังรับ folder ที่มีเพียง `DESIGN.md` เพื่อ compatibility กับ content เก่าหรือ user-installed แต่ไม่ใช่ authoring target สำหรับ bundled system ใหม่. Catalog จะ scan ใหม่ทุก request `/api/design-systems`; หลังแก้ไขให้ refresh Design System surface โดยไม่ต้อง restart daemon.
+Design system ใหม่ใน repository คือ package ใต้ [`design-systems/<slug>/`](../../design-systems/) ไม่ใช่ Markdown file เดี่ยว. Systems ที่ bundle อยู่ทั้ง 164 ชุด migrate มาใช้ package contract ด้านล่างแล้ว. Daemon ยังรับ folder ที่มีเพียง `DESIGN.md` เพื่อ compatibility กับ content เก่าหรือ user-installed แต่ไม่ใช่ authoring target สำหรับ bundled system ใหม่. Catalog จะ scan ใหม่ทุก request `/api/design-systems`; หลังแก้ไขให้ refresh Design System surface โดยไม่ต้อง restart daemon.
 
 ### โครงสร้าง package ขั้นต่ำ
 

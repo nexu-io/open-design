@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "Barbie primary and secondary action control.",
+  "selectors": [
+    ".ds-barbie-button"
+  ],
+  "variants": {
+    "primary": {
+      "selectors": [
+        ".ds-barbie-button--primary"
+      ]
+    },
+    "secondary": {
+      "selectors": [
+        ".ds-barbie-button--secondary"
+      ]
+    }
+  },
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "states": {
+    "hoverPrimary": {
+      "selectors": [
+        ".ds-barbie-button--primary:hover"
+      ]
+    },
+    "hoverSecondary": {
+      "selectors": [
+        ".ds-barbie-button--secondary:hover"
+      ]
+    },
+    "focus": {
+      "selectors": [
+        ".ds-barbie-button:focus-visible"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<button class=\"ds-barbie-button ds-barbie-button--primary\" type=\"button\">{{label}}</button>"
+}

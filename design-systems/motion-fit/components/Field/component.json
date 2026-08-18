@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Field",
+  "name": "Field",
+  "description": "Motion Fit labeled text field.",
+  "selectors": [
+    ".ds-motion-fit-field"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "value": {
+      "type": "string"
+    },
+    "placeholder": {
+      "type": "string"
+    }
+  },
+  "states": {
+    "focus": {
+      "selectors": [
+        ".ds-motion-fit-field:focus-within"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<label class=\"ds-motion-fit-field\"><span>{{label}}</span><input value=\"{{value}}\" placeholder=\"{{placeholder}}\" /></label>"
+}

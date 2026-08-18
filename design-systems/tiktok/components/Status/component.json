@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Status",
+  "name": "Status",
+  "description": "TikTok compact status and warning label.",
+  "selectors": [
+    ".ds-tiktok-status"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "states": {
+    "indicator": {
+      "selectors": [
+        ".ds-tiktok-status__indicator"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<span class=\"ds-tiktok-status\"><span class=\"ds-tiktok-status__indicator\" aria-hidden=\"true\"></span>{{label}}</span>"
+}

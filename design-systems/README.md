@@ -4,7 +4,7 @@ Each subfolder is a portable design-system package. Selecting one from the
 Design System surface or a supported project-creation workflow composes its
 design context into the agent prompt.
 
-The bundled catalog currently contains **151 packages**. Every bundled package
+The bundled catalog currently contains **164 packages**. Every bundled package
 has the same minimum machine-readable shape:
 
 ```text
@@ -151,8 +151,10 @@ The validator returns `passed`, `failed`, or `confirmation-required`. It checks
 the generated files against the selected component, variant, required states,
 tokens, and raw-color policy; failed checks include remediation and must be
 re-run after correction.
-`hud`, `webflow`, and `uber` are the first bundled packages using this complete
-runtime path and cover the three-task DS 3.0 regression set.
+`hud`, `webflow`, and `uber` established this complete runtime path. The same
+three-task contract now also covers TRAE Work, TRAE, Volcengine, TikTok,
+Doubao, Apple, Claude, Google, Vercel, Minimal, 21th, Motion Fit, Golden Time,
+NERV, Barbie, and Vibe Camp.
 If `runtime` is present but invalid, it is reported as invalid rather than
 silently treated as a legacy package. The production schema versions and shared
 types live in

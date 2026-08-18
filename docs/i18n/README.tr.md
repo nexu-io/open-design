@@ -31,7 +31,7 @@
 
 ## Open Design nedir
 
-🎨 **Yerel öncelikli, açık kaynaklı Claude Design alternatifi.** &nbsp;🖥️ **macOS ve Windows için yerel masaüstü uygulaması.** &nbsp;⚡ **100+ işlevsel beceri + ayrı render şablonu kataloğu** · ✨ **151 tasarım sistemi paketi** · 📦 **277 kullanıma hazır eklenti.** &nbsp;🖼️ **web · masaüstü · mobil prototipler**, **canlı panolar / artifact'ler**, **sunum desteleri**, **görseller**, **video** ve ayrıca **HyperFrames** hareket grafikleri üretir. 🔒 Yalıtılmış iframe önizlemesi · HTML / PDF / PPTX / MP4 dışa aktarımı. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity ve 25 ayrı yerel CLI yürütülebilir dosyası üzerinde** veya BYOK ile herhangi bir OpenAI uyumlu uç noktada çalışır.
+🎨 **Yerel öncelikli, açık kaynaklı Claude Design alternatifi.** &nbsp;🖥️ **macOS ve Windows için yerel masaüstü uygulaması.** &nbsp;⚡ **100+ işlevsel beceri + ayrı render şablonu kataloğu** · ✨ **164 tasarım sistemi paketi** · 📦 **277 kullanıma hazır eklenti.** &nbsp;🖼️ **web · masaüstü · mobil prototipler**, **canlı panolar / artifact'ler**, **sunum desteleri**, **görseller**, **video** ve ayrıca **HyperFrames** hareket grafikleri üretir. 🔒 Yalıtılmış iframe önizlemesi · HTML / PDF / PPTX / MP4 dışa aktarımı. &nbsp;🤖 **Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Hermes · Kimi · Antigravity ve 25 ayrı yerel CLI yürütülebilir dosyası üzerinde** veya BYOK ile herhangi bir OpenAI uyumlu uç noktada çalışır.
 
 Open Design bu döngüyü ajanların okuyup yazabildiği bir **işlevsel beceriler, render tasarım şablonları, tasarım sistemleri ve eklentiler dosya sistemine** dönüştürür.
 
@@ -253,7 +253,7 @@ Her deste **HTML** (tek dosya, gömülü varlıklar), **PDF** (tarayıcı yazdı
 Open Design (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact öncelikli zihinsel model, hiçbir bağımlılık kilidi olmadan:
 
 - 🤖 **Ajan-yerel, modelden bağımsız.** Bir ajan sunmuyoruz. `PATH`'inizde zaten bulunan `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` tasarım motorudur. Tek tıkla değiştirin.
-- 🧠 **Varsayılan olarak marka düzeyinde.** Her render etkin paketin `DESIGN.md` dosyasını temel marka sözleşmesi olarak okur. Depoda 151 tasarım sistemi paketi bulunur; eski paketler yalnızca `DESIGN.md` içerebilir, yenileri `manifest.json`, `tokens.css`, bileşenler, varlıklar ve provenance ekleyebilir. Bir klasör bırakın, seçici onu bulur.
+- 🧠 **Varsayılan olarak marka düzeyinde.** Her render etkin paketin `DESIGN.md` dosyasını temel marka sözleşmesi olarak okur. Depoda 164 tasarım sistemi paketi bulunur; eski paketler yalnızca `DESIGN.md` içerebilir, yenileri `manifest.json`, `tokens.css`, bileşenler, varlıklar ve provenance ekleyebilir. Bir klasör bırakın, seçici onu bulur.
 - 🖥️ **Yerel öncelikli, her katmanda BYOK.** Yerel masaüstü uygulamaları buluta gidip gelmeden yerel öncelikli kalır. Daemon veri yollarını açıklamadan önce kökteki `AGENTS.md` dosyasında **Daemon data directory contract** bölümünü MUTLAKA okuyun.
 - 🌍 **Dört düzlemde birleştirilebilir.** **Eklentiler** çalıştırılabilir iş akışları taşır · işlevsel **beceriler** ajan davranışını taşır · **tasarım şablonları** render planlarını taşır · **tasarım sistemleri** markayı taşır. Dördü de herkesin yazıp yayınlayabileceği taşınabilir, sürümlenebilir dizinler kullanır.
 - 🔁 **Mevcut bir kod tabanını yenileyin.** Ajana bir `git` deposu + `DESIGN.md` verin, gerçek bileşenlerinizi marka spesifikasyonuna göre yeniden düzenler. Özel eklentiler Figma / Pencil iş akışlarını React / Next.js / Vue koduna taşır.
@@ -266,7 +266,7 @@ Open Design (OD) açık kaynaklı alternatiftir. Aynı döngü, aynı artifact �
 | Açık kaynak | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Kendi sunucunda barındırma / masaüstü | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
 | Ajan-yerel (CLI'nizde çalışır) | Yalnızca Anthropic | ❌ | Yalnızca bulut ajanı | **✅ 25 CLI + BYOK** |
-| Marka düzeyinde `DESIGN.md` | Tescilli | Theme JSON | Sınırlı token | **✅ 151 sistem sunuluyor** |
+| Marka düzeyinde `DESIGN.md` | Tescilli | Theme JSON | Sınırlı token | **✅ 164 sistem sunuluyor** |
 | Beceriler / eklentiler / şablonlar | Kapalı | Eklenti mağazası | Kapalı | **✅ 100+ işlevsel beceri · ayrı render şablonu kataloğu · 277 eklenti** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ Birinci sınıf** |
 | Mevcut bir depoyu markaya yenileme | ❌ | ❌ | ❌ | **✅ ajan + `DESIGN.md` ile** |
@@ -284,7 +284,7 @@ Open Design'ı kullanmanın en hızlı yolu. Node yok, pnpm yok, klonlama yok.
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) veya [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux** (AppImage, isteğe bağlı hat) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-Kurulumdan sonra: uygulama `PATH`'inizdeki her kodlama ajanı CLI'sini otomatik algılar, 100+ işlevsel beceriyi, ayrı render şablonu kataloğunu ve 151 tasarım sistemi paketini yükler ve giriş görünümünde bir özet yazmanıza olanak tanır.
+Kurulumdan sonra: uygulama `PATH`'inizdeki her kodlama ajanı CLI'sini otomatik algılar, 100+ işlevsel beceriyi, ayrı render şablonu kataloğunu ve 164 tasarım sistemi paketini yükler ve giriş görünümünde bir özet yazmanıza olanak tanır.
 
 ### 🤖 Kodlama ajanınıza kurun (UI yok)
 
@@ -406,7 +406,7 @@ Protokol ve dizin ayrımı → [`docs/skills-protocol.md`](../../docs/skills-pro
 
 ## Tasarım Sistemleri
 
-**`DESIGN.md` merkezli 151 tasarım sistemi paketi** depoyla birlikte gelir. Eski paketler yalnızca Markdown sözleşmesini içerebilir; yenileri `manifest.json`, derlenmiş `tokens.css`, bileşen fixture'ları, varlıklar ve kaynak kanıtı da taşıyabilir. Katalog upstream türevlerini ve projeye ait ekleri birleştirir; [`design-systems/README.md`](../../design-systems/README.md) paket biçimini ve kaynakları belgeler.
+**`DESIGN.md` merkezli 164 tasarım sistemi paketi** depoyla birlikte gelir. Eski paketler yalnızca Markdown sözleşmesini içerebilir; yenileri `manifest.json`, derlenmiş `tokens.css`, bileşen fixture'ları, varlıklar ve kaynak kanıtı da taşıyabilir. Katalog upstream türevlerini ve projeye ait ekleri birleştirir; [`design-systems/README.md`](../../design-systems/README.md) paket biçimini ve kaynakları belgeler.
 
 <details>
 <summary><b>Tam katalog (genişletmek için tıklayın)</b></summary>
@@ -562,7 +562,7 @@ Tam mimari → [`docs/architecture.md`](../../docs/architecture.md). Beceri prot
 
 - [x] Daemon + 25 ayrı CLI yürütülebilir dosyası üzerinde 26 runtime tanımı + beceri/şablon kayıtları + tasarım sistemi kataloğu
 - [x] Web uygulaması + sohbet + soru formu + 5 yönlü seçici + yapılacaklar ilerlemesi + yalıtılmış önizleme
-- [x] 100+ işlevsel beceri · ayrı render şablonu kataloğu · 151 tasarım sistemi paketi · 5 görsel yön · 5 cihaz çerçevesi
+- [x] 100+ işlevsel beceri · ayrı render şablonu kataloğu · 164 tasarım sistemi paketi · 5 görsel yön · 5 cihaz çerçevesi
 - [x] SQLite destekli projeler · konuşmalar · mesajlar · sekmeler · şablonlar
 - [x] Çok sağlayıcılı BYOK proxy (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + SSRF koruması
 - [x] Claude Design ZIP içe aktarma (`/api/import/claude-design`)

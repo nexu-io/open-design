@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Field",
+  "name": "Field",
+  "description": "Doubao labeled text field.",
+  "selectors": [
+    ".ds-doubao-field"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "value": {
+      "type": "string"
+    },
+    "placeholder": {
+      "type": "string"
+    }
+  },
+  "states": {
+    "focus": {
+      "selectors": [
+        ".ds-doubao-field:focus-within"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<label class=\"ds-doubao-field\"><span>{{label}}</span><input value=\"{{value}}\" placeholder=\"{{placeholder}}\" /></label>"
+}

@@ -181,7 +181,7 @@ Un Skill fonctionnel est une capacité que l'agent invoque pendant une tâche po
 
 Un nouveau design system du dépôt est un package sous
 [`design-systems/<slug>/`](../../design-systems/), pas un fichier Markdown isolé.
-Les 151 systèmes fournis utilisent désormais le contrat de package ci-dessous.
+Les 164 systèmes fournis utilisent désormais le contrat de package ci-dessous.
 Le daemon accepte encore les dossiers contenant uniquement `DESIGN.md` pour la
 compatibilité avec les contenus anciens ou installés par l'utilisateur, mais ce
 n'est pas la cible d'authoring. Le catalogue est rescanné à chaque requête

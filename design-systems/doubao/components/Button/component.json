@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Button",
+  "name": "Button",
+  "description": "Doubao primary and secondary action control.",
+  "selectors": [
+    ".ds-doubao-button"
+  ],
+  "variants": {
+    "primary": {
+      "selectors": [
+        ".ds-doubao-button--primary"
+      ]
+    },
+    "secondary": {
+      "selectors": [
+        ".ds-doubao-button--secondary"
+      ]
+    }
+  },
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "disabled": {
+      "type": "boolean",
+      "default": false
+    }
+  },
+  "states": {
+    "hoverPrimary": {
+      "selectors": [
+        ".ds-doubao-button--primary:hover"
+      ]
+    },
+    "hoverSecondary": {
+      "selectors": [
+        ".ds-doubao-button--secondary:hover"
+      ]
+    },
+    "focus": {
+      "selectors": [
+        ".ds-doubao-button:focus-visible"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<button class=\"ds-doubao-button ds-doubao-button--primary\" type=\"button\">{{label}}</button>"
+}

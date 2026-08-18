@@ -31,7 +31,7 @@
 
 ## Open Design란
 
-🎨 **로컬 우선의 오픈소스 Claude Design 대안.** &nbsp;🖥️ **macOS와 Windows용 네이티브 데스크톱 앱.** &nbsp;⚡ **100개 이상의 기능 스킬 + 별도 렌더링 템플릿 카탈로그** · ✨ **151개의 디자인 시스템 패키지** · 📦 **바로 쓸 수 있는 277개의 플러그인.** &nbsp;🖼️ **웹 · 데스크톱 · 모바일 프로토타입**, **라이브 대시보드 / 아티팩트**, **덱**, **이미지**, **비디오**, 그리고 **HyperFrames** 모션 그래픽을 생성합니다. 🔒 샌드박스 iframe 미리보기 · HTML / PDF / PPTX / MP4 내보내기. &nbsp;🤖 **25개의 고유한 로컬 CLI 실행 파일에서 실행**되며, BYOK를 통해 OpenAI 호환 엔드포인트라면 무엇이든 사용할 수 있습니다.
+🎨 **로컬 우선의 오픈소스 Claude Design 대안.** &nbsp;🖥️ **macOS와 Windows용 네이티브 데스크톱 앱.** &nbsp;⚡ **100개 이상의 기능 스킬 + 별도 렌더링 템플릿 카탈로그** · ✨ **164개의 디자인 시스템 패키지** · 📦 **바로 쓸 수 있는 277개의 플러그인.** &nbsp;🖼️ **웹 · 데스크톱 · 모바일 프로토타입**, **라이브 대시보드 / 아티팩트**, **덱**, **이미지**, **비디오**, 그리고 **HyperFrames** 모션 그래픽을 생성합니다. 🔒 샌드박스 iframe 미리보기 · HTML / PDF / PPTX / MP4 내보내기. &nbsp;🤖 **25개의 고유한 로컬 CLI 실행 파일에서 실행**되며, BYOK를 통해 OpenAI 호환 엔드포인트라면 무엇이든 사용할 수 있습니다.
 
 Open Design는 그 루프를 에이전트가 읽고 쓸 수 있는 **기능 스킬 · 렌더링 디자인 템플릿 · 디자인 시스템 · 플러그인의 파일시스템**으로 만듭니다.
 
@@ -253,7 +253,7 @@ Runtime 정의는 [`apps/daemon/src/runtimes/defs/`](../../apps/daemon/src/runti
 Open Design(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아티팩트 우선의 사고방식, 잠금은 전혀 없이:
 
 - 🤖 **에이전트 네이티브, 모델에 구애받지 않음.** 우리는 에이전트를 제공하지 않습니다. 이미 당신의 `PATH`에 있는 `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi`가 디자인 엔진입니다. 한 번의 클릭으로 교체하세요.
-- 🧠 **기본부터 브랜드급.** 모든 렌더는 활성 패키지의 `DESIGN.md`를 핵심 브랜드 계약으로 읽습니다. 151개 디자인 시스템 패키지가 제공되며, 레거시 패키지는 `DESIGN.md`만 포함할 수 있고 새 패키지는 `manifest.json`, `tokens.css`, 컴포넌트, 에셋, 출처 정보를 더할 수 있습니다. 폴더 하나만 넣으면 피커가 찾아냅니다.
+- 🧠 **기본부터 브랜드급.** 모든 렌더는 활성 패키지의 `DESIGN.md`를 핵심 브랜드 계약으로 읽습니다. 164개 디자인 시스템 패키지가 제공되며, 레거시 패키지는 `DESIGN.md`만 포함할 수 있고 새 패키지는 `manifest.json`, `tokens.css`, 컴포넌트, 에셋, 출처 정보를 더할 수 있습니다. 폴더 하나만 넣으면 피커가 찾아냅니다.
 - 🖥️ **로컬 우선, 모든 계층에서 BYOK.** 네이티브 데스크톱 앱은 클라우드 왕복 없이 로컬 우선을 유지합니다. daemon 데이터 경로를 설명하기 전에 반드시 루트 `AGENTS.md`의 **Daemon data directory contract**를 읽어야 합니다.
 - 🌍 **네 가지 평면에서 조합 가능.** **플러그인**은 워크플로, **기능 스킬**은 에이전트 동작, **디자인 템플릿**은 렌더링 청사진, **디자인 시스템**은 브랜드를 담습니다.
 - 🔁 **기존 코드베이스를 새롭게.** `git` 저장소 + `DESIGN.md`를 에이전트에 넘기면 당신의 실제 컴포넌트를 브랜드 사양에 맞게 리팩터링합니다. 전용 플러그인이 Figma / Pencil 워크플로를 React / Next.js / Vue 코드로 마이그레이션합니다.
@@ -266,7 +266,7 @@ Open Design(OD)는 그 오픈소스 대안입니다. 같은 루프, 같은 아�
 | 오픈소스 | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | 셀프 호스트 / 데스크톱 | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
 | 에이전트 네이티브(당신의 CLI에서 실행) | Anthropic 전용 | ❌ | 클라우드 에이전트 전용 | **✅ 25개 CLI + BYOK** |
-| 브랜드급 `DESIGN.md` | 독점 | 테마 JSON | 제한적 토큰 | **✅ 151개 시스템 제공** |
+| 브랜드급 `DESIGN.md` | 독점 | 테마 JSON | 제한적 토큰 | **✅ 164개 시스템 제공** |
 | 스킬 / 플러그인 / 템플릿 | 비공개 | 플러그인 스토어 | 비공개 | **✅ 100개 이상의 기능 스킬 · 별도 렌더링 템플릿 카탈로그 · 277개 플러그인** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ 일급 지원** |
 | 기존 저장소를 브랜드에 맞게 새롭게 | ❌ | ❌ | ❌ | **✅ 에이전트 + `DESIGN.md`로** |
@@ -284,7 +284,7 @@ Open Design를 사용하는 가장 빠른 방법입니다. Node도, pnpm도, 클
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) 또는 [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux** (AppImage, 선택적 레인) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-설치 후: 앱이 당신의 `PATH`에 있는 모든 코딩 에이전트 CLI를 자동으로 감지하고, 100개 이상의 기능 스킬과 별도 렌더링 템플릿 카탈로그, 151개의 디자인 시스템 패키지를 불러오며, entry view에서 브리프를 입력할 수 있게 합니다.
+설치 후: 앱이 당신의 `PATH`에 있는 모든 코딩 에이전트 CLI를 자동으로 감지하고, 100개 이상의 기능 스킬과 별도 렌더링 템플릿 카탈로그, 164개의 디자인 시스템 패키지를 불러오며, entry view에서 브리프를 입력할 수 있게 합니다.
 
 ### 🤖 코딩 에이전트에 설치 (UI 없이)
 
@@ -406,7 +406,7 @@ od skills list --json
 
 ## 디자인 시스템
 
-**`DESIGN.md` 중심의 151개 디자인 시스템 패키지**가 제공됩니다. 레거시 패키지는 Markdown 계약만 포함할 수 있고, 새 패키지는 `manifest.json`, 컴파일된 `tokens.css`, 컴포넌트 fixture, 자산, 출처 증거도 포함할 수 있습니다. 업스트림 파생 시스템과 프로젝트 고유 추가분이 섞이며 [`design-systems/README.md`](../../design-systems/README.md)가 패키지 형태와 출처를 기록합니다.
+**`DESIGN.md` 중심의 164개 디자인 시스템 패키지**가 제공됩니다. 레거시 패키지는 Markdown 계약만 포함할 수 있고, 새 패키지는 `manifest.json`, 컴파일된 `tokens.css`, 컴포넌트 fixture, 자산, 출처 증거도 포함할 수 있습니다. 업스트림 파생 시스템과 프로젝트 고유 추가분이 섞이며 [`design-systems/README.md`](../../design-systems/README.md)가 패키지 형태와 출처를 기록합니다.
 
 <details>
 <summary><b>전체 카탈로그(클릭하여 펼치기)</b></summary>
@@ -562,7 +562,7 @@ pnpm guard && pnpm --filter @open-design/plugin-runtime typecheck
 
 - [x] 데몬 + 25개 고유 CLI 실행 파일의 26개 runtime 정의 + 스킬/템플릿 레지스트리 + 디자인 시스템 카탈로그
 - [x] 웹 앱 + 챗 + 질문 폼 + 5방향 피커 + 할 일 진행 상황 + 샌드박스 미리보기
-- [x] 100개 이상의 기능 스킬 · 별도 렌더링 템플릿 카탈로그 · 151개 디자인 시스템 패키지 · 5개의 비주얼 방향 · 5개의 디바이스 프레임
+- [x] 100개 이상의 기능 스킬 · 별도 렌더링 템플릿 카탈로그 · 164개 디자인 시스템 패키지 · 5개의 비주얼 방향 · 5개의 디바이스 프레임
 - [x] SQLite 기반 프로젝트 · 대화 · 메시지 · 탭 · 템플릿
 - [x] 다중 프로바이더 BYOK 프록시(`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + SSRF 가드
 - [x] Claude Design ZIP 가져오기(`/api/import/claude-design`)

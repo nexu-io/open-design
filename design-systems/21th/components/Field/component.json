@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Field",
+  "name": "Field",
+  "description": "21th labeled text field.",
+  "selectors": [
+    ".ds-21th-field"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    },
+    "value": {
+      "type": "string"
+    },
+    "placeholder": {
+      "type": "string"
+    }
+  },
+  "states": {
+    "focus": {
+      "selectors": [
+        ".ds-21th-field:focus-within"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<label class=\"ds-21th-field\"><span>{{label}}</span><input value=\"{{value}}\" placeholder=\"{{placeholder}}\" /></label>"
+}

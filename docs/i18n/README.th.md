@@ -31,7 +31,7 @@
 
 ## Open Design คืออะไร
 
-🎨 **ทางเลือก Claude Design แบบ local-first และโอเพนซอร์ส.** &nbsp;🖥️ **แอป desktop native สำหรับ macOS และ Windows.** &nbsp;⚡ **functional skills 100+ รายการ + rendering-template catalog แยกต่างหาก** · ✨ **design-system packages ระดับแบรนด์ 151 ชุด** · 📦 **plugin พร้อมใช้ 277 ตัว.** &nbsp;🖼️ สร้าง **prototype สำหรับ web · desktop · mobile**, **live dashboard / artifact**, **deck**, **image**, **video** และ motion graphics ด้วย **HyperFrames**. 🔒 preview ผ่าน sandboxed iframe · export เป็น HTML / PDF / PPTX / MP4. &nbsp;🤖 **รันบน Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity และ local CLI executable ที่ไม่ซ้ำกัน 25 ตัว**, หรือ endpoint ที่เข้ากันได้กับ OpenAI ผ่าน BYOK.
+🎨 **ทางเลือก Claude Design แบบ local-first และโอเพนซอร์ส.** &nbsp;🖥️ **แอป desktop native สำหรับ macOS และ Windows.** &nbsp;⚡ **functional skills 100+ รายการ + rendering-template catalog แยกต่างหาก** · ✨ **design-system packages ระดับแบรนด์ 164 ชุด** · 📦 **plugin พร้อมใช้ 277 ตัว.** &nbsp;🖼️ สร้าง **prototype สำหรับ web · desktop · mobile**, **live dashboard / artifact**, **deck**, **image**, **video** และ motion graphics ด้วย **HyperFrames**. 🔒 preview ผ่าน sandboxed iframe · export เป็น HTML / PDF / PPTX / MP4. &nbsp;🤖 **รันบน Claude Code · OpenClaw · Codex · Cursor · OpenCode · Qwen · Copilot · Amp · Hermes · Kimi · Antigravity และ local CLI executable ที่ไม่ซ้ำกัน 25 ตัว**, หรือ endpoint ที่เข้ากันได้กับ OpenAI ผ่าน BYOK.
 
 Open Design คือสิ่งที่เกิดขึ้นเมื่อ loop แบบ **agent-native** ที่ Anthropic เปิดตัวกับ Claude Design — ค้นหา brief, ล็อก direction, stream artifact, critique, deliver — เลิกเป็นระบบปิด แล้วกลายเป็น **filesystem ของ functional skills, rendering design templates, design systems และ plugins** ที่ coding agent บน laptop ของคุณอ่าน เขียน และ remix ได้. CLI ของคุณกลายเป็น design engine, laptop ของคุณกลายเป็น studio, และ `DESIGN.md` ของทีมกลายเป็น brand contract.
 
@@ -253,7 +253,7 @@ Live dashboard, decision room, KPI wall — artifact หน้าเดียว
 Open Design (OD) คือทางเลือกโอเพนซอร์ส. Loop เดียวกัน, mental model แบบ artifact-first เดียวกัน, แต่ไม่มี lock-in:
 
 - 🤖 **Agent-native, model-agnostic.** เราไม่ได้ ship agent. `claude` / `codex` / `cursor-agent` / `copilot` / `hermes` / `kimi` ที่มีอยู่แล้วบน `PATH` ของคุณคือ design engine. สลับได้ในคลิกเดียว.
-- 🧠 **Brand-grade เป็นค่าเริ่มต้น.** ทุก render อ่าน `DESIGN.md` ของ package ที่ active เป็น brand contract หลัก. Repo ship design-system packages 151 ชุด; package รุ่นเก่าอาจมีแค่ `DESIGN.md` ส่วน package รุ่นใหม่เพิ่ม `manifest.json`, `tokens.css`, components, assets และ provenance ได้. วาง folder เข้าไป picker ก็หาเจอ.
+- 🧠 **Brand-grade เป็นค่าเริ่มต้น.** ทุก render อ่าน `DESIGN.md` ของ package ที่ active เป็น brand contract หลัก. Repo ship design-system packages 164 ชุด; package รุ่นเก่าอาจมีแค่ `DESIGN.md` ส่วน package รุ่นใหม่เพิ่ม `manifest.json`, `tokens.css`, components, assets และ provenance ได้. วาง folder เข้าไป picker ก็หาเจอ.
 - 🖥️ **Local-first, BYOK ทุกชั้น.** แอป desktop native สำหรับ macOS (Apple Silicon + Intel) และ Windows (x64). Linux AppImage อยู่ใน release lane แบบ optional. Product analytics และ session replay ต้องได้รับ consent; safety/reliability telemetry ที่ scrub ข้อมูลแล้วทำงานตลอด. ก่อนอธิบาย path ของ daemon data ต้องอ่าน **Daemon data directory contract** ใน `AGENTS.md` ที่ราก repo และ README นี้ต้องไม่ระบุ path ซ้ำ.
 - 🌍 **ประกอบกันได้บน 4 plane.** **Plugins** พา workflow ที่รันได้ · functional **skills** พาพฤติกรรมของ agent · **design templates** พา rendering blueprint · **design systems** พาแบรนด์. ทั้งสี่ใช้ directory แบบ portable และ versionable ที่ใครก็ author และ publish ได้.
 - 🔁 **Refresh codebase เดิม.** ส่ง `git` repo + `DESIGN.md` ให้ agent แล้วมัน refactor component จริงของคุณให้เข้ากับ brand spec. มี plugin เฉพาะสำหรับ migrate workflow จาก Figma / Pencil ไปเป็น React / Next.js / Vue code.
@@ -266,7 +266,7 @@ Open Design (OD) คือทางเลือกโอเพนซอร์ส
 | Open source | ❌ | ❌ | ❌ | **✅ Apache-2.0** |
 | Self-host / desktop | ❌ | ❌ | ❌ | **✅ macOS + Windows + Docker** |
 | Agent-native (รันใน CLI ของคุณ) | Anthropic เท่านั้น | ❌ | Cloud agent เท่านั้น | **✅ 25 CLIs + BYOK** |
-| `DESIGN.md` ระดับแบรนด์ | Proprietary | Theme JSON | Limited tokens | **✅ ship systems 151 ชุด** |
+| `DESIGN.md` ระดับแบรนด์ | Proprietary | Theme JSON | Limited tokens | **✅ ship systems 164 ชุด** |
 | Skills / plugins / templates | Closed | Plugin store | Closed | **✅ 100+ functional skills · separate rendering-template catalog · 277 plugins** |
 | HyperFrames (HTML→MP4) | ❌ | ❌ | ❌ | **✅ First-class** |
 | Refresh repo เดิมให้ตรง brand | ❌ | ❌ | ❌ | **✅ ผ่าน agent + `DESIGN.md`** |
@@ -284,7 +284,7 @@ Open Design (OD) คือทางเลือกโอเพนซอร์ส
 - **Windows** (x64) → [**open-design.ai**](https://open-design.ai/) หรือ [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 - **Linux** (AppImage, optional lane) → [GitHub Releases](https://github.com/nexu-io/open-design/releases)
 
-หลังติดตั้ง: แอปจะ auto-detect coding-agent CLI ทุกตัวบน `PATH`, โหลด functional skills 100+ รายการ, rendering-template catalog ที่แยกต่างหาก และ design-system packages 151 ชุด แล้วให้คุณพิมพ์ brief ใน entry view ได้ทันที.
+หลังติดตั้ง: แอปจะ auto-detect coding-agent CLI ทุกตัวบน `PATH`, โหลด functional skills 100+ รายการ, rendering-template catalog ที่แยกต่างหาก และ design-system packages 164 ชุด แล้วให้คุณพิมพ์ brief ใน entry view ได้ทันที.
 
 ### 🤖 ติดตั้งเข้า coding agent ของคุณ (ไม่ใช้ UI)
 
@@ -402,7 +402,7 @@ Protocol และ directory split → [`docs/skills-protocol.md`](../../docs/sk
 
 ## Design Systems
 
-**Design-system packages ระดับแบรนด์ 151 ชุดที่มี `DESIGN.md` เป็นแกนหลัก** ship มากับ repo. Legacy package อาจมีเพียง Markdown contract; package ใหม่อาจมี `manifest.json`, compiled `tokens.css`, component fixture, assets และ provenance evidence ด้วย. Catalog ผสมระบบที่ derive จาก upstream กับส่วนที่ project เป็นเจ้าของ; [`design-systems/README.md`](../../design-systems/README.md) บันทึก package shape และ provenance.
+**Design-system packages ระดับแบรนด์ 164 ชุดที่มี `DESIGN.md` เป็นแกนหลัก** ship มากับ repo. Legacy package อาจมีเพียง Markdown contract; package ใหม่อาจมี `manifest.json`, compiled `tokens.css`, component fixture, assets และ provenance evidence ด้วย. Catalog ผสมระบบที่ derive จาก upstream กับส่วนที่ project เป็นเจ้าของ; [`design-systems/README.md`](../../design-systems/README.md) บันทึก package shape และ provenance.
 
 <details>
 <summary><b>Catalog เต็ม (คลิกเพื่อขยาย)</b></summary>
@@ -559,7 +559,7 @@ Architecture เต็ม → [`docs/architecture.md`](../../docs/architecture.m
 
 - [x] Daemon + 26 runtime definitions across 25 distinct coding-agent CLI executables + skill/design-template registries + design-system catalog
 - [x] Web app + chat + question form + 5-direction picker + todo progress + sandboxed preview
-- [x] 100+ functional skills · separate rendering-template catalog · 151 design-system packages · 5 visual directions · 5 device frames
+- [x] 100+ functional skills · separate rendering-template catalog · 164 design-system packages · 5 visual directions · 5 device frames
 - [x] SQLite-backed projects · conversations · messages · tabs · templates
 - [x] Multi-provider BYOK proxy (`/api/proxy/{anthropic,openai,azure,google,ollama,senseaudio}/stream`) + SSRF guard
 - [x] Claude Design ZIP import (`/api/import/claude-design`)

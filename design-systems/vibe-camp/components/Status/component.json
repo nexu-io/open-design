@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "od-design-system-component/v1",
+  "id": "Status",
+  "name": "Status",
+  "description": "Vibe Camp compact status and warning label.",
+  "selectors": [
+    ".ds-vibe-camp-status"
+  ],
+  "properties": {
+    "label": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "states": {
+    "indicator": {
+      "selectors": [
+        ".ds-vibe-camp-status__indicator"
+      ],
+      "required": true
+    }
+  },
+  "implementation": "<span class=\"ds-vibe-camp-status\"><span class=\"ds-vibe-camp-status__indicator\" aria-hidden=\"true\"></span>{{label}}</span>"
+}
