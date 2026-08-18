@@ -2718,12 +2718,11 @@
    width-fit scale letterboxes top/bottom with the card bg and never clips. */
 .home-hero__plugin-preset[data-od-mode="deck"] .plugins-home__html-iframe {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  inset: auto;
+  inset: 0 auto auto 0;
   width: 1280px;
   height: 720px;
-  transform: translate(-50%, -50%) scale(var(--deck-preview-scale));
+  transform: scale(var(--deck-preview-scale));
+  transform-origin: top left;
 }
 
 /* Baked deck posters/clips use the gallery's 1.31:1 capture frame, with the
