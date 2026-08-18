@@ -5,20 +5,23 @@
 # changed area. Kept minimal so the fast lane stays fast.
 set -euo pipefail
 
-case "$(uname -m)" in
-  arm64|aarch64 NODE_ARCH=arm64 ;;
-  x86_64) NODE_ARCH=x64 ;;
-  *) echo unsupportedarch >&2; exit 2 ;;
-esac
-NODE_VERSION=v24.19.0
-NODE_DIR=/Users/vvladescu/.node-
-export PATH=/bin:/Users/vvladescu/.npm/_npx/1e7f6d9597241db0/node_modules/.bin:/Users/vvladescu/Desktop/ZenInfra/node_modules/.bin:/Users/vvladescu/Desktop/node_modules/.bin:/Users/vvladescu/node_modules/.bin:/Users/node_modules/.bin:/node_modules/.bin:/Users/vvladescu/.local/share/mise/installs/node/22.22.0/lib/node_modules/npm/node_modules/@npmcli/run-script/lib/node-gyp-bin:/Users/vvladescu/.local/bin:/Users/vvladescu/.claude/bin:/Users/vvladescu/.codeium/windsurf/bin:/Users/vvladescu/.local/bin:/Users/vvladescu/go/bin:/Users/vvladescu/.local/share/mise/installs/bun/latest/bin:/Users/vvladescu/.local/share/mise/installs/node/22/bin:/usr/local/bin:/usr/local/sbin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/Library/TeX/texbin:/Users/vvladescu/.cargo/bin:/Users/vvladescu/.orbstack/bin:/usr/local/opt/fzf/bin:/Users/vvladescu/.pulumi/bin
-
-if ! command -v node >/dev/null 2>&1; then
-  mkdir -p /tmp/node-dl
-  curl -fsSL https://nodejs.org/dist//node--darwin-.tar.gz -o /tmp/node-dl/node.tgz
-  tar xzf /tmp/node-dl/node.tgz -C /tmp/node-dl
-  mv /tmp/node-dl/node--darwin- 
+# Force Node 24: the worker ships node 22, but the repo targets node ~24
+# (AGENTS.md: Node 22 is unsupported).
+if ! command -v node >/dev/null 2>&1 || ! node -v | grep -q '^v24'; then
+  case "$(uname -m)" in
+    arm64|aarch64) NODE_ARCH=arm64 ;;
+    x86_64) NODE_ARCH=x64 ;;
+    *) echo "unsupported arch" >&2; exit 2 ;;
+  esac
+  NODE_VERSION=v24.19.0
+  NODE_DIR="$HOME/.node-$NODE_VERSION"
+  if [ ! -x "$NODE_DIR/bin/node" ]; then
+    mkdir -p /tmp/node-dl
+    curl -fsSL "https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-$NODE_ARCH.tar.gz" -o /tmp/node-dl/node.tgz
+    tar xzf /tmp/node-dl/node.tgz -C /tmp/node-dl
+    mv "/tmp/node-dl/node-$NODE_VERSION-darwin-$NODE_ARCH" "$NODE_DIR"
+  fi
+  export PATH="$NODE_DIR/bin:$PATH"
 fi
 node -v
 
@@ -31,7 +34,7 @@ pnpm rebuild better-sqlite3 >/tmp/sqlite-rebuild.log 2>&1
 pnpm --filter @open-design/daemon build >/tmp/daemon-build.log 2>&1
 
 # Branch-specific hardening suite + shared regression files.
-pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts   tests/run-create-validation.test.ts tests/project-file-rename.test.ts tests/mcp-write-tools.test.ts
+pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts \
+  tests/run-create-validation.test.ts tests/project-file-rename.test.ts tests/mcp-write-tools.test.ts
 echo GATE_OK
-GATEEOF
-)
+
