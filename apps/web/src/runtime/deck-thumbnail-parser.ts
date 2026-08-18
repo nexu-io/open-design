@@ -30,7 +30,8 @@ export type DeckThumbnailFallbackReason =
   | 'no-dom-parser'
   | 'no-slides'
   | 'no-styles'
-  | 'external-stylesheet';
+  | 'external-stylesheet'
+  | 'container-query-units';
 
 /** One reconstructed wrapper element between the shadow root and the slide. */
 export interface DeckThumbnailAncestor {
@@ -150,6 +151,13 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
   );
   if (!rawStyle.trim()) return unrenderable('no-styles');
 
+  // Static thumbnails reconstruct one slide in a shadow root. Container query
+  // units are relative to an authored query container, so they cannot be
+  // faithfully rewritten against the deck canvas as viewport units can. Keep
+  // the live iframe fallback for these decks rather than rendering a black or
+  // collapsed thumbnail rail.
+  if (hasContainerQueryUnits(doc, rawStyle)) return unrenderable('container-query-units');
+
   const designSize = resolveDesignSize(doc, rawStyle);
 
   // Rewrite viewport units to their px-equivalent against the design canvas so
@@ -181,6 +189,14 @@ export function parseDeckThumbnails(html: string, baseHref?: string): ParsedDeck
 }
 
 const VIEWPORT_UNIT_TOKEN_RE = /(-?\d*\.?\d+)\s*(vw|vh|vmin|vmax|svw|svh|lvw|lvh|dvw|dvh)\b/gi;
+const CONTAINER_QUERY_UNIT_RE = /-?\d*\.?\d+\s*(?:cqw|cqh|cqi|cqb|cqmin|cqmax)\b/i;
+
+function hasContainerQueryUnits(doc: Document, stylesheet: string): boolean {
+  if (CONTAINER_QUERY_UNIT_RE.test(stylesheet)) return true;
+  return Array.from(doc.querySelectorAll('[style]')).some((element) =>
+    CONTAINER_QUERY_UNIT_RE.test(element.getAttribute('style') || ''),
+  );
+}
 
 // Replace each `<n><viewport-unit>` with `calc(<n> * <k>px)` where `k` is the
 // design canvas dimension / 100. Works inside `clamp()`/`min()`/`max()` and
