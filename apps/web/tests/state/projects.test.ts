@@ -32,6 +32,7 @@ import {
   pickLocalFolderPath,
   publishGeneratedPluginToGitHub,
   resolvedWorkspaceContextForWrite,
+  removePluginMarketplace,
   startGeneratedPluginShareTask,
   uploadPluginFolder,
   waitGeneratedPluginShareTask,
@@ -583,6 +584,28 @@ describe('applyPlugin', () => {
       ['ws-a', 'wm-a'],
       ['ws-b', 'wm-b'],
     ]);
+  });
+});
+
+describe('plugin marketplace errors', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('does not expose a raw non-JSON response body', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async () => new Response(
+      '<!doctype html><pre>Error: boom at /Users/alice/open-design/marketplace.ts:42:1</pre>',
+      {
+        status: 500,
+        statusText: 'Internal Server Error',
+        headers: { 'content-type': 'text/html' },
+      },
+    )));
+
+    await expect(removePluginMarketplace('community')).resolves.toEqual({
+      ok: false,
+      message: 'Internal Server Error',
+    });
   });
 });
 
