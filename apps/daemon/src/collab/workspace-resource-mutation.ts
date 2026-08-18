@@ -57,6 +57,10 @@ export type VerifyWorkspaceRequestAuthority = (
   req: unknown,
 ) => Promise<WorkspaceRequestAuthorityResult>;
 
+export type ResolveWorkspaceResourceReadAuthority = (
+  resourceId: string,
+) => Promise<WorkspaceRequestAuthorityResult>;
+
 type RequestAuthorityCacheEntry = {
   identity: string;
   promise: Promise<WorkspaceRequestAuthorityResult>;
@@ -704,14 +708,16 @@ export async function enforceVerifiedWorkspaceResourceMutation(
 }
 
 /**
- * Fresh exact authority gate for the data plane of a Workspace-bound resource.
+ * Exact authority gate for the data plane of a Workspace-bound resource.
  *
  * Reads deliberately do not require creator/admin mutation standing: every
- * active member may read a resource that is bound to the exact Workspace in
- * the request. Locked/frozen Team resources intentionally remain readable but
- * read-only; removed members, authority outages, cross-Workspace identities,
- * and deleted resources fail closed. Truly unbound legacy local resources
- * remain compatible.
+ * active member may read a resource bound to the exact Workspace resolved by
+ * the server. Explicit request claims are checked rather than trusted, while a
+ * headerless read derives its Workspace from persisted ownership. Locked or
+ * frozen Team resources intentionally remain readable but read-only; removed
+ * members, authority outages, cross-Workspace identities, and deleted
+ * resources fail closed. Truly unbound legacy local resources remain
+ * compatible.
  */
 export async function enforceVerifiedWorkspaceResourceRead(
   resourceType: string,
@@ -736,7 +742,10 @@ export async function enforceVerifiedWorkspaceResourceRead(
   db: unknown,
   resourceId: string,
   verifyWorkspaceRequestAuthority: VerifyWorkspaceRequestAuthority | undefined,
-  options: { allowNavigationQuery?: boolean } = {},
+  options: {
+    allowNavigationQuery?: boolean;
+    resolveAuthority?: ResolveWorkspaceResourceReadAuthority;
+  } = {},
 ): Promise<boolean> {
   if (!getWorkspaceResourceByResourceId(db, resourceId)) return true;
   const scopedRequest = options.allowNavigationQuery
@@ -751,16 +760,17 @@ export async function enforceVerifiedWorkspaceResourceRead(
     );
     return false;
   }
-  if (!verifyWorkspaceRequestAuthority) {
-    sendApiError(
-      res,
-      400,
-      'WORKSPACE_CONTEXT_REQUIRED',
-      'an explicit workspace context is required',
-    );
-    return false;
-  }
-  const verified = await verifyWorkspaceRequestAuthority(scopedRequest);
+  const claimed = workspaceResourceContextFromRequest(scopedRequest);
+  const verified = claimed === null && options.resolveAuthority
+    ? await options.resolveAuthority(resourceId)
+    : verifyWorkspaceRequestAuthority
+      ? await verifyWorkspaceRequestAuthority(scopedRequest)
+      : {
+          ok: false as const,
+          status: 400 as const,
+          code: 'WORKSPACE_CONTEXT_REQUIRED',
+          message: 'an explicit workspace context is required',
+        };
   if (!verified.ok) {
     sendApiError(
       res,

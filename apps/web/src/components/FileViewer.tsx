@@ -9812,11 +9812,10 @@ function HtmlViewer({
       || effectiveScopedSrcDocPreviewBase
       || !workspaceActive
       || projectResourceReadBlocked
-      || !workspaceContext
     ) return;
     let cancelled = false;
     const identity = srcDocPreviewBaseIdentity;
-    void fetchProjectPreviewBaseHref(projectId, file.name, workspaceContext).then((href) => {
+    void fetchProjectPreviewBaseHref(projectId, file.name).then((href) => {
       if (cancelled || !href) return;
       setScopedSrcDocPreviewBase({ identity, href });
     });

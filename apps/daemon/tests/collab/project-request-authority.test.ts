@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createAuthorizeProjectRequest } from '../../src/collab/project-request-authority.js';
+import {
+  createAuthorizeProjectRequest,
+  resolveBoundProjectWorkspaceReadAuthority,
+} from '../../src/collab/project-request-authority.js';
 import { verifyWorkspaceRequestContext } from '../../src/collab/request-workspace-context.js';
 import { createCachedWorkspaceDirectoryFetcher } from '../../src/collab/vela-workspace-context.js';
 
@@ -57,6 +60,135 @@ function context(overrides: Record<string, unknown> = {}) {
 }
 
 describe('createAuthorizeProjectRequest', () => {
+  it('preserves the expired-session sign-in signal for derived bound-project reads', () => {
+    const result = resolveBoundProjectWorkspaceReadAuthority('workspace-a', {
+      ok: false,
+      items: [],
+      reason: 'unauthorized',
+      status: 401,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      status: 401,
+      code: 'AMR_AUTH_REQUIRED',
+    });
+    expect(result).not.toHaveProperty('retryable');
+  });
+
+  it('derives a bound project read from persisted server authority when the request is headerless', async () => {
+    const row = {
+      workspaceId: 'workspace-a',
+      visibility: 'personal',
+      resourceState: 'active',
+      createdByWorkspaceMemberId: 'member-a',
+    };
+    const verify = vi.fn();
+    const resolve = vi.fn(async () => ({
+      ok: true as const,
+      context: context(),
+    }));
+    const sendApiError = vi.fn();
+    const authorize = createAuthorizeProjectRequest({
+      db: {},
+      getWorkspaceProject: () => row,
+      getWorkspaceProjectByProjectId: () => row,
+      verifyWorkspaceReadAuthority: verify,
+      resolveWorkspaceReadAuthority: resolve,
+      sendApiError,
+    });
+
+    await expect(authorize(
+      request({}),
+      response(),
+      'project-a',
+      { mode: 'read' },
+    )).resolves.toBe(true);
+    expect(resolve).toHaveBeenCalledWith('project-a');
+    expect(verify).not.toHaveBeenCalled();
+    expect(sendApiError).not.toHaveBeenCalled();
+  });
+
+  it('never lets derived authority override an explicit cross-Workspace claim', async () => {
+    const row = {
+      workspaceId: 'workspace-a',
+      visibility: 'team',
+      resourceState: 'active',
+    };
+    const verify = vi.fn(async () => ({
+      ok: true as const,
+      context: context({
+        workspaceId: 'workspace-b',
+        workspaceMemberId: 'member-b',
+      }),
+    }));
+    const resolve = vi.fn(async () => ({
+      ok: true as const,
+      context: context(),
+    }));
+    const sendApiError = vi.fn();
+    const authorize = createAuthorizeProjectRequest({
+      db: {},
+      getWorkspaceProject: (_db, workspaceId) =>
+        workspaceId === 'workspace-a' ? row : null,
+      getWorkspaceProjectByProjectId: () => row,
+      verifyWorkspaceReadAuthority: verify,
+      resolveWorkspaceReadAuthority: resolve,
+      sendApiError,
+    });
+
+    await expect(authorize(
+      request({ workspaceId: 'workspace-b', memberId: 'member-b' }),
+      response(),
+      'project-a',
+      { mode: 'read' },
+    )).resolves.toBe(false);
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(resolve).not.toHaveBeenCalled();
+    expect(sendApiError).toHaveBeenCalledWith(
+      expect.anything(),
+      403,
+      'WORKSPACE_PROJECT_PERMISSION_DENIED',
+      expect.any(String),
+    );
+  });
+
+  it('fails a derived bound-project read closed when server authority is unavailable', async () => {
+    const row = {
+      workspaceId: 'workspace-a',
+      visibility: 'team',
+      resourceState: 'active',
+    };
+    const sendApiError = vi.fn();
+    const authorize = createAuthorizeProjectRequest({
+      db: {},
+      getWorkspaceProject: () => row,
+      getWorkspaceProjectByProjectId: () => row,
+      resolveWorkspaceReadAuthority: async () => ({
+        ok: false,
+        status: 503,
+        code: 'WORKSPACE_AUTHORITY_UNAVAILABLE',
+        message: 'workspace authority is temporarily unavailable',
+        retryable: true,
+      }),
+      sendApiError,
+    });
+
+    await expect(authorize(
+      request({}),
+      response(),
+      'project-a',
+      { mode: 'read' },
+    )).resolves.toBe(false);
+    expect(sendApiError).toHaveBeenCalledWith(
+      expect.anything(),
+      503,
+      'WORKSPACE_AUTHORITY_UNAVAILABLE',
+      expect.any(String),
+      { retryable: true },
+    );
+  });
+
   it('uses the bounded read verifier without weakening fresh mutation authority', async () => {
     const row = {
       workspaceId: 'workspace-a',

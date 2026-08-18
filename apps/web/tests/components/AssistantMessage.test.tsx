@@ -1333,8 +1333,9 @@ describe('AssistantMessage recovered produced files', () => {
     expect(produced?.textContent).toContain('browser-war-deck-outline.md');
     const download = produced?.querySelector('a[download]');
     expect(download).toBeTruthy();
-    expect(download?.getAttribute('href')).toContain('workspaceId=workspace-a');
-    expect(download?.getAttribute('href')).toContain('workspaceMemberId=member-a');
+    expect(download?.getAttribute('href')).toBe(
+      '/api/projects/proj-1/raw/browser-war-deck-outline.md',
+    );
     expect(screen.queryByTestId('file-ops-summary')).toBeNull();
   });
 

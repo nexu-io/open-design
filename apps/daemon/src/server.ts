@@ -770,10 +770,14 @@ import {
   headerValue,
   isWorkspaceResourceLocked,
   resolveOptionalWorkspaceRequestAuthority,
+  type WorkspaceRequestAuthorityResult,
   workspaceResourceContext,
   workspaceResourceContextFromRequest,
 } from './collab/workspace-resource-mutation.js';
-import { createAuthorizeProjectRequest } from './collab/project-request-authority.js';
+import {
+  createAuthorizeProjectRequest,
+  resolveBoundProjectWorkspaceReadAuthority,
+} from './collab/project-request-authority.js';
 import { withLastKnownWorkspaceContext } from './collab/workspace-context.js';
 import {
   createWorkspaceTypeRegistry,
@@ -7334,54 +7338,31 @@ export async function startServer({
     stageProjectDirsForDelete,
     validateLinkedDirs,
   };
-  const authorizeProjectRequest = createAuthorizeProjectRequest({
-    db,
-    getWorkspaceProject,
-    getWorkspaceProjectByProjectId,
-    isProjectRevoked: (_db, projectId) =>
-      revokedTeamProjectMirrors.has(projectId),
-    verifyWorkspaceReadAuthority,
-    verifyWorkspaceRequestAuthority,
-    sendApiError,
-  });
-  const authorizeProjectToolRequest = async (
-    res,
-    projectId,
-    options,
-  ) => {
+  const resolveProjectWorkspaceAuthority = async (
+    projectId: string,
+    options: { fresh: boolean },
+  ): Promise<WorkspaceRequestAuthorityResult | null> => {
     const binding = getWorkspaceProjectByProjectId(db, projectId);
-    if (!binding?.workspaceId) return { workspace: null };
+    if (!binding?.workspaceId) return null;
 
-    let authority;
     if (process.env.OD_WORKSPACE_CONTEXT_SOURCE?.trim() === 'vela') {
-      const directory = await fetchFreshMutationWorkspaceDirectory().catch(
-        () => ({ ok: false, items: [] }),
+      const readDirectory = options.fresh
+        ? fetchFreshMutationWorkspaceDirectory
+        : fetchWorkspaceDirectory;
+      const directory = await readDirectory().catch(() => ({
+        ok: false as const,
+        items: [],
+      }));
+      return resolveBoundProjectWorkspaceReadAuthority(
+        binding.workspaceId,
+        directory,
+        configuredAmrEnv(),
       );
-      if (!directory.ok) {
-        sendApiError(
-          res,
-          503,
-          'WORKSPACE_AUTHORITY_UNAVAILABLE',
-          'workspace membership authority is temporarily unavailable',
-          { retryable: true },
-        );
-        return null;
-      }
-      const item = directory.items.find(
-        (candidate) => candidate.workspaceId === binding.workspaceId,
-      );
-      if (!item) {
-        sendApiError(
-          res,
-          403,
-          'WORKSPACE_PROJECT_PERMISSION_DENIED',
-          'workspace project access is not allowed',
-        );
-        return null;
-      }
-      authority = workspaceContextFromDirectoryItem(item, configuredAmrEnv());
-    } else {
-      authority = workspaceContextFromDirectoryItem({
+    }
+
+    return {
+      ok: true,
+      context: workspaceContextFromDirectoryItem({
         workspaceId: binding.workspaceId,
         workspaceName: binding.workspaceId,
         workspaceType: 'personal',
@@ -7390,8 +7371,61 @@ export async function startServer({
         role: 'owner',
         memberStatus: 'active',
         lifecycleState: 'active',
-      }, configuredAmrEnv());
+      }, configuredAmrEnv()),
+    };
+  };
+  const authorizeProjectRequest = createAuthorizeProjectRequest({
+    db,
+    getWorkspaceProject,
+    getWorkspaceProjectByProjectId,
+    isProjectRevoked: (_db, projectId) =>
+      revokedTeamProjectMirrors.has(projectId),
+    verifyWorkspaceReadAuthority,
+    resolveWorkspaceReadAuthority: async (projectId) => {
+      const authority = await resolveProjectWorkspaceAuthority(
+        projectId,
+        { fresh: false },
+      );
+      return authority ?? {
+        ok: false,
+        status: 403,
+        code: 'WORKSPACE_PROJECT_PERMISSION_DENIED',
+        message: 'workspace project access is not allowed',
+      };
+    },
+    verifyWorkspaceRequestAuthority,
+    sendApiError,
+  });
+  const authorizeProjectToolRequest = async (
+    res,
+    projectId,
+    options,
+  ) => {
+    const resolvedAuthority = await resolveProjectWorkspaceAuthority(
+      projectId,
+      { fresh: true },
+    );
+    if (!resolvedAuthority) return { workspace: null };
+    if (!resolvedAuthority.ok) {
+      if (resolvedAuthority.retryable) {
+        sendApiError(
+          res,
+          resolvedAuthority.status,
+          resolvedAuthority.code,
+          resolvedAuthority.message,
+          { retryable: true },
+        );
+      } else {
+        sendApiError(
+          res,
+          resolvedAuthority.status,
+          resolvedAuthority.code,
+          resolvedAuthority.message,
+        );
+      }
+      return null;
     }
+    const authority = resolvedAuthority.context;
     const scopedAuthorize = createAuthorizeProjectRequest({
       db,
       getWorkspaceProject,

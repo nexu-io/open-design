@@ -141,7 +141,6 @@ test('[P0] Team design systems catch up missed shares, updates, and retractions'
     await expectProjectSharedLogo(
       ownerPage,
       'Shared Product Language',
-      OWNER.memberId,
     );
 
     await gotoDesignSystems(ownerPage);
@@ -152,7 +151,6 @@ test('[P0] Team design systems catch up missed shares, updates, and retractions'
     await expectSharedLogo(
       ownerPage.getByTestId(`design-system-detail-${designSystemId}`),
       'Shared Product Language',
-      OWNER.memberId,
     );
 
     const shareResponse = await ownerPage.request.post(
@@ -208,7 +206,6 @@ test('[P0] Team design systems catch up missed shares, updates, and retractions'
     await expectSharedLogo(
       memberPage.getByTestId(`design-system-detail-${designSystemId}`),
       'Shared Product Language',
-      MEMBER.memberId,
     );
     await gotoHome(memberPage);
     await ensureRailOpen(memberPage);
@@ -450,7 +447,6 @@ async function writeLogoProjectFile(
 async function expectSharedLogo(
   container: ReturnType<Page['getByTestId']>,
   alt: string,
-  workspaceMemberId: string,
 ): Promise<void> {
   const logo = container.getByTestId('design-kit-logo-section').getByRole('img', { name: alt });
   await expect(logo).toBeVisible({ timeout: T.xlong });
@@ -459,16 +455,22 @@ async function expectSharedLogo(
       complete: image.complete,
       width: image.naturalWidth,
       height: image.naturalHeight,
+      workspaceId: new URL(image.src).searchParams.get('workspaceId'),
       workspaceMemberId: new URL(image.src).searchParams.get('workspaceMemberId'),
     })),
     { timeout: T.long },
-  ).toEqual({ complete: true, width: 320, height: 160, workspaceMemberId });
+  ).toEqual({
+    complete: true,
+    width: 320,
+    height: 160,
+    workspaceId: null,
+    workspaceMemberId: null,
+  });
 }
 
 async function expectProjectSharedLogo(
   page: Page,
   alt: string,
-  workspaceMemberId: string,
 ): Promise<void> {
   const tab = page.getByTestId('design-system-project-tab');
   const panel = page.getByTestId('design-system-project-tab-panel');
@@ -491,12 +493,14 @@ async function expectProjectSharedLogo(
       complete: element.complete,
       width: element.naturalWidth,
       height: element.naturalHeight,
+      workspaceId: new URL(element.src).searchParams.get('workspaceId'),
       workspaceMemberId: new URL(element.src).searchParams.get('workspaceMemberId'),
     })).catch(() => null);
     const matches = image?.complete === true
       && image.width === 320
       && image.height === 160
-      && image.workspaceMemberId === workspaceMemberId;
+      && image.workspaceId === null
+      && image.workspaceMemberId === null;
     if (!matches) {
       matchingSince = 0;
       return 0;

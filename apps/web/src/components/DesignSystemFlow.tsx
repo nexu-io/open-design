@@ -1700,6 +1700,9 @@ export function DesignSystemDetailView({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [projectChatMessages, setProjectChatMessages] = useState<ChatMessage[]>([]);
+  const [projectChatMessagesConversationId, setProjectChatMessagesConversationId] =
+    useState<string | null>(null);
+  const [projectChatLoadError, setProjectChatLoadError] = useState<string | null>(null);
   const [chatStreaming, setChatStreaming] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [workspaceTabsState, setWorkspaceTabsState] = useState<OpenTabsState>({
@@ -1732,6 +1735,8 @@ export function DesignSystemDetailView({
     setConversations([]);
     setActiveConversationId(null);
     setProjectChatMessages([]);
+    setProjectChatMessagesConversationId(null);
+    setProjectChatLoadError(null);
     setChatError(null);
     setChatSeed(null);
     setWorkspaceTabsState({ tabs: [], active: null });
@@ -1855,8 +1860,13 @@ export function DesignSystemDetailView({
   useEffect(() => {
     if (!workspaceProjectId || !activeConversationId) {
       setProjectChatMessages([]);
+      setProjectChatMessagesConversationId(null);
+      setProjectChatLoadError(null);
       return undefined;
     }
+    setProjectChatMessages([]);
+    setProjectChatMessagesConversationId(null);
+    setProjectChatLoadError(null);
     let cancelled = false;
     void listMessages(
       workspaceProjectId,
@@ -1865,6 +1875,16 @@ export function DesignSystemDetailView({
     ).then((messages) => {
       if (cancelled) return;
       setProjectChatMessages(messages);
+      setProjectChatMessagesConversationId(activeConversationId);
+    }).catch((error) => {
+      if (cancelled) return;
+      setProjectChatMessages([]);
+      setProjectChatLoadError(
+        error instanceof Error
+          ? error.message
+          : 'Could not load messages for this conversation.',
+      );
+      console.warn('Failed to load design-system project messages', error);
     });
     return () => {
       cancelled = true;
@@ -2064,6 +2084,10 @@ export function DesignSystemDetailView({
     [activeJob, generationActive, recentRevisions, system, t],
   );
   const chatMessages = projectChatMessages.length > 0 ? projectChatMessages : introChatMessages;
+  const projectChatMessagesReady =
+    !activeConversationId || projectChatMessagesConversationId === activeConversationId;
+  const projectChatMessagesLoading =
+    Boolean(activeConversationId) && !projectChatMessagesReady && !projectChatLoadError;
   const workspaceActivityMessage = useMemo(
     () => findWorkspaceActivityMessage(chatMessages),
     [chatMessages],
@@ -2356,6 +2380,7 @@ export function DesignSystemDetailView({
     ) => {
       const rawText = prompt.trim();
       if (!rawText || chatStreaming || !system) return;
+      if (activeConversationId && !projectChatMessagesReady) return;
       const text = feedbackSection ? `${rawText}\n\nFocus section: ${feedbackSection}` : rawText;
       const projectId = workspaceProjectId ?? await ensureWorkspaceProject();
       if (!projectId) {
@@ -2666,6 +2691,7 @@ export function DesignSystemDetailView({
       onProjectsRefresh,
       persistProjectMessage,
       projectChatMessages,
+      projectChatMessagesReady,
       refreshWorkspaceProjectFiles,
       requestWorkspaceFileOpen,
       syncDesignSystemAssetsFromWorkspace,
@@ -2683,6 +2709,13 @@ export function DesignSystemDetailView({
     chatAbortRef.current = null;
     pendingWorkspaceFileWritesRef.current.clear();
     setChatStreaming(false);
+  }, []);
+
+  const selectProjectChatConversation = useCallback((conversationId: string) => {
+    setProjectChatMessages([]);
+    setProjectChatMessagesConversationId(null);
+    setProjectChatLoadError(null);
+    setActiveConversationId(conversationId);
   }, []);
 
   const createProjectChatConversation = useCallback(() => {
@@ -2704,6 +2737,8 @@ export function DesignSystemDetailView({
       setConversations((current) => [fresh, ...current]);
       setActiveConversationId(fresh.id);
       setProjectChatMessages([]);
+      setProjectChatMessagesConversationId(null);
+      setProjectChatLoadError(null);
       setChatError(null);
       setChatSeed({
         id: `general-${Date.now()}`,
@@ -2810,7 +2845,9 @@ export function DesignSystemDetailView({
             key={`${activeConversationId ?? 'design-system-chat'}:${chatSeed?.id ?? 'ready'}`}
             messages={chatMessages}
             streaming={generationActive || saving || chatStreaming}
-            error={chatError}
+            loading={projectChatMessagesLoading}
+            sendDisabled={!projectChatMessagesReady}
+            error={chatError ?? projectChatLoadError}
             config={config}
             projectId={workspaceProjectId}
             projectFiles={workspaceProjectFiles}
@@ -2831,7 +2868,7 @@ export function DesignSystemDetailView({
             // trusting the live length would show the previous conversation's
             // count for the newly active row. Fall back to the persisted
             // `conversation.messageCount` for a stable list count instead.
-            onSelectConversation={setActiveConversationId}
+            onSelectConversation={selectProjectChatConversation}
             onDeleteConversation={() => {}}
             onNewConversation={createProjectChatConversation}
           />

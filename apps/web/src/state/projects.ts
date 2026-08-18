@@ -2,8 +2,9 @@
 // daemon's SQLite store. All writes round-trip through HTTP so projects
 // stay coherent across multiple browser tabs and across restarts.
 //
-// These helpers fail soft (returning null / [] on transport errors) so
-// the UI can stay rendered when the daemon is briefly unreachable.
+// Most helpers fail soft (returning null / [] on transport errors) so the UI
+// can stay rendered when the daemon is briefly unreachable. Reads whose empty
+// result changes behavior must preserve failure as a typed error instead.
 
 import { coalescedGet, evictCoalescedGet } from '../lib/coalesced-get';
 import { BackoffController, type BackoffOptions } from '../lib/backoff';
@@ -1251,6 +1252,57 @@ export async function deleteConversation(
 
 // ---------- messages ----------
 
+/**
+ * A failed authoritative transcript read. Callers must not reinterpret this
+ * as an empty conversation: Home auto-send and recovery flows make decisions
+ * from that distinction.
+ */
+export class ProjectMessageListError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null,
+    readonly code: string | null,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = 'ProjectMessageListError';
+  }
+}
+
+async function readProjectMessageListError(resp: Response): Promise<{
+  message: string;
+  code: string | null;
+  retryable: boolean;
+}> {
+  let message = `Could not load messages for this conversation (${resp.status}).`;
+  let code: string | null = null;
+  let retryable = false;
+  try {
+    const payload = await resp.json() as {
+      error?: string | {
+        code?: unknown;
+        message?: unknown;
+        retryable?: unknown;
+      };
+    };
+    if (payload.error && typeof payload.error === 'object') {
+      const rawCode = payload.error.code;
+      code = typeof rawCode === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/u.test(rawCode)
+        ? rawCode
+        : null;
+      if (typeof payload.error.message === 'string' && payload.error.message.trim()) {
+        message = payload.error.message;
+      }
+      retryable = payload.error.retryable === true;
+    } else if (typeof payload.error === 'string' && payload.error.trim()) {
+      message = payload.error;
+    }
+  } catch {
+    // Keep the stable HTTP fallback for legacy/non-JSON responses.
+  }
+  return { message, code, retryable };
+}
+
 export async function listMessages(
   projectId: string,
   conversationId: string,
@@ -1263,11 +1315,25 @@ export async function listMessages(
         ? { headers: workspaceProjectHeaders(workspaceContext) }
         : undefined,
     );
-    if (!resp.ok) return [];
+    if (!resp.ok) {
+      const failure = await readProjectMessageListError(resp);
+      throw new ProjectMessageListError(
+        failure.message,
+        resp.status,
+        failure.code,
+        failure.retryable,
+      );
+    }
     const json = (await resp.json()) as { messages: ChatMessage[] };
     return json.messages ?? [];
-  } catch {
-    return [];
+  } catch (error) {
+    if (error instanceof ProjectMessageListError) throw error;
+    throw new ProjectMessageListError(
+      error instanceof Error ? error.message : 'Could not load messages for this conversation.',
+      null,
+      null,
+      true,
+    );
   }
 }
 
