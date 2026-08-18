@@ -864,8 +864,10 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project, projectBeta]} />);
 
     const alphaTab = await screen.findByRole('tab', { name: /Project Alpha/i });
-    mockTabRect(alphaTab, 80, 120);
-    fireEvent.contextMenu(alphaTab, { clientX: 0, clientY: 0 });
+    const alphaControl = alphaTab.querySelector<HTMLButtonElement>('.workspace-tab__main');
+    expect(alphaControl).not.toBeNull();
+    mockTabRect(alphaControl!, 80, 120);
+    fireEvent.contextMenu(alphaControl!, { clientX: 0, clientY: 0 });
 
     const menu = screen.getByRole('menu', { name: 'Workspace tab actions' });
     expect(menu).toHaveStyle({ left: '92px', top: '36px' });
@@ -887,6 +889,7 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     fireEvent.keyDown(menu, { key: 'Escape' });
     await waitFor(() => {
       expect(screen.queryByRole('menu', { name: 'Workspace tab actions' })).toBeNull();
+      expect(alphaControl).toHaveFocus();
     });
   });
 

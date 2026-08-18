@@ -766,6 +766,16 @@ export function WorkspaceTabsBar({
   const [tabContextMenu, setTabContextMenu] = useState<TabContextMenuState | null>(null);
   const stripRef = useRef<HTMLDivElement | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
+  const contextMenuInvokerRef = useRef<HTMLElement | null>(null);
+  const dismissTabContextMenu = useCallback((restoreFocus = false) => {
+    const invoker = contextMenuInvokerRef.current;
+    contextMenuInvokerRef.current = null;
+    setTabContextMenu(null);
+    if (!restoreFocus || !invoker) return;
+    window.requestAnimationFrame(() => {
+      if (invoker.isConnected) invoker.focus();
+    });
+  }, []);
   const previousOnboardingCompletedRef = useRef(onboardingCompleted);
   const resetEntryToHomeAfterOnboardingRef = useRef(false);
   const dragSuppressClickRef = useRef(false);
@@ -949,8 +959,8 @@ export function WorkspaceTabsBar({
   }, [route, identityScopeKey]);
 
   useEffect(() => {
-    setTabContextMenu(null);
-  }, [route, identityScopeKey]);
+    dismissTabContextMenu();
+  }, [route, identityScopeKey, dismissTabContextMenu]);
 
   useEffect(() => {
     if (!previousOnboardingCompletedRef.current && onboardingCompleted) {
@@ -1305,12 +1315,12 @@ export function WorkspaceTabsBar({
     function onPointerDown(event: MouseEvent) {
       const target = event.target as Node;
       if (!(contextMenuRef.current?.contains(target) ?? false)) {
-        setTabContextMenu(null);
+        dismissTabContextMenu();
       }
     }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        setTabContextMenu(null);
+        dismissTabContextMenu(true);
       }
     }
     document.addEventListener('mousedown', onPointerDown, true);
@@ -1320,7 +1330,7 @@ export function WorkspaceTabsBar({
       document.removeEventListener('mousedown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [tabContextMenu]);
+  }, [tabContextMenu, dismissTabContextMenu]);
 
   useEffect(() => {
     function onWorkspaceTabShortcut(event: KeyboardEvent) {
@@ -1392,7 +1402,7 @@ export function WorkspaceTabsBar({
       ),
       activeTabId: tab.id,
     }));
-    setTabContextMenu(null);
+    dismissTabContextMenu();
     navigate(routeForTab(tab));
   }
 
@@ -1535,11 +1545,11 @@ export function WorkspaceTabsBar({
       });
       navigate({ kind: 'home', view: 'home' });
     }
-    setTabContextMenu(null);
+    dismissTabContextMenu();
   }
 
   function closeTab(tabId: string) {
-    setTabContextMenu(null);
+    dismissTabContextMenu();
     const normalized = normalizeTabsState(state);
     const closingIndex = normalized.tabs.findIndex((tab) => tab.id === tabId);
     if (closingIndex < 0) return;
@@ -1567,7 +1577,7 @@ export function WorkspaceTabsBar({
 
   function closeOtherTabs(tabId: string) {
     setDockMenuOpen(false);
-    setTabContextMenu(null);
+    dismissTabContextMenu();
     const normalized = normalizeTabsState(state);
     const targetTab = normalized.tabs.find((tab) => tab.id === tabId);
     if (!targetTab) return;
@@ -1578,7 +1588,7 @@ export function WorkspaceTabsBar({
 
   function closeTabsToRight(tabId: string) {
     setDockMenuOpen(false);
-    setTabContextMenu(null);
+    dismissTabContextMenu();
     const normalized = normalizeTabsState(state);
     const targetIndex = normalized.tabs.findIndex((tab) => tab.id === tabId);
     if (targetIndex < 0) return;
@@ -1595,7 +1605,7 @@ export function WorkspaceTabsBar({
   }
 
   function reorderTab(sourceId: string, targetId: string, edge: TabDropEdge) {
-    setTabContextMenu(null);
+    dismissTabContextMenu();
     setState((current) => {
       const normalized = normalizeTabsState(current);
       const tabs = reorderTabsById(normalized.tabs, sourceId, targetId, edge);
@@ -1649,7 +1659,7 @@ export function WorkspaceTabsBar({
       event.preventDefault();
       return;
     }
-    setTabContextMenu(null);
+    dismissTabContextMenu();
     dragSuppressClickRef.current = true;
     draggingTabIdRef.current = tabId;
     dragHapticTargetRef.current = `${tabId}:self`;
@@ -1718,7 +1728,7 @@ export function WorkspaceTabsBar({
     event.stopPropagation();
     const capabilities = tabContextMenuCapabilities(state, tabId);
     if (!capabilities?.canClose && !capabilities?.canCloseOthers && !capabilities?.canCloseRight) {
-      setTabContextMenu(null);
+      dismissTabContextMenu();
       return;
     }
     const viewportWidth = typeof window === 'undefined' ? 1024 : window.innerWidth;
@@ -1727,6 +1737,7 @@ export function WorkspaceTabsBar({
     const openedFromKeyboard = event.clientX === 0 && event.clientY === 0;
     const anchorX = openedFromKeyboard ? rect.left + 12 : event.clientX;
     const anchorY = openedFromKeyboard ? rect.bottom + 4 : event.clientY;
+    contextMenuInvokerRef.current = event.currentTarget;
     setDockMenuOpen(false);
     setRadialMenu(null);
     setTabContextMenu({
@@ -1764,7 +1775,8 @@ export function WorkspaceTabsBar({
       focusContextMenuItem(menuElement, items.length - 1);
     } else if (event.key === 'Escape') {
       event.preventDefault();
-      setTabContextMenu(null);
+      event.stopPropagation();
+      dismissTabContextMenu(true);
     }
   }
 
@@ -1833,6 +1845,7 @@ export function WorkspaceTabsBar({
                       className="workspace-tabs-dropdown__row-main"
                       role="option"
                       aria-selected={active}
+                      onContextMenu={(event) => openTabContextMenu(tab.id, event)}
                       onClick={() => {
                         setDockMenuOpen(false);
                         openTab(tab);
@@ -1952,6 +1965,7 @@ export function WorkspaceTabsBar({
                   data-tooltip={entryRailOpen ? undefined : t('entry.navExpand')}
                   data-tooltip-placement="bottom"
                   data-testid="workspace-home-rail-toggle"
+                  onContextMenu={(event) => openTabContextMenu(tab.id, event)}
                   onClick={(event) => {
                     event.stopPropagation();
                     if (!entryRailOpen) {
@@ -1984,6 +1998,7 @@ export function WorkspaceTabsBar({
                   data-tooltip={t('entry.navHome')}
                   data-tooltip-placement="bottom"
                   data-testid="workspace-home-nav"
+                  onContextMenu={(event) => openTabContextMenu(tab.id, event)}
                   onClick={(event) => {
                     event.stopPropagation();
                     openTab(tab);
@@ -1996,6 +2011,7 @@ export function WorkspaceTabsBar({
                   <button
                     type="button"
                     className="workspace-tab__main"
+                    onContextMenu={(event) => openTabContextMenu(tab.id, event)}
                     onClick={() => openTab(tab)}
                   >
                     <span className="workspace-tab__icon" aria-hidden>
