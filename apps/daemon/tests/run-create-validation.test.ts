@@ -43,6 +43,7 @@ describe('run creation input validation (#7040)', () => {
       { message: {} },
       { message: 42 },
       { attachments: [null, 42] },
+      { commentAttachments: [42] },
       { pluginId: 'definitely-not-installed' },
     ];
     for (const body of cases) {
@@ -53,6 +54,29 @@ describe('run creation input validation (#7040)', () => {
       });
       expect(resp.status, JSON.stringify(body)).toBe(400);
     }
+  });
+
+  it('accepts attachments-only turns with an empty message', async () => {
+    const id = 'att-only-' + Date.now();
+    const create = await fetch(baseUrl + '/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name: 'Attachments Only' }),
+    });
+    expect(create.status).toBe(200);
+    const convId = ((await create.json()) as { conversationId: string }).conversationId;
+    const resp = await fetch(baseUrl + '/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        agentId: 'missing-agent-' + Date.now(),
+        projectId: id,
+        conversationId: convId,
+        message: '',
+        attachments: ['assets/no-prompt.png'],
+      }),
+    });
+    expect(resp.status).toBe(202);
   });
 
   it('still accepts a normal prompt', async () => {

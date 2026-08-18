@@ -1246,9 +1246,17 @@ export function registerRunRoutes(app: Express, ctx: RegisterRunRoutesDeps) {
     const hasPrompt =
       (typeof requestBody.message === 'string' && requestBody.message.trim().length > 0)
       || (typeof requestBody.currentPrompt === 'string' && requestBody.currentPrompt.trim().length > 0);
-    const hasAttachments = Array.isArray(requestBody.attachments)
-      && requestBody.attachments.length > 0
-      && requestBody.attachments.every((entry) => entry !== null && typeof entry === 'object');
+    // Attachments mirror the seed predicate: attachments is a list of
+    // non-empty file-path strings and commentAttachments is a list of
+    // objects. Either list, when well-formed and non-empty, legitimizes an
+    // empty-message turn (attachments-only sends seed the user message).
+    const hasAttachments =
+      (Array.isArray(requestBody.attachments)
+        && requestBody.attachments.length > 0
+        && requestBody.attachments.every((entry) => typeof entry === 'string' && entry.trim().length > 0))
+      || (Array.isArray(requestBody.commentAttachments)
+        && requestBody.commentAttachments.length > 0
+        && requestBody.commentAttachments.every((entry) => entry !== null && typeof entry === 'object'));
     const hasPluginBriefSource =
       (typeof requestBody.pluginId === 'string'
         && requestBody.pluginId.length > 0
