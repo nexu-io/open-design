@@ -334,4 +334,36 @@ describe('@open-design/dsh-runtime protocol', () => {
     assert.equal(frames.at(-1)?.status, 'cancelled');
     assert.equal(frames.at(-1)?.error, undefined);
   });
+
+  test('emits a failed result frame when model selection derivation throws (no silent exit)', async () => {
+    // Model selection (provider/id → resolved selection) is derived before
+    // the run itself. If that derivation throws — e.g. the default-model
+    // service is unavailable, or a host-supplied value is rejected — the
+    // execute must still settle the protocol contract: exactly one result
+    // frame, status failed. Before the fix the derivation sat outside the
+    // error path, so a throw rejected the task promise with no frame at all
+    // and the serve loop exited the process silently, leaving the host
+    // waiting on a result that never arrived.
+    const chunks: string[] = [];
+    const ctx = {
+      agentDefaultModel: {
+        currentSelection: () => {
+          throw new Error('default model unavailable');
+        },
+      },
+    };
+    await internals.execute(ctx as never, {
+      v: 1,
+      type: 'execute',
+      request_id: 'run-bad-selection',
+      cwd: '/project',
+      prompt: 'hi',
+      mcp_servers: [],
+    }, { write: (chunk: string) => chunks.push(chunk) }, () => {}, new AbortController().signal);
+
+    const frames = chunks.map((chunk) => JSON.parse(chunk) as { type: string; status?: string; error?: { code?: string } });
+    assert.equal(frames.filter((frame) => frame.type === 'result').length, 1);
+    assert.equal(frames.at(-1)?.status, 'failed');
+    assert.equal(frames.at(-1)?.error?.code, 'DSH_PROFILE_INVALID_MODEL_SELECTION');
+  });
 });

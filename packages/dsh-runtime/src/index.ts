@@ -258,13 +258,35 @@ async function execute(
   onHandle: (handle: AgentHandle | undefined) => void,
   signal: AbortSignal,
 ): Promise<void> {
-  const defaultSelection = ctx.agentDefaultModel.currentSelection();
-  const baseSelection = request.model
-    ? { provider: request.model.provider, model: request.model.id }
-    : defaultSelection;
-  const selection = request.reasoning_effort
-    ? { ...baseSelection, reasoningEffort: ReasoningEffortId(request.reasoning_effort) }
-    : baseSelection;
+  // Model selection derivation (provider/id/resume-id → resolved selection)
+  // runs before the try below, so a host-supplied value that the harness
+  // rejects (e.g. an unknown reasoning_effort) would throw OUTSIDE the
+  // handler's error path and reject the task promise with no result frame —
+  // `serve` would then exit the process silently and the host would wait on
+  // a response that never comes. Derive inside its own guard and emit an
+  // explicit failed frame so the protocol contract (every execute gets
+  // exactly one result) holds even for malformed selections.
+  let selection: ModelSelectionRef['current'];
+  try {
+    const defaultSelection = ctx.agentDefaultModel.currentSelection();
+    const baseSelection = request.model
+      ? { provider: request.model.provider, model: request.model.id }
+      : defaultSelection;
+    selection = request.reasoning_effort
+      ? { ...baseSelection, reasoningEffort: ReasoningEffortId(request.reasoning_effort) }
+      : baseSelection;
+  } catch (error: unknown) {
+    writeFrame(output, {
+      v: 1,
+      type: 'result',
+      request_id: request.request_id,
+      status: 'failed',
+      session_id: String(SessionId(request.resume_session_id ?? `od-${randomUUID()}`)),
+      resume_rejected: false,
+      error: errorFacts(error, 'DSH_PROFILE_INVALID_MODEL_SELECTION'),
+    });
+    return;
+  }
   const sessionId = SessionId(request.resume_session_id ?? `od-${randomUUID()}`);
   let handle: AgentHandle | undefined;
   let firstSeq = Number.POSITIVE_INFINITY;
@@ -439,7 +461,24 @@ async function serve(
         (nextHandle) => { handle = nextHandle; },
         taskAbort.signal,
       );
-      void task.finally(settle);
+      // Defense in depth: `execute` reports every failure via a result frame
+      // and resolves, so a rejection here would mean a bug in that contract.
+      // Still convert it into an explicit failed frame instead of an
+      // unhandled rejection (which would make the process exit silently and
+      // leave the host waiting on a result that never arrives).
+      void task
+        .catch((error: unknown) => {
+          writeFrame(output, {
+            v: 1,
+            type: 'result',
+            request_id: requestId ?? command.request_id,
+            status: 'failed',
+            session_id: `od-${randomUUID()}`,
+            resume_rejected: false,
+            error: errorFacts(error, 'DSH_PROFILE_EXECUTION_FAILED'),
+          });
+        })
+        .finally(settle);
     });
     lines.on('close', () => {
       if (!task) settle();
