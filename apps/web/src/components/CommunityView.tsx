@@ -99,7 +99,7 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
   // chip (飞书 recvqxDuYM6Uxk). Keep the raw record here: the modal renders
   // from `InstalledPluginRecord`, not from the card view-model.
   const [detailsRecord, setDetailsRecord] = useState<InstalledPluginRecord | null>(null);
-  const [activeType, setActiveType] = useState<TemplateType>('Slides');
+  const [selectedType, setSelectedType] = useState<TemplateType | null>(null);
   const [activeSubtype, setActiveSubtype] = useState('All');
   // Remix hands off to a fire-and-forget parent callback
   // (`onRemixTemplate` returns void) that kicks off a real POST /api/projects
@@ -153,6 +153,9 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
   const typeOptions = TEMPLATE_TYPE_ORDER.filter((type) =>
     templates.some((template) => template.type === type),
   );
+  const activeType = selectedType && typeOptions.includes(selectedType)
+    ? selectedType
+    : typeOptions[0];
   const subtypeOptions = Array.from(new Set(
     templates
       .filter((template) => template.type === activeType && template.subtype)
@@ -280,7 +283,7 @@ export function CommunityView({ onRemixTemplate, onUsePrompt, onUsePlugin }: Com
                     filter_value: type,
                     ...workspaceDimensions,
                   });
-                  setActiveType(type);
+                  setSelectedType(type);
                   setActiveSubtype('All');
                 }}
               >

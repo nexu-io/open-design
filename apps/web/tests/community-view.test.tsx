@@ -201,20 +201,34 @@ describe('CommunityView catalogue source', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('/api/plugins', undefined);
 
-    // Slides leads, and it carries exactly the two deck plugins the daemon
-    // served — not a bundled demo array.
+    // Prototype leads, followed by Slides; both come from the daemon-served
+    // plugin catalogue rather than a bundled demo array.
     const facets = readFacets();
-    expect(facets.map((facet) => facet.label)).toEqual(['Slides', 'Prototype', 'Image']);
+    expect(facets.map((facet) => facet.label)).toEqual(['Prototype', 'Slides', 'Image']);
 
     // The card footer reads "<type> · <sub-facet>", both resolved from the
     // shared plugins-home taxonomy. Asserted before the tab walk below, which
     // leaves a different facet active.
     expect(renderedCards().map((card) => card.querySelector('.community-template-card__foot span')?.textContent))
-      .toEqual(['Slides · Fundraising pitch', 'Slides · B2B sales']);
+      .toEqual(['Prototype · Landing / marketing']);
 
-    // Slides leads and carries exactly the two deck plugins the daemon served
-    // — not a bundled demo array.
-    expect(readFacetCardCounts()).toEqual([2, 1, 1]);
+    expect(readFacetCardCounts()).toEqual([1, 2, 1]);
+  });
+
+  it('falls back to the first available type when the catalogue has no Prototype templates', async () => {
+    fetchMock.mockImplementation(async () => new Response(JSON.stringify({
+      plugins: [PITCH_DECK, SALES_DECK],
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    await renderCommunity();
+
+    const facets = readFacets();
+    expect(facets.map((facet) => facet.label)).toEqual(['Slides']);
+    expect(facets[0]!.tab.classList.contains('is-active')).toBe(true);
+    expect(renderedCards()).toHaveLength(2);
   });
 
   it('leaves hidden and design-system plugins out of the gallery', async () => {
@@ -234,8 +248,9 @@ describe('CommunityView catalogue source', () => {
     const pills = Array.from(
       document.querySelectorAll('.community-template-view__subtabs button'),
     ).map((button) => button.textContent?.trim());
-    expect(pills).toEqual(['All', 'Fundraising pitch', 'B2B sales']);
+    expect(pills).toEqual(['All', 'Landing / marketing']);
 
+    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
     fireEvent.click(screen.getByRole('button', { name: 'B2B sales' }));
     expect(renderedCards()).toHaveLength(1);
   });
@@ -244,6 +259,7 @@ describe('CommunityView catalogue source', () => {
 describe('CommunityView previews', () => {
   it('centres deck media in the 16:9 preview crop while legacy bakes are being replaced', async () => {
     await renderCommunity();
+    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
 
     expect(renderedCards()[0]!.querySelector('.community-template-card__preview.is-deck'))
       .not.toBeNull();
@@ -251,6 +267,7 @@ describe('CommunityView previews', () => {
 
   it('shows the plugin\'s own poster on the card and its live page in the full details modal', async () => {
     await renderCommunity();
+    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
 
     // Card thumbnail: the daemon-baked poster for that plugin.
     const thumb = renderedCards()[0]!.querySelector('img.plugins-home__media-img');
@@ -276,6 +293,7 @@ describe('CommunityView previews', () => {
     // floor even though the daemon still attached it and the classifier still
     // resolved it.
     await renderCommunity();
+    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
 
     const card = renderedCards()[0]!;
     expect(card.querySelector('img.community-template-thumb__image')).toBeNull();
@@ -306,6 +324,7 @@ describe('CommunityView previews', () => {
     // The B2B deck ships an html preview and no bake, so there is no media spec
     // to mount — that card must still fall back to the stylized paper tile.
     await renderCommunity();
+    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
 
     const card = renderedCards()[1]!;
     expect(card.querySelector('.community-template-thumb__paper')).not.toBeNull();
@@ -374,8 +393,8 @@ describe('CommunityView remix', () => {
 
     expect(onRemix).toHaveBeenCalledTimes(1);
     expect(onRemix.mock.calls[0]![0]).toEqual({
-      templateId: 'example-fundraising-deck',
-      prompt: 'A decision-grade seed round narrative.',
+      templateId: 'example-landing-prototype',
+      prompt: 'A conversion-focused SaaS landing page.',
     });
   });
 
@@ -420,6 +439,7 @@ describe('CommunityView remix', () => {
     // handler invocation really runs (see the rapid-click note above).
     const onRemix = vi.fn();
     await renderCommunity({ onRemixTemplate: onRemix });
+    fireEvent.click(readFacets().find((facet) => facet.label === 'Slides')!.tab);
 
     fireEvent.click(renderedCards()[0]!);
     await waitFor(() => {
@@ -459,10 +479,10 @@ describe('CommunityView use handoff', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Use' })[0]!);
 
     expect(onUsePrompt).toHaveBeenCalledWith({
-      templateId: 'example-fundraising-deck',
-      prompt: 'A decision-grade seed round narrative.',
-      chipId: 'deck',
-      projectKind: 'deck',
+      templateId: 'example-landing-prototype',
+      prompt: 'A conversion-focused SaaS landing page.',
+      chipId: 'prototype',
+      projectKind: 'prototype',
     });
   });
 
