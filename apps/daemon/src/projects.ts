@@ -277,19 +277,15 @@ export async function deleteProjectFolder(projectsRoot, projectId, name, metadat
     err.code = 'ENOTDIR';
     throw err;
   }
-  if (projectStorageMirror) {
-    // #7043 — capture the folder's relative paths before the local delete so
-    // the mirror can remove exactly those keys (best-effort).
-    const prefix = safeName + '/';
-    const all = await listFiles(projectsRoot, projectId, { metadata });
-    const folderPaths = all
-      .filter((f) => f.path === safeName || f.path.startsWith(prefix))
-      .map((f) => f.path);
-    for (const p of folderPaths) {
-      await projectStorageMirror.deleteFile(projectId, p).catch(() => {});
-    }
-  }
   await rm(target, { recursive: true, force: true });
+  if (projectStorageMirror && !usesExternalProjectRoot(metadata)) {
+    // #7043 — delete the local folder FIRST, then run the authoritative
+    // full-tree sync. Reconciliation removes every remote key that no longer
+    // exists locally — including hidden files and artifact sidecars that a
+    // targeted prefix walk would miss — and the per-project serialization
+    // keeps a concurrent terminal sync from resurrecting the deletion.
+    await projectStorageMirror.uploadProject(projectId).catch(() => {});
+  }
 }
 
 // Best-effort entry-file detector — looks for index.html at the root,
