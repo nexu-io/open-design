@@ -5445,6 +5445,9 @@ export interface Dict {
   'experienceSurvey.improvement.slow': string;
   'experienceSurvey.improvement.looks': string;
   'experienceSurvey.improvement.regression': string;
+  'experienceSurvey.improvement.other': string;
+  'experienceSurvey.otherPlaceholder': string;
+  'experienceSurvey.submit': string;
   'experienceSurvey.skip': string;
   'experienceSurvey.thanksTitle': string;
   'experienceSurvey.thanksBody': string;

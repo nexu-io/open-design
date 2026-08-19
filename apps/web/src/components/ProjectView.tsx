@@ -137,6 +137,7 @@ import {
   resolveDesignDeliveryOutcome,
   type DesignDeliveryOutcome,
 } from '../runtime/design-delivery';
+import { notifyArtifactDelivered } from './experience-survey-trigger';
 import { RESUME_CONTINUE_PROMPT } from '../runtime/resume';
 import {
   amrBalanceGateScopeForWorkspaceContext,
@@ -7522,6 +7523,13 @@ export function ProjectView({
                 artifactPersistenceError,
               );
               latestAssistantMsg = finalized;
+              // Only the live completion path arms the experience survey. The
+              // reattach and artifact-recovery paths below also settle on
+              // `delivered`, but they do so while replaying a run that
+              // finished before this page load — "how was that?" about work
+              // the user cannot remember finishing is a worse question than
+              // one not asked.
+              if (deliveryOutcome === 'delivered') notifyArtifactDelivered();
               setMessages((curr) => {
                 const updated = curr.map((m) =>
                   m.id === assistantId

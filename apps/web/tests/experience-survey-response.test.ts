@@ -15,6 +15,7 @@ import {
   EXPERIENCE_SURVEY_ID,
   EXPERIENCE_SURVEY_IMPROVEMENT_CHOICES,
   EXPERIENCE_SURVEY_QUESTION_IDS,
+  EXPERIENCE_SURVEY_TRIGGER,
 } from '../src/analytics/experience-survey-contract';
 
 const ids = EXPERIENCE_SURVEY_QUESTION_IDS;
@@ -89,11 +90,61 @@ describe('experience survey response reporting', () => {
     const shown = capture();
     trackExperienceSurveyShown(shown.track);
     expect(shown.event()).toBe('survey shown');
-    expect(shown.props()).toEqual({ $survey_id: EXPERIENCE_SURVEY_ID });
+    expect(shown.props()).toEqual({
+      $survey_id: EXPERIENCE_SURVEY_ID,
+      trigger: EXPERIENCE_SURVEY_TRIGGER,
+    });
 
     const dismissed = capture();
     trackExperienceSurveyDismissed(dismissed.track);
     expect(dismissed.event()).toBe('survey dismissed');
-    expect(dismissed.props()).toEqual({ $survey_id: EXPERIENCE_SURVEY_ID });
+    expect(dismissed.props()).toEqual({
+      $survey_id: EXPERIENCE_SURVEY_ID,
+      trigger: EXPERIENCE_SURVEY_TRIGGER,
+    });
+  });
+
+  // The trigger moved from a successful export to a delivered artifact. Every
+  // response carries which regime produced it, so the score before and after
+  // the move can be read apart instead of averaged together.
+  it('stamps every survey event with the trigger that armed the card', () => {
+    const sent = capture();
+    trackExperienceSurveySent(sent.track, { recommendation: 7 });
+    expect(sent.props().trigger).toBe(EXPERIENCE_SURVEY_TRIGGER);
+  });
+});
+
+describe('experience survey "other" answer', () => {
+  it('reports the typed text as the improvement response', () => {
+    // PostHog's open-choice convention: the response IS the free text, not the
+    // word "Other" with the text tucked somewhere else.
+    const t = capture();
+    trackExperienceSurveySent(t.track, {
+      recommendation: 4,
+      improvementOther: '导出的 PDF 字体全变了',
+    });
+
+    expect(t.props()[`$survey_response_${ids.improvement}`]).toBe('导出的 PDF 字体全变了');
+  });
+
+  it('still reports the choice when "other" is picked but nothing is typed', () => {
+    // "None of these fit" is an answer. Dropping it would turn those people
+    // into non-responders and quietly overstate the listed choices.
+    const t = capture();
+    trackExperienceSurveySent(t.track, { recommendation: 4, improvementOther: '   ' });
+
+    expect(t.props()[`$survey_response_${ids.improvement}`]).toBe('Other');
+    expect(t.props().$survey_questions).toHaveLength(2);
+  });
+
+  it('prefers the typed text over a stale choice index', () => {
+    const t = capture();
+    trackExperienceSurveySent(t.track, {
+      recommendation: 4,
+      improvement: 0,
+      improvementOther: 'PDF fonts break on export',
+    });
+
+    expect(t.props()[`$survey_response_${ids.improvement}`]).toBe('PDF fonts break on export');
   });
 });

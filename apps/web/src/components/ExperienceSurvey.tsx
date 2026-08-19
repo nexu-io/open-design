@@ -1,6 +1,6 @@
-// Experience survey (NPS). Armed by a successful export, rendered globally
-// from App.tsx so it survives the project → home navigation, and retired
-// permanently the moment the user answers or closes it.
+// Experience survey (NPS). Armed by a delivered artifact — any design run that
+// actually produces one — rendered globally from App.tsx so it survives the
+// project → home navigation, and retired permanently the moment it is shown.
 //
 // Two questions. The score is the metric and costs one tap; the follow-up asks
 // what to fix first and can be skipped. Anything longer was cut deliberately —
@@ -9,12 +9,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import type { Variants } from 'motion/react';
+import { Button } from '@open-design/components';
 import { useT } from '../i18n';
 import styles from './ExperienceSurvey.module.css';
 import {
   SURVEY_DELAY_MS,
   isSurveyRetired,
-  onExportSucceeded,
+  onArtifactDelivered,
   retireSurvey,
 } from './experience-survey-trigger';
 
@@ -24,6 +25,11 @@ export interface ExperienceSurveyAnswers {
   recommendation: number;
   /** Index into the improvement options, in the order rendered. */
   improvement?: number;
+  /**
+   * Set when the respondent picked "Other". Empty string means they picked it
+   * and typed nothing, which still says none of the listed choices fit.
+   */
+  improvementOther?: string;
 }
 
 interface Props {
@@ -72,6 +78,15 @@ const IMPROVEMENT_KEYS = [
   'experienceSurvey.improvement.regression',
 ] as const;
 
+/**
+ * "Other" sits after the eight choices and behaves differently: instead of
+ * finishing the survey it opens a text field. The eight are what users already
+ * tell us most often, so most people never reach for this — but the ones who
+ * do are the ones whose problem we have not named yet, and they are worth the
+ * extra tap.
+ */
+const OTHER_INDEX = IMPROVEMENT_KEYS.length;
+
 type Step = 'recommendation' | 'improvement' | 'thanks';
 
 const STEP_ORDER: Step[] = ['recommendation', 'improvement'];
@@ -99,6 +114,7 @@ export function ExperienceSurvey({
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState<Step>('recommendation');
   const [picked, setPicked] = useState<number | null>(null);
+  const [otherText, setOtherText] = useState('');
   const answersRef = useRef<Partial<ExperienceSurveyAnswers>>({});
   const bodyRef = useRef<HTMLDivElement | null>(null);
   // Tallest step seen so far. The card is pinned to the bottom-right corner,
@@ -139,18 +155,28 @@ export function ExperienceSurvey({
     };
   }, []);
 
-  // Arm on export. The delay gives the user a beat to see their export land
-  // before anything else asks for attention.
+  // Arm on a delivered artifact. The delay gives the user a beat to look at
+  // what the run just produced before anything else asks for attention. Once
+  // armed, the card is shown — nothing the user does during the delay calls it
+  // off, because the survey is asked once per user and dropping a chance is
+  // how a user ends up never being asked at all.
   useEffect(() => {
     if (!metricsConsent) return;
     let armTimer: number | null = null;
     let modalWatcher: MutationObserver | null = null;
 
+    const clearArm = () => {
+      if (armTimer !== null) {
+        window.clearTimeout(armTimer);
+        armTimer = null;
+      }
+    };
+
     const reveal = () => {
       if (isSurveyRetired()) return;
       if (isModalOpen()) {
         // Stay armed and wait the dialog out rather than dropping the chance:
-        // the export already happened, and this is the only one we get.
+        // the artifact is already delivered and the dialog will close.
         modalWatcher?.disconnect();
         modalWatcher = new MutationObserver(() => {
           if (isModalOpen()) return;
@@ -167,10 +193,14 @@ export function ExperienceSurvey({
       setVisible(true);
     };
 
-    const unsubscribe = onExportSucceeded(() => {
+    const unsubscribe = onArtifactDelivered(() => {
       if (isSurveyRetired() || exposedRef.current || armTimer !== null) return;
+      // The delay is the only thing between the artifact landing and the card
+      // arriving. It is short on purpose: long enough that the two do not
+      // animate on top of each other, short enough that the card still reads
+      // as being about the run that just finished.
       armTimer = window.setTimeout(() => {
-        armTimer = null;
+        clearArm();
         reveal();
       }, SURVEY_DELAY_MS);
     });
@@ -178,13 +208,21 @@ export function ExperienceSurvey({
     return () => {
       unsubscribe();
       modalWatcher?.disconnect();
-      if (armTimer !== null) window.clearTimeout(armTimer);
+      clearArm();
     };
   }, [metricsConsent]);
 
+  // Being shown is what spends the one ask this user gets. Retiring here
+  // rather than in `finish`/`close` is the difference between "asked once" and
+  // "asked until you engage": a user who reads the card and neither answers
+  // nor closes it — the most common way to respond to an unwanted prompt — was
+  // otherwise asked again after their next artifact, and again after the one
+  // after that. `exposedRef` alone could not prevent that; it is a ref, so it
+  // resets on the next page load.
   useEffect(() => {
     if (!visible || exposedRef.current) return;
     exposedRef.current = true;
+    retireSurvey();
     onExposure?.();
   }, [visible, onExposure]);
 
@@ -215,6 +253,17 @@ export function ExperienceSurvey({
     setVisible(false);
     if (step !== 'thanks') onDismiss?.(answersRef.current);
   }, [onDismiss, step]);
+
+  /** Opens the free-text field rather than finishing the survey. */
+  const pickOther = useCallback(() => {
+    if (picked !== null) return;
+    setPicked(OTHER_INDEX);
+  }, [picked]);
+
+  const submitOther = useCallback(() => {
+    answersRef.current.improvementOther = otherText.trim();
+    finish();
+  }, [finish, otherText]);
 
   /** Lights the tapped choice, then advances — the tap needs a receipt. */
   const pick = useCallback(
@@ -303,12 +352,43 @@ export function ExperienceSurvey({
               {t(key)}
             </button>
           ))}
+          <button
+            type="button"
+            className={`${styles.option} ${picked === OTHER_INDEX ? styles.picked : ''}`}
+            onClick={pickOther}
+          >
+            {t('experienceSurvey.improvement.other')}
+          </button>
         </div>
+        {picked === OTHER_INDEX ? (
+          <textarea
+            className={styles.textarea}
+            value={otherText}
+            onChange={(event) => setOtherText(event.target.value)}
+            placeholder={t('experienceSurvey.otherPlaceholder')}
+            // The field is auto-focused, so its name is announced immediately
+            // and is the only thing telling a screen-reader user what to type.
+            // A placeholder cannot carry that: it is not a label, and it
+            // disappears on the first keystroke. Reusing the same string keeps
+            // the two in step without a 20-locale key for the same sentence.
+            aria-label={t('experienceSurvey.otherPlaceholder')}
+            autoFocus
+          />
+        ) : null}
         <div className={styles.foot}>
           {counter}
-          <button type="button" className={styles.skip} onClick={finish}>
-            {t('experienceSurvey.skip')}
-          </button>
+          {/* Once "Other" is picked the question is already answered, so Skip
+              would only be a second way to submit. Submit replaces it, and an
+              empty field still reports "none of these fit". */}
+          {picked === OTHER_INDEX ? (
+            <Button variant="primary" className={styles.submit} onClick={submitOther}>
+              {t('experienceSurvey.submit')}
+            </Button>
+          ) : (
+            <button type="button" className={styles.skip} onClick={finish}>
+              {t('experienceSurvey.skip')}
+            </button>
+          )}
         </div>
       </>
     );

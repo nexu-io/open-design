@@ -193,8 +193,10 @@ type Track = (
 import {
   EXPERIENCE_SURVEY_ID,
   EXPERIENCE_SURVEY_IMPROVEMENT_CHOICES,
+  EXPERIENCE_SURVEY_IMPROVEMENT_OTHER,
   EXPERIENCE_SURVEY_QUESTION_IDS,
   EXPERIENCE_SURVEY_QUESTION_TEXT,
+  EXPERIENCE_SURVEY_TRIGGER,
 } from './experience-survey-contract';
 
 function send<T extends object>(
@@ -1456,11 +1458,17 @@ export function trackWhatsNewPopupClick(
 // PostHog events rather than the v2 schema's own.
 
 export function trackExperienceSurveyShown(track: Track): void {
-  send(track, 'survey shown', { $survey_id: EXPERIENCE_SURVEY_ID });
+  send(track, 'survey shown', {
+    $survey_id: EXPERIENCE_SURVEY_ID,
+    trigger: EXPERIENCE_SURVEY_TRIGGER,
+  });
 }
 
 export function trackExperienceSurveyDismissed(track: Track): void {
-  send(track, 'survey dismissed', { $survey_id: EXPERIENCE_SURVEY_ID });
+  send(track, 'survey dismissed', {
+    $survey_id: EXPERIENCE_SURVEY_ID,
+    trigger: EXPERIENCE_SURVEY_TRIGGER,
+  });
 }
 
 /**
@@ -1470,7 +1478,7 @@ export function trackExperienceSurveyDismissed(track: Track): void {
  */
 export function trackExperienceSurveySent(
   track: Track,
-  answers: { recommendation: number; improvement?: number },
+  answers: { recommendation: number; improvement?: number; improvementOther?: string },
 ): void {
   const ids = EXPERIENCE_SURVEY_QUESTION_IDS;
   const text = EXPERIENCE_SURVEY_QUESTION_TEXT;
@@ -1483,13 +1491,23 @@ export function trackExperienceSurveySent(
   };
 
   add(ids.recommendation, text.recommendation, answers.recommendation);
-  if (typeof answers.improvement === 'number') {
+  if (typeof answers.improvementOther === 'string') {
+    // PostHog's open-choice convention: the response is what they typed. An
+    // empty field still reports the choice itself, so "none of these fit"
+    // survives instead of looking like the question was skipped.
+    add(
+      ids.improvement,
+      text.improvement,
+      answers.improvementOther.trim() || EXPERIENCE_SURVEY_IMPROVEMENT_OTHER,
+    );
+  } else if (typeof answers.improvement === 'number') {
     const choice = EXPERIENCE_SURVEY_IMPROVEMENT_CHOICES[answers.improvement];
     if (choice) add(ids.improvement, text.improvement, choice);
   }
 
   send(track, 'survey sent', {
     $survey_id: EXPERIENCE_SURVEY_ID,
+    trigger: EXPERIENCE_SURVEY_TRIGGER,
     $survey_questions: answered,
     ...responses,
   });

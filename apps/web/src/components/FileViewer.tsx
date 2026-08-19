@@ -46,7 +46,6 @@ import {
   type PreviewTransportDocumentState,
   type PreviewTransportRecoverySignal,
 } from '../observability/iframe-error';
-import { notifyExportSucceeded } from './experience-survey-trigger';
 import {
   trackArtifactExportResult,
   trackArtifactDeployResult,
@@ -7527,7 +7526,6 @@ function HtmlViewer({
     const originPromise = resolveArtifactExportOrigin(context)
       .catch(() => unknownExportOrigin());
     const finish = async (result: 'success' | 'failed' | 'cancelled', errorCode?: string) => {
-      if (result === 'success') notifyExportSucceeded();
       const originProps = await originPromise;
       trackArtifactExportResult(
         analytics.track,
@@ -12939,7 +12937,6 @@ function HtmlViewer({
     const started = templateExportStartedRef.current || performance.now();
     const originPromise = templateExportOriginPromiseRef.current
       ?? resolveArtifactExportOrigin().catch(() => unknownExportOrigin());
-    if (result === 'success') notifyExportSucceeded();
     void originPromise.then((originProps) => {
       trackArtifactExportResult(
         analytics.track,
@@ -14121,7 +14118,6 @@ function HtmlViewer({
     const started = imageExportStartedRef.current || performance.now();
     const originPromise = imageExportOriginPromiseRef.current
       ?? resolveArtifactExportOrigin().catch(() => unknownExportOrigin());
-    if (result === 'success') notifyExportSucceeded();
     void originPromise.then((originProps) => {
       trackArtifactExportResult(
         analytics.track,
