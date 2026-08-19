@@ -796,11 +796,13 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Caret is nested inline in the text span (see PlaceholderCarousel.tsx). */
 .home-hero__carousel-caret {
-  flex: none;
+  display: inline-block;
   width: 1.5px;
-  align-self: stretch;
-  margin: 3px 0 3px 2px;
+  height: 1.1em;
+  vertical-align: text-bottom;
+  margin-inline-start: 2px;
   background: var(--accent);
   border-radius: 1px;
   animation: home-hero-caret-blink 1.05s steps(1, end) infinite;

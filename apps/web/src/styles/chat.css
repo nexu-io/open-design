@@ -1483,33 +1483,41 @@
   white-space: nowrap;
   max-width: calc(100% - 8px);
 }
+/* Follow-up scenarios can be full paragraphs (visualPolish is ~270 chars);
+   the placeholder wraps within the composer's width instead of clipping.
+   pre-wrap (not normal) keeps the typewriter's trailing spaces at wrap
+   edges so the caret doesn't jitter to the next line for one frame.
+   The wrap grows to fit up to four wrapped lines (13px * 1.6 * 4 + padding)
+   only while the carousel is mounted, so the composer chrome doesn't
+   bounce as the typewriter rotates and the toolbar row stays uncovered. */
+.composer-input-wrap:has(.home-hero__carousel) {
+  min-height: 104px;
+}
 .composer-input-wrap .home-hero__carousel {
   position: absolute;
   left: 9px;
   right: 9px;
   top: 8px;
   z-index: 2;
-  display: flex;
-  align-items: center;
-  gap: 1px;
   color: var(--text-faint);
   font-size: 13px;
   line-height: 1.6;
   pointer-events: none;
   user-select: none;
-  white-space: nowrap;
-  overflow: hidden;
 }
 .composer-input-wrap .home-hero__carousel-text {
-  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
 }
 .composer-input-wrap .home-hero__carousel-caret {
   width: 1px;
   height: 1.25em;
-  flex: 0 0 auto;
-  background: var(--accent);
   opacity: 0.85;
   animation: home-hero-carousel-caret 900ms steps(1) infinite;
 }

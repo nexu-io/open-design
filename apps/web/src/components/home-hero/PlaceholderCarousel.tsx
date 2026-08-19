@@ -110,10 +110,14 @@ export function PlaceholderCarousel({ scenarios, active, paused = false, onScena
   const visible = reducedMotion || visualStabilityMode
     ? scenario.text
     : scenario.text.slice(0, state.charCount);
+  // Caret is nested in the text span so it follows the last character when the
+  // placeholder wraps (long follow-up scenarios in the chat composer).
   return (
     <div className="home-hero__carousel" aria-hidden="true" data-testid="home-hero-carousel">
-      <span className="home-hero__carousel-text">{visible}</span>
-      <span className="home-hero__carousel-caret" />
+      <span className="home-hero__carousel-text">
+        {visible}
+        <span className="home-hero__carousel-caret" />
+      </span>
     </div>
   );
 }
