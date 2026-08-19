@@ -168,6 +168,30 @@ describe('project storage mirror (#7043)', () => {
       expect((await readFile(path.join(projectDir, 'ok.html'))).toString()).toBe('ok');
       expect(await import('node:fs').then((fs) => fs.existsSync(path.join(dir, 'escape.html')))).toBe(false);
     });
+    it('folder delete reconciles hidden files and sidecars authoritatively', async () => {
+      // Remote state: the folder's visible file, a hidden file, and a sidecar.
+      fake.map.set('p1/sub/page.html', Buffer.from('page'));
+      fake.map.set('p1/sub/.hidden.html', Buffer.from('hidden'));
+      fake.map.set('p1/sub/page.html.artifact.json', Buffer.from('sidecar'));
+      fake.map.set('p1/keep.html', Buffer.from('keep'));
+      const projectDir = path.join(dir, 'p1');
+      await mkdir(path.join(projectDir, 'sub'), { recursive: true });
+      await writeFile(path.join(projectDir, 'sub', 'page.html'), 'page');
+      await writeFile(path.join(projectDir, 'keep.html'), 'keep');
+      const { deleteProjectFolder, setProjectStorageMirror } = await import('../src/projects.js');
+      const prev = setProjectStorageMirror(mirror);
+      try {
+        await deleteProjectFolder(dir, 'p1', 'sub');
+      } finally {
+        setProjectStorageMirror(prev);
+      }
+      // The authoritative sync removes all remote keys the local tree no
+      // longer has — visible, hidden, and sidecar — and re-uploads keep.html.
+      expect(fake.map.has('p1/sub/page.html')).toBe(false);
+      expect(fake.map.has('p1/sub/.hidden.html')).toBe(false);
+      expect(fake.map.has('p1/sub/page.html.artifact.json')).toBe(false);
+      expect(fake.map.get('p1/keep.html')?.toString()).toBe('keep');
+    });
   });
 
   describe('integration: daemon write-through + delete against a mock S3', () => {
