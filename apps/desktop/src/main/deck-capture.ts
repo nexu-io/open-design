@@ -454,10 +454,11 @@ async function renderEditablePptx(
   )) as string[];
   const importedStylesheetOverrides = await fetchGoogleFontStylesheets(importedStylesheetUrls);
   await window.webContents.executeJavaScript(await loadDomToPptxBundle(), true);
-  // runDomToPptx calls cjkPromotedFontFamily by name; define it in the same scope
-  // as the serialized body so the reference resolves inside the render window.
+  // runDomToPptx (and reduceBackgroundImageLayers) call these module-scope
+  // helpers by name; define them in the same scope as the serialized body so
+  // the references resolve inside the render window.
   const out = (await window.webContents.executeJavaScript(
-    `(() => { const cjkPromotedFontFamily = ${cjkPromotedFontFamily.toString()}; return (${runDomToPptx.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${JSON.stringify(importedStylesheetOverrides)}); })()`,
+    `(() => { const cjkPromotedFontFamily = ${cjkPromotedFontFamily.toString()}; const firstCssColorStop = ${firstCssColorStop.toString()}; const reduceBackgroundImageLayers = ${reduceBackgroundImageLayers.toString()}; const cssCommaListItem = ${cssCommaListItem.toString()}; const pseudoBorderNeedsMaterialization = ${pseudoBorderNeedsMaterialization.toString()}; return (${runDomToPptx.toString()})(${JSON.stringify(SLIDE_SELECTOR)}, ${JSON.stringify(importedStylesheetOverrides)}); })()`,
     true,
   )) as { b64?: string; error?: string };
   if (!out || out.error || !out.b64) {
@@ -1069,6 +1070,234 @@ export function cjkPromotedFontFamily(fontFamily: string, text: string): string 
   return [families[firstCjk], ...families.filter((_, i) => i !== firstCjk)].join(", ");
 }
 
+// Split a comma-separated CSS list (background-size/position/repeat/…) the same
+// way background-image layers are split: commas inside url()/gradient()/image-set()
+// do not count. When the list is shorter than the selected layer index, values
+// cycle (`index % length`) so a leftover comma list is never left on the surviving
+// image as objectFit. Kept pure and self-contained so it can be unit-tested and
+// serialized into the export render window beside reduceBackgroundImageLayers.
+export function cssCommaListItem(list: string, index: number): string | null {
+  const input = (list || "").trim();
+  if (!input || index < 0) return null;
+  const items: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === "(") depth += 1;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    else if (ch === "," && depth === 0) {
+      items.push(input.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  items.push(input.slice(start).trim());
+  const filtered = items.filter(Boolean);
+  if (filtered.length === 0) return null;
+  return filtered[index % filtered.length] ?? null;
+}
+
+// First color stop in a CSS image/gradient value, including Color 4 functions
+// (`oklch()`, `color(display-p3 …)`) and named/currentColor stops. Quoted
+// strings and `url(...)` bodies are skipped so a hash in a filename cannot
+// become a bogus fill. Kept self-contained so it can be unit-tested and
+// serialized into the export render window.
+export function firstCssColorStop(input: string): string | null {
+  const colorFn = /^(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)$/i;
+  const ident = /^-?[a-z_][\w-]*/i;
+  const hex = /^#[0-9a-f]{3,8}\b/i;
+  const named = new Set(
+    (
+      "aliceblue antiquewhite aqua aquamarine azure beige bisque black " +
+      "blanchedalmond blue blueviolet brown burlywood cadetblue chartreuse " +
+      "chocolate coral cornflowerblue cornsilk crimson cyan darkblue darkcyan " +
+      "darkgoldenrod darkgray darkgreen darkgrey darkkhaki darkmagenta " +
+      "darkolivegreen darkorange darkorchid darkred darksalmon darkseagreen " +
+      "darkslateblue darkslategray darkslategrey darkturquoise darkviolet " +
+      "deeppink deepskyblue dimgray dimgrey dodgerblue firebrick floralwhite " +
+      "forestgreen fuchsia gainsboro ghostwhite gold goldenrod gray green " +
+      "greenyellow grey honeydew hotpink indianred indigo ivory khaki lavender " +
+      "lavenderblush lawngreen lemonchiffon lightblue lightcoral lightcyan " +
+      "lightgoldenrodyellow lightgray lightgreen lightgrey lightpink " +
+      "lightsalmon lightseagreen lightskyblue lightslategray lightslategrey " +
+      "lightsteelblue lightyellow lime limegreen linen magenta maroon " +
+      "mediumaquamarine mediumblue mediumorchid mediumpurple mediumseagreen " +
+      "mediumslateblue mediumspringgreen mediumturquoise mediumvioletred " +
+      "midnightblue mintcream mistyrose moccasin navajowhite navy oldlace olive " +
+      "olivedrab orange orangered orchid palegoldenrod palegreen paleturquoise " +
+      "palevioletred papayawhip peachpuff peru pink plum powderblue purple " +
+      "rebeccapurple red rosybrown royalblue saddlebrown salmon sandybrown " +
+      "seagreen seashell sienna silver skyblue slateblue slategray slategrey " +
+      "snow springgreen steelblue tan teal thistle tomato turquoise violet " +
+      "wheat white whitesmoke yellow yellowgreen currentcolor"
+    ).split(" "),
+  );
+
+  const skipQuoted = (from: number, quote: string): number => {
+    let i = from + 1;
+    while (i < input.length) {
+      if (input[i] === "\\") {
+        i += 2;
+        continue;
+      }
+      if (input[i] === quote) return i + 1;
+      i += 1;
+    }
+    return input.length;
+  };
+
+  const skipBalanced = (openAt: number): number => {
+    let depth = 0;
+    for (let k = openAt; k < input.length; k++) {
+      const ch = input[k];
+      if (ch === '"' || ch === "'") {
+        k = skipQuoted(k, ch) - 1;
+        continue;
+      }
+      if (ch === "(") depth += 1;
+      else if (ch === ")") {
+        depth -= 1;
+        if (depth === 0) return k + 1;
+      }
+    }
+    return input.length;
+  };
+
+  let i = 0;
+  while (i < input.length) {
+    const ch = input[i];
+    if (ch === '"' || ch === "'") {
+      i = skipQuoted(i, ch);
+      continue;
+    }
+    const rest = input.slice(i);
+    const hexMatch = rest.match(hex);
+    if (hexMatch) return hexMatch[0];
+    const identMatch = rest.match(ident);
+    if (identMatch) {
+      const name = identMatch[0];
+      const afterName = i + name.length;
+      if (input[afterName] === "(") {
+        if (colorFn.test(name)) {
+          const end = skipBalanced(afterName);
+          if (end > afterName && input[end - 1] === ")") return input.slice(i, end);
+          return null;
+        }
+        if (/^url$/i.test(name)) {
+          i = skipBalanced(afterName);
+          continue;
+        }
+        i = afterName;
+        continue;
+      }
+      const key = name.toLowerCase();
+      if (key !== "transparent" && named.has(key)) return name;
+      i = afterName;
+      continue;
+    }
+    i += 1;
+  }
+  return null;
+}
+
+// dom-to-pptx claims gradient support but reads `background-image` with the
+// greedy regex `/linear-gradient\((.*)\)/` and a bare `includes('linear-gradient')`
+// guard, so ANY multi-layer background — the common
+// `radial-gradient(...), linear-gradient(...)` stack, a scrim gradient over a
+// `url(...)` photo, or `repeating-linear-gradient` textures (which also match the
+// `includes` check) — is parsed across layer boundaries into one corrupt gradient
+// SVG. Reduce the computed value to the single bottom-most layer the engine can
+// faithfully render (a plain `linear-gradient(...)` or `url(...)`); when no layer
+// qualifies, drop the image and surface the first CSS color stop (including
+// Color 4 functions) so the caller can keep an equivalent solid fill.
+// selectedLayerIndex lets the caller
+// rewrite the matching background-size/position/repeat/origin/clip list item so
+// a leftover comma list is not passed to the engine as objectFit. Kept pure and
+// self-contained so it can be both unit-tested and serialized into the export
+// render window.
+export function reduceBackgroundImageLayers(backgroundImage: string): {
+  changed: boolean;
+  value: string;
+  fallbackColor: string | null;
+  selectedLayerIndex: number | null;
+} {
+  const input = (backgroundImage || "").trim();
+  if (!input || input === "none") {
+    return { changed: false, value: "none", fallbackColor: null, selectedLayerIndex: null };
+  }
+  // Split into top-level layers; commas inside url()/gradient() color stops don't count.
+  const layers: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (ch === "(") depth += 1;
+    else if (ch === ")") depth = Math.max(0, depth - 1);
+    else if (ch === "," && depth === 0) {
+      layers.push(input.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  layers.push(input.slice(start).trim());
+  // Plain linear-gradient (NOT repeating-) and url() are the only layer kinds the
+  // engine converts faithfully — and only when they stand alone.
+  const supported = (layer: string) => /^(?:linear-gradient|url)\(/i.test(layer);
+  if (layers.length === 1 && supported(layers[0])) {
+    return { changed: false, value: input, fallbackColor: null, selectedLayerIndex: 0 };
+  }
+  // CSS lists layers top-first, so the LAST supported layer is the visual base
+  // (e.g. a dark scrim over `url(photo)` keeps the photo, not the scrim).
+  for (let i = layers.length - 1; i >= 0; i--) {
+    if (supported(layers[i])) {
+      return { changed: true, value: layers[i], fallbackColor: null, selectedLayerIndex: i };
+    }
+  }
+  return {
+    changed: true,
+    value: "none",
+    fallbackColor: firstCssColorStop(input),
+    selectedLayerIndex: null,
+  };
+}
+
+export interface PseudoBorderSnapshot {
+  content: string;
+  display: string;
+  borderTopWidth: string;
+  borderRightWidth: string;
+  borderBottomWidth: string;
+  borderLeftWidth: string;
+}
+
+// dom-to-pptx renders a contentless ::before/::after as ONE rect shape whose
+// `line` outlines all four sides, so partial-border decorations — corner
+// brackets (border-top + border-left only), arrow heads (two rotated borders),
+// underline accents — come back from the editable export as full boxes drawn
+// around the pseudo's bounds. Returns true when the pseudo generates a
+// decorative box (empty string content) whose border sides are uneven, i.e.
+// exactly the shape the engine will get wrong. Kept pure and self-contained so
+// it can be both unit-tested and serialized into the export render window.
+export function pseudoBorderNeedsMaterialization(style: PseudoBorderSnapshot): boolean {
+  if (style.display === "none") return false;
+  const content = (style.content || "").trim();
+  // 'none'/'normal' → no pseudo box; quoted text → engine's text path handles it.
+  if (content !== '""' && content !== "''") return false;
+  const widths = [
+    style.borderTopWidth,
+    style.borderRightWidth,
+    style.borderBottomWidth,
+    style.borderLeftWidth,
+  ].map((w) => {
+    const n = Number.parseFloat(w);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  });
+  const visible = widths.filter((w) => w > 0);
+  if (visible.length === 0) return false;
+  // A uniform four-side border is the one case the engine's full outline is right.
+  if (visible.length === 4 && visible.every((w) => w === visible[0])) return false;
+  return true;
+}
+
 // Serialized into the page: runs the injected dom-to-pptx engine over every real
 // slide and returns the .pptx bytes as base64 (or an error). Fonts are
 // auto-detected + embedded; SVGs stay vector (editable in PowerPoint).
@@ -1202,10 +1431,7 @@ export async function runDomToPptx(
   }
 
   function firstCssColor(input: string): string | null {
-    const rgb = input.match(/rgba?\([^)]*\)/i);
-    if (rgb) return rgb[0];
-    const hex = input.match(/#[0-9a-f]{3,8}\b/i);
-    return hex ? hex[0] : null;
+    return firstCssColorStop(input);
   }
 
   function effectiveBackgroundStyle(slide: HTMLElement): {
@@ -1363,6 +1589,276 @@ export async function runDomToPptx(
     }
   }
 
+  // Reduce every element's background-image to the single layer dom-to-pptx can
+  // faithfully convert BEFORE the engine reads it (see reduceBackgroundImageLayers
+  // for the why). Runs after ensureExplicitSlideBackgrounds and
+  // materializeUnevenPseudoBorders so both the injected [data-od-pptx-bg] layer
+  // and materialized pseudo boxes — which copy the original multi-layer stack —
+  // are normalized too.
+  function normalizeBackgroundPaint(slides: HTMLElement[]): void {
+    for (const slide of slides) {
+      const all: Element[] = [slide, ...Array.from(slide.querySelectorAll("*"))];
+      for (const el of all) {
+        const element = el as HTMLElement;
+        if (!element.style) continue;
+        const style = getComputedStyle(element);
+        // Gradient text (background-clip: text) rides a dedicated engine path;
+        // leave it alone.
+        const clip =
+          (style as CSSStyleDeclaration & { webkitBackgroundClip?: string }).webkitBackgroundClip ||
+          style.backgroundClip;
+        if (clip === "text") continue;
+        const reduced = reduceBackgroundImageLayers(style.backgroundImage);
+        if (!reduced.changed) continue;
+        element.style.setProperty("background-image", reduced.value, "important");
+        if (reduced.selectedLayerIndex != null) {
+          const size = cssCommaListItem(style.backgroundSize, reduced.selectedLayerIndex);
+          if (size) element.style.setProperty("background-size", size, "important");
+          const position = cssCommaListItem(style.backgroundPosition, reduced.selectedLayerIndex);
+          if (position) element.style.setProperty("background-position", position, "important");
+          const repeat = cssCommaListItem(style.backgroundRepeat, reduced.selectedLayerIndex);
+          if (repeat) element.style.setProperty("background-repeat", repeat, "important");
+          const origin = cssCommaListItem(style.backgroundOrigin, reduced.selectedLayerIndex);
+          if (origin) element.style.setProperty("background-origin", origin, "important");
+          const clip = cssCommaListItem(style.backgroundClip, reduced.selectedLayerIndex);
+          if (clip) element.style.setProperty("background-clip", clip, "important");
+        }
+        if (
+          reduced.value === "none" &&
+          reduced.fallbackColor &&
+          isTransparentColor(style.backgroundColor)
+        ) {
+          element.style.setProperty("background-color", reduced.fallbackColor, "important");
+        }
+      }
+    }
+  }
+
+  // Replace partial-border ::before/::after decorations (corner brackets, arrow
+  // heads) with real elements BEFORE the engine walks the DOM: dom-to-pptx draws
+  // a contentless pseudo as one rect outlined on ALL four sides, while a real
+  // element goes through its per-side composite-border path and renders each
+  // border as its own line. The original pseudo is neutralized via an injected
+  // rule (the engine reads a suppressed pseudo's computed border/background as
+  // if it still existed, so the paint must be zeroed, not just `content: none`).
+  //
+  // A block stand-in MUST NOT become a child of a text host: the engine's
+  // isTextContainer returns false as soon as any child is display:block, then
+  // text falls through a trim-only path that drops links and spacing. Overlay
+  // those replacements on the nearest non-text ancestor instead.
+  function isPptxSafeInlineChild(el: Element): boolean {
+    const tag = (el.tagName || "").toUpperCase();
+    if (!tag || tag.includes("-") || tag === "IMG" || tag === "SVG") return false;
+    const style = getComputedStyle(el);
+    const display = (style.display || "").toLowerCase();
+    if (display === "block" || display === "flex" || display === "grid" || display === "table") {
+      return false;
+    }
+    const parent = el.parentElement;
+    if (parent) {
+      const parentDisplay = (getComputedStyle(parent).display || "").toLowerCase();
+      if (parentDisplay.includes("flex") || parentDisplay.includes("grid")) return false;
+    }
+    const isInlineTag = ["SPAN", "B", "STRONG", "EM", "I", "A", "SMALL", "MARK"].includes(tag);
+    if (display.includes("inline")) return true;
+    if (!display) return isInlineTag;
+    return isInlineTag;
+  }
+
+  function isPptxTextHost(element: HTMLElement): boolean {
+    if (element.getAttribute("data-od-pptx-pseudo-box") === "true") return false;
+    if (!(element.textContent || "").trim()) return false;
+    const children = Array.from(element.children).filter(
+      (child) => child.getAttribute("data-od-pptx-pseudo-box") !== "true",
+    );
+    if (children.length === 0) return true;
+    return children.every(isPptxSafeInlineChild);
+  }
+
+  // A stand-in overlaid on an ancestor leaves the host's visual context behind:
+  // transforms, filters, clip-path, and overflow clipping on the host (or on
+  // text-host ancestors between it and the overlay parent) cannot be replicated
+  // on a sibling without matrix/clip math the export cannot verify, so those
+  // decorations stay suppressed. Opacity is the one context that composes
+  // exactly (multiplication), so it is returned for the caller to fold into the
+  // stand-in instead of blocking it.
+  function composableOverlayOpacity(host: HTMLElement, parent: HTMLElement): number | null {
+    let opacity = 1;
+    for (let el: HTMLElement | null = host; el && el !== parent; el = el.parentElement) {
+      const style = getComputedStyle(el);
+      if (style.transform && style.transform !== "none") return null;
+      if (style.filter && style.filter !== "none") return null;
+      if (style.clipPath && style.clipPath !== "none") return null;
+      if (style.overflow && style.overflow !== "visible") return null;
+      const value = Number.parseFloat(style.opacity);
+      if (Number.isFinite(value)) opacity *= Math.max(0, Math.min(1, value));
+    }
+    return opacity;
+  }
+
+  function rebasePseudoBoxToOverlayParent(
+    box: HTMLElement,
+    host: HTMLElement,
+    parent: HTMLElement,
+  ): void {
+    if (typeof host.getBoundingClientRect !== "function") return;
+    const hostRect = host.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    const left = box.style.getPropertyValue("left");
+    const right = box.style.getPropertyValue("right");
+    const top = box.style.getPropertyValue("top");
+    const bottom = box.style.getPropertyValue("bottom");
+    const width = Number.parseFloat(box.style.getPropertyValue("width")) || 0;
+    const height = Number.parseFloat(box.style.getPropertyValue("height")) || 0;
+    let viewportLeft: number | null = null;
+    let viewportTop: number | null = null;
+    if (left) viewportLeft = hostRect.left + Number.parseFloat(left);
+    else if (right) viewportLeft = hostRect.right - Number.parseFloat(right) - width;
+    if (top) viewportTop = hostRect.top + Number.parseFloat(top);
+    else if (bottom) viewportTop = hostRect.bottom - Number.parseFloat(bottom) - height;
+    if (viewportLeft != null && Number.isFinite(viewportLeft)) {
+      box.style.setProperty("left", `${viewportLeft - parentRect.left}px`, "important");
+      box.style.removeProperty("right");
+    }
+    if (viewportTop != null && Number.isFinite(viewportTop)) {
+      box.style.setProperty("top", `${viewportTop - parentRect.top}px`, "important");
+      box.style.removeProperty("bottom");
+    }
+  }
+
+  function materializeUnevenPseudoBorders(slides: HTMLElement[]): void {
+    const rules: string[] = [];
+    let seq = 0;
+    for (const slide of slides) {
+      const all: Element[] = [slide, ...Array.from(slide.querySelectorAll("*"))];
+      for (const el of all) {
+        const element = el as HTMLElement;
+        if (!element.style) continue;
+        // Export-generated nodes (pseudo stand-ins, the injected slide
+        // background layer) do not exist in the authored deck; a generic
+        // authored rule like `div::before { border-top: … }` matching them must
+        // not spawn extra shapes.
+        if (element.getAttribute("data-od-pptx-pseudo-box") === "true") continue;
+        if (element.getAttribute("data-od-pptx-bg") === "true") continue;
+        for (const pseudo of ["::before", "::after"] as const) {
+          const ps = getComputedStyle(element, pseudo);
+          if (
+            !pseudoBorderNeedsMaterialization({
+              content: ps.content,
+              display: ps.display,
+              borderTopWidth: ps.borderTopWidth,
+              borderRightWidth: ps.borderRightWidth,
+              borderBottomWidth: ps.borderBottomWidth,
+              borderLeftWidth: ps.borderLeftWidth,
+            })
+          ) {
+            continue;
+          }
+          seq += 1;
+          const attr = pseudo === "::before" ? "data-od-pptx-pseudo-before" : "data-od-pptx-pseudo-after";
+          element.setAttribute(attr, String(seq));
+          rules.push(
+            `[${attr}="${seq}"]${pseudo}{content:none!important;border:0!important;` +
+              `background:transparent!important;box-shadow:none!important;}`,
+          );
+          // Only an absolutely-positioned pseudo can be replicated without
+          // disturbing flow layout; its replacement resolves against the same
+          // containing block because it shares the pseudo's parent. Statically
+          // positioned decorations stay suppressed (a missing flourish beats a
+          // wrong full box).
+          if (ps.position !== "absolute" && ps.position !== "fixed") continue;
+          // Hidden decorations are still neutralized above; emitting a visible
+          // stand-in would leak paint the source never showed.
+          if (ps.visibility === "hidden") continue;
+          // Text hosts get their stand-in overlaid on an ancestor (see
+          // isPptxTextHost). That path only works when the placement can be
+          // reproduced faithfully:
+          // - fixed offsets are viewport-relative, so the parent-relative
+          //   rebase below would shift them twice; fixed decorations on text
+          //   hosts stay suppressed.
+          // - transform/filter/clip/overflow on the host cannot be carried
+          //   onto a sibling (see composableOverlayOpacity); only opacity
+          //   composes exactly and is folded into the stand-in.
+          let overlayParent: HTMLElement | null = null;
+          let overlayOpacity = 1;
+          if (isPptxTextHost(element)) {
+            if (ps.position === "fixed") continue;
+            let parent: HTMLElement | null = element.parentElement;
+            while (parent && isPptxTextHost(parent)) {
+              parent = parent.parentElement;
+            }
+            if (!parent) continue;
+            const composed = composableOverlayOpacity(element, parent);
+            if (composed == null) continue;
+            overlayParent = parent;
+            overlayOpacity = composed;
+          }
+          const box = document.createElement("div");
+          box.setAttribute("data-od-pptx-pseudo-box", "true");
+          box.setAttribute("aria-hidden", "true");
+          const copy: Array<[string, string]> = [
+            ["display", "block"],
+            ["position", ps.position],
+            ["left", ps.left],
+            ["right", ps.right],
+            ["top", ps.top],
+            ["bottom", ps.bottom],
+            ["width", ps.width],
+            ["height", ps.height],
+            ["margin", ps.margin],
+            ["box-sizing", ps.boxSizing],
+            ["border-top", `${ps.borderTopWidth} ${ps.borderTopStyle} ${ps.borderTopColor}`],
+            ["border-right", `${ps.borderRightWidth} ${ps.borderRightStyle} ${ps.borderRightColor}`],
+            ["border-bottom", `${ps.borderBottomWidth} ${ps.borderBottomStyle} ${ps.borderBottomColor}`],
+            ["border-left", `${ps.borderLeftWidth} ${ps.borderLeftStyle} ${ps.borderLeftColor}`],
+            ["border-radius", ps.borderRadius],
+            ["background-color", ps.backgroundColor],
+            ["background-image", ps.backgroundImage],
+            ["background-size", ps.backgroundSize],
+            ["background-position", ps.backgroundPosition],
+            ["background-repeat", ps.backgroundRepeat],
+            ["background-origin", ps.backgroundOrigin],
+            ["background-clip", ps.backgroundClip],
+            ["box-shadow", ps.boxShadow],
+            ["filter", ps.filter],
+            ["transform", ps.transform],
+            ["transform-origin", ps.transformOrigin],
+            ["opacity", ps.opacity],
+            ["visibility", ps.visibility],
+            ["z-index", ps.zIndex],
+            ["pointer-events", "none"],
+          ];
+          for (const [prop, value] of copy) {
+            if (value && value !== "auto") box.style.setProperty(prop, value, "important");
+          }
+          if (overlayParent) {
+            const parent = overlayParent;
+            if (overlayOpacity < 1) {
+              const own = Number.parseFloat(ps.opacity);
+              const effective = (Number.isFinite(own) ? own : 1) * overlayOpacity;
+              box.style.setProperty("opacity", String(effective), "important");
+            }
+            rebasePseudoBoxToOverlayParent(box, element, parent);
+            if (pseudo === "::before") parent.insertBefore(box, element);
+            else parent.insertBefore(box, element.nextSibling);
+            continue;
+          }
+          if (pseudo === "::before") {
+            element.insertBefore(box, element.firstChild);
+          } else {
+            element.appendChild(box);
+          }
+        }
+      }
+    }
+    if (rules.length > 0) {
+      const sheet = document.createElement("style");
+      sheet.setAttribute("data-od-pptx-pseudo-rules", "true");
+      sheet.textContent = rules.join("\n");
+      (document.head || document.documentElement).appendChild(sheet);
+    }
+  }
+
   try {
     const w = window as unknown as {
       domToPptx?: { exportToPptx: (target: unknown, options: unknown) => Promise<Blob> };
@@ -1377,6 +1873,8 @@ export async function runDomToPptx(
     const importedFonts = await exposeImportedFontFaces();
     await document.fonts?.ready;
     ensureExplicitSlideBackgrounds(slides as HTMLElement[]);
+    materializeUnevenPseudoBorders(slides as HTMLElement[]);
+    normalizeBackgroundPaint(slides as HTMLElement[]);
     stabilizeLargeSingleLineText(slides as HTMLElement[]);
     stabilizeAuthoredHeadingLines(slides as HTMLElement[]);
     promoteCjkTypefaces(slides as HTMLElement[]);
