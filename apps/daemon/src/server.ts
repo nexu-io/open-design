@@ -2618,11 +2618,18 @@ export async function startServer({
   // wall — well past 4mb for image/markup-heavy sites. Give it a dedicated limit
   // (registered before the global parser so it claims the body first).
   app.use('/api/brands/:id/extract-from-html', express.json({ limit: '32mb' }));
-  // #7040 — run creation payloads are small prompts; a dedicated 1mb cap
+  // #7040 — run CREATION payloads are small prompts; a dedicated 1mb cap
   // rejects oversized junk at the boundary before it can mint a run row.
-  // Registered before the global parser so it claims the /api/runs body first
+  // Scoped to the exact creation route (POST /api/runs, nothing nested) so
+  // sub-resources like /api/runs/:id/... keep the global 4mb limit.
+  // Registered before the global parser so it claims the body first
   // (express.json is a no-op once a body has already been read).
-  app.use('/api/runs', express.json({ limit: '1mb' }));
+  app.use('/api/runs', (req, res, next) => {
+    if (req.method === 'POST' && (req.path === '/' || req.path === '')) {
+      return express.json({ limit: '1mb' })(req, res, next);
+    }
+    next();
+  });
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
