@@ -123,8 +123,14 @@ export function createProjectStorageMirror(
         if (entries.length > 0) return;
         const remote = await adapter.listFiles(projectId);
         for (const entry of remote) {
-          const body = await adapter.readFile(projectId, entry.path);
-          const target = path.join(localDir, entry.path);
+          // Confine restores to the project tree: a hostile or corrupt store
+          // must never be able to materialize a path outside localDir.
+          const rel = String(entry.path || '').replace(/\\/g, '/');
+          if (!rel || rel.startsWith('/') || rel.split('/').some((seg) => seg === '..' || seg === '.')) {
+            continue;
+          }
+          const body = await adapter.readFile(projectId, rel);
+          const target = path.join(localDir, rel);
           await fsp.mkdir(path.dirname(target), { recursive: true });
           await fsp.writeFile(target, body);
         }

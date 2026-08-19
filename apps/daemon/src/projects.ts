@@ -85,8 +85,10 @@ let projectStorageMirror: import('./storage/project-storage-mirror.js').ProjectS
 
 export function setProjectStorageMirror(
   mirror: import('./storage/project-storage-mirror.js').ProjectStorageMirror | null,
-): void {
+): import('./storage/project-storage-mirror.js').ProjectStorageMirror | null {
+  const previous = projectStorageMirror;
   projectStorageMirror = mirror;
+  return previous;
 }
 
 export function getProjectStorageMirror() {
@@ -1132,14 +1134,11 @@ export async function renameProjectFile(projectsRoot, projectId, fromName, toNam
   await commitArtifactManifestRename(manifestRename, newName);
   await updateArtifactManifestRefsForRename(dir, oldName, newName);
   if (projectStorageMirror) {
-    // #7043 — rename mirrors the artifact sidecar too: delete the old file
-    // and old manifest keys, then upload the renamed file and its manifest.
-    const oldManifestName = oldName + '.artifact.json';
-    const newManifestName = newName + '.artifact.json';
-    await projectStorageMirror.deleteFile(projectId, oldName).catch(() => {});
-    await projectStorageMirror.deleteFile(projectId, oldManifestName).catch(() => {});
-    await projectStorageMirror.uploadFile(projectId, newName).catch(() => {});
-    await projectStorageMirror.uploadFile(projectId, newManifestName).catch(() => {});
+    // #7043 — a rename touches the file, its manifest sidecar, AND the
+    // manifests of other artifacts that reference the old name, so run the
+    // authoritative full-tree sync: it uploads every local file and deletes
+    // remote objects (old name + old manifest) that no longer exist locally.
+    await projectStorageMirror.uploadProject(projectId).catch(() => {});
   }
 
   const st = await stat(targetPath);

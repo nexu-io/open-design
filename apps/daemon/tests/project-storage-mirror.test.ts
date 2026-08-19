@@ -146,12 +146,24 @@ describe('project storage mirror (#7043)', () => {
       } finally {
         setProjectStorageMirror(prev);
       }
+      // The rename runs the authoritative full-tree sync: the old file and
+      // old manifest are reconciled away and every local file is re-uploaded.
       expect(fake.calls).toEqual([
         'del:p1/index.html',
         'del:p1/index.html.artifact.json',
         'put:p1/home.html',
         'put:p1/home.html.artifact.json',
       ]);
+    });
+
+    it('restoreIfEmpty refuses to materialize unsafe remote paths', async () => {
+      fake.map.set('p1/../escape.html', Buffer.from('evil'));
+      fake.map.set('p1/ok.html', Buffer.from('ok'));
+      const projectDir = path.join(dir, 'p1');
+      await mkdir(projectDir, { recursive: true });
+      await mirror.restoreIfEmpty('p1', projectDir);
+      expect((await readFile(path.join(projectDir, 'ok.html'))).toString()).toBe('ok');
+      expect(await import('node:fs').then((fs) => fs.existsSync(path.join(dir, 'escape.html')))).toBe(false);
     });
   });
 
