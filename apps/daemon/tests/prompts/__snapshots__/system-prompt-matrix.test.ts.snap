@@ -36,11 +36,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "clarifying-questions",
       "role-marker-guard",
     ],
-<<<<<<< HEAD
-    "totalChars": 18819,
-=======
-    "totalChars": 18070,
->>>>>>> 16fad1c4d (revert(design-systems): remove structured runtime workflow (#7110))
+    "totalChars": 18076,
   },
   "codex-image-dispatcher": {
     "sections": [
@@ -73,11 +69,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "clarifying-questions",
       "role-marker-guard",
     ],
-<<<<<<< HEAD
-    "totalChars": 59814,
-=======
-    "totalChars": 59063,
->>>>>>> 16fad1c4d (revert(design-systems): remove structured runtime workflow (#7110))
+    "totalChars": 59071,
   },
   "deck-kind-no-skill": {
     "sections": [
@@ -130,51 +122,6 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
     ],
     "totalChars": 81653,
   },
-<<<<<<< HEAD
-  "design-ds-invalid-runtime": {
-    "sections": [
-      "injection-resistance",
-      "discovery-and-philosophy",
-      "identity-charter",
-      "design-system-usage",
-      "design-system-body",
-      "design-system-import-mode",
-      "design-system-tokens",
-      "design-system-runtime-unavailable",
-      "design-system-pull-index",
-      "deck-framework",
-      "maybe-deck-framework",
-      "media-dispatch-hint",
-      "active-ds-visual-direction-override",
-      "filesystem-handoff-override",
-      "clarifying-questions",
-      "role-marker-guard",
-    ],
-    "totalChars": 81685,
-  },
-  "design-ds-manifest-legacy": {
-    "sections": [
-      "injection-resistance",
-      "discovery-and-philosophy",
-      "identity-charter",
-      "design-system-usage",
-      "design-system-body",
-      "design-system-import-mode",
-      "design-system-tokens",
-      "design-system-components-manifest",
-      "design-system-pull-index",
-      "deck-framework",
-      "maybe-deck-framework",
-      "media-dispatch-hint",
-      "active-ds-visual-direction-override",
-      "filesystem-handoff-override",
-      "clarifying-questions",
-      "role-marker-guard",
-    ],
-    "totalChars": 81651,
-  },
-=======
->>>>>>> 16fad1c4d (revert(design-systems): remove structured runtime workflow (#7110))
   "design-full-stack": {
     "sections": [
       "injection-resistance",
@@ -203,11 +150,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "clarifying-questions",
       "role-marker-guard",
     ],
-<<<<<<< HEAD
-    "totalChars": 69151,
-=======
-    "totalChars": 68399,
->>>>>>> 16fad1c4d (revert(design-systems): remove structured runtime workflow (#7110))
+    "totalChars": 68408,
   },
   "design-minimal": {
     "sections": [
@@ -385,11 +328,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "media-dispatch-hint",
       "role-marker-guard",
     ],
-<<<<<<< HEAD
-    "totalChars": 42008,
-=======
-    "totalChars": 41262,
->>>>>>> 16fad1c4d (revert(design-systems): remove structured runtime workflow (#7110))
+    "totalChars": 41265,
   },
   "slim-freeform-no-deck-signal": {
     "sections": [
