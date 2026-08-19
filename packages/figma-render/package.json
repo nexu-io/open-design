@@ -1,0 +1,23 @@
+{
+  "name": "@open-design/figma-render",
+  "version": "0.19.2",
+  "description": "Render Figma .fig binaries to pixel-accurate HTML, round-trip .fig edits, and convert layout JSON to .fig.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "render": "node dist/index.js",
+    "test": "echo \"no tests yet \u2014 validated with 433-node round-trip\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "commonjs",
+  "dependencies": {
+    "openfig-core": "^0.3.7",
+    "zstd-napi": "^0.0.13"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
+  },
+  "private": true
+}
