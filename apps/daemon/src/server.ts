@@ -3218,11 +3218,18 @@ export async function startServer({
   // exactly the incidents it was built for, and silently: the uploader reports
   // `res.ok` and the export continues without the evidence.
   app.use(CHAT_SCROLL_FORENSICS_PATH, chatScrollForensicsBodyParser);
-  // #7040 — run creation payloads are small prompts; a dedicated 1mb cap
+  // #7040 — run CREATION payloads are small prompts; a dedicated 1mb cap
   // rejects oversized junk at the boundary before it can mint a run row.
-  // Registered before the global parser so it claims the /api/runs body first
+  // Scoped to the exact creation route (POST /api/runs, nothing nested) so
+  // sub-resources like /api/runs/:id/... keep the global 4mb limit.
+  // Registered before the global parser so it claims the body first
   // (express.json is a no-op once a body has already been read).
-  app.use('/api/runs', express.json({ limit: '1mb' }));
+  app.use('/api/runs', (req, res, next) => {
+    if (req.method === 'POST' && (req.path === '/' || req.path === '')) {
+      return express.json({ limit: '1mb' })(req, res, next);
+    }
+    next();
+  });
   app.use(express.json({ limit: '4mb' }));
   const projectPreviewScopes = createProjectPreviewScopeRegistry();
 
