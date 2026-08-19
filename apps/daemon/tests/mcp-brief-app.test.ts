@@ -874,4 +874,14 @@ describe('local OpenDesign MCP brief app', () => {
     expect(userFacingCopy).not.toMatch(/\b(?:Vela|AMR)\b/u);
     expect(userFacingCopy).not.toMatch(/agent\s*:\s*["']?[a-z]/iu);
   });
+
+  it('keeps MCP server instructions within the Claude Code limit', () => {
+    expect(MCP_SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(2048);
+    expect(MCP_SERVER_INSTRUCTIONS).toContain('collect_brief');
+    expect(MCP_SERVER_INSTRUCTIONS).toContain('list_agents');
+    expect(MCP_SERVER_INSTRUCTIONS).toContain('start_run');
+    expect(MCP_SERVER_INSTRUCTIONS).toContain('requestId');
+    expect(MCP_SERVER_INSTRUCTIONS).toContain('get_run');
+    expect(MCP_SERVER_INSTRUCTIONS).toContain('resume:true');
+  });
 });
