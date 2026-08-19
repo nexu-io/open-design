@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from 'react';
+import { useT } from '../i18n';
 
 const PRESET_COLORS = [
   '#000000','#ffffff','#f87171','#fb923c','#facc15','#4ade80','#2dd4bf','#38bdf8',
@@ -7,6 +8,7 @@ const PRESET_COLORS = [
 
 export function ColorPicker({ value, onChange, compact }: { value: string; onChange: (v: string) => void; compact?: boolean }) {
   const [open, setOpen] = useState(false);
+  const t = useT();
 
   const swatch: CSSProperties = {
     width: compact ? 20 : 24,
@@ -37,7 +39,7 @@ export function ColorPicker({ value, onChange, compact }: { value: string; onCha
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4, position: 'relative' }}>
-      <div style={swatch} onClick={() => setOpen(!open)} title="Pick color" />
+      <div style={swatch} onClick={() => setOpen(!open)} title={t('manualEdit.pickColor')} />
       {!compact ? (
         <input
           type="text"

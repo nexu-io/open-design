@@ -1,4 +1,5 @@
 import { type CSSProperties } from 'react';
+import { useT } from '../i18n';
 
 export type DrawTool = 'rect' | 'circle' | 'text' | 'line' | 'image' | null;
 
@@ -20,18 +21,27 @@ const base: CSSProperties = {
   textAlign: 'center',
 };
 
-const tools: Array<{ tool: DrawTool; label: string; title: string }> = [
-  { tool: null, label: '↖', title: 'Select (Esc)' },
-  { tool: 'rect', label: '▭', title: 'Rectangle' },
-  { tool: 'circle', label: '○', title: 'Circle' },
-  { tool: 'text', label: 'T', title: 'Text' },
-  { tool: 'line', label: '╱', title: 'Line' },
-  { tool: 'image', label: '🖼', title: 'Image (URL)' },
-];
+const toolIcons: Record<NonNullable<DrawTool> | 'select', string> = {
+  select: '↖',
+  rect: '▭',
+  circle: '○',
+  text: 'T',
+  line: '╱',
+  image: '🖼',
+};
 
 export function ManualEditToolbar({ activeTool, onSelectTool }: ManualEditToolbarProps) {
+  const t = useT();
+  const tools: Array<{ tool: DrawTool; label: string; title: string }> = [
+    { tool: null, label: toolIcons.select, title: t('manualEdit.toolSelect') },
+    { tool: 'rect', label: toolIcons.rect, title: t('manualEdit.toolRect') },
+    { tool: 'circle', label: toolIcons.circle, title: t('manualEdit.toolCircle') },
+    { tool: 'text', label: toolIcons.text, title: t('manualEdit.toolText') },
+    { tool: 'line', label: toolIcons.line, title: t('manualEdit.toolLine') },
+    { tool: 'image', label: toolIcons.image, title: t('manualEdit.toolImage') },
+  ];
   return (
-    <div role="toolbar" aria-label="Drawing tools" style={{ display: 'flex', gap: 2, padding: 4 }}>
+    <div role="toolbar" aria-label={t('manualEdit.drawingTools')} style={{ display: 'flex', gap: 2, padding: 4 }}>
       {tools.map(({ tool, label, title }) => (
         <button
           key={tool ?? '__select__'}

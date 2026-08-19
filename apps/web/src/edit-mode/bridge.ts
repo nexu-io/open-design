@@ -1966,6 +1966,7 @@ export function buildManualEditBridge(enabled: boolean): string {
     screenshotTap.left = false;
     screenshotTap.right = false;
   });
+
   function bootEditBridge(){
     annotateBrandKitRuntimeTargets();
     postTargets();

@@ -258,18 +258,18 @@ export function ManualEditPanel({
           ) : null}
         </div>
         {selectedCount > 1 && onAlign ? (
-          <div role="toolbar" aria-label="Align" style={{ display: 'flex', gap: 2, padding: '4px 8px', borderBottom: '1px solid var(--separator)', flexWrap: 'wrap' }}>
+          <div role="toolbar" aria-label={t('manualEdit.align')} style={{ display: 'flex', gap: 2, padding: '4px 8px', borderBottom: '1px solid var(--separator)', flexWrap: 'wrap' }}>
             <span style={{ fontSize: 11, color: 'var(--muted)', padding: '0 4px', display: 'flex', alignItems: 'center' }}>{selectedCount} selected</span>
-            <button type="button" title="Align left" onClick={() => onAlign('align-left')} style={alignBtnStyle}>⟵</button>
-            <button type="button" title="Align center H" onClick={() => onAlign('align-center-h')} style={alignBtnStyle}>⟷</button>
-            <button type="button" title="Align right" onClick={() => onAlign('align-right')} style={alignBtnStyle}>⟶</button>
+            <button type="button" title={t('manualEdit.alignLeft')} onClick={() => onAlign('align-left')} style={alignBtnStyle}>⟵</button>
+            <button type="button" title={t('manualEdit.alignCenterH')} onClick={() => onAlign('align-center-h')} style={alignBtnStyle}>⟷</button>
+            <button type="button" title={t('manualEdit.alignRight')} onClick={() => onAlign('align-right')} style={alignBtnStyle}>⟶</button>
             <span style={{ width: 4 }} />
-            <button type="button" title="Align top" onClick={() => onAlign('align-top')} style={alignBtnStyle}>⟰</button>
-            <button type="button" title="Align center V" onClick={() => onAlign('align-center-v')} style={alignBtnStyle}>↕</button>
-            <button type="button" title="Align bottom" onClick={() => onAlign('align-bottom')} style={alignBtnStyle}>⟱</button>
+            <button type="button" title={t('manualEdit.alignTop')} onClick={() => onAlign('align-top')} style={alignBtnStyle}>⟰</button>
+            <button type="button" title={t('manualEdit.alignCenterV')} onClick={() => onAlign('align-center-v')} style={alignBtnStyle}>↕</button>
+            <button type="button" title={t('manualEdit.alignBottom')} onClick={() => onAlign('align-bottom')} style={alignBtnStyle}>⟱</button>
             <span style={{ width: 4 }} />
-            <button type="button" title="Distribute H" onClick={() => onAlign('distribute-h')} style={alignBtnStyle}>⇥</button>
-            <button type="button" title="Distribute V" onClick={() => onAlign('distribute-v')} style={alignBtnStyle}>⇅</button>
+            <button type="button" title={t('manualEdit.distributeH')} onClick={() => onAlign('distribute-h')} style={alignBtnStyle}>⇥</button>
+            <button type="button" title={t('manualEdit.distributeV')} onClick={() => onAlign('distribute-v')} style={alignBtnStyle}>⇅</button>
           </div>
         ) : null}
         <div className="manual-edit-scroll">
@@ -901,10 +901,10 @@ function StyleInspector({
         </PairRow>
         <PairRow>
           <div style={{ display:'flex',alignItems:'center',gap:6 }}>
-            <span style={{ fontSize:11,minWidth:48,color:'var(--muted)' }}>Fill</span>
+            <span style={{ fontSize:11,minWidth:48,color:'var(--muted)' }}>{t('manualEdit.fill')}</span>
             <ColorPicker value={styles.backgroundColor} onChange={(v) => u('backgroundColor', v)} />
           </div>
-          <UnitRow label="Opacity" value={styles.opacity} onChange={(v) => u('opacity', v)} unit="" />
+          <UnitRow label={t('manualEdit.opacity')} value={styles.opacity} onChange={(v) => u('opacity', v)} unit="" />
         </PairRow>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: -4, marginBottom: 4 }}>
           <input type="range" min="0" max="1" step="0.05" value={parseFloat(styles.opacity || '1')} style={{ flex: 1, height: 4 }}
@@ -912,13 +912,13 @@ function StyleInspector({
           <span style={{ fontSize: 10, color: 'var(--muted)', minWidth: 30 }}>{(parseFloat(styles.opacity || '1') * 100).toFixed(0)}%</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, fontSize: 11 }}>
-          <span>Order</span>
+          <span>{t('manualEdit.order')}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <button title="Send backward (Ctrl+[)" style={alignBtnStyle} onClick={() => u('zIndex', String(Math.max(0, (parseInt(styles.zIndex || '0', 10) || 0) - 1)))}>↓</button>
+            <button title={t('manualEdit.sendBackward')} style={alignBtnStyle} onClick={() => u('zIndex', String(Math.max(0, (parseInt(styles.zIndex || '0', 10) || 0) - 1)))}>↓</button>
             <span style={{ minWidth: 24, textAlign: 'center', color: 'var(--muted)' }}>{styles.zIndex || '0'}</span>
-            <button title="Bring forward (Ctrl+])" style={alignBtnStyle} onClick={() => u('zIndex', String((parseInt(styles.zIndex || '0', 10) || 0) + 1))}>↑</button>
-            <button title="To front (Ctrl+Shift+])" style={alignBtnStyle} onClick={() => u('zIndex', '9999')}>⤒</button>
-            <button title="To back (Ctrl+Shift+[)" style={alignBtnStyle} onClick={() => u('zIndex', '0')}>⤓</button>
+            <button title={t('manualEdit.bringForward')} style={alignBtnStyle} onClick={() => u('zIndex', String((parseInt(styles.zIndex || '0', 10) || 0) + 1))}>↑</button>
+            <button title={t('manualEdit.toFront')} style={alignBtnStyle} onClick={() => u('zIndex', '9999')}>⤒</button>
+            <button title={t('manualEdit.toBack')} style={alignBtnStyle} onClick={() => u('zIndex', '0')}>⤓</button>
           </div>
         </div>
         <div style={{ fontSize: 10, color: 'var(--muted)', marginBottom: 6, paddingLeft: 2 }}>Ctrl+[/] to adjust layer order</div>
@@ -941,9 +941,9 @@ function StyleInspector({
           <DropdownRow label={t('manualEdit.distribution')} value={styles.justifyContent} onChange={(v) => u('justifyContent', v)} options={justifyOptions(t)} disabled={layoutDisabled} />
         </PairRow>
         <PairRow>
-          <DropdownRow label="Style" value={styles.borderStyle} onChange={(v) => u('borderStyle', v)} options={BORDER_STYLE_OPTS} />
+          <DropdownRow label={t('manualEdit.borderStyle')} value={styles.borderStyle} onChange={(v) => u('borderStyle', v)} options={BORDER_STYLE_OPTS} />
           <div style={{ display:'flex',alignItems:'center',gap:6 }}>
-            <span style={{ fontSize:11,minWidth:40,color:'var(--muted)' }}>Stroke</span>
+            <span style={{ fontSize:11,minWidth:40,color:'var(--muted)' }}>{t('manualEdit.stroke')}</span>
             <ColorPicker value={styles.borderColor} onChange={(v) => u('borderColor', v)} compact />
           </div>
         </PairRow>
@@ -959,9 +959,9 @@ function StyleInspector({
           )}
         </PairRow>
         {layoutDisabled ? <p className="cc-section-hint">{t('manualEdit.layoutUnavailable')}</p> : null}
-        <UnitRow label="Radius" value={styles.borderRadius} onChange={(v) => u('borderRadius', v)} unit="px" autoUnit />
+        <UnitRow label={t('manualEdit.radius')} value={styles.borderRadius} onChange={(v) => u('borderRadius', v)} unit="px" autoUnit />
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, fontSize: 11 }}>
-          <span style={{ color: 'var(--muted)', minWidth: 60 }}>Corners</span>
+          <span style={{ color: 'var(--muted)', minWidth: 60 }}>{t('manualEdit.corners')}</span>
           {(['borderTopLeftRadius','borderTopRightRadius','borderBottomRightRadius','borderBottomLeftRadius'] as const).map((cp, ci) => (
             <input key={cp} type="number" min="0" step="1"
               value={parseFloat((styles[cp] || '0') || '0') || 0}
@@ -970,17 +970,17 @@ function StyleInspector({
           ))}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 60 }}>Rotate</span>
+          <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 60 }}>{t('manualEdit.rotate')}</span>
           <input type="number" min="-360" max="360" step="1" value={parseRotationDeg(styles.transform)}
             onChange={(e) => u('transform', e.target.value ? 'rotate(' + e.target.value + 'deg)' : '')}
             style={{ fontSize: 11, flex: 1, maxWidth: 60, background: 'var(--bg-input)', color: 'var(--fg)', border: '1px solid var(--separator)', borderRadius: 4, padding: '2px 4px' }} />
           <span style={{ fontSize: 10, color: 'var(--muted)' }}>°</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-          <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 60 }}>Shadow</span>
+          <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 60 }}>{t('manualEdit.shadow')}</span>
           <select value={styles.boxShadow || ''} onChange={(e) => u('boxShadow', e.target.value)}
             style={{ fontSize: 11, flex: 1, background: 'var(--bg-input)', color: 'var(--fg)', border: '1px solid var(--separator)', borderRadius: 4, padding: '2px 4px' }}>
-            <option value="">None</option>
+            <option value="">{t('manualEdit.shadowNone')}</option>
             <option value="0 1px 3px rgba(0,0,0,0.12)">Sm</option>
             <option value="0 4px 6px rgba(0,0,0,0.1)">Md</option>
             <option value="0 10px 25px rgba(0,0,0,0.15)">Lg</option>
