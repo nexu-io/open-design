@@ -3855,16 +3855,27 @@ export function ProjectView({
       userActivations: workspaceUserActivationsRef.current,
     });
     if (!decision.keepWatching) pendingAutoOpenSettleRef.current = null;
-    // The watch's own conversation guard runs above, at decision time; this
-    // carries it to activation time for the same reason the run opener does.
-    // Generation is not this path's fence — the watch is retired outright when a
-    // newer send arms over it — so conversation is the whole ownership here.
+    // The guards above run at DECISION time; this carries both of them to
+    // ACTIVATION time, for the same reason the run opener does — the workspace
+    // can park the activation behind an unsettled manual edit for an unbounded
+    // stretch, and everything checked here can go stale inside it.
+    //
+    // Generation belongs in the predicate as much as conversation does. Retiring
+    // the pending watch is not the same as disowning a request already handed
+    // out: a newer send in the SAME conversation bumps the generation and clears
+    // `pendingAutoOpenSettleRef`, but a request enqueued a moment earlier is no
+    // longer reachable from that ref, so the conversation comparison alone still
+    // passes and the previous turn's artifact lands on top of the new one.
+    const watchGeneration = pending.generation;
     const watchConversationId = pending.conversationId;
     if (decision.openFileName) {
       requestOpenFile(
         decision.openFileName,
         'internal',
-        () => activeConversationIdRef.current === watchConversationId,
+        () => (
+          autoOpenSettleGenerationRef.current === watchGeneration
+          && activeConversationIdRef.current === watchConversationId
+        ),
       );
     }
   }, [requestOpenFile]);

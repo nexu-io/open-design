@@ -457,6 +457,55 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     expect(openRequestKeys().slice(openedBeforeRelease)).toEqual([]);
   });
 
+  // The predicate the watcher sends along with a request, read back off the
+  // props exactly as the workspace re-asks it when a parked activation runs.
+  function latestSettleOwnership(): (() => boolean) | undefined {
+    for (const call of [...fileWorkspaceSpy.mock.calls].reverse()) {
+      const request = (call[0] as {
+        openRequest?: { name: string; isStillOwned?: () => boolean } | null;
+      }).openRequest;
+      if (request) return request.isStillOwned;
+    }
+    return undefined;
+  }
+
+  it('disowns a queued settle-watch open when a newer same-conversation send starts', async () => {
+    // Retiring the pending watch does not reach a request already handed to the
+    // workspace — that request is no longer reachable from the ref the new send
+    // clears. Its own predicate is the only thing left guarding it, and the
+    // workspace can hold the activation behind an unsettled manual edit for as
+    // long as the edit takes. Comparing only the conversation therefore leaves a
+    // same-conversation turn B looking like the owner of turn A's request.
+    const turn = await runTurnHoldingCompletionRead({
+      projectId: 'project-settle-queued-ownership',
+      tabs: { tabs: ['notes.md'], active: 'notes.md' },
+      preTurn: [NOTES, OTHER],
+      postRun: [NOTES, OTHER, RUN_LOG],
+      settled: [NOTES, OTHER, RUN_LOG, INDEX],
+    });
+
+    await turn.releaseCompletionRead();
+    await landSettledFileList();
+    await landSettledFileList();
+
+    expect(openRequestKeys().map((key) => key.name)).toContain('index.html');
+    const isStillOwned = latestSettleOwnership();
+    // Positive control. Without it, "false after turn B" would also hold for a
+    // predicate that never returns true at all — including one that fences the
+    // parked activation out even while its own turn is still current.
+    expect(isStillOwned?.()).toBe(true);
+
+    // Turn B, in the same conversation. The conversation the request captured is
+    // still the active one; only the generation moves.
+    const sendPropsB = await waitForSend();
+    await act(async () => {
+      await sendPropsB.onSend!('turn B', [], []);
+    });
+    await waitFor(() => expect(streamViaDaemon).toHaveBeenCalledTimes(2));
+
+    expect(isStillOwned?.()).toBe(false);
+  });
+
   // The turn's own post-run read already carries a previewable artifact, so the
   // completion pass opens it directly and never arms the watcher. That path is
   // parked behind the same awaits, so it needs the same owner token.
@@ -837,8 +886,15 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     // raced, and the failure looked like "the guard blocked it" rather than
     // "the assertion ran early" — the two are indistinguishable from an empty
     // list, which cost real debugging time.
-    await waitFor(() =>
-      expect(openRequestKeys().map((key) => key.name)).toContain('plan.md'),
+    //
+    // The default 1s poll window was still not enough: this chain crosses a
+    // fire-and-forget per-write refresh, so under full-suite load it went red
+    // roughly one run in three while passing every time the file ran alone.
+    // The bound is here only so a genuine hang cannot run forever; nothing on
+    // this path is expected to take anywhere near that long.
+    await waitFor(
+      () => expect(openRequestKeys().map((key) => key.name)).toContain('plan.md'),
+      { timeout: 10_000 },
     );
 
     // The workspace follows the open request, exactly as it would in the app.
