@@ -28,7 +28,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "design-system-body",
       "design-system-import-mode",
       "design-system-tokens",
-      "design-system-intent-routing",
+      "design-system-components-manifest",
       "design-system-pull-index",
       "active-skill",
       "project-metadata",
@@ -36,7 +36,11 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "clarifying-questions",
       "role-marker-guard",
     ],
+<<<<<<< HEAD
     "totalChars": 18819,
+=======
+    "totalChars": 18070,
+>>>>>>> 16fad1c4d (revert(design-systems): remove structured runtime workflow (#7110))
   },
   "codex-image-dispatcher": {
     "sections": [
@@ -59,7 +63,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "design-system-body",
       "design-system-import-mode",
       "design-system-tokens",
-      "design-system-intent-routing",
+      "design-system-components-manifest",
       "design-system-pull-index",
       "active-skill",
       "media-dispatch-hint",
@@ -69,7 +73,11 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "clarifying-questions",
       "role-marker-guard",
     ],
+<<<<<<< HEAD
     "totalChars": 59814,
+=======
+    "totalChars": 59063,
+>>>>>>> 16fad1c4d (revert(design-systems): remove structured runtime workflow (#7110))
   },
   "deck-kind-no-skill": {
     "sections": [
@@ -122,6 +130,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
     ],
     "totalChars": 81653,
   },
+<<<<<<< HEAD
   "design-ds-invalid-runtime": {
     "sections": [
       "injection-resistance",
@@ -164,6 +173,8 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
     ],
     "totalChars": 81651,
   },
+=======
+>>>>>>> 16fad1c4d (revert(design-systems): remove structured runtime workflow (#7110))
   "design-full-stack": {
     "sections": [
       "injection-resistance",
@@ -181,7 +192,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "design-system-body",
       "design-system-import-mode",
       "design-system-tokens",
-      "design-system-intent-routing",
+      "design-system-components-manifest",
       "design-system-pull-index",
       "craft-references",
       "active-skill",
@@ -192,7 +203,11 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "clarifying-questions",
       "role-marker-guard",
     ],
+<<<<<<< HEAD
     "totalChars": 69151,
+=======
+    "totalChars": 68399,
+>>>>>>> 16fad1c4d (revert(design-systems): remove structured runtime workflow (#7110))
   },
   "design-minimal": {
     "sections": [
@@ -362,7 +377,7 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "design-system-body",
       "design-system-import-mode",
       "design-system-tokens",
-      "design-system-intent-routing",
+      "design-system-components-manifest",
       "design-system-pull-index",
       "craft-references",
       "active-skill",
@@ -370,7 +385,11 @@ exports[`composeSystemPrompt — scenario × section golden matrix > keeps the s
       "media-dispatch-hint",
       "role-marker-guard",
     ],
+<<<<<<< HEAD
     "totalChars": 42008,
+=======
+    "totalChars": 41262,
+>>>>>>> 16fad1c4d (revert(design-systems): remove structured runtime workflow (#7110))
   },
   "slim-freeform-no-deck-signal": {
     "sections": [

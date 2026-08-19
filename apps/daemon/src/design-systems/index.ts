@@ -17,20 +17,13 @@ import type Database from 'better-sqlite3';
 
 import {
   type ComponentsManifest,
-  DesignSystemRuntimePathsSchema,
   extractComponentsManifest,
   summarizeComponentsManifestForPrompt,
-  type DesignSystemRuntimePaths,
 } from '@open-design/contracts';
 
 import { parseFrontmatter } from './frontmatter.js';
 import type { FrontmatterObject, FrontmatterValue } from './frontmatter.js';
 import { extractSwiftColors } from './swift-colors.js';
-import {
-  loadDesignSystemRuntimePackage,
-  summarizeDesignSystemIntentMapForPrompt,
-  type DesignSystemRuntimeLoadResult,
-} from './runtime.js';
 import { workspaceTeamDesignSystemBindingResourceId } from './workspace-team-binding.js';
 import {
   ensureWorkspaceResource,
@@ -201,7 +194,6 @@ type DesignSystemProjectManifest = {
     suggested?: string[];
     exemptions?: string[];
   };
-  runtime?: DesignSystemRuntimePaths;
 };
 
 export type DesignSystemProvenance = {
@@ -523,94 +515,6 @@ export async function readDesignSystemPackageInfo(
   };
 }
 
-export async function readDesignSystemRuntime(
-  root: string,
-  id: string,
-  options: { idPrefix?: string } = {},
-): Promise<DesignSystemRuntimeLoadResult> {
-  const dirId = stripPrefixAndValidateId(id, options.idPrefix);
-  if (!dirId) return { mode: 'legacy' };
-  const brandRoot = path.join(root, dirId);
-  const raw = await readFileOptional(path.join(brandRoot, 'manifest.json'));
-  if (raw === undefined) return { mode: 'legacy' };
-
-  let value: unknown;
-  try {
-    value = JSON.parse(raw) as unknown;
-  } catch (error) {
-    return {
-      mode: 'invalid',
-      errors: [`manifest.json: ${error instanceof Error ? error.message : String(error)}`],
-    };
-  }
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return { mode: 'invalid', errors: ['manifest.json must contain an object'] };
-  }
-  const record = value as Record<string, unknown>;
-  if (record.id !== dirId) {
-    return { mode: 'invalid', errors: [`manifest.json id must match ${dirId}`] };
-  }
-  if (record.runtime === undefined) return { mode: 'legacy' };
-  const parsedRuntime = DesignSystemRuntimePathsSchema.safeParse(record.runtime);
-  if (!parsedRuntime.success) {
-    return {
-      mode: 'invalid',
-      errors: parsedRuntime.error.issues.map((issue) => {
-        const suffix = issue.path.length === 0
-          ? ''
-          : issue.path.map((part) => typeof part === 'number' ? `[${part}]` : `.${part}`).join('');
-        return `manifest.json: $.runtime${suffix} ${issue.message}`;
-      }),
-    };
-  }
-  return loadDesignSystemRuntimePackage(brandRoot, parsedRuntime.data);
-}
-
-/** Resolve the active package with the same built-in → installed precedence used by prompt assets. */
-export async function resolveDesignSystemRuntime(
-  designSystemId: string,
-  builtInRoot: string,
-  userInstalledRoot: string,
-): Promise<DesignSystemRuntimeLoadResult> {
-  if (designSystemId.startsWith('user:')) {
-    return readDesignSystemRuntime(userInstalledRoot, designSystemId, { idPrefix: 'user:' });
-  }
-
-  const builtIn = await readDesignSystemRuntime(builtInRoot, designSystemId);
-  if (builtIn.mode !== 'legacy') return builtIn;
-  return readDesignSystemRuntime(userInstalledRoot, designSystemId);
-}
-
-export type DesignSystemRuntimePromptContext =
-  | { mode: 'legacy' }
-  | { mode: 'structured'; intentIndex: string }
-  | { mode: 'invalid'; issue: string };
-
-export async function resolveDesignSystemRuntimePromptContext(
-  designSystemId: string,
-  builtInRoot: string,
-  userInstalledRoot: string,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<DesignSystemRuntimePromptContext> {
-  if (!isDesignTokenChannelEnabled(env)) return { mode: 'legacy' };
-
-  const runtime = await resolveDesignSystemRuntime(
-    designSystemId,
-    builtInRoot,
-    userInstalledRoot,
-  );
-  if (runtime.mode === 'structured') {
-    return {
-      mode: 'structured',
-      intentIndex: summarizeDesignSystemIntentMapForPrompt(runtime.bundle),
-    };
-  }
-  if (runtime.mode === 'invalid') {
-    return { mode: 'invalid', issue: runtime.errors.join('\n') };
-  }
-  return { mode: 'legacy' };
-}
-
 async function listAvailableDesignSystemPackageFiles(
   brandRoot: string,
   manifest: DesignSystemProjectManifest,
@@ -628,10 +532,6 @@ async function listAvailableDesignSystemPackageFiles(
   add(manifest.files.tailwind);
   add(manifest.usage);
   add(manifest.componentsManifest);
-  add(manifest.runtime?.components);
-  add(manifest.runtime?.intents);
-  add(manifest.runtime?.lint);
-  add(manifest.runtime?.fallback);
   for (const page of manifest.preview?.pages ?? []) add(page.path);
   for (const font of manifest.fonts ?? []) add(font.file);
 
@@ -815,8 +715,6 @@ export function digestDesignSystemContext(input: {
   componentsManifest?: string | null;
   fixtureHtml?: string | null;
   pullIndex?: string | null;
-  intentIndex?: string | null;
-  runtimeIssue?: string | null;
   importMode?: string | null;
 }): string | null {
   const hasContent = [
@@ -826,8 +724,6 @@ export function digestDesignSystemContext(input: {
     input.componentsManifest,
     input.fixtureHtml,
     input.pullIndex,
-    input.intentIndex,
-    input.runtimeIssue,
     input.importMode,
   ].some((value) => typeof value === 'string' && value.length > 0);
   if (!hasContent) return null;
@@ -841,8 +737,6 @@ export function digestDesignSystemContext(input: {
     componentsManifest: input.componentsManifest ?? null,
     fixtureHtml: input.fixtureHtml ?? null,
     pullIndex: input.pullIndex ?? null,
-    intentIndex: input.intentIndex ?? null,
-    runtimeIssue: input.runtimeIssue ?? null,
     importMode: input.importMode ?? null,
   };
   return createHash('sha256').update(JSON.stringify(payload), 'utf8').digest('hex');
@@ -4215,15 +4109,13 @@ function isProjectManifest(value: unknown, expectedId: string): value is DesignS
   const files = record.files;
   if (typeof files !== 'object' || files === null || Array.isArray(files)) return false;
   const fileRecord = files as Record<string, unknown>;
-  if (!(
+  return (
     fileRecord.design === 'DESIGN.md' &&
     fileRecord.tokens === 'tokens.css' &&
     (fileRecord.designTokens === undefined || fileRecord.designTokens === 'design-tokens.json') &&
     (fileRecord.tailwind === undefined || fileRecord.tailwind === 'tailwind-v4.css') &&
     (fileRecord.components === undefined || fileRecord.components === 'components.html')
-  )) return false;
-
-  return record.runtime === undefined || DesignSystemRuntimePathsSchema.safeParse(record.runtime).success;
+  );
 }
 
 function summarize(raw: string): string {

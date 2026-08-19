@@ -58,8 +58,6 @@ const SECTION_INPUTS = {
     'designSystemComponentsManifest',
     'designSystemFixtureHtml',
     'designSystemPullIndex',
-    'designSystemIntentIndex',
-    'designSystemRuntimeIssue',
     'designSystemImportMode',
   ],
   skill: ['skillBody', 'skillName', 'skillMode', 'skillModes'],

@@ -1,9 +1,0 @@
-{
-  "schemaVersion": "od-design-system-components/v1",
-  "components": [
-    {
-      "id": "Button",
-      "path": "components/Button/component.json"
-    }
-  ]
-}

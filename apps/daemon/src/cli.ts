@@ -868,8 +868,6 @@ function printRootHelp() {
 
   od tools design-systems read --path <manifest-declared-path>
       Read active design-system pull-layer files through daemon wrapper commands.
-  od tools design-systems resolve --intent <canonical-intent>
-      Resolve an active DS 3.0 intent to its component, variant, properties, and states.
 
   od mcp live-artifacts
       Start the MCP server exposing live-artifact and connector tools.

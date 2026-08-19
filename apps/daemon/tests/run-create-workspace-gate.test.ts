@@ -121,7 +121,6 @@ function createRunsServiceStub() {
         assistantMessageId: typeof meta.assistantMessageId === 'string' ? meta.assistantMessageId : null,
         agentId: typeof meta.agentId === 'string' ? meta.agentId : null,
         workspaceScope: meta.workspaceScope,
-        designSystemScope: meta.designSystemScope,
         status: 'queued',
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -817,7 +816,7 @@ describe('POST /api/runs — workspace mutation gate', () => {
   });
 
   it.each(['/api/runs', '/api/chat'])(
-    'ignores client-forged run scopes for an unbound project through %s',
+    'ignores a client-forged workspace scope for an unbound project through %s',
     async (route) => {
       const baseUrl = await startServer();
       const response = await fetch(`${baseUrl}${route}`, {
@@ -834,12 +833,6 @@ describe('POST /api/runs — workspace mutation gate', () => {
             workspaceMemberId: 'forged-member',
             source: 'persisted_project_binding',
           },
-          designSystemScope: {
-            schemaVersion: 1,
-            kind: 'local',
-            projectId: UNBOUND_PROJECT,
-            designSystemId: 'user:forged',
-          },
         }),
       });
 
@@ -849,7 +842,6 @@ describe('POST /api/runs — workspace mutation gate', () => {
       expect(statusResponse.status).toBe(200);
       const run = await statusResponse.json() as Record<string, unknown>;
       expect(run.workspaceScope).toBeNull();
-      expect(run).not.toHaveProperty('designSystemScope');
     },
   );
 

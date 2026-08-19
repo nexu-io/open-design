@@ -1182,23 +1182,7 @@ describe('run event log persistence', () => {
         schemaVersion: 1,
         projectId: 'p1',
         workspaceId: 'workspace-a',
-        workspaceMemberId: 'member-a',
         source: 'persisted_project_binding',
-      },
-      designSystemScope: {
-        schemaVersion: 1,
-        kind: 'workspace-resource',
-        projectId: 'p1',
-        designSystemId: 'user:brand-a',
-        workspaceId: 'workspace-a',
-        workspaceMemberId: 'member-a',
-        bindingResourceId: 'user:brand-a',
-        visibility: 'personal',
-        bindingResourceState: 'active',
-        bindingVersion: 1,
-        bindingCreatedAt: 50,
-        bindingUpdatedAt: 100,
-        bindingCreatedByWorkspaceMemberId: 'member-a',
       },
     });
     const statePath = path.join(tmpDir, run.id, 'state.json');
@@ -1212,14 +1196,7 @@ describe('run event log persistence', () => {
         schemaVersion: 1,
         projectId: 'p1',
         workspaceId: 'workspace-a',
-        workspaceMemberId: 'member-a',
         source: 'persisted_project_binding',
-      },
-      designSystemScope: {
-        kind: 'workspace-resource',
-        designSystemId: 'user:brand-a',
-        bindingResourceId: 'user:brand-a',
-        visibility: 'personal',
       },
     });
 

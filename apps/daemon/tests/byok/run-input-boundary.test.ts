@@ -50,12 +50,6 @@ describe('BYOK run input boundary', () => {
         workspaceMemberId: 'forged-member',
         source: 'persisted_project_binding',
       },
-      designSystemScope: {
-        schemaVersion: 1,
-        kind: 'local',
-        projectId: 'forged-project',
-        designSystemId: 'user:forged',
-      },
       message: 'Create a site',
     });
 
