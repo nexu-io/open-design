@@ -263,6 +263,44 @@ describe('buildSrcdoc', () => {
     expect(srcdoc).toContain('pruneHiddenSnapshotNodes(document.documentElement, clone)');
   });
 
+  it('strips snapshot resources only AFTER pruning so the original/clone lists stay index-aligned', () => {
+    // Regression (#5444): prune pairs original/clone querySelectorAll('*')
+    // lists by index. Removing clone scripts/links first shifted every later
+    // clone under the wrong original and the misdirected removals deleted
+    // visible content (often the <body> itself), so any page containing a
+    // script or stylesheet link rasterized as a uniform frame → the capture
+    // failed with 'empty-render' ("Preview is still loading" toast) on every
+    // pure-web (no desktop compositor) deployment.
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero</main>');
+
+    expect(srcdoc).toContain('function stripSnapshotResources');
+    const pruneCall = srcdoc.indexOf('pruneHiddenSnapshotNodes(document.documentElement, clone)');
+    const stripCall = srcdoc.indexOf('stripSnapshotResources(clone)');
+    expect(pruneCall).toBeGreaterThan(-1);
+    expect(stripCall).toBeGreaterThan(pruneCall);
+    // And inlineSnapshotStyles no longer removes nodes itself.
+    const inlineBody = srcdoc.slice(
+      srcdoc.indexOf('function inlineSnapshotStyles'),
+      srcdoc.indexOf('function stripSnapshotResources'),
+    );
+    expect(inlineBody).not.toContain('.remove()');
+  });
+
+  it('serializes snapshot content as XHTML so void elements do not break the SVG parse', () => {
+    // Regression (#5444): innerHTML emits void elements (<br>, <img>) without
+    // self-closing slashes — invalid XML inside foreignObject, so the SVG
+    // image fired onerror ('snapshot image failed') for any page containing
+    // one. XMLSerializer emits well-formed XHTML; XML-invalid attribute
+    // names (@click, :href) are dropped for the same reason.
+    const srcdoc = buildSrcdoc('<main style="color:red">Hero<br><img alt="x"></main>');
+
+    expect(srcdoc).toContain('function serializeSnapshotXhtml');
+    expect(srcdoc).toContain('new XMLSerializer()');
+    expect(srcdoc).toContain('serializeSnapshotXhtml(cloneBody || clone)');
+    expect(srcdoc).not.toContain('cloneBody ? cloneBody.innerHTML : clone.innerHTML');
+    expect(srcdoc).toContain('XML_NAME');
+  });
+
   it('injects a deck-stage fallback before the deck bridge for broken runtime decks', () => {
     const srcdoc = buildSrcdoc(brokenDeckStageHtml, { deck: true });
 
