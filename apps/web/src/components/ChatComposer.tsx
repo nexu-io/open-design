@@ -163,6 +163,8 @@ type ToolsTab = 'plugins' | 'skills' | 'mcp' | 'import';
 
 type MentionTab = 'all' | 'tabs' | 'files' | 'plugins' | 'skills' | 'mcp' | 'connectors';
 
+const EMPTY_SKILLS: SkillSummary[] = [];
+
 const USER_PLUGIN_SOURCE_KINDS = new Set<PluginSourceKind>([
   'user',
   'project',
@@ -456,7 +458,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
       onEnsureProject,
       commentAttachments = [],
       onRemoveCommentAttachment,
-      skills = [],
+      skills: suppliedSkills,
       onSend,
       onStop,
       onOpenMcpSettings,
@@ -493,6 +495,9 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     ref
   ) {
     const { locale, t } = useI18n();
+    // Keep an omitted skill catalog distinct from a loaded-but-empty catalog.
+    // Only the latter can mean that an already-staged skill was deleted.
+    const skills = suppliedSkills ?? EMPTY_SKILLS;
     const analytics = useAnalytics();
     const { workspaceContext } = useProjectCollabContext();
     const activeFileContext =
@@ -875,6 +880,25 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(
     // Skills now come from the parent (App.tsx → ProjectView → ChatPane → ChatComposer)
     // pre-filtered by enabled/disabled state. We no longer fetch a fresh list
     // here to avoid showing skills the user has disabled via Settings.
+
+    // A user can delete a skill while it is staged in this composer. The parent
+    // then supplies the refreshed catalog; drop the orphaned staged chip and
+    // its atomic inline mention together so the context row cannot retain stale
+    // state or reflow around a no-longer-valid skill.
+    useEffect(() => {
+      if (!suppliedSkills) return;
+      const availableIds = new Set(suppliedSkills.map((skill) => skill.id));
+      const removed = stagedSkills.filter((skill) => !availableIds.has(skill.id));
+      if (removed.length === 0) return;
+
+      setStagedSkills((current) => current.filter((skill) => availableIds.has(skill.id)));
+      const labels = removed.flatMap((skill) => [skill.id, skill.name]);
+      const nextDraft = stripInlineMentionLabels(draftRef.current, labels);
+      if (nextDraft === draftRef.current) return;
+      draftRef.current = nextDraft;
+      setDraft(nextDraft);
+      editorRef.current?.setText(nextDraft);
+    }, [stagedSkills, suppliedSkills]);
 
     // Lazy-fetch installed plugins once on mount; the tools-menu Plugins
     // tab and the @-mention picker both consume this list.
