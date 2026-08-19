@@ -201,6 +201,36 @@ describe('editable PPTX font fidelity', () => {
     expect(exportedStyles.join('\n')).toContain('https://fonts.example/fraunces.woff2');
   });
 
+  test('preserves imported fonts across layered-background prepare and export phases', async () => {
+    const importedUrl = 'https://fonts.example/fraunces.css';
+    const importedCss = `@font-face {
+      font-family: 'Fraunces';
+      src: url('./fraunces.woff2') format('woff2');
+    }`;
+    let exportedOptions: Record<string, unknown> = {};
+    installEditablePptxDom({
+      sourceCss: `@import url('${importedUrl}');`,
+      importedCss: '',
+      onExport: (_injectedStyles, _heading, exportOptions) => {
+        exportedOptions = exportOptions;
+      },
+    });
+
+    const overrides = [{ cssText: importedCss, url: importedUrl }];
+    const prepared = await runDomToPptx('.slide', {}, 'prepare', overrides);
+    const exported = await runDomToPptx('.slide', {}, 'export-prepared', overrides);
+
+    expect(prepared).toEqual({ prepared: true });
+    expect(exported.error).toBeUndefined();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(exportedOptions.fonts).toEqual([
+      {
+        name: 'Fraunces',
+        urls: ['https://fonts.example/fraunces.woff2'],
+      },
+    ]);
+  });
+
   test('embeds one regular Latin face per family instead of merging incompatible variants and subsets', async () => {
     let exportedStyles: string[] = [];
     let exportedOptions: Record<string, unknown> = {};

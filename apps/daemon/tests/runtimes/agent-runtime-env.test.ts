@@ -209,6 +209,7 @@ describe('agent runtime tool environment', () => {
       ),
       ...createOpenDesignToolEnv({
         daemonUrl: 'http://127.0.0.1:7456',
+        hyperFramesBin: '/opt/open-design/hyperframes/bin/hyperframes.mjs',
         projectDir: '/tmp/project',
         projectId: 'project-1',
       }),
@@ -220,6 +221,7 @@ describe('agent runtime tool environment', () => {
     );
     expect(env.OD_PROJECT_ID).toBe('project-1');
     expect(env.OD_PROJECT_DIR).toBe('/tmp/project');
+    expect(env.OD_HYPERFRAMES_BIN).toBe('/opt/open-design/hyperframes/bin/hyperframes.mjs');
   });
 
   it('keeps non-sandbox NO_PROXY behavior unchanged', () => {
@@ -270,6 +272,7 @@ describe('agent runtime tool environment', () => {
     expect(prompt).toContain('Daemon URL: `http://127.0.0.1:7456`');
     expect(prompt).toContain('`OD_DAEMON_URL`');
     expect(prompt).toContain('`OD_NODE_BIN`');
+    expect(prompt).toContain('`OD_HYPERFRAMES_BIN`');
     expect(prompt).toContain('`"$OD_NODE_BIN" "$OD_BIN" tools ...`');
     expect(prompt).toContain('& $env:OD_NODE_BIN $env:OD_BIN tools ...');
     expect(prompt).toContain('`OD_TOOL_TOKEN` is available');

@@ -59,7 +59,7 @@ export type TemplateDemo = {
   prompt: string;
 };
 
-export const TEMPLATE_TYPE_ORDER: TemplateType[] = ['Slides', 'Prototype', 'Live Artifact', 'Image', 'Video', 'HyperFrames', 'Audio'];
+export const TEMPLATE_TYPE_ORDER: TemplateType[] = ['Prototype', 'Slides', 'Live Artifact', 'Image', 'Video', 'HyperFrames', 'Audio'];
 
 /** The Community grid is the plugin catalogue seen through the artifact a user
  *  wants to make. Membership comes from the shared facet derivation in

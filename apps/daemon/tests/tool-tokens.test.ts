@@ -72,48 +72,6 @@ describe('run-scoped tool tokens', () => {
     registry.clear();
   });
 
-  it('snapshots the workspace scope for the lifetime of a run token', () => {
-    const registry = new ToolTokenRegistry();
-    const designSystemScope = {
-      schemaVersion: 1 as const,
-      kind: 'workspace-resource' as const,
-      projectId: 'project-team',
-      designSystemId: 'user:brand-a',
-      workspaceId: 'workspace-a',
-      workspaceMemberId: 'member-a',
-      bindingResourceId: 'user:brand-a',
-      visibility: 'personal' as const,
-      bindingResourceState: 'active',
-      bindingVersion: 2,
-      bindingCreatedAt: 50,
-      bindingUpdatedAt: 100,
-      bindingCreatedByWorkspaceMemberId: 'member-a',
-    };
-    const grant = registry.mint({
-      runId: 'run-team',
-      projectId: 'project-team',
-      workspaceId: 'workspace-a',
-      workspaceMemberId: 'member-a',
-      designSystemScope,
-      nowMs: 1_000,
-    });
-
-    expect(grant).toMatchObject({
-      workspaceId: 'workspace-a',
-      workspaceMemberId: 'member-a',
-      designSystemScope,
-    });
-    expect(registry.validate(grant.token, { nowMs: 1_001 })).toMatchObject({
-      ok: true,
-      grant: {
-        workspaceId: 'workspace-a',
-        workspaceMemberId: 'member-a',
-        designSystemScope,
-      },
-    });
-    registry.clear();
-  });
-
   it('binds tokens to endpoint and operation allowlists', () => {
     const registry = new ToolTokenRegistry();
     const grant = registry.mint({
@@ -171,16 +129,6 @@ describe('run-scoped tool tokens', () => {
     expect(MEDIA_TASK_WAIT_TOOL_ENDPOINT).toBe('/api/media/tasks/:id/wait');
     expect(grant.allowedEndpoints).toContain(MEDIA_TASK_WAIT_TOOL_ENDPOINT);
     expect(grant.allowedOperations).toEqual([...CHAT_TOOL_OPERATIONS]);
-    expect(registry.validate(grant.token, {
-      endpoint: '/api/tools/design-systems/resolve-intent',
-      operation: 'design-systems:resolve-intent',
-      nowMs: 1_001,
-    })).toMatchObject({ ok: true });
-    expect(registry.validate(grant.token, {
-      endpoint: '/api/tools/design-systems/validate-adherence',
-      operation: 'design-systems:validate-adherence',
-      nowMs: 1_001,
-    })).toMatchObject({ ok: true });
     registry.clear();
   });
 });

@@ -88,6 +88,14 @@ const MEDIA_GENERATE_BOOLEAN_FLAGS = new Set([
   'h',
   'loop',
 ]);
+const MEDIA_SCAFFOLD_STRING_FLAGS = new Set([
+  'project',
+  'workspace',
+  'workspace-member',
+  'composition-dir',
+  'daemon-url',
+]);
+const MEDIA_SCAFFOLD_BOOLEAN_FLAGS = new Set(['help', 'h', 'json']);
 
 const MCP_STRING_FLAGS = new Set([
   'daemon-url',
@@ -868,8 +876,6 @@ function printRootHelp() {
 
   od tools design-systems read --path <manifest-declared-path>
       Read active design-system pull-layer files through daemon wrapper commands.
-  od tools design-systems resolve --intent <canonical-intent>
-      Resolve an active DS 3.0 intent to its component, variant, properties, and states.
 
   od mcp live-artifacts
       Start the MCP server exposing live-artifact and connector tools.
@@ -936,6 +942,10 @@ function printRootHelp() {
       Designed to be invoked by a code agent - picks up OD_DAEMON_URL
       and OD_PROJECT_ID from the env that the daemon injected on spawn.
 
+  od media scaffold --composition-dir .hyperframes-cache/<id>
+      Create a deterministic HyperFrames composition without npx or global
+      skill installation, before dispatching it through media generate.
+
   od mcp [--daemon-url <url>]
       Run a stdio MCP server that proxies project tool calls to a
       running OpenDesign daemon. Wire it into a coding agent
@@ -954,8 +964,8 @@ What the daemon does:
   * scans PATH for installed code-agent CLIs (claude, codex, devin, opencode, cursor-agent, ...)
   * serves the chat UI at http://<host>:<port>
   * proxies messages (text + images) to the selected agent via child-process spawn
-  * exposes /api/projects/:id/media/generate — the unified image/video/audio
-     dispatcher that the agent calls via \`od media generate\`.`);
+  * exposes project-scoped media scaffold/generate APIs — the unified path
+     that the agent calls via \`od media scaffold\` and \`od media generate\`.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1626,7 +1636,7 @@ async function runMedia(args) {
     printMediaHelp();
     return;
   }
-  if (sub !== 'generate' && sub !== 'wait') {
+  if (sub !== 'generate' && sub !== 'wait' && sub !== 'scaffold') {
     console.error(`unknown subcommand: od media ${sub}`);
     printMediaHelp();
     process.exit(1);
@@ -1635,7 +1645,64 @@ async function runMedia(args) {
   const idx = args.indexOf(sub);
   const subArgs = [...args.slice(0, idx), ...args.slice(idx + 1)];
   if (sub === 'wait') return runMediaWait(subArgs);
+  if (sub === 'scaffold') return runMediaScaffold(subArgs);
   return runMediaGenerate(subArgs);
+}
+
+async function runMediaScaffold(rawArgs) {
+  let flags;
+  try {
+    flags = parseFlags(rawArgs, {
+      string: MEDIA_SCAFFOLD_STRING_FLAGS,
+      boolean: MEDIA_SCAFFOLD_BOOLEAN_FLAGS,
+    });
+  } catch (err) {
+    console.error(err.message);
+    printMediaHelp();
+    process.exit(2);
+  }
+  if (flags.help || flags.h) {
+    printMediaHelp();
+    return;
+  }
+
+  const daemonUrl = await cliDaemonUrl(flags);
+  const projectId = flags.project || process.env.OD_PROJECT_ID;
+  const token = process.env.OD_TOOL_TOKEN;
+  if (!projectId && !token) {
+    console.error('project id required. Pass --project <id> or set OD_PROJECT_ID.');
+    process.exit(2);
+  }
+  const compositionDir = flags['composition-dir'];
+  if (!compositionDir) {
+    console.error('--composition-dir required (expected .hyperframes-cache/<id>)');
+    process.exit(2);
+  }
+
+  const url = token
+    ? `${daemonUrl.replace(/\/$/, '')}/api/tools/media/hyperframes/scaffold`
+    : `${daemonUrl.replace(/\/$/, '')}/api/projects/${encodeURIComponent(projectId)}/media/hyperframes/scaffold`;
+  let resp;
+  try {
+    resp = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(token ? {} : workspaceHeadersFromExplicitFlags(flags) ?? {}),
+      },
+      body: JSON.stringify({ compositionDir }),
+    });
+  } catch (err) {
+    surfaceFetchError(err, daemonUrl);
+    process.exit(3);
+  }
+  if (!resp.ok) {
+    const responseText = await resp.text();
+    console.error(`daemon ${resp.status}: ${responseText}`);
+    process.exit(4);
+  }
+  process.stdout.write(`${JSON.stringify(await resp.json())}\n`);
 }
 
 async function runMediaGenerate(rawArgs) {
@@ -2029,10 +2096,17 @@ async function cliDaemonBaseUrl(flags) {
 }
 
 function printMediaHelp() {
-  console.log(`Usage: od media generate --surface <image|video|audio> --model <id> [opts]
+  console.log(`Usage: od media scaffold --composition-dir .hyperframes-cache/<id> [opts]
+       od media generate --surface <image|video|audio> --model <id> [opts]
        "$OD_NODE_BIN" "$OD_BIN" media generate --surface <image|video|audio> --model <id> [opts]
 
-Required:
+Scaffold:
+  Creates hyperframes.json, meta.json, and index.html without running
+  HyperFrames init or installing global skills. The target must be new and
+  live directly under .hyperframes-cache.
+  --json is accepted for consistency; scaffold output is always one JSON line.
+
+Generate required:
   --surface  image | video | audio
   --model    Model id from /api/media/models (e.g. gpt-image-2, seedance-2, suno-v5).
   --project  Project id. Auto-resolved from OD_PROJECT_ID when invoked by the daemon.
@@ -2060,8 +2134,9 @@ Common options:
   --audio-kind music|speech|sfx
   --composition-dir <path>  hyperframes-html only — project-relative path
                             to the dir containing hyperframes.json /
-                            meta.json / index.html. The daemon runs
-                            \`npx hyperframes render\` against it.
+                            meta.json / index.html. Use \`media scaffold\` to
+                            create it; the daemon renders it with its pinned
+                            HyperFrames runtime.
   --image <path>            Project-relative reference image; repeat up to 5
                             times for Vela image editing or video references.
                             The first video image is the first frame; the rest

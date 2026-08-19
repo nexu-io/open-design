@@ -2585,7 +2585,14 @@ process.stdin.on("end", () => {
     expect(productionWorkflow).toContain('wranglerVersion: "4.110.0"');
     expect(productionWorkflow).toContain("d1 migrations apply open-design-landing-attribution --remote");
     expect(productionWorkflow).toContain("Publish immutable DeepSeek Harness bootstrap installers to R2");
-    expect(productionWorkflow).toContain("DSH_BOOTSTRAP_VERSION: v1");
+    expect(productionWorkflow).toContain("id: dsh_bootstrap");
+    // The bootstrap version follows the installer bytes. Pinning it in the
+    // workflow is what turned a copy edit inside install-dsh.ps1 into a hard
+    // production deploy failure, so the promotion must read the version the
+    // publisher resolved instead of naming one.
+    expect(productionWorkflow).not.toMatch(/DSH_BOOTSTRAP_VERSION: v\d/);
+    expect(productionWorkflow).toContain("DSH_BOOTSTRAP_VERSION: ${{ steps.dsh_bootstrap.outputs.version }}");
+    expect(productionWorkflow).toContain('"$RELEASE_PUBLIC_ORIGIN/bootstrap/dsh/$DSH_BOOTSTRAP_VERSION/$name"');
     expect(productionWorkflow).toContain("DSH_BOOTSTRAP_SOURCE_DIR: apps/landing-page/public");
     expect(productionWorkflow).toContain("RELEASE_PUBLIC_ORIGIN: ${{ vars.CLOUDFLARE_R2_RELEASES_PUBLIC_ORIGIN }}");
     expect(productionWorkflow).toContain("RELEASE_STORAGE_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_RELEASES_AK }}");

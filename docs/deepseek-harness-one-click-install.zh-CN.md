@@ -4,10 +4,10 @@
 
 正式发布不采用开发机手动上传。脚本合并到 `main` 后，由 `landing-page-production` 生产发布 workflow 自动完成两件事：
 
-1. 将脚本和 `SHA256SUMS` 以不可覆盖的 `v1` 版本保存到 `https://releases.open-design.ai/bootstrap/dsh/v1/`。
+1. 将脚本和 `SHA256SUMS` 以不可覆盖的版本保存到 `https://releases.open-design.ai/bootstrap/dsh/<version>/`。
 2. 将相同脚本发布为下方 `open-design.ai/install-dsh.*` 用户短链接。
 
-如果 R2 中已有同名 `v1` 但内容不同，workflow 会停止，必须提升为 `v2`，不能静默覆盖已经对外分发的安装器。
+版本号由脚本内容决定，不需要人工维护：脚本没变就复用已发布的那一版，脚本改了就自动开下一版（`v1` → `v2` → …）。每个已发布版本都保持逐字节不可覆盖，历史版本永久留存，`https://releases.open-design.ai/bootstrap/dsh/latest.json` 指向当前版本并附带各文件的 sha256 与发布来源。
 
 ## 对外宣发文案
 

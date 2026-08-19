@@ -667,11 +667,7 @@ Active design system exception: the active design system is the visual direction
 - When a downstream framework mentions "active direction" or "theme tokens", bind those fields from the active design system instead of the built-in direction library.
 `;
 
-const DEFAULT_LEGACY_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles, paste tokens.css verbatim into the first <style> when it is provided, and match component shapes from the reference component manifest or fixture when available. Treat any pull-layer index as optional context for deeper inspection; do not assume those files have already been loaded.`;
-
-const DEFAULT_STRUCTURED_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles and paste tokens.css verbatim into the first <style> when it is provided. Use the structured intent routing below as the sole component-selection path; do not infer components from a legacy manifest or fixture. Treat any pull-layer index as optional evidence for deeper inspection, not as an alternate component inventory.`;
-
-const DEFAULT_INVALID_RUNTIME_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles and paste tokens.css verbatim into the first <style> when it is provided. The package's structured component runtime is unavailable, so do not fall back to a legacy manifest or fixture or claim exact component reuse. Treat any pull-layer index as optional evidence for diagnosing the package.`;
+const DEFAULT_DESIGN_SYSTEM_USAGE = `Read DESIGN.md for visual principles, paste tokens.css verbatim into the first <style> when it is provided, and match component shapes from the reference component manifest or fixture when available. Treat any pull-layer index as optional context for deeper inspection; do not assume those files have already been loaded.`;
 
 function renderDesignSystemImportModeGuidance(
   importMode: ComposeInput['designSystemImportMode'],
@@ -727,19 +723,11 @@ export interface ComposeInput {
   // - `designSystemPullIndex`          — lightweight manifest-derived
   //                                      list of richer files available
   //                                      for later pull-channel work.
-  // - `designSystemIntentIndex`        — compact list of canonical business
-  //                                      intents; component details are pulled
-  //                                      only after an intent is selected.
-  // - `designSystemRuntimeIssue`       — visible validation failure for a DS
-  //                                      that declared, but could not load, a
-  //                                      structured runtime.
   designSystemUsageMd?: string | undefined;
   designSystemTokensCss?: string | undefined;
   designSystemComponentsManifest?: string | undefined;
   designSystemFixtureHtml?: string | undefined;
   designSystemPullIndex?: string | undefined;
-  designSystemIntentIndex?: string | undefined;
-  designSystemRuntimeIssue?: string | undefined;
   designSystemImportMode?: 'normalized' | 'hybrid' | 'verbatim' | undefined;
   // Craft references the active skill opted into via `od.craft.requires`.
   // The daemon resolves the slug list to file contents and concatenates
@@ -865,8 +853,6 @@ export function composeSystemPrompt({
   designSystemComponentsManifest,
   designSystemFixtureHtml,
   designSystemPullIndex,
-  designSystemIntentIndex,
-  designSystemRuntimeIssue,
   designSystemImportMode,
   craftBody,
   craftSections,
@@ -1184,20 +1170,11 @@ export function composeSystemPrompt({
     );
   }
 
-  const hasStructuredIntentIndex = Boolean(designSystemIntentIndex?.trim());
-  const hasStructuredRuntimeIssue = Boolean(designSystemRuntimeIssue?.trim());
-  const hasDeclaredStructuredRuntime = hasStructuredIntentIndex || hasStructuredRuntimeIssue;
-
   if (activeDesignSystemBody && activeDesignSystemBody.length > 0) {
-    const defaultUsageBlock = hasStructuredIntentIndex
-      ? DEFAULT_STRUCTURED_DESIGN_SYSTEM_USAGE
-      : hasStructuredRuntimeIssue
-        ? DEFAULT_INVALID_RUNTIME_DESIGN_SYSTEM_USAGE
-        : DEFAULT_LEGACY_DESIGN_SYSTEM_USAGE;
     const usageBlock =
       designSystemUsageMd && designSystemUsageMd.trim().length > 0
         ? designSystemUsageMd.trim()
-        : defaultUsageBlock;
+        : DEFAULT_DESIGN_SYSTEM_USAGE;
     parts.push(
       `\n\n## How to use this design system${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\n${usageBlock}`,
     );
@@ -1217,51 +1194,26 @@ export function composeSystemPrompt({
   // Structured (compiled) form of the active brand. The DESIGN.md above
   // sets voice and intent; the tokens.css block below is the SAME
   // contract in machine-readable form — names + values the agent pastes
-  // verbatim instead of re-deriving from prose. Legacy packages use the
-  // components.html manifest to ground the token vocabulary in worked
-  // component shapes (button / card / type roles) without injecting the full
-  // HTML fixture. If manifest extraction fails or is unavailable, the composer
-  // falls back to the verbatim components.html fixture.
-  // Structured packages instead expose an intent index and resolve one exact
-  // component on demand. Those two component paths are mutually exclusive:
-  // the structured runtime, including an invalid one, never falls back to the
-  // legacy manifest / fixture as a competing selection authority.
+  // verbatim instead of re-deriving from prose. The components.html
+  // manifest grounds the token vocabulary in worked component shapes
+  // (button / card / type roles) without injecting the full HTML fixture.
+  // If manifest extraction fails or is unavailable, the composer falls
+  // back to the verbatim components.html fixture. Both blocks are
+  // individually gated: missing files skip silently, preserving the
+  // legacy DESIGN.md-only behaviour for prose-only brands.
   if (designSystemTokensCss && designSystemTokensCss.trim().length > 0) {
     parts.push(
       `\n\n## Active design system tokens${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThe block below is this brand's tokens.css contract — every \`:root\` custom property and any scoped override (e.g. \`:root[lang=...]\`) the brand defines. **Paste the unscoped \`:root { ... }\` block verbatim into the artifact's first \`<style>\`** so every \`var(--*)\` reference resolves at runtime.\n\nDo not invent new tokens. Do not redefine these values. Do not write raw hex outside this :root block. The DESIGN.md above is prose; this is the binding contract.\n\n\`\`\`css\n${designSystemTokensCss.trim()}\n\`\`\``,
     );
   }
 
-  if (
-    !hasDeclaredStructuredRuntime
-    && designSystemComponentsManifest
-    && designSystemComponentsManifest.trim().length > 0
-  ) {
+  if (designSystemComponentsManifest && designSystemComponentsManifest.trim().length > 0) {
     parts.push(
       `\n\n## Reference component manifest${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA compact structured summary derived from this brand's components.html fixture. Use it as the component inventory for generated artifacts: match the listed selectors, component groups, class names, token references, focus behavior, and spacing cadence. Prefer these manifest entries over inventing new component shapes.\n\n\`\`\`text\n${designSystemComponentsManifest.trim()}\n\`\`\``,
     );
-  } else if (
-    !hasDeclaredStructuredRuntime
-    && designSystemFixtureHtml
-    && designSystemFixtureHtml.trim().length > 0
-  ) {
+  } else if (designSystemFixtureHtml && designSystemFixtureHtml.trim().length > 0) {
     parts.push(
       `\n\n## Reference fixture${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nA self-contained worked artifact in this design system. Match its component shapes (button structure, card structure, type-scale rhythm, focus ring, spacing cadence) when generating new artifacts. Copying fragments is encouraged as long as you keep the \`var(--*)\` references intact — they are already wired to the tokens above.\n\n\`\`\`html\n${designSystemFixtureHtml.trim()}\n\`\`\``,
-    );
-  }
-
-  if (designSystemIntentIndex && designSystemIntentIndex.trim().length > 0) {
-    const resolutionInstruction = resolvedExecutionProfile === 'text_artifact'
-      ? 'This runtime cannot call the resolver or adherence checker. Use the visible intent-to-component mapping to choose the component, but do not invent hidden variants, properties, states, or implementation details. Before finishing, self-check that every mapped component is reused and every visible value comes from the active tokens.'
-      : 'Before writing UI for a listed business intent, run `"$OD_NODE_BIN" "$OD_BIN" tools design-systems resolve --intent <canonical-intent>` once. Reuse the returned implementation and selectors, apply its variant and properties, and include every required state. If the result requires confirmation or forbids invention, follow that decision instead of creating a near-copy. After writing, run `"$OD_NODE_BIN" "$OD_BIN" tools design-systems validate --intent <canonical-intent> --artifact <project-relative-file>` and add one `--artifact` for every related HTML, CSS, or component source file. A failed report must be fixed and re-run before completion. A confirmation-required report must be surfaced to the user; do not silently bypass it.';
-    parts.push(
-      `\n\n## Structured component intent routing${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis intent map and its resolver are the sole component-selection authority. Do not select components from prose, a legacy component manifest, or a fixture. Identify the page's business intent first, then choose from the canonical ids below. ${resolutionInstruction}\n\n\`\`\`text\n${designSystemIntentIndex.trim()}\n\`\`\``,
-    );
-  }
-
-  if (designSystemRuntimeIssue && designSystemRuntimeIssue.trim().length > 0) {
-    parts.push(
-      `\n\n## Structured design-system runtime unavailable${designSystemTitle ? ` — ${designSystemTitle}` : ''}\n\nThis package declares a structured runtime, but it failed validation. Do not silently treat it as a valid legacy component map and do not claim structured component reuse. You may still apply DESIGN.md and tokens.css for visual styling; if the task requires mapped component reuse, report this issue for repair.\n\n\`\`\`text\n${designSystemRuntimeIssue.trim()}\n\`\`\``,
     );
   }
 
@@ -1761,7 +1713,7 @@ function renderMetadataBlock(
     ));
     if (metadata.videoModel === 'hyperframes-html') {
       lines.push(
-        'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then create a HyperFrames composition with `npx hyperframes init` under `.hyperframes-cache/`, edit `index.html`, and dispatch via `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`. Do not run `npx hyperframes render` yourself.',
+        'Special case: `hyperframes-html` is a local HTML-to-MP4 renderer, not a photoreal text-to-video model. Treat it like a motion design renderer, ask at most one clarifying question, then create a HyperFrames composition with `"$OD_NODE_BIN" "$OD_BIN" media scaffold --composition-dir <rel>` under `.hyperframes-cache/`, edit `index.html`, and dispatch via `"$OD_NODE_BIN" "$OD_BIN" media generate --surface video --model hyperframes-html --composition-dir <rel>`. Do not run HyperFrames `init` or `render` yourself.',
       );
     }
   }

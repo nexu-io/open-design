@@ -112,6 +112,7 @@ describe('codex buildArgs session resume', () => {
     );
     expect(includeOnly).toContain('"PATH"');
     expect(includeOnly).toContain('"OD_NODE_BIN"');
+    expect(includeOnly).toContain('"OD_HYPERFRAMES_BIN"');
     expect(includeOnly).toContain('"OD_BIN"');
     expect(includeOnly).toContain('"OD_DAEMON_URL"');
     expect(includeOnly).toContain('"OD_TOOL_TOKEN"');
