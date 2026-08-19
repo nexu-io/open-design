@@ -893,6 +893,77 @@ describe('WorkspaceTabsBar navigation semantics', () => {
     });
   });
 
+  it('keeps a taller localized context menu inside the bottom viewport edge', async () => {
+    window.localStorage.setItem(
+      'open-design:workspace-tabs:v1',
+      JSON.stringify({
+        activeTabId: 'project:project-alpha',
+        tabs: [
+          {
+            id: 'entry:home:seed',
+            kind: 'entry',
+            view: 'home',
+            createdAt: 1,
+            lastActiveAt: 1,
+          },
+          {
+            id: 'project:project-alpha',
+            kind: 'project',
+            projectId: 'project-alpha',
+            conversationId: null,
+            fileName: null,
+            createdAt: 2,
+            lastActiveAt: 2,
+          },
+        ],
+      }),
+    );
+
+    const originalViewportHeight = window.innerHeight;
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 });
+    const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+    const menuRectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.classList.contains('workspace-tabs-context-menu')) {
+          // Represents menu items growing beyond their min-height after a
+          // longer localized label wraps within the fixed-width menu.
+          return {
+            x: 0,
+            y: 0,
+            left: 0,
+            right: 190,
+            top: 0,
+            bottom: 180,
+            width: 190,
+            height: 180,
+            toJSON: () => ({}),
+          } as DOMRect;
+        }
+        return originalGetBoundingClientRect.call(this);
+      });
+
+    try {
+      render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
+
+      const alphaTab = await screen.findByRole('tab', { name: /Project Alpha/i });
+      const alphaControl = alphaTab.querySelector<HTMLButtonElement>('.workspace-tab__main');
+      expect(alphaControl).not.toBeNull();
+      mockTabRect(alphaControl!, 80, 120);
+      fireEvent.contextMenu(alphaControl!, { clientX: 120, clientY: 744 });
+
+      const menu = screen.getByRole('menu', { name: 'Workspace tab actions' });
+      await waitFor(() => expect(menu).toHaveStyle({ top: '580px' }));
+      expect(Number.parseFloat(menu.style.top) + 180).toBeLessThanOrEqual(760);
+    } finally {
+      menuRectSpy.mockRestore();
+      Object.defineProperty(window, 'innerHeight', {
+        configurable: true,
+        value: originalViewportHeight,
+      });
+    }
+  });
+
   it('maps the browser new-tab shortcut to the workspace new-tab action', async () => {
     render(<WorkspaceTabsBar route={{ ...projectRoute }} projects={[project]} />);
 

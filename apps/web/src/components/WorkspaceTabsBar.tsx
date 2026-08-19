@@ -138,8 +138,6 @@ const REMOVE_WORKSPACE_PROJECT_TABS_EVENT = 'open-design:workspace-tabs:remove-p
 const MAX_PERSISTED_TAB_SCOPES = 12;
 const TAB_DRAG_HAPTIC_MS = 8;
 const TAB_DROP_HAPTIC_MS = 12;
-const TAB_CONTEXT_MENU_WIDTH = 190;
-const TAB_CONTEXT_MENU_HEIGHT = 112;
 const TAB_CONTEXT_MENU_EDGE_PADDING = 8;
 
 function consumeWorkspaceTabShortcut(event: KeyboardEvent) {
@@ -1305,6 +1303,29 @@ export function WorkspaceTabsBar({
     );
   }, [state, identityScopeKey, persistedTabsStore]);
 
+  useLayoutEffect(() => {
+    if (!tabContextMenu) return;
+    const menuElement = contextMenuRef.current;
+    if (!menuElement) return;
+    const menuRect = menuElement.getBoundingClientRect();
+    const maxX = Math.max(
+      TAB_CONTEXT_MENU_EDGE_PADDING,
+      window.innerWidth - menuRect.width - TAB_CONTEXT_MENU_EDGE_PADDING,
+    );
+    const maxY = Math.max(
+      TAB_CONTEXT_MENU_EDGE_PADDING,
+      window.innerHeight - menuRect.height - TAB_CONTEXT_MENU_EDGE_PADDING,
+    );
+    const x = Math.max(TAB_CONTEXT_MENU_EDGE_PADDING, Math.min(tabContextMenu.x, maxX));
+    const y = Math.max(TAB_CONTEXT_MENU_EDGE_PADDING, Math.min(tabContextMenu.y, maxY));
+    if (x === tabContextMenu.x && y === tabContextMenu.y) return;
+    setTabContextMenu((current) => {
+      if (!current || current.tabId !== tabContextMenu.tabId) return current;
+      if (current.x === x && current.y === y) return current;
+      return { ...current, x, y };
+    });
+  }, [tabContextMenu]);
+
   useEffect(() => {
     if (!tabContextMenu) return;
     const focusFrame = window.requestAnimationFrame(() => {
@@ -1731,8 +1752,6 @@ export function WorkspaceTabsBar({
       dismissTabContextMenu();
       return;
     }
-    const viewportWidth = typeof window === 'undefined' ? 1024 : window.innerWidth;
-    const viewportHeight = typeof window === 'undefined' ? 768 : window.innerHeight;
     const rect = event.currentTarget.getBoundingClientRect();
     const openedFromKeyboard = event.clientX === 0 && event.clientY === 0;
     const anchorX = openedFromKeyboard ? rect.left + 12 : event.clientX;
@@ -1742,14 +1761,8 @@ export function WorkspaceTabsBar({
     setRadialMenu(null);
     setTabContextMenu({
       tabId,
-      x: Math.max(
-        TAB_CONTEXT_MENU_EDGE_PADDING,
-        Math.min(anchorX, viewportWidth - TAB_CONTEXT_MENU_WIDTH - TAB_CONTEXT_MENU_EDGE_PADDING),
-      ),
-      y: Math.max(
-        TAB_CONTEXT_MENU_EDGE_PADDING,
-        Math.min(anchorY, viewportHeight - TAB_CONTEXT_MENU_HEIGHT - TAB_CONTEXT_MENU_EDGE_PADDING),
-      ),
+      x: Math.max(TAB_CONTEXT_MENU_EDGE_PADDING, anchorX),
+      y: Math.max(TAB_CONTEXT_MENU_EDGE_PADDING, anchorY),
     });
   }
 
