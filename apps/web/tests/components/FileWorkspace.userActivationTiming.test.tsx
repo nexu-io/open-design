@@ -19,7 +19,10 @@
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { FileWorkspace } from '../../src/components/FileWorkspace';
+import {
+  FileWorkspace,
+  type WorkspaceOpenRequest,
+} from '../../src/components/FileWorkspace';
 import { I18nProvider } from '../../src/i18n';
 import type { ProjectFile } from '../../src/types';
 
@@ -37,7 +40,10 @@ vi.mock('../../src/providers/registry', async () => {
   };
 });
 
-const manualEditHeld = { open: false };
+const manualEditHeld: {
+  open: boolean;
+  release: ((settled: boolean) => void) | null;
+} = { open: false, release: null };
 
 vi.mock('../../src/components/FileViewer', () => ({
   // Stands in for a file sitting in Manual Edit mode: it registers an exit
@@ -55,7 +61,12 @@ vi.mock('../../src/components/FileViewer', () => ({
   }) => {
     onManualEditExitHandlerChange?.(file.name, () => {
       manualEditHeld.open = true;
-      return new Promise<boolean>(() => {});
+      // Resolvable, unlike a plain never-settling promise: the ownership tests
+      // below need the parked activation to be RELEASED after the handoff, to
+      // show it is dropped at that moment rather than merely still waiting.
+      return new Promise<boolean>((resolve) => {
+        manualEditHeld.release = resolve;
+      });
     });
     return <div data-testid="file-viewer">{file.name}</div>;
   },
@@ -80,7 +91,7 @@ const OTHER = textFile('other.md');
 function renderWorkspace(props: {
   onTabsStateChange: () => void;
   onUserActivateTab: () => void;
-  openRequest?: { name: string; nonce: number; source: 'user' | 'internal' } | null;
+  openRequest?: WorkspaceOpenRequest | null;
 }) {
   return render(
     <I18nProvider>
@@ -104,6 +115,7 @@ describe('FileWorkspace user-activation reporting', () => {
   afterEach(() => {
     cleanup();
     manualEditHeld.open = false;
+    manualEditHeld.release = null;
     vi.clearAllMocks();
   });
 
@@ -172,5 +184,79 @@ describe('FileWorkspace user-activation reporting', () => {
     // that issued it.
     await waitFor(() => expect(manualEditHeld.open).toBe(true));
     expect(onUserActivateTab).not.toHaveBeenCalled();
+  });
+  // Shared by the two ownership tests: render, then hand the workspace an
+  // internal request whose owner predicate the test controls, and leave the
+  // activation parked on the manual edit.
+  async function parkInternalRequest(isStillOwned: () => boolean) {
+    const onTabsStateChange = vi.fn();
+    const onUserActivateTab = vi.fn();
+    const request: WorkspaceOpenRequest = {
+      name: 'other.md',
+      nonce: 1,
+      source: 'internal',
+      isStillOwned,
+    };
+
+    const { rerender } = renderWorkspace({ onTabsStateChange, onUserActivateTab });
+    rerender(
+      <I18nProvider>
+        <FileWorkspace
+          projectId="project-1"
+          projectKind="prototype"
+          files={[NOTES, OTHER]}
+          liveArtifacts={[]}
+          onRefreshFiles={vi.fn()}
+          isDeck={false}
+          tabsState={{ tabs: ['notes.md'], active: 'notes.md' }}
+          onTabsStateChange={onTabsStateChange}
+          onUserActivateTab={onUserActivateTab}
+          openRequest={request}
+        />
+      </I18nProvider>,
+    );
+
+    // The activation must really be parked, or releasing it below proves nothing.
+    await waitFor(() => expect(manualEditHeld.release).not.toBeNull());
+    expect(onTabsStateChange).not.toHaveBeenCalled();
+    return { onTabsStateChange };
+  }
+
+  async function releaseManualEdit() {
+    manualEditHeld.release?.(true);
+    await waitFor(() => expect(manualEditHeld.release).not.toBeNull());
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  // Positive control for the ownership test below: without it, "did not
+  // activate" would also pass if the parked activation simply never ran.
+  it('lands a parked internal activation whose run still owns it', async () => {
+    const { onTabsStateChange } = await parkInternalRequest(() => true);
+
+    await releaseManualEdit();
+
+    await waitFor(() =>
+      expect(onTabsStateChange).toHaveBeenCalledWith(
+        expect.objectContaining({ active: 'other.md' }),
+      ),
+    );
+  });
+
+  it('drops a parked internal activation whose run lost ownership while it waited', async () => {
+    // Reviewer #6842 (nettee, 2026-08-18, round 7): the requester's generation
+    // and conversation checks ran when the request was made. This window is
+    // unbounded, so a newer run or another conversation can take over inside
+    // it — and the parked callback would still activate, because the gate only
+    // re-checks the source tab and the activation sequence, neither of which a
+    // handoff changes. Re-asking the owner at release is what stops it.
+    let owned = true;
+    const { onTabsStateChange } = await parkInternalRequest(() => owned);
+
+    // The handoff: a newer send, or the user moving to another chat.
+    owned = false;
+    await releaseManualEdit();
+
+    expect(onTabsStateChange).not.toHaveBeenCalled();
   });
 });

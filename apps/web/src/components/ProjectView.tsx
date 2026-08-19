@@ -3561,9 +3561,20 @@ export function ProjectView({
   // gesture or opening on the project's own initiative. Defaulting either way
   // would silently mislabel whichever kind of caller forgot it, and mislabelling
   // a user click is exactly what lets the settle watcher overwrite her choice.
-  const requestOpenFile = useCallback((name: string, source: WorkspaceOpenRequestSource) => {
+  // `isStillOwned` is re-asked by the workspace when the activation actually
+  // runs. Everything checked here is checked at REQUEST time, and the workspace
+  // can park an activation behind an unsettled manual edit for an unbounded
+  // time — long enough for a newer run or another conversation to take over. A
+  // predicate rather than data because only the caller knows what owning this
+  // request means; a user's click passes none, since a user's choice cannot go
+  // stale by waiting.
+  const requestOpenFile = useCallback((
+    name: string,
+    source: WorkspaceOpenRequestSource,
+    isStillOwned?: () => boolean,
+  ) => {
     if (!name) return;
-    setOpenRequest({ name, nonce: Date.now(), source });
+    setOpenRequest({ name, nonce: Date.now(), source, isStillOwned });
   }, []);
   // Handed to ChatPane, whose file links and produced-file chips are clicked by
   // the user; ChatPane itself stays a plain `(name) => void` consumer.
@@ -3844,7 +3855,18 @@ export function ProjectView({
       userActivations: workspaceUserActivationsRef.current,
     });
     if (!decision.keepWatching) pendingAutoOpenSettleRef.current = null;
-    if (decision.openFileName) requestOpenFile(decision.openFileName, 'internal');
+    // The watch's own conversation guard runs above, at decision time; this
+    // carries it to activation time for the same reason the run opener does.
+    // Generation is not this path's fence — the watch is retired outright when a
+    // newer send arms over it — so conversation is the whole ownership here.
+    const watchConversationId = pending.conversationId;
+    if (decision.openFileName) {
+      requestOpenFile(
+        decision.openFileName,
+        'internal',
+        () => activeConversationIdRef.current === watchConversationId,
+      );
+    }
   }, [requestOpenFile]);
 
   // Later lists: every accepted file-list generation (and every focus change,
@@ -7097,10 +7119,16 @@ export function ProjectView({
       // it. Checked here, at the moment the request actually goes out, rather
       // than at arming: the whole point is that an unbounded amount of time can
       // pass in between.
+      const runStillOwnsAutoOpen = () =>
+        autoOpenSettleGenerationRef.current === autoOpenSettleGeneration
+        && activeConversationIdRef.current === runConversationId;
       const requestRunOpenFile = (fileName: string) => {
-        if (autoOpenSettleGenerationRef.current !== autoOpenSettleGeneration) return false;
-        if (activeConversationIdRef.current !== runConversationId) return false;
-        requestOpenFile(fileName, 'internal');
+        if (!runStillOwnsAutoOpen()) return false;
+        // The same predicate travels with the request, because passing it here
+        // only proves the run owned auto-open when it asked. The workspace can
+        // hold the activation until a manual edit flushes, and the two lines
+        // above have already run by then.
+        requestOpenFile(fileName, 'internal', runStillOwnsAutoOpen);
         runAutoOpenedFileNames.add(fileName);
         return true;
       };

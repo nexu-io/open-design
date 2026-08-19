@@ -212,6 +212,15 @@ export interface WorkspaceOpenRequest {
   name: string;
   nonce: number;
   source: WorkspaceOpenRequestSource;
+  // Re-asked at the moment the activation actually runs, not when the request
+  // is made. An activation can be parked behind an unsettled manual edit for an
+  // unbounded time (see `afterActiveManualEditSettles`), and the requester's own
+  // checks have long since passed by then — so whatever made this request the
+  // right one to honour has to stay askable. Only the requester knows what that
+  // is, which is why this is a predicate rather than data: 'internal' requests
+  // carry their run's ownership, and a user's click carries nothing because a
+  // user's choice cannot go stale.
+  isStillOwned?: () => boolean;
 }
 
 interface Props {
@@ -1605,16 +1614,23 @@ export function FileWorkspace({
   function afterActiveManualEditSettles(
     action: () => void,
     origin: WorkspaceOpenRequestSource = 'user',
+    isStillOwned?: () => boolean,
   ) {
     // Over-reporting is the safe direction and is deliberate here: this can
     // double-count with the `activeTab` effect when the activation lands
     // promptly. The count is only ever compared for equality, so an extra
     // increment can retire a watch early — never move focus off the user's tab.
     if (origin === 'user') onUserActivateTab?.();
+    // The owner is re-checked HERE rather than at the callsite, because this is
+    // the only place that knows whether the action ran immediately or waited.
+    const run = () => {
+      if (isStillOwned && !isStillOwned()) return;
+      action();
+    };
     const sourceTab = activeTabRef.current;
     const exit = manualEditExitHandlersRef.current.get(sourceTab);
     if (!exit) {
-      action();
+      run();
       return;
     }
     const sequence = ++requestedActivationSequenceRef.current;
@@ -1624,7 +1640,7 @@ export function FileWorkspace({
         ok
         && sequence === requestedActivationSequenceRef.current
         && activeTabRef.current === sourceTab
-      ) action();
+      ) run();
     });
   }
 
@@ -1869,13 +1885,17 @@ export function FileWorkspace({
     onTabsStateChange(next);
   }
 
-  function setPersistedActive(name: string | null, origin: WorkspaceOpenRequestSource = 'user') {
+  function setPersistedActive(
+    name: string | null,
+    origin: WorkspaceOpenRequestSource = 'user',
+    isStillOwned?: () => boolean,
+  ) {
     const nextActive = name ?? defaultRootTab;
     if (nextActive === activeTab) return;
     afterActiveManualEditSettles(() => {
       setActiveTab(nextActive);
       commitTabsState(workspaceTabsState(persistedTabs, name));
-    }, origin);
+    }, origin, isStillOwned);
   }
 
   function openRequestedBrowserTab(request: BrowserOpenRequest) {
@@ -2084,6 +2104,7 @@ export function FileWorkspace({
     // classify the user's click as the parent's and leave the settle watcher
     // free to open a higher-ranked artifact over it.
     const origin = openRequest.source;
+    const isStillOwned = openRequest.isStillOwned;
     // Still marked for BOTH sources, so the reporter above never fires off the
     // landed activation for a request that came through this prop: a run's own
     // auto-open must not retire the watch that issued it, and a user-sourced one
@@ -2096,16 +2117,16 @@ export function FileWorkspace({
           ? DESIGN_FILES_TAB
           : name;
       parentRequestedActivationRef.current = nextActive;
-      setPersistedActive(nextActive, origin);
+      setPersistedActive(nextActive, origin, isStillOwned);
       return;
     }
     if (isBrowserTabId(name) && browserTabs.some((tab) => tab.id === name)) {
       parentRequestedActivationRef.current = name;
-      setPersistedActive(name, origin);
+      setPersistedActive(name, origin, isStillOwned);
       return;
     }
     parentRequestedActivationRef.current = name;
-    openFile(name, { forcePersist: true, origin });
+    openFile(name, { forcePersist: true, origin, isStillOwned });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openRequest]);
 
@@ -2170,7 +2191,11 @@ export function FileWorkspace({
 
   function openFile(
     name: string,
-    options?: { forcePersist?: boolean; origin?: WorkspaceOpenRequestSource },
+    options?: {
+      forcePersist?: boolean;
+      origin?: WorkspaceOpenRequestSource;
+      isStillOwned?: () => boolean;
+    },
   ) {
     if (name === activeTab) return;
     afterActiveManualEditSettles(() => {
@@ -2190,7 +2215,7 @@ export function FileWorkspace({
       if (nextBrowserTabs !== browserTabs) setBrowserTabs(nextBrowserTabs);
       commitTabsState(workspaceTabsState(nextTabs, name, nextBrowserTabs));
       setActiveTab(name);
-    }, options?.origin ?? 'user');
+    }, options?.origin ?? 'user', options?.isStillOwned);
   }
   openFileRef.current = openFile;
 

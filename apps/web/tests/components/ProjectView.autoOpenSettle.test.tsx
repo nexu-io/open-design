@@ -831,7 +831,15 @@ describe('ProjectView auto-open settle watcher lifecycle', () => {
     });
 
     await turn.releasePerWriteRead();
-    expect(openRequestKeys().map((key) => key.name)).toContain('plan.md');
+    // Polled rather than asserted on the tick after the release: the release
+    // awaits a fixed number of microtasks, which is not a guarantee that the
+    // continuation behind it has reached its open. Under full-suite load that
+    // raced, and the failure looked like "the guard blocked it" rather than
+    // "the assertion ran early" — the two are indistinguishable from an empty
+    // list, which cost real debugging time.
+    await waitFor(() =>
+      expect(openRequestKeys().map((key) => key.name)).toContain('plan.md'),
+    );
 
     // The workspace follows the open request, exactly as it would in the app.
     await act(async () => {
