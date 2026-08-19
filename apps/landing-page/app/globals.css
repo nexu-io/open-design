@@ -1183,6 +1183,151 @@ a.nav-mega-col-head.is-active {
   top: calc(100% + var(--nav-flyout-gap, 12px));
   right: 0;
 }
+.nav-community-entry {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+}
+.nav-community-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 14px;
+  border: 1px solid color-mix(in srgb, var(--coral) 76%, var(--ink));
+  border-radius: 999px;
+  background: var(--coral);
+  box-shadow: 0 5px 14px color-mix(in srgb, var(--coral) 24%, transparent);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.nav-community-cta:hover {
+  background: var(--coral-soft);
+  box-shadow: 0 7px 18px color-mix(in srgb, var(--coral) 32%, transparent);
+  transform: translateY(-1px);
+}
+.nav-community-cta:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+.nav-community-benefits {
+  position: relative;
+  flex-shrink: 0;
+  font-family: var(--sans);
+}
+.nav-community-benefits summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+  transition: color 160ms ease;
+}
+.nav-community-benefits summary::-webkit-details-marker {
+  display: none;
+}
+.nav-community-benefits summary:hover,
+.nav-community-benefits summary:focus-visible,
+.nav-community-benefits[open] summary {
+  color: var(--ink);
+}
+.nav-community-benefits summary:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.nav-community-benefits-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid color-mix(in srgb, var(--ink) 24%, transparent);
+  border-radius: 50%;
+  font-family: ui-serif, Georgia, serif;
+  font-size: 10px;
+  font-style: italic;
+  font-weight: 700;
+}
+.nav-community-benefits-card {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 14px);
+  right: 0;
+  width: 330px;
+  padding: 18px 20px 17px;
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow:
+    0 16px 42px rgba(17, 17, 26, 0.12),
+    0 3px 10px rgba(17, 17, 26, 0.06);
+  color: var(--ink);
+}
+.nav-community-benefits-card::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  right: 11px;
+  width: 11px;
+  height: 11px;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-left: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  background: #fff;
+  transform: rotate(45deg);
+}
+.nav-community-benefits-card strong {
+  display: block;
+  margin-bottom: 11px;
+  font-size: 14px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.nav-community-benefits-card ol {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: community-benefit;
+}
+.nav-community-benefits-card li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 9px;
+  align-items: start;
+  color: color-mix(in srgb, var(--ink) 76%, transparent);
+  font-size: 12.5px;
+  line-height: 1.4;
+  counter-increment: community-benefit;
+}
+.nav-community-benefits-card li::before {
+  content: counter(community-benefit);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: var(--coral-soft);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1;
+}
 .nav-cta {
   display: inline-flex;
   align-items: center;
@@ -5600,6 +5745,7 @@ footer .container {
 @media (max-width: 1080px) {
   .nav-toggle { display: inline-flex; }
   .brand { white-space: nowrap; }
+  .nav-community-benefits { display: none; }
   /* Hide Download from the bar (Star stays). */
   .nav-side .nav-cta.ghost { display: none; }
   /* Collapse the nav <ul> into a panel that drops below the header bar.
