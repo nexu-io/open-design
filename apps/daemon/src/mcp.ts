@@ -1804,7 +1804,7 @@ export async function runMcpStdio(options: RunMcpOptions): Promise<void> {
         '- Cloud mode: check login status first; if signed out, call sign-in tool and show activation URL/code.',
         '- create_project(name) first if needed; start_run requires an existing project.',
         '- start_run(prompt, requestId, [skill], [plugin], [inputs]) starts generation. Generate UUID requestId once per action; reuse verbatim on retries.',
-        '- Poll get_run(runId) every 30–60s until terminal. Runs take 5–30m; unchanged files = inner agent thinking, NOT a hang. Do NOT cancel or use write_file.',
+        '- Poll get_run(runId) every 30–60s until terminal. Runs take 5–30m; unchanged files = inner agent thinking, NOT a hang. Do NOT cancel or use write_file unless user explicitly asks to abort.',
         '- On failureAction:"recharge", show rechargeUrl. After top-up, call original start_run with same requestId and resume:true.',
         '- On success, get_run returns previewUrl (open in browser) and agentMessage. Use get_artifact for source files.',
         '',
