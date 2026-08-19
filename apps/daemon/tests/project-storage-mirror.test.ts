@@ -139,6 +139,11 @@ describe('project storage mirror (#7043)', () => {
       await mkdir(projectDir, { recursive: true });
       await writeFile(path.join(projectDir, 'index.html'), '<h1>old</h1>');
       await writeFile(path.join(projectDir, 'index.html.artifact.json'), '{"kind":"html"}');
+      // Seed the old remote state: the rename's authoritative full-tree sync
+      // must reconcile away the old file and old manifest, then re-upload
+      // the renamed file and its manifest.
+      fake.map.set('p1/index.html', Buffer.from('old-remote'));
+      fake.map.set('p1/index.html.artifact.json', Buffer.from('old-manifest-remote'));
       const { renameProjectFile, setProjectStorageMirror } = await import('../src/projects.js');
       const prev = setProjectStorageMirror(mirror);
       try {
@@ -146,8 +151,6 @@ describe('project storage mirror (#7043)', () => {
       } finally {
         setProjectStorageMirror(prev);
       }
-      // The rename runs the authoritative full-tree sync: the old file and
-      // old manifest are reconciled away and every local file is re-uploaded.
       expect(fake.calls).toEqual([
         'del:p1/index.html',
         'del:p1/index.html.artifact.json',
