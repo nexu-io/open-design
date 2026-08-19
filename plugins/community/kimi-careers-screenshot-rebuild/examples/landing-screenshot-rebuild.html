@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Moonshot AI 招聘 - Screenshot Rebuild</title>
+  <style>
+    :root {
+      --bg: #000;
+      --fg: #f4f4f4;
+      --muted: #8d8d8d;
+      --dim: #555;
+      --line: rgba(255, 255, 255, 0.16);
+      --font-pixel: "Fusion Pixel 12px Mono zh_hans", "Fusion Pixel", "Zpix", "PixelMplus10", "LXGW WenKai Mono", "SimSun", ui-monospace, monospace;
+      --font-ui: ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+    }
+
+    @font-face {
+      font-family: "Fusion Pixel 12px Mono zh_hans";
+      src: url("assets/fonts/fusion-pixel-12px-mono-zh-hans.otf") format("opentype");
+      font-style: normal;
+      font-weight: 400;
+      font-display: swap;
+    }
+
+    * { box-sizing: border-box; }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: var(--font-ui);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: geometricPrecision;
+    }
+
+    body {
+      overflow-x: hidden;
+    }
+
+    .page {
+      width: 100%;
+      height: 860vh;
+      background: #000;
+    }
+
+    .screen {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      isolation: isolate;
+    }
+
+    .transition-shell {
+      position: relative;
+      width: 100%;
+      height: 860vh;
+      background: #000;
+    }
+
+    .transition-stage {
+      position: sticky;
+      top: 0;
+      width: 100%;
+      height: 100svh;
+      overflow: hidden;
+      background: #000;
+      isolation: isolate;
+    }
+
+    .scene-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      opacity: 0;
+      transform: translate3d(0, 0, 0) scale(1);
+      transition: opacity 80ms linear;
+      will-change: opacity, transform, filter;
+      pointer-events: none;
+      background: #000;
+    }
+
+    .scene-layer.is-current {
+      pointer-events: auto;
+    }
+
+    .scene-stage {
+      position: relative;
+      width: 100%;
+      height: 100svh;
+      overflow: hidden;
+      background: #000;
+      isolation: isolate;
+    }
+
+    .hero-art {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.08) 35%, rgba(0, 0, 0, 0.15) 100%),
+        url("assets/figma/hero-cockpit.webp") center center / cover no-repeat;
+      image-rendering: pixelated;
+      will-change: opacity;
+    }
+
+    .hero-art::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(0, 0, 0, 0.42), transparent 20%, transparent 78%, rgba(0, 0, 0, 0.24)),
+        repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 4px);
+      mix-blend-mode: normal;
+      pointer-events: none;
+    }
+
+    .nav {
+      position: absolute;
+      inset: 14px 40px auto 34px;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 40px;
+      font-size: 16px;
+      line-height: 1;
+      color: #fff;
+    }
+
+    .brand {
+      display: block;
+      color: #fff;
+      text-decoration: none;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .brand-pixel-image {
+      display: block;
+      width: 226px;
+      height: auto;
+      image-rendering: pixelated;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: clamp(44px, 8vw, 104px);
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+
+    .nav-links a {
+      color: inherit;
+      text-decoration: none;
+    }
+
+    .hero-title {
+      position: absolute;
+      z-index: 2;
+      left: 5.3vw;
+      top: 19.1vh;
+      width: clamp(300px, 28.55vw, 548px);
+    }
+
+    .pixel-image {
+      display: block;
+      width: 100%;
+      height: auto;
+      image-rendering: pixelated;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    .hero-text-piece {
+      position: absolute;
+      z-index: 2;
+    }
+
+    .builder-title {
+      left: 5.98vw;
+      top: 75.48vh;
+      width: 12.10vw;
+    }
+
+    .builder-copy {
+      left: 6.12vw;
+      top: 81.70vh;
+      width: 26.65vw;
+    }
+
+    .join-title {
+      left: 79.40vw;
+      top: 67.22vh;
+      width: 14.28vw;
+    }
+
+    .build-title {
+      left: 57.92vw;
+      top: 75.84vh;
+      width: 36.71vw;
+    }
+
+    .scroll-cue {
+      position: absolute;
+      z-index: 2;
+      left: 50%;
+      bottom: 4.4vh;
+      transform: translateX(-50%);
+      display: grid;
+      justify-items: center;
+      gap: 14px;
+      color: #8d8d8d;
+      font-size: 14px;
+      letter-spacing: 0.01em;
+      opacity: 0.84;
+    }
+
+    .chevrons {
+      display: grid;
+      gap: 3px;
+      opacity: 0.74;
+    }
+
+    .chevrons span {
+      width: 12px;
+      height: 12px;
+      border-left: 2px solid #8d8d8d;
+      border-top: 2px solid #8d8d8d;
+      transform: rotate(45deg);
+    }
+
+    .reference-screen {
+      height: 100%;
+      display: block;
+      background: #000;
+    }
+
+    .screen-reference {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center top;
+      image-rendering: pixelated;
+      user-select: none;
+      pointer-events: none;
+      opacity: 1;
+      filter: contrast(1) brightness(1);
+    }
+
+    @media (max-width: 860px) {
+      .nav {
+        inset: 20px 22px auto;
+      }
+
+      .brand-pixel-image { width: 190px; }
+      .nav-links { display: none; }
+
+      .hero-art {
+        background-position: 52% 50%;
+        background-size: auto 100%;
+      }
+
+      .hero-title {
+        left: 24px;
+        top: 17vh;
+        width: min(360px, calc(100vw - 48px));
+      }
+
+      .builder-title {
+        left: 24px;
+        top: 74vh;
+        width: 178px;
+      }
+
+      .builder-copy {
+        left: 24px;
+        top: calc(74vh + 42px);
+        width: min(392px, calc(100vw - 48px));
+      }
+
+      .join-title {
+        left: auto;
+        right: 24px;
+        top: 65vh;
+        width: 210px;
+      }
+
+      .build-title {
+        left: auto;
+        right: 24px;
+        top: calc(65vh + 66px);
+        width: min(540px, calc(100vw - 48px));
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="transition-shell" id="transition-shell">
+      <div class="transition-stage" id="transition-stage" aria-live="polite">
+        <section class="scene-layer screen hero-screen is-current" data-scene="hero" data-screen-label="01 Hero" aria-label="Moonshot AI 首屏">
+          <div class="scene-stage">
+            <div class="hero-art" aria-hidden="true"></div>
+
+            <header class="nav" aria-label="Moonshot AI 招聘导航">
+              <a class="brand" href="#" aria-label="Moonshot AI 招聘">
+                <img class="brand-pixel-image" src="assets/rebuild/hero-brand-pixel.png" alt="" aria-hidden="true" />
+                <span class="sr-only">Moonshot AI 招聘</span>
+              </a>
+              <nav class="nav-links" aria-label="页面导航">
+                <a href="#join">加入我们</a>
+                <a href="#about">关于我们</a>
+                <a href="#process">招聘流程</a>
+              </nav>
+            </header>
+
+            <div class="hero-title">
+              <img class="pixel-image" src="assets/rebuild/hero-title-pixel.png" alt="" aria-hidden="true" />
+              <span class="sr-only">Moonshot AI 月之暗面，把光带进来</span>
+            </div>
+
+            <aside aria-label="New builder">
+              <img class="pixel-image hero-text-piece builder-title" src="assets/rebuild/hero-builder-title-pixel.png" alt="" aria-hidden="true" />
+              <img class="pixel-image hero-text-piece builder-copy" src="assets/rebuild/hero-builder-copy-pixel.png" alt="" aria-hidden="true" />
+              <span class="sr-only">New builder. We look forward to building the future of AI with you.</span>
+            </aside>
+
+            <div class="join" id="join">
+              <img class="pixel-image hero-text-piece join-title" src="assets/rebuild/hero-join-title-pixel.png" alt="" aria-hidden="true" />
+              <img class="pixel-image hero-text-piece build-title" src="assets/rebuild/hero-build-title-pixel.png" alt="" aria-hidden="true" />
+              <span class="sr-only">Join us. Build your own job.</span>
+            </div>
+
+            <div class="scroll-cue" aria-hidden="true">
+              <div class="chevrons"><span></span><span></span></div>
+              <div>滑动开启探索</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="scene-layer screen reference-screen" data-scene="orbit" data-screen-label="02 Moon Orbit" aria-label="小月球环绕文字段落">
+          <img class="screen-reference" src="assets/rebuild/screen02-moon-orbit-reference.png" alt="" aria-hidden="true" />
+        </section>
+
+        <section class="scene-layer screen reference-screen" data-scene="join" data-screen-label="03 Join Paths" aria-label="招聘入口月球段落">
+          <img class="screen-reference" src="assets/rebuild/screen03-large-moon-reference.png" alt="" aria-hidden="true" />
+        </section>
+
+        <section class="scene-layer screen reference-screen" data-scene="build" data-screen-label="04 Build Your Own Job" aria-label="Build Your Own Job 段落">
+          <img class="screen-reference" src="assets/rebuild/screen04-build-job-reference.png" alt="" aria-hidden="true" />
+        </section>
+
+        <section class="scene-layer screen reference-screen" data-scene="odyssey" data-screen-label="05 AGI Odyssey" aria-label="AGI Odyssey 段落">
+          <img class="screen-reference" src="assets/rebuild/screen05-agi-odyssey-reference.png" alt="" aria-hidden="true" />
+        </section>
+
+        <section class="scene-layer screen reference-screen" data-scene="stats" data-screen-label="06 Exploration Stats" aria-label="探索阶段数据段落">
+          <img class="screen-reference" src="assets/rebuild/screen06-stats-reference.png" alt="" aria-hidden="true" />
+        </section>
+
+        <section class="scene-layer screen reference-screen" data-scene="process" data-screen-label="07 Application Process" aria-label="登月申请流程段落">
+          <img class="screen-reference" src="assets/rebuild/screen07-process-reference.png" alt="" aria-hidden="true" />
+        </section>
+
+        <section class="scene-layer screen reference-screen" data-scene="footer" data-screen-label="08 Footer CTA" aria-label="底部联系与 CTA 段落">
+          <img class="screen-reference" src="assets/rebuild/screen08-footer-reference.png" alt="" aria-hidden="true" />
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      var shell = document.getElementById('transition-shell');
+      var layers = Array.prototype.slice.call(document.querySelectorAll('.scene-layer'));
+      if (!shell || !layers.length) return;
+
+      function clamp(n, min, max) {
+        return Math.max(min, Math.min(max, n));
+      }
+
+      function smooth(t) {
+        t = clamp(t, 0, 1);
+        return t * t * (3 - 2 * t);
+      }
+
+      function sceneStyle(name, local, distance) {
+        var enter = smooth(local);
+        var exit = smooth(1 - local);
+        var x = 0;
+        var y = 0;
+        var scale = 1;
+        var blur = Math.min(2.6, Math.abs(distance) * 2.6);
+
+        if (name === 'hero') {
+          scale = 1 + enter * 0.015;
+        } else if (name === 'orbit') {
+          scale = 1.02 - enter * 0.02;
+        } else if (name === 'join') {
+          x = (1 - enter) * 4;
+          scale = 1.035 - enter * 0.035;
+        } else if (name === 'build') {
+          scale = 1.08 - enter * 0.08;
+        } else if (name === 'odyssey') {
+          x = (1 - enter) * -3;
+        } else if (name === 'stats') {
+          x = (0.5 - local) * 5;
+          scale = 1.015;
+        } else if (name === 'process') {
+          x = (1 - enter) * 3;
+          scale = 1.025 - enter * 0.025;
+        } else if (name === 'footer') {
+          y = (1 - enter) * 4;
+          scale = 1.04 - enter * 0.04;
+        }
+
+        if (distance < 0) {
+          x *= -0.35;
+          y *= -0.35;
+          scale += (1 - exit) * 0.01;
+        }
+
+        return {
+          transform: 'translate3d(' + x.toFixed(3) + 'vw,' + y.toFixed(3) + 'vh,0) scale(' + scale.toFixed(4) + ')',
+          filter: blur > 0.1 ? 'blur(' + blur.toFixed(2) + 'px)' : 'none'
+        };
+      }
+
+      function paint() {
+        var rect = shell.getBoundingClientRect();
+        var travel = Math.max(1, shell.offsetHeight - window.innerHeight);
+        var raw = clamp(-rect.top / travel, 0, 1);
+        var position = raw * (layers.length - 1);
+        var current = Math.round(position);
+
+        layers.forEach(function (layer, i) {
+          var distance = i - position;
+          var amount = clamp(1 - Math.abs(distance), 0, 1);
+          var opacity = smooth(amount);
+          var local = clamp(position - Math.floor(position), 0, 1);
+          var style = sceneStyle(layer.dataset.scene || '', local, distance);
+
+          layer.style.opacity = opacity.toFixed(4);
+          layer.style.zIndex = String(Math.round(opacity * 100) + i);
+          layer.style.transform = style.transform;
+          layer.style.filter = style.filter;
+          layer.classList.toggle('is-current', i === current);
+          layer.setAttribute('aria-hidden', i === current ? 'false' : 'true');
+        });
+      }
+
+      var raf = 0;
+      function schedule() {
+        if (raf) return;
+        raf = requestAnimationFrame(function () {
+          raf = 0;
+          paint();
+        });
+      }
+
+      window.addEventListener('scroll', schedule, { passive: true });
+      document.addEventListener('scroll', schedule, { passive: true, capture: true });
+      window.addEventListener('resize', schedule);
+      paint();
+    })();
+  </script>
+</body>
+</html>

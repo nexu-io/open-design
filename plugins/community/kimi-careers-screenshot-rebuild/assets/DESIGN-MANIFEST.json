@@ -1,0 +1,68 @@
+{
+  "schema": "open-design.design-manifest.v1",
+  "brand": "Kimi Careers",
+  "source": {
+    "url": "https://careers.kimi.com/",
+    "extractedOn": "2026-06-25",
+    "stack": "Next.js (App Router) + Tailwind CSS v4 + custom semantic token layer",
+    "sourceFiles": [
+      "/careers-assets/_next/static/chunks/5180814f5f83ca1d.css",
+      "/careers-assets/_next/static/chunks/d1234ed065ef52a4.css",
+      "/assets/fonts/fusion-pixel-12px-mono-zh-hans.otf"
+    ]
+  },
+  "entryFile": "index.html",
+  "screens": [
+    { "file": "index.html", "role": "design-system-spec", "title": "Kimi Careers 设计系统规范" },
+    { "file": "landing.html", "role": "landing-page", "title": "Kimi Careers 招聘落地页（token 演示）" }
+  ],
+  "screenFilePolicy": "screen-file-first",
+  "tokens": {
+    "theme": { "default": "dark", "supports": ["light", "dark"] },
+    "color": {
+      "brand": { "light": "#1783ff", "dark": "#1a88ff", "role": "Kimi blue — sole accent" },
+      "brandHover": { "light": "#167ff7", "dark": "#258eff" },
+      "brandFocus": { "light": "#1783ff33", "dark": "#1a88ff33" },
+      "success": { "light": "#16c456", "dark": "#16c456" },
+      "warning": { "light": "#ff9500", "dark": "#ff9f0a" },
+      "danger": { "light": "#ff3849", "dark": "#ff4756" },
+      "yellow": { "light": "#ffd230", "dark": "#ffd230" },
+      "neon": { "light": "#32ff7d", "dark": "#32ff7d" },
+      "text1": { "light": "#000000e6", "dark": "#ffffffd6" },
+      "text2": { "light": "#0009", "dark": "#ffffff8f" },
+      "text3": { "light": "#00000073", "dark": "#ffffff6b" },
+      "text4": { "light": "#0000004d", "dark": "#ffffff42" },
+      "bg": { "light": "#f9fbfc", "dark": "#161717" },
+      "bgSecondary": { "light": "#f5f5f5", "dark": "#121212" },
+      "surface1": { "light": "#ffffff", "dark": "#1f1f1f" },
+      "surface2": { "light": "#f5f5f5", "dark": "#292929" },
+      "border": { "light": "#00000021", "dark": "#ffffff1f" },
+      "line": { "light": "#0000000d", "dark": "#ffffff14" }
+    },
+    "typography": {
+      "sans": "ui-sans-serif, system-ui, sans-serif",
+      "mono": "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+      "signature": { "family": "Fusion Pixel 12px Mono zh_hans", "src": "/assets/fonts/fusion-pixel-12px-mono-zh-hans.otf", "use": "numerals, labels, recruitment-map tags" },
+      "scaleUI": { "t1": "18/26", "t2": "16/24", "b1": "15/22", "b2": "14/20", "c1": "12/18", "c2": "10/14" },
+      "scaleMD": { "h1": "20/32", "h2": "18/28", "b1": "16/26", "b2": "15/24", "b3": "14/22" }
+    },
+    "spacing": { "base": "4px", "unit": "--spacing:.25rem" },
+    "radius": { "md": "6px", "sm": "2px", "lg": "8px", "xl": "12px", "measured": ["md"], "derived": ["sm", "lg", "xl"] },
+    "shadow": { "measured": false, "note": "no custom shadow tokens at source; dark uses Kimi-blue glow", "glow": "0 0 0 1px #1a88ff40, 0 0 28px #1a88ff33" }
+  },
+  "interactions": [
+    { "name": "recruitment-map-glow-ray", "source": "RecruitmentMap module", "css": "hoverRayFade .12s; hoverRayGlow opacity 0->.95->.42" },
+    { "name": "shuffle-char-scroll", "source": ".shuffle-char-wrapper", "desc": "per-character flip/scroll text reveal" },
+    { "name": "retro-cursor", "source": "RetroCursorTheme", "desc": "pixel retro cursor on dark canvas" }
+  ],
+  "responsiveViewports": [360, 390, 430, 768, 834, 1024, 1280, 1440],
+  "implementationChecklist": [
+    "All colors via var(--*); no off-system hardcoded hex",
+    "Kimi blue used <= 2 times per screen",
+    "Text uses white/black alpha steps, not solid gray",
+    "Dark layering via lightness + glow, no conventional shadows",
+    "Numerals/labels in Fusion Pixel signature font",
+    "No emoji icons; 1.7px monoline SVG",
+    "No horizontal scroll across the 8 viewports"
+  ]
+}

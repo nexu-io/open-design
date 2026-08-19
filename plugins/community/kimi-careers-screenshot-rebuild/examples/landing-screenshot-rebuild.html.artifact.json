@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "kind": "html",
+  "title": "generated-plugin/examples/landing-screenshot-rebuild.html",
+  "entry": "generated-plugin/examples/landing-screenshot-rebuild.html",
+  "renderer": "html",
+  "status": "complete",
+  "exports": [
+    "html",
+    "pdf",
+    "zip"
+  ],
+  "createdAt": "2026-06-30T08:29:06.445Z",
+  "updatedAt": "2026-06-30T08:29:06.445Z",
+  "metadata": {
+    "inferred": true,
+    "reconciled": true
+  }
+}

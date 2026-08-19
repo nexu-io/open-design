@@ -1,0 +1,151 @@
+{
+  "$schema": "https://open-design.ai/schemas/plugin.v1.json",
+  "specVersion": "1.0.0",
+  "name": "kimi-careers-screenshot-rebuild",
+  "title": "Kimi Careers Screenshot Rebuild",
+  "title_i18n": {
+    "en": "Kimi Careers Screenshot Rebuild",
+    "zh-CN": "Kimi 招聘页截图复刻"
+  },
+  "version": "0.1.0",
+  "description": "Screenshot-faithful Kimi Careers / Moonshot AI recruitment landing-page workflow with black pixel-art scenes, fixed-stage scroll transitions, and packaged reference assets.",
+  "description_i18n": {
+    "en": "Screenshot-faithful Kimi Careers / Moonshot AI recruitment landing-page workflow with black pixel-art scenes, fixed-stage scroll transitions, and packaged reference assets.",
+    "zh-CN": "用于复刻 Kimi Careers / Moonshot AI 招聘落地页的截图保真工作流，包含黑色像素场景、固定舞台滚动转场和参考资源。"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "kokisanai",
+    "url": "https://github.com/kokisanai"
+  },
+  "homepage": "https://github.com/kokisanai/kimi-careers-screenshot-rebuild",
+  "plugin": {
+    "repo": "https://github.com/kokisanai/kimi-careers-screenshot-rebuild"
+  },
+  "tags": [
+    "community",
+    "design-system",
+    "landing-page",
+    "recruiting",
+    "pixel-art",
+    "screenshot-rebuild",
+    "kimi",
+    "moonshot-ai"
+  ],
+  "compat": {
+    "agentSkills": [
+      {
+        "path": "./SKILL.md"
+      }
+    ]
+  },
+  "od": {
+    "kind": "scenario",
+    "taskKind": "new-generation",
+    "mode": "design-system",
+    "scenario": "design",
+    "surface": "web",
+    "preview": {
+      "type": "html",
+      "entry": "./examples/landing-screenshot-rebuild.html",
+      "motion": "scroll"
+    },
+    "useCase": {
+      "query": {
+        "en": "Create a {{artifactKind}} using the Kimi Careers screenshot-rebuild workflow. Use the packaged design handoff and example as the visual contract: black fixed-stage scenes, white pixel typography, sparse recruitment navigation, screenshot-first composition, and scroll-driven scene transitions. Brief: {{brief}} Reference notes or source: {{reference}} Motion fidelity: {{motionFidelity}}.",
+        "zh-CN": "使用 Kimi 招聘页截图复刻工作流创建 {{artifactKind}}。以插件内设计交接和示例为视觉契约：黑色固定舞台、白色像素字、克制招聘导航、截图优先构图、滚动驱动场景转场。需求：{{brief}} 参考说明或来源：{{reference}} 动效保真度：{{motionFidelity}}。"
+      },
+      "exampleOutputs": [
+        {
+          "path": "./examples/landing-screenshot-rebuild.html",
+          "title": "Moonshot AI Recruiting Landing Screenshot Rebuild"
+        }
+      ]
+    },
+    "inputs": [
+      {
+        "name": "artifactKind",
+        "label": "Artifact kind",
+        "type": "select",
+        "required": true,
+        "options": [
+          "recruitment landing page",
+          "brand landing page",
+          "campaign microsite",
+          "web prototype"
+        ],
+        "default": "recruitment landing page"
+      },
+      {
+        "name": "brief",
+        "label": "Brief",
+        "type": "string",
+        "required": true,
+        "placeholder": "What should the page communicate?",
+        "default": "A Moonshot AI / Kimi-style recruiting page"
+      },
+      {
+        "name": "reference",
+        "label": "Reference",
+        "type": "string",
+        "required": false,
+        "placeholder": "Screenshots, recording, source site, or fidelity notes",
+        "default": "Use the packaged example and Kimi Careers design handoff"
+      },
+      {
+        "name": "motionFidelity",
+        "label": "Motion fidelity",
+        "type": "select",
+        "required": true,
+        "options": [
+          "static screenshot fidelity first",
+          "scroll transition fidelity",
+          "full scene-state rebuild"
+        ],
+        "default": "static screenshot fidelity first"
+      }
+    ],
+    "context": {
+      "assets": [
+        "./assets/DESIGN-HANDOFF.md",
+        "./assets/DESIGN-MANIFEST.json",
+        "./examples/landing-screenshot-rebuild.html"
+      ]
+    },
+    "pipeline": {
+      "stages": [
+        {
+          "id": "discovery",
+          "atoms": [
+            "discovery-question-form"
+          ]
+        },
+        {
+          "id": "plan",
+          "atoms": [
+            "todo-write"
+          ]
+        },
+        {
+          "id": "generate",
+          "atoms": [
+            "file-write",
+            "live-artifact"
+          ]
+        },
+        {
+          "id": "critique",
+          "atoms": [
+            "critique-theater"
+          ],
+          "repeat": true,
+          "until": "critique.score >= 4 || iterations >= 3"
+        }
+      ]
+    },
+    "capabilities": [
+      "prompt:inject",
+      "fs:write"
+    ]
+  }
+}
