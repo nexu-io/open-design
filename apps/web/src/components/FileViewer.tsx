@@ -175,7 +175,7 @@ import {
   htmlHasAuthoredBase,
   PREVIEW_REDIRECT_LOOP_MESSAGE,
 } from '../runtime/srcdoc';
-import { DeckThumbnailRail } from './DeckThumbnailRail';
+import { DeckThumbnailRail, type DeckThumbnailViewport } from './DeckThumbnailRail';
 import { parseDeckThumbnails } from '../runtime/deck-thumbnail-parser';
 import {
   buildSpeakerNotesPresenterHtml,
@@ -8241,6 +8241,8 @@ function HtmlViewer({
   const [previewBodyRef, previewBodySize] = usePreviewCanvasSize<HTMLDivElement>();
   const [commentComposerHost, setCommentComposerHost] = useState<HTMLDivElement | null>(null);
   const [commentPreviewCanvasNode, setCommentPreviewCanvasNode] = useState<HTMLDivElement | null>(null);
+  const [deckThumbnailCanvasSize, setDeckThumbnailCanvasSize] =
+    useState<DeckThumbnailViewport | null>(null);
   // Seed from the cache instead of a cold `null` — see htmlPreviewContentWidthState
   // above. A stale seed still self-corrects once a fresh measurement lands.
   const previewMeasurementInteractionActive =
@@ -8441,6 +8443,27 @@ function HtmlViewer({
   const setCommentPreviewCanvasRef = useCallback((node: HTMLDivElement | null) => {
     setCommentPreviewCanvasNode((current) => (current === node ? current : node));
   }, []);
+  useEffect(() => {
+    const canvas = commentPreviewCanvasNode;
+    if (!canvas) {
+      setDeckThumbnailCanvasSize(null);
+      return;
+    }
+    const measure = () => {
+      const width = canvas.clientWidth;
+      const height = canvas.clientHeight;
+      if (!width || !height) return;
+      setDeckThumbnailCanvasSize((current) => (
+        current?.width === width && current.height === height
+          ? current
+          : { width, height }
+      ));
+    };
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    observer?.observe(canvas);
+    return () => observer?.disconnect();
+  }, [commentPreviewCanvasNode]);
   const requestDesktopPreviewContentMeasure = useCallback((target: HTMLIFrameElement | null = iframeRef.current) => {
     if (!workspaceActive) return;
     const source = target?.contentWindow;
@@ -9465,6 +9488,18 @@ function HtmlViewer({
       : null,
   });
   const previewScale = previewZoomPercent / 100;
+  const deckThumbnailRenderViewport = useMemo(() => {
+    const preset = PREVIEW_VIEWPORT_PRESETS.find((item) => item.id === previewViewport);
+    if (preset?.width && preset.height) {
+      return { width: preset.width, height: preset.height };
+    }
+    if (!deckThumbnailCanvasSize) return null;
+    const scale = Number.isFinite(previewScale) && previewScale > 0 ? previewScale : 1;
+    return {
+      width: Math.max(1, Math.round(deckThumbnailCanvasSize.width / scale)),
+      height: Math.max(1, Math.round(deckThumbnailCanvasSize.height / scale)),
+    };
+  }, [deckThumbnailCanvasSize, previewScale, previewViewport]);
   previewContentMeasurementContextRef.current = {
     canvasWidth: boardPreviewCanvasSize?.width ?? 0,
     previewScale,
@@ -15930,6 +15965,7 @@ function HtmlViewer({
                 labelTotal={deckNavTotal}
                 buildThumbSrcDoc={buildDeckThumbnailSrcDoc}
                 parsedDeck={parsedDeckThumbnails}
+                previewViewport={deckThumbnailRenderViewport}
                 onSelect={(index) => {
                   fireDeckViewerClick('thumbnail_select', {
                     slide_index: index,

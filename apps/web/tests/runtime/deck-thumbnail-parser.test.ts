@@ -212,6 +212,60 @@ describe('parseDeckThumbnails', () => {
     expect(parsed.styleText).toContain('width: 100%');
   });
 
+  it('falls back when viewport media queries would diverge from the preview iframe', () => {
+    const html = `<!doctype html><html><head><style>
+      .slide { width: 100vw; height: 100vh; display: flex; }
+      @media (max-width: 768px) {
+        .slide { padding: 24px; display: grid; }
+      }
+    </style></head><body>
+      <section class="slide">A</section>
+      <section class="slide">B</section>
+    </body></html>`;
+
+    const parsed = parseDeckThumbnails(html);
+
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('viewport-media-query');
+  });
+
+  it.each([
+    ['one-sided width range', '(width <= 768px)'],
+    ['reversed height range', '(900px >= height)'],
+    ['chained width range', '(400px < width < 900px)'],
+    ['aspect-ratio range', '(4 / 3 < aspect-ratio)'],
+    ['exact width range', '(width = 768px)'],
+  ])('falls back for Media Queries Level 4 %s', (_label, query) => {
+    const html = `<!doctype html><html><head><style>
+      .slide { width: 1920px; height: 1080px; display: flex; }
+      @media ${query} {
+        .slide { display: grid; }
+      }
+    </style></head><body>
+      <section class="slide">A</section>
+      <section class="slide">B</section>
+    </body></html>`;
+
+    const parsed = parseDeckThumbnails(html);
+
+    expect(parsed.renderable).toBe(false);
+    expect(parsed.reason).toBe('viewport-media-query');
+  });
+
+  it('keeps non-viewport media queries on the static thumbnail path', () => {
+    const html = `<!doctype html><html><head><style>
+      .slide { width: 1920px; height: 1080px; display: flex; }
+      @media (prefers-reduced-motion: reduce) {
+        .slide { animation: none; }
+      }
+    </style></head><body>
+      <section class="slide">A</section>
+      <section class="slide">B</section>
+    </body></html>`;
+
+    expect(parseDeckThumbnails(html).renderable).toBe(true);
+  });
+
   it('does not mistake a slide descendant decoration for the design canvas', () => {
     const html = `<!doctype html><html><head><style>
       body { display: flex; width: 200vw; height: 100vh; }
