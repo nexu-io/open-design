@@ -326,10 +326,66 @@ describe('HomeView media composer options', () => {
     });
   });
 
+  it('submits the image prompt template model and aspect from the Home entry', async () => {
+    stubFetch();
+    const onSubmit = vi.fn();
+    const portraitTemplate: PromptTemplateSummary = {
+      ...PROMPT_TEMPLATES[0]!,
+      aspect: '3:4',
+    };
+    renderHome({ onSubmit, promptTemplates: [portraitTemplate] });
+
+    await clickHomeRailChip('image');
+    await setHomePrompt('Create a portrait campaign image.');
+    await submitHome();
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+        projectMetadata: expect.objectContaining({
+          imageModel: 'gpt-image-2',
+          imageAspect: '3:4',
+          promptTemplate: expect.objectContaining({ id: 'image-product' }),
+        }),
+      }));
+    });
+  });
+
+  it('retains image template metadata when a rejected create is retried', async () => {
+    stubFetch();
+    const onSubmit = vi.fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    const portraitTemplate: PromptTemplateSummary = {
+      ...PROMPT_TEMPLATES[0]!,
+      aspect: '3:4',
+    };
+    renderHome({ onSubmit, promptTemplates: [portraitTemplate] });
+
+    await clickHomeRailChip('image');
+    await setHomePrompt('Create a retryable portrait image.');
+    await submitHome();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+    await submitHome();
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2));
+
+    for (const [payload] of onSubmit.mock.calls) {
+      expect(payload).toEqual(expect.objectContaining({
+        projectMetadata: expect.objectContaining({
+          imageModel: 'gpt-image-2',
+          imageAspect: '3:4',
+        }),
+      }));
+    }
+  });
+
   it('updates submitted template metadata after media templates load', async () => {
     stubFetch();
     const onSubmit = vi.fn();
     const props = homeProps({ onSubmit, promptTemplates: [] });
+    const portraitTemplate: PromptTemplateSummary = {
+      ...PROMPT_TEMPLATES[0]!,
+      aspect: '3:4',
+    };
     const view = render(<HomeView {...props} />);
 
     await clickHomeRailChip('image');
@@ -345,12 +401,14 @@ describe('HomeView media composer options', () => {
     });
 
     onSubmit.mockClear();
-    view.rerender(<HomeView {...props} promptTemplates={PROMPT_TEMPLATES} />);
+    view.rerender(<HomeView {...props} promptTemplates={[portraitTemplate]} />);
     await submitHome();
 
     await waitFor(() => {
       expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
         projectMetadata: expect.objectContaining({
+          imageModel: 'gpt-image-2',
+          imageAspect: '3:4',
           promptTemplate: expect.objectContaining({ id: 'image-product' }),
         }),
       }));
