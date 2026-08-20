@@ -79,29 +79,41 @@ export interface PricingContract {
   teamTiers: TeamPlanTierConfig[];
 }
 
-/** Production dashboard that owns the authenticated billing-plan dialog. */
+/** Production dashboard that owns authenticated checkout. */
 export const CLOUD_BASE_URL = 'https://open-design.ai/cloud/dashboard';
 
 /** Public pricing contract served by the landing page. */
 export const PLANS_JSON_URL = '/pricing/plans.json';
 
+/** Confirmed Go launch prices shared by the page, SEO metadata, and tests. */
+export const GO_PLAN = {
+  tier: 'go',
+  monthly: { priceUsd: 10, introPriceUsd: 5 },
+  yearly: { priceUsd: 60 },
+} as const;
+
 /**
- * Stable Vela contract for opening the billing plan chooser. `view=plans` and
- * `checkout=auto` are wallet-era compatibility aliases and must not be emitted
- * by the landing page.
+ * Stable Vela contract for opening the generic billing entry. Specific plan
+ * CTAs use `cloudSubscribeUrl` so Vela can start checkout without reopening a
+ * plan chooser.
  */
 export const CLOUD_CONSOLE_URL = `${CLOUD_BASE_URL}?billing=plan`;
 
 /**
- * Compatibility helper retained for existing call sites. Landing pricing is a
- * static comparison surface, so every CTA opens the authoritative plan chooser
- * rather than guessing a user's current workspace, plan, or permitted change.
+ * Landing pricing is the authoritative comparison surface. A selected plan and
+ * interval are handed to Vela so the dashboard can authenticate and continue
+ * directly into checkout.
  */
 export function cloudSubscribeUrl(
-  _tier: string,
-  _interval: 'monthly' | 'yearly',
+  tier: string,
+  interval: 'monthly' | 'yearly',
 ): string {
-  return CLOUD_CONSOLE_URL;
+  const url = new URL(CLOUD_BASE_URL);
+  url.searchParams.set('billing', 'plan');
+  url.searchParams.set('plan', tier);
+  url.searchParams.set('interval', interval);
+  url.searchParams.set('checkout', 'auto');
+  return url.toString();
 }
 
 /**
