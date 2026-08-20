@@ -22,24 +22,11 @@ export const AMR_CONSOLE_URL =
   'https://open-design.ai/amr/dashboard?source=open_design';
 export const DEFAULT_AMR_RECHARGE_URL = AMR_CONSOLE_URL;
 export const AMR_RECHARGE_URL = DEFAULT_AMR_RECHARGE_URL;
+export const OPEN_DESIGN_PRICING_URL = 'https://open-design.ai/pricing/';
 
 // Path + attribution the console is always reached through, so a runtime
 // origin only has to carry the host.
 const AMR_CONSOLE_PATH = '/dashboard?source=open_design';
-
-/**
- * The console's `billing=<intent>` value that means "open the upgrade surface
- * that matches THIS workspace".
- *
- * B's dashboard resolves it against the workspace's own subscription state
- * rather than trusting the caller: a personal owner gets the personal plan
- * modal (the same one the console's 「升级订阅」 hero button opens), a team
- * that never subscribed gets first-checkout, and a subscribed team gets
- * change-plan. That is why this client links one intent for every state
- * instead of guessing a per-state parameter — a wrong guess used to open
- * nothing at all (recvpSQKna0LwR).
- */
-export const AMR_CONSOLE_UPGRADE_INTENT = 'plan';
 
 const AMR_CONSOLE_URL_BY_PROFILE: Record<string, string> = {
   prod: DEFAULT_AMR_RECHARGE_URL,
@@ -102,13 +89,11 @@ export function amrRechargeUrlForProfile(profile: string | null | undefined): st
 function amrWorkspaceUrl(
   profile: string | null | undefined,
   workspaceId: string | null | undefined,
-  intent?: 'plans',
 ): string | null {
   const normalizedWorkspaceId = workspaceId?.trim();
   if (!normalizedWorkspaceId) return null;
   const url = new URL(amrConsoleUrlForProfile(profile));
   url.searchParams.set('workspaceId', normalizedWorkspaceId);
-  if (intent === 'plans') url.searchParams.set('billing', AMR_CONSOLE_UPGRADE_INTENT);
   return url.toString();
 }
 
@@ -120,18 +105,17 @@ export function amrConsoleUrlForWorkspace(
 }
 
 export function amrPlansUrlForWorkspace(
-  profile: string | null | undefined,
+  _profile: string | null | undefined,
   workspaceId: string | null | undefined,
 ): string | null {
-  return amrWorkspaceUrl(profile, workspaceId, 'plans');
+  return workspaceId?.trim() ? OPEN_DESIGN_PRICING_URL : null;
 }
 
-// Console dashboard deep-linked to open the subscription/plans modal, used by
-// the "Upgrade" affordances next to the plan tier.
-export function amrPlansUrlForProfile(profile: string | null | undefined): string {
-  const base = amrConsoleUrlForProfile(profile);
-  const intent = `billing=${AMR_CONSOLE_UPGRADE_INTENT}`;
-  return base.includes('?') ? `${base}&${intent}` : `${base}?${intent}`;
+// Public comparison surface used by every generic Upgrade / View plans entry.
+// A selected Pricing card still carries plan + interval back to Vela for
+// direct checkout; generic discovery never opens the Cloud plan modal.
+export function amrPlansUrlForProfile(_profile: string | null | undefined): string {
+  return OPEN_DESIGN_PRICING_URL;
 }
 
 export function amrProfileBadgeLabel(profile: string | null | undefined): string | null {
@@ -157,7 +141,7 @@ const PROMOTE_AMR_CODES = new Set<string>([
 //   - retry:                       re-run with the current agent.
 //   - authorize:                   AMR sign-in/authorize flow, then auto-retry on success.
 //   - recharge:                    open the AMR console (manual retry afterwards).
-//   - upgrade:                     open the AMR plan modal (manual retry afterwards).
+//   - upgrade:                     open public Pricing (manual retry afterwards).
 //   - launch-terminal-auth:        Antigravity-specific. agy's `-p`
 //                                  print mode cannot complete Google
 //                                  Sign-In on its own (no input field

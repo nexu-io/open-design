@@ -71,8 +71,8 @@ import {
   workspaceBillingSummaryForContext,
   workspaceIdentityCacheKey,
 } from '../collab/useWorkspaceContext';
-import { canUpgradeFromPlanTier, hasTeamPlan, resolvePlanLabelTier } from '../collab/team-plan';
-import { AMR_CONSOLE_UPGRADE_INTENT, amrPlansUrlForProfile } from '../runtime/amr-guidance';
+import { canUpgradeFromPlanTier, resolvePlanLabelTier } from '../collab/team-plan';
+import { amrPlansUrlForProfile } from '../runtime/amr-guidance';
 import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import type { EntryHomeView } from '../router';
 import type {
@@ -324,13 +324,8 @@ export function teamConsoleUrl(
     | 'dashboard'
     | 'settings'
     | 'billing'
-    | 'upgrade'
     | 'create-team'
-    | 'plans'
     | 'invite',
-  // Only consulted for `section: 'upgrade'` — see the comment below on why the
-  // deep-link param depends on it.
-  options?: { hasActivePlan?: boolean },
 ): string {
   // B's console routes: members live at /team, everything account/billing
   // shaped reports on the dashboard. The settings URL the context carries
@@ -343,25 +338,11 @@ export function teamConsoleUrl(
   // the product's information architecture — balance, manual top-up and the
   // auto-recharge policy were rehomed onto the dashboard (vela #1055).
   //
-  // `upgrade` and `plans` both land on the dashboard AND ask it to open an
-  // upgrade dialog. B resolves `billing=plan` against the workspace's own
-  // subscription state, so one intent covers all three states: a personal
-  // owner gets the personal plan modal (the same one the console's 「升级订阅」
-  // hero button opens), a never-subscribed team gets first-checkout, and a
-  // subscribed team gets change-plan.
-  //
-  // `upgrade` additionally still passes `billing=checkout` for a team the
-  // caller knows has never subscribed (`options.hasActivePlan`, from
-  // `hasTeamPlan(context, billing)` in `collab/team-plan.ts`). That is now a
-  // hint rather than a requirement: B honors it when first-checkout is really
-  // available and otherwise falls back to the dialog that does match, so a
-  // stale `hasActivePlan` can no longer strand the user on a bare Overview
-  // page the way it did in recvpSQKna0LwR.
+  // Plan comparison is deliberately absent here: every generic upgrade entry
+  // uses `workspaceUpgradeUrl` and public Pricing instead of a Cloud modal.
   const path =
     section === 'members' ? 'team'
     : section === 'billing' ? 'dashboard'
-    : section === 'plans' ? 'dashboard'
-    : section === 'upgrade' ? 'dashboard'
     : section === 'create-team' || section === 'invite' ? 'dashboard'
     : section;
   try {
@@ -373,13 +354,6 @@ export function teamConsoleUrl(
       segments.push(path);
     }
     url.pathname = `/${segments.join('/')}`;
-    if (section === 'upgrade') {
-      url.searchParams.set(
-        'billing',
-        options?.hasActivePlan ? AMR_CONSOLE_UPGRADE_INTENT : 'checkout',
-      );
-    }
-    if (section === 'plans') url.searchParams.set('billing', AMR_CONSOLE_UPGRADE_INTENT);
     // Vela owns the final invite action because only its dashboard has the
     // authoritative subscription + seat state needed to choose between
     // upgrading to Team, buying seats, and sending an invite. `invite=auto`
@@ -401,34 +375,9 @@ export function teamConsoleUrl(
 }
 
 /**
- * Where an 「升级」/「升级套餐」 affordance sends THIS workspace — the one
- * decision point shared by every upgrade entry (EntryNavRail's credits chip
- * and invite dialog, AmrBalanceDialog's balance-gate CTA, RecentProjectsStrip's
- * invite dialog, SettingsDialog's AMR-card upgrade buttons), so the three
- * subscription states cannot drift apart per entry point.
- *
- * The axis is the WORKSPACE TYPE, never "does a console URL exist": B returns
- * `workspaceSettingsUrl` for a personal workspace too (it has a settings page
- * like any other), so URL-presence stopped implying "team" — that premise
- * routed a $0-balance personal account onto the team dashboard's
- * `billing=checkout` deep link, which opens the Upgrade-to-Team dialog in an
- * error state ("Team plan unavailable" / 3-seat minimum). recvpYEiH019cD,
- * verified live with a real personal-workspace session.
- *
- *   - personal (or type unknown) → `dashboard?billing=plan`, B's personal plan
- *     modal — the same dialog the console's own 「升级订阅」 hero button opens.
- *   - team, never subscribed → `dashboard?billing=checkout` (first-checkout
- *     dialog); team, already subscribed → `dashboard?billing=plan`
- *     (change-plan dialog). See `teamConsoleUrl` for why the team branch still
- *     sends the more specific hint even though B can now resolve either.
- *   - a resolved workspace without `canManageBilling` → null. Billing is
- *     owner-only, so admin/member surfaces hide the action rather than linking
- *     to an operation B will reject.
- *
- * Dialog callers pass `fallbackProfile` and receive the profile-keyed personal
- * plans deep link when no workspace context exists after loading. An existing
- * workspace without billing permission still returns null; callers hide the
- * affordance.
+ * Shared destination for every generic 「升级」/「升级套餐」 affordance. Pricing
+ * owns comparison; selecting a concrete card there is what hands checkout to
+ * Cloud. A resolved workspace without billing permission still returns null.
  */
 export function workspaceUpgradeUrl(
   context: WorkspaceCollabContext | null | undefined,
@@ -441,22 +390,14 @@ export function workspaceUpgradeUrl(
 ): string | null;
 export function workspaceUpgradeUrl(
   context: WorkspaceCollabContext | null | undefined,
-  billing: WorkspaceBillingSummary | null | undefined,
+  _billing: WorkspaceBillingSummary | null | undefined,
   options?: { fallbackProfile: string | null | undefined },
 ): string | null {
-  // Team billing is owner-only. Keep the permission check in the shared
-  // resolver so every upgrade surface (including dialogs that pass a profile
-  // fallback) fails closed for admins/members instead of accidentally linking
-  // them to an action B will reject. A missing context still uses the fallback
-  // because there is no workspace identity to authorize yet.
+  // Billing is owner-only. Missing context can use the caller's fallback
+  // profile because there is no workspace identity to authorize yet.
   if (context && context.permissions?.canManageBilling !== true) return null;
-  const settingsUrl = context?.workspaceSettingsUrl?.trim() || null;
-  if (settingsUrl) {
-    return context?.workspaceType === 'team'
-      ? teamConsoleUrl(settingsUrl, 'upgrade', { hasActivePlan: hasTeamPlan(context, billing) })
-      : teamConsoleUrl(settingsUrl, 'plans');
-  }
-  return options ? amrPlansUrlForProfile(options.fallbackProfile) : null;
+  if (!context && !options) return null;
+  return amrPlansUrlForProfile(options?.fallbackProfile);
 }
 
 export type WorkspaceInviteTarget =
@@ -749,10 +690,8 @@ export function EntryTopRightCluster({
     setAccountOpen(false);
   });
 
-  // One decision shared with the rail's invite dialog: personal → the
-  // console's personal plan modal, team → checkout vs change-plan by
-  // subscription state. See `workspaceUpgradeUrl` for why the axis is the
-  // workspace TYPE.
+  // One public comparison destination shared with the rail's invite dialog.
+  // Pricing owns plan choice; only a selected card hands off to checkout.
   const upgradeUrl = workspaceUpgradeUrl(context, billing);
   const billingUpgradeUrl =
     context?.billingRecovery?.recoveryUrl?.trim() || upgradeUrl;
@@ -763,9 +702,9 @@ export function EntryTopRightCluster({
   const billingConsoleUrl = workspaceSettingsUrl
     ? teamConsoleUrl(workspaceSettingsUrl, 'billing')
     : null;
-  // Product decision: plan selection / payment lives in Vela Web. The local
-  // client opens that billing surface, then refreshes billing + context when
-  // focus returns so direct web upgrades sync plan, credits, seats and gates.
+  // Product decision: plan comparison lives on public Pricing and payment
+  // lives in Cloud. The client refreshes billing + context when focus returns
+  // so a completed web upgrade syncs plan, credits, seats and gates.
   //
   // The gate needs all three answers: a destination exists, the caller may act
   // on billing, AND the tier actually has somewhere to go. Without the tier
@@ -1247,10 +1186,8 @@ export function EntryNavRail({
   const [workspaceSwitchingId, setWorkspaceSwitchingId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const inviteTarget = resolveWorkspaceInviteTarget(context);
-  // The invite dialog's seat-gate upgrade entry: personal → the console's
-  // personal plan modal, team → checkout vs change-plan by subscription state.
-  // See `workspaceUpgradeUrl` for why the axis is the workspace TYPE. (The
-  // credits chip's twin decision lives in `EntryTopRightCluster`.)
+  // The invite dialog's seat-gate upgrade entry uses the same public Pricing
+  // destination as the credits chip's twin decision in EntryTopRightCluster.
   const upgradeUrl = workspaceUpgradeUrl(context, billing);
   const identityWorkspaceItems = workspaceDirectoryForIdentity(workspaceItems, context);
   const currentWorkspaceItem = context

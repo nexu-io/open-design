@@ -95,18 +95,8 @@ export function AmrBalanceDialog({
   // resume the parked task via onResolved. Bounded so an abandoned recharge
   // doesn't poll forever; guarded against double-fires.
   const [watchingWallet, setWatchingWallet] = useState(false);
-  // Where 「升级套餐」 goes. `workspaceUpgradeUrl` is the one decision point for
-  // every upgrade affordance: personal workspace → B's personal plan modal
-  // (`billing=plan`); team → `billing=checkout` vs `billing=plan` by whether
-  // the team ever completed a first checkout. Getting the personal branch wrong
-  // opened an error-state dialog: routing a personal workspace onto the team
-  // `billing=checkout` deep link opened the Upgrade-to-Team dialog with "Team
-  // plan unavailable" / a 3-seat minimum (recvpYEiH019cD, failed acceptance
-  // round). B now resolves `billing=plan` against the workspace's own state, so
-  // the team branch's guess is a hint rather than a requirement. The profile
-  // fallback keeps the CTA alive after a signed-out/no-context read (but not
-  // while that read is pending) — same `billing=plan` deep link every other
-  // Upgrade affordance uses (ChatPane, AvatarMenu, InlineModelSwitcher).
+  // `workspaceUpgradeUrl` keeps every generic upgrade affordance on the public
+  // Pricing comparison surface. A concrete card there owns the Cloud handoff.
   const {
     context: workspaceContext,
     loading: workspaceContextLoading,

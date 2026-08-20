@@ -1652,14 +1652,9 @@ export function SettingsDialog({
     workspaceContext,
   );
   const showWorkspaceSettings = canShowWorkspaceSettings(workspaceContext);
-  // The 「升级」 buttons on the AMR model card route through
-  // `workspaceUpgradeUrl` — the one decision point every upgrade affordance
-  // shares (see its docblock in `EntryNavRail.tsx`): personal workspace →
-  // B's personal plan modal (`billing=plan`, recvpYEiH019cD); team → the
-  // checkout vs change-plan dashboard dialog by subscription state
-  // (recvpSQKna0LwR). The profile fallback keeps the buttons alive after a
-  // signed-out/no-context read; while that read is still loading, hide them so
-  // an owner-only action cannot flash briefly for an admin/member.
+  // All generic AMR upgrade buttons route through public Pricing. While the
+  // workspace read is pending, hide the owner-only action to avoid a flash for
+  // admins or members.
   const amrUpgradeUrl = (profile: string | null | undefined): string | null =>
     workspaceContextLoading
       ? null

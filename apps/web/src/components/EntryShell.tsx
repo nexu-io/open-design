@@ -72,7 +72,7 @@ import type {
   TrackingCliProviderId,
 } from '@open-design/contracts/analytics';
 import { agentIdToTracking } from '@open-design/contracts/analytics';
-import { useT } from '../i18n';
+import { useI18n, useT } from '../i18n';
 import { navigate, useRoute } from '../router';
 import type {
   AgentInfo,
@@ -123,10 +123,6 @@ import {
   type AmrBalanceGateScope,
 } from '../runtime/amr-balance-gate';
 import { isPaidAmrPlan, resolveAmrPlan } from '../runtime/amr-low-balance-plan';
-import {
-  amrPlansUrlForProfile,
-  amrPlansUrlForWorkspace,
-} from '../runtime/amr-guidance';
 import { HomeView, seedHomeComposerPrompt } from './HomeView';
 import { EntryBlankState } from './EntryBlankState';
 import { RecentProjectsStrip } from './RecentProjectsStrip';
@@ -161,6 +157,12 @@ import { useWorkspaceInvalidation } from '../collab/workspace-events';
 import { resolvePlanLabelTier } from '../collab/team-plan';
 import { resolveDeepSeekV4FlashCampaignAudience } from '../campaigns/deepseek-v4-flash';
 import { useDeepSeekV4FlashCampaignVisibility } from '../campaigns/use-deepseek-v4-flash-campaign';
+import {
+  GO_PLAN_PRICING_URL,
+  resolveSubscriptionAudience,
+} from '../campaigns/go-plan';
+import { useGoPlanCampaignVisibility } from '../campaigns/use-go-plan-campaign';
+import { getGoPlanCampaignCopy } from '../campaigns/go-plan-content';
 import {
   beginWorkspaceScopedRead,
   workspaceIdentityCacheKey,
@@ -609,7 +611,8 @@ export function EntryShell({
   onAmrLoginStatusChange,
   artifactUpgradeSlot,
 }: Props) {
-  const t = useT();
+  const { locale, t } = useI18n();
+  const goPlanCopy = getGoPlanCampaignCopy(locale);
   // Each entry sub-view (home / projects / design-systems) is its own
   // URL now, so the browser back/forward buttons work and a deep link
   // to /design-systems lands on that section. We derive the active
@@ -671,6 +674,7 @@ export function EntryShell({
     workspaceContext,
   );
   const deepSeekCampaignVisibility = useDeepSeekV4FlashCampaignVisibility();
+  const goPlanCampaignVisibility = useGoPlanCampaignVisibility();
   // Same personal-vs-team accountPlan rule as App's `resolvedAmrPlan`.
   const deepSeekCampaignPlan = resolvePlanLabelTier({
     billing: workspaceBilling,
@@ -688,6 +692,22 @@ export function EntryShell({
     loggedIn: amrLoggedIn,
     now: deepSeekCampaignVisibility.now,
   });
+  const subscriptionAudience = resolveSubscriptionAudience({
+    plan: deepSeekCampaignPlan,
+    loggedIn: amrLoggedIn,
+  });
+  const homeCampaignModalAudience =
+    subscriptionAudience === 'unpaid' && goPlanCampaignVisibility.visible
+      ? 'unpaid'
+      : deepSeekV4FlashCampaignAudience === 'paid'
+        ? 'paid'
+        : 'unknown';
+  const topRightCampaignKind =
+    subscriptionAudience === 'unpaid'
+      ? 'go'
+      : deepSeekV4FlashCampaignAudience === 'paid'
+        ? 'deepseek'
+        : null;
   const workspaceBalanceUsd = workspaceBillingBalanceUsd(
     workspaceBillingResponse,
     workspaceContext,
@@ -1170,23 +1190,30 @@ export function EntryShell({
   }, [view]);
   const analytics = useAnalytics();
   useEffect(() => {
-    if (view !== 'home' || deepSeekV4FlashCampaignAudience === 'unknown') return;
+    if (view !== 'home' || !topRightCampaignKind) return;
+    const go = topRightCampaignKind === 'go';
+    if (go) return;
     trackDeepSeekCampaignBadgeSurfaceView(analytics.track, {
       page_name: 'home',
       area: 'campaign_badge',
       element: 'deepseek_v4_pro',
       campaign_id: 'deepseek_v4_pro',
-      user_state: deepSeekV4FlashCampaignAudience,
+      user_state: 'paid',
     });
-  }, [analytics.track, deepSeekV4FlashCampaignAudience, view]);
-  const openDeepSeekCampaignPricing = useCallback(() => {
-    if (deepSeekV4FlashCampaignAudience === 'unknown') return;
+  }, [analytics.track, topRightCampaignKind, view]);
+  const openCampaignPricing = useCallback(() => {
+    if (!topRightCampaignKind) return;
+    const go = topRightCampaignKind === 'go';
+    if (go) {
+      window.open(GO_PLAN_PRICING_URL, '_blank', 'noopener,noreferrer');
+      return;
+    }
     trackDeepSeekCampaignBadgeClick(analytics.track, {
       page_name: 'home',
       area: 'campaign_badge',
       element: 'open_pricing',
       campaign_id: 'deepseek_v4_pro',
-      user_state: deepSeekV4FlashCampaignAudience,
+      user_state: 'paid',
     });
     const attribution = recordAmrEntry(
       analytics.track,
@@ -1203,17 +1230,11 @@ export function EntryShell({
       resolvedDeviceId: getResolvedDeviceId(),
       installationId: config.installationId,
     });
-    // The same destination the modal's CTA opens: the console's plan surface,
-    // scoped to this workspace. Both are in-product entries for a signed-in
-    // user, so pointing one at the console (where a subscription can actually
-    // be started) and the other at the marketing site would split one funnel
-    // across two destinations — and the marketing link was pinned to `/zh/`,
-    // landing every non-Chinese user on a Chinese page.
-    const plansUrl =
-      amrPlansUrlForWorkspace(undefined, workspaceContext?.workspaceId)
-      ?? amrPlansUrlForProfile(undefined);
+    // Both campaign badges are lightweight discovery entries. Pricing owns
+    // comparison; only a concrete Pricing card hands checkout to Cloud.
+    const destination = GO_PLAN_PRICING_URL;
     window.open(
-      attributedAmrUrl(plansUrl, attribution, deviceId),
+      attributedAmrUrl(destination, attribution, deviceId),
       '_blank',
       'noopener,noreferrer',
     );
@@ -1221,7 +1242,7 @@ export function EntryShell({
     analytics.track,
     config.installationId,
     config.telemetry?.metrics,
-    deepSeekV4FlashCampaignAudience,
+    topRightCampaignKind,
     workspaceContext?.workspaceId,
   ]);
   // 产品拍板 D5: the campaign modal's paid 立即使用 performs the REAL switch —
@@ -1660,15 +1681,19 @@ export function EntryShell({
           onOpenSearch={() => setProjectSearchOpen(true)}
           open={railOpen}
           topRightSlot={
-            view === 'home' && deepSeekV4FlashCampaignAudience !== 'unknown' ? (
+            view === 'home' && topRightCampaignKind ? (
               <button
                 type="button"
                 className="entry-deepseek-campaign-badge"
-                onClick={openDeepSeekCampaignPricing}
-                aria-label={t('campaign.deepseekV4Flash.workbenchBadgeAria')}
+                onClick={openCampaignPricing}
+                aria-label={topRightCampaignKind === 'go'
+                  ? goPlanCopy.workbenchBadgeAria
+                  : t('campaign.deepseekV4Flash.workbenchBadgeAria')}
                 data-testid="deepseek-campaign-pricing-badge"
               >
-                <span>{t('campaign.deepseekV4Flash.workbenchBadge')}</span>
+                <span>{topRightCampaignKind === 'go'
+                  ? goPlanCopy.workbenchBadge
+                  : t('campaign.deepseekV4Flash.workbenchBadge')}</span>
                 <Icon name="arrow-right" size={13} />
               </button>
             ) : null
@@ -1767,7 +1792,7 @@ export function EntryShell({
                 promptTemplates={promptTemplates}
                 executionSwitcher={view === 'home' ? homeExecutionSwitcher : undefined}
                 artifactUpgradeSlot={artifactUpgradeSlot}
-                deepSeekV4FlashCampaignAudience={deepSeekV4FlashCampaignAudience}
+                deepSeekV4FlashCampaignAudience={homeCampaignModalAudience}
                 onDeepSeekV4FlashCampaignUseNow={applyDeepSeekCampaignModel}
                 deepSeekV4FlashCampaignMetricsConsent={config.telemetry?.metrics === true}
                 deepSeekV4FlashCampaignInstallationId={config.installationId ?? null}
