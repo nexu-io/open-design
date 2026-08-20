@@ -1786,14 +1786,14 @@ async function runMediaGenerate(rawArgs) {
       },
       body: JSON.stringify(body),
     });
-  } catch (err) {
-    surfaceFetchError(err, daemonUrl);
-    process.exit(3);
+  } catch {
+    await exitWithMediaError({
+      code: 'MEDIA_DISPATCHER_UNREACHABLE',
+      message: 'local media dispatcher could not be reached',
+    }, 3);
   }
   if (!resp.ok) {
-    const text = await resp.text();
-    console.error(`daemon ${resp.status}: ${text}`);
-    process.exit(4);
+    await exitWithMediaHttpFailure(resp);
   }
   const accepted = await resp.json();
   const { taskId } = accepted;
@@ -1808,6 +1808,40 @@ async function runMediaGenerate(rawArgs) {
       ? { authorization: `Bearer ${token}` }
       : workspaceHeaders,
   });
+}
+
+async function exitWithMediaError(error, exitCode) {
+  const safeError = {
+    code: error.code,
+    message: error.message,
+    ...(typeof error.retryable === 'boolean' ? { retryable: error.retryable } : {}),
+  };
+  process.stderr.write(JSON.stringify({ error: safeError }) + '\n');
+  await flushStreamsAndExit(exitCode);
+}
+
+async function exitWithMediaHttpFailure(resp) {
+  let parsed = null;
+  try {
+    parsed = await resp.json();
+  } catch {
+    // Non-JSON daemon responses are operational diagnostics, not public copy.
+  }
+  const error = parsed?.error;
+  if (
+    error
+    && typeof error === 'object'
+    && typeof error.code === 'string'
+    && error.code.trim()
+    && typeof error.message === 'string'
+    && error.message.trim()
+  ) {
+    await exitWithMediaError(error, 4);
+  }
+  await exitWithMediaError({
+    code: 'MEDIA_DISPATCH_FAILED',
+    message: 'media dispatcher failed before generation started',
+  }, 4);
 }
 
 async function runMediaWait(rawArgs) {
