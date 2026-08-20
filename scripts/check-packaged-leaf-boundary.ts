@@ -247,7 +247,10 @@ export async function checkPackagedLeafBoundary(): Promise<boolean> {
     }
   }
 
-  const workflow = await readFile(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8");
+  const workflow = (await readFile(path.join(repoRoot, ".github/workflows/ci.yml"), "utf8")).replace(
+    /\r\n/g,
+    "\n",
+  );
   const errors = scopeBoundaryErrors();
   if (!workflow.includes(requiredWorkspaceUnitBlock)) {
     errors.push("ci.yml no longer contains the guarded tools-dev, packaged unit, and focused E2E command block");

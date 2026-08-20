@@ -78,6 +78,33 @@ const residualAllowedExactPaths = new Set([
   "packages/platform/esbuild.config.mjs",
   "packages/plugin-runtime/esbuild.config.mjs",
   "packages/registry-protocol/esbuild.config.mjs",
+  "packages/scene3d/esbuild.config.mjs",
+  // scene3d's visual harness. Run directly by Node against the package's own
+  // built dist and a path-resolved playwright-core, deliberately outside the
+  // package's TS build so the harness never becomes a build or install
+  // dependency of the package it exists to photograph.
+  "packages/scene3d/scripts/harness/build-fixtures.mjs",
+  "packages/scene3d/scripts/harness/shoot.mjs",
+  // Same harness, reading the live DOM instead of writing a PNG: a
+  // screenshot shows that a line is wrong, this shows whether it is empty
+  // or merely faint.
+  "packages/scene3d/scripts/harness/probe.mjs",
+  // Same harness again, driving real pointer gestures and reading back what
+  // moved. Two of the gizmo bugs it exists to catch are invisible in a
+  // screenshot: a rotate drag that snaps back a full turn, and a
+  // pointer-to-world scale pinned to one canvas height.
+  "packages/scene3d/scripts/harness/gesture.mjs",
+  // The save path is the one feature the fixture harness cannot reach: the
+  // fixtures are served by a static file server, so there is no API to save
+  // to. These drive a REAL daemon and a real project, and check the file on
+  // disk rather than what the button says about how it went.
+  "packages/scene3d/scripts/harness/save.mjs",
+  "packages/scene3d/scripts/harness/save-reopen.mjs",
+  // The Export menu is web-app chrome, not part of the generated page, so no
+  // kit harness can see it. This drives the real app end to end: open the
+  // project, open the artifact, open Export, click a format chip, and read
+  // the archive that comes back.
+  "packages/scene3d/scripts/harness/export-menu.mjs",
   "packages/sidecar/esbuild.config.mjs",
   "packages/sidecar-proto/esbuild.config.mjs",
   // Maintainer utility scripts ported from the media branch. They are
