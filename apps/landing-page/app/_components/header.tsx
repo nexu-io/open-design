@@ -517,11 +517,6 @@ export function Header({
                     </span>
                   </a>
                 </li>
-                <li>
-                  <a href={X_PROFILE} {...ext}>
-                    <span className='dropdown-name'>X</span>
-                  </a>
-                </li>
               </ul>
             </li>
 
